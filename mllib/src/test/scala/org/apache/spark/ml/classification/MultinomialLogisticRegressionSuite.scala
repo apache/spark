@@ -80,40 +80,41 @@ class MultinomialLogisticRegressionSuite
    * so we can validate the training accuracy compared with R's glmnet package.
    */
   ignore("export test data into CSV format") {
-    multinomialDataset.rdd.map { case Row(label: Double, features: Vector) =>
+    val rdd = multinomialDataset.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDataset")
+    }.repartition(1)
+    rdd.saveAsTextFile("target/tmp/MultinomialLogisticRegressionSuite/multinomialDataset")
   }
 
-    test("params") {
-      ParamsSuite.checkParams(new MultinomialLogisticRegression)
-      val model = new MultinomialLogisticRegressionModel("mLogReg",
-        Matrices.dense(2, 1, Array(0.0, 0.0)), Vectors.dense(0.0, 0.0), 2)
-      ParamsSuite.checkParams(model)
-    }
+  test("params") {
+    ParamsSuite.checkParams(new MultinomialLogisticRegression)
+    val model = new MultinomialLogisticRegressionModel("mLogReg",
+      Matrices.dense(2, 1, Array(0.0, 0.0)), Vectors.dense(0.0, 0.0), 2)
+    ParamsSuite.checkParams(model)
+  }
 
-    test("multinomial logistic regression: default params") {
-      val mlr = new MultinomialLogisticRegression
-      assert(mlr.getLabelCol === "label")
-      assert(mlr.getFeaturesCol === "features")
-      assert(mlr.getPredictionCol === "prediction")
-      assert(mlr.getRawPredictionCol === "rawPrediction")
-      assert(mlr.getProbabilityCol === "probability")
-      assert(!mlr.isDefined(mlr.weightCol))
-      assert(!mlr.isDefined(mlr.thresholds))
-      assert(mlr.getFitIntercept)
-      assert(mlr.getStandardization)
-      val model = mlr.fit(dataset)
-      model.transform(dataset)
-        .select("label", "probability", "prediction", "rawPrediction")
-        .collect()
-      assert(model.getFeaturesCol === "features")
-      assert(model.getPredictionCol === "prediction")
-      assert(model.getRawPredictionCol === "rawPrediction")
-      assert(model.getProbabilityCol === "probability")
-      assert(model.intercepts !== Vectors.dense(0.0, 0.0))
-      assert(model.hasParent)
-    }
+  test("multinomial logistic regression: default params") {
+    val mlr = new MultinomialLogisticRegression
+    assert(mlr.getLabelCol === "label")
+    assert(mlr.getFeaturesCol === "features")
+    assert(mlr.getPredictionCol === "prediction")
+    assert(mlr.getRawPredictionCol === "rawPrediction")
+    assert(mlr.getProbabilityCol === "probability")
+    assert(!mlr.isDefined(mlr.weightCol))
+    assert(!mlr.isDefined(mlr.thresholds))
+    assert(mlr.getFitIntercept)
+    assert(mlr.getStandardization)
+    val model = mlr.fit(dataset)
+    model.transform(dataset)
+      .select("label", "probability", "prediction", "rawPrediction")
+      .collect()
+    assert(model.getFeaturesCol === "features")
+    assert(model.getPredictionCol === "prediction")
+    assert(model.getRawPredictionCol === "rawPrediction")
+    assert(model.getProbabilityCol === "probability")
+    assert(model.intercepts !== Vectors.dense(0.0, 0.0))
+    assert(model.hasParent)
+  }
 
   test("multinomial logistic regression with intercept without regularization") {
 
@@ -319,9 +320,9 @@ class MultinomialLogisticRegressionSuite
       0.0, 0.0, 0.0, 0.0), isTransposed = true)
     val interceptsR = Vectors.dense(-0.44893320, 0.7376760, -0.2887428)
 
-    assert(model1.coefficients ~== coefficientsRStd absTol 0.01)
+    assert(model1.coefficients ~== coefficientsRStd absTol 0.02)
     assert(model1.intercepts ~== interceptsRStd relTol 0.1)
-    assert(model2.coefficients ~== coefficientsR absTol 0.01)
+    assert(model2.coefficients ~== coefficientsR absTol 0.02)
     assert(model2.intercepts ~== interceptsR relTol 0.1)
   }
 
@@ -891,6 +892,9 @@ class MultinomialLogisticRegressionSuite
       LabeledPoint(4.0, Vectors.dense(1.0)),
       LabeledPoint(4.0, Vectors.dense(2.0)))
     )
+    val labelMeta = NominalAttribute.defaultAttr.withName("label").withNumValues(6).toMetadata()
+    val constantDataWithMetadata = constantData
+      .select(constantData("label").as("label", labelMeta), constantData("features"))
     val mlr = new MultinomialLogisticRegression
     val model = mlr.fit(constantData)
     val results = model.transform(constantData)
@@ -898,6 +902,16 @@ class MultinomialLogisticRegressionSuite
       case Row(raw: Vector, prob: Vector, pred: Double) =>
         assert(raw === Vectors.dense(Array(0.0, 0.0, 0.0, 0.0, Double.PositiveInfinity)))
         assert(prob === Vectors.dense(Array(0.0, 0.0, 0.0, 0.0, 1.0)))
+        assert(pred === 4.0)
+    }
+
+    // ensure that the correct value is predicted when numClasses passed through metadata
+    val modelWithMetadata = mlr.fit(constantDataWithMetadata)
+    val resultsWithMetadata = modelWithMetadata.transform(constantDataWithMetadata)
+    resultsWithMetadata.select("rawPrediction", "probability", "prediction").collect().foreach {
+      case Row(raw: Vector, prob: Vector, pred: Double) =>
+        assert(raw === Vectors.dense(Array(0.0, 0.0, 0.0, 0.0, Double.PositiveInfinity, 0.0)))
+        assert(prob === Vectors.dense(Array(0.0, 0.0, 0.0, 0.0, 1.0, 0.0)))
         assert(pred === 4.0)
     }
     // TODO: check num iters is zero when it become available in the model

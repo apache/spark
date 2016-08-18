@@ -319,13 +319,15 @@ class LogisticRegression @Since("1.2.0") (
         throw new SparkException(msg)
       }
 
+      val isConstantLabel = histogram.count(_ != 0) == 1
+
       if (numClasses > 2) {
         val msg = s"LogisticRegression with ElasticNet in ML package only supports " +
           s"binary classification. Found $numClasses in the input dataset. Consider using " +
           s"MultinomialLogisticRegression instead."
         logError(msg)
         throw new SparkException(msg)
-      } else if ($(fitIntercept) && numClasses == 2 && histogram(0) == 0.0) {
+      } else if ($(fitIntercept) && numClasses == 2 && isConstantLabel) {
         logWarning(s"All labels are one and fitIntercept=true, so the coefficients will be " +
           s"zeros and the intercept will be positive infinity; as a result, " +
           s"training is not needed.")
@@ -336,12 +338,9 @@ class LogisticRegression @Since("1.2.0") (
           s"training is not needed.")
         (Vectors.sparse(numFeatures, Seq()), Double.NegativeInfinity, Array.empty[Double])
       } else {
-        if (!$(fitIntercept) && numClasses == 2 && histogram(0) == 0.0) {
-          logWarning(s"All labels are one and fitIntercept=false. It's a dangerous ground, " +
-            s"so the algorithm may not converge.")
-        } else if (!$(fitIntercept) && numClasses == 1) {
-          logWarning(s"All labels are zero and fitIntercept=false. It's a dangerous ground, " +
-            s"so the algorithm may not converge.")
+        if (!$(fitIntercept) && isConstantLabel) {
+          logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
+            s"dangerous ground, so the algorithm may not converge.")
         }
 
         val featuresMean = summarizer.mean.toArray

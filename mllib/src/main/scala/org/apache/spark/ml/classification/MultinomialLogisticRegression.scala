@@ -215,20 +215,29 @@ class MultinomialLogisticRegression @Since("2.1.0") (
         throw new SparkException(msg)
       }
 
-      val labelIsConstant = histogram.count(_ != 0) == 1
+      val isConstantLabel = histogram.count(_ != 0) == 1
 
-      if ($(fitIntercept) && labelIsConstant) {
-        // we want to produce a model that will always predict the constant label
+      if ($(fitIntercept) && isConstantLabel) {
+        // we want to produce a model that will always predict the constant label so all the
+        // coefficients will be zero, and the constant label class intercept will be +inf
+        val constantLabelIndex = Vectors.dense(histogram).argmax
         (Matrices.sparse(numClasses, numFeatures, Array.fill(numFeatures + 1)(0), Array(), Array()),
-          Vectors.sparse(numClasses, Seq((numClasses - 1, Double.PositiveInfinity))),
+          Vectors.sparse(numClasses, Seq((constantLabelIndex, Double.PositiveInfinity))),
           Array.empty[Double])
       } else {
-        if (!$(fitIntercept) && labelIsConstant) {
+        if (!$(fitIntercept) && isConstantLabel) {
           logWarning(s"All labels belong to a single class and fitIntercept=false. It's" +
             s"a dangerous ground, so the algorithm may not converge.")
         }
 
         val featuresStd = summarizer.variance.toArray.map(math.sqrt)
+        val featuresMean = summarizer.mean.toArray
+        if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
+          featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
+          logWarning("Fitting MultinomialLogisticRegressionModel without intercept on dataset " +
+            "with bconstant nonzero column, Spark MLlib outputs zero coefficients for constant " +
+            "nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.")
+        }
 
         val regParamL1 = $(elasticNetParam) * $(regParam)
         val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
@@ -279,28 +288,28 @@ class MultinomialLogisticRegression @Since("2.1.0") (
              it will converge faster if we initialize the intercepts such that
              it follows the distribution of the labels.
              {{{
-               P(0) = \exp(b_0) / (\sum_{k=1}^K \exp(b_k))
+               P(1) = \exp(b_1) / Z
                ...
-               P(K) = \exp(b_K) / (\sum_{k=1}^K \exp(b_k))
+               P(K) = \exp(b_K) / Z
              }}}
-             The solution to this is not identifiable, so choose the solution with minimum
-             L2 penalty (i.e. subtract the mean). Hence,
+             Where Z is a normalizing constant. Hence,
              {{{
-               b_k = \log{count_k / count_0}
-               b_k' = b_k - \frac{1}{K} \sum b_k
+              b_k = \log(P(k)) + \log(Z)
+                  = \log(count_k) - \log(count) + \log(Z)
+                  = \log(count_k) + \lambda
+             }}}
+             The solution to this is not identifiable, so choose the phase \lambda such that the
+             mean is centered. This yields
+             {{{
+               b_k = \log(count_k)
+               b_k' = b_k - \mean(b_k)
              }}}
            */
-          val referenceCoef = histogram.indices.map { i =>
-            if (histogram(i) > 0) {
-              math.log(histogram(i) / (histogram(0) + 1)) // add 1 for smoothing
-            } else {
-              0.0
-            }
-          }
-          val referenceMean = referenceCoef.sum / referenceCoef.length
-          histogram.indices.foreach { i =>
+          val rawIntercepts = histogram.map(c => math.log(c + 1)) // add 1 for smoothing
+          val rawMean = rawIntercepts.sum / rawIntercepts.length
+          rawIntercepts.indices.foreach { i =>
             initialCoefficientsWithIntercept.toArray(i * numFeaturesPlusIntercept + numFeatures) =
-              referenceCoef(i) - referenceMean
+              rawIntercepts(i) - rawMean
           }
         }
         val states = optimizer.iterations(new CachedDiffFunction(costFun),
@@ -332,37 +341,28 @@ class MultinomialLogisticRegression @Since("2.1.0") (
            Note that the intercept in scaled space and original space is the same;
            as a result, no scaling is needed.
          */
-        var interceptSum = 0.0
-        var coefSum = 0.0
-        val rawCoefficients = Vectors.fromBreeze(state.x)
-        val (coefMatrix, interceptVector) = rawCoefficients match {
-          case dv: DenseVector =>
-            val coefArray = Array.tabulate(numClasses * numFeatures) { i =>
-              val flatIndex = if ($(fitIntercept)) i + i / numFeatures else i
-              val featureIndex = i % numFeatures
-              val unscaledCoef = if (featuresStd(featureIndex) != 0.0) {
-                dv(flatIndex) / featuresStd(featureIndex)
-              } else {
-                0.0
-              }
-              coefSum += unscaledCoef
-              unscaledCoef
-            }
-            val interceptVector = if ($(fitIntercept)) {
-              Vectors.dense(Array.tabulate(numClasses) { i =>
-                val coefIndex = (i + 1) * numFeaturesPlusIntercept - 1
-                val intercept = dv(coefIndex)
-                interceptSum += intercept
-                intercept
-              })
-            } else {
-              Vectors.sparse(numClasses, Seq())
-            }
-            (new DenseMatrix(numClasses, numFeatures, coefArray, isTransposed = true),
-              interceptVector)
-          case sv: SparseVector =>
-            throw new IllegalArgumentException("SparseVector is not supported for coefficients")
+        val rawCoefficients = state.x.toArray
+        val interceptsArray: Array[Double] = if ($(fitIntercept)) {
+          Array.tabulate(numClasses) { i =>
+            val coefIndex = (i + 1) * numFeaturesPlusIntercept - 1
+            rawCoefficients(coefIndex)
+          }
+        } else {
+          Array[Double]()
         }
+
+        val coefficientArray: Array[Double] = Array.tabulate(numClasses * numFeatures) { i =>
+          // flatIndex will loop though rawCoefficients, and skip the intercept terms.
+          val flatIndex = if ($(fitIntercept)) i + i / numFeatures else i
+          val featureIndex = i % numFeatures
+          if (featuresStd(featureIndex) != 0.0) {
+            rawCoefficients(flatIndex) / featuresStd(featureIndex)
+          } else {
+            0.0
+          }
+        }
+        val coefficientMatrix =
+          new DenseMatrix(numClasses, numFeatures, coefficientArray, isTransposed = true)
 
         /*
           When no regularization is applied, the coefficients lack identifiability because
@@ -374,21 +374,24 @@ class MultinomialLogisticRegression @Since("2.1.0") (
             Coordinate Descent," https://core.ac.uk/download/files/153/6287975.pdf
          */
         if ($(regParam) == 0.0) {
-          val coefficientMean = coefSum / (numClasses * numFeatures)
-          coefMatrix.update(_ - coefficientMean)
+          val coefficientMean = coefficientMatrix.values.sum / (numClasses * numFeatures)
+          coefficientMatrix.update(_ - coefficientMean)
         }
         /*
           The intercepts are never regularized, so we always center the mean.
          */
-        val interceptMean = interceptSum / numClasses
-        interceptVector match {
-          case dv: DenseVector => (0 until dv.size).foreach { i => dv.toArray(i) -= interceptMean }
-          case sv: SparseVector =>
-            (0 until sv.numNonzeros).foreach { i => sv.values(i) -= interceptMean }
+        val interceptVector = if (interceptsArray.nonEmpty) {
+          val interceptMean = interceptsArray.sum / numClasses
+          interceptsArray.indices.foreach { i => interceptsArray(i) -= interceptMean }
+          Vectors.dense(interceptsArray)
+        } else {
+          Vectors.sparse(numClasses, Seq())
         }
-        (coefMatrix, interceptVector, arrayBuilder.result())
+
+        (coefficientMatrix, interceptVector, arrayBuilder.result())
       }
     }
+
     if (handlePersistence) instances.unpersist()
 
     val model = copyValues(
@@ -440,32 +443,30 @@ class MultinomialLogisticRegressionModel private[spark] (
 
   /** Score (probability) for each class label. */
   private val scores: Vector => Vector = (features) => {
-    val m = margins(features).toDense
+    val m = margins(features)
     val maxMarginIndex = m.argmax
     val maxMargin = m(maxMarginIndex)
+    val marginArray = m.toArray
 
     // adjust margins for overflow
     val sum = {
       var temp = 0.0
-      if (maxMargin > 0) {
-        for (i <- 0 until numClasses) {
-          m.toArray(i) -= maxMargin
-          temp += math.exp(m(i))
+      var k = 0
+      while (k < numClasses) {
+        marginArray(k) = if (maxMargin > 0) {
+          math.exp(marginArray(k) - maxMargin)
+        } else {
+          math.exp(marginArray(k))
         }
-      } else {
-        for (i <- 0 until numClasses ) {
-          temp += math.exp(m(i))
-        }
+        temp += marginArray(k)
+        k += 1
       }
       temp
     }
 
-    var i = 0
-    while (i < m.size) {
-      m.values(i) = math.exp(m.values(i)) / sum
-      i += 1
-    }
-    m
+    val scores = Vectors.dense(marginArray)
+    BLAS.scal(1 / sum, scores)
+    scores
   }
 
   /**
@@ -475,11 +476,24 @@ class MultinomialLogisticRegressionModel private[spark] (
   override protected def predict(features: Vector): Double = {
     if (isDefined(thresholds)) {
       val thresholds: Array[Double] = getThresholds
-      val scaledProbability: Array[Double] =
-        scores(features).toArray.zip(thresholds).map { case (p, t) =>
-          if (t == 0.0) Double.PositiveInfinity else p / t
+      val probabilities = scores(features).toArray
+      var argMax = 0
+      var max = Double.NegativeInfinity
+      var i = 0
+      while (i < numClasses) {
+        if (thresholds(i) == 0.0) {
+          max = Double.PositiveInfinity
+          argMax = i
+        } else {
+          val scaled = probabilities(i) / thresholds(i)
+          if (scaled > max) {
+            max = scaled
+            argMax = i
+          }
         }
-      Vectors.dense(scaledProbability).argmax
+        i += 1
+      }
+      argMax
     } else {
       scores(features).argmax
     }
@@ -489,42 +503,34 @@ class MultinomialLogisticRegressionModel private[spark] (
     rawPrediction match {
       case dv: DenseVector =>
         val size = dv.size
+        val values = dv.values
 
         // get the maximum margin
         val maxMarginIndex = rawPrediction.argmax
         val maxMargin = rawPrediction(maxMarginIndex)
 
         if (maxMargin == Double.PositiveInfinity) {
-          for (j <- 0 until size) {
-            if (j == maxMarginIndex) {
-              dv.values(j) = 1.0
-            } else {
-              dv.values(j) = 0.0
-            }
+          var k = 0
+          while (k < size) {
+            values(k) = if (k == maxMarginIndex) 1.0 else 0.0
+            k += 1
           }
         } else {
           val sum = {
             var temp = 0.0
-            if (maxMargin > 0) {
-              // adjust margins for overflow
-              for (j <- 0 until numClasses) {
-                dv.values(j) -= maxMargin
-                temp += math.exp(dv.values(j))
+            var k = 0
+            while (k < numClasses) {
+              values(k) = if (maxMargin > 0) {
+                math.exp(values(k) - maxMargin)
+              } else {
+                math.exp(values(k))
               }
-            } else {
-              for (j <- 0 until numClasses) {
-                temp += math.exp(dv.values(j))
-              }
+              temp += values(k)
+              k += 1
             }
             temp
           }
-
-          // update in place
-          var i = 0
-          while (i < size) {
-            dv.values(i) = math.exp(dv.values(i)) / sum
-            i += 1
-          }
+          BLAS.scal(1 / sum, dv)
         }
         dv
       case sv: SparseVector =>
@@ -572,7 +578,7 @@ object MultinomialLogisticRegressionModel extends MLReadable[MultinomialLogistic
     private case class Data(
         numClasses: Int,
         numFeatures: Int,
-        intercept: Vector,
+        intercepts: Vector,
         coefficients: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
@@ -597,10 +603,10 @@ object MultinomialLogisticRegressionModel extends MLReadable[MultinomialLogistic
 
       val dataPath = new Path(path, "data").toString
       val data = sqlContext.read.format("parquet").load(dataPath)
-        .select("numClasses", "numFeatures", "intercept", "coefficients").head()
-      val numClasses = data.getInt(0)
-      val intercepts = data.getAs[Vector](2)
-      val coefficients = data.getAs[Matrix](3)
+        .select("numClasses", "numFeatures", "intercepts", "coefficients").head()
+      val numClasses = data.getAs[Int](data.fieldIndex("numClasses"))
+      val intercepts = data.getAs[Vector](data.fieldIndex("intercepts"))
+      val coefficients = data.getAs[Matrix](data.fieldIndex("coefficients"))
       val model =
         new MultinomialLogisticRegressionModel(metadata.uid, coefficients, intercepts, numClasses)
 
