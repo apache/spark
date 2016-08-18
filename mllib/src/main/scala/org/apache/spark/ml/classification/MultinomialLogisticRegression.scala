@@ -221,7 +221,8 @@ class MultinomialLogisticRegression @Since("2.1.0") (
         // we want to produce a model that will always predict the constant label so all the
         // coefficients will be zero, and the constant label class intercept will be +inf
         val constantLabelIndex = Vectors.dense(histogram).argmax
-        (Matrices.sparse(numClasses, numFeatures, Array.fill(numFeatures + 1)(0), Array(), Array()),
+        (Matrices.sparse(numClasses, numFeatures, Array.fill(numFeatures + 1)(0),
+          Array.empty[Int], Array.empty[Double]),
           Vectors.sparse(numClasses, Seq((constantLabelIndex, Double.PositiveInfinity))),
           Array.empty[Double])
       } else {
@@ -235,7 +236,7 @@ class MultinomialLogisticRegression @Since("2.1.0") (
         if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
           featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
           logWarning("Fitting MultinomialLogisticRegressionModel without intercept on dataset " +
-            "with bconstant nonzero column, Spark MLlib outputs zero coefficients for constant " +
+            "with constant nonzero column, Spark MLlib outputs zero coefficients for constant " +
             "nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.")
         }
 
@@ -312,6 +313,7 @@ class MultinomialLogisticRegression @Since("2.1.0") (
               rawIntercepts(i) - rawMean
           }
         }
+
         val states = optimizer.iterations(new CachedDiffFunction(costFun),
           initialCoefficientsWithIntercept.asBreeze.toDenseVector)
 
