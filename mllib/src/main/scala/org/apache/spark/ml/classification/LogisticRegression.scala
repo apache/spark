@@ -155,8 +155,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
 /**
  * Logistic regression.
- * Currently, this class only supports binary classification.  It will support multiclass
- * in the future.
+ * Currently, this class only supports binary classification.  For multiclass classification,
+ * use [[MultinomialLogisticRegression]]
  */
 @Since("1.2.0")
 class LogisticRegression @Since("1.2.0") (
@@ -241,8 +241,8 @@ class LogisticRegression @Since("1.2.0") (
   override def getThreshold: Double = super.getThreshold
 
   /**
-   * Whether to over-/under-sample training instances according to the given weights in weightCol.
-   * If not set or empty String, all instances are treated equally (weight 1.0).
+   * Sets the value of param [[weightCol]].
+   * If this is not set or empty, we treat all instance weights as 1.0.
    * Default is not set, so all instances have weight one.
    *
    * @group setParam
@@ -320,7 +320,7 @@ class LogisticRegression @Since("1.2.0") (
       }
 
       if (numClasses > 2) {
-        val msg = s"Currently, LogisticRegression with ElasticNet in ML package only supports " +
+        val msg = s"LogisticRegression with ElasticNet in ML package only supports " +
           s"binary classification. Found $numClasses in the input dataset. Consider using " +
           s"MultinomialLogisticRegression instead."
         logError(msg)
@@ -990,7 +990,7 @@ class BinaryLogisticRegressionSummary private[classification] (
  *    $$
  * </blockquote></p>
  *
- * The model coefficients $\beta = (\beta_1, \beta_2, ..., \beta_{K-1})$ become a matrix
+ * The model coefficients $\beta = (\beta_0, \beta_1, \beta_2, ..., \beta_{K-1})$ become a matrix
  * which has dimension of $K \times (N+1)$ if the intercepts are added. If the intercepts are not
  * added, the dimension will be $K \times N$.
  *
@@ -1094,20 +1094,19 @@ class BinaryLogisticRegressionSummary private[classification] (
  *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
- * @param numFeatures The number of features for the input data.
  * @param numClasses the number of possible outcomes for k classes classification problem in
  *                   Multinomial Logistic Regression.
  * @param fitIntercept Whether to fit an intercept term.
- * @param multinomial Whether to use multinomial or binary loss
+ * @param multinomial Whether to use multinomial (softmax) or binary loss
  */
 private class LogisticAggregator(
     bcCoefficients: Broadcast[Vector],
     bcFeaturesStd: Broadcast[Array[Double]],
-    private val numFeatures: Int,
     numClasses: Int,
     fitIntercept: Boolean,
     multinomial: Boolean) extends Serializable with Logging {
 
+  private val numFeatures = bcFeaturesStd.value.length
   private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
   private val coefficientSize = bcCoefficients.value.size
   if (multinomial) {
@@ -1116,8 +1115,8 @@ private class LogisticAggregator(
   } else {
     require(coefficientSize == numFeaturesPlusIntercept, s"Expected $numFeaturesPlusIntercept " +
       s"coefficients but got $coefficientSize")
-    require(numClasses <= 2, s"Binary logistic aggregator requires numClasses in {1, 2}" +
-      s" but found $numClasses.")
+    require(numClasses == 1 || numClasses == 2, s"Binary logistic aggregator requires numClasses " +
+      s"in {1, 2} but found $numClasses.")
   }
 
   private var weightSum = 0.0
@@ -1136,32 +1135,32 @@ private class LogisticAggregator(
   private def binaryUpdateInPlace(
       features: Vector,
       weight: Double,
-      label: Double,
-      coefficients: Array[Double],
-      gradient: Array[Double],
-      featuresStd: Array[Double],
-      numFeaturesPlusIntercept: Int): Unit = {
+      label: Double): Unit = {
+
+    val localFeaturesStd = bcFeaturesStd.value
+    val localCoefficients = bcCoefficients.value
+    val localGradientArray = gradientSumArray
     val margin = - {
       var sum = 0.0
       features.foreachActive { (index, value) =>
-        if (featuresStd(index) != 0.0 && value != 0.0) {
-          sum += coefficients(index) * value / featuresStd(index)
+        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+          sum += localCoefficients(index) * value / localFeaturesStd(index)
         }
       }
-      if (fitIntercept) sum += coefficients(numFeaturesPlusIntercept - 1)
+      if (fitIntercept) sum += localCoefficients(numFeaturesPlusIntercept - 1)
       sum
     }
 
     val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
 
     features.foreachActive { (index, value) =>
-      if (featuresStd(index) != 0.0 && value != 0.0) {
-        gradient(index) += multiplier * value / featuresStd(index)
+      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+        localGradientArray(index) += multiplier * value / localFeaturesStd(index)
       }
     }
 
     if (fitIntercept) {
-      gradient(numFeaturesPlusIntercept - 1) += multiplier
+      localGradientArray(numFeaturesPlusIntercept - 1) += multiplier
     }
 
     if (label > 0) {
@@ -1176,16 +1175,15 @@ private class LogisticAggregator(
   private def multinomialUpdateInPlace(
       features: Vector,
       weight: Double,
-      label: Double,
-      coefficients: Array[Double],
-      gradient: Array[Double],
-      featuresStd: Array[Double],
-      numFeaturesPlusIntercept: Int): Unit = {
+      label: Double): Unit = {
     // TODO: use level 2 BLAS operations
     /*
       Note: this can still be used when numClasses = 2 for binary
       logistic regression without pivoting.
      */
+    val localFeaturesStd = bcFeaturesStd.value
+    val localCoefficients = bcCoefficients.value
+    val localGradientArray = gradientSumArray
 
     // marginOfLabel is margins(label) in the formula
     var marginOfLabel = 0.0
@@ -1194,13 +1192,14 @@ private class LogisticAggregator(
     val margins = Array.tabulate(numClasses) { i =>
       var margin = 0.0
       features.foreachActive { (index, value) =>
-        if (featuresStd(index) != 0.0 && value != 0.0) {
-          margin += coefficients(i * numFeaturesPlusIntercept + index) * value / featuresStd(index)
+        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+          margin += localCoefficients(i * numFeaturesPlusIntercept + index) *
+            value / localFeaturesStd(index)
         }
       }
 
       if (fitIntercept) {
-        margin += coefficients(i * numFeaturesPlusIntercept + features.size)
+        margin += localCoefficients(i * numFeaturesPlusIntercept + numFeatures)
       }
       if (i == label.toInt) marginOfLabel = margin
       if (margin > maxMargin) {
@@ -1234,14 +1233,13 @@ private class LogisticAggregator(
         if (label == i) 1.0 else 0.0
       }
       features.foreachActive { (index, value) =>
-        if (featuresStd(index) != 0.0 && value != 0.0) {
-          gradient(i * numFeaturesPlusIntercept + index) +=
-            weight * multiplier * value / featuresStd(index)
+        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+          localGradientArray(i * numFeaturesPlusIntercept + index) +=
+            weight * multiplier * value / localFeaturesStd(index)
         }
       }
       if (fitIntercept) {
-        gradient(i * numFeaturesPlusIntercept + features.size) +=
-          weight * multiplier
+        localGradientArray(i * numFeaturesPlusIntercept + numFeatures) += weight * multiplier
       }
     }
 
@@ -1268,20 +1266,10 @@ private class LogisticAggregator(
 
       if (weight == 0.0) return this
 
-      val coefficientsArray = bcCoefficients.value match {
-        case dv: DenseVector => dv.values
-        case _ =>
-          throw new IllegalArgumentException(
-            "coefficients only supports dense vector" +
-              s"but got type ${bcCoefficients.value.getClass}.")
-      }
-
       if (multinomial) {
-        multinomialUpdateInPlace(features, weight, label, coefficientsArray, gradientSumArray,
-          bcFeaturesStd.value, numFeaturesPlusIntercept)
+        multinomialUpdateInPlace(features, weight, label)
       } else {
-        binaryUpdateInPlace(features, weight, label, coefficientsArray, gradientSumArray,
-          bcFeaturesStd.value, numFeaturesPlusIntercept)
+        binaryUpdateInPlace(features, weight, label)
       }
       weightSum += weight
       this
@@ -1358,7 +1346,7 @@ private class LogisticCostFun(
       val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new LogisticAggregator(bcCoeffs, bcFeaturesStd, numFeatures, numClasses, fitIntercept,
+        new LogisticAggregator(bcCoeffs, bcFeaturesStd, numClasses, fitIntercept,
           multinomial)
       )(seqOp, combOp)
     }

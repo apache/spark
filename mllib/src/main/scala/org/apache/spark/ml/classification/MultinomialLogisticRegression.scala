@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
 
 /**
- * Params for multinomial logistic regression.
+ * Params for multinomial logistic (softmax) regression.
  */
 private[classification] trait MultinomialLogisticRegressionParams
   extends ProbabilisticClassifierParams with HasRegParam with HasElasticNetParam with HasMaxIter
@@ -70,7 +70,7 @@ private[classification] trait MultinomialLogisticRegressionParams
 
 /**
  * :: Experimental ::
- * Multinomial Logistic regression.
+ * Multinomial Logistic (softmax) regression.
  */
 @Since("2.1.0")
 @Experimental
@@ -91,7 +91,6 @@ class MultinomialLogisticRegression @Since("2.1.0") (
    */
   @Since("2.1.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
-
   setDefault(regParam -> 0.0)
 
   /**
@@ -104,7 +103,6 @@ class MultinomialLogisticRegression @Since("2.1.0") (
    */
   @Since("2.1.0")
   def setElasticNetParam(value: Double): this.type = set(elasticNetParam, value)
-
   setDefault(elasticNetParam -> 0.0)
 
   /**
@@ -115,7 +113,6 @@ class MultinomialLogisticRegression @Since("2.1.0") (
    */
   @Since("2.1.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-
   setDefault(maxIter -> 100)
 
   /**
@@ -127,7 +124,6 @@ class MultinomialLogisticRegression @Since("2.1.0") (
    */
   @Since("2.1.0")
   def setTol(value: Double): this.type = set(tol, value)
-
   setDefault(tol -> 1E-6)
 
   /**
@@ -138,7 +134,6 @@ class MultinomialLogisticRegression @Since("2.1.0") (
    */
   @Since("2.1.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
-
   setDefault(fitIntercept -> true)
 
   /**
@@ -153,7 +148,6 @@ class MultinomialLogisticRegression @Since("2.1.0") (
    */
   @Since("2.1.0")
   def setStandardization(value: Boolean): this.type = set(standardization, value)
-
   setDefault(standardization -> true)
 
   /**
@@ -170,13 +164,6 @@ class MultinomialLogisticRegression @Since("2.1.0") (
   override def setThresholds(value: Array[Double]): this.type = super.setThresholds(value)
 
   override protected[spark] def train(dataset: Dataset[_]): MultinomialLogisticRegressionModel = {
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    train(dataset, handlePersistence)
-  }
-
-  protected[spark] def train(
-      dataset: Dataset[_],
-      handlePersistence: Boolean): MultinomialLogisticRegressionModel = {
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
@@ -184,6 +171,7 @@ class MultinomialLogisticRegression @Since("2.1.0") (
           Instance(label, weight, features)
       }
 
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val instr = Instrumentation.create(this, instances)
@@ -192,12 +180,12 @@ class MultinomialLogisticRegression @Since("2.1.0") (
 
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-                   instance: Instance) =>
+       instance: Instance) =>
         (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight))
 
       val combOp = (c1: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-                    c2: (MultivariateOnlineSummarizer, MultiClassSummarizer)) =>
-        (c1._1.merge(c2._1), c1._2.merge(c2._2))
+        c2: (MultivariateOnlineSummarizer, MultiClassSummarizer)) =>
+          (c1._1.merge(c2._1), c1._2.merge(c2._2))
 
       instances.treeAggregate(
         new MultivariateOnlineSummarizer, new MultiClassSummarizer)(seqOp, combOp)
@@ -207,6 +195,7 @@ class MultinomialLogisticRegression @Since("2.1.0") (
     val numInvalid = labelSummarizer.countInvalid
     val numFeatures = summarizer.mean.size
     val numFeaturesPlusIntercept = if (getFitIntercept) numFeatures + 1 else numFeatures
+
     val numClasses = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
       case Some(n: Int) =>
         require(n >= histogram.length, s"Specified number of classes $n was " +
