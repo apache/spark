@@ -1141,7 +1141,7 @@ setMethod("minute",
 #' @export
 #' @examples \dontrun{select(df, monotonically_increasing_id())}
 setMethod("monotonically_increasing_id",
-          signature("missing"),
+          signature(),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "monotonically_increasing_id")
             column(jc)
@@ -1498,7 +1498,7 @@ setMethod("soundex",
 #' \dontrun{select(df, spark_partition_id())}
 #' @note spark_partition_id since 2.0.0
 setMethod("spark_partition_id",
-          signature("missing"),
+          signature(),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "spark_partition_id")
             column(jc)
@@ -3128,7 +3128,7 @@ setMethod("ifelse",
 #' }
 #' @note cume_dist since 1.6.0
 setMethod("cume_dist",
-          signature("missing"),
+          signature(),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "cume_dist")
             column(jc)
@@ -3152,7 +3152,7 @@ setMethod("cume_dist",
 #' @examples \dontrun{dense_rank()}
 #' @note dense_rank since 1.6.0
 setMethod("dense_rank",
-          signature("missing"),
+          signature(),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "dense_rank")
             column(jc)
@@ -3267,7 +3267,7 @@ setMethod("ntile",
 #' @examples \dontrun{percent_rank()}
 #' @note percent_rank since 1.6.0
 setMethod("percent_rank",
-          signature("missing"),
+          signature(),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "percent_rank")
             column(jc)
@@ -3325,7 +3325,7 @@ setMethod("rank",
 #' @examples \dontrun{row_number()}
 #' @note row_number since 1.6.0
 setMethod("row_number",
-          signature("missing"),
+          signature(),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "row_number")
             column(jc)

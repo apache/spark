@@ -920,10 +920,10 @@ setGeneric("crc32", function(x) { standardGeneric("crc32") })
 #' @export
 setGeneric("hash", function(x, ...) { standardGeneric("hash") })
 
-#' @param x empty. Should be used with no argument.
+#' @param ... empty. Use with no argument.
 #' @rdname cume_dist
 #' @export
-setGeneric("cume_dist", function(x = "missing") { standardGeneric("cume_dist") })
+setGeneric("cume_dist", function(...) { standardGeneric("cume_dist") })
 
 #' @rdname datediff
 #' @export
@@ -953,10 +953,10 @@ setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 #' @export
 setGeneric("decode", function(x, charset) { standardGeneric("decode") })
 
-#' @param x empty. Should be used with no argument.
+#' @param ... empty. Use with no argument.
 #' @rdname dense_rank
 #' @export
-setGeneric("dense_rank", function(x = "missing") { standardGeneric("dense_rank") })
+setGeneric("dense_rank", function(...) { standardGeneric("dense_rank") })
 
 #' @rdname encode
 #' @export
@@ -1070,11 +1070,11 @@ setGeneric("md5", function(x) { standardGeneric("md5") })
 #' @export
 setGeneric("minute", function(x) { standardGeneric("minute") })
 
-#' @param x empty. Should be used with no argument.
+#' @param ... empty. Use with no argument.
 #' @rdname monotonically_increasing_id
 #' @export
 setGeneric("monotonically_increasing_id",
-           function(x = "missing") { standardGeneric("monotonically_increasing_id") })
+           function(...) { standardGeneric("monotonically_increasing_id") })
 
 #' @rdname month
 #' @export
@@ -1108,10 +1108,10 @@ setGeneric("ntile", function(x) { standardGeneric("ntile") })
 #' @export
 setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 
-#' @param x empty. Should be used with no argument.
+#' @param ... empty. Use with no argument.
 #' @rdname percent_rank
 #' @export
-setGeneric("percent_rank", function(x = "missing") { standardGeneric("percent_rank") })
+setGeneric("percent_rank", function(...) { standardGeneric("percent_rank") })
 
 #' @rdname pmod
 #' @export
@@ -1154,10 +1154,10 @@ setGeneric("reverse", function(x) { standardGeneric("reverse") })
 #' @export
 setGeneric("rint", function(x) { standardGeneric("rint") })
 
-#' @param x empty. Should be used with no argument.
+#' @param ... empty. Use with no argument.
 #' @rdname row_number
 #' @export
-setGeneric("row_number", function(x = "missing") { standardGeneric("row_number") })
+setGeneric("row_number", function(...) { standardGeneric("row_number") })
 
 #' @rdname rpad
 #' @export
@@ -1215,10 +1215,10 @@ setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array")
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
 
-#' @param x empty. Should be used with no argument.
+#' @param ... empty. Use with no argument.
 #' @rdname spark_partition_id
 #' @export
-setGeneric("spark_partition_id", function(x = "missing") { standardGeneric("spark_partition_id") })
+setGeneric("spark_partition_id", function(...) { standardGeneric("spark_partition_id") })
 
 #' @rdname sd
 #' @export

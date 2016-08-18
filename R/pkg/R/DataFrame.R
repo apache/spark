@@ -2483,8 +2483,7 @@ setMethod("unionAll",
 #'
 #' @param x a SparkDataFrame.
 #' @param ... additional SparkDataFrame(s).
-#' @param deparse.level currently not used (put here to match the signature of
-#'                      the base implementation).
+#' @param deparse.level dummy variable, currently not used.
 #' @return A SparkDataFrame containing the result of the union.
 #' @family SparkDataFrame functions
 #' @aliases rbind,SparkDataFrame-method
@@ -3213,7 +3212,7 @@ setMethod("histogram",
 #' @param x A SparkDataFrame
 #' @param url JDBC database url of the form `jdbc:subprotocol:subname`
 #' @param tableName The name of the table in the external database
-#' @param ... additional JDBC database connection properties.
+#' @param ... additional JDBC database connection propertie(s).
 #' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
 #' @family SparkDataFrame functions
 #' @rdname write.jdbc
