@@ -58,15 +58,11 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
    */
   private[analysis] def validateInputDimension(table: UnresolvedInlineTable): Unit = {
     if (table.rows.nonEmpty) {
-      val numCols = table.rows.head.size
+      val numCols = table.names.size
       table.rows.zipWithIndex.foreach { case (row, ri) =>
         if (row.size != numCols) {
           table.failAnalysis(s"expected $numCols columns but found ${row.size} columns in row $ri")
         }
-      }
-
-      if (table.names.size != numCols) {
-        table.failAnalysis(s"expected ${table.names.size} columns but found $numCols in first row")
       }
     }
   }
