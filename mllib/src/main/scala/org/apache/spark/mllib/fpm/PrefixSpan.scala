@@ -30,7 +30,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.internal.Logging
@@ -42,8 +42,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
 /**
- * :: Experimental ::
- *
  * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
  * The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
  * Efficiently by Prefix-Projected Pattern Growth ([[http://doi.org/10.1109/ICDE.2001.914830]]).
@@ -60,7 +58,6 @@ import org.apache.spark.storage.StorageLevel
  * @see [[https://en.wikipedia.org/wiki/Sequential_Pattern_Mining Sequential Pattern Mining
  *       (Wikipedia)]]
  */
-@Experimental
 @Since("1.5.0")
 class PrefixSpan private (
     private var minSupport: Double,
@@ -230,7 +227,6 @@ class PrefixSpan private (
 
 }
 
-@Experimental
 @Since("1.5.0")
 object PrefixSpan extends Logging {
 

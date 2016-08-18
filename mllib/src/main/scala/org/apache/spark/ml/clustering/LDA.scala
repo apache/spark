@@ -37,7 +37,7 @@ import org.apache.spark.mllib.linalg.MatrixImplicits._
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, udf}
+import org.apache.spark.sql.functions.{col, monotonically_increasing_id, udf}
 import org.apache.spark.sql.types.StructType
 
 
@@ -385,6 +385,10 @@ sealed abstract class LDAModel private[ml] (
   /** Returns underlying spark.mllib model, which may be local or distributed */
   @Since("1.6.0")
   protected def getModel: OldLDAModel
+
+  private[ml] def getEffectiveDocConcentration: Array[Double] = getModel.docConcentration.toArray
+
+  private[ml] def getEffectiveTopicConcentration: Double = getModel.topicConcentration
 
   /**
    * The features for LDA should be a [[Vector]] representing the word counts in a document.
@@ -888,7 +892,7 @@ object LDA extends DefaultParamsReadable[LDA] {
        dataset: Dataset[_],
        featuresCol: String): RDD[(Long, OldVector)] = {
     dataset
-      .withColumn("docId", monotonicallyIncreasingId())
+      .withColumn("docId", monotonically_increasing_id())
       .select("docId", featuresCol)
       .rdd
       .map { case Row(docId: Long, features: Vector) =>

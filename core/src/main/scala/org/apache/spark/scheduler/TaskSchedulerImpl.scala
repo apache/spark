@@ -24,7 +24,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.Set
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark._
@@ -600,6 +599,14 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   def isExecutorBusy(execId: String): Boolean = synchronized {
     executorIdToTaskCount.getOrElse(execId, -1) > 0
+  }
+
+  /**
+   * Get a snapshot of the currently blacklisted nodes for the entire application.  This is
+   * thread-safe -- it can be called without a lock on the TaskScheduler.
+   */
+  def nodeBlacklist(): scala.collection.immutable.Set[String] = {
+    blacklistTracker.map(_.nodeBlacklist()).getOrElse(scala.collection.immutable.Set())
   }
 
   // By default, rack is unknown

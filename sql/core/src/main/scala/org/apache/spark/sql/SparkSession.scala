@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
@@ -79,6 +79,13 @@ class SparkSession private(
 
   sparkContext.assertNotStopped()
 
+  /**
+   * The version of Spark on which this application is running.
+   *
+   * @since 2.0.0
+   */
+  def version: String = SPARK_VERSION
+
   /* ----------------------- *
    |  Session-related state  |
    * ----------------------- */
@@ -108,9 +115,11 @@ class SparkSession private(
 
   /**
    * A wrapped version of this session in the form of a [[SQLContext]], for backward compatibility.
+   *
+   * @since 2.0.0
    */
   @transient
-  private[spark] val sqlContext: SQLContext = new SQLContext(this)
+  val sqlContext: SQLContext = new SQLContext(this)
 
   /**
    * Runtime configuration interface for Spark.
@@ -807,16 +816,19 @@ object SparkSession {
         // No active nor global default session. Create a new one.
         val sparkContext = userSuppliedContext.getOrElse {
           // set app name if not given
-          if (!options.contains("spark.app.name")) {
-            options += "spark.app.name" -> java.util.UUID.randomUUID().toString
-          }
-
+          val randomAppName = java.util.UUID.randomUUID().toString
           val sparkConf = new SparkConf()
           options.foreach { case (k, v) => sparkConf.set(k, v) }
+          if (!sparkConf.contains("spark.app.name")) {
+            sparkConf.setAppName(randomAppName)
+          }
           val sc = SparkContext.getOrCreate(sparkConf)
           // maybe this is an existing SparkContext, update its SparkConf which maybe used
           // by SparkSession
           options.foreach { case (k, v) => sc.conf.set(k, v) }
+          if (!sc.conf.contains("spark.app.name")) {
+            sc.conf.setAppName(randomAppName)
+          }
           sc
         }
         session = new SparkSession(sparkContext)

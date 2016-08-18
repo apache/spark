@@ -48,7 +48,9 @@ getInternalType <- function(x) {
 #' @return whatever the target returns
 #' @noRd
 dispatchFunc <- function(newFuncSig, x, ...) {
-  funcName <- as.character(sys.call(sys.parent())[[1]])
+  # When called with SparkR::createDataFrame, sys.call()[[1]] returns c(::, SparkR, createDataFrame)
+  callsite <- as.character(sys.call(sys.parent())[[1]])
+  funcName <- callsite[[length(callsite)]]
   f <- get(paste0(funcName, ".default"))
   # Strip sqlContext from list of parameters and then pass the rest along.
   contextNames <- c("org.apache.spark.sql.SQLContext",
@@ -216,7 +218,7 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   }
 
   if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
-    row <- first(rdd)
+    row <- firstRDD(rdd)
     names <- if (is.null(schema)) {
       names(row)
     } else {
@@ -267,6 +269,9 @@ as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   createDataFrame(data, schema, samplingRatio)
 }
 
+#' @rdname createDataFrame
+#' @aliases as.DataFrame
+#' @export
 as.DataFrame <- function(x, ...) {
   dispatchFunc("as.DataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
 }

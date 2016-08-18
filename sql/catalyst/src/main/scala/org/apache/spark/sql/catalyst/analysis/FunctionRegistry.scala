@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
+import org.apache.spark.sql.types._
 
 
 /**
@@ -228,6 +229,7 @@ object FunctionRegistry {
     expression[Signum]("signum"),
     expression[Sin]("sin"),
     expression[Sinh]("sinh"),
+    expression[StringToMap]("str_to_map"),
     expression[Sqrt]("sqrt"),
     expression[Tan]("tan"),
     expression[Tanh]("tanh"),
@@ -407,8 +409,21 @@ object FunctionRegistry {
     expression[BitwiseAnd]("&"),
     expression[BitwiseNot]("~"),
     expression[BitwiseOr]("|"),
-    expression[BitwiseXor]("^")
+    expression[BitwiseXor]("^"),
 
+    // Cast aliases (SPARK-16730)
+    castAlias("boolean", BooleanType),
+    castAlias("tinyint", ByteType),
+    castAlias("smallint", ShortType),
+    castAlias("int", IntegerType),
+    castAlias("bigint", LongType),
+    castAlias("float", FloatType),
+    castAlias("double", DoubleType),
+    castAlias("decimal", DecimalType.USER_DEFAULT),
+    castAlias("date", DateType),
+    castAlias("timestamp", TimestampType),
+    castAlias("binary", BinaryType),
+    castAlias("string", StringType)
   )
 
   val builtin: SimpleFunctionRegistry = {
@@ -451,14 +466,37 @@ object FunctionRegistry {
       }
     }
 
-    val clazz = tag.runtimeClass
+    (name, (expressionInfo[T](name), builder))
+  }
+
+  /**
+   * Creates a function registry lookup entry for cast aliases (SPARK-16730).
+   * For example, if name is "int", and dataType is IntegerType, this means int(x) would become
+   * an alias for cast(x as IntegerType).
+   * See usage above.
+   */
+  private def castAlias(
+      name: String,
+      dataType: DataType): (String, (ExpressionInfo, FunctionBuilder)) = {
+    val builder = (args: Seq[Expression]) => {
+      if (args.size != 1) {
+        throw new AnalysisException(s"Function $name accepts only one argument")
+      }
+      Cast(args.head, dataType)
+    }
+    (name, (expressionInfo[Cast](name), builder))
+  }
+
+  /**
+   * Creates an [[ExpressionInfo]] for the function as defined by expression T using the given name.
+   */
+  private def expressionInfo[T <: Expression : ClassTag](name: String): ExpressionInfo = {
+    val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
-      (name,
-        (new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended()),
-        builder))
+      new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended())
     } else {
-      (name, (new ExpressionInfo(clazz.getCanonicalName, name), builder))
+      new ExpressionInfo(clazz.getCanonicalName, name)
     }
   }
 }

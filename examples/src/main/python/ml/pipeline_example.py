@@ -38,12 +38,13 @@ if __name__ == "__main__":
         (0L, "a b c d e spark", 1.0),
         (1L, "b d", 0.0),
         (2L, "spark f g h", 1.0),
-        (3L, "hadoop mapreduce", 0.0)], ["id", "text", "label"])
+        (3L, "hadoop mapreduce", 0.0)
+    ], ["id", "text", "label"])
 
     # Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     tokenizer = Tokenizer(inputCol="text", outputCol="words")
     hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
-    lr = LogisticRegression(maxIter=10, regParam=0.01)
+    lr = LogisticRegression(maxIter=10, regParam=0.001)
     pipeline = Pipeline(stages=[tokenizer, hashingTF, lr])
 
     # Fit the pipeline to training documents.
@@ -53,14 +54,16 @@ if __name__ == "__main__":
     test = spark.createDataFrame([
         (4L, "spark i j k"),
         (5L, "l m n"),
-        (6L, "mapreduce spark"),
-        (7L, "apache hadoop")], ["id", "text"])
+        (6L, "spark hadoop spark"),
+        (7L, "apache hadoop")
+    ], ["id", "text"])
 
     # Make predictions on test documents and print columns of interest.
     prediction = model.transform(test)
-    selected = prediction.select("id", "text", "prediction")
+    selected = prediction.select("id", "text", "probability", "prediction")
     for row in selected.collect():
-        print(row)
+        rid, text, prob, prediction = row
+        print("(%d, %s) --> prob=%s, prediction=%f" % (rid, text, str(prob), prediction))
     # $example off$
 
     spark.stop()
