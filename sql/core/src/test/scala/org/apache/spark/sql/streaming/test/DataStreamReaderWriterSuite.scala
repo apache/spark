@@ -457,4 +457,14 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       }
     }
   }
+
+  test("ConsoleSink should not require checkpointLocation") {
+    LastOptions.clear()
+    val df = spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .load()
+
+    val sq = df.writeStream.format("console").start()
+    sq.stop()
+  }
 }

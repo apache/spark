@@ -129,7 +129,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def load(path: String): DataFrame = {
-    load(Seq(path): _*) // force invocation of `load(...varargs...)`
+    option("path", path).load(Seq.empty: _*) // force invocation of `load(...varargs...)`
   }
 
   /**
@@ -177,7 +177,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *                      clause expressions used to split the column `columnName` evenly.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
-   *                             should be included.
+   *                             should be included. "fetchsize" can be used to control the
+   *                             number of rows per fetch.
    * @since 1.4.0
    */
   def jdbc(
@@ -207,7 +208,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @param predicates Condition in the where clause for each partition.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
-   *                             should be included.
+   *                             should be included. "fetchsize" can be used to control the
+   *                             number of rows per fetch.
    * @since 1.4.0
    */
   def jdbc(
@@ -317,16 +319,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         columnNameOfCorruptRecord,
         parsedOptions)
     }
+    val parsed = jsonRDD.mapPartitions { iter =>
+      val parser = new JacksonParser(schema, columnNameOfCorruptRecord, parsedOptions)
+      iter.flatMap(parser.parse)
+    }
 
     Dataset.ofRows(
       sparkSession,
-      LogicalRDD(
-        schema.toAttributes,
-        JacksonParser.parse(
-          jsonRDD,
-          schema,
-          columnNameOfCorruptRecord,
-          parsedOptions))(sparkSession))
+      LogicalRDD(schema.toAttributes, parsed)(sparkSession))
   }
 
   /**

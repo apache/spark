@@ -18,7 +18,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
@@ -116,10 +116,8 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
 }
 
 /**
- * :: Experimental ::
  * Extracts a vocabulary from document collections and generates a [[CountVectorizerModel]].
  */
-@Experimental
 @Since("1.5.0")
 class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[CountVectorizerModel] with CountVectorizerParams with DefaultParamsWritable {
@@ -201,11 +199,9 @@ object CountVectorizer extends DefaultParamsReadable[CountVectorizer] {
 }
 
 /**
- * :: Experimental ::
  * Converts a text document to a sparse vector of token counts.
  * @param vocabulary An Array over terms. Only the terms in the vocabulary will be counted.
  */
-@Experimental
 @Since("1.5.0")
 class CountVectorizerModel(
     @Since("1.5.0") override val uid: String,
@@ -297,7 +293,7 @@ object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val data = Data(instance.vocabulary)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -308,7 +304,7 @@ object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
     override def load(path: String): CountVectorizerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath)
+      val data = sparkSession.read.parquet(dataPath)
         .select("vocabulary")
         .head()
       val vocabulary = data.getAs[Seq[String]](0).toArray

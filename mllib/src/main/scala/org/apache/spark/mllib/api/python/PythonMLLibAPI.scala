@@ -1127,7 +1127,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Wrapper around RowMatrix constructor.
    */
   def createRowMatrix(rows: JavaRDD[Vector], numRows: Long, numCols: Int): RowMatrix = {
-    new RowMatrix(rows.rdd.retag(classOf[Vector]), numRows, numCols)
+    new RowMatrix(rows.rdd, numRows, numCols)
   }
 
   /**
@@ -1214,6 +1214,20 @@ private[python] class PythonMLLibAPI extends Serializable {
    */
   def convertVectorColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
     MLUtils.convertVectorColumnsFromML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertMatrixColumnsToML()]].
+   */
+  def convertMatrixColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertMatrixColumnsToML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertMatrixColumnsFromML()]]
+   */
+  def convertMatrixColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertMatrixColumnsFromML(dataset, cols.asScala: _*)
   }
 }
 

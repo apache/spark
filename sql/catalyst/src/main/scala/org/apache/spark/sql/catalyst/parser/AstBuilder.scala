@@ -97,7 +97,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       }
       // Check for duplicate names.
       checkDuplicateKeys(ctes, ctx)
-      With(query, ctes.toMap)
+      With(query, ctes)
     }
   }
 
@@ -107,7 +107,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * This is only used for Common Table Expressions.
    */
   override def visitNamedQuery(ctx: NamedQueryContext): SubqueryAlias = withOrigin(ctx) {
-    SubqueryAlias(ctx.name.getText, plan(ctx.queryNoWith))
+    SubqueryAlias(ctx.name.getText, plan(ctx.queryNoWith), None)
   }
 
   /**
@@ -132,7 +132,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // Build the insert clauses.
     val inserts = ctx.multiInsertQueryBody.asScala.map {
       body =>
-        assert(body.querySpecification.fromClause == null,
+        validate(body.querySpecification.fromClause == null,
           "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements",
           body)
 
@@ -410,6 +410,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * - UNION [DISTINCT]
    * - UNION ALL
    * - EXCEPT [DISTINCT]
+   * - MINUS [DISTINCT]
    * - INTERSECT [DISTINCT]
    */
   override def visitSetOperation(ctx: SetOperationContext): LogicalPlan = withOrigin(ctx) {
@@ -428,6 +429,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.EXCEPT if all =>
         throw new ParseException("EXCEPT ALL is not supported.", ctx)
       case SqlBaseParser.EXCEPT =>
+        Except(left, right)
+      case SqlBaseParser.SETMINUS if all =>
+        throw new ParseException("MINUS ALL is not supported.", ctx)
+      case SqlBaseParser.SETMINUS =>
         Except(left, right)
     }
   }
@@ -591,7 +596,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       // function takes X PERCENT as the input and the range of X is [0, 100], we need to
       // adjust the fraction.
       val eps = RandomSampler.roundingEpsilon
-      assert(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
+      validate(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
         s"Sampling fraction ($fraction) must be on interval [0, 1]",
         ctx)
       Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, query)(true)
@@ -653,13 +658,21 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
+   * Create a table-valued function call with arguments, e.g. range(1000)
+   */
+  override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
+      : LogicalPlan = withOrigin(ctx) {
+    UnresolvedTableValuedFunction(ctx.identifier.getText, ctx.expression.asScala.map(expression))
+  }
+
+  /**
    * Create an inline table (a virtual table in Hive parlance).
    */
   override def visitInlineTable(ctx: InlineTableContext): LogicalPlan = withOrigin(ctx) {
     // Get the backing expressions.
     val expressions = ctx.expression.asScala.map { eCtx =>
       val e = expression(eCtx)
-      assert(e.foldable, "All expressions in an inline table must be constants.", eCtx)
+      validate(e.foldable, "All expressions in an inline table must be constants.", eCtx)
       e
     }
 
@@ -681,7 +694,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val baseAttributes = structType.toAttributes.map(_.withNullability(true))
     val attributes = if (ctx.identifierList != null) {
       val aliases = visitIdentifierList(ctx.identifierList)
-      assert(aliases.size == baseAttributes.size,
+      validate(aliases.size == baseAttributes.size,
         "Number of aliases must match the number of fields in an inline table.", ctx)
       baseAttributes.zip(aliases).map(p => p._1.withName(p._2))
     } else {
@@ -718,7 +731,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create an alias (SubqueryAlias) for a LogicalPlan.
    */
   private def aliasPlan(alias: ParserRuleContext, plan: LogicalPlan): LogicalPlan = {
-    SubqueryAlias(alias.getText, plan)
+    SubqueryAlias(alias.getText, plan, None)
   }
 
   /**
@@ -1023,6 +1036,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
+   * Create a current timestamp/date expression. These are different from regular function because
+   * they do not require the user to specify braces when calling them.
+   */
+  override def visitTimeFunctionCall(ctx: TimeFunctionCallContext): Expression = withOrigin(ctx) {
+    ctx.name.getType match {
+      case SqlBaseParser.CURRENT_DATE =>
+        CurrentDate()
+      case SqlBaseParser.CURRENT_TIMESTAMP =>
+        CurrentTimestamp()
+    }
+  }
+
+  /**
    * Create a function database (optional) and name pair.
    */
   protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
@@ -1076,7 +1102,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // We currently only allow foldable integers.
     def value: Int = {
       val e = expression(ctx.expression)
-      assert(e.resolved && e.foldable && e.dataType == IntegerType,
+      validate(e.resolved && e.foldable && e.dataType == IntegerType,
         "Frame bound value must be a constant integer.",
         ctx)
       e.eval().asInstanceOf[Int]
@@ -1329,7 +1355,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
     val intervals = ctx.intervalField.asScala.map(visitIntervalField)
-    assert(intervals.nonEmpty, "at least one time unit should be given for interval literal", ctx)
+    validate(intervals.nonEmpty, "at least one time unit should be given for interval literal", ctx)
     Literal(intervals.reduce(_.add(_)))
   }
 
@@ -1356,7 +1382,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         case (from, Some(t)) =>
           throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
       }
-      assert(interval != null, "No interval can be constructed", ctx)
+      validate(interval != null, "No interval can be constructed", ctx)
       interval
     } catch {
       // Handle Exceptions thrown by CalendarInterval
@@ -1430,13 +1456,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-
-    // Add the comment to the metadata.
-    val builder = new MetadataBuilder
-    if (STRING != null) {
-      builder.putString("comment", string(STRING))
-    }
-
-    StructField(identifier.getText, typedVisit(dataType), nullable = true, builder.build())
+    val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
+    if (STRING == null) structField else structField.withComment(string(STRING))
   }
 }

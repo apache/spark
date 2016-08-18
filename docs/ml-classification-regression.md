@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Classification and regression - spark.ml
-displayTitle: Classification and regression - spark.ml
+title: Classification and regression
+displayTitle: Classification and regression
 ---
 
 
@@ -22,36 +22,13 @@ displayTitle: Classification and regression - spark.ml
 \newcommand{\zero}{\mathbf{0}}
 \]`
 
+This page covers algorithms for Classification and Regression.  It also includes sections
+discussing specific classes of algorithms, such as linear methods, trees, and ensembles.
+
 **Table of Contents**
 
 * This will become a table of contents (this text will be scraped).
 {:toc}
-
-In `spark.ml`, we implement popular linear methods such as logistic
-regression and linear least squares with $L_1$ or $L_2$ regularization.
-Refer to [the linear methods in mllib](mllib-linear-methods.html) for
-details about implementation and tuning.  We also include a DataFrame API for [Elastic
-net](http://en.wikipedia.org/wiki/Elastic_net_regularization), a hybrid
-of $L_1$ and $L_2$ regularization proposed in [Zou et al, Regularization
-and variable selection via the elastic
-net](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf).
-Mathematically, it is defined as a convex combination of the $L_1$ and
-the $L_2$ regularization terms:
-`\[
-\alpha \left( \lambda \|\wv\|_1 \right) + (1-\alpha) \left( \frac{\lambda}{2}\|\wv\|_2^2 \right) , \alpha \in [0, 1], \lambda \geq 0
-\]`
-By setting $\alpha$ properly, elastic net contains both $L_1$ and $L_2$
-regularization as special cases. For example, if a [linear
-regression](https://en.wikipedia.org/wiki/Linear_regression) model is
-trained with the elastic net parameter $\alpha$ set to $1$, it is
-equivalent to a
-[Lasso](http://en.wikipedia.org/wiki/Least_squares#Lasso_method) model.
-On the other hand, if $\alpha$ is set to $0$, the trained model reduces
-to a [ridge
-regression](http://en.wikipedia.org/wiki/Tikhonov_regularization) model.
-We implement Pipelines API for both linear regression and logistic
-regression with elastic net regularization.
-
 
 # Classification
 
@@ -760,7 +737,34 @@ Refer to the [`IsotonicRegression` Python docs](api/python/pyspark.ml.html#pyspa
 </div>
 </div>
 
+# Linear methods
 
+We implement popular linear methods such as logistic
+regression and linear least squares with $L_1$ or $L_2$ regularization.
+Refer to [the linear methods guide for the RDD-based API](mllib-linear-methods.html) for
+details about implementation and tuning; this information is still relevant.
+
+We also include a DataFrame API for [Elastic
+net](http://en.wikipedia.org/wiki/Elastic_net_regularization), a hybrid
+of $L_1$ and $L_2$ regularization proposed in [Zou et al, Regularization
+and variable selection via the elastic
+net](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf).
+Mathematically, it is defined as a convex combination of the $L_1$ and
+the $L_2$ regularization terms:
+`\[
+\alpha \left( \lambda \|\wv\|_1 \right) + (1-\alpha) \left( \frac{\lambda}{2}\|\wv\|_2^2 \right) , \alpha \in [0, 1], \lambda \geq 0
+\]`
+By setting $\alpha$ properly, elastic net contains both $L_1$ and $L_2$
+regularization as special cases. For example, if a [linear
+regression](https://en.wikipedia.org/wiki/Linear_regression) model is
+trained with the elastic net parameter $\alpha$ set to $1$, it is
+equivalent to a
+[Lasso](http://en.wikipedia.org/wiki/Least_squares#Lasso_method) model.
+On the other hand, if $\alpha$ is set to $0$, the trained model reduces
+to a [ridge
+regression](http://en.wikipedia.org/wiki/Tikhonov_regularization) model.
+We implement Pipelines API for both linear regression and logistic
+regression with elastic net regularization.
 
 # Decision trees
 

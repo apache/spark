@@ -100,8 +100,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // instance across threads
     private val ser = SparkEnv.get.closureSerializer.newInstance()
 
-    override protected def log = CoarseGrainedSchedulerBackend.this.log
-
     protected val addressToExecutorId = new HashMap[RpcAddress, String]
 
     private val reviveThread =

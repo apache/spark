@@ -109,7 +109,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * :: Experimental ::
-   * Specifies the name of the [[StreamingQuery]] that can be started with `startStream()`.
+   * Specifies the name of the [[StreamingQuery]] that can be started with `start()`.
    * This name must be unique among all the currently active queries in the associated SQLContext.
    *
    * @since 2.0.0
@@ -272,6 +272,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         useTempCheckpointLocation = true,
         trigger = trigger)
     } else {
+      val (useTempCheckpointLocation, recoverFromCheckpointLocation) =
+        if (source == "console") {
+          (true, false)
+        } else {
+          (false, true)
+        }
       val dataSource =
         DataSource(
           df.sparkSession,
@@ -284,6 +290,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         df,
         dataSource.createSink(outputMode),
         outputMode,
+        useTempCheckpointLocation = useTempCheckpointLocation,
+        recoverFromCheckpointLocation = recoverFromCheckpointLocation,
         trigger = trigger)
     }
   }

@@ -35,9 +35,9 @@ abstract class StreamingQueryListener {
   /**
    * Called when a query is started.
    * @note This is called synchronously with
-   *       [[org.apache.spark.sql.DataFrameWriter `DataFrameWriter.startStream()`]],
+   *       [[org.apache.spark.sql.DataStreamWriter `DataStreamWriter.start()`]],
    *       that is, `onQueryStart` will be called on all listeners before
-   *       `DataFrameWriter.startStream()` returns the corresponding [[StreamingQuery]]. Please
+   *       `DataStreamWriter.start()` returns the corresponding [[StreamingQuery]]. Please
    *       don't block this method as it will block your query.
    * @since 2.0.0
    */
@@ -108,6 +108,5 @@ object StreamingQueryListener {
   @Experimental
   class QueryTerminated private[sql](
       val queryInfo: StreamingQueryInfo,
-      val exception: Option[String],
-      val stackTrace: Seq[StackTraceElement]) extends Event
+      val exception: Option[String]) extends Event
 }

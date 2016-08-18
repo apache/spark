@@ -33,6 +33,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
+
 /**
  * Shared trait for implementing a Mesos Scheduler. This holds common state and helper
  * methods and Mesos scheduler will use.
@@ -46,6 +47,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
 
   /**
    * Creates a new MesosSchedulerDriver that communicates to the Mesos master.
+   *
    * @param masterUrl The url to connect to Mesos master
    * @param scheduler the scheduler class to receive scheduler callbacks
    * @param sparkUser User to impersonate with when running tasks
@@ -79,7 +81,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       credBuilder.setPrincipal(principal)
     }
     conf.getOption("spark.mesos.secret").foreach { secret =>
-      credBuilder.setSecret(ByteString.copyFromUtf8(secret))
+      credBuilder.setSecret(secret)
     }
     if (credBuilder.hasSecret && !fwInfoBuilder.hasPrincipal) {
       throw new SparkException(
@@ -147,6 +149,20 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   }
 
   /**
+   * Transforms a range resource to a list of ranges
+   *
+   * @param res the mesos resource list
+   * @param name the name of the resource
+   * @return the list of ranges returned
+   */
+  protected def getRangeResource(res: JList[Resource], name: String): List[(Long, Long)] = {
+    // A resource can have multiple values in the offer since it can either be from
+    // a specific role or wildcard.
+    res.asScala.filter(_.getName == name).flatMap(_.getRanges.getRangeList.asScala
+      .map(r => (r.getBegin, r.getEnd)).toList).toList
+  }
+
+  /**
    * Signal that the scheduler has registered with Mesos.
    */
   protected def markRegistered(): Unit = {
@@ -171,6 +187,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   /**
    * Partition the existing set of resources into two groups, those remaining to be
    * scheduled and those requested to be used for a new task.
+   *
    * @param resources The full list of available resources
    * @param resourceName The name of the resource to take from the available resources
    * @param amountToUse The amount of resources to take from the available resources
@@ -222,7 +239,8 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   /**
    * Converts the attributes from the resource offer into a Map of name -> Attribute Value
    * The attribute values are the mesos attribute types and they are
-   * @param offerAttributes
+   *
+   * @param offerAttributes the attributes offered
    * @return
    */
   protected def toAttributeMap(offerAttributes: JList[Attribute]): Map[String, GeneratedMessage] = {
@@ -332,6 +350,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   /**
    * Return the amount of memory to allocate to each executor, taking into account
    * container overheads.
+   *
    * @param sc SparkContext to use to get `spark.mesos.executor.memoryOverhead` value
    * @return memory requirement as (0.1 * <memoryOverhead>) or MEMORY_OVERHEAD_MINIMUM
    *         (whichever is larger)
@@ -356,4 +375,120 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     sc.conf.getTimeAsSeconds("spark.mesos.rejectOfferDurationForReachedMaxCores", "120s")
   }
 
+  /**
+   * Checks executor ports if they are within some range of the offered list of ports ranges,
+   *
+   * @param conf the Spark Config
+   * @param ports the list of ports to check
+   * @return true if ports are within range false otherwise
+   */
+  protected def checkPorts(conf: SparkConf, ports: List[(Long, Long)]): Boolean = {
+
+    def checkIfInRange(port: Long, ps: List[(Long, Long)]): Boolean = {
+      ps.exists{case (rangeStart, rangeEnd) => rangeStart <= port & rangeEnd >= port }
+    }
+
+    val portsToCheck = nonZeroPortValuesFromConfig(conf)
+    val withinRange = portsToCheck.forall(p => checkIfInRange(p, ports))
+    // make sure we have enough ports to allocate per offer
+    val enoughPorts =
+    ports.map{case (rangeStart, rangeEnd) => rangeEnd - rangeStart + 1}.sum >= portsToCheck.size
+    enoughPorts && withinRange
+  }
+
+  /**
+   * Partitions port resources.
+   *
+   * @param requestedPorts non-zero ports to assign
+   * @param offeredResources the resources offered
+   * @return resources left, port resources to be used.
+   */
+  def partitionPortResources(requestedPorts: List[Long], offeredResources: List[Resource])
+    : (List[Resource], List[Resource]) = {
+    if (requestedPorts.isEmpty) {
+      (offeredResources, List[Resource]())
+    } else {
+      // partition port offers
+      val (resourcesWithoutPorts, portResources) = filterPortResources(offeredResources)
+
+      val portsAndRoles = requestedPorts.
+        map(x => (x, findPortAndGetAssignedRangeRole(x, portResources)))
+
+      val assignedPortResources = createResourcesFromPorts(portsAndRoles)
+
+      // ignore non-assigned port resources, they will be declined implicitly by mesos
+      // no need for splitting port resources.
+      (resourcesWithoutPorts, assignedPortResources)
+    }
+  }
+
+  val managedPortNames = List("spark.executor.port", "spark.blockManager.port")
+
+  /**
+   * The values of the non-zero ports to be used by the executor process.
+   * @param conf the spark config to use
+   * @return the ono-zero values of the ports
+   */
+  def nonZeroPortValuesFromConfig(conf: SparkConf): List[Long] = {
+    managedPortNames.map(conf.getLong(_, 0)).filter( _ != 0)
+  }
+
+  /** Creates a mesos resource for a specific port number. */
+  private def createResourcesFromPorts(portsAndRoles: List[(Long, String)]) : List[Resource] = {
+    portsAndRoles.flatMap{ case (port, role) =>
+      createMesosPortResource(List((port, port)), Some(role))}
+  }
+
+  /** Helper to create mesos resources for specific port ranges. */
+  private def createMesosPortResource(
+      ranges: List[(Long, Long)],
+      role: Option[String] = None): List[Resource] = {
+    ranges.map { case (rangeStart, rangeEnd) =>
+      val rangeValue = Value.Range.newBuilder()
+        .setBegin(rangeStart)
+        .setEnd(rangeEnd)
+      val builder = Resource.newBuilder()
+        .setName("ports")
+        .setType(Value.Type.RANGES)
+        .setRanges(Value.Ranges.newBuilder().addRange(rangeValue))
+      role.foreach(r => builder.setRole(r))
+      builder.build()
+    }
+  }
+
+ /**
+  * Helper to assign a port to an offered range and get the latter's role
+  * info to use it later on.
+  */
+  private def findPortAndGetAssignedRangeRole(port: Long, portResources: List[Resource])
+    : String = {
+
+    val ranges = portResources.
+      map(resource =>
+        (resource.getRole, resource.getRanges.getRangeList.asScala
+          .map(r => (r.getBegin, r.getEnd)).toList))
+
+    val rangePortRole = ranges
+      .find { case (role, rangeList) => rangeList
+        .exists{ case (rangeStart, rangeEnd) => rangeStart <= port & rangeEnd >= port}}
+    // this is safe since we have previously checked about the ranges (see checkPorts method)
+    rangePortRole.map{ case (role, rangeList) => role}.get
+  }
+
+  /** Retrieves the port resources from a list of mesos offered resources */
+  private def filterPortResources(resources: List[Resource]): (List[Resource], List[Resource]) = {
+    resources.partition { r => !(r.getType == Value.Type.RANGES && r.getName == "ports") }
+  }
+
+  /**
+   * spark.mesos.driver.frameworkId is set by the cluster dispatcher to correlate driver
+   * submissions with frameworkIDs.  However, this causes issues when a driver process launches
+   * more than one framework (more than one SparkContext(, because they all try to register with
+   * the same frameworkID.  To enforce that only the first driver registers with the configured
+   * framework ID, the driver calls this method after the first registration.
+   */
+  def unsetFrameworkID(sc: SparkContext) {
+    sc.conf.remove("spark.mesos.driver.frameworkId")
+    System.clearProperty("spark.mesos.driver.frameworkId")
+  }
 }

@@ -53,12 +53,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   assertNotSupportedInBatchPlan(
     "streaming source",
     streamRelation,
-    Seq("with streaming source", "startStream"))
+    Seq("with streaming source", "start"))
 
   assertNotSupportedInBatchPlan(
     "select on streaming source",
     streamRelation.select($"count(*)"),
-    Seq("with streaming source", "startStream"))
+    Seq("with streaming source", "start"))
 
 
   /*
@@ -70,7 +70,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Batch plan in streaming query
   testError(
     "streaming plan - no streaming source",
-    Seq("without streaming source", "startStream")) {
+    Seq("without streaming source", "start")) {
     UnsupportedOperationChecker.checkForStreaming(batchRelation.select($"count(*)"), Append)
   }
 

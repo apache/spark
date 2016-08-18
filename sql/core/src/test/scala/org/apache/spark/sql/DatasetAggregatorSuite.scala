@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.language.postfixOps
-
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
@@ -71,6 +69,16 @@ object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
     (b1._1 + b2._1, b1._2)
   override def bufferEncoder: Encoder[(Int, AggData)] = Encoders.product[(Int, AggData)]
   override def outputEncoder: Encoder[Int] = Encoders.scalaInt
+}
+
+
+object MapTypeBufferAgg extends Aggregator[Int, Map[Int, Int], Int] {
+  override def zero: Map[Int, Int] = Map.empty
+  override def reduce(b: Map[Int, Int], a: Int): Map[Int, Int] = b
+  override def finish(reduction: Map[Int, Int]): Int = 1
+  override def merge(b1: Map[Int, Int], b2: Map[Int, Int]): Map[Int, Int] = b1
+  override def bufferEncoder: Encoder[Map[Int, Int]] = ExpressionEncoder()
+  override def outputEncoder: Encoder[Int] = ExpressionEncoder()
 }
 
 
@@ -289,5 +297,19 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkDatasetUnorderly(
       ds.groupByKey(_.a).agg(NullResultAgg.toColumn),
       1 -> AggData(1, "one"), 2 -> null)
+  }
+
+  test("SPARK-16100: use Map as the buffer type of Aggregator") {
+    val ds = Seq(1, 2, 3).toDS()
+    checkDataset(ds.select(MapTypeBufferAgg.toColumn), 1)
+  }
+
+  test("SPARK-15204 improve nullability inference for Aggregator") {
+    val ds1 = Seq(1, 3, 2, 5).toDS()
+    assert(ds1.select(typed.sum((i: Int) => i)).schema.head.nullable === false)
+    val ds2 = Seq(AggData(1, "a"), AggData(2, "a")).toDS()
+    assert(ds2.select(SeqAgg.toColumn).schema.head.nullable === true)
+    val ds3 = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
+    assert(ds3.select(NameAgg.toColumn).schema.head.nullable === true)
   }
 }

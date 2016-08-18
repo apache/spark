@@ -1465,8 +1465,10 @@ class DAGScheduler(
     }
 
     if (ableToCancelStages) {
-      job.listener.jobFailed(error)
+      // SPARK-15783 important to cleanup state first, just for tests where we have some asserts
+      // against the state.  Otherwise we have a *little* bit of flakiness in the tests.
       cleanupStateForJobAndIndependentStages(job)
+      job.listener.jobFailed(error)
       listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))
     }
   }

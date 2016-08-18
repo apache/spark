@@ -22,10 +22,10 @@ NULL
 
 #' S4 class that represents a WindowSpec
 #'
-#' WindowSpec can be created by using window.partitionBy() or window.orderBy()
+#' WindowSpec can be created by using windowPartitionBy() or windowOrderBy()
 #'
 #' @rdname WindowSpec
-#' @seealso \link{window.partitionBy}, \link{window.orderBy}
+#' @seealso \link{windowPartitionBy}, \link{windowOrderBy}
 #'
 #' @param sws A Java object reference to the backing Scala WindowSpec
 #' @export
@@ -58,6 +58,7 @@ setMethod("show", "WindowSpec",
 #' @return a WindowSpec
 #' @rdname partitionBy
 #' @name partitionBy
+#' @aliases partitionBy,WindowSpec-method
 #' @family windowspec_method
 #' @export
 #' @examples
@@ -81,15 +82,18 @@ setMethod("partitionBy",
             }
           })
 
-#' orderBy
+#' Ordering Columns in a WindowSpec
 #'
 #' Defines the ordering columns in a WindowSpec.
-#'
 #' @param x a WindowSpec
-#' @return a WindowSpec
-#' @rdname arrange
+#' @param col a character or Column object indicating an ordering column
+#' @param ... additional sorting fields
+#' @return A WindowSpec.
 #' @name orderBy
+#' @rdname orderBy
+#' @aliases orderBy,WindowSpec,character-method
 #' @family windowspec_method
+#' @seealso See \link{arrange} for use in sorting a SparkDataFrame
 #' @export
 #' @examples
 #' \dontrun{
@@ -103,8 +107,9 @@ setMethod("orderBy",
             windowSpec(callJMethod(x@sws, "orderBy", col, list(...)))
           })
 
-#' @rdname arrange
+#' @rdname orderBy
 #' @name orderBy
+#' @aliases orderBy,WindowSpec,Column-method
 #' @export
 #' @note orderBy(WindowSpec, Column) since 2.0.0
 setMethod("orderBy",
@@ -119,7 +124,7 @@ setMethod("orderBy",
 #' rowsBetween
 #'
 #' Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
-#' 
+#'
 #' Both `start` and `end` are relative positions from the current row. For example, "0" means
 #' "current row", while "-1" means the row before the current row, and "5" means the fifth row
 #' after the current row.
@@ -131,6 +136,7 @@ setMethod("orderBy",
 #'            The frame is unbounded if this is the maximum long value.
 #' @return a WindowSpec
 #' @rdname rowsBetween
+#' @aliases rowsBetween,WindowSpec,numeric,numeric-method
 #' @name rowsBetween
 #' @family windowspec_method
 #' @export
@@ -150,7 +156,7 @@ setMethod("rowsBetween",
 #' rangeBetween
 #'
 #' Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
-#' 
+#'
 #' Both `start` and `end` are relative from the current row. For example, "0" means "current row",
 #' while "-1" means one off before the current row, and "5" means the five off after the
 #' current row.
@@ -162,6 +168,7 @@ setMethod("rowsBetween",
 #'            The frame is unbounded if this is the maximum long value.
 #' @return a WindowSpec
 #' @rdname rangeBetween
+#' @aliases rangeBetween,WindowSpec,numeric,numeric-method
 #' @name rangeBetween
 #' @family windowspec_method
 #' @export
@@ -183,10 +190,11 @@ setMethod("rangeBetween",
 
 #' over
 #'
-#' Define a windowing column. 
+#' Define a windowing column.
 #'
 #' @rdname over
 #' @name over
+#' @aliases over,Column,WindowSpec-method
 #' @family colum_func
 #' @export
 #' @note over since 2.0.0

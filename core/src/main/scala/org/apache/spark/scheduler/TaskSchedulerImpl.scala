@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark._
@@ -266,7 +265,6 @@ private[spark] class TaskSchedulerImpl(
             taskIdToTaskSetManager(tid) = taskSet
             taskIdToExecutorId(tid) = execId
             executorIdToTaskCount(execId) += 1
-            executorsByHost(host) += execId
             availableCpus(i) -= CPUS_PER_TASK
             assert(availableCpus(i) >= 0)
             launchedTask = true
@@ -279,6 +277,9 @@ private[spark] class TaskSchedulerImpl(
             return launchedTask
         }
       }
+    }
+    if (!launchedTask) {
+      taskSet.abortIfCompletelyBlacklisted(executorIdToHost.keys)
     }
     return launchedTask
   }
@@ -293,11 +294,14 @@ private[spark] class TaskSchedulerImpl(
     // Also track if new executor is added
     var newExecAvail = false
     for (o <- offers) {
-      executorIdToHost(o.executorId) = o.host
-      executorIdToTaskCount.getOrElseUpdate(o.executorId, 0)
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
+      }
+      if (!executorIdToTaskCount.contains(o.executorId)) {
+        executorsByHost(o.host) += o.executorId
         executorAdded(o.executorId, o.host)
+        executorIdToHost(o.executorId) = o.host
+        executorIdToTaskCount(o.executorId) = 0
         newExecAvail = true
       }
       for (rack <- getRackForHost(o.host)) {
