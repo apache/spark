@@ -426,6 +426,7 @@ relationPrimary
     | '(' queryNoWith ')' sample? (AS? strictIdentifier)?           #aliasedQuery
     | '(' relation ')' sample? (AS? strictIdentifier)?              #aliasedRelation
     | inlineTable                                                   #inlineTableDefault2
+    | identifier '(' (expression (',' expression)*)? ')'            #tableValuedFunction
     ;
 
 inlineTable
