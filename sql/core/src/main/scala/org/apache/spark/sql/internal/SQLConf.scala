@@ -315,7 +315,7 @@ object SQLConf {
       .doc("When true, fast stats (number of files and total size of all files) will be gathered" +
         "while reparing table partitions.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   // This is used to control the when we will split a schema's JSON string to multiple pieces
   // in order to fit the JSON string in metastore's table property (by default, the value has
