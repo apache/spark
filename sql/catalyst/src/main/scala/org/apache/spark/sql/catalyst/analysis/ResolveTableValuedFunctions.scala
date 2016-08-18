@@ -68,7 +68,14 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
    * TVF builder.
    */
   private def tvf(args: (String, DataType)*)(pf: PartialFunction[Seq[Any], LogicalPlan])
-    : (ArgumentList, Seq[Any] => LogicalPlan) = (ArgumentList(args: _*), pf)
+      : (ArgumentList, Seq[Any] => LogicalPlan) = {
+    (ArgumentList(args: _*),
+     pf orElse {
+       case args =>
+         throw new IllegalArgumentException(
+           "Invalid arguments for resolved function: " + args.mkString(", "))
+     })
+  }
 
   /**
    * Internal registry of table-valued functions.
@@ -87,15 +94,15 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
 
       /* range(start, end, step) */
       tvf("start" -> LongType, "end" -> LongType, "step" -> LongType) {
-          case Seq(start: Long, end: Long, step: Long) =>
-        Range(start, end, step, defaultParallelism)
+        case Seq(start: Long, end: Long, step: Long) =>
+          Range(start, end, step, defaultParallelism)
       },
 
       /* range(start, end, step, numPartitions) */
       tvf("start" -> LongType, "end" -> LongType, "step" -> LongType,
           "numPartitions" -> IntegerType) {
-          case Seq(start: Long, end: Long, step: Long, numPartitions: Int) =>
-        Range(start, end, step, numPartitions)
+        case Seq(start: Long, end: Long, step: Long, numPartitions: Int) =>
+          Range(start, end, step, numPartitions)
       })
   )
 
@@ -103,17 +110,21 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
     case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
       builtinFunctions.get(u.functionName) match {
         case Some(tvf) =>
-          for ((argList, resolver) <- tvf) {
-            val casted = argList.implicitCast(u.functionArgs)
-            if (casted.isDefined) {
-              return resolver(casted.get.map(_.eval()))
+          val resolved = tvf.flatMap { case (argList, resolver) =>
+            argList.implicitCast(u.functionArgs) match {
+              case Some(casted) =>
+                Some(resolver(casted.map(_.eval())))
+              case _ =>
+                None
             }
           }
-          val argTypes = u.functionArgs.map(_.dataType.typeName).mkString(", ")
-          u.failAnalysis(
-            s"""error: table-valued function ${u.functionName} with alternatives:
-              |${tvf.keys.map(_.toString).toSeq.sorted.map(x => s" ($x)").mkString("\n")}
-              |cannot be applied to: (${argTypes})""".stripMargin)
+          resolved.headOption.getOrElse {
+            val argTypes = u.functionArgs.map(_.dataType.typeName).mkString(", ")
+            u.failAnalysis(
+              s"""error: table-valued function ${u.functionName} with alternatives:
+                |${tvf.keys.map(_.toString).toSeq.sorted.map(x => s" ($x)").mkString("\n")}
+                |cannot be applied to: (${argTypes})""".stripMargin)
+          }
         case _ =>
           u.failAnalysis(s"could not resolve `${u.functionName}` to a table-valued function")
       }
