@@ -38,11 +38,11 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Data corresponding to one partition of a JDBCRDD.
  */
-private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
+case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
   override def index: Int = idx
 }
 
-private[sql] object JDBCRDD extends Logging {
+object JDBCRDD extends Logging {
 
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
@@ -192,7 +192,7 @@ private[sql] object JDBCRDD extends Logging {
    * Turns a single Filter into a String representing a SQL expression.
    * Returns None for an unhandled filter.
    */
-  private[jdbc] def compileFilter(f: Filter): Option[String] = {
+  def compileFilter(f: Filter): Option[String] = {
     Option(f match {
       case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
       case EqualNullSafe(attr, value) =>
@@ -275,7 +275,7 @@ private[sql] object JDBCRDD extends Logging {
  * driver code and the workers must be able to access the database; the driver
  * needs to fetch the schema while the workers need to fetch the data.
  */
-private[sql] class JDBCRDD(
+private[jdbc] class JDBCRDD(
     sc: SparkContext,
     getConnection: () => Connection,
     schema: StructType,
@@ -322,19 +322,19 @@ private[sql] class JDBCRDD(
     }
   }
 
-  // A `JDBCValueSetter` is responsible for converting and setting a value from `ResultSet`
-  // into a field for `MutableRow`. The last argument `Int` means the index for the
-  // value to be set in the row and also used for the value to retrieve from `ResultSet`.
-  private type JDBCValueSetter = (ResultSet, MutableRow, Int) => Unit
+  // A `JDBCValueGetter` is responsible for getting a value from `ResultSet` into a field
+  // for `MutableRow`. The last argument `Int` means the index for the value to be set in
+  // the row and also used for the value in `ResultSet`.
+  private type JDBCValueGetter = (ResultSet, MutableRow, Int) => Unit
 
   /**
-   * Creates `JDBCValueSetter`s according to [[StructType]], which can set
+   * Creates `JDBCValueGetter`s according to [[StructType]], which can set
    * each value from `ResultSet` to each field of [[MutableRow]] correctly.
    */
-  def makeSetters(schema: StructType): Array[JDBCValueSetter] =
-    schema.fields.map(sf => makeSetter(sf.dataType, sf.metadata))
+  def makeGetters(schema: StructType): Array[JDBCValueGetter] =
+    schema.fields.map(sf => makeGetter(sf.dataType, sf.metadata))
 
-  private def makeSetter(dt: DataType, metadata: Metadata): JDBCValueSetter = dt match {
+  private def makeGetter(dt: DataType, metadata: Metadata): JDBCValueGetter = dt match {
     case BooleanType =>
       (rs: ResultSet, row: MutableRow, pos: Int) =>
         row.setBoolean(pos, rs.getBoolean(pos + 1))
@@ -489,15 +489,15 @@ private[sql] class JDBCRDD(
     stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 
-    val setters: Array[JDBCValueSetter] = makeSetters(schema)
+    val getters: Array[JDBCValueGetter] = makeGetters(schema)
     val mutableRow = new SpecificMutableRow(schema.fields.map(x => x.dataType))
 
     def getNext(): InternalRow = {
       if (rs.next()) {
         inputMetrics.incRecordsRead(1)
         var i = 0
-        while (i < setters.length) {
-          setters(i).apply(rs, mutableRow, i)
+        while (i < getters.length) {
+          getters(i).apply(rs, mutableRow, i)
           if (rs.wasNull) mutableRow.setNullAt(i)
           i = i + 1
         }

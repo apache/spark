@@ -135,10 +135,20 @@ class HiveDDLSuite
         sql(s"CREATE VIEW $viewName COMMENT 'no comment' AS SELECT * FROM $tabName")
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
         val viewMetadata = catalog.getTableMetadata(TableIdentifier(viewName, Some("default")))
-        assert(tableMetadata.properties.get("comment") == Option("BLABLA"))
-        assert(viewMetadata.properties.get("comment") == Option("no comment"))
+        assert(tableMetadata.comment == Option("BLABLA"))
+        assert(viewMetadata.comment == Option("no comment"))
+        // Ensure that `comment` is removed from the table property
+        assert(tableMetadata.properties.get("comment").isEmpty)
+        assert(viewMetadata.properties.get("comment").isEmpty)
       }
     }
+  }
+
+  test("create table: partition column names exist in table definition") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int) PARTITIONED BY (a string)")
+    }
+    assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
   }
 
   test("add/drop partitions - external table") {
@@ -431,6 +441,22 @@ class HiveDDLSuite
     }
   }
 
+  test("desc table for Hive table - partitioned table") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(a int) PARTITIONED BY (b int)")
+
+      assert(sql("DESC tbl").collect().containsSlice(
+        Seq(
+          Row("a", "int", null),
+          Row("b", "int", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("b", "int", null)
+        )
+      ))
+    }
+  }
+
   test("desc table for data source table using Hive Metastore") {
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
     val tabName = "tab1"
@@ -621,7 +647,7 @@ class HiveDDLSuite
 
           val desc = sql("DESC FORMATTED t1").collect().toSeq
 
-          assert(desc.contains(Row("id", "bigint", "")))
+          assert(desc.contains(Row("id", "bigint", null)))
         }
       }
     }
@@ -638,13 +664,13 @@ class HiveDDLSuite
 
       assert(formattedDesc.containsSlice(
         Seq(
-          Row("a", "bigint", ""),
-          Row("b", "bigint", ""),
-          Row("c", "bigint", ""),
-          Row("d", "bigint", ""),
+          Row("a", "bigint", null),
+          Row("b", "bigint", null),
+          Row("c", "bigint", null),
+          Row("d", "bigint", null),
           Row("# Partition Information", "", ""),
-          Row("# col_name", "", ""),
-          Row("d", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("d", "bigint", null),
           Row("", "", ""),
           Row("# Detailed Table Information", "", ""),
           Row("Database:", "default", "")

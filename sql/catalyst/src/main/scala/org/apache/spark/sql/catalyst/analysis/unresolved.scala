@@ -50,6 +50,17 @@ case class UnresolvedRelation(
 }
 
 /**
+ * Holds a table-valued function call that has yet to be resolved.
+ */
+case class UnresolvedTableValuedFunction(
+    functionName: String, functionArgs: Seq[Expression]) extends LeafNode {
+
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+}
+
+/**
  * Holds the name of an attribute that has yet to be resolved.
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {
@@ -366,6 +377,24 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
 
 case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpression
   with Unevaluable with NonSQLExpression {
+  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
+  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override lazy val resolved = false
+}
+
+/**
+ * Represents unresolved ordinal used in order by or group by.
+ *
+ * For example:
+ * {{{
+ *   select a from table order by 1
+ *   select a   from table group by 1
+ * }}}
+ * @param ordinal ordinal starts from 1, instead of 0
+ */
+case class UnresolvedOrdinal(ordinal: Int)
+    extends LeafExpression with Unevaluable with NonSQLExpression {
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false

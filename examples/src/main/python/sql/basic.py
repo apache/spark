@@ -182,7 +182,7 @@ if __name__ == "__main__":
     # $example on:init_session$
     spark = SparkSession \
         .builder \
-        .appName("PythonSQL") \
+        .appName("Python Spark SQL basic example") \
         .config("spark.some.config.option", "some-value") \
         .getOrCreate()
     # $example off:init_session$

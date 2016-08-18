@@ -49,7 +49,7 @@ import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
-  with PrivateMethodTester with ResetSystemProperties {
+  with PrivateMethodTester with LocalSparkContext with ResetSystemProperties {
 
   import BlockManagerSuite._
 
@@ -107,8 +107,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
     conf.set("spark.driver.port", rpcEnv.address.port.toString)
 
+    sc = new SparkContext("local", "test", conf)
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
-      new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
+      new BlockManagerMasterEndpoint(rpcEnv, true, conf,
+        new LiveListenerBus(sc))), conf, true)
 
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
@@ -239,8 +241,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // Checking whether blocks are in memory and memory size
     val memStatus = master.getMemoryStatus.head._2
-    assert(memStatus._1 == 20000L, "total memory " + memStatus._1 + " should equal 20000")
-    assert(memStatus._2 <= 12000L, "remaining memory " + memStatus._2 + " should <= 12000")
+    assert(memStatus._1 == 40000L, "total memory " + memStatus._1 + " should equal 40000")
+    assert(memStatus._2 <= 32000L, "remaining memory " + memStatus._2 + " should <= 12000")
     assert(store.getSingleAndReleaseLock("a1-to-remove").isDefined, "a1 was not in store")
     assert(store.getSingleAndReleaseLock("a2-to-remove").isDefined, "a2 was not in store")
     assert(store.getSingleAndReleaseLock("a3-to-remove").isDefined, "a3 was not in store")
@@ -269,8 +271,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
       val memStatus = master.getMemoryStatus.head._2
-      memStatus._1 should equal (20000L)
-      memStatus._2 should equal (20000L)
+      memStatus._1 should equal (40000L)
+      memStatus._2 should equal (40000L)
     }
   }
 
