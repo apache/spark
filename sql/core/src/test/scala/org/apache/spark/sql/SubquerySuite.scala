@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
+import org.apache.spark.sql.execution.{FilterExec, ProjectExec}
 import org.apache.spark.sql.execution.subquery.CommonSubqueryExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{DoubleType, IntegerType}
 
 class SubquerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -619,6 +622,51 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       case c: CommonSubqueryExec => c.subquery.child
     }.distinct
     assert(commonSubqueries5.length == 1)
+  }
+
+  test("Dedup subqueries with optimization: Filter pushdown") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val df = sql("WITH cte AS (SELECT a.a AS a, a.b AS b, b.a AS c, b.b AS d FROM l a, l b) " +
+        "SELECT * FROM (SELECT * FROM cte WHERE a = 1) x JOIN (SELECT * FROM cte WHERE b = 1.0) y")
+
+      val commonSubqueries = df.queryExecution.sparkPlan.collect {
+        case c: CommonSubqueryExec => c.subquery.child
+      }.distinct
+      assert(commonSubqueries.length == 1)
+      val pushdownFilter = commonSubqueries(0).collect {
+        case f: FilterExec => f
+      }
+      assert(pushdownFilter.length == 1)
+      val intConditions = pushdownFilter(0).asInstanceOf[FilterExec].condition.collect {
+        case EqualTo(a: AttributeReference, Literal(i, IntegerType)) => (a.name, i)
+      }
+      assert(intConditions.length == 1 && intConditions(0)._1 == "a" && intConditions(0)._2 == 1)
+      val doubleConditions = pushdownFilter(0).asInstanceOf[FilterExec].condition.collect {
+        case EqualTo(a: AttributeReference, Literal(d, DoubleType)) => (a.name, d)
+      }
+      assert(doubleConditions.length == 1 &&
+        doubleConditions(0)._1 == "b" && doubleConditions(0)._2 == 1.0)
+    }
+  }
+
+  test("Dedup subqueries with optimization: Project pushdown") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val df = sql("WITH cte AS (SELECT a.a AS a, a.b AS b, b.a AS c, b.b AS d FROM l a, l b) " +
+        "SELECT * FROM (SELECT a FROM cte) x JOIN (SELECT b FROM cte) y")
+
+      val commonSubqueries = df.queryExecution.sparkPlan.collect {
+        case c: CommonSubqueryExec => c.subquery.child
+      }.distinct
+      assert(commonSubqueries.length == 1)
+
+      val pushdownProject = commonSubqueries(0).collect {
+        case f: ProjectExec => f
+      }
+      assert(pushdownProject.length == 1)
+      // As we project `a` and `b` which both are located at only one side at the inner join,
+      // optimizer will add an empty projection node to filter out all rows from other side.
+      assert(pushdownProject(0).asInstanceOf[ProjectExec].projectList.isEmpty)
+    }
   }
 
   test("SPARK-16804: Correlated subqueries containing LIMIT - 1") {

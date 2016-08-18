@@ -141,7 +141,7 @@ trait CheckAnalysis extends PredicateHelper {
 
             // Skip projects and subquery aliases added by the Analyzer and the SQLBuilder.
             def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
-              case SubqueryAlias(_, child) => cleanQuery(child)
+              case SubqueryAlias(_, child, _) => cleanQuery(child)
               case Project(_, child) => cleanQuery(child)
               case child => child
             }

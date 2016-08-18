@@ -693,7 +693,17 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   }
 }
 
-case class SubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
+/**
+ * Represents a subquery in query plan.
+ * @param alias The name of this subquery.
+ * @param child The logical plan of the subquery.
+ * @param commonSubquery Whether this subquery is a common subquery, i.e., the logical plan
+ *                       referred more than once in the query plan. Default: false.
+ */
+case class SubqueryAlias(
+    alias: String,
+    child: LogicalPlan,
+    commonSubquery: Boolean = false) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 

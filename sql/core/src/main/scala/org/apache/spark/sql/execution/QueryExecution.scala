@@ -24,7 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
-import org.apache.spark.sql.catalyst.optimizer.EliminateOneTimeSubqueryAliases
+import org.apache.spark.sql.catalyst.optimizer.OptimizeCommonSubqueries
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -73,9 +73,9 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   }
 
   lazy val optimizedPlan: LogicalPlan = {
-    val noOneTimeCommonSubqueries = EliminateOneTimeSubqueryAliases(withCachedData)
-    val dedupSubqueries = DedupCommonSubqueries(sparkSession)(noOneTimeCommonSubqueries)
-    sparkSession.sessionState.optimizer.execute(dedupSubqueries)
+    val optimized = sparkSession.sessionState.optimizer.execute(withCachedData)
+    val subqueryOptimized = OptimizeCommonSubqueries(sparkSession.sessionState.optimizer)(optimized)
+    DedupCommonSubqueries(sparkSession)(subqueryOptimized)
   }
 
   lazy val sparkPlan: SparkPlan = {

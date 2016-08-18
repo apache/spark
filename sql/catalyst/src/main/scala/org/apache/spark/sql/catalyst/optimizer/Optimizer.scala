@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashMap
 
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
@@ -49,7 +50,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     // However, because we also use the analyzer to canonicalized queries (for view definition),
     // we do not eliminate subqueries or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
-      EliminateSubqueryAliases,
+      EliminateOneTimeSubqueryAliases,
       ReplaceExpressions,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
@@ -463,6 +464,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
+
+    // Don't prune the columns on common subquery.
+    case p @ Project(_, SubqueryAlias(_, _, true)) => p
 
     // for all other logical plans that inherits the output from it's children
     case p @ Project(_, child) =>
@@ -1210,6 +1214,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     case filter @ Filter(_, _: Filter) => filter
     // should not push predicates through sample, or will generate different results.
     case filter @ Filter(_, _: Sample) => filter
+    // should not push predicates through common subquery.
+    case filter @ Filter(_, SubqueryAlias(_, _, true)) => filter
 
     case filter @ Filter(condition, u: UnaryNode) if u.expressions.forall(_.deterministic) =>
       pushDownPredicate(filter, u.child) { predicate =>
@@ -1862,7 +1868,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     // and Project operators, followed by an optional Filter, followed by an
     // Aggregate. Traverse the operators recursively.
     def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Any]] = lp match {
-      case SubqueryAlias(_, child) => evalPlan(child)
+      case SubqueryAlias(_, child, false) => evalPlan(child)
       case Filter(condition, child) =>
         val bindings = evalPlan(child)
         if (bindings.isEmpty) bindings
@@ -1920,7 +1926,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           topPart += p
           bottomPart = child
 
-        case s @ SubqueryAlias(_, child) =>
+        case s @ SubqueryAlias(_, child, false) =>
           topPart += s
           bottomPart = child
 
@@ -1991,7 +1997,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
             topPart.reverse.foreach {
               case Project(projList, _) =>
                 subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
-              case s @ SubqueryAlias(alias, _) =>
+              case s @ SubqueryAlias(alias, _, false) =>
                 subqueryRoot = SubqueryAlias(alias, subqueryRoot)
               case op => sys.error(s"Unexpected operator $op in corelated subquery")
             }
@@ -2055,6 +2061,130 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
 }
 
 /**
+ * Optimizes the logical plans wrapped in SubqueryAlias and operators on them.
+ * The SubqueryAlias which are remaining in optimization phase are common subqueries,
+ * i.e., they are duplicate in the whole query plan. The logical plans wrapped in
+ * SubqueryAlias will be executed individually later. However, some operators such as
+ * Project and Filter can be optimized with the wrapped logical plans. Thus, this rule
+ * considers the optimization of the wrapped logical plans and operators on SubqueryAlias.
+ */
+case class OptimizeCommonSubqueries(optimizer: Optimizer) extends Rule[LogicalPlan] {
+  // Optimized the subqueries which all have a Project parent node and the same results.
+  private def optimizeProjectWithSubqueries(
+      plan: LogicalPlan,
+      subqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
+    plan transform {
+      case p @ Project(pList, SubqueryAlias(alias, subquery, true)) =>
+        val pListForAll: Seq[NamedExpression] = subqueries.flatMap { case Project(pList, child) =>
+          val rewrites = buildRewrites(child, subquery)
+          pList.map(pushToOtherPlan(_, rewrites))
+        }
+
+        val newSubquery = Project(pListForAll, subquery)
+        val optimized = optimizer.execute(newSubquery)
+        // Check if any optimization is performed.
+        if (optimized.sameResult(newSubquery)) {
+          // No optimization happens. Let's keep original subquery.
+          p
+        } else {
+          Project(pList, SubqueryAlias(alias, newSubquery, true))
+        }
+    }
+  }
+
+  /**
+   * Maps Attributes from the source side to the corresponding Attribute on the target side.
+   */
+  private def buildRewrites(source: LogicalPlan, target: LogicalPlan): AttributeMap[Attribute] = {
+    assert(source.output.size == target.output.size)
+    AttributeMap(source.output.zip(target.output))
+  }
+
+  /**
+   * Rewrites an expression so that it can be pushed to another LogicalPlan.
+   */
+  private def pushToOtherPlan[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
+    val result = e transform {
+      case a: Attribute => rewrites(a)
+    }
+
+    // We must promise the compiler that we did not discard the names in the case of project
+    // expressions.  This is safe since the only transformation is from Attribute => Attribute.
+    result.asInstanceOf[A]
+  }
+
+  private def optimizeFilterWithSubqueries(
+      plan: LogicalPlan,
+      subqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
+    plan transform {
+      case f @ Filter(cond, SubqueryAlias(alias, subquery, true)) =>
+        val conditionForAll: Expression = subqueries.map { case Filter(otherCond, child) =>
+          val rewrites = buildRewrites(child, subquery)
+          pushToOtherPlan(otherCond, rewrites)
+        }.reduce(Or)
+
+        val newSubquery = Filter(conditionForAll, subquery)
+        val optimized = optimizer.execute(newSubquery)
+        // Check if any optimization is performed.
+        if (optimized.sameResult(newSubquery)) {
+          // No optimization happens. Let's keep original subquery.
+          f
+        } else {
+          Filter(cond, SubqueryAlias(alias, newSubquery, true))
+        }
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val subqueryMap = HashMap.empty[LogicalPlan, ArrayBuffer[LogicalPlan]]
+
+    // Constructs the groups of the subqueries with the same results.
+    plan.foreach {
+      case u: UnaryNode
+          if u.child.isInstanceOf[SubqueryAlias] &&
+            u.child.asInstanceOf[SubqueryAlias].commonSubquery =>
+
+        val child = u.child.asInstanceOf[SubqueryAlias].child
+        // Looking for the existing group with the same results.
+        subqueryMap.find { case (key, _) =>
+          if (key.sameResult(child)) {
+            true
+          } else {
+            false
+          }
+        }.map { case (_, subqueries) =>
+          // If found, add current logical plan into this group.
+          subqueries += u
+        }.getOrElse {
+          // If not, create a new group.
+          subqueryMap += ((child, ArrayBuffer[LogicalPlan](u)))
+        }
+      case _ =>
+    }
+
+    // Begins to optimize common SubqueryAlias with outside operators.
+    // We only need to take care two cases:
+    // 1. All subqueries have a Project on them.
+    // 2. All subqueries have a Filter on them.
+    var currentPlan = plan
+    subqueryMap.map { case (_, subqueries) =>
+      if (subqueries.length > 1) {
+        val allProject = subqueries.forall(_.isInstanceOf[Project])
+        if (allProject) {
+          currentPlan = optimizeProjectWithSubqueries(currentPlan, subqueries)
+        } else {
+          val allFilter = subqueries.forall(_.isInstanceOf[Filter])
+          if (allFilter) {
+            currentPlan = optimizeFilterWithSubqueries(currentPlan, subqueries)
+          }
+        }
+      }
+    }
+    currentPlan
+  }
+}
+
+/**
  * Removes the [[SubqueryAlias]] operators which are used only once from the plan.
  */
 object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
@@ -2064,14 +2194,14 @@ object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
 
     val noRecursiveSubqueryPlan = plan.transformDown {
       // Eliminate the recursive subqueries which have the same output.
-      case s @ SubqueryAlias(_, child)
+      case s @ SubqueryAlias(_, child, _)
           if child.find(p => p.isInstanceOf[SubqueryAlias] && p.sameResult(s)).isDefined =>
         child
     }
 
     noRecursiveSubqueryPlan.foreach {
-      // Collect the subqueries that are used more than once in the query.
-      case SubqueryAlias(_, child) =>
+      // Collects the subqueries that are used more than once in the query.
+      case SubqueryAlias(_, child, _) =>
         if (subqueries.indexWhere(s => s.sameResult(child)) >= 0) {
           // If the plan with same results can be found.
           duplicateSubqueries += child
@@ -2082,11 +2212,15 @@ object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
       case _ =>
     }
 
+    // Set the `commonSubquery` of remainning SubqueryAlias as `true`.
     noRecursiveSubqueryPlan.transformDown {
-      // Only eliminate the subqueries that are used only once in the query.
-      case SubqueryAlias(_, child)
-          if duplicateSubqueries.indexWhere(s => s.sameResult(child)) < 0 =>
-        child
+      // Eliminates the subqueries that are used only once in the query.
+      case SubqueryAlias(alias, child, _) =>
+        if (duplicateSubqueries.indexWhere(s => s.sameResult(child)) < 0) {
+          child
+        } else {
+          SubqueryAlias(alias, child, commonSubquery = true)
+        }
     }
   }
 }

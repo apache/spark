@@ -201,8 +201,8 @@ case class DedupCommonSubqueries(sparkSession: SparkSession) extends Rule[Logica
   def apply(plan: LogicalPlan): LogicalPlan = {
     val dedup = new SubqueryDedup()
     plan.transformDown {
-      case s: SubqueryAlias =>
-        dedup.createCommonSubquery(sparkSession, s.child)
+      case s @ SubqueryAlias(_, child, true) =>
+        dedup.createCommonSubquery(sparkSession, child)
     }
   }
 }
