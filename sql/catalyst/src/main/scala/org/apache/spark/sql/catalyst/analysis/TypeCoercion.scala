@@ -543,11 +543,14 @@ object TypeCoercion {
       // Decimal and Double remain the same
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
-      case Divide(left, right) if isNumeric(left) && isNumeric(right) =>
+      case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
         Divide(Cast(left, DoubleType), Cast(right, DoubleType))
     }
 
-    private def isNumeric(ex: Expression): Boolean = ex.dataType.isInstanceOf[NumericType]
+    private def isNumericOrNull(ex: Expression): Boolean = {
+      // We need to handle null types in case a query contains null literals.
+      ex.dataType.isInstanceOf[NumericType] || ex.dataType == NullType
+    }
   }
 
   /**

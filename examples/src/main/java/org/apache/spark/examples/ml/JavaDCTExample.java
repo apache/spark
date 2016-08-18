@@ -51,13 +51,17 @@ public class JavaDCTExample {
       new StructField("features", new VectorUDT(), false, Metadata.empty()),
     });
     Dataset<Row> df = spark.createDataFrame(data, schema);
+
     DCT dct = new DCT()
       .setInputCol("features")
       .setOutputCol("featuresDCT")
       .setInverse(false);
+
     Dataset<Row> dctDf = dct.transform(df);
-    dctDf.select("featuresDCT").show(3);
+
+    dctDf.select("featuresDCT").show(false);
     // $example off$
+
     spark.stop();
   }
 }
