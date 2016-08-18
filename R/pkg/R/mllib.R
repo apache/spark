@@ -1139,14 +1139,11 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
               stop("maxIter should be a positive number.")
             }
 
-            features <- array(c(ratingCol, userCol, itemCol))
-            distParams <- array(as.integer(c(numUserBlocks, numItemBlocks,
-                                             checkpointInterval, seed)))
-
             jobj <- callJStatic("org.apache.spark.ml.r.ALSWrapper",
-                                "fit", data@sdf, features, as.integer(rank),
+                                "fit", data@sdf, ratingCol, userCol, itemCol, as.integer(rank),
                                 reg, as.integer(maxIter), implicitPrefs, alpha, nonnegative,
-                                distParams)
+                                as.integer(numUserBlocks), as.integer(numItemBlocks),
+                                as.integer(checkpointInterval), as.integer(seed))
             return(new("ALSModel", jobj = jobj))
           })
 
@@ -1162,13 +1159,10 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
 setMethod("summary", signature(object = "ALSModel"),
 function(object, ...) {
     jobj <- object@jobj
-    userFactors <- dataFrame(callJMethod(jobj, "rUserFactors"))
-    itemFactors <- dataFrame(callJMethod(jobj, "rItemFactors"))
-    rank <- callJMethod(jobj, "rRank")
-    regParam <- callJMethod(jobj, "rRegParam")
-    maxIter <- callJMethod(jobj, "rMaxIter")
-    return(list(userFactors = userFactors, itemFactors = itemFactors, rank = rank,
-                regParam = regParam, maxIter = maxIter))
+    userFactors <- dataFrame(callJMethod(jobj, "userFactors"))
+    itemFactors <- dataFrame(callJMethod(jobj, "itemFactors"))
+    rank <- callJMethod(jobj, "rank")
+    return(list(userFactors = userFactors, itemFactors = itemFactors, rank = rank))
 })
 
 

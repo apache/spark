@@ -27,21 +27,16 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class ALSWrapper private (
-    val alsm: ALSModel,
-    val rRatingCol: String,
-    val rUserCol: String,
-    val rItemCol: String,
-    val rRegParam: Double,
-    val rMaxIter: Int) extends MLWritable {
+    val alsModel: ALSModel) extends MLWritable {
 
-  lazy val rUserFactors: DataFrame = alsm.userFactors
-
-  lazy val rItemFactors: DataFrame = alsm.itemFactors
-
-  lazy val rRank: Int = alsm.rank
+  lazy val userCol: String = alsModel.getUserCol
+  lazy val itemCol: String = alsModel.getItemCol
+  lazy val userFactors: DataFrame = alsModel.userFactors
+  lazy val itemFactors: DataFrame = alsModel.itemFactors
+  lazy val rank: Int = alsModel.rank
 
   def transform(dataset: Dataset[_]): DataFrame = {
-    alsm.transform(dataset)
+    alsModel.transform(dataset)
   }
 
   override def write: MLWriter = new ALSWrapper.ALSWrapperWriter(this)
@@ -49,13 +44,21 @@ private[r] class ALSWrapper private (
 
 private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
 
-  def fit(data: DataFrame, features: Array[String], rank: Int, regParam: Double, maxIter: Int,
-          implicitPrefs: Boolean, alpha: Double, nonnegative: Boolean,
-          distParams: Array[Int]): ALSWrapper = {
-
-    val ratingCol = features(0)
-    val userCol = features(1)
-    val itemCol = features(2)
+  def fit(  // scalastyle:ignore
+      data: DataFrame,
+      ratingCol: String,
+      userCol: String,
+      itemCol: String,
+      rank: Int,
+      regParam: Double,
+      maxIter: Int,
+      implicitPrefs: Boolean,
+      alpha: Double,
+      nonnegative: Boolean,
+      numUserBlocks: Int,
+      numItemBlocks: Int,
+      checkpointInterval: Int,
+      seed: Int): ALSWrapper = {
 
     val als = new ALS()
       .setRatingCol(ratingCol)
@@ -67,14 +70,14 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
       .setImplicitPrefs(implicitPrefs)
       .setAlpha(alpha)
       .setNonnegative(nonnegative)
-      .setNumBlocks(distParams(0))
-      .setNumItemBlocks(distParams(1))
-      .setCheckpointInterval(distParams(2))
-      .setSeed(distParams(3).toLong)
+      .setNumBlocks(numUserBlocks)
+      .setNumItemBlocks(numItemBlocks)
+      .setCheckpointInterval(checkpointInterval)
+      .setSeed(seed.toLong)
 
-    val alsm: ALSModel = als.fit(data)
+    val alsModel: ALSModel = als.fit(data)
 
-    new ALSWrapper(alsm, ratingCol, userCol, itemCol, regParam, maxIter)
+    new ALSWrapper(alsModel)
   }
 
   override def read: MLReader[ALSWrapper] = new ALSWrapperReader
@@ -87,16 +90,11 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
       val rMetadataPath = new Path(path, "rMetadata").toString
       val modelPath = new Path(path, "model").toString
 
-      val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("rRatingCol" -> instance.rRatingCol) ~
-        ("rUserCol" -> instance.rUserCol) ~
-        ("rItemCol" -> instance.rItemCol) ~
-        ("rRegParam" -> instance.rRegParam) ~
-        ("rMaxIter" -> instance.rMaxIter)
-
+      val rMetadata = ("class" -> instance.getClass.getName)
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
-      instance.alsm.save(modelPath)
+
+      instance.alsModel.save(modelPath)
     }
   }
 
@@ -104,20 +102,11 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
 
     override def load(path: String): ALSWrapper = {
       implicit val format = DefaultFormats
-      val rMetadataPath = new Path(path, "rMetadata").toString
       val modelPath = new Path(path, "model").toString
 
-      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
-      val rMetadata = parse(rMetadataStr)
-      val rRatingCol = (rMetadata \ "rRatingCol").extract[String]
-      val rUserCol = (rMetadata \ "rUserCol").extract[String]
-      val rItemCol = (rMetadata \ "rItemCol").extract[String]
-      val rRegParam = (rMetadata \ "rRegParam").extract[Double]
-      val rMaxIter = (rMetadata \ "rMaxIter").extract[Int]
+      val alsModel = ALSModel.load(modelPath)
 
-      val alsm = ALSModel.load(modelPath)
-
-      new ALSWrapper(alsm, rRatingCol, rUserCol, rItemCol, rRegParam, rMaxIter)
+      new ALSWrapper(alsModel)
     }
   }
 

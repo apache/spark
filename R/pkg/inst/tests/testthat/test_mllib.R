@@ -641,23 +641,6 @@ test_that("spark.lda with text input", {
 })
 
 test_that("spark.als", {
-  # R code to reproduce the result.
-  #
-  #' data <- list(list(0, 0, 4.0), list(0, 1, 2.0), list(1, 1, 3.0), list(1, 2, 4.0),
-  #'              list(2, 1, 1.0), list(2, 2, 5.0))
-  #' df <- createDataFrame(data, c("user", "item", "rating"))
-  #' model <- spark.als(df, ratingCol = "rating", userCol = "user", itemCol = "item",
-  #'                    rank = 10, maxIter = 5, seed = 0)
-  #' test <- createDataFrame(list(list(0, 2), list(1, 0), list(2, 0)), c("user", "item"))
-  #' predict(model, test)
-  #
-  # -- output of 'predict(model, data)'
-  #
-  #     user     item       prediction
-  #       0         2       -0.1380762
-  #       1         0       2.6258414
-  #       2         0       -1.5018409
-  #
   data <- list(list(0, 0, 4.0), list(0, 1, 2.0), list(1, 1, 3.0), list(1, 2, 4.0),
                list(2, 1, 1.0), list(2, 2, 5.0))
   df <- createDataFrame(data, c("user", "item", "rating"))
@@ -678,7 +661,6 @@ test_that("spark.als", {
   write.ml(model, modelPath, overwrite = TRUE)
   model2 <- read.ml(modelPath)
   stats2 <- summary(model2)
-  expect_equal(stats2$maxIter, 5)
   userFactors <- collect(stats$userFactors)
   itemFactors <- collect(stats$itemFactors)
   userFactors2 <- collect(stats2$userFactors)
