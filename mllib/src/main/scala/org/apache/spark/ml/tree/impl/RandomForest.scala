@@ -51,7 +51,7 @@ import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
  * findSplits() method during initialization, after which each continuous feature becomes
  * an ordered discretized feature with at most maxBins possible values.
  *
- * The main loop in the algorithm operates on a queue of nodes (nodeQueue).  These nodes
+ * The main loop in the algorithm operates on a queue of nodes (nodeStack).  These nodes
  * lie at the periphery of the tree being trained.  If multiple trees are being trained at once,
  * then this queue contains nodes from all of them.  Each iteration works roughly as follows:
  *   On the master node:
@@ -162,11 +162,10 @@ private[spark] object RandomForest extends Logging {
     }
 
     /*
-      FILO queue of nodes to train: (treeIndex, node)
-      We make this FILO by always inserting nodes by appending (+=) and removing with dropRight.
+      Stack of nodes to train: (treeIndex, node)
       The reason this is FILO is that we train many trees at once, but we want to focus on
       completing trees, rather than training all simultaneously.  If we are splitting nodes from
-      1 tree, then the new nodes to split will be put at the end of this list, so we will continue
+      1 tree, then the new nodes to split will be put at the top of this stack, so we will continue
       training the same tree in the next iteration.  This focus allows us to send fewer trees to
       workers on each iteration; see topNodesForGroup below.
      */
