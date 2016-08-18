@@ -228,23 +228,25 @@ private[csv] class CsvOutputWriter(
   }
 
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
-    case DateType if params.dateFormat != null =>
-      (row: InternalRow, ordinal: Int) =>
-        params.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
-
     case DateType =>
-      (row: InternalRow, ordinal: Int) =>
-        val date = DateTimeUtils.toJavaDate(row.getInt(ordinal))
-        DateTimeUtils.iso8601DateFormat.format(date)
-
-    case TimestampType if params.dateFormat != null =>
-      (row: InternalRow, ordinal: Int) =>
-        params.dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
+      if (params.dateFormat != null) {
+        (row: InternalRow, ordinal: Int) =>
+          params.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
+      } else {
+        (row: InternalRow, ordinal: Int) =>
+          val date = DateTimeUtils.toJavaDate(row.getInt(ordinal))
+          DateTimeUtils.iso8601DateFormat.format(date)
+      }
 
     case TimestampType =>
-      (row: InternalRow, ordinal: Int) =>
-        val timestamp = DateTimeUtils.toJavaTimestamp(row.getLong(ordinal))
-        DateTimeUtils.iso8601TimeFormat.format(timestamp)
+      if (params.dateFormat != null) {
+        (row: InternalRow, ordinal: Int) =>
+          params.dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
+      } else {
+        (row: InternalRow, ordinal: Int) =>
+          val timestamp = DateTimeUtils.toJavaTimestamp(row.getLong(ordinal))
+          DateTimeUtils.iso8601TimeFormat.format(timestamp)
+      }
 
     case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
 

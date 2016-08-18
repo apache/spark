@@ -66,8 +66,8 @@ object DateTimeUtils {
 
   // These are ISO 8601 compliant `FastDateFormat`s. These are thread-safe and compatible
   // with `SimpleDateFormat`.
-  lazy val iso8601TimeFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSZZ")
-  lazy val iso8601DateFormat = FastDateFormat.getInstance("yyyy-MM-dd")
+  val iso8601TimeFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSZZ")
+  val iso8601DateFormat = FastDateFormat.getInstance("yyyy-MM-dd")
 
   // Reuse the Calendar object in each thread as it is expensive to create in each method call.
   private val threadLocalGmtCalendar = new ThreadLocal[Calendar] {
