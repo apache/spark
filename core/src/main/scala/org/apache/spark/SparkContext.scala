@@ -1410,9 +1410,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     val scheme = new URI(schemeCorrectedPath).getScheme
     if (!Array("http", "https", "ftp").contains(scheme)) {
       val fs = hadoopPath.getFileSystem(hadoopConfiguration)
-      if (!fs.exists(hadoopPath)) {
-        throw new FileNotFoundException(s"Added file $hadoopPath does not exist.")
-      }
       val isDir = fs.getFileStatus(hadoopPath).isDirectory
       if (!isLocal && scheme == "file" && isDir) {
         throw new SparkException(s"addFile does not support local directories when not running " +

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -703,7 +704,9 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 case class SubqueryAlias(
     alias: String,
     child: LogicalPlan,
-    commonSubquery: Boolean = false) extends UnaryNode {
+    view: Option[TableIdentifier],
+    commonSubquery: Boolean = false)
+  extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 

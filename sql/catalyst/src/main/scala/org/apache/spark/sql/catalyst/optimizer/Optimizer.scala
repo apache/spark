@@ -76,7 +76,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       RemoveRepetitionFromGroupExpressions) ::
     Batch("Operator Optimizations", fixedPoint,
       // Operator push down
-      PushThroughSetOperations,
+      PushProjectionThroughUnion,
       ReorderJoin,
       EliminateOuterJoin,
       PushPredicateThroughJoin,
@@ -128,7 +128,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
   object OptimizeSubqueries extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s: SubqueryExpression =>
-        s.withNewPlan(Optimizer.this.execute(s.query))
+        s.withNewPlan(Optimizer.this.execute(s.plan))
     }
   }
 }
@@ -303,14 +303,14 @@ object LimitPushDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes certain operations to both sides of a Union operator.
+ * Pushes Project operator to both sides of a Union operator.
  * Operations that are safe to pushdown are listed as follows.
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
- * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
- * we will not be able to pushdown Projections.
+ * safe to pushdown Filters and Projections through it. Filter pushdown is handled by another
+ * rule PushDownPredicate. Once we add UNION DISTINCT, we will not be able to pushdown Projections.
  */
-object PushThroughSetOperations extends Rule[LogicalPlan] with PredicateHelper {
+object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
@@ -365,17 +365,6 @@ object PushThroughSetOperations extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         p
       }
-
-    // Push down filter into union
-    case Filter(condition, Union(children)) =>
-      assert(children.nonEmpty)
-      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val newFirstChild = Filter(deterministic, children.head)
-      val newOtherChildren = children.tail.map { child =>
-        val rewrites = buildRewrites(children.head, child)
-        Filter(pushToRight(deterministic, rewrites), child)
-      }
-      Filter(nondeterministic, Union(newFirstChild +: newOtherChildren))
   }
 }
 
@@ -466,7 +455,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, _: LeafNode) => p
 
     // Don't prune the columns on common subquery.
-    case p @ Project(_, SubqueryAlias(_, _, true)) => p
+    case p @ Project(_, SubqueryAlias(_, _, _, true)) => p
 
     // for all other logical plans that inherits the output from it's children
     case p @ Project(_, child) =>
@@ -731,6 +720,19 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         case j @ Join(_, _, LeftOuter | RightOuter | FullOuter, _) =>
           stop = true
           j
+
+        // These 3 operators take attributes as constructor parameters, and these attributes
+        // can't be replaced by alias.
+        case m: MapGroups =>
+          stop = true
+          m
+        case f: FlatMapGroupsInR =>
+          stop = true
+          f
+        case c: CoGroup =>
+          stop = true
+          c
+
         case p: LogicalPlan if !stop => p.transformExpressions {
           case a: AttributeReference if foldableMap.contains(a) =>
             foldableMap(a)
@@ -1215,7 +1217,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // should not push predicates through sample, or will generate different results.
     case filter @ Filter(_, _: Sample) => filter
     // should not push predicates through common subquery.
-    case filter @ Filter(_, SubqueryAlias(_, _, true)) => filter
+    case filter @ Filter(_, SubqueryAlias(_, _, _, true)) => filter
 
     case filter @ Filter(condition, u: UnaryNode) if u.expressions.forall(_.deterministic) =>
       pushDownPredicate(filter, u.child) { predicate =>
@@ -1820,7 +1822,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     val newExpression = expression transform {
       case s: ScalarSubquery if s.children.nonEmpty =>
         subqueries += s
-        s.query.output.head
+        s.plan.output.head
     }
     newExpression.asInstanceOf[E]
   }
@@ -1868,7 +1870,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     // and Project operators, followed by an optional Filter, followed by an
     // Aggregate. Traverse the operators recursively.
     def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Any]] = lp match {
-      case SubqueryAlias(_, child, false) => evalPlan(child)
+      case SubqueryAlias(_, child, _, false) => evalPlan(child)
       case Filter(condition, child) =>
         val bindings = evalPlan(child)
         if (bindings.isEmpty) bindings
@@ -1926,7 +1928,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           topPart += p
           bottomPart = child
 
-        case s @ SubqueryAlias(_, child, false) =>
+        case s @ SubqueryAlias(_, child, _, false) =>
           topPart += s
           bottomPart = child
 
@@ -1997,8 +1999,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
             topPart.reverse.foreach {
               case Project(projList, _) =>
                 subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
-              case s @ SubqueryAlias(alias, _, false) =>
-                subqueryRoot = SubqueryAlias(alias, subqueryRoot)
+              case s @ SubqueryAlias(alias, _, None, false) =>
+                subqueryRoot = SubqueryAlias(alias, subqueryRoot, None)
               case op => sys.error(s"Unexpected operator $op in corelated subquery")
             }
 
@@ -2035,7 +2037,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         // grouping expressions. As a result we need to replace all the scalar subqueries in the
         // grouping expressions by their result.
         val newGrouping = grouping.map { e =>
-          subqueries.find(_.semanticEquals(e)).map(_.query.output.head).getOrElse(e)
+          subqueries.find(_.semanticEquals(e)).map(_.plan.output.head).getOrElse(e)
         }
         Aggregate(newGrouping, newExpressions, constructLeftJoins(child, subqueries))
       } else {
@@ -2074,7 +2076,7 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer) extends Rule[LogicalPl
       plan: LogicalPlan,
       subqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
     plan transform {
-      case p @ Project(pList, SubqueryAlias(alias, subquery, true)) =>
+      case p @ Project(pList, SubqueryAlias(alias, subquery, v, true)) =>
         val pListForAll: Seq[NamedExpression] = subqueries.flatMap { case Project(pList, child) =>
           val rewrites = buildRewrites(child, subquery)
           pList.map(pushToOtherPlan(_, rewrites))
@@ -2087,7 +2089,7 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer) extends Rule[LogicalPl
           // No optimization happens. Let's keep original subquery.
           p
         } else {
-          Project(pList, SubqueryAlias(alias, newSubquery, true))
+          Project(pList, SubqueryAlias(alias, newSubquery, v, true))
         }
     }
   }
@@ -2117,7 +2119,7 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer) extends Rule[LogicalPl
       plan: LogicalPlan,
       subqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
     plan transform {
-      case f @ Filter(cond, SubqueryAlias(alias, subquery, true)) =>
+      case f @ Filter(cond, SubqueryAlias(alias, subquery, v, true)) =>
         val conditionForAll: Expression = subqueries.map { case Filter(otherCond, child) =>
           val rewrites = buildRewrites(child, subquery)
           pushToOtherPlan(otherCond, rewrites)
@@ -2130,7 +2132,7 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer) extends Rule[LogicalPl
           // No optimization happens. Let's keep original subquery.
           f
         } else {
-          Filter(cond, SubqueryAlias(alias, newSubquery, true))
+          Filter(cond, SubqueryAlias(alias, newSubquery, v, true))
         }
     }
   }
@@ -2194,14 +2196,14 @@ object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
 
     val noRecursiveSubqueryPlan = plan.transformDown {
       // Eliminate the recursive subqueries which have the same output.
-      case s @ SubqueryAlias(_, child, _)
+      case s @ SubqueryAlias(_, child, _, _)
           if child.find(p => p.isInstanceOf[SubqueryAlias] && p.sameResult(s)).isDefined =>
         child
     }
 
     noRecursiveSubqueryPlan.foreach {
       // Collects the subqueries that are used more than once in the query.
-      case SubqueryAlias(_, child, _) =>
+      case SubqueryAlias(_, child, _, _) =>
         if (subqueries.indexWhere(s => s.sameResult(child)) >= 0) {
           // If the plan with same results can be found.
           duplicateSubqueries += child
@@ -2215,11 +2217,11 @@ object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
     // Set the `commonSubquery` of remainning SubqueryAlias as `true`.
     noRecursiveSubqueryPlan.transformDown {
       // Eliminates the subqueries that are used only once in the query.
-      case SubqueryAlias(alias, child, _) =>
+      case SubqueryAlias(alias, child, v, _) =>
         if (duplicateSubqueries.indexWhere(s => s.sameResult(child)) < 0) {
           child
         } else {
-          SubqueryAlias(alias, child, commonSubquery = true)
+          SubqueryAlias(alias, child, v, commonSubquery = true)
         }
     }
   }
