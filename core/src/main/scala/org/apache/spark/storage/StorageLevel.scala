@@ -21,6 +21,7 @@ import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.util.Utils
 
 /**
@@ -59,10 +60,12 @@ class StorageLevel private(
   assert(replication < 40, "Replication restricted to be less than 40 for calculating hash codes")
 
   if (useOffHeap) {
-    require(!useDisk, "Off-heap storage level does not support using disk")
-    require(!useMemory, "Off-heap storage level does not support using heap memory")
     require(!deserialized, "Off-heap storage level does not support deserialized storage")
-    require(replication == 1, "Off-heap storage level does not support multiple replication")
+  }
+
+  private[spark] def memoryMode: MemoryMode = {
+    if (useOffHeap) MemoryMode.OFF_HEAP
+    else MemoryMode.ON_HEAP
   }
 
   override def clone(): StorageLevel = {
@@ -80,7 +83,7 @@ class StorageLevel private(
       false
   }
 
-  def isValid: Boolean = (useMemory || useDisk || useOffHeap) && (replication > 0)
+  def isValid: Boolean = (useMemory || useDisk) && (replication > 0)
 
   def toInt: Int = {
     var ret = 0
@@ -117,7 +120,14 @@ class StorageLevel private(
   private def readResolve(): Object = StorageLevel.getCachedStorageLevel(this)
 
   override def toString: String = {
-    s"StorageLevel($useDisk, $useMemory, $useOffHeap, $deserialized, $replication)"
+    val disk = if (useDisk) "disk" else ""
+    val memory = if (useMemory) "memory" else ""
+    val heap = if (useOffHeap) "offheap" else ""
+    val deserialize = if (deserialized) "deserialized" else ""
+
+    val output =
+      Seq(disk, memory, heap, deserialize, s"$replication replicas").filter(_.nonEmpty)
+    s"StorageLevel(${output.mkString(", ")})"
   }
 
   override def hashCode(): Int = toInt * 41 + replication
@@ -125,8 +135,9 @@ class StorageLevel private(
   def description: String = {
     var result = ""
     result += (if (useDisk) "Disk " else "")
-    result += (if (useMemory) "Memory " else "")
-    result += (if (useOffHeap) "ExternalBlockStore " else "")
+    if (useMemory) {
+      result += (if (useOffHeap) "Memory (off heap) " else "Memory ")
+    }
     result += (if (deserialized) "Deserialized " else "Serialized ")
     result += s"${replication}x Replicated"
     result
@@ -150,7 +161,7 @@ object StorageLevel {
   val MEMORY_AND_DISK_2 = new StorageLevel(true, true, false, true, 2)
   val MEMORY_AND_DISK_SER = new StorageLevel(true, true, false, false)
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2)
-  val OFF_HEAP = new StorageLevel(false, false, true, false)
+  val OFF_HEAP = new StorageLevel(true, true, true, false, 1)
 
   /**
    * :: DeveloperApi ::
@@ -175,7 +186,7 @@ object StorageLevel {
 
   /**
    * :: DeveloperApi ::
-   * Create a new StorageLevel object without setting useOffHeap.
+   * Create a new StorageLevel object.
    */
   @DeveloperApi
   def apply(
@@ -190,7 +201,7 @@ object StorageLevel {
 
   /**
    * :: DeveloperApi ::
-   * Create a new StorageLevel object.
+   * Create a new StorageLevel object without setting useOffHeap.
    */
   @DeveloperApi
   def apply(

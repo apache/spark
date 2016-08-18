@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
-import org.apache.parquet.schema.MessageType
-
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -28,12 +26,14 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter
-import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetMetadata}
 import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
+import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetMetadata}
+import org.apache.parquet.schema.MessageType
 
+import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SQLConf, SaveMode}
 
 /**
  * A helper trait that provides convenient facilities for Parquet testing.
@@ -45,6 +45,20 @@ import org.apache.spark.sql.{DataFrame, SQLConf, SaveMode}
 private[sql] trait ParquetTest extends SQLTestUtils {
 
   /**
+   * Reads the parquet file at `path`
+   */
+  protected def readParquetFile(path: String, testVectorized: Boolean = true)
+      (f: DataFrame => Unit) = {
+    (true :: false :: Nil).foreach { vectorized =>
+      if (!vectorized || testVectorized) {
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          f(spark.read.parquet(path.toString))
+        }
+      }
+    }
+  }
+
+  /**
    * Writes `data` to a Parquet file, which is then passed to `f` and will be deleted after `f`
    * returns.
    */
@@ -52,7 +66,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       (data: Seq[T])
       (f: String => Unit): Unit = {
     withTempPath { file =>
-      sqlContext.createDataFrame(data).write.parquet(file.getCanonicalPath)
+      spark.createDataFrame(data).write.parquet(file.getCanonicalPath)
       f(file.getCanonicalPath)
     }
   }
@@ -62,9 +76,9 @@ private[sql] trait ParquetTest extends SQLTestUtils {
    * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
    */
   protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
-      (data: Seq[T])
+      (data: Seq[T], testVectorized: Boolean = true)
       (f: DataFrame => Unit): Unit = {
-    withParquetFile(data)(path => f(sqlContext.read.parquet(path)))
+    withParquetFile(data)(path => readParquetFile(path.toString, testVectorized)(f))
   }
 
   /**
@@ -73,17 +87,17 @@ private[sql] trait ParquetTest extends SQLTestUtils {
    * Parquet file will be dropped/deleted after `f` returns.
    */
   protected def withParquetTable[T <: Product: ClassTag: TypeTag]
-      (data: Seq[T], tableName: String)
+      (data: Seq[T], tableName: String, testVectorized: Boolean = true)
       (f: => Unit): Unit = {
-    withParquetDataFrame(data) { df =>
-      sqlContext.registerDataFrameAsTable(df, tableName)
-      withTempTable(tableName)(f)
+    withParquetDataFrame(data, testVectorized) { df =>
+      df.createOrReplaceTempView(tableName)
+      withTempView(tableName)(f)
     }
   }
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
-    sqlContext.createDataFrame(data).write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
+    spark.createDataFrame(data).write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
   }
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
@@ -110,8 +124,8 @@ private[sql] trait ParquetTest extends SQLTestUtils {
 
   protected def writeMetadata(
       schema: StructType, path: Path, configuration: Configuration): Unit = {
-    val parquetSchema = new CatalystSchemaConverter().convert(schema)
-    val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> schema.json).asJava
+    val parquetSchema = new ParquetSchemaConverter().convert(schema)
+    val extraMetadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schema.json).asJava
     val createdBy = s"Apache Spark ${org.apache.spark.SPARK_VERSION}"
     val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, createdBy)
     val parquetMetadata = new ParquetMetadata(fileMetadata, Seq.empty[BlockMetaData].asJava)
@@ -159,6 +173,6 @@ private[sql] trait ParquetTest extends SQLTestUtils {
 
   protected def readResourceParquetFile(name: String): DataFrame = {
     val url = Thread.currentThread().getContextClassLoader.getResource(name)
-    sqlContext.read.parquet(url.toString)
+    spark.read.parquet(url.toString)
   }
 }

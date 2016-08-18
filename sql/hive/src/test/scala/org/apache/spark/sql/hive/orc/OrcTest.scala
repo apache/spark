@@ -23,8 +23,8 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 
 private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
   import testImplicits._
@@ -49,7 +49,7 @@ private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
   protected def withOrcDataFrame[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
-    withOrcFile(data)(path => f(sqlContext.read.orc(path)))
+    withOrcFile(data)(path => f(spark.read.orc(path)))
   }
 
   /**
@@ -61,8 +61,8 @@ private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
       (data: Seq[T], tableName: String)
       (f: => Unit): Unit = {
     withOrcDataFrame(data) { df =>
-      sqlContext.registerDataFrameAsTable(df, tableName)
-      withTempTable(tableName)(f)
+      df.createOrReplaceTempView(tableName)
+      withTempView(tableName)(f)
     }
   }
 

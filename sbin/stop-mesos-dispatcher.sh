@@ -24,5 +24,10 @@ fi
 
 . "${SPARK_HOME}/sbin/spark-config.sh"
 
-"${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.mesos.MesosClusterDispatcher 1
+if [ "$SPARK_MESOS_DISPATCHER_NUM" = "" ]; then
+  SPARK_MESOS_DISPATCHER_NUM=1
+fi
+
+"${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.mesos.MesosClusterDispatcher \
+    $SPARK_MESOS_DISPATCHER_NUM
 

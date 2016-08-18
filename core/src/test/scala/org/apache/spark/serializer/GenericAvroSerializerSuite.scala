@@ -20,11 +20,11 @@ package org.apache.spark.serializer
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
 
-import com.esotericsoftware.kryo.io.{Output, Input}
-import org.apache.avro.{SchemaBuilder, Schema}
+import com.esotericsoftware.kryo.io.{Input, Output}
+import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.GenericData.Record
 
-import org.apache.spark.{SparkFunSuite, SharedSparkContext}
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 
 class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")

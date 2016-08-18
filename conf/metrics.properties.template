@@ -57,40 +57,43 @@
 #    added to Java properties using -Dspark.metrics.conf=xxx if you want to
 #    customize metrics system. You can also put the file in ${SPARK_HOME}/conf
 #    and it will be loaded automatically.
-#    5. MetricsServlet is added by default as a sink in master, worker and client
-#    driver, you can send http request "/metrics/json" to get a snapshot of all the
-#    registered metrics in json format. For master, requests "/metrics/master/json" and
-#    "/metrics/applications/json" can be sent seperately to get metrics snapshot of
-#    instance master and applications. MetricsServlet may not be configured by self.
-#
+#    5. The MetricsServlet sink is added by default as a sink in the master,
+#    worker and driver, and you can send HTTP requests to the "/metrics/json"
+#    endpoint to get a snapshot of all the registered metrics in JSON format.
+#    For master, requests to the "/metrics/master/json" and
+#    "/metrics/applications/json" endpoints can be sent separately to get
+#    metrics snapshots of the master instance and applications. This
+#    MetricsServlet does not have to be configured.
 
 ## List of available common sources and their properties.
 
 # org.apache.spark.metrics.source.JvmSource
-#   Note: Currently, JvmSource is the only available common source 
-#         to add additionaly to an instance, to enable this, 
-#         set the "class" option to its fully qulified class name (see examples below)
+#   Note: Currently, JvmSource is the only available common source.
+#         It can be added to an instance by setting the "class" option to its
+#         fully qualified class name (see examples below).
 
 ## List of available sinks and their properties.
 
 # org.apache.spark.metrics.sink.ConsoleSink
 #   Name:   Default:   Description:
 #   period  10         Poll period
-#   unit    seconds    Units of poll period
+#   unit    seconds    Unit of the poll period
 
 # org.apache.spark.metrics.sink.CSVSink
 #   Name:     Default:   Description:
 #   period    10         Poll period
-#   unit      seconds    Units of poll period
+#   unit      seconds    Unit of the poll period
 #   directory /tmp       Where to store CSV files
 
 # org.apache.spark.metrics.sink.GangliaSink
 #   Name:     Default:   Description:
-#   host      NONE       Hostname or multicast group of Ganglia server
-#   port      NONE       Port of Ganglia server(s)
+#   host      NONE       Hostname or multicast group of the Ganglia server,
+#                        must be set
+#   port      NONE       Port of the Ganglia server(s), must be set
 #   period    10         Poll period
-#   unit      seconds    Units of poll period
+#   unit      seconds    Unit of the poll period
 #   ttl       1          TTL of messages sent by Ganglia
+#   dmax      0          Lifetime in seconds of metrics (0 never expired)
 #   mode      multicast  Ganglia network mode ('unicast' or 'multicast')
 
 # org.apache.spark.metrics.sink.JmxSink
@@ -98,19 +101,21 @@
 # org.apache.spark.metrics.sink.MetricsServlet
 #   Name:     Default:   Description:
 #   path      VARIES*    Path prefix from the web server root
-#   sample    false      Whether to show entire set of samples for histograms ('false' or 'true')
+#   sample    false      Whether to show entire set of samples for histograms
+#                        ('false' or 'true')
 #
-# * Default path is /metrics/json for all instances except the master. The master has two paths:
+# * Default path is /metrics/json for all instances except the master. The
+#   master has two paths:
 #     /metrics/applications/json # App information
 #     /metrics/master/json       # Master information
 
 # org.apache.spark.metrics.sink.GraphiteSink
 #   Name:     Default:      Description:
-#   host      NONE          Hostname of Graphite server
-#   port      NONE          Port of Graphite server
+#   host      NONE          Hostname of the Graphite server, must be set
+#   port      NONE          Port of the Graphite server, must be set
 #   period    10            Poll period
-#   unit      seconds       Units of poll period
-#   prefix    EMPTY STRING  Prefix to prepend to metric name
+#   unit      seconds       Unit of the poll period
+#   prefix    EMPTY STRING  Prefix to prepend to every metric's name
 #   protocol  tcp           Protocol ("tcp" or "udp") to use
 
 ## Examples
@@ -120,42 +125,42 @@
 # Enable ConsoleSink for all instances by class name
 #*.sink.console.class=org.apache.spark.metrics.sink.ConsoleSink
 
-# Polling period for ConsoleSink
+# Polling period for the ConsoleSink
 #*.sink.console.period=10
-
+# Unit of the polling period for the ConsoleSink
 #*.sink.console.unit=seconds
 
-# Master instance overlap polling period
+# Polling period for the ConsoleSink specific for the master instance
 #master.sink.console.period=15
-
+# Unit of the polling period for the ConsoleSink specific for the master
+# instance
 #master.sink.console.unit=seconds
 
-# Enable CsvSink for all instances
+# Enable CsvSink for all instances by class name
 #*.sink.csv.class=org.apache.spark.metrics.sink.CsvSink
 
-# Polling period for CsvSink
+# Polling period for the CsvSink
 #*.sink.csv.period=1
-
+# Unit of the polling period for the CsvSink
 #*.sink.csv.unit=minutes
 
 # Polling directory for CsvSink
 #*.sink.csv.directory=/tmp/
 
-# Worker instance overlap polling period
+# Polling period for the CsvSink specific for the worker instance
 #worker.sink.csv.period=10
-
+# Unit of the polling period for the CsvSink specific for the worker instance
 #worker.sink.csv.unit=minutes
 
 # Enable Slf4jSink for all instances by class name
 #*.sink.slf4j.class=org.apache.spark.metrics.sink.Slf4jSink
 
-# Polling period for Slf4JSink
+# Polling period for the Slf4JSink
 #*.sink.slf4j.period=1
-
+# Unit of the polling period for the Slf4jSink
 #*.sink.slf4j.unit=minutes
 
-
-# Enable jvm source for instance master, worker, driver and executor
+# Enable JvmSource for instance master, worker, driver and executor
 #master.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
 #worker.source.jvm.class=org.apache.spark.metrics.source.JvmSource
@@ -163,4 +168,3 @@
 #driver.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
 #executor.source.jvm.class=org.apache.spark.metrics.source.JvmSource
-

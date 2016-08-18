@@ -22,8 +22,8 @@ import java.io.*;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
 
+import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
-import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
 
 /**
@@ -38,6 +38,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
   // Variables that change with every record read:
   private int recordLength;
   private long keyPrefix;
+  private int numRecords;
   private int numRecordsRemaining;
 
   private byte[] arr = new byte[1024 * 1024];
@@ -45,19 +46,24 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
   private final long baseOffset = Platform.BYTE_ARRAY_OFFSET;
 
   public UnsafeSorterSpillReader(
-      BlockManager blockManager,
+      SerializerManager serializerManager,
       File file,
       BlockId blockId) throws IOException {
     assert (file.length() > 0);
     final BufferedInputStream bs = new BufferedInputStream(new FileInputStream(file));
     try {
-      this.in = blockManager.wrapForCompression(blockId, bs);
+      this.in = serializerManager.wrapForCompression(blockId, bs);
       this.din = new DataInputStream(this.in);
-      numRecordsRemaining = din.readInt();
+      numRecords = numRecordsRemaining = din.readInt();
     } catch (IOException e) {
       Closeables.close(bs, /* swallowIOException = */ true);
       throw e;
     }
+  }
+
+  @Override
+  public int getNumRecords() {
+    return numRecords;
   }
 
   @Override

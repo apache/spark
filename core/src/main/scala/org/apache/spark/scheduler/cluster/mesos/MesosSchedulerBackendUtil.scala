@@ -17,14 +17,15 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.mesos.Protos.{ContainerInfo, Volume}
+import org.apache.mesos.Protos.{ContainerInfo, Image, Volume}
 import org.apache.mesos.Protos.ContainerInfo.DockerInfo
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.internal.Logging
 
 /**
  * A collection of utility functions which can be used by both the
- * MesosSchedulerBackend and the CoarseMesosSchedulerBackend.
+ * MesosSchedulerBackend and the [[MesosFineGrainedSchedulerBackend]].
  */
 private[mesos] object MesosSchedulerBackendUtil extends Logging {
   /**
@@ -54,11 +55,10 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
             Some(vol.setContainerPath(container_path)
               .setHostPath(host_path)
               .setMode(Volume.Mode.RO))
-          case spec => {
+          case spec =>
             logWarning(s"Unable to parse volume specs: $volumes. "
               + "Expected form: \"[host-dir:]container-dir[:rw|:ro](, ...)\"")
             None
-          }
       }
     }
     .map { _.build() }
@@ -89,11 +89,10 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
           Some(portmap.setHostPort(host_port.toInt)
             .setContainerPort(container_port.toInt)
             .setProtocol(protocol))
-        case spec => {
+        case spec =>
           logWarning(s"Unable to parse port mapping specs: $portmaps. "
             + "Expected form: \"host_port:container_port[:udp|:tcp](, ...)\"")
           None
-        }
       }
     }
     .map { _.build() }
@@ -106,35 +105,59 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
   def addDockerInfo(
       container: ContainerInfo.Builder,
       image: String,
+      containerizer: String,
+      forcePullImage: Boolean = false,
       volumes: Option[List[Volume]] = None,
-      network: Option[ContainerInfo.DockerInfo.Network] = None,
       portmaps: Option[List[ContainerInfo.DockerInfo.PortMapping]] = None): Unit = {
 
-    val docker = ContainerInfo.DockerInfo.newBuilder().setImage(image)
+    containerizer match {
+      case "docker" =>
+        container.setType(ContainerInfo.Type.DOCKER)
+        val docker = ContainerInfo.DockerInfo.newBuilder()
+          .setImage(image)
+          .setForcePullImage(forcePullImage)
+        // TODO (mgummelt): Remove this. Portmaps have no effect,
+        //                  as we don't support bridge networking.
+        portmaps.foreach(_.foreach(docker.addPortMappings))
+        container.setDocker(docker)
+      case "mesos" =>
+        container.setType(ContainerInfo.Type.MESOS)
+        val imageProto = Image.newBuilder()
+          .setType(Image.Type.DOCKER)
+          .setDocker(Image.Docker.newBuilder().setName(image))
+          .setCached(!forcePullImage)
+        container.setMesos(ContainerInfo.MesosInfo.newBuilder().setImage(imageProto))
+      case _ =>
+        throw new SparkException(
+          "spark.mesos.containerizer must be one of {\"docker\", \"mesos\"}")
+    }
 
-    network.foreach(docker.setNetwork)
-    portmaps.foreach(_.foreach(docker.addPortMappings))
-    container.setType(ContainerInfo.Type.DOCKER)
-    container.setDocker(docker.build())
     volumes.foreach(_.foreach(container.addVolumes))
   }
 
   /**
-   * Setup a docker containerizer
+   * Setup a docker containerizer from MesosDriverDescription scheduler properties
    */
   def setupContainerBuilderDockerInfo(
     imageName: String,
     conf: SparkConf,
     builder: ContainerInfo.Builder): Unit = {
+    val forcePullImage = conf
+      .getOption("spark.mesos.executor.docker.forcePullImage")
+      .exists(_.equals("true"))
     val volumes = conf
       .getOption("spark.mesos.executor.docker.volumes")
       .map(parseVolumesSpec)
     val portmaps = conf
       .getOption("spark.mesos.executor.docker.portmaps")
       .map(parsePortMappingsSpec)
+
+    val containerizer = conf.get("spark.mesos.containerizer", "docker")
     addDockerInfo(
       builder,
       imageName,
+      containerizer,
+      forcePullImage = forcePullImage,
       volumes = volumes,
       portmaps = portmaps)
     logDebug("setupContainerDockerInfo: using docker image: " + imageName)

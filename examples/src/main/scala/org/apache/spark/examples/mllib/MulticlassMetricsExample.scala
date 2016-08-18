@@ -18,13 +18,13 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 // $example off$
-import org.apache.spark.{SparkContext, SparkConf}
 
 object MulticlassMetricsExample {
 
@@ -59,13 +59,9 @@ object MulticlassMetricsExample {
     println(metrics.confusionMatrix)
 
     // Overall Statistics
-    val precision = metrics.precision
-    val recall = metrics.recall // same as true positive rate
-    val f1Score = metrics.fMeasure
+    val accuracy = metrics.accuracy
     println("Summary Statistics")
-    println(s"Precision = $precision")
-    println(s"Recall = $recall")
-    println(s"F1 Score = $f1Score")
+    println(s"Accuracy = $accuracy")
 
     // Precision by label
     val labels = metrics.labels

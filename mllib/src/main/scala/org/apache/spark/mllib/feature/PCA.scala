@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
@@ -30,7 +30,8 @@ import org.apache.spark.rdd.RDD
  */
 @Since("1.4.0")
 class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
-  require(k >= 1, s"PCA requires a number of principal components k >= 1 but was given $k")
+  require(k > 0,
+    s"Number of principal components must be positive but got ${k}")
 
   /**
    * Computes a [[PCAModel]] that contains the principal components of the input vectors.
@@ -39,11 +40,13 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
    */
   @Since("1.4.0")
   def fit(sources: RDD[Vector]): PCAModel = {
-    require(k <= sources.first().size,
-      s"source vector size is ${sources.first().size} must be greater than k=$k")
+    val numFeatures = sources.first().size
+    require(k <= numFeatures,
+      s"source vector size $numFeatures must be no less than k=$k")
 
     val mat = new RowMatrix(sources)
-    val pc = mat.computePrincipalComponents(k) match {
+    val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
+    val densePC = pc match {
       case dm: DenseMatrix =>
         dm
       case sm: SparseMatrix =>
@@ -56,13 +59,18 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
       case m =>
         throw new IllegalArgumentException("Unsupported matrix format. Expected " +
           s"SparseMatrix or DenseMatrix. Instead got: ${m.getClass}")
-
     }
-    new PCAModel(k, pc)
+    val denseExplainedVariance = explainedVariance match {
+      case dv: DenseVector =>
+        dv
+      case sv: SparseVector =>
+        sv.toDense
+    }
+    new PCAModel(k, densePC, denseExplainedVariance)
   }
 
   /**
-   * Java-friendly version of [[fit()]]
+   * Java-friendly version of `fit()`.
    */
   @Since("1.4.0")
   def fit(sources: JavaRDD[Vector]): PCAModel = fit(sources.rdd)
@@ -77,12 +85,13 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
 @Since("1.4.0")
 class PCAModel private[spark] (
     @Since("1.4.0") val k: Int,
-    @Since("1.4.0") val pc: DenseMatrix) extends VectorTransformer {
+    @Since("1.4.0") val pc: DenseMatrix,
+    @Since("1.6.0") val explainedVariance: DenseVector) extends VectorTransformer {
   /**
    * Transform a vector by computed Principal Components.
    *
    * @param vector vector to be transformed.
-   *               Vector must be the same length as the source vectors given to [[PCA.fit()]].
+   *               Vector must be the same length as the source vectors given to `PCA.fit()`.
    * @return transformed vector. Vector will be of length k.
    */
   @Since("1.4.0")

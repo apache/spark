@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.Platform;
  * [unsafe key array numBytes] [unsafe key array] [unsafe value array]
  */
 // TODO: Use a more efficient format which doesn't depend on unsafe array.
-public class UnsafeMapData extends MapData {
+public final class UnsafeMapData extends MapData {
 
   private Object baseObject;
   private long baseOffset;

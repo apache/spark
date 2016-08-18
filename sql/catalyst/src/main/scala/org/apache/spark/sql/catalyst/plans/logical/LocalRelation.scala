@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.{analysis, CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, analysis}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 object LocalRelation {
@@ -45,6 +45,9 @@ object LocalRelation {
 case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
   extends LeafNode with analysis.MultiInstanceRelation {
 
+  // A local relation must have resolved output.
+  require(output.forall(_.resolved), "Unresolved attributes found when constructing LocalRelation.")
+
   /**
    * Returns an identical copy of this relation with new exprIds for all attributes.  Different
    * attributes are required when a relation is going to be included multiple times in the same
@@ -54,12 +57,20 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
     LocalRelation(output.map(_.newInstance()), data).asInstanceOf[this.type]
   }
 
-  override protected def stringArgs = Iterator(output)
+  override protected def stringArgs: Iterator[Any] = {
+    if (data.isEmpty) {
+      Iterator("<empty>", output)
+    } else {
+      Iterator(output)
+    }
+  }
 
-  override def sameResult(plan: LogicalPlan): Boolean = plan match {
-    case LocalRelation(otherOutput, otherData) =>
-      otherOutput.map(_.dataType) == output.map(_.dataType) && otherData == data
-    case _ => false
+  override def sameResult(plan: LogicalPlan): Boolean = {
+    plan.canonicalized match {
+      case LocalRelation(otherOutput, otherData) =>
+        otherOutput.map(_.dataType) == output.map(_.dataType) && otherData == data
+      case _ => false
+    }
   }
 
   override lazy val statistics =

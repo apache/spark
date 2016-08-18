@@ -31,7 +31,7 @@ import org.apache.spark.streaming.receiver.Receiver
  *    all receivers at the same time. ReceiverTracker will call `scheduleReceivers` at this phase.
  *    It will try to schedule receivers such that they are evenly distributed. ReceiverTracker
  *    should update its `receiverTrackingInfoMap` according to the results of `scheduleReceivers`.
- *    `ReceiverTrackingInfo.scheduledLocations` for each receiver should be set to an location list
+ *    `ReceiverTrackingInfo.scheduledLocations` for each receiver should be set to a location list
  *    that contains the scheduled locations. Then when a receiver is starting, it will send a
  *    register request and `ReceiverTracker.registerReceiver` will be called. In
  *    `ReceiverTracker.registerReceiver`, if a receiver's scheduled locations is set, it should

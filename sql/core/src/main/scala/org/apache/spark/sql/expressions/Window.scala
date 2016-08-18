@@ -42,7 +42,7 @@ object Window {
    * Creates a [[WindowSpec]] with the partitioning defined.
    * @since 1.4.0
    */
-  @scala.annotation.varargs
+  @_root_.scala.annotation.varargs
   def partitionBy(colName: String, colNames: String*): WindowSpec = {
     spec.partitionBy(colName, colNames : _*)
   }
@@ -51,7 +51,7 @@ object Window {
    * Creates a [[WindowSpec]] with the partitioning defined.
    * @since 1.4.0
    */
-  @scala.annotation.varargs
+  @_root_.scala.annotation.varargs
   def partitionBy(cols: Column*): WindowSpec = {
     spec.partitionBy(cols : _*)
   }
@@ -60,7 +60,7 @@ object Window {
    * Creates a [[WindowSpec]] with the ordering defined.
    * @since 1.4.0
    */
-  @scala.annotation.varargs
+  @_root_.scala.annotation.varargs
   def orderBy(colName: String, colNames: String*): WindowSpec = {
     spec.orderBy(colName, colNames : _*)
   }
@@ -69,12 +69,12 @@ object Window {
    * Creates a [[WindowSpec]] with the ordering defined.
    * @since 1.4.0
    */
-  @scala.annotation.varargs
+  @_root_.scala.annotation.varargs
   def orderBy(cols: Column*): WindowSpec = {
     spec.orderBy(cols : _*)
   }
 
-  private def spec: WindowSpec = {
+  private[sql] def spec: WindowSpec = {
     new WindowSpec(Seq.empty, Seq.empty, UnspecifiedFrame)
   }
 

@@ -17,6 +17,7 @@
 
 import numpy as np
 from numpy import array
+import warnings
 
 from pyspark import RDD, since
 from pyspark.streaming.dstream import DStream
@@ -37,10 +38,11 @@ class LabeledPoint(object):
     """
     Class that represents the features and labels of a data point.
 
-    :param label: Label for this data point.
-    :param features: Vector of features for this point (NumPy array,
-            list, pyspark.mllib.linalg.SparseVector, or scipy.sparse
-            column matrix)
+    :param label:
+      Label for this data point.
+    :param features:
+      Vector of features for this point (NumPy array, list,
+      pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix).
 
     Note: 'label' and 'features' are accessible as class attributes.
 
@@ -66,8 +68,10 @@ class LinearModel(object):
     """
     A linear model that has a vector of coefficients and an intercept.
 
-    :param weights: Weights computed for every feature.
-    :param intercept: Intercept computed for this model.
+    :param weights:
+      Weights computed for every feature.
+    :param intercept:
+      Intercept computed for this model.
 
     .. versionadded:: 0.9.0
     """
@@ -217,17 +221,9 @@ def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
 
 class LinearRegressionWithSGD(object):
     """
-    Train a linear regression model with no regularization using Stochastic Gradient Descent.
-    This solves the least squares regression formulation
-                 f(weights) = 1/n ||A weights-y||^2^
-    (which is the mean squared error).
-    Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
-    its corresponding right hand side label y.
-    See also the documentation for the precise formulation.
-
     .. versionadded:: 0.9.0
+    .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression.
     """
-
     @classmethod
     @since("0.9.0")
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
@@ -235,48 +231,55 @@ class LinearRegressionWithSGD(object):
               validateData=True, convergenceTol=0.001):
         """
         Train a linear regression model using Stochastic Gradient
-        Descent (SGD).
-        This solves the least squares regression formulation
+        Descent (SGD). This solves the least squares regression
+        formulation
 
-            f(weights) = 1/(2n) ||A weights - y||^2,
+            f(weights) = 1/(2n) ||A weights - y||^2
 
-        which is the mean squared error.
-        Here the data matrix has n rows, and the input RDD holds the
-        set of rows of A, each with its corresponding right hand side
-        label y. See also the documentation for the precise formulation.
+        which is the mean squared error. Here the data matrix has n rows,
+        and the input RDD holds the set of rows of A, each with its
+        corresponding right hand side label y.
+        See also the documentation for the precise formulation.
 
-        :param data:              The training data, an RDD of
-                                  LabeledPoint.
-        :param iterations:        The number of iterations
-                                  (default: 100).
-        :param step:              The step parameter used in SGD
-                                  (default: 1.0).
-        :param miniBatchFraction: Fraction of data to be used for each
-                                  SGD iteration (default: 1.0).
-        :param initialWeights:    The initial weights (default: None).
-        :param regParam:          The regularizer parameter
-                                  (default: 0.0).
-        :param regType:           The type of regularizer used for
-                                  training our model.
+        :param data:
+          The training data, an RDD of LabeledPoint.
+        :param iterations:
+          The number of iterations.
+          (default: 100)
+        :param step:
+          The step parameter used in SGD.
+          (default: 1.0)
+        :param miniBatchFraction:
+          Fraction of data to be used for each SGD iteration.
+          (default: 1.0)
+        :param initialWeights:
+          The initial weights.
+          (default: None)
+        :param regParam:
+          The regularizer parameter.
+          (default: 0.0)
+        :param regType:
+          The type of regularizer used for training our model.
+          Supported values:
 
-                                  :Allowed values:
-                                     - "l1" for using L1 regularization (lasso),
-                                     - "l2" for using L2 regularization (ridge),
-                                     - None for no regularization
-
-                                     (default: None)
-
-        :param intercept:         Boolean parameter which indicates the
-                                  use or not of the augmented representation
-                                  for training data (i.e. whether bias
-                                  features are activated or not,
-                                  default: False).
-        :param validateData:      Boolean parameter which indicates if
-                                  the algorithm should validate data
-                                  before training. (default: True)
-        :param convergenceTol:    A condition which decides iteration termination.
-                                  (default: 0.001)
+            - "l1" for using L1 regularization
+            - "l2" for using L2 regularization
+            - None for no regularization (default)
+        :param intercept:
+          Boolean parameter which indicates the use or not of the
+          augmented representation for training data (i.e., whether bias
+          features are activated or not).
+          (default: False)
+        :param validateData:
+          Boolean parameter which indicates if the algorithm should
+          validate data before training.
+          (default: True)
+        :param convergenceTol:
+          A condition which decides iteration termination.
+          (default: 0.001)
         """
+        warnings.warn("Deprecated in 2.0.0. Use ml.regression.LinearRegression.")
+
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam),
@@ -366,55 +369,60 @@ class LassoModel(LinearRegressionModelBase):
 
 class LassoWithSGD(object):
     """
-    Train a regression model with L1-regularization using Stochastic Gradient Descent.
-    This solves the l1-regularized least squares regression formulation
-             f(weights) = 1/2n ||A weights-y||^2^  + regParam ||weights||_1
-    Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
-    its corresponding right hand side label y.
-    See also the documentation for the precise formulation.
-
     .. versionadded:: 0.9.0
+    .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0.
+            Note the default regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.
     """
-
     @classmethod
     @since("0.9.0")
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, intercept=False,
               validateData=True, convergenceTol=0.001):
         """
-        Train a regression model with L1-regularization using
-        Stochastic Gradient Descent.
-        This solves the l1-regularized least squares regression
-        formulation
+        Train a regression model with L1-regularization using Stochastic
+        Gradient Descent. This solves the l1-regularized least squares
+        regression formulation
 
-            f(weights) = 1/(2n) ||A weights - y||^2  + regParam ||weights||_1.
+            f(weights) = 1/(2n) ||A weights - y||^2  + regParam ||weights||_1
 
-        Here the data matrix has n rows, and the input RDD holds the
-        set of rows of A, each with its corresponding right hand side
-        label y. See also the documentation for the precise formulation.
+        Here the data matrix has n rows, and the input RDD holds the set
+        of rows of A, each with its corresponding right hand side label y.
+        See also the documentation for the precise formulation.
 
-        :param data:              The training data, an RDD of
-                                  LabeledPoint.
-        :param iterations:        The number of iterations
-                                  (default: 100).
-        :param step:              The step parameter used in SGD
-                                  (default: 1.0).
-        :param regParam:          The regularizer parameter
-                                  (default: 0.01).
-        :param miniBatchFraction: Fraction of data to be used for each
-                                  SGD iteration (default: 1.0).
-        :param initialWeights:    The initial weights (default: None).
-        :param intercept:         Boolean parameter which indicates the
-                                  use or not of the augmented representation
-                                  for training data (i.e. whether bias
-                                  features are activated or not,
-                                  default: False).
-        :param validateData:      Boolean parameter which indicates if
-                                  the algorithm should validate data
-                                  before training. (default: True)
-        :param convergenceTol:    A condition which decides iteration termination.
-                                  (default: 0.001)
+        :param data:
+          The training data, an RDD of LabeledPoint.
+        :param iterations:
+          The number of iterations.
+          (default: 100)
+        :param step:
+          The step parameter used in SGD.
+          (default: 1.0)
+        :param regParam:
+          The regularizer parameter.
+          (default: 0.01)
+        :param miniBatchFraction:
+          Fraction of data to be used for each SGD iteration.
+          (default: 1.0)
+        :param initialWeights:
+          The initial weights.
+          (default: None)
+        :param intercept:
+          Boolean parameter which indicates the use or not of the
+          augmented representation for training data (i.e. whether bias
+          features are activated or not).
+          (default: False)
+        :param validateData:
+          Boolean parameter which indicates if the algorithm should
+          validate data before training.
+          (default: True)
+        :param convergenceTol:
+          A condition which decides iteration termination.
+          (default: 0.001)
         """
+        warnings.warn(
+            "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0. "
+            "Note the default regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.")
+
         def train(rdd, i):
             return callMLlibFunc("trainLassoModelWithSGD", rdd, int(iterations), float(step),
                                  float(regParam), float(miniBatchFraction), i, bool(intercept),
@@ -504,55 +512,62 @@ class RidgeRegressionModel(LinearRegressionModelBase):
 
 class RidgeRegressionWithSGD(object):
     """
-    Train a regression model with L2-regularization using Stochastic Gradient Descent.
-    This solves the l2-regularized least squares regression formulation
-             f(weights) = 1/2n ||A weights-y||^2^  + regParam/2 ||weights||^2^
-    Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
-    its corresponding right hand side label y.
-    See also the documentation for the precise formulation.
-
     .. versionadded:: 0.9.0
+    .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0.
+            Note the default regParam is 0.01 for RidgeRegressionWithSGD, but is 0.0 for
+            LinearRegression.
     """
-
     @classmethod
     @since("0.9.0")
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, intercept=False,
               validateData=True, convergenceTol=0.001):
         """
-        Train a regression model with L2-regularization using
-        Stochastic Gradient Descent.
-        This solves the l2-regularized least squares regression
-        formulation
+        Train a regression model with L2-regularization using Stochastic
+        Gradient Descent. This solves the l2-regularized least squares
+        regression formulation
 
-            f(weights) = 1/(2n) ||A weights - y||^2 + regParam/2 ||weights||^2.
+            f(weights) = 1/(2n) ||A weights - y||^2 + regParam/2 ||weights||^2
 
-        Here the data matrix has n rows, and the input RDD holds the
-        set of rows of A, each with its corresponding right hand side
-        label y. See also the documentation for the precise formulation.
+        Here the data matrix has n rows, and the input RDD holds the set
+        of rows of A, each with its corresponding right hand side label y.
+        See also the documentation for the precise formulation.
 
-        :param data:              The training data, an RDD of
-                                  LabeledPoint.
-        :param iterations:        The number of iterations
-                                  (default: 100).
-        :param step:              The step parameter used in SGD
-                                  (default: 1.0).
-        :param regParam:          The regularizer parameter
-                                  (default: 0.01).
-        :param miniBatchFraction: Fraction of data to be used for each
-                                  SGD iteration (default: 1.0).
-        :param initialWeights:    The initial weights (default: None).
-        :param intercept:         Boolean parameter which indicates the
-                                  use or not of the augmented representation
-                                  for training data (i.e. whether bias
-                                  features are activated or not,
-                                  default: False).
-        :param validateData:      Boolean parameter which indicates if
-                                  the algorithm should validate data
-                                  before training. (default: True)
-        :param convergenceTol:    A condition which decides iteration termination.
-                                  (default: 0.001)
+        :param data:
+          The training data, an RDD of LabeledPoint.
+        :param iterations:
+          The number of iterations.
+          (default: 100)
+        :param step:
+          The step parameter used in SGD.
+          (default: 1.0)
+        :param regParam:
+          The regularizer parameter.
+          (default: 0.01)
+        :param miniBatchFraction:
+          Fraction of data to be used for each SGD iteration.
+          (default: 1.0)
+        :param initialWeights:
+          The initial weights.
+          (default: None)
+        :param intercept:
+          Boolean parameter which indicates the use or not of the
+          augmented representation for training data (i.e. whether bias
+          features are activated or not).
+          (default: False)
+        :param validateData:
+          Boolean parameter which indicates if the algorithm should
+          validate data before training.
+          (default: True)
+        :param convergenceTol:
+          A condition which decides iteration termination.
+          (default: 0.001)
         """
+        warnings.warn(
+            "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0. "
+            "Note the default regParam is 0.01 for RidgeRegressionWithSGD, but is 0.0 for "
+            "LinearRegression.")
+
         def train(rdd, i):
             return callMLlibFunc("trainRidgeModelWithSGD", rdd, int(iterations), float(step),
                                  float(regParam), float(miniBatchFraction), i, bool(intercept),
@@ -566,12 +581,14 @@ class IsotonicRegressionModel(Saveable, Loader):
     """
     Regression model for isotonic regression.
 
-    :param boundaries: Array of boundaries for which predictions are
-            known. Boundaries must be sorted in increasing order.
-    :param predictions: Array of predictions associated to the
-            boundaries at the same index. Results of isotonic
-            regression and therefore monotone.
-    :param isotonic: indicates whether this is isotonic or antitonic.
+    :param boundaries:
+      Array of boundaries for which predictions are known. Boundaries
+      must be sorted in increasing order.
+    :param predictions:
+      Array of predictions associated to the boundaries at the same
+      index. Results of isotonic regression and therefore monotone.
+    :param isotonic:
+      Indicates whether this is isotonic or antitonic.
 
     >>> data = [(1, 0, 1), (2, 1, 1), (3, 2, 1), (1, 3, 1), (6, 4, 1), (17, 5, 1), (16, 6, 1)]
     >>> irm = IsotonicRegression.train(sc.parallelize(data))
@@ -622,7 +639,8 @@ class IsotonicRegressionModel(Saveable, Loader):
         values with the same boundary then the same rules as in 2)
         are used.
 
-        :param x: Feature or RDD of Features to be labeled.
+        :param x:
+          Feature or RDD of Features to be labeled.
         """
         if isinstance(x, RDD):
             return x.map(lambda v: self.predict(v))
@@ -630,7 +648,7 @@ class IsotonicRegressionModel(Saveable, Loader):
 
     @since("1.4.0")
     def save(self, sc, path):
-        """Save a IsotonicRegressionModel."""
+        """Save an IsotonicRegressionModel."""
         java_boundaries = _py2java(sc, self.boundaries.tolist())
         java_predictions = _py2java(sc, self.predictions.tolist())
         java_model = sc._jvm.org.apache.spark.mllib.regression.IsotonicRegressionModel(
@@ -640,7 +658,7 @@ class IsotonicRegressionModel(Saveable, Loader):
     @classmethod
     @since("1.4.0")
     def load(cls, sc, path):
-        """Load a IsotonicRegressionModel."""
+        """Load an IsotonicRegressionModel."""
         java_model = sc._jvm.org.apache.spark.mllib.regression.IsotonicRegressionModel.load(
             sc._jsc.sc(), path)
         py_boundaries = _java2py(sc, java_model.boundaryVector()).toArray()
@@ -651,21 +669,23 @@ class IsotonicRegressionModel(Saveable, Loader):
 class IsotonicRegression(object):
     """
     Isotonic regression.
-    Currently implemented using parallelized pool adjacent violators algorithm.
-    Only univariate (single feature) algorithm supported.
+    Currently implemented using parallelized pool adjacent violators
+    algorithm. Only univariate (single feature) algorithm supported.
 
     Sequential PAV implementation based on:
-    Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
+
+      Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
       "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
-      Available from [[http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf]]
+      Available from http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf
 
     Sequential PAV parallelization based on:
-    Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset.
-      "An approach to parallelizing isotonic regression."
-      Applied Mathematics and Parallel Computing. Physica-Verlag HD, 1996. 141-147.
-      Available from [[http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf]]
 
-    @see [[http://en.wikipedia.org/wiki/Isotonic_regression Isotonic regression (Wikipedia)]]
+        Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset.
+        "An approach to parallelizing isotonic regression."
+        Applied Mathematics and Parallel Computing. Physica-Verlag HD, 1996. 141-147.
+        Available from http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf
+
+    See `Isotonic regression (Wikipedia) <http://en.wikipedia.org/wiki/Isotonic_regression>`_.
 
     .. versionadded:: 1.4.0
     """
@@ -674,10 +694,13 @@ class IsotonicRegression(object):
     @since("1.4.0")
     def train(cls, data, isotonic=True):
         """
-        Train a isotonic regression model on the given data.
+        Train an isotonic regression model on the given data.
 
-        :param data: RDD of (label, feature, weight) tuples.
-        :param isotonic: Whether this is isotonic or antitonic.
+        :param data:
+          RDD of (label, feature, weight) tuples.
+        :param isotonic:
+          Whether this is isotonic (which is default) or antitonic.
+          (default: True)
         """
         boundaries, predictions = callMLlibFunc("trainIsotonicRegressionModel",
                                                 data.map(_convert_to_vector), bool(isotonic))
@@ -713,9 +736,11 @@ class StreamingLinearAlgorithm(object):
     @since("1.5.0")
     def predictOn(self, dstream):
         """
-        Make predictions on a dstream.
+        Use the model to make predictions on batches of data from a
+        DStream.
 
-        :return: Transformed dstream object.
+        :return:
+          DStream containing predictions.
         """
         self._validate(dstream)
         return dstream.map(lambda x: self._model.predict(x))
@@ -723,9 +748,11 @@ class StreamingLinearAlgorithm(object):
     @since("1.5.0")
     def predictOnValues(self, dstream):
         """
-        Make predictions on a keyed dstream.
+        Use the model to make predictions on the values of a DStream and
+        carry over its keys.
 
-        :return: Transformed dstream object.
+        :return:
+          DStream containing the input keys and the predictions as values.
         """
         self._validate(dstream)
         return dstream.mapValues(lambda x: self._model.predict(x))
@@ -734,14 +761,15 @@ class StreamingLinearAlgorithm(object):
 @inherit_doc
 class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
     """
-    Train or predict a linear regression model on streaming data. Training uses
-    Stochastic Gradient Descent to update the model based on each new batch of
-    incoming data from a DStream (see `LinearRegressionWithSGD` for model equation).
+    Train or predict a linear regression model on streaming data.
+    Training uses Stochastic Gradient Descent to update the model
+    based on each new batch of incoming data from a DStream
+    (see `LinearRegressionWithSGD` for model equation).
 
     Each batch of data is assumed to be an RDD of LabeledPoints.
     The number of data points per batch can vary, but the number
-    of features must be constant. An initial weight
-    vector must be provided.
+    of features must be constant. An initial weight vector must
+    be provided.
 
     :param stepSize:
       Step size for each iteration of gradient descent.
@@ -796,12 +824,16 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
 
 def _test():
     import doctest
-    from pyspark import SparkContext
+    from pyspark.sql import SparkSession
     import pyspark.mllib.regression
     globs = pyspark.mllib.regression.__dict__.copy()
-    globs['sc'] = SparkContext('local[2]', 'PythonTest', batchSize=2)
+    spark = SparkSession.builder\
+        .master("local[2]")\
+        .appName("mllib.regression tests")\
+        .getOrCreate()
+    globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

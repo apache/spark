@@ -23,8 +23,10 @@ private[sql] object ObjectType extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType =
     throw new UnsupportedOperationException("null literals can't be casted to ObjectType")
 
-  // No casting or comparison is supported.
-  override private[sql] def acceptsType(other: DataType): Boolean = false
+  override private[sql] def acceptsType(other: DataType): Boolean = other match {
+    case ObjectType(_) => true
+    case _ => false
+  }
 
   override private[sql] def simpleString: String = "Object"
 }
@@ -35,8 +37,9 @@ private[sql] object ObjectType extends AbstractDataType {
  * outside of the execution engine.
  */
 private[sql] case class ObjectType(cls: Class[_]) extends DataType {
-  override def defaultSize: Int =
-    throw new UnsupportedOperationException("No size estimation available for objects.")
+  override def defaultSize: Int = 4096
 
   def asNullable: DataType = this
+
+  override def simpleString: String = cls.getName
 }

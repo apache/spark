@@ -18,12 +18,11 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.fpm.AssociationRules
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 // $example off$
-
-import org.apache.spark.{SparkConf, SparkContext}
 
 object AssociationRulesExample {
 

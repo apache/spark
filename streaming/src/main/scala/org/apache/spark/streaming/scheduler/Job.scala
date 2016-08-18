@@ -20,7 +20,7 @@ package org.apache.spark.streaming.scheduler
 import scala.util.{Failure, Try}
 
 import org.apache.spark.streaming.Time
-import org.apache.spark.util.{Utils, CallSite}
+import org.apache.spark.util.{CallSite, Utils}
 
 /**
  * Class representing a Spark computation. It may contain multiple Spark jobs.

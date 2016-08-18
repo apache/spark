@@ -21,11 +21,11 @@ import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 
 import io.netty.channel.Channel
-import org.mockito.Mockito._
 import org.mockito.Matchers._
+import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.network.client.{TransportResponseHandler, TransportClient}
+import org.apache.spark.network.client.{TransportClient, TransportResponseHandler}
 import org.apache.spark.network.server.StreamManager
 import org.apache.spark.rpc._
 
@@ -43,7 +43,7 @@ class NettyRpcHandlerSuite extends SparkFunSuite {
     val channel = mock(classOf[Channel])
     val client = new TransportClient(channel, mock(classOf[TransportResponseHandler]))
     when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40000))
-    nettyRpcHandler.receive(client, null, null)
+    nettyRpcHandler.channelActive(client)
 
     verify(dispatcher, times(1)).postToAll(RemoteProcessConnected(RpcAddress("localhost", 40000)))
   }
@@ -55,10 +55,10 @@ class NettyRpcHandlerSuite extends SparkFunSuite {
     val channel = mock(classOf[Channel])
     val client = new TransportClient(channel, mock(classOf[TransportResponseHandler]))
     when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40000))
-    nettyRpcHandler.receive(client, null, null)
+    nettyRpcHandler.channelActive(client)
 
     when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40000))
-    nettyRpcHandler.connectionTerminated(client)
+    nettyRpcHandler.channelInactive(client)
 
     verify(dispatcher, times(1)).postToAll(RemoteProcessConnected(RpcAddress("localhost", 40000)))
     verify(dispatcher, times(1)).postToAll(

@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution.stat
 
 import scala.collection.mutable.{Map => MutableMap}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, Column, DataFrame}
 
-private[sql] object FrequentItems extends Logging {
+object FrequentItems extends Logging {
 
   /** A helper class wrapping `MutableMap[Any, Long]` for simplicity. */
   private class FreqItemCounter(size: Int) extends Serializable {
@@ -40,7 +40,7 @@ private[sql] object FrequentItems extends Logging {
         if (baseMap.size < size) {
           baseMap += key -> count
         } else {
-          val minCount = baseMap.values.min
+          val minCount = if (baseMap.values.isEmpty) 0 else baseMap.values.min
           val remainder = count - minCount
           if (remainder >= 0) {
             baseMap += key -> count // something will get kicked out, so we can add this
@@ -79,11 +79,11 @@ private[sql] object FrequentItems extends Logging {
    *                than 1e-4.
    * @return A Local DataFrame with the Array of frequent items for each column.
    */
-  private[sql] def singlePassFreqItems(
+  def singlePassFreqItems(
       df: DataFrame,
       cols: Seq[String],
       support: Double): DataFrame = {
-    require(support >= 1e-4, s"support ($support) must be greater than 1e-4.")
+    require(support >= 1e-4 && support <= 1.0, s"Support must be in [1e-4, 1], but got $support.")
     val numCols = cols.length
     // number of max items to keep counts for
     val sizeOfMap = (1 / support).toInt
@@ -121,6 +121,6 @@ private[sql] object FrequentItems extends Logging {
       StructField(v._1 + "_freqItems", ArrayType(v._2, false))
     }
     val schema = StructType(outputCols).toAttributes
-    new DataFrame(df.sqlContext, LocalRelation.fromExternalRows(schema, Seq(resultRow)))
+    Dataset.ofRows(df.sparkSession, LocalRelation.fromExternalRows(schema, Seq(resultRow)))
   }
 }

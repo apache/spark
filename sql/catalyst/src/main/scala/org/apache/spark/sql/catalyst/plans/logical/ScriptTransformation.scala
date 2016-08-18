@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
 
 /**
  * Transforms the input by forking and running the specified script.
@@ -37,7 +37,65 @@ case class ScriptTransformation(
 }
 
 /**
- * A placeholder for implementation specific input and output properties when passing data
- * to a script. For example, in Hive this would specify which SerDes to use.
+ * Input and output properties when passing data to a script.
+ * For example, in Hive this would specify which SerDes to use.
  */
-trait ScriptInputOutputSchema
+case class ScriptInputOutputSchema(
+    inputRowFormat: Seq[(String, String)],
+    outputRowFormat: Seq[(String, String)],
+    inputSerdeClass: Option[String],
+    outputSerdeClass: Option[String],
+    inputSerdeProps: Seq[(String, String)],
+    outputSerdeProps: Seq[(String, String)],
+    recordReaderClass: Option[String],
+    recordWriterClass: Option[String],
+    schemaLess: Boolean) {
+
+  def inputRowFormatSQL: Option[String] =
+    getRowFormatSQL(inputRowFormat, inputSerdeClass, inputSerdeProps)
+
+  def outputRowFormatSQL: Option[String] =
+    getRowFormatSQL(outputRowFormat, outputSerdeClass, outputSerdeProps)
+
+  /**
+   * Get the row format specification
+   * Note:
+   * 1. Changes are needed when readerClause and writerClause are supported.
+   * 2. Changes are needed when "ESCAPED BY" is supported.
+   */
+  private def getRowFormatSQL(
+    rowFormat: Seq[(String, String)],
+    serdeClass: Option[String],
+    serdeProps: Seq[(String, String)]): Option[String] = {
+    if (schemaLess) return Some("")
+
+    val rowFormatDelimited =
+      rowFormat.map {
+        case ("TOK_TABLEROWFORMATFIELD", value) =>
+          "FIELDS TERMINATED BY " + value
+        case ("TOK_TABLEROWFORMATCOLLITEMS", value) =>
+          "COLLECTION ITEMS TERMINATED BY " + value
+        case ("TOK_TABLEROWFORMATMAPKEYS", value) =>
+          "MAP KEYS TERMINATED BY " + value
+        case ("TOK_TABLEROWFORMATLINES", value) =>
+          "LINES TERMINATED BY " + value
+        case ("TOK_TABLEROWFORMATNULL", value) =>
+          "NULL DEFINED AS " + value
+        case o => return None
+      }
+
+    val serdeClassSQL = serdeClass.map("'" + _ + "'").getOrElse("")
+    val serdePropsSQL =
+      if (serdeClass.nonEmpty) {
+        val props = serdeProps.map{p => s"'${p._1}' = '${p._2}'"}.mkString(", ")
+        if (props.nonEmpty) " WITH SERDEPROPERTIES(" + props + ")" else ""
+      } else {
+        ""
+      }
+    if (rowFormat.nonEmpty) {
+      Some("ROW FORMAT DELIMITED " + rowFormatDelimited.mkString(" "))
+    } else {
+      Some("ROW FORMAT SERDE " + serdeClassSQL + serdePropsSQL)
+    }
+  }
+}

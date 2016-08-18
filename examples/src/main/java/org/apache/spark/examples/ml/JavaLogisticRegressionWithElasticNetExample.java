@@ -17,24 +17,24 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 // $example off$
 
 public class JavaLogisticRegressionWithElasticNetExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaLogisticRegressionWithElasticNetExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaLogisticRegressionWithElasticNetExample")
+      .getOrCreate();
 
     // $example on$
     // Load training data
-    DataFrame training = sqlContext.read().format("libsvm")
+    Dataset<Row> training = spark.read().format("libsvm")
       .load("data/mllib/sample_libsvm_data.txt");
 
     LogisticRegression lr = new LogisticRegression()
@@ -50,6 +50,6 @@ public class JavaLogisticRegressionWithElasticNetExample {
       + lrModel.coefficients() + " Intercept: " + lrModel.intercept());
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }

@@ -17,14 +17,15 @@
 
 package org.apache.spark.ui
 
+import java.net.URLDecoder
 import java.text.SimpleDateFormat
-import java.util.{Date, Locale}
+import java.util.{Date, Locale, TimeZone}
 
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Utility functions for generating XML pages with spark content. */
@@ -167,6 +168,8 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/table.js")}></script>
     <script src={prependBaseUri("/static/additional-metrics.js")}></script>
     <script src={prependBaseUri("/static/timeline-view.js")}></script>
+    <script src={prependBaseUri("/static/log-view.js")}></script>
+    <script src={prependBaseUri("/static/webui.js")}></script>
   }
 
   def vizHeaderNodes: Seq[Node] = {
@@ -177,6 +180,20 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/spark-dag-viz.js")}></script>
   }
 
+  def dataTablesHeaderNodes: Seq[Node] = {
+    <link rel="stylesheet"
+          href={prependBaseUri("/static/jquery.dataTables.1.10.4.min.css")} type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri("/static/dataTables.bootstrap.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/jsonFormatter.min.css")} type="text/css"/>
+    <script src={prependBaseUri("/static/jquery.dataTables.1.10.4.min.js")}></script>
+    <script src={prependBaseUri("/static/jquery.cookies.2.2.0.min.js")}></script>
+    <script src={prependBaseUri("/static/jquery.blockUI.min.js")}></script>
+    <script src={prependBaseUri("/static/dataTables.bootstrap.min.js")}></script>
+    <script src={prependBaseUri("/static/jsonFormatter.min.js")}></script>
+    <script src={prependBaseUri("/static/jquery.mustache.js")}></script>
+  }
+
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(
       title: String,
@@ -184,7 +201,8 @@ private[spark] object UIUtils extends Logging {
       activeTab: SparkUITab,
       refreshInterval: Option[Int] = None,
       helpText: Option[String] = None,
-      showVisualization: Boolean = false): Seq[Node] = {
+      showVisualization: Boolean = false,
+      useDataTables: Boolean = false): Seq[Node] = {
 
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
@@ -199,6 +217,7 @@ private[spark] object UIUtils extends Logging {
       <head>
         {commonHeaderNodes}
         {if (showVisualization) vizHeaderNodes else Seq.empty}
+        {if (useDataTables) dataTablesHeaderNodes else Seq.empty}
         <title>{appName} - {title}</title>
       </head>
       <body>
@@ -232,10 +251,14 @@ private[spark] object UIUtils extends Logging {
   }
 
   /** Returns a page with the spark css/js and a simple format. Used for scheduler UI. */
-  def basicSparkPage(content: => Seq[Node], title: String): Seq[Node] = {
+  def basicSparkPage(
+      content: => Seq[Node],
+      title: String,
+      useDataTables: Boolean = false): Seq[Node] = {
     <html>
       <head>
         {commonHeaderNodes}
+        {if (useDataTables) dataTablesHeaderNodes else Seq.empty}
         <title>{title}</title>
       </head>
       <body>
@@ -317,6 +340,7 @@ private[spark] object UIUtils extends Logging {
       completed: Int,
       failed: Int,
       skipped: Int,
+      killed: Int,
       total: Int): Seq[Node] = {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
     // started + completed can be > total when there are speculative tasks
@@ -328,6 +352,7 @@ private[spark] object UIUtils extends Logging {
         {completed}/{total}
         { if (failed > 0) s"($failed failed)" }
         { if (skipped > 0) s"($skipped skipped)" }
+        { if (killed > 0) s"($killed killed)" }
       </span>
       <div class="bar bar-completed" style={completeWidth}></div>
       <div class="bar bar-running" style={startWidth}></div>
@@ -389,13 +414,6 @@ private[spark] object UIUtils extends Logging {
     </sup>
   }
 
-  /** Return a script element that automatically expands the DAG visualization on page load. */
-  def expandDagVizOnLoad(forJob: Boolean): Seq[Node] = {
-    <script type="text/javascript">
-      {Unparsed("$(document).ready(function() { toggleDagViz(" + forJob + ") });")}
-    </script>
-  }
-
   /**
    * Returns HTML rendering of a job or stage description. It will try to parse the string as HTML
    * and make sure that it only contains anchors with root-relative links. Otherwise,
@@ -404,8 +422,16 @@ private[spark] object UIUtils extends Logging {
    * Note: In terms of security, only anchor tags with root relative links are supported. So any
    * attempts to embed links outside Spark UI, or other tags like <script> will cause in the whole
    * description to be treated as plain text.
+   *
+   * @param desc        the original job or stage description string, which may contain html tags.
+   * @param basePathUri with which to prepend the relative links; this is used when plainText is
+   *                    false.
+   * @param plainText   whether to keep only plain text (i.e. remove html tags) from the original
+   *                    description string.
+   * @return the HTML rendering of the job or stage description, which will be a Text when plainText
+   *         is true, and an Elem otherwise.
    */
-  def makeDescription(desc: String, basePathUri: String): NodeSeq = {
+  def makeDescription(desc: String, basePathUri: String, plainText: Boolean = false): NodeSeq = {
     import scala.language.postfixOps
 
     // If the description can be parsed as HTML and has only relative links, then render
@@ -433,23 +459,55 @@ private[spark] object UIUtils extends Logging {
           "Links in job descriptions must be root-relative:\n" + allLinks.mkString("\n\t"))
       }
 
-      // Prepend the relative links with basePathUri
-      val rule = new RewriteRule() {
-        override def transform(n: Node): Seq[Node] = {
-          n match {
-            case e: Elem if e \ "@href" nonEmpty =>
-              val relativePath = e.attribute("href").get.toString
-              val fullUri = s"${basePathUri.stripSuffix("/")}/${relativePath.stripPrefix("/")}"
-              e % Attribute(null, "href", fullUri, Null)
-            case _ => n
+      val rule =
+        if (plainText) {
+          // Remove all tags, retaining only their texts
+          new RewriteRule() {
+            override def transform(n: Node): Seq[Node] = {
+              n match {
+                case e: Elem if e.child isEmpty => Text(e.text)
+                case e: Elem if e.child nonEmpty => Text(e.child.flatMap(transform).text)
+                case _ => n
+              }
+            }
           }
         }
-      }
+        else {
+          // Prepend the relative links with basePathUri
+          new RewriteRule() {
+            override def transform(n: Node): Seq[Node] = {
+              n match {
+                case e: Elem if e \ "@href" nonEmpty =>
+                  val relativePath = e.attribute("href").get.toString
+                  val fullUri = s"${basePathUri.stripSuffix("/")}/${relativePath.stripPrefix("/")}"
+                  e % Attribute(null, "href", fullUri, Null)
+                case _ => n
+              }
+            }
+          }
+        }
       new RuleTransformer(rule).transform(xml)
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Invalid job description: $desc ", e)
-        <span class="description-input">{desc}</span>
+        if (plainText) Text(desc) else <span class="description-input">{desc}</span>
     }
   }
+
+  /**
+   * Decode URLParameter if URL is encoded by YARN-WebAppProxyServlet.
+   * Due to YARN-2844: WebAppProxyServlet cannot handle urls which contain encoded characters
+   * Therefore we need to decode it until we get the real URLParameter.
+   */
+  def decodeURLParameter(urlParam: String): String = {
+    var param = urlParam
+    var decodedParam = URLDecoder.decode(param, "UTF-8")
+    while (param != decodedParam) {
+      param = decodedParam
+      decodedParam = URLDecoder.decode(param, "UTF-8")
+    }
+    param
+  }
+
+  def getTimeZoneOffset() : Int =
+    TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
 }

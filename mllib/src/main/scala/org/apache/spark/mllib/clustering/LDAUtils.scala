@@ -16,7 +16,7 @@
  */
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, max, sum}
+import breeze.linalg.{max, sum, DenseMatrix => BDM, DenseVector => BDV}
 import breeze.numerics._
 
 /**
@@ -25,7 +25,7 @@ import breeze.numerics._
 private[clustering] object LDAUtils {
   /**
    * Log Sum Exp with overflow protection using the identity:
-   * For any a: \log \sum_{n=1}^N \exp\{x_n\} = a + \log \sum_{n=1}^N \exp\{x_n - a\}
+   * For any a: $\log \sum_{n=1}^N \exp\{x_n\} = a + \log \sum_{n=1}^N \exp\{x_n - a\}$
    */
   private[clustering] def logSumExp(x: BDV[Double]): Double = {
     val a = max(x)

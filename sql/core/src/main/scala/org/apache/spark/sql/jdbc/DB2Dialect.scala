@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import org.apache.spark.sql.types.{BooleanType, StringType, DataType}
-
+import org.apache.spark.sql.types.{BooleanType, DataType, StringType}
 
 private object DB2Dialect extends JdbcDialect {
 
@@ -29,4 +28,6 @@ private object DB2Dialect extends JdbcDialect {
     case BooleanType => Option(JdbcType("CHAR(1)", java.sql.Types.CHAR))
     case _ => None
   }
+
+  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 }

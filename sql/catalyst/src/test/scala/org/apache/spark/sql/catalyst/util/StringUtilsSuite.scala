@@ -31,4 +31,16 @@ class StringUtilsSuite extends SparkFunSuite {
     assert(escapeLikeRegex("**") === "(?s)\\Q*\\E\\Q*\\E")
     assert(escapeLikeRegex("a_b") === "(?s)\\Qa\\E.\\Qb\\E")
   }
+
+  test("filter pattern") {
+    val names = Seq("a1", "a2", "b2", "c3")
+    assert(filterPattern(names, " * ") === Seq("a1", "a2", "b2", "c3"))
+    assert(filterPattern(names, "*a*") === Seq("a1", "a2"))
+    assert(filterPattern(names, " *a* ") === Seq("a1", "a2"))
+    assert(filterPattern(names, " a* ") === Seq("a1", "a2"))
+    assert(filterPattern(names, " a.* ") === Seq("a1", "a2"))
+    assert(filterPattern(names, " B.*|a* ") === Seq("a1", "a2", "b2"))
+    assert(filterPattern(names, " a. ") === Seq("a1", "a2"))
+    assert(filterPattern(names, " d* ") === Nil)
+  }
 }

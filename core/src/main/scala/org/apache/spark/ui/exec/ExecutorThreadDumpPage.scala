@@ -17,11 +17,9 @@
 
 package org.apache.spark.ui.exec
 
-import java.net.URLDecoder
 import javax.servlet.http.HttpServletRequest
 
-import scala.util.Try
-import scala.xml.{Text, Node}
+import scala.xml.{Node, Text}
 
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
@@ -30,18 +28,8 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
   private val sc = parent.sc
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val executorId = Option(request.getParameter("executorId")).map {
-      executorId =>
-        // Due to YARN-2844, "<driver>" in the url will be encoded to "%25253Cdriver%25253E" when
-        // running in yarn-cluster mode. `request.getParameter("executorId")` will return
-        // "%253Cdriver%253E". Therefore we need to decode it until we get the real id.
-        var id = executorId
-        var decodedId = URLDecoder.decode(id, "UTF-8")
-        while (id != decodedId) {
-          id = decodedId
-          decodedId = URLDecoder.decode(id, "UTF-8")
-        }
-        id
+    val executorId = Option(request.getParameter("executorId")).map { executorId =>
+      UIUtils.decodeURLParameter(executorId)
     }.getOrElse {
       throw new IllegalArgumentException(s"Missing executorId parameter")
     }
@@ -50,7 +38,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
 
     val content = maybeThreadDump.map { threadDump =>
       val dumpRows = threadDump.sortWith {
-        case (threadTrace1, threadTrace2) => {
+        case (threadTrace1, threadTrace2) =>
           val v1 = if (threadTrace1.threadName.contains("Executor task launch")) 1 else 0
           val v2 = if (threadTrace2.threadName.contains("Executor task launch")) 1 else 0
           if (v1 == v2) {
@@ -58,46 +46,50 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
           } else {
             v1 > v2
           }
-        }
       }.map { thread =>
-        val threadName = thread.threadName
-        val className = "accordion-heading " + {
-          if (threadName.contains("Executor task launch")) {
-            "executor-thread"
-          } else {
-            "non-executor-thread"
-          }
-        }
-        <div class="accordion-group">
-          <div class={className} onclick="$(this).next().toggleClass('hidden')">
-            <a class="accordion-toggle">
-              Thread {thread.threadId}: {threadName} ({thread.threadState})
-            </a>
-          </div>
-          <div class="accordion-body hidden">
-            <div class="accordion-inner">
-              <pre>{thread.stackTrace}</pre>
+        val threadId = thread.threadId
+        <tr id={s"thread_${threadId}_tr"} class="accordion-heading"
+            onclick={s"toggleThreadStackTrace($threadId, false)"}
+            onmouseover={s"onMouseOverAndOut($threadId)"}
+            onmouseout={s"onMouseOverAndOut($threadId)"}>
+          <td id={s"${threadId}_td_id"}>{threadId}</td>
+          <td id={s"${threadId}_td_name"}>{thread.threadName}</td>
+          <td id={s"${threadId}_td_state"}>{thread.threadState}</td>
+          <td id={s"${threadId}_td_stacktrace"} class="hidden">{thread.stackTrace}</td>
+        </tr>
+      }
+
+    <div class="row-fluid">
+      <p>Updated at {UIUtils.formatDate(time)}</p>
+      {
+        // scalastyle:off
+        <p><a class="expandbutton" onClick="expandAllThreadStackTrace(true)">
+          Expand All
+        </a></p>
+        <p><a class="expandbutton hidden" onClick="collapseAllThreadStackTrace(true)">
+          Collapse All
+        </a></p>
+        <div class="form-inline">
+        <div class="bs-example" data-example-id="simple-form-inline">
+          <div class="form-group">
+            <div class="input-group">
+              Search: <input type="text" class="form-control" id="search" oninput="onSearchStringChange()"></input>
             </div>
           </div>
         </div>
+        </div>
+        <p></p>
+        // scalastyle:on
       }
-
-      <div class="row-fluid">
-        <p>Updated at {UIUtils.formatDate(time)}</p>
-        {
-          // scalastyle:off
-          <p><a class="expandbutton"
-                onClick="$('.accordion-body').removeClass('hidden'); $('.expandbutton').toggleClass('hidden')">
-            Expand All
-          </a></p>
-          <p><a class="expandbutton hidden"
-                onClick="$('.accordion-body').addClass('hidden'); $('.expandbutton').toggleClass('hidden')">
-            Collapse All
-          </a></p>
-          // scalastyle:on
-        }
-        <div class="accordion">{dumpRows}</div>
-      </div>
+      <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
+        <thead>
+          <th onClick="collapseAllThreadStackTrace(false)">Thread ID</th>
+          <th onClick="collapseAllThreadStackTrace(false)">Thread Name</th>
+          <th onClick="collapseAllThreadStackTrace(false)">Thread State</th>
+        </thead>
+        <tbody>{dumpRows}</tbody>
+      </table>
+    </div>
     }.getOrElse(Text("Error fetching thread dump"))
     UIUtils.headerSparkPage(s"Thread dump for executor $executorId", content, parent)
   }
