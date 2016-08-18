@@ -50,6 +50,17 @@ case class UnresolvedRelation(
 }
 
 /**
+ * Holds a table-valued function call that has yet to be resolved.
+ */
+case class UnresolvedTableValuedFunction(
+    functionName: String, functionArgs: Seq[Expression]) extends LeafNode {
+
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+}
+
+/**
  * Holds the name of an attribute that has yet to be resolved.
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {

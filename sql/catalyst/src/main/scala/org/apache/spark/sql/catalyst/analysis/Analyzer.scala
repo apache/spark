@@ -86,6 +86,7 @@ class Analyzer(
       EliminateUnions,
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
+      ResolveTableValuedFunctions ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveDeserializer ::
