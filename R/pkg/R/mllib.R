@@ -357,7 +357,7 @@ setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkData
 #' @export
 #' @note summary(LDAModel) since 2.1.0
 setMethod("summary", signature(object = "LDAModel"),
-          function(object, maxTermsPerTopic, ...) {
+          function(object, maxTermsPerTopic) {
             maxTermsPerTopic <- as.integer(ifelse(missing(maxTermsPerTopic), 10, maxTermsPerTopic))
             jobj <- object@jobj
             docConcentration <- callJMethod(jobj, "docConcentration")

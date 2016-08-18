@@ -1304,8 +1304,8 @@ setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("s
 #' @export
 setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
 
-<<<<<<< HEAD
 #' @rdname spark.lda
+#' @param ... Additional parameters to tune LDA.
 #' @export
 setGeneric("spark.lda", function(data, ...) { standardGeneric("spark.lda") })
 
