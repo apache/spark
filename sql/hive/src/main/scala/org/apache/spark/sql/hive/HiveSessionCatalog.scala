@@ -70,31 +70,28 @@ private[sql] class HiveSessionCatalog(
       val metadata = getTableMetadata(newName)
       if (DDLUtils.isDatasourceTable(metadata.properties)) {
         val dataSourceTable = metadataCache.getTable(newName)
-        val qualifiedTable = SubqueryAlias(table, dataSourceTable)
+        val qualifiedTable = SubqueryAlias(table, dataSourceTable, None)
         // Then, if alias is specified, wrap the table with a Subquery using the alias.
         // Otherwise, wrap the table with a Subquery using the table name.
-        alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
+        alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
       } else if (metadata.tableType == CatalogTableType.VIEW) {
         val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
-        alias match {
-          case None =>
-            SubqueryAlias(metadata.identifier.table,
-              sparkSession.sessionState.sqlParser.parsePlan(viewText))
-          case Some(aliasText) =>
-            SubqueryAlias(aliasText, sparkSession.sessionState.sqlParser.parsePlan(viewText))
-        }
+        SubqueryAlias(
+          alias.getOrElse(metadata.identifier.table),
+          sparkSession.sessionState.sqlParser.parsePlan(viewText),
+          Option(metadata.identifier))
       } else {
         val qualifiedTable =
           MetastoreRelation(
             databaseName = database, tableName = table)(metadata, client, sparkSession)
-        alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
+        alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
       }
     } else {
       val relation = tempTables(table)
-      val tableWithQualifiers = SubqueryAlias(table, relation)
+      val tableWithQualifiers = SubqueryAlias(table, relation, None)
       // If an alias was specified by the lookup, wrap the plan in a subquery so that
       // attributes are properly qualified with this alias.
-      alias.map(a => SubqueryAlias(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
+      alias.map(a => SubqueryAlias(a, tableWithQualifiers, None)).getOrElse(tableWithQualifiers)
     }
   }
 

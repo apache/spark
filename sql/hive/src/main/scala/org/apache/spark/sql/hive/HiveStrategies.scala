@@ -158,7 +158,7 @@ class OrcConversions(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       // Read path
       case relation: MetastoreRelation if shouldConvertMetastoreOrc(relation) =>
         val orcRelation = convertToOrcRelation(relation)
-        SubqueryAlias(relation.tableName, orcRelation)
+        SubqueryAlias(relation.tableName, orcRelation, None)
     }
   }
 }
@@ -200,7 +200,7 @@ class ParquetConversions(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       // Read path
       case relation: MetastoreRelation if shouldConvertMetastoreParquet(relation) =>
         val parquetRelation = convertToParquetRelation(relation)
-        SubqueryAlias(relation.tableName, parquetRelation)
+        SubqueryAlias(relation.tableName, parquetRelation, None)
     }
   }
 }

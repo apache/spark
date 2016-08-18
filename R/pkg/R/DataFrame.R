@@ -2048,14 +2048,14 @@ setMethod("rename",
 
 setClassUnion("characterOrColumn", c("character", "Column"))
 
-#' Arrange
+#' Arrange Rows by Variables
 #'
 #' Sort a SparkDataFrame by the specified column(s).
 #'
-#' @param x A SparkDataFrame to be sorted.
-#' @param col A character or Column object vector indicating the fields to sort on
-#' @param ... Additional sorting fields
-#' @param decreasing A logical argument indicating sorting order for columns when
+#' @param x a SparkDataFrame to be sorted.
+#' @param col a character or Column object indicating the fields to sort on
+#' @param ... additional sorting fields
+#' @param decreasing a logical argument indicating sorting order for columns when
 #'                   a character vector is specified for col
 #' @return A SparkDataFrame where all elements are sorted.
 #' @family SparkDataFrame functions
@@ -2120,7 +2120,6 @@ setMethod("arrange",
           })
 
 #' @rdname arrange
-#' @name orderBy
 #' @aliases orderBy,SparkDataFrame,characterOrColumn-method
 #' @export
 #' @note orderBy(SparkDataFrame, characterOrColumn) since 1.4.0
