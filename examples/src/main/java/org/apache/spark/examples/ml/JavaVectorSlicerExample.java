@@ -65,9 +65,9 @@ public class JavaVectorSlicerExample {
     // or slicer.setIndices(new int[]{1, 2}), or slicer.setNames(new String[]{"f2", "f3"})
 
     Dataset<Row> output = vectorSlicer.transform(dataset);
-
-    System.out.println(output.select("userFeatures", "features").first());
+    output.show(false);
     // $example off$
+
     spark.stop();
   }
 }

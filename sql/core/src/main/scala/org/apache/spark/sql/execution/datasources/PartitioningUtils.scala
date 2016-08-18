@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
 
+// TODO: We should tighten up visibility of the classes here once we clean up Hive coupling.
 
 object PartitionDirectory {
   def apply(values: InternalRow, path: String): PartitionDirectory =
@@ -41,22 +42,23 @@ object PartitionDirectory {
  * Holds a directory in a partitioned collection of files as well as as the partition values
  * in the form of a Row.  Before scanning, the files at `path` need to be enumerated.
  */
-private[sql] case class PartitionDirectory(values: InternalRow, path: Path)
+case class PartitionDirectory(values: InternalRow, path: Path)
 
-private[sql] case class PartitionSpec(
+case class PartitionSpec(
     partitionColumns: StructType,
     partitions: Seq[PartitionDirectory])
 
-private[sql] object PartitionSpec {
+object PartitionSpec {
   val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[PartitionDirectory])
 }
 
-private[sql] object PartitioningUtils {
+object PartitioningUtils {
   // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since sql/core doesn't
   // depend on Hive.
-  private[sql] val DEFAULT_PARTITION_NAME = "__HIVE_DEFAULT_PARTITION__"
+  val DEFAULT_PARTITION_NAME = "__HIVE_DEFAULT_PARTITION__"
 
-  private[sql] case class PartitionValues(columnNames: Seq[String], literals: Seq[Literal]) {
+  private[datasources] case class PartitionValues(columnNames: Seq[String], literals: Seq[Literal])
+  {
     require(columnNames.size == literals.size)
   }
 
@@ -83,7 +85,7 @@ private[sql] object PartitioningUtils {
    *         path = "hdfs://<host>:<port>/path/to/partition/a=2/b=world/c=6.28")))
    * }}}
    */
-  private[sql] def parsePartitions(
+  private[datasources] def parsePartitions(
       paths: Seq[Path],
       defaultPartitionName: String,
       typeInference: Boolean,
@@ -166,7 +168,7 @@ private[sql] object PartitioningUtils {
    *   hdfs://<host>:<port>/path/to/partition
    * }}}
    */
-  private[sql] def parsePartition(
+  private[datasources] def parsePartition(
       path: Path,
       defaultPartitionName: String,
       typeInference: Boolean,
@@ -249,7 +251,7 @@ private[sql] object PartitioningUtils {
    *   DoubleType -> StringType
    * }}}
    */
-  private[sql] def resolvePartitions(
+  def resolvePartitions(
       pathsWithPartitionValues: Seq[(Path, PartitionValues)]): Seq[PartitionValues] = {
     if (pathsWithPartitionValues.isEmpty) {
       Seq.empty
@@ -275,7 +277,7 @@ private[sql] object PartitioningUtils {
     }
   }
 
-  private[sql] def listConflictingPartitionColumns(
+  private[datasources] def listConflictingPartitionColumns(
       pathWithPartitionValues: Seq[(Path, PartitionValues)]): String = {
     val distinctPartColNames = pathWithPartitionValues.map(_._2.columnNames).distinct
 
@@ -308,7 +310,7 @@ private[sql] object PartitioningUtils {
    * [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType.SYSTEM_DEFAULT]], and
    * [[StringType]].
    */
-  private[sql] def inferPartitionColumnValue(
+  private[datasources] def inferPartitionColumnValue(
       raw: String,
       defaultPartitionName: String,
       typeInference: Boolean): Literal = {
