@@ -87,7 +87,9 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
   }
 
   /**
-   * If the given table properties contains datasource properties, throw an exception.
+   * If the given table properties contains datasource properties, throw an exception. We will do
+   * this check when create or alter a table, i.e. when we try to write table metadata to Hive
+   * metastore.
    */
   private def verifyTableProperties(table: CatalogTable): Unit = {
     val datasourceKeys = table.properties.keys.filter(_.startsWith(DATASOURCE_PREFIX))
@@ -162,12 +164,29 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
     val db = tableDefinition.identifier.database.get
     requireDbExists(db)
     verifyTableProperties(tableDefinition)
+    // We can't create index table currently.
+    assert(tableDefinition.tableType != INDEX)
+    // All tables except view must have a provider.
+    assert(tableDefinition.tableType == VIEW || tableDefinition.provider.isDefined)
 
+    // For view or Hive serde tables, they are guaranteed to be Hive compatible and we save them
+    // to Hive metastore directly. Otherwise, we need to put table metadata to table properties to
+    // work around some hive metastore problems, e.g. not case-preserving, bad decimal type support.
     if (tableDefinition.provider == Some("hive") || tableDefinition.tableType == VIEW) {
       client.createTable(tableDefinition, ignoreIfExists)
     } else {
+      // Before saving data source table metadata into Hive metastore, we should:
+      //  1. Put table schema, partition column names and bucket specification in table properties.
+      //  2. Check if this table is hive compatible
+      //    2.1  If it's not hive compatible, set schema, partition columns and bucket spec to empty
+      //         and save table metadata to Hive.
+      //    2.1  If it's hive compatible, set serde information in table metadata and try to save
+      //         it to Hive. If it fails, treat it as not hive compatible and go back to 2.1
+
       val tableProperties = tableMetadataToProperties(tableDefinition)
 
+      // converts the table metadata to Spark SQL specific format, i.e. set schema, partition column
+      // names and bucket specification to empty.
       def newSparkSQLSpecificMetastoreTable(): CatalogTable = {
         tableDefinition.copy(
           schema = new StructType,
@@ -176,6 +195,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
           properties = tableDefinition.properties ++ tableProperties)
       }
 
+      // converts the table metadata to Hive compatible format, i.e. set the serde information.
       def newHiveCompatibleMetastoreTable(serde: HiveSerDe, path: String): CatalogTable = {
         tableDefinition.copy(
           storage = tableDefinition.storage.copy(
@@ -252,6 +272,10 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
     }
   }
 
+  /**
+   * Converts table schema, partition column names and bucket specification to a (String, String)
+   * map, which will be put into table properties later.
+   */
   private def tableMetadataToProperties(table: CatalogTable): Map[String, String] = {
     val properties = new scala.collection.mutable.HashMap[String, String]
     properties.put(DATASOURCE_PROVIDER, table.provider.get)
@@ -259,6 +283,9 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
     // Serialized JSON schema string may be too long to be stored into a single metastore table
     // property. In this case, we split the JSON string and store each part as a separate table
     // property.
+    // TODO: the threshold should be set by `spark.sql.sources.schemaStringLengthThreshold`, however
+    // the current SQLConf is session isolated, which is not applicable to external catalog. We
+    // should re-enable this conf instead of hard code the value here, after we have global SQLConf.
     val threshold = 4000
     val schemaJsonString = table.schema.json
     // Split the JSON string.
@@ -348,7 +375,8 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
    * Alter a table whose name that matches the one specified in `tableDefinition`,
    * assuming the table exists.
    *
-   * Note: As of now, this only supports altering table properties and serde properties.
+   * Note: As of now, this doesn't support altering table schema, partition column names and bucket
+   * specification. We will ignore them even if users do specify different values for these fields.
    */
   override def alterTable(tableDefinition: CatalogTable): Unit = withClient {
     assert(tableDefinition.identifier.database.isDefined)
@@ -384,6 +412,9 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
   /**
    * Restores table metadata from the table properties if it's a datasouce table. This method is
    * kind of a opposite version of [[createTable]].
+   *
+   * It reads table schema, provider, partition column names and bucket specification from table
+   * properties, and filter out these special entries from table properties.
    */
   private def restoreTableMetadata(table: CatalogTable): CatalogTable = {
     if (table.tableType == VIEW) {
