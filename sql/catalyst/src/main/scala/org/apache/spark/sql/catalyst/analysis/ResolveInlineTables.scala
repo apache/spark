@@ -35,13 +35,18 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
   }
 
   /**
-   * Validates that all inline table data are foldable expressions.
+   * Validates that all inline table data are valid expressions that can be evaluated.
    *
    * This is package visible for unit testing.
    */
   private[analysis] def validateInputEvaluable(table: UnresolvedInlineTable): Unit = {
     table.rows.foreach { row =>
       row.foreach { e =>
+        // We want to support foldable expressions and nondeterministic expressions (e.g. rand)
+        // that are evaluable.
+        // Note that there are expressions that are evaluable but not actually valid for inline
+        // tables. One example is AttributeReference. However, since UnresolvedInlineTable is a
+        // leaf node, the analyzer would not resolve UnresolvedAttribute into AttributeReference.
         if (!e.resolved || e.isInstanceOf[Unevaluable]) {
           e.failAnalysis(s"cannot evaluate expression ${e.sql} in inline table definition")
         }
@@ -76,8 +81,6 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
    * This is package visible for unit testing.
    */
   private[analysis] def convert(table: UnresolvedInlineTable): LocalRelation = {
-    val numCols = table.rows.head.size
-
     // For each column, traverse all the values and find a common data type.
     val targetTypes = table.rows.transpose.zip(table.names).map { case (column, name) =>
       val inputTypes = column.map(_.dataType)
