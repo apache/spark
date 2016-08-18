@@ -62,6 +62,7 @@ case class UnresolvedInlineTable(
   extends LeafNode {
 
   lazy val expressionsResolved: Boolean = rows.forall(_.forall(_.resolved))
+  override lazy val resolved = false
   override def output: Seq[Attribute] = Nil
 }
 
