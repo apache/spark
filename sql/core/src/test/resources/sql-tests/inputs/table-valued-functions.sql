@@ -17,4 +17,4 @@ select * from range(0, 10, 1, 200);
 select * from range(1, 1, 1, 1, 1);
 
 -- range call with null
-select * from range(null);
+select * from range(1, null);
