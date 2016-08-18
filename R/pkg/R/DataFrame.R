@@ -611,8 +611,9 @@ setMethod("persist",
 #' Mark this SparkDataFrame as non-persistent, and remove all blocks for it from memory and
 #' disk.
 #'
-#' @param x The SparkDataFrame to unpersist
-#' @param blocking Whether to block until all blocks are deleted
+#' @param x the SparkDataFrame to unpersist.
+#' @param blocking whether to block until all blocks are deleted.
+#' @param ... further arguments to be passed to or from other methods.
 #'
 #' @family SparkDataFrame functions
 #' @rdname unpersist-methods
@@ -630,7 +631,7 @@ setMethod("persist",
 #' @note unpersist since 1.4.0
 setMethod("unpersist",
           signature(x = "SparkDataFrame"),
-          function(x, blocking = TRUE) {
+          function(x, blocking = TRUE, ...) {
             callJMethod(x@sdf, "unpersist", blocking)
             x@env$isCached <- FALSE
             x
@@ -1162,6 +1163,7 @@ setMethod("head",
 #' Return the first row of a SparkDataFrame
 #'
 #' @param x a SparkDataFrame or a column used in aggregation function.
+#' @param ... further arguments to be passed to or from other methods.
 #'
 #' @family SparkDataFrame functions
 #' @aliases first,SparkDataFrame-method
