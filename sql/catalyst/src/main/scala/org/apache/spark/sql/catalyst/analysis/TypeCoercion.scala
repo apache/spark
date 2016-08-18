@@ -548,6 +548,7 @@ object TypeCoercion {
     }
 
     private def isNumericOrNull(ex: Expression): Boolean = {
+      // We need to handle null types in case a query contains null literals.
       ex.dataType.isInstanceOf[NumericType] || ex.dataType == NullType
     }
   }
