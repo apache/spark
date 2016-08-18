@@ -630,7 +630,7 @@ convertNamedListToEnv <- function(namedList) {
 
   env <- new.env()
   for (name in names) {
-    env[[name]] <- namedList[[name]]
+    env[[name]] <- as.character(namedList[[name]])
   }
   env
 }
