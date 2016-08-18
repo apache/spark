@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedGenerator, UnresolvedInlineTable}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedGenerator, UnresolvedInlineTable, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -80,7 +79,7 @@ class PlanParserSuite extends PlanTest {
     def cte(plan: LogicalPlan, namedPlans: (String, LogicalPlan)*): With = {
       val ctes = namedPlans.map {
         case (name, cte) =>
-          name -> SubqueryAlias(name, cte)
+          name -> SubqueryAlias(name, cte, None)
       }
       With(plan, ctes)
     }
@@ -424,6 +423,12 @@ class PlanParserSuite extends PlanTest {
   test("table reference") {
     assertEqual("table t", table("t"))
     assertEqual("table d.t", table("d", "t"))
+  }
+
+  test("table valued function") {
+    assertEqual(
+      "select * from range(2)",
+      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
   }
 
   test("inline table") {

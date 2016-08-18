@@ -63,6 +63,19 @@ case class UnresolvedInlineTable(
 
   lazy val expressionsResolved: Boolean = rows.forall(_.forall(_.resolved))
   override def output: Seq[Attribute] = Nil
+}
+
+/**
+ * A table-valued function, e.g.
+ * {{{
+ *   select * from range(10);
+ * }}}
+ */
+case class UnresolvedTableValuedFunction(functionName: String, functionArgs: Seq[Expression])
+  extends LeafNode {
+
+  override def output: Seq[Attribute] = Nil
+
   override lazy val resolved = false
 }
 
