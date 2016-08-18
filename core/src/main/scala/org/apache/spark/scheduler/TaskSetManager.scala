@@ -93,6 +93,7 @@ private[spark] class TaskSetManager(
    */
   private val nodeToExecsWithFailures: HashMap[String, HashSet[String]] = new HashMap()
   private val nodeToBlacklistedTasks: HashMap[String, HashSet[Int]] = new HashMap()
+  private val blacklistedExecs: HashSet[String] = new HashSet()
   private val blacklistedNodes: HashSet[String] = new HashSet()
 
 
@@ -867,15 +868,16 @@ private[spark] class TaskSetManager(
     }
 
     if (execFailures.numUniqueTasksWithFailures >= MAX_FAILURES_PER_EXEC_STAGE) {
-      // This executor has been pushed into the blacklist for this stage.  Let's check if it pushes
-      // the whole node into the blacklist
-      val blacklistedExecutorsOnNode =
-        execsWithFailuresOnNode.
-          flatMap(execToFailures.get(_)).
-          filter(_.numUniqueTasksWithFailures >= MAX_FAILURES_PER_EXEC_STAGE)
-      if (blacklistedExecutorsOnNode.size >= MAX_FAILED_EXEC_PER_NODE_STAGE) {
-        if (blacklistedNodes.add(host)) {
-          logInfo(s"Blacklisting ${host} for stage $stageId")
+      if (blacklistedExecs.add(exec)) {
+        logInfo(s"Blacklisting executor ${exec} for stage $stageId")
+        // This executor has been pushed into the blacklist for this stage.  Let's check if it
+        // pushes the whole node into the blacklist.
+        val blacklistedExecutorsOnNode =
+          execsWithFailuresOnNode.filter(blacklistedExecs.contains(_))
+        if (blacklistedExecutorsOnNode.size >= MAX_FAILED_EXEC_PER_NODE_STAGE) {
+          if (blacklistedNodes.add(host)) {
+            logInfo(s"Blacklisting ${host} for stage $stageId")
+          }
         }
       }
     }
@@ -913,8 +915,7 @@ private[spark] class TaskSetManager(
    * filters will already have been applied.
    */
   def isExecutorBlacklistedForTaskSet(executorId: String): Boolean = {
-    execToFailures.get(executorId)
-      .map(_.numUniqueTasksWithFailures >= MAX_FAILURES_PER_EXEC_STAGE).getOrElse(false)
+    blacklistedExecs.contains(executorId)
   }
 
   def isNodeBlacklistedForTaskSet(node: String): Boolean = {
