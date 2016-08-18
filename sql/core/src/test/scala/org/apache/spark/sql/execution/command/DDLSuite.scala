@@ -677,7 +677,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("create temporary view using") {
-    val csvFile = Thread.currentThread().getContextClassLoader.getResource("cars.csv").toString()
+    val csvFile =
+      Thread.currentThread().getContextClassLoader.getResource("test-data/cars.csv").toString
     withView("testview") {
       sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1: String, c2: String)  USING " +
         "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
@@ -1272,11 +1273,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
     }
-    // serde properties must not be a datasource property
-    val e = intercept[AnalysisException] {
-      sql(s"ALTER TABLE tab1 SET SERDEPROPERTIES ('${DATASOURCE_PREFIX}foo'='wah')")
-    }
-    assert(e.getMessage.contains(DATASOURCE_PREFIX + "foo"))
   }
 
   private def testSetSerdePartition(isDatasourceTable: Boolean): Unit = {
@@ -1579,8 +1575,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("create table with datasource properties (not allowed)") {
     assertUnsupported("CREATE TABLE my_tab TBLPROPERTIES ('spark.sql.sources.me'='anything')")
-    assertUnsupported("CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
-      "WITH SERDEPROPERTIES ('spark.sql.sources.me'='anything')")
   }
 
   test("Create Hive Table As Select") {
