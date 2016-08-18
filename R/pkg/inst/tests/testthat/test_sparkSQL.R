@@ -2247,16 +2247,17 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
               })
   expect_identical(expected, result)
 
-  # Ensure UDF's can return columns containing arrays and bytes
-  add_list_columns <- function(x){
-    bytes <- serialize(1:5, NULL)
-    x$bytecolumn <- rep(list(bytes), nrow(x))
-    x$arraycolumn <- rep(list(1:5), nrow(x))
-    x
-  }
-  expected <- add_list_columns(ldf)
-  result <- dapplyCollect(df, add_list_columns)
-  expect_equal(expected, result)
+  # Ensure UDF's operate on list columns containing arrays and bytes
+  df_listcols <- data.frame(key = 1:3)
+  df_listcols$bytes <- lapply(df_listcols$key, serialize, connection = NULL)
+  df_listcols$arr <- lapply(df_listcols$key,
+                            function(x) seq(0, 1, length.out=15))
+
+  df_listcols_spark <- createDataFrame(df_listcols)
+  result <- dapplyCollect(df_listcols_spark, function(x) x)
+
+  expect_equal(df_listcols, result)
+
 })
 
 test_that("repartition by columns on DataFrame", {
