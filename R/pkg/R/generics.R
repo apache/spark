@@ -397,7 +397,7 @@ setGeneric("value", function(bcast) { standardGeneric("value") })
 ####################  SparkDataFrame Methods ########################
 
 #' @param x a SparkDataFrame or GroupedData.
-#' @param ... additional argument(s) passed to the method.
+#' @param ... further arguments to be passed to or from other methods.
 #' @return A SparkDataFrame.
 #' @rdname summarize
 #' @export
@@ -1311,52 +1311,7 @@ setGeneric("year", function(x) { standardGeneric("year") })
 #' @export
 setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.glm") })
 
-#' @param formula a symbolic description of the model to be fitted. If \code{data} is a
-#'                SparkDataFrame, currently only a few formula operators are supported,
-#'                including '~', '.', ':', '+', and '-'.
-#' @param data a SparkDataFrame or (R glm) data.frame, list or environment for training.
-#' @param family a description of the error distribution and link function to be used in the model.
-#'               This can be a character string naming a family function, a family function or
-#'               the result of a call to a family function. Refer R family at
-#'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
-#' @param epsilon positive convergence tolerance of iterations.
-#' @param maxit integer giving the maximal number of IRLS iterations.
-#' @param weights an optional vector of 'prior weights' to be used in the fitting process.
-#'                Should be NULL or a numeric vector.
-#' @param subset an optional vector specifying a subset of observations to be used in the
-#'               fitting process.
-#' @param na.action a function which indicates what should happen when the data contain NAs.
-#'                  The default is set by the na.action setting of options, and is na.fail
-#'                  if that is unset. The 'factory-fresh' default is na.omit. Another possible
-#'                  value is NULL, no action. Value na.exclude can be useful.
-#' @param start starting values for the parameters in the linear predictor.
-#' @param etastart starting values for the linear predictor.
-#' @param mustart starting values for the vector of means.
-#' @param offset this can be used to specify an a priori known component to be included in
-#'               the linear predictor during fitting. This should be NULL or
-#'               a numeric vector of length equal to the number of cases. One or more offset
-#'               terms can be included in the formula instead or as well, and if more than
-#'               one is specified their sum is used. See model.offset.
-#' @param control a list of parameters for controlling the fitting process. For glm.fit
-#'                this is passed to glm.control.
-#' @param model a logical value indicating whether model frame should be included as
-#'              a component of the returned value.
-#' @param method the method to be used in fitting the model. The default method
-#'               "glm.fit" uses iteratively reweighted least squares (IWLS): the alternative
-#'               "model.frame" returns the model frame and does no fitting.
-#'               User-supplied fitting functions can be supplied either as a function or
-#'               a character string naming a function, with a function which takes the same
-#'               arguments as glm.fit. If specified as a character string it is looked up from
-#'               within the stats namespace.
-#' @param x,y logical values indicating whether the response vector and model matrix
-#'            used in the fitting process should be returned as components of the returned value.
-#' @param contrasts an optional list. See the contrasts.arg of model.matrix.default.
-#' @param ...	arguments to be used to form the default control argument if it is
-#'            not supplied directly.
 #' @rdname glm
-#' @details If \code{data} is a data.frame, list or environment, \code{glm} behaves the same as
-#'          \code{glm} in the \code{stats} package. If \code{data} is a SparkDataFrame,
-#'          \code{spark.glm} is called.
 #' @export
 setGeneric("glm")
 
