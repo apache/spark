@@ -340,30 +340,12 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         return CountVectorizerModel(java_model)
 
 
-class CountVectorizerModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class CountVectorizerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`CountVectorizer`.
 
     .. versionadded:: 1.6.0
     """
-
-    @classmethod
-    def fromVocabulary(cls, vocab):
-        #jvocab = cls._new_java_obj("org.apache.spark.ml.feature.Blah.convert", vocab)
-        #jvocab = cls._new_java_obj("org.apache.spark.api.python.PythonUtils.toStringArray", vocab)
-        #jvocab = sc._jvm.PythonUtils.toList(vocab)
-        '''
-        from pyspark import SparkContext
-        sc = SparkContext._active_spark_context
-        jvocab = sc._gateway.new_array(sc._gateway.jvm.java.lang.String, len(vocab))
-        for i in xrange(len(vocab)):
-            jvocab[i] = vocab[i]
-        '''
-
-        jvocab = CountVectorizerModel._new_java_primitive_array(vocab)
-        model = CountVectorizerModel._create_from_java_class("org.apache.spark.ml.feature.CountVectorizerModel", jvocab)
-        #self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizerModel", vocab)
-        return model
 
     @property
     @since("1.6.0")
