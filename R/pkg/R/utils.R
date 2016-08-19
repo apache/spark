@@ -700,6 +700,7 @@ is_yarn_client <- function(master) {
 
 is_sparkR_shell <- function() {
   grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
+}
 
 getRemoteMasterInfo <- function(master) {
   hostPort <- sub("spark://", "", master)
