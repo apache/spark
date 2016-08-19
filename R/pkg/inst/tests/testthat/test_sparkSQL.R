@@ -381,6 +381,7 @@ test_that("create DataFrame with complex types", {
   expect_equal(s$b, 3L)
 })
 
+# TODO Clark: Make sure this one passes
 test_that("create DataFrame from a data.frame with complex types", {
   ldf <- data.frame(row.names = 1:2)
   ldf$a_list <- list(list(1, 2), list(3, 4))
@@ -2254,9 +2255,13 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
                             function(x) seq(0, 1, length.out=15))
 
   df_listcols_spark <- createDataFrame(df_listcols)
-  result <- dapplyCollect(df_listcols_spark, function(x) x)
 
-  expect_equal(df_listcols, result)
+  # TODO Clark: Right now both of these lines fail
+  result1 <- collect(df_listcols_spark)
+  result2 <- dapplyCollect(df_listcols_spark, function(x) x)
+
+  expect_equal(df_listcols, result1)
+  expect_equal(df_listcols, result2)
 
 })
 
