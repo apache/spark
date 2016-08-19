@@ -223,7 +223,8 @@ spark_cache_path <- function() {
     }
   } else if (.Platform$OS.type == "unix") {
     if (Sys.info()["sysname"] == "Darwin") {
-      path <- file.path(paste("/Users/", Sys.getenv("USER"), sep = ""), "Library/Caches", "spark")
+      path <- file.path(paste("/", "Users/", Sys.getenv("USER"), sep = ""),
+        "Library/Caches", "spark")
     } else {
       path <- file.path(
         Sys.getenv("XDG_CACHE_HOME", file.path(Sys.getenv("HOME"), ".cache")), "spark")
