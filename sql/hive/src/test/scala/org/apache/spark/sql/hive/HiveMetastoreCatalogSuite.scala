@@ -23,12 +23,13 @@ import org.apache.spark.sql.{QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
 import org.apache.spark.sql.types.{DecimalType, IntegerType, StringType, StructField, StructType}
 
-class HiveMetastoreCatalogSuite extends TestHiveSingleton {
+class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
   import spark.implicits._
 
   test("struct field should accept underscore in sub-column name") {
@@ -56,6 +57,17 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton {
     }
     val dataType = StructType((1 to 100).map(field))
     assert(CatalystSqlParser.parseDataType(dataType.catalogString) == dataType)
+  }
+
+  test("view relation") {
+    withView("vw1") {
+      spark.sql("create view vw1 as select 1 as id")
+      val plan = spark.sql("select id from vw1").queryExecution.analyzed
+      val aliases = plan.collect {
+        case x @ SubqueryAlias("vw1", _, Some(TableIdentifier("vw1", Some("default")))) => x
+      }
+      assert(aliases.size == 1)
+    }
   }
 }
 
