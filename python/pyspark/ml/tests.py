@@ -16,7 +16,7 @@
 #
 
 """
-Unit tests for Spark ML Python APIs.
+Unit tests for MLlib Python DataFrame-based APIs.
 """
 import sys
 if sys.version > '3':

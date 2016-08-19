@@ -36,7 +36,7 @@ import org.apache.spark.sql.Dataset
 
 
 /**
- * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
+ * Decision tree learning algorithm (http://en.wikipedia.org/wiki/Decision_tree_learning)
  * for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
@@ -84,6 +84,13 @@ class DecisionTreeClassifier @Since("1.4.0") (
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val numClasses: Int = getNumClasses(dataset)
+
+    if (isDefined(thresholds)) {
+      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
+        ".train() called with non-matching numClasses and thresholds.length." +
+        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
+    }
+
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, numClasses)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
 
@@ -135,7 +142,7 @@ object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifi
 }
 
 /**
- * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for classification.
+ * Decision tree model (http://en.wikipedia.org/wiki/Decision_tree_learning) for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */

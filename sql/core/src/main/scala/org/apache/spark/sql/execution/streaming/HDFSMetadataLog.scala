@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.UninterruptibleThread
 
 
 /**
@@ -91,18 +92,30 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
     serializer.deserialize[T](ByteBuffer.wrap(bytes))
   }
 
+  /**
+   * Store the metadata for the specified batchId and return `true` if successful. If the batchId's
+   * metadata has already been stored, this method will return `false`.
+   *
+   * Note that this method must be called on a [[org.apache.spark.util.UninterruptibleThread]]
+   * so that interrupts can be disabled while writing the batch file. This is because there is a
+   * potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622). If the thread
+   * running "Shell.runCommand" is interrupted, then the thread can get deadlocked. In our
+   * case, `writeBatch` creates a file using HDFS API and calls "Shell.runCommand" to set the
+   * file permissions, and can get deadlocked if the stream execution thread is stopped by
+   * interrupt. Hence, we make sure that this method is called on [[UninterruptibleThread]] which
+   * allows us to disable interrupts here. Also see SPARK-14131.
+   */
   override def add(batchId: Long, metadata: T): Boolean = {
     get(batchId).map(_ => false).getOrElse {
-      // Only write metadata when the batch has not yet been written.
-      try {
-        writeBatch(batchId, serialize(metadata))
-        true
-      } catch {
-        case e: IOException if "java.lang.InterruptedException" == e.getMessage =>
-          // create may convert InterruptedException to IOException. Let's convert it back to
-          // InterruptedException so that this failure won't crash StreamExecution
-          throw new InterruptedException("Creating file is interrupted")
+      // Only write metadata when the batch has not yet been written
+      Thread.currentThread match {
+        case ut: UninterruptibleThread =>
+          ut.runUninterruptibly { writeBatch(batchId, serialize(metadata)) }
+        case _ =>
+          throw new IllegalStateException(
+            "HDFSMetadataLog.add() must be executed on a o.a.spark.util.UninterruptibleThread")
       }
+      true
     }
   }
 

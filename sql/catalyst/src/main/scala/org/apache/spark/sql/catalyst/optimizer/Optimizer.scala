@@ -75,8 +75,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       RemoveRepetitionFromGroupExpressions) ::
     Batch("Operator Optimizations", fixedPoint,
       // Operator push down
-      PushThroughSetOperations,
-      PushProjectThroughSample,
+      PushProjectionThroughUnion,
       ReorderJoin,
       EliminateOuterJoin,
       PushPredicateThroughJoin,
@@ -128,7 +127,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
   object OptimizeSubqueries extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s: SubqueryExpression =>
-        s.withNewPlan(Optimizer.this.execute(s.query))
+        s.withNewPlan(Optimizer.this.execute(s.plan))
     }
   }
 }
@@ -147,17 +146,6 @@ class SimpleTestOptimizer extends Optimizer(
     EmptyFunctionRegistry,
     new SimpleCatalystConf(caseSensitiveAnalysis = true)),
   new SimpleCatalystConf(caseSensitiveAnalysis = true))
-
-/**
- * Pushes projects down beneath Sample to enable column pruning with sampling.
- */
-object PushProjectThroughSample extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Push down projection into sample
-    case Project(projectList, Sample(lb, up, replace, seed, child)) =>
-      Sample(lb, up, replace, seed, Project(projectList, child))()
-  }
-}
 
 /**
  * Removes the Project only conducting Alias of its child node.
@@ -226,7 +214,7 @@ object EliminateSerialization extends Rule[LogicalPlan] {
       val objAttr = Alias(s.inputObjAttr, s.inputObjAttr.name)(exprId = d.outputObjAttr.exprId)
       Project(objAttr :: Nil, s.child)
 
-    case a @ AppendColumns(_, _, _, s: SerializeFromObject)
+    case a @ AppendColumns(_, _, _, _, _, s: SerializeFromObject)
         if a.deserializer.dataType == s.inputObjAttr.dataType =>
       AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)
 
@@ -235,7 +223,7 @@ object EliminateSerialization extends Rule[LogicalPlan] {
     // deserialization in condition, and push it down through `SerializeFromObject`.
     // e.g. `ds.map(...).filter(...)` can be optimized by this rule to save extra deserialization,
     // but `ds.map(...).as[AnotherType].filter(...)` can not be optimized.
-    case f @ TypedFilter(_, _, s: SerializeFromObject)
+    case f @ TypedFilter(_, _, _, _, s: SerializeFromObject)
         if f.deserializer.dataType == s.inputObjAttr.dataType =>
       s.copy(child = f.withObjectProducerChild(s.child))
 
@@ -314,14 +302,14 @@ object LimitPushDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes certain operations to both sides of a Union operator.
+ * Pushes Project operator to both sides of a Union operator.
  * Operations that are safe to pushdown are listed as follows.
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
- * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
- * we will not be able to pushdown Projections.
+ * safe to pushdown Filters and Projections through it. Filter pushdown is handled by another
+ * rule PushDownPredicate. Once we add UNION DISTINCT, we will not be able to pushdown Projections.
  */
-object PushThroughSetOperations extends Rule[LogicalPlan] with PredicateHelper {
+object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
@@ -376,17 +364,6 @@ object PushThroughSetOperations extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         p
       }
-
-    // Push down filter into union
-    case Filter(condition, Union(children)) =>
-      assert(children.nonEmpty)
-      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val newFirstChild = Filter(deterministic, children.head)
-      val newOtherChildren = children.tail.map { child =>
-        val rewrites = buildRewrites(children.head, child)
-        Filter(pushToRight(deterministic, rewrites), child)
-      }
-      Filter(nondeterministic, Union(newFirstChild +: newOtherChildren))
   }
 }
 
@@ -674,10 +651,6 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ Substring(_, Literal(null, _), _) => Literal.create(null, e.dataType)
       case e @ Substring(_, _, Literal(null, _)) => Literal.create(null, e.dataType)
 
-      // MaxOf and MinOf can't do null propagation
-      case e: MaxOf => e
-      case e: MinOf => e
-
       // Put exceptional cases above if any
       case e @ BinaryArithmetic(Literal(null, _), _) => Literal.create(null, e.dataType)
       case e @ BinaryArithmetic(_, Literal(null, _)) => Literal.create(null, e.dataType)
@@ -743,6 +716,19 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         case j @ Join(_, _, LeftOuter | RightOuter | FullOuter, _) =>
           stop = true
           j
+
+        // These 3 operators take attributes as constructor parameters, and these attributes
+        // can't be replaced by alias.
+        case m: MapGroups =>
+          stop = true
+          m
+        case f: FlatMapGroupsInR =>
+          stop = true
+          f
+        case c: CoGroup =>
+          stop = true
+          c
+
         case p: LogicalPlan if !stop => p.transformExpressions {
           case a: AttributeReference if foldableMap.contains(a) =>
             foldableMap(a)
@@ -1719,9 +1705,14 @@ case class GetCurrentDatabase(sessionCatalog: SessionCatalog) extends Rule[Logic
  */
 object CombineTypedFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case t1 @ TypedFilter(_, _, t2 @ TypedFilter(_, _, child))
+    case t1 @ TypedFilter(_, _, _, _, t2 @ TypedFilter(_, _, _, _, child))
         if t1.deserializer.dataType == t2.deserializer.dataType =>
-      TypedFilter(combineFilterFunction(t2.func, t1.func), t1.deserializer, child)
+      TypedFilter(
+        combineFilterFunction(t2.func, t1.func),
+        t1.argumentClass,
+        t1.argumentSchema,
+        t1.deserializer,
+        child)
   }
 
   private def combineFilterFunction(func1: AnyRef, func2: AnyRef): Any => Boolean = {
@@ -1825,7 +1816,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     val newExpression = expression transform {
       case s: ScalarSubquery if s.children.nonEmpty =>
         subqueries += s
-        s.query.output.head
+        s.plan.output.head
     }
     newExpression.asInstanceOf[E]
   }
@@ -1873,7 +1864,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     // and Project operators, followed by an optional Filter, followed by an
     // Aggregate. Traverse the operators recursively.
     def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Any]] = lp match {
-      case SubqueryAlias(_, child) => evalPlan(child)
+      case SubqueryAlias(_, child, _) => evalPlan(child)
       case Filter(condition, child) =>
         val bindings = evalPlan(child)
         if (bindings.isEmpty) bindings
@@ -1931,7 +1922,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           topPart += p
           bottomPart = child
 
-        case s @ SubqueryAlias(_, child) =>
+        case s @ SubqueryAlias(_, child, _) =>
           topPart += s
           bottomPart = child
 
@@ -2002,8 +1993,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
             topPart.reverse.foreach {
               case Project(projList, _) =>
                 subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
-              case s @ SubqueryAlias(alias, _) =>
-                subqueryRoot = SubqueryAlias(alias, subqueryRoot)
+              case s @ SubqueryAlias(alias, _, None) =>
+                subqueryRoot = SubqueryAlias(alias, subqueryRoot, None)
               case op => sys.error(s"Unexpected operator $op in corelated subquery")
             }
 
@@ -2040,7 +2031,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         // grouping expressions. As a result we need to replace all the scalar subqueries in the
         // grouping expressions by their result.
         val newGrouping = grouping.map { e =>
-          subqueries.find(_.semanticEquals(e)).map(_.query.output.head).getOrElse(e)
+          subqueries.find(_.semanticEquals(e)).map(_.plan.output.head).getOrElse(e)
         }
         Aggregate(newGrouping, newExpressions, constructLeftJoins(child, subqueries))
       } else {

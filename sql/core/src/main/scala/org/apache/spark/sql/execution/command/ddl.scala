@@ -17,18 +17,22 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.collection.GenSeq
+import scala.collection.parallel.ForkJoinTaskSupport
+import scala.concurrent.forkjoin.ForkJoinPool
 import scala.util.control.NonFatal
+
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
+import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTablePartition, CatalogTableType, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
-import org.apache.spark.sql.execution.datasources.BucketSpec
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
-
 
 // Note: The definition of these commands are based on the ones described in
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
@@ -302,9 +306,6 @@ case class AlterTableSerDePropertiesCommand(
     "ALTER TABLE attempted to set neither serde class name nor serde properties")
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    DDLUtils.verifyTableProperties(
-      serdeProperties.toSeq.flatMap(_.keys.toSeq),
-      "ALTER TABLE SERDEPROPERTIES")
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     // For datasource tables, disallow setting serde or specifying partition
@@ -320,14 +321,14 @@ case class AlterTableSerDePropertiesCommand(
     if (partSpec.isEmpty) {
       val newTable = table.withNewStorage(
         serde = serdeClassName.orElse(table.storage.serde),
-        serdeProperties = table.storage.serdeProperties ++ serdeProperties.getOrElse(Map()))
+        serdeProperties = table.storage.properties ++ serdeProperties.getOrElse(Map()))
       catalog.alterTable(newTable)
     } else {
       val spec = partSpec.get
       val part = catalog.getPartition(tableName, spec)
       val newPart = part.copy(storage = part.storage.copy(
         serde = serdeClassName.orElse(part.storage.serde),
-        serdeProperties = part.storage.serdeProperties ++ serdeProperties.getOrElse(Map())))
+        properties = part.storage.properties ++ serdeProperties.getOrElse(Map())))
       catalog.alterPartitions(tableName, Seq(newPart))
     }
     Seq.empty[Row]
@@ -426,6 +427,111 @@ case class AlterTableDropPartitionCommand(
 
 }
 
+/**
+ * Recover Partitions in ALTER TABLE: recover all the partition in the directory of a table and
+ * update the catalog.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table RECOVER PARTITIONS;
+ *   MSCK REPAIR TABLE table;
+ * }}}
+ */
+case class AlterTableRecoverPartitionsCommand(
+    tableName: TableIdentifier,
+    cmd: String = "ALTER TABLE RECOVER PARTITIONS") extends RunnableCommand {
+  override def run(spark: SparkSession): Seq[Row] = {
+    val catalog = spark.sessionState.catalog
+    if (!catalog.tableExists(tableName)) {
+      throw new AnalysisException(s"Table $tableName in $cmd does not exist.")
+    }
+    val table = catalog.getTableMetadata(tableName)
+    if (catalog.isTemporaryTable(tableName)) {
+      throw new AnalysisException(
+        s"Operation not allowed: $cmd on temporary tables: $tableName")
+    }
+    if (DDLUtils.isDatasourceTable(table)) {
+      throw new AnalysisException(
+        s"Operation not allowed: $cmd on datasource tables: $tableName")
+    }
+    if (table.tableType != CatalogTableType.EXTERNAL) {
+      throw new AnalysisException(
+        s"Operation not allowed: $cmd only works on external tables: $tableName")
+    }
+    if (!DDLUtils.isTablePartitioned(table)) {
+      throw new AnalysisException(
+        s"Operation not allowed: $cmd only works on partitioned tables: $tableName")
+    }
+    if (table.storage.locationUri.isEmpty) {
+      throw new AnalysisException(
+        s"Operation not allowed: $cmd only works on table with location provided: $tableName")
+    }
+
+    val root = new Path(table.storage.locationUri.get)
+    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    // Dummy jobconf to get to the pathFilter defined in configuration
+    // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
+    val jobConf = new JobConf(spark.sparkContext.hadoopConfiguration, this.getClass)
+    val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+    val partitionSpecsAndLocs = scanPartitions(
+      spark, fs, pathFilter, root, Map(), table.partitionColumnNames.map(_.toLowerCase))
+    val parts = partitionSpecsAndLocs.map { case (spec, location) =>
+      // inherit table storage format (possibly except for location)
+      CatalogTablePartition(spec, table.storage.copy(locationUri = Some(location.toUri.toString)))
+    }
+    spark.sessionState.catalog.createPartitions(tableName,
+      parts.toArray[CatalogTablePartition], ignoreIfExists = true)
+    Seq.empty[Row]
+  }
+
+  @transient private lazy val evalTaskSupport = new ForkJoinTaskSupport(new ForkJoinPool(8))
+
+  private def scanPartitions(
+      spark: SparkSession,
+      fs: FileSystem,
+      filter: PathFilter,
+      path: Path,
+      spec: TablePartitionSpec,
+      partitionNames: Seq[String]): GenSeq[(TablePartitionSpec, Path)] = {
+    if (partitionNames.length == 0) {
+      return Seq(spec -> path)
+    }
+
+    val statuses = fs.listStatus(path)
+    val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
+    val statusPar: GenSeq[FileStatus] =
+      if (partitionNames.length > 1 && statuses.length > threshold || partitionNames.length > 2) {
+        val parArray = statuses.par
+        parArray.tasksupport = evalTaskSupport
+        parArray
+      } else {
+        statuses
+      }
+    statusPar.flatMap { st =>
+      val name = st.getPath.getName
+      if (st.isDirectory && name.contains("=")) {
+        val ps = name.split("=", 2)
+        val columnName = PartitioningUtils.unescapePathName(ps(0)).toLowerCase
+        // TODO: Validate the value
+        val value = PartitioningUtils.unescapePathName(ps(1))
+        // comparing with case-insensitive, but preserve the case
+        if (columnName == partitionNames(0)) {
+          scanPartitions(
+            spark, fs, filter, st.getPath, spec ++ Map(columnName -> value), partitionNames.drop(1))
+        } else {
+          logWarning(s"expect partition column ${partitionNames(0)}, but got ${ps(0)}, ignore it")
+          Seq()
+        }
+      } else {
+        if (name != "_SUCCESS" && name != "_temporary" && !name.startsWith(".")) {
+          logWarning(s"ignore ${new Path(path, name)}")
+        }
+        Seq()
+      }
+    }
+  }
+}
+
 
 /**
  * A command that sets the location of a table or a partition.
@@ -466,7 +572,7 @@ case class AlterTableSetLocationCommand(
           if (DDLUtils.isDatasourceTable(table)) {
             table.withNewStorage(
               locationUri = Some(location),
-              serdeProperties = table.storage.serdeProperties ++ Map("path" -> location))
+              serdeProperties = table.storage.properties ++ Map("path" -> location))
           } else {
             table.withNewStorage(locationUri = Some(location))
           }
@@ -519,34 +625,32 @@ object DDLUtils {
   }
 
   def isTablePartitioned(table: CatalogTable): Boolean = {
-    table.partitionColumns.nonEmpty || table.properties.contains(DATASOURCE_SCHEMA_NUMPARTCOLS)
+    table.partitionColumnNames.nonEmpty || table.properties.contains(DATASOURCE_SCHEMA_NUMPARTCOLS)
   }
 
-  // A persisted data source table may not store its schema in the catalog. In this case, its schema
-  // will be inferred at runtime when the table is referenced.
-  def getSchemaFromTableProperties(metadata: CatalogTable): Option[StructType] = {
+  // A persisted data source table always store its schema in the catalog.
+  def getSchemaFromTableProperties(metadata: CatalogTable): StructType = {
     require(isDatasourceTable(metadata))
+    val msgSchemaCorrupted = "Could not read schema from the metastore because it is corrupted."
     val props = metadata.properties
-    if (props.isDefinedAt(DATASOURCE_SCHEMA)) {
+    props.get(DATASOURCE_SCHEMA).map { schema =>
       // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
       // After SPARK-6024, we removed this flag.
       // Although we are not using spark.sql.sources.schema any more, we need to still support.
-      props.get(DATASOURCE_SCHEMA).map(DataType.fromJson(_).asInstanceOf[StructType])
-    } else {
-      metadata.properties.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
+      DataType.fromJson(schema).asInstanceOf[StructType]
+    } getOrElse {
+      props.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
         val parts = (0 until numParts.toInt).map { index =>
           val part = metadata.properties.get(s"$DATASOURCE_SCHEMA_PART_PREFIX$index").orNull
           if (part == null) {
-            throw new AnalysisException(
-              "Could not read schema from the metastore because it is corrupted " +
-                s"(missing part $index of the schema, $numParts parts are expected).")
+            throw new AnalysisException(msgSchemaCorrupted +
+              s" (missing part $index of the schema, $numParts parts are expected).")
           }
-
           part
         }
         // Stick all parts back to a single schema string.
         DataType.fromJson(parts.mkString).asInstanceOf[StructType]
-      }
+      } getOrElse(throw new AnalysisException(msgSchemaCorrupted))
     }
   }
 
