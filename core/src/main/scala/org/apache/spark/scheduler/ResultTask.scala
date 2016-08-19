@@ -17,10 +17,8 @@
 
 package org.apache.spark.scheduler
 
-import java.lang.management.ManagementFactory
-import java.nio.ByteBuffer
-
 import java.io._
+import java.lang.management.ManagementFactory
 import java.nio.ByteBuffer
 import java.util.Properties
 
