@@ -173,7 +173,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' Fits a generalized linear model, similarly to R's glm().
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
-#' @param data SparkDataFrame for training.
+#' @param data a SparkDataFrame or R's glm data for training.
 #' @param family a description of the error distribution and link function to be used in the model.
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
@@ -508,10 +508,10 @@ setMethod("summary", signature(object = "IsotonicRegressionModel"),
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #'                Note that the response variable of formula is empty in spark.kmeans.
-#' @param ... additional argument(s) passed to the method.
 #' @param k number of centers.
 #' @param maxIter maximum iteration number.
 #' @param initMode the initialization algorithm choosen to fit the model.
+#' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.kmeans} returns a fitted k-means model.
 #' @rdname spark.kmeans
 #' @aliases spark.kmeans,SparkDataFrame,formula-method
@@ -628,8 +628,8 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param data a \code{SparkDataFrame} of observations and labels for model fitting.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
 #'               operators are supported, including '~', '.', ':', '+', and '-'.
-#' @param ... additional argument(s) passed to the method. Currently only \code{smoothing}.
 #' @param smoothing smoothing parameter.
+#' @param ... additional argument(s) passed to the method. Currently only \code{smoothing}.
 #' @return \code{spark.naiveBayes} returns a fitted naive Bayes model.
 #' @rdname spark.naiveBayes
 #' @aliases spark.naiveBayes,SparkDataFrame,formula-method
@@ -657,7 +657,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' }
 #' @note spark.naiveBayes since 2.0.0
 setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, smoothing = 1.0) {
+          function(data, formula, smoothing = 1.0, ...) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
             formula, data@sdf, smoothing)

@@ -316,7 +316,7 @@ setMethod("column",
 #'
 #' Computes the Pearson Correlation Coefficient for two Columns.
 #'
-#' @param col2 a (second) Column object.
+#' @param col2 a (second) Column.
 #'
 #' @rdname corr
 #' @name corr
@@ -357,8 +357,8 @@ setMethod("cov", signature(x = "characterOrColumn"),
 
 #' @rdname cov
 #'
-#' @param col1 the first Column object.
-#' @param col2 the second Column object.
+#' @param col1 the first Column.
+#' @param col2 the second Column.
 #' @name covar_samp
 #' @aliases covar_samp,characterOrColumn,characterOrColumn-method
 #' @note covar_samp since 2.0.0
@@ -446,8 +446,8 @@ setMethod("cosh",
 #'
 #' Returns the number of items in a group. This is a column aggregate function.
 #'
-#' @rdname n
-#' @name n
+#' @rdname count
+#' @name count
 #' @family agg_funcs
 #' @aliases count,Column-method
 #' @export
@@ -1270,14 +1270,14 @@ setMethod("round",
 
 #' bround
 #'
-#' Returns the value of the column `e` rounded to `scale` decimal places using HALF_EVEN rounding
-#' mode if `scale` >= 0 or at integer part when `scale` < 0.
+#' Returns the value of the column \code{e} rounded to \code{scale} decimal places using HALF_EVEN rounding
+#' mode if \code{scale} >= 0 or at integer part when \code{scale} < 0.
 #' Also known as Gaussian rounding or bankers' rounding that rounds to the nearest even number.
 #' bround(2.5, 0) = 2, bround(3.5, 0) = 4.
 #'
 #' @param x Column to compute on.
 #' @param scale round to \code{scale} digits to the right of the decimal point when \code{scale} > 0,
-#'        the nearest even number when \code{scale} = 0, and `scale` digits to the left
+#'        the nearest even number when \code{scale} = 0, and \code{scale} digits to the left
 #'        of the decimal point when \code{scale} < 0.
 #' @param ... further arguments to be passed to or from other methods.
 #' @rdname bround
@@ -2276,8 +2276,7 @@ setMethod("n_distinct", signature(x = "Column"),
             countDistinct(x, ...)
           })
 
-#' @param x a Column.
-#' @rdname n
+#' @rdname count
 #' @name n
 #' @aliases n,Column-method
 #' @export
@@ -2655,7 +2654,7 @@ setMethod("expr", signature(x = "character"),
 #' Formats the arguments in printf-style and returns the result as a string column.
 #'
 #' @param format a character object of format strings.
-#' @param x a Column object.
+#' @param x a Column.
 #' @param ... additional Column(s).
 #' @family string_funcs
 #' @rdname format_string

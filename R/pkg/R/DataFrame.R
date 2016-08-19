@@ -932,7 +932,7 @@ setMethod("sample_frac",
 #' @param x a SparkDataFrame.
 #' @family SparkDataFrame functions
 #' @rdname nrow
-#' @name count
+#' @name nrow
 #' @aliases count,SparkDataFrame-method
 #' @export
 #' @examples
@@ -1214,9 +1214,9 @@ setMethod("toRDD",
 #'
 #' Groups the SparkDataFrame using the specified columns, so we can run aggregation on them.
 #'
-#' @param x a SparkDataFrame
+#' @param x a SparkDataFrame.
 #' @param ... variable(s) (character names(s) or Column(s)) to group on.
-#' @return a GroupedData
+#' @return A GroupedData.
 #' @family SparkDataFrame functions
 #' @aliases groupBy,SparkDataFrame-method
 #' @rdname groupBy
@@ -3037,8 +3037,8 @@ setMethod("str",
 #' This is a no-op if schema doesn't contain column name(s).
 #'
 #' @param x a SparkDataFrame.
-#' @param ... further arguments to be passed to or from other methods.
 #' @param col a character vector of column names or a Column.
+#' @param ... further arguments to be passed to or from other methods.
 #' @return A SparkDataFrame.
 #'
 #' @family SparkDataFrame functions
@@ -3058,7 +3058,7 @@ setMethod("str",
 #' @note drop since 2.0.0
 setMethod("drop",
           signature(x = "SparkDataFrame"),
-          function(x, col) {
+          function(x, col, ...) {
             stopifnot(class(col) == "character" || class(col) == "Column")
 
             if (class(col) == "Column") {
@@ -3218,11 +3218,11 @@ setMethod("histogram",
 #'         and to not change the existing data.
 #' }
 #'
-#' @param x A SparkDataFrame
-#' @param url JDBC database url of the form `jdbc:subprotocol:subname`
-#' @param tableName The name of the table in the external database
+#' @param x s SparkDataFrame.
+#' @param url JDBC database url of the form `jdbc:subprotocol:subname`.
+#' @param tableName yhe name of the table in the external database.
+#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default).
 #' @param ... additional JDBC database connection properties.
-#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
 #' @family SparkDataFrame functions
 #' @rdname write.jdbc
 #' @name write.jdbc

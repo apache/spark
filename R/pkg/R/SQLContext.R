@@ -730,7 +730,7 @@ dropTempView <- function(viewName) {
 #' @param source The name of external data source
 #' @param schema The data schema defined in structType
 #' @param na.strings Default string value for NA when source is "csv"
-#' @param ... additional external data source specific named propertie(s).
+#' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.df
 #' @name read.df

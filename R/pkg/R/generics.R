@@ -432,7 +432,8 @@ setGeneric("coltypes<-", function(x, value) { standardGeneric("coltypes<-") })
 #' @export
 setGeneric("columns", function(x) {standardGeneric("columns") })
 
-#' @rdname nrow
+#' @param x a GroupedData or Column.
+#' @rdname count
 #' @export
 setGeneric("count", function(x) { standardGeneric("count") })
 
@@ -1071,7 +1072,7 @@ setGeneric("month", function(x) { standardGeneric("month") })
 #' @export
 setGeneric("months_between", function(y, x) { standardGeneric("months_between") })
 
-#' @rdname n
+#' @rdname count
 #' @export
 setGeneric("n", function(x) { standardGeneric("n") })
 
@@ -1303,6 +1304,10 @@ setGeneric("year", function(x) { standardGeneric("year") })
 #' @export
 setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.glm") })
 
+#' @param x,y For \code{glm}: logical values indicating whether the response vector
+#'          and model matrix used in the fitting process should be returned as
+#'          components of the returned value.
+#' @inheritParams stats::glm
 #' @rdname glm
 #' @export
 setGeneric("glm")
