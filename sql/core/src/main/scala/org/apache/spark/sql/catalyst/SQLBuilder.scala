@@ -205,6 +205,9 @@ class SQLBuilder private (
     case p: ScriptTransformation =>
       scriptTransformationToSQL(p)
 
+    case Range(start, end, step, numPartitions, output) =>
+      s"SELECT id AS `${output.head.name}` FROM range($start, $end, $step, $numPartitions)"
+
     case OneRowRelation =>
       ""
 
