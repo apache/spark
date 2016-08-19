@@ -2248,20 +2248,43 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
               })
   expect_identical(expected, result)
 
+############################################################
   # Ensure UDF's operate on list columns containing arrays and bytes
   df_listcols <- data.frame(key = 1:3)
   df_listcols$bytes <- lapply(df_listcols$key, serialize, connection = NULL)
-  df_listcols$arr <- lapply(df_listcols$key,
-                            function(x) seq(0, 1, length.out=15))
-
+  #df_listcols$arr <- lapply(df_listcols$key,
+  #                          function(x) seq(0, 1, length.out=15))
   df_listcols_spark <- createDataFrame(df_listcols)
 
-  # TODO Clark: Right now both of these lines fail
-  result1 <- collect(df_listcols_spark)
-  result2 <- dapplyCollect(df_listcols_spark, function(x) x)
+# TODO Clark: I think these warnings come from serialize. Should eliminate
+# them?
+#>   result1 <- collect(df_listcols_spark)
+#Warning messages:
+#1: closing unused connection 4 (->localhost:50241)
+#2: closing unused connection 3 (->localhost:50242)
 
-  expect_equal(df_listcols, result1)
+# TODO Clark: This line fails if the numeric array column is added
+  result1 <- collect(df_listcols_spark)
+
+  expect_identical(df_listcols, result1)
+# Fails on patched version with:
+#Error: `df_listcols` not equal to `result1`.
+#Component “bytes”: Component 1: Modes: raw, list
+#Component “bytes”: Component 1: Lengths: 26, 1
+#Component “bytes”: Component 1: target is raw, current is list
+
+
+  result2 <- dapplyCollect(df_listcols_spark, function(x) x)
+# Fails on patched version with:
+#R computation failed with
+# Error in (function (..., row.names = NULL, check.rows = FALSE, check.names = TRUE,  :
+#  arguments imply differing number of rows: 3, 26
+#        at org.apache.spark.api.r.RRunner.compute(RRunner.scala:108)
+
+
   expect_equal(df_listcols, result2)
+
+############################################################
 
 })
 
