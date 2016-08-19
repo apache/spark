@@ -391,14 +391,14 @@ private[ml] trait HasSolver extends Params {
 }
 
 /**
-  * Trait for shared param treeDepth (default: 2).
-  */
+ * Trait for shared param treeDepth (default: 2).
+ */
 private[ml] trait HasTreeDepth extends Params {
 
   /**
-    * Param for suggested depth for treeAggregate or treeReduce (>= 2).
-    * @group param
-    */
+   * Param for suggested depth for treeAggregate or treeReduce (>= 2).
+   * @group param
+   */
   final val treeDepth: IntParam = new IntParam(this, "treeDepth", "suggested depth for treeAggregate or treeReduce (>= 2)", ParamValidators.gtEq(2))
 
   setDefault(treeDepth, 2)

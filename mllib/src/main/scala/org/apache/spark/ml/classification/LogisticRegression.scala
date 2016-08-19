@@ -257,10 +257,10 @@ class LogisticRegression @Since("1.2.0") (
   override def getThresholds: Array[Double] = super.getThresholds
 
   /**
-    * Set suggested depth for treeAggregate or treeReduce (>= 2).
-    * Default is 2.
-    * @group setParam
-    */
+   * Set suggested depth for treeAggregate or treeReduce (>= 2).
+   * Default is 2.
+   * @group setParam
+   */
   @Since("2.1.0")
   def setTreeDepth(value: Int): this.type = set(treeDepth, value)
   setDefault(treeDepth -> 2)

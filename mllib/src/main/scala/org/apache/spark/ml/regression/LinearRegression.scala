@@ -174,10 +174,10 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   setDefault(solver -> "auto")
 
   /**
-    * Set suggested depth for treeAggregate or treeReduce (>= 2).
-    * Default is 2.
-    * @group setParam
-    */
+   * Set suggested depth for treeAggregate or treeReduce (>= 2).
+   * Default is 2.
+   * @group setParam
+   */
   @Since("2.1.0")
   def setTreeDepth(value: Int): this.type = set(treeDepth, value)
   setDefault(treeDepth -> 2)
