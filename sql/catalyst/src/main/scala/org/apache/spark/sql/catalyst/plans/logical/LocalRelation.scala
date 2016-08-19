@@ -79,13 +79,13 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
 
   def toSQL(inlineTableName: String): String = {
     require(data.nonEmpty)
-    val types = schema.fields.map(_.dataType)
+    val types = output.map(_.dataType)
     val rows = data.map { row =>
       val cells = row.toSeq(types).zip(types).map { case (v, tpe) => Literal(v, tpe).sql }
       cells.mkString("(", ", ", ")")
     }
     "VALUES " + rows.mkString(", ") +
       " AS " + inlineTableName +
-      schema.fields.map(_.name).mkString("(", ", ", ")")
+      output.map(_.name).mkString("(", ", ", ")")
   }
 }
