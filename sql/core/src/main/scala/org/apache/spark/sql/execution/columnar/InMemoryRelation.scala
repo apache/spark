@@ -63,8 +63,8 @@ case class InMemoryRelation(
     @transient child: SparkPlan,
     tableName: Option[String])(
     @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
-    val batchStats: CollectionAccumulator[InternalRow] =
-      child.sqlContext.sparkContext.collectionAccumulator[InternalRow])
+    val batchStats: CollectionAccumulator[(Int, InternalRow)] =
+      child.sqlContext.sparkContext.collectionAccumulator[(Int, InternalRow)])
   extends logical.LeafNode with MultiInstanceRelation {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
@@ -87,7 +87,7 @@ case class InMemoryRelation(
           partitionStatistics.schema)
 
       val sizeInBytes =
-        batchStats.value.asScala.map(row => sizeOfRow.eval(row).asInstanceOf[Long]).sum
+        batchStats.value.asScala.map(_._2).map(row => sizeOfRow.eval(row).asInstanceOf[Long]).sum
       Statistics(sizeInBytes = sizeInBytes)
     }
   }
@@ -106,7 +106,7 @@ case class InMemoryRelation(
 
   private def buildBuffers(): Unit = {
     val output = child.output
-    val cached = child.execute().mapPartitionsInternal { rowIterator =>
+    val cached = child.execute().mapPartitionsWithIndex { (i, rowIterator) =>
       new Iterator[CachedBatch] {
         def next(): CachedBatch = {
           val columnBuilders = output.map { attribute =>
@@ -142,7 +142,7 @@ case class InMemoryRelation(
           val stats = InternalRow.fromSeq(columnBuilders.map(_.columnStats.collectedStatistics)
             .flatMap(_.values))
 
-          batchStats.add(stats)
+          batchStats.add((i, stats))
           CachedBatch(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
           }, stats)
