@@ -2252,31 +2252,40 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
   # Ensure UDF's operate on list columns containing arrays and bytes
   df_listcols <- data.frame(key = 1:3)
   df_listcols$bytes <- lapply(df_listcols$key, serialize, connection = NULL)
+# TODO Clark: Related issue- The dataframe can't be collected if this
+# column is added:
   #df_listcols$arr <- lapply(df_listcols$key,
   #                          function(x) seq(0, 1, length.out=15))
   df_listcols_spark <- createDataFrame(df_listcols)
 
-# TODO Clark: I think these warnings come from serialize. Should eliminate
+# class SparkDataFrame
+#PATCH: SparkDataFrame[key:int, bytes:array<binary>]
+#MASTER: SparkDataFrame[key:int, bytes:binary]
+# So clearly MASTER is how it should be here
+
+
+# TODO Clark: I think these warnings come from serialize. Should I try to eliminate
 # them?
 #>   result1 <- collect(df_listcols_spark)
 #Warning messages:
 #1: closing unused connection 4 (->localhost:50241)
 #2: closing unused connection 3 (->localhost:50242)
 
-# TODO Clark: This line fails if the numeric array column is added
   result1 <- collect(df_listcols_spark)
 
   expect_identical(df_listcols, result1)
-# Fails on patched version with:
+# PASS MASTER
+# FAIL PATCH
 #Error: `df_listcols` not equal to `result1`.
 #Component “bytes”: Component 1: Modes: raw, list
 #Component “bytes”: Component 1: Lengths: 26, 1
 #Component “bytes”: Component 1: target is raw, current is list
 
-
   result2 <- dapplyCollect(df_listcols_spark, function(x) x)
-# Fails on patched version with:
-#R computation failed with
+# FAIL MASTER
+# FAIL PATCH
+# Same error message:
+# R computation failed with
 # Error in (function (..., row.names = NULL, check.rows = FALSE, check.names = TRUE,  :
 #  arguments imply differing number of rows: 3, 26
 #        at org.apache.spark.api.r.RRunner.compute(RRunner.scala:108)
