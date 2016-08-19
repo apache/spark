@@ -71,7 +71,7 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   test("non-partial aggregation for distinct aggregates") {
-    withTempTable("testNonPartialAggregation") {
+    withTempView("testNonPartialAggregation") {
       val schema = StructType(StructField(s"value", IntegerType, true) :: Nil)
       val row = Row.fromSeq(Seq.fill(1)(null))
       val rowRDD = sparkContext.parallelize(row :: Nil)
