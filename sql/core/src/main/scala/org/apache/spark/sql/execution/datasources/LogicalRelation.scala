@@ -88,7 +88,7 @@ case class LogicalRelation(
   override def newInstance(): this.type = {
     LogicalRelation(
       relation,
-      Some(output.map(_.newInstance())),
+      expectedOutputAttributes.map(_.map(_.newInstance())),
       metastoreTableIdentifier).asInstanceOf[this.type]
   }
 
