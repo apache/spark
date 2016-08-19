@@ -1278,9 +1278,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /** Create a numeric literal expression. */
-  private def numericLiteral(ctx: NumberContext)
-                            (minValue: BigDecimal, maxValue: BigDecimal, typeName: String)
-                            (f: String => Any): Literal = withOrigin(ctx) {
+  private def numericLiteral
+      (ctx: NumberContext, minValue: BigDecimal, maxValue: BigDecimal, typeName: String)
+      (converter: String => Any): Literal = withOrigin(ctx) {
     val rawStrippedQualifier = ctx.getText.substring(0, ctx.getText.length - 1)
     try {
       val rawBigDecimal = BigDecimal(rawStrippedQualifier)
@@ -1288,7 +1288,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         throw new ParseException(s"Numeric literal ${rawStrippedQualifier} does not " +
           s"fit in range [${minValue}, ${maxValue}] for type ${typeName}", ctx)
       }
-      Literal(f(rawStrippedQualifier))
+      Literal(converter(rawStrippedQualifier))
     } catch {
       case e: NumberFormatException =>
         throw new ParseException(e.getMessage, ctx)
@@ -1299,28 +1299,28 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a Byte Literal expression.
    */
   override def visitTinyIntLiteral(ctx: TinyIntLiteralContext): Literal = {
-    numericLiteral(ctx)(Byte.MinValue, Byte.MaxValue, ByteType.simpleString)(_.toByte)
+    numericLiteral(ctx, Byte.MinValue, Byte.MaxValue, ByteType.simpleString)(_.toByte)
   }
 
   /**
    * Create a Short Literal expression.
    */
   override def visitSmallIntLiteral(ctx: SmallIntLiteralContext): Literal = {
-    numericLiteral(ctx)(Short.MinValue, Short.MaxValue, ShortType.simpleString)(_.toShort)
+    numericLiteral(ctx, Short.MinValue, Short.MaxValue, ShortType.simpleString)(_.toShort)
   }
 
   /**
    * Create a Long Literal expression.
    */
   override def visitBigIntLiteral(ctx: BigIntLiteralContext): Literal = {
-    numericLiteral(ctx)(Long.MinValue, Long.MaxValue, LongType.simpleString)(_.toLong)
+    numericLiteral(ctx, Long.MinValue, Long.MaxValue, LongType.simpleString)(_.toLong)
   }
 
   /**
    * Create a Double Literal expression.
    */
   override def visitDoubleLiteral(ctx: DoubleLiteralContext): Literal = {
-    numericLiteral(ctx)(Double.MinValue, Double.MaxValue, DoubleType.simpleString)(_.toDouble)
+    numericLiteral(ctx, Double.MinValue, Double.MaxValue, DoubleType.simpleString)(_.toDouble)
   }
 
   /**

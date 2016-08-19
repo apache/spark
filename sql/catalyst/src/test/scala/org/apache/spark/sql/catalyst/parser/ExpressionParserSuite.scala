@@ -375,15 +375,16 @@ class ExpressionParserSuite extends PlanTest {
 
     // Tiny Int Literal
     assertEqual("10Y", Literal(10.toByte))
-    intercept("-1000Y")
+    intercept("-1000Y", s"does not fit in range [-${Byte.MinValue}, ${Byte.MaxValue}]")
 
     // Small Int Literal
     assertEqual("10S", Literal(10.toShort))
-    intercept("40000S")
+    intercept("40000S", s"does not fit in range [-${Short.MinValue}, ${Short.MaxValue}]")
 
     // Long Int Literal
     assertEqual("10L", Literal(10L))
-    intercept("78732472347982492793712334L")
+    intercept("78732472347982492793712334L",
+        s"does not fit in range [-${Long.MinValue}, ${Long.MaxValue}]")
 
     // Double Literal
     assertEqual("10.0D", Literal(10.0D))
