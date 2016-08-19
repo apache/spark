@@ -1808,6 +1808,189 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-10747: ORDER BY clause with NULLS FIRST|LAST in WINDOW specification") {
+
+    withTable("spark_10747") {
+      sql("create table spark_10747(col1 int, col2 int, col3 int) stored as parquet")
+      sql(
+        """
+          |INSERT INTO spark_10747 VALUES (6, 12, 10), (6, 11, 4), (6, 9, 10), (6, 15, 8),
+          |(6, 15, 8), (6, 7, 4), (6, 7, 8)
+        """.stripMargin)
+
+      sql(
+        """
+          |INSERT INTO spark_10747 VALUES (6, 13, null), (6, 10, null)
+        """.stripMargin
+      )
+
+      checkAnswer(
+        sql(
+          """
+            |select col1, col2, col3, sum(col2)
+            |    over (partition by col1
+            |       order by col3 desc nulls last, col2
+            |       rows between 2 preceding and 2 following )
+            |from spark_10747 where col1 = 6
+          """.stripMargin
+        ),
+        sql(
+          """
+            |select col1, col2, col3, sum(col2)
+            |    over (partition by col1
+            |       order by col3 desc, col2
+            |       rows between 2 preceding and 2 following )
+            |from spark_10747 where col1 = 6
+          """.stripMargin
+        )
+      )
+
+      checkAnswer(
+        sql(
+          """
+            |select col1, col2, col3, sum(col2)
+            |    over (partition by col1
+            |       order by col3 desc nulls first, col2
+            |       rows between 2 preceding and 2 following )
+            |from spark_10747 where col1 = 6
+          """.stripMargin
+        ),
+        Row(6, 10, null, 32)::
+          Row(6, 13, null, 44)::
+          Row(6, 9, 10, 51)::
+          Row(6, 12, 10, 56)::
+          Row(6, 7, 8, 58)::
+          Row(6, 15, 8, 56)::
+          Row(6, 15, 8, 55)::
+          Row(6, 7, 4, 48)::
+          Row(6, 11, 4, 33)::Nil
+      )
+
+      checkAnswer(
+        sql(
+          """
+            |select col1, col2, col3, sum(col2)
+            |    over (partition by col1
+            |       order by col3 asc nulls last, col2
+            |       rows between 2 preceding and 2 following )
+            |from spark_10747 where col1 = 6
+          """.stripMargin
+        ),
+        Row(6, 7, 4, 25)::
+          Row(6, 11, 4, 40)::
+          Row(6, 7, 8, 55)::
+          Row(6, 15, 8, 57)::
+          Row(6, 15, 8, 58)::
+          Row(6, 9, 10, 61)::
+          Row(6, 12, 10, 59)::
+          Row(6, 10, null, 44)::
+          Row(6, 13, null, 35)::Nil
+      )
+
+      checkAnswer(
+        sql(
+          """
+            |select col1, col2, col3, sum(col2)
+            |    over (partition by col1
+            |       order by col3 asc nulls first, col2
+            |       rows between 2 preceding and 2 following )
+            |from spark_10747 where col1 = 6
+          """.stripMargin
+        ),
+        sql(
+          """
+            |select col1, col2, col3, sum(col2)
+            |    over (partition by col1
+            |       order by col3 asc, col2
+            |       rows between 2 preceding and 2 following )
+            |from spark_10747 where col1 = 6
+          """.stripMargin
+        )
+      )
+    }
+  }
+
+
+  test("SPARK-10747: ORDER BY clause with NULLS FIRST|LAST") {
+    withTable("spark_10747") {
+      sql("create table spark_10747(col1 int, col2 int, col3 int) stored as parquet")
+      sql(
+        """
+          |INSERT INTO spark_10747 VALUES (6, 12, 10), (6, 11, 4), (6, 9, 10), (6, 15, 8),
+          |(6, 15, 8), (6, 7, 4), (6, 7, 8)
+        """.stripMargin)
+
+      sql(
+        """
+          |INSERT INTO spark_10747 VALUES (6, 13, null), (6, 10, null)
+        """.stripMargin
+      )
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 ASC NULLS FIRST, COL2
+          """.stripMargin
+        ),
+        sql(
+          """
+            |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 ASC, COL2
+          """.stripMargin
+        )
+      )
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 ASC NULLS LAST, COL2
+          """.stripMargin
+        ),
+
+        Row(6, 7, 4)::
+          Row(6, 11, 4)::
+          Row(6, 7, 8)::
+          Row(6, 15, 8)::
+          Row(6, 15, 8)::
+          Row(6, 9, 10)::
+          Row(6, 12, 10)::
+          Row(6, 10, null)::
+          Row(6, 13, null)::Nil
+      )
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 DESC NULLS FIRST, COL2
+          """.stripMargin
+        ),
+
+        Row(6, 10, null)::
+          Row(6, 13, null)::
+          Row(6, 9, 10)::
+          Row(6, 12, 10)::
+          Row(6, 7, 8)::
+          Row(6, 15, 8)::
+          Row(6, 15, 8)::
+          Row(6, 7, 4)::
+          Row(6, 11, 4)::Nil
+      )
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 DESC NULLS LAST, COL2
+          """.stripMargin
+        ),
+        sql(
+          """
+            |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 DESC, COL2
+          """.stripMargin
+        )
+      )
+    }
+  }
+
+
   def testCommandAvailable(command: String): Boolean = {
     val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
     attempt.isSuccess && attempt.get == 0

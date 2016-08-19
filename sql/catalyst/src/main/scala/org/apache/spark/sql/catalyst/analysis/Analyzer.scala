@@ -714,9 +714,9 @@ class Analyzer(
       case s @ Sort(orders, global, child)
         if orders.exists(_.child.isInstanceOf[UnresolvedOrdinal]) =>
         val newOrders = orders map {
-          case s @ SortOrder(UnresolvedOrdinal(index), direction, _) =>
+          case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrder) =>
             if (index > 0 && index <= child.output.size) {
-              SortOrder(child.output(index - 1), direction)
+              SortOrder(child.output(index - 1), direction, nullOrder)
             } else {
               s.failAnalysis(
                 s"ORDER BY position $index is not in select list " +
