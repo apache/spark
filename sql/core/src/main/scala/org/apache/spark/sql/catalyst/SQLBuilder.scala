@@ -205,6 +205,9 @@ class SQLBuilder private (
     case p: ScriptTransformation =>
       scriptTransformationToSQL(p)
 
+    case p: LocalRelation =>
+      p.toSQL(newSubqueryName())
+
     case OneRowRelation =>
       ""
 
