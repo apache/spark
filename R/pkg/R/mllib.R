@@ -39,6 +39,13 @@ setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 #' @note NaiveBayesModel since 2.0.0
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
 
+#' S4 class that represents an LDAModel
+#'
+#' @param jobj a Java object reference to the backing Scala LDAWrapper
+#' @export
+#' @note LDAModel since 2.1.0
+setClass("LDAModel", representation(jobj = "jobj"))
+
 #' S4 class that represents a AFTSurvivalRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala AFTSurvivalRegressionWrapper
@@ -75,7 +82,7 @@ setClass("GaussianMixtureModel", representation(jobj = "jobj"))
 #' @name write.ml
 #' @export
 #' @seealso \link{spark.glm}, \link{glm}, \link{spark.gaussianMixture}
-#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}, \link{spark.lda}
 #' @seealso \link{spark.isoreg}
 #' @seealso \link{read.ml}
 NULL
@@ -313,6 +320,94 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
             rownames(tables) <- unlist(labels)
             colnames(tables) <- unlist(features)
             return(list(apriori = apriori, tables = tables))
+          })
+
+# Returns posterior probabilities from a Latent Dirichlet Allocation model produced by spark.lda()
+
+#' @param newData A SparkDataFrame for testing
+#' @return \code{spark.posterior} returns a SparkDataFrame containing posterior probabilities
+#'         vectors named "topicDistribution"
+#' @rdname spark.lda
+#' @aliases spark.posterior,LDAModel,SparkDataFrame-method
+#' @export
+#' @note spark.posterior(LDAModel) since 2.1.0
+setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkDataFrame"),
+          function(object, newData) {
+            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+          })
+
+# Returns the summary of a Latent Dirichlet Allocation model produced by \code{spark.lda}
+
+#' @param object A Latent Dirichlet Allocation model fitted by \code{spark.lda}.
+#' @param maxTermsPerTopic Maximum number of terms to collect for each topic. Default value of 10.
+#' @return \code{summary} returns a list containing
+#'         \item{\code{docConcentration}}{concentration parameter commonly named \code{alpha} for
+#'               the prior placed on documents distributions over topics \code{theta}}
+#'         \item{\code{topicConcentration}}{concentration parameter commonly named \code{beta} or
+#'               \code{eta} for the prior placed on topic distributions over terms}
+#'         \item{\code{logLikelihood}}{log likelihood of the entire corpus}
+#'         \item{\code{logPerplexity}}{log perplexity}
+#'         \item{\code{isDistributed}}{TRUE for distributed model while FALSE for local model}
+#'         \item{\code{vocabSize}}{number of terms in the corpus}
+#'         \item{\code{topics}}{top 10 terms and their weights of all topics}
+#'         \item{\code{vocabulary}}{whole terms of the training corpus, NULL if libsvm format file
+#'               used as training set}
+#' @rdname spark.lda
+#' @aliases summary,LDAModel-method
+#' @export
+#' @note summary(LDAModel) since 2.1.0
+setMethod("summary", signature(object = "LDAModel"),
+          function(object, maxTermsPerTopic) {
+            maxTermsPerTopic <- as.integer(ifelse(missing(maxTermsPerTopic), 10, maxTermsPerTopic))
+            jobj <- object@jobj
+            docConcentration <- callJMethod(jobj, "docConcentration")
+            topicConcentration <- callJMethod(jobj, "topicConcentration")
+            logLikelihood <- callJMethod(jobj, "logLikelihood")
+            logPerplexity <- callJMethod(jobj, "logPerplexity")
+            isDistributed <- callJMethod(jobj, "isDistributed")
+            vocabSize <- callJMethod(jobj, "vocabSize")
+            topics <- dataFrame(callJMethod(jobj, "topics", maxTermsPerTopic))
+            vocabulary <- callJMethod(jobj, "vocabulary")
+            return(list(docConcentration = unlist(docConcentration),
+                        topicConcentration = topicConcentration,
+                        logLikelihood = logLikelihood, logPerplexity = logPerplexity,
+                        isDistributed = isDistributed, vocabSize = vocabSize,
+                        topics = topics,
+                        vocabulary = unlist(vocabulary)))
+          })
+
+# Returns the log perplexity of a Latent Dirichlet Allocation model produced by \code{spark.lda}
+
+#' @return \code{spark.perplexity} returns the log perplexity of given SparkDataFrame, or the log
+#'         perplexity of the training data if missing argument "data".
+#' @rdname spark.lda
+#' @aliases spark.perplexity,LDAModel-method
+#' @export
+#' @note spark.perplexity(LDAModel) since 2.1.0
+setMethod("spark.perplexity", signature(object = "LDAModel", data = "SparkDataFrame"),
+          function(object, data) {
+            return(ifelse(missing(data), callJMethod(object@jobj, "logPerplexity"),
+                   callJMethod(object@jobj, "computeLogPerplexity", data@sdf)))
+         })
+
+# Saves the Latent Dirichlet Allocation model to the input path.
+
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.lda
+#' @aliases write.ml,LDAModel,character-method
+#' @export
+#' @seealso \link{read.ml}
+#' @note write.ml(LDAModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "LDAModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            writer <- callJMethod(object@jobj, "write")
+            if (overwrite) {
+              writer <- callJMethod(writer, "overwrite")
+            }
+            invisible(callJMethod(writer, "save", path))
           })
 
 #' Isotonic Regression Model
@@ -700,6 +795,8 @@ read.ml <- function(path) {
       return(new("GeneralizedLinearRegressionModel", jobj = jobj))
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.KMeansWrapper")) {
       return(new("KMeansModel", jobj = jobj))
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.LDAWrapper")) {
+      return(new("LDAModel", jobj = jobj))
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.IsotonicRegressionWrapper")) {
       return(new("IsotonicRegressionModel", jobj = jobj))
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GaussianMixtureWrapper")) {
@@ -751,6 +848,71 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
             return(new("AFTSurvivalRegressionModel", jobj = jobj))
           })
 
+#' Latent Dirichlet Allocation
+#'
+#' \code{spark.lda} fits a Latent Dirichlet Allocation model on a SparkDataFrame. Users can call
+#' \code{summary} to get a summary of the fitted LDA model, \code{spark.posterior} to compute
+#' posterior probabilities on new data, \code{spark.perplexity} to compute log perplexity on new
+#' data and \code{write.ml}/\code{read.ml} to save/load fitted models.
+#'
+#' @param data A SparkDataFrame for training
+#' @param features Features column name, default "features". Either libSVM-format column or
+#'        character-format column is valid.
+#' @param k Number of topics, default 10
+#' @param maxIter Maximum iterations, default 20
+#' @param optimizer Optimizer to train an LDA model, "online" or "em", default "online"
+#' @param subsamplingRate (For online optimizer) Fraction of the corpus to be sampled and used in
+#'        each iteration of mini-batch gradient descent, in range (0, 1], default 0.05
+#' @param topicConcentration concentration parameter (commonly named \code{beta} or \code{eta}) for
+#'        the prior placed on topic distributions over terms, default -1 to set automatically on the
+#'        Spark side. Use \code{summary} to retrieve the effective topicConcentration. Only 1-size
+#'        numeric is accepted.
+#' @param docConcentration concentration parameter (commonly named \code{alpha}) for the
+#'        prior placed on documents distributions over topics (\code{theta}), default -1 to set
+#'        automatically on the Spark side. Use \code{summary} to retrieve the effective
+#'        docConcentration. Only 1-size or \code{k}-size numeric is accepted.
+#' @param customizedStopWords stopwords that need to be removed from the given corpus. Ignore the
+#'        parameter if libSVM-format column is used as the features column.
+#' @param maxVocabSize maximum vocabulary size, default 1 << 18
+#' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model
+#' @rdname spark.lda
+#' @aliases spark.lda,SparkDataFrame-method
+#' @seealso topicmodels: \url{https://cran.r-project.org/web/packages/topicmodels/}
+#' @export
+#' @examples
+#' \dontrun{
+#' text <- read.df("path/to/data", source = "libsvm")
+#' model <- spark.lda(data = text, optimizer = "em")
+#'
+#' # get a summary of the model
+#' summary(model)
+#'
+#' # compute posterior probabilities
+#' posterior <- spark.posterior(model, df)
+#' showDF(posterior)
+#'
+#' # compute perplexity
+#' perplexity <- spark.perplexity(model, df)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
+#' @note spark.lda since 2.1.0
+setMethod("spark.lda", signature(data = "SparkDataFrame"),
+          function(data, features = "features", k = 10, maxIter = 20, optimizer = c("online", "em"),
+                   subsamplingRate = 0.05, topicConcentration = -1, docConcentration = -1,
+                   customizedStopWords = "", maxVocabSize = bitwShiftL(1, 18)) {
+            optimizer <- match.arg(optimizer)
+            jobj <- callJStatic("org.apache.spark.ml.r.LDAWrapper", "fit", data@sdf, features,
+                                as.integer(k), as.integer(maxIter), optimizer,
+                                as.numeric(subsamplingRate), topicConcentration,
+                                as.array(docConcentration), as.array(customizedStopWords),
+                                maxVocabSize)
+            return(new("LDAModel", jobj = jobj))
+          })
 
 # Returns a summary of the AFT survival regression model produced by spark.survreg,
 # similarly to R's summary().

@@ -25,6 +25,9 @@ exportMethods("glm",
               "fitted",
               "spark.naiveBayes",
               "spark.survreg",
+              "spark.lda",
+              "spark.posterior",
+              "spark.perplexity",
               "spark.isoreg",
               "spark.gaussianMixture")
 
