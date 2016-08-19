@@ -150,6 +150,17 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
+  test("SPARK-16994: filter should not be pushed down into local limit") {
+    val originalQuery = testRelation
+      .limit(1)
+      .where('a % 2 == 0)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    comparePlans(optimized, originalQuery)
+  }
+
   test("filters: combines filters") {
     val originalQuery = testRelation
       .select('a)
