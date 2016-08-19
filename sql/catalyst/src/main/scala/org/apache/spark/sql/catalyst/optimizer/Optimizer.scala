@@ -90,6 +90,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       CombineFilters,
       CombineLimits,
       CombineUnions,
+      CombineScanners,
       // Constant folding and strength reduction
       NullPropagation,
       FoldablePropagation,
@@ -121,9 +122,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       OptimizeCodegen(conf)) ::
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
-      CollapseProject) ::
-    Batch("Insert Scanner", Once,
-      InsertRelationScanner) :: Nil
+      CollapseProject) :: Nil
   }
 
   /**
@@ -604,6 +603,35 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
+ * Combines adjacent [[Scanner]] operators with [[Project]]s and [[Filter]]s as well as other
+ * [[Scanner]]s, merging the non-redundant conditions into one conjunctive predicate.
+ */
+object CombineScanners extends Rule[LogicalPlan] with PredicateHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case Project(fields, child: Scanner) if fields.forall(_.deterministic) =>
+      val aliasMap = AttributeMap(child.projectList.collect {
+        case a: Alias => (a.toAttribute, a)
+      })
+
+      child.copy(projectList = fields.map { field =>
+        aliasMap.getOrElse(field.toAttribute, field)
+      })
+    case Filter(condition, child: Scanner) if condition.deterministic =>
+      val aliasMap = AttributeMap(child.projectList.collect {
+        case a: Alias => (a.toAttribute, a.child)
+      })
+
+      val newFilters =
+        splitConjunctivePredicates(replaceAlias(condition, aliasMap)) ++ child.filters
+      child.copy(filters = newFilters)
+    case Scanner(fields, filters, child: Scanner) =>
+      val newFilters = filters ++ child.filters
+      child.copy(projectList = fields, filters = newFilters)
+  }
+}
+
+/**
  * Removes no-op SortOrder from Sort
  */
 object EliminateSorts extends Rule[LogicalPlan] {
@@ -748,6 +776,28 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
           Filter(stayUp.reduceLeft(And), newUnion)
         } else {
           newUnion
+        }
+      } else {
+        filter
+      }
+
+    case filter @ Filter(condition, child: Scanner) =>
+      // Deterministic parts placed before any non-deterministic predicates in [[Filter]] could
+      // be pushed down to [[Scanner]], combine with `Scanner.filters`.
+      val aliasMap = AttributeMap(child.projectList.collect {
+        case a: Alias => (a.toAttribute, a.child)
+      })
+
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).span(_.deterministic)
+
+      if (pushDown.nonEmpty) {
+        val newCondition = (pushDown ++ child.filters).reduce(And)
+        val replaced = replaceAlias(newCondition, aliasMap)
+        val newScanner = child.copy(filters = splitConjunctivePredicates(replaced))
+        if (stayUp.nonEmpty) {
+          Filter(stayUp.reduceLeft(And), newScanner)
+        } else {
+          newScanner
         }
       } else {
         filter
@@ -1091,30 +1141,6 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
       Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And)))
-  }
-}
-
-/**
- * Insert a [[Scanner]] operator over [[MultiInstanceRelation]], then combine [[Project]]s and
- * [[Filter]]s with this operator, then the planner can match on the [[Scanner]] node directly.
- */
-object InsertRelationScanner extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case relation: MultiInstanceRelation =>
-      Scanner(relation.output, Nil, relation)
-    case Project(fields, child: Scanner) if fields.forall(_.deterministic) =>
-      child.copy(projectList = fields)
-    case Filter(condition, child: Scanner) if condition.deterministic =>
-      val aliasMap = AttributeMap(child.projectList.collect {
-        case a: Alias => (a.toAttribute, a.child)
-      })
-
-      val newFilters =
-        splitConjunctivePredicates(replaceAlias(condition, aliasMap)) ++ child.filters
-      child.copy(filters = newFilters)
-    case Scanner(fields, filters, child: Scanner) =>
-      val newFilters = filters ++ child.filters
-      child.copy(projectList = fields, filters = newFilters)
   }
 }
 

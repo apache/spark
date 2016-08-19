@@ -98,6 +98,7 @@ class Analyzer(
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
+      InsertRelationScanner ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -463,6 +464,34 @@ class Analyzer(
         } else {
           lookupTableFromCatalog(u)
         }
+    }
+  }
+
+  /**
+   * Insert a [[Scanner]] operator over [[MultiInstanceRelation]], the operator can hold both
+   * projectLists and filter predicates.
+   */
+  object InsertRelationScanner extends Rule[LogicalPlan] {
+    // If relation is direct child of [[Scanner]] or [[InsertIntoTable]] operator then we don't
+    // insert [[Scanner]] operator over it.
+    def collectProcessedRelations(plan: LogicalPlan): Set[LogicalPlan] = {
+      plan.collect {
+        case s @ Scanner(_, _, r: MultiInstanceRelation) =>
+          r
+        case i @ InsertIntoTable(r: MultiInstanceRelation, _, _, _, _) =>
+          r
+      }.toSet
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      val relationsProcessed = collectProcessedRelations(plan)
+
+      plan transformUp {
+        case relation: MultiInstanceRelation if !relationsProcessed.contains(relation) =>
+          Scanner(relation.output, Nil, relation)
+        case i @ InsertIntoTable(Scanner(_, _, r: MultiInstanceRelation), _, _, _, _) =>
+          i.copy(table = r)
+      }
     }
   }
 
