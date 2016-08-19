@@ -1810,7 +1810,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "ID": 3,
       |          "Name": "$EXECUTOR_CPU_TIME",
       |          "Update": 0,
-      |          "Interval": true,
+      |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
