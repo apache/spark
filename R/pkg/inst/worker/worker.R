@@ -46,14 +46,16 @@ compute <- function(mode, partition, serializer, deserializer, key,
       oldOpt <- getOption("stringsAsFactors")
       options(stringsAsFactors = FALSE)
 
-# TODO Clark: 
-      # Handle binary data types
-      rawcolumns <- ("raw" == sapply(row1, class))
-      if(any(rawcolumns)){
-        inputData <- rbind_with_raws(inputData, rawcolumns)
-      } else {
-        inputData <- do.call(rbind.data.frame, inputData)
-      }
+# TODO Clark: This didn't change error message
+# Handle binary data types
+#rawcolumns <- ("raw" == sapply(row1, class))
+#if(any(rawcolumns)){
+#  inputData <- rbind_with_raws(inputData, rawcolumns)
+#} else {
+#  inputData <- do.call(rbind.data.frame, inputData)
+#}
+
+      inputData <- do.call(rbind.data.frame, inputData)
       options(stringsAsFactors = oldOpt)
 
       names(inputData) <- colNames
