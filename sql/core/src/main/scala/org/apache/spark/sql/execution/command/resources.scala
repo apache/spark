@@ -99,3 +99,13 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends Runnab
     }
   }
 }
+
+/**
+ * Deletes a file to the current session.
+ */
+case class DeleteFileCommand(path: String) extends RunnableCommand {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sparkContext.deleteFile(path)
+    Seq.empty[Row]
+  }
+}

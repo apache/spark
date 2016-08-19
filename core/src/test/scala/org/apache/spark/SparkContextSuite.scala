@@ -108,7 +108,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     assert(byteArray2.length === 0)
   }
 
-  test("basic case for addFile and listFiles") {
+  test("basic case for addFile, deleteFile and listFiles") {
     val dir = Utils.createTempDir()
 
     val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
@@ -157,6 +157,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
         x
       }).count()
       assert(sc.listFiles().filter(_.contains("somesuffix1")).size == 1)
+      sc.deleteFile(file1.getAbsolutePath)
+      assert(sc.listFiles().filter(_.contains("somesuffix1")).size == 0)
+      sc.deleteFile(relativePath)
+      assert(sc.listFiles().filter(_.contains("somesuffix2")).size == 0)
     } finally {
       sc.stop()
     }

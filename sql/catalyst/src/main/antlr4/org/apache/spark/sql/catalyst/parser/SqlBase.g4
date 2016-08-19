@@ -123,7 +123,7 @@ statement
         tableIdentifier partitionSpec?                                 #loadData
     | TRUNCATE TABLE tableIdentifier partitionSpec?                    #truncateTable
     | MSCK REPAIR TABLE tableIdentifier                                #repairTable
-    | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | op=(ADD |  DELETE | LIST) identifier .*?                         #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration

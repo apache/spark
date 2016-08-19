@@ -1458,6 +1458,29 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * Delete a file based on the given path. This file should have been added by prior call
+   * 'ADD FILE' command.
+   */
+  def deleteFile(path: String): Unit = {
+    val uri = new URI(path)
+    val schemeCorrectedPath = uri.getScheme match {
+      case null | "local" => new File(path).getCanonicalFile.toURI.toString
+      case _ => path
+    }
+    val scheme = new URI(schemeCorrectedPath).getScheme
+    val fileName = new File(uri.getPath)
+    val key = if (!isLocal && scheme == "file") {
+      env.rpcEnv.fileServer.deleteFile(fileName.getName())
+    } else {
+      schemeCorrectedPath
+    }
+    addedFiles.remove(key)
+    val timestamp = System.currentTimeMillis
+    logInfo("Deleted file " + path + " at " + key + " with timestamp " + timestamp)
+    postEnvironmentUpdate()
+  }
+
+  /**
    * :: DeveloperApi ::
    * Register a listener to receive up-calls from events that happen during execution.
    */
