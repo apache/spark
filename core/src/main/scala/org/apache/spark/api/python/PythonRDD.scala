@@ -926,10 +926,12 @@ private[spark] class PythonAccumulatorV2(@transient private val serverHost: Stri
       val socket = openSocket()
       val in = socket.getInputStream
       val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream, bufferSize))
-      out.writeInt(otherPythonAccumulator._acc.size)
-      for (array <- otherPythonAccumulator._acc.asScala) {
-        out.writeInt(array.length)
-        out.write(array)
+      otherPythonAccumulator._acc.synchronized {
+        out.writeInt(otherPythonAccumulator._acc.size)
+        for (array <- otherPythonAccumulator._acc.asScala) {
+          out.writeInt(array.length)
+          out.write(array)
+        }
       }
       out.flush()
       // Wait for a byte from the Python side as an acknowledgement
