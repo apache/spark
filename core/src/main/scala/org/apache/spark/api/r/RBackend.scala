@@ -68,7 +68,7 @@ private[spark] class RBackend {
     })
 
     // accept any IPv4 address
-    val backendPort = conf.getInt("spark.r.backendPort", 8000)
+    val backendPort = conf.getInt("spark.r.backendPort", 9212)
     channelFuture = bootstrap.bind(new InetSocketAddress("0.0.0.0", backendPort))
     channelFuture.syncUninterruptibly()
     channelFuture.channel().localAddress().asInstanceOf[InetSocketAddress].getPort()
@@ -108,10 +108,10 @@ private[spark] object RBackend extends Logging {
 
     val sparkRBackend = new RBackend()
     try {
-      // bind to port configured by spark.r.backendPort, with default 8000
+      // bind to port configured by spark.r.backendPort, with default 9212
       val boundPort = sparkRBackend.init()
       val conf = new SparkConf()
-      val listenPort = conf.getInt("spark.r.monitorPort", 8001)
+      val listenPort = conf.getInt("spark.r.monitorPort", 9213)
       val serverSocket = new ServerSocket(listenPort, 1)
 
       // tell the R process via temporary file

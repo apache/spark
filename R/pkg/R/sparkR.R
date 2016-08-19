@@ -206,12 +206,12 @@ sparkR.sparkContext <- function(
       backendPort <- if (!is.null(sparkEnvirMap[["backend.port"]])) {
         sparkEnvirMap[["backend.port"]]
       } else {
-        "8000"
+        "9212"
       }
       monitorPort <- if (!is.null(sparkEnvirMap[["monitor.port"]])) {
         sparkEnvirMap[["monitor.port"]]
       } else {
-        "8001"
+        "9213"
       }
       host <- getRemoteMasterInfo(master)$host
       port <- getRemoteMasterInfo(master)$port
