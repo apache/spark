@@ -183,25 +183,34 @@ getDefaultSqlSource <- function() {
 # TODO(davies): support sampling and infer type from NA
 createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   sparkSession <- getSparkSession()
+
+  # Convert dataframes into a list of rows. Each row is a list
   if (is.data.frame(data)) {
-    # get the names of columns, they will be put into RDD
-    if (is.null(schema)) {
-      schema <- names(data)
-    }
+      # get the names of columns, they will be put into RDD
+      if (is.null(schema)) {
+        schema <- names(data)
+      }
 
-    # convert factors to character
-    factor_columns <- sapply(data, is.factor)
-    data[factor_columns] <- lapply(data[factor_columns], as.character)
+      # get rid of factor type
+      cleanCols <- function(x) {
+        if (is.factor(x)) {
+          as.character(x)
+        } else {
+          x
+        }
+      }
 
-    colnames(data) <- NULL
+      # drop factors and wrap lists
+      data <- setNames(lapply(data, cleanCols), NULL)
 
-    # check if all columns have supported type
-    lapply(data, getInternalType)
+      # check if all columns have supported type
+      lapply(data, getInternalType)
 
-    # data is now a list of rows, and each row is a data.frame
-    data <- split(data, seq_len(nrow(data)))
-    names(data) <- NULL
+      # convert to rows
+      args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
+      data <- do.call(mapply, append(args, data))
   }
+
   if (is.list(data)) {
     sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
     rdd <- parallelize(sc, data)
