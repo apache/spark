@@ -2275,21 +2275,16 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
 
   expect_identical(df_listcols, result1)
 # PASS MASTER
-# FAIL PATCH
-#Error: `df_listcols` not equal to `result1`.
-#Component “bytes”: Component 1: Modes: raw, list
-#Component “bytes”: Component 1: Lengths: 26, 1
-#Component “bytes”: Component 1: target is raw, current is list
+# PASS PATCH
 
   result2 <- dapplyCollect(df_listcols_spark, function(x) x)
 # FAIL MASTER
 # FAIL PATCH
-# Same error message:
+# Same error message each time:
 # R computation failed with
 # Error in (function (..., row.names = NULL, check.rows = FALSE, check.names = TRUE,  :
 #  arguments imply differing number of rows: 3, 26
 #        at org.apache.spark.api.r.RRunner.compute(RRunner.scala:108)
-
 
   expect_equal(df_listcols, result2)
 
