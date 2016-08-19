@@ -199,6 +199,11 @@ case class FileSourceScanExec(
         relation.location.paths.head,
         originalPartitions)
     }
+    val totalFilesRaw = originalPartitions.map(_.files.size).sum
+    val totalFilesFiltered = filteredPartitions.map(_.files.size).sum
+    logInfo(s"Filtered down total number of partitions to ${filteredPartitions.size}"
+      + s" from ${originalPartitions.size}, "
+      + s"total number of files to ${totalFilesFiltered} from ${totalFilesRaw}")
 
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(

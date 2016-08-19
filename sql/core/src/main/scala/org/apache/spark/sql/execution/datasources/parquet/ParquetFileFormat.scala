@@ -60,6 +60,9 @@ class ParquetFileFormat
   with Logging
   with Serializable {
 
+  // Attempt to cache parquet metadata for this instance of
+  @transient @volatile private var cachedMetadata: ParquetMetadata = _
+
   override def shortName(): String = "parquet"
 
   override def toString: String = "ParquetFormat"
@@ -437,7 +440,7 @@ class ParquetFileFormat
     // all of the footers in a batch rather than having to read every single file just to get its
     // footer.
     allFiles.find(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE).map { stat =>
-      val metadata = ParquetFileReader.readFooter(conf, stat, ParquetMetadataConverter.NO_FILTER)
+      val metadata = getOrReadMetadata(conf, stat)
       partitions.map { part =>
         filterByMetadata(
           filters,
@@ -471,6 +474,16 @@ class ParquetFileFormat
         filteredBlocks.contains(f.getPath.toString)
       })
     }.getOrElse(partition)
+  }
+
+  private def getOrReadMetadata(conf: Configuration, stat: FileStatus): ParquetMetadata = {
+    if (cachedMetadata == null) {
+      logInfo("Reading summary metadata into cache in ParquetFileFormat")
+      cachedMetadata = ParquetFileReader.readFooter(conf, stat, ParquetMetadataConverter.NO_FILTER)
+    } else {
+      logInfo("Using cached summary metadata")
+    }
+    cachedMetadata
   }
 
 }
