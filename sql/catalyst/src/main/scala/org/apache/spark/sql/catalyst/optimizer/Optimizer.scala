@@ -1216,6 +1216,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def canPushThrough(p: UnaryNode): Boolean = p match {
+    // Note that some operators (e.g. project, aggregate, union) are being handled separately
+    // (earlier in this rule).
     case _: AppendColumns => true
     case _: BroadcastHint => true
     case _: Distinct => true
@@ -1225,7 +1227,6 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     case _: Repartition => true
     case _: ScriptTransformation => true
     case _: Sort => true
-    case _: With => true
     case _ => false
   }
 
