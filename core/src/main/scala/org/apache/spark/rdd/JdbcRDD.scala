@@ -133,7 +133,7 @@ class JdbcRDD[T: ClassTag](
   }
 }
 
-class PagedJdbcRDD[T: ClassTag](
+class LimitJdbcRDD[T: ClassTag](
                                  sc: SparkContext,
                                  getConnection: () => Connection,
                                  sql: String,
