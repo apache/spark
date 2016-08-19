@@ -498,7 +498,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   /** -------------------------------- *
-    * | Util methods for comparing events |
+   | Util methods for comparing events |
    * --------------------------------- */
 
   private[spark] def assertEquals(event1: SparkListenerEvent, event2: SparkListenerEvent) {
@@ -747,7 +747,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
 
   /** ----------------------------------- *
-    * | Util methods for constructing events |
+   | Util methods for constructing events |
    * ------------------------------------ */
 
   private val properties = {
@@ -857,7 +857,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
 
   /** --------------------------------------- *
-    * | JSON string representation of each event |
+   | JSON string representation of each event |
    * ---------------------------------------- */
 
   private val stageSubmittedJsonString =
