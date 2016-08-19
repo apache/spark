@@ -49,6 +49,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
   }
 
+  // To test `HiveExternalCatalog`, we need to read the raw table metadata(schema, partition
+  // columns and bucket specification are still in table properties) from hive client.
   private def hiveClient: HiveClient = sharedState.asInstanceOf[HiveSharedState].metadataHive
 
   test("persistent JSON table") {
