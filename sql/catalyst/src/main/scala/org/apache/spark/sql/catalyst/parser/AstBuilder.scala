@@ -670,39 +670,24 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitInlineTable(ctx: InlineTableContext): LogicalPlan = withOrigin(ctx) {
     // Get the backing expressions.
-    val expressions = ctx.expression.asScala.map { eCtx =>
-      val e = expression(eCtx)
-      validate(e.foldable, "All expressions in an inline table must be constants.", eCtx)
-      e
+    val rows = ctx.expression.asScala.map { e =>
+      expression(e) match {
+        // inline table comes in two styles:
+        // style 1: values (1), (2), (3)  -- multiple columns are supported
+        // style 2: values 1, 2, 3  -- only a single column is supported here
+        case CreateStruct(children) => children  // style 1
+        case child => Seq(child)  // style 2
+      }
     }
 
-    // Validate and evaluate the rows.
-    val (structType, structConstructor) = expressions.head.dataType match {
-      case st: StructType =>
-        (st, (e: Expression) => e)
-      case dt =>
-        val st = CreateStruct(Seq(expressions.head)).dataType
-        (st, (e: Expression) => CreateStruct(Seq(e)))
-    }
-    val rows = expressions.map {
-      case expression =>
-        val safe = Cast(structConstructor(expression), structType)
-        safe.eval().asInstanceOf[InternalRow]
-    }
-
-    // Construct attributes.
-    val baseAttributes = structType.toAttributes.map(_.withNullability(true))
-    val attributes = if (ctx.identifierList != null) {
-      val aliases = visitIdentifierList(ctx.identifierList)
-      validate(aliases.size == baseAttributes.size,
-        "Number of aliases must match the number of fields in an inline table.", ctx)
-      baseAttributes.zip(aliases).map(p => p._1.withName(p._2))
+    val aliases = if (ctx.identifierList != null) {
+      visitIdentifierList(ctx.identifierList)
     } else {
-      baseAttributes
+      Seq.tabulate(rows.head.size)(i => s"col${i + 1}")
     }
 
-    // Create plan and add an alias if a name has been defined.
-    LocalRelation(attributes, rows).optionalMap(ctx.identifier)(aliasPlan)
+    val table = UnresolvedInlineTable(aliases, rows)
+    table.optionalMap(ctx.identifier)(aliasPlan)
   }
 
   /**

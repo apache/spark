@@ -546,15 +546,15 @@ test_that("spark.gaussianMixture", {
   df <- createDataFrame(data, c("x1", "x2"))
   model <- spark.gaussianMixture(df, ~ x1 + x2, k = 2)
   stats <- summary(model)
-  rLambda <- c(0.4, 0.6)
-  rMu <- c(-0.2614822, 0.5128697, 2.647284, 4.544682)
-  rSigma <- c(0.08427399, 0.00548772, 0.00548772, 0.09090715,
-              0.1641373, -0.1673806, -0.1673806, 0.7508951)
-  expect_equal(stats$lambda, rLambda)
+  rLambda <- c(0.50861, 0.49139)
+  rMu <- c(0.267, 1.195, 2.743, 4.730)
+  rSigma <- c(1.099, 1.339, 1.339, 1.798,
+              0.145, -0.309, -0.309, 0.716)
+  expect_equal(stats$lambda, rLambda, tolerance = 1e-3)
   expect_equal(unlist(stats$mu), rMu, tolerance = 1e-3)
   expect_equal(unlist(stats$sigma), rSigma, tolerance = 1e-3)
   p <- collect(select(predict(model, df), "prediction"))
-  expect_equal(p$prediction, c(0, 0, 0, 0, 1, 1, 1, 1, 1, 1))
+  expect_equal(p$prediction, c(0, 0, 0, 0, 0, 1, 1, 1, 1, 1))
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-gaussianMixture", fileext = ".tmp")
