@@ -61,20 +61,29 @@ class JavaWrapper(object):
 
     @staticmethod
     def _new_java_primitive_array(pylist):
+        if not pylist:
+            raise ValueError("Unable to convert an empty list to Java array")
         sc = SparkContext._active_spark_context
-        if isinstance(pylist[0], basestring):
+        head = pylist[0]
+        if isinstance(head, basestring):
             java_class = sc._gateway.jvm.java.lang.String
+        elif isinstance(head, int):
+            java_class = sc._gateway.jvm.java.lang.Integer
+        elif isinstance(head, float):
+            java_class = sc._gateway.jvm.java.lang.Double
+        elif isinstance(head, bool):
+            java_class = sc._gateway.jvm.java.lang.Boolean
         else:
             raise TypeError("Unknown type for Java primitive array")
-        return JavaWrapper._new_java_arr(pylist, java_class)
+        return JavaWrapper._new_java_array(pylist, java_class)
 
     @staticmethod
     def _new_java_array(pylist, java_class):
         sc = SparkContext._active_spark_context
-        jvocab = sc._gateway.new_array(java_class, len(pylist))
+        java_array = sc._gateway.new_array(java_class, len(pylist))
         for i in xrange(len(pylist)):
-            jvocab[i] = pylist[i]
-        return jvocab
+            java_array[i] = pylist[i]
+        return java_array
 
 
 @inherit_doc

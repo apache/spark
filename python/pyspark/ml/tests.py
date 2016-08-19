@@ -60,8 +60,8 @@ from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor, \
     GeneralizedLinearRegression
 from pyspark.ml.tuning import *
-from pyspark.ml.wrapper import JavaParams
-from pyspark.ml.common import _java2py
+from pyspark.ml.wrapper import JavaParams, JavaWrapper
+from pyspark.ml.common import _java2py, _py2java
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
@@ -1516,6 +1516,33 @@ class MatrixUDTTests(MLlibTestCase):
                 self.assertTrue(m, self.sm1)
             else:
                 raise ValueError("Expected a matrix but got type %r" % type(m))
+
+
+class WrapperTests(MLlibTestCase):
+
+    def test_java_array_of_primitive(self):
+        # test array of strings
+        str_list = ["a", "b", "c"]
+        java_array = JavaWrapper._new_java_primitive_array(str_list)
+        self.assertEqual(_java2py(self.sc, java_array), str_list)
+        # test array of integers
+        int_list = [1, 2, 3]
+        java_array = JavaWrapper._new_java_primitive_array(int_list)
+        self.assertEqual(_java2py(self.sc, java_array), int_list)
+        # test array of floats
+        float_list = [0.1, 0.2, 0.3]
+        java_array = JavaWrapper._new_java_primitive_array(float_list)
+        self.assertEqual(_java2py(self.sc, java_array), float_list)
+
+    def test_java_array_of_class(self):
+        #vec_list = [DenseVector([0.0, 1.0]), DenseVector([1.0, 0.0])]
+        v1 = DenseVector([0.0, 1.0])
+        v2 = DenseVector([1.0, 0.0])
+        vec_java_list = [_py2java(self.sc, v1), _py2java(self.sc, v2)]
+        java_array = JavaWrapper._new_java_array(vec_java_list, self.sc._gateway.jvm.org.apache.spark.ml.linalg.DenseVector)
+        self.assertEqual(_java2py(self.sc, java_array), vec_java_list)
+        #rdd_list = [_py2java()]
+        #java_array = JavaWrapper._new_java_array(rdd_list, self.sc._gateway.jvm.org.apache.spark.rdd.EmptyRDD)
 
 
 if __name__ == "__main__":
