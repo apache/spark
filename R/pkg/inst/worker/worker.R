@@ -27,6 +27,15 @@ elapsedSecs <- function() {
   proc.time()[3]
 }
 
+# Raws (binary data) require a list column in a data.frame
+# argument inputData should be a list of rows, with each row a list
+rbind_with_raws <- function(inputData, rawcolumns){
+  args <- c(inputData, stringsAsFactors = FALSE)
+  inputData <- as.data.frame(do.call(rbind, args))
+  inputData[!rawcolumns] <- lapply(inputData[!rawcolumns], unlist)
+  inputData
+}
+
 compute <- function(mode, partition, serializer, deserializer, key,
              colNames, computeFunc, inputData) {
   if (mode > 0) {
@@ -36,7 +45,15 @@ compute <- function(mode, partition, serializer, deserializer, key,
       # available since R 3.2.4. So we set the global option here.
       oldOpt <- getOption("stringsAsFactors")
       options(stringsAsFactors = FALSE)
-      inputData <- do.call(rbind.data.frame, inputData)
+
+# TODO Clark: 
+      # Handle binary data types
+      rawcolumns <- ("raw" == sapply(row1, class))
+      if(any(rawcolumns)){
+        inputData <- rbind_with_raws(inputData, rawcolumns)
+      } else {
+        inputData <- do.call(rbind.data.frame, inputData)
+      }
       options(stringsAsFactors = oldOpt)
 
       names(inputData) <- colNames
