@@ -40,7 +40,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "text"
 
-  override def toString: String = shortName.toUpperCase
+  override def toString: String = "Text"
 
   private def verifySchema(schema: StructType): Unit = {
     if (schema.size != 1) {
