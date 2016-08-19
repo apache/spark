@@ -163,7 +163,7 @@ sparkR.sparkContext <- function(
     backendPort <- existingPort
   } else {
 
-    if (!nzchar(master) || is_master_local(master)) {
+    if (is_master_local(master) || is_yarn_client(master)) {
       path <- tempfile(pattern = "backend_port")
       submitOps <- getClientModeSparkSubmitOpts(
         Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"),
