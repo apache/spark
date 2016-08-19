@@ -530,11 +530,16 @@ class Analyzer(
           val newRight = right transformUp {
             case r if r == oldRelation => newRelation
           } transformUp {
-            case other => other transformExpressions {
-              case a: Attribute =>
-                attributeRewrites.get(a).getOrElse(a).withQualifier(a.qualifier)
-            }
+            case other =>
+              val transformed = other transformExpressions {
+                case a: Attribute =>
+                  attributeRewrites.get(a).getOrElse(a).withQualifier(a.qualifier)
+              }
+
+              transformed.setPlanId(other.planId)
+              transformed
           }
+          newRight.setPlanId(right.planId)
           newRight
       }
     }
@@ -597,7 +602,7 @@ class Analyzer(
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        q transformExpressionsUp  {
+        q transformExpressionsUp {
           case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =
@@ -606,6 +611,20 @@ class Analyzer(
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
             ExtractValue(child, fieldExpr, resolver)
+          case l: LazilyDeterminedAttribute =>
+            val foundPlanOpt = q.findByBreadthFirst(_.planId == l.plan.planId)
+            val foundPlan = foundPlanOpt.getOrElse {
+              failAnalysis(s"""Cannot resolve column name "${l.name}" """)
+            }
+
+            if (foundPlan == l.plan) {
+              l.namedExpr
+            } else {
+              foundPlan.resolveQuoted(l.name, resolver).getOrElse {
+                failAnalysis(s"""Cannot resolve column name "${l.name}" """ +
+                  s"""among (${foundPlan.schema.fieldNames.mkString(", ")})""")
+              }
+            }
         }
     }
 

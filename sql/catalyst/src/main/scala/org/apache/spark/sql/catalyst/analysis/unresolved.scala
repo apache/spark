@@ -161,7 +161,7 @@ object UnresolvedAttribute {
     }
     if (inBacktick) throw e
     nameParts += tmp.mkString
-    nameParts.toSeq
+    nameParts
   }
 }
 
@@ -418,4 +418,43 @@ case class UnresolvedOrdinal(ordinal: Int)
   override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
+}
+
+/**
+ * This is used when we refer a column like `df("expr")`
+ * and determines which expression `df("expr")` should point to lazily.
+ * Normally, `df("expr")` should point the expression (say expr1 here.) which
+ * the logical plan in `df` outputs. but we have some cases that `df("expr")` should
+ * point to another expression (say expr2 here) rather than expr1
+ * and in this case, expr2 is equally to expr1 except exprId.
+ * This will happen when datasets are self-joined or in similar situations and in this situation,
+ * logical plans and expressions of those outputs are re-created with new exprIds the analyzer.
+ * [[LazilyDeterminedAttribute()]] can treat this case properly
+ * to determine that `df("expr")` should point which expression in the analyzer.
+ *
+ * @param namedExpr The expression which a column reference should point to normally.
+ * @param plan The logical plan which contains the expression
+ *             which the column reference should point to lazily.
+ */
+case class LazilyDeterminedAttribute(
+    namedExpr: NamedExpression)(
+  val plan: LogicalPlan)
+  extends Attribute with Unevaluable {
+  // We need to keep the constructor curried
+  // so that we can compare like df1("col1") == df2("col1") especially in case of test.
+
+  override def name: String = namedExpr.name
+  override def exprId: ExprId = throw new UnresolvedException(this, "exprId")
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override def qualifier: Option[String] = throw new UnresolvedException(this, "qualifier")
+  override lazy val resolved = false
+
+  override def newInstance(): Attribute = throw new UnresolvedException(this, "newInstance")
+  override def withNullability(newNullability: Boolean): Attribute =
+    throw new UnresolvedException(this, "withNullability")
+  override def withName(newName: String): Attribute =
+    throw new UnresolvedException(this, "withName")
+  override def withQualifier(newQualifier: Option[String]): Attribute =
+    throw new UnresolvedException(this, "withQualifier")
 }

@@ -899,7 +899,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def sort(sortCol: String, sortCols: String*): Dataset[T] = {
-    sort((sortCol +: sortCols).map(apply) : _*)
+    sort((sortCol +: sortCols).map(colInternal) : _*)
   }
 
   /**
@@ -952,12 +952,10 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def col(colName: String): Column = colName match {
-    case "*" =>
-      Column(ResolvedStar(queryExecution.analyzed.output))
-    case _ =>
-      val expr = resolve(colName)
-      Column(expr)
+  def col(colName: String): Column = withStarResolved(colName) {
+    val candidateExpr = resolve(colName)
+    val expr = LazilyDeterminedAttribute(candidateExpr)(logicalPlan)
+    Column(expr)
   }
 
   /**
@@ -1705,7 +1703,8 @@ class Dataset[T] private[sql](
       val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
       f(row(0).asInstanceOf[A]).map(o => InternalRow(convert(o)))
     }
-    val generator = UserDefinedGenerator(elementSchema, rowFunction, apply(inputColumn).expr :: Nil)
+    val generator =
+      UserDefinedGenerator(elementSchema, rowFunction, colInternal(inputColumn).expr :: Nil)
 
     withPlan {
       Generate(generator, join = true, outer = false,
@@ -1836,6 +1835,12 @@ class Dataset[T] private[sql](
       case Column(u: UnresolvedAttribute) =>
         queryExecution.analyzed.resolveQuoted(
           u.name, sparkSession.sessionState.analyzer.resolver).getOrElse(u)
+      case Column(l: LazilyDeterminedAttribute) =>
+        val foundExpression =
+          logicalPlan.findByBreadthFirst(_.planId == l.plan.planId)
+            .flatMap(_.resolveQuoted(l.name, sparkSession.sessionState.analyzer.resolver))
+            .getOrElse(l.namedExpr)
+        foundExpression
       case Column(expr: Expression) => expr
     }
     val attrs = this.logicalPlan.output
@@ -2626,6 +2631,16 @@ class Dataset[T] private[sql](
     withTypedPlan {
       Sort(sortOrder, global = global, logicalPlan)
     }
+  }
+
+  private[sql] def colInternal(colName: String): Column = withStarResolved(colName) {
+    val expr = resolve(colName)
+    Column(expr)
+  }
+
+  private def withStarResolved(colName: String)(f: => Column): Column = colName match {
+    case "*" => Column(ResolvedStar(queryExecution.analyzed.output))
+    case _ => f
   }
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */

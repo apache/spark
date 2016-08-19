@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.UUID
 
 import scala.collection.Map
-import scala.collection.mutable.Stack
+import scala.collection.mutable.{ArrayBuffer, Stack}
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.ClassUtils
@@ -106,6 +106,24 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def find(f: BaseType => Boolean): Option[BaseType] = f(this) match {
     case true => Some(this)
     case false => children.foldLeft(Option.empty[BaseType]) { (l, r) => l.orElse(r.find(f)) }
+  }
+
+  def findByBreadthFirst(f: BaseType => Boolean): Option[BaseType] = {
+    val queue = new ArrayBuffer[BaseType]
+    var foundOpt: Option[BaseType] = None
+    queue.append(this)
+
+    // Do breadth first search to find most exact logical plan
+    while (queue.nonEmpty && foundOpt.isEmpty) {
+      val currentNode = queue.remove(0)
+      f(currentNode) match {
+        case true => foundOpt = Option(currentNode)
+        case false =>
+          val childPlans = currentNode.children.reverse
+          childPlans.foreach(queue.append(_))
+      }
+    }
+    foundOpt
   }
 
   /**
