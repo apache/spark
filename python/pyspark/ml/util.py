@@ -22,8 +22,14 @@ if sys.version > '3':
     basestring = str
     unicode = str
 
-from pyspark import SparkContext, since
+import traceback
+
+from pyspark import SparkContext
 from pyspark.ml.common import inherit_doc
+from pyspark.serializers import CloudPickleSerializer
+from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.types import _parse_datatype_json_string
+from pyspark.sql import SQLContext
 
 
 def _jvm():
@@ -36,6 +42,18 @@ def _jvm():
         return jvm
     else:
         raise AttributeError("Cannot load _jvm from SparkContext. Is SparkContext initialized?")
+
+
+def _get_class(clazz):
+        """
+        Loads Python class from its name.
+        """
+        parts = clazz.split('.')
+        module = ".".join(parts[:-1])
+        m = __import__(module)
+        for comp in parts[1:]:
+            m = getattr(m, comp)
+        return m
 
 
 class Identifiable(object):
@@ -238,3 +256,159 @@ class JavaMLReadable(MLReadable):
     def read(cls):
         """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
+
+
+class StageWrapper(object):
+    """
+    This class wraps a pure Python stage, allowing it to be called from Java via Py4J's
+    callback server, making it as-like a Java side PipelineStage.
+    """
+
+    def __init__(self, sc, stage):
+        self.sc = sc
+        self.sql_ctx = SQLContext.getOrCreate(self.sc)
+        self.stage = stage
+        self.failure = None
+        reader = StageReader(self.sc)
+        self.sc._gateway.jvm.\
+            org.apache.spark.ml.api.python.PythonStage.registerReader(reader)
+
+    def getUid(self):
+        self.failure = None
+        try:
+            return self.stage.uid
+        except:
+            self.failure = traceback.format_exc()
+
+    def copy(self, extra):
+        self.failure = None
+        try:
+            self.stage = self.stage.copy(extra)
+            return self
+        except:
+            self.failure = traceback.format_exc()
+
+    def transformSchema(self, jschema):
+        """
+        Transform Java schema with transformSchema in pure Python stages.
+        """
+        self.failure = None
+        try:
+            schema = _parse_datatype_json_string(jschema.json())
+            converted = self.stage.transformSchema(schema)
+            return _jvm().org.apache.spark.sql.types.StructType.fromJson(converted.json())
+        except:
+            self.failure = traceback.format_exc()
+
+    def getStage(self):
+        self.failure = None
+        try:
+            return bytearray(CloudPickleSerializer().dumps(self.stage))
+        except:
+            self.failure = traceback.format_exc()
+
+    def getClassName(self):
+        self.failure = None
+        try:
+            cls = self.stage.__class__
+            return cls.__module__ + "." + cls.__name__
+        except:
+            self.failure = traceback.format_exc()
+
+    def fit(self, jdf):
+        self.failure = None
+        try:
+            df = DataFrame(jdf, self.sql_ctx) if jdf else None
+            m = self.stage.fit(df)
+            if m:
+                return StageWrapper(self.sc, m)
+        except:
+            self.failure = traceback.format_exc()
+
+    def transform(self, jdf):
+        self.failure = None
+        try:
+            df = DataFrame(jdf, self.sql_ctx) if jdf else None
+            r = self.stage.transform(df)
+            if r:
+                return r._jdf
+        except:
+            self.failure = traceback.format_exc()
+
+    def getLastFailure(self):
+        return self.failure
+
+    def save(self, path):
+        self.failure = None
+        try:
+            self.stage.save(path)
+        except:
+            self.failure = traceback.format_exc()
+
+    def __repr__(self):
+        return "StageWrapper(%s)" % self.stage
+
+    class Java:
+        implements = ['org.apache.spark.ml.api.python.PythonStageWrapper']
+
+
+class StageReader(object):
+    """
+    Reader to load Python stages.
+    """
+    def __init__(self, sc):
+        self.failure = None
+        self.sc = sc
+
+    def getLastFailure(self):
+        return self.failure
+
+    def load(self, path, clazz):
+        self.failure = None
+        try:
+            cls = _get_class(clazz)
+            transformer = cls.load(path)
+            return StageWrapper(self.sc, transformer)
+        except:
+            self.failure = traceback.format_exc()
+
+    class Java:
+        implements = ['org.apache.spark.ml.api.python.PythonStageReader']
+
+
+class StageSerializer(object):
+    """
+    This class implements a serializer for PythonStageWrapper Java objects.
+    """
+    def __init__(self, sc, serializer):
+        self.sc = sc
+        self.serializer = serializer
+        self.gateway = self.sc._gateway
+        self.gateway.jvm\
+            .org.apache.spark.ml.api.python.PythonPipelineStage.registerSerializer(self)
+        self.failure = None
+
+    def dumps(self, id):
+        self.failure = None
+        try:
+            wrapper = self.gateway.gateway_property.pool[id]
+            return bytearray(self.serializer.dumps(wrapper.stage))
+        except:
+            self.failure = traceback.format_exc()
+
+    def loads(self, data):
+        self.failure = None
+        try:
+            stage = self.serializer.loads(bytes(data))
+            return StageWrapper(self.sc, stage)
+        except:
+            self.failure = traceback.format_exc()
+
+    def getLastFailure(self):
+        return self.failure
+
+    def __repr__(self):
+        return "StageSerializer(%s)" % self.serializer
+
+    class Java:
+        implements = ['org.apache.spark.ml.api.python.PythonStageSerializer']

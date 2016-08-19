@@ -55,7 +55,7 @@ from pyspark.ml.feature import *
 from pyspark.ml.linalg import Vector, SparseVector, DenseVector, VectorUDT,\
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT, _convert_to_vector
 from pyspark.ml.param import Param, Params, TypeConverters
-from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
+from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasOutputCol, HasSeed
 from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor, \
     GeneralizedLinearRegression
@@ -65,6 +65,7 @@ from pyspark.ml.common import _java2py
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
+from pyspark.sql.types import StructField, DoubleType
 from pyspark.sql.utils import IllegalArgumentException
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
@@ -93,12 +94,6 @@ class SparkSessionTestCase(PySparkTestCase):
         cls.spark.stop()
 
 
-class MockDataset(DataFrame):
-
-    def __init__(self):
-        self.index = 0
-
-
 class HasFake(Params):
 
     def __init__(self):
@@ -107,35 +102,6 @@ class HasFake(Params):
 
     def getFake(self):
         return self.getOrDefault(self.fake)
-
-
-class MockTransformer(Transformer, HasFake):
-
-    def __init__(self):
-        super(MockTransformer, self).__init__()
-        self.dataset_index = None
-
-    def _transform(self, dataset):
-        self.dataset_index = dataset.index
-        dataset.index += 1
-        return dataset
-
-
-class MockEstimator(Estimator, HasFake):
-
-    def __init__(self):
-        super(MockEstimator, self).__init__()
-        self.dataset_index = None
-
-    def _fit(self, dataset):
-        self.dataset_index = dataset.index
-        model = MockModel()
-        self._copyValues(model)
-        return model
-
-
-class MockModel(MockTransformer, Model, HasFake):
-    pass
 
 
 class ParamTypeConversionTests(PySparkTestCase):
@@ -204,31 +170,71 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertRaises(TypeError, lambda: LogisticRegression(fitIntercept="false"))
 
 
-class PipelineTests(PySparkTestCase):
+class MockTransformer(Transformer, HasInputCol, HasOutputCol):
+    factor = Param(Params._dummy(), "factor", "factor", typeConverter=TypeConverters.toFloat)
+
+    def __init__(self):
+        super(MockTransformer, self).__init__()
+        self._setDefault(factor=1)
+
+    def transformSchema(self, schema):
+        outSchema = StructField(self.getOutputCol(), DoubleType(), True)
+        return schema.add(outSchema)
+
+    def _transform(self, dataset):
+        inc = self.getInputCol()
+        ouc = self.getOutputCol()
+        factor = self.getOrDefault(self.factor)
+        return dataset.withColumn(ouc, dataset[inc] + factor)
+
+
+class MockModel(MockTransformer):
+    def __init__(self):
+        super(MockModel, self).__init__()
+
+
+class MockEstimator(Estimator, HasInputCol, HasOutputCol):
+
+    def __init__(self):
+        super(MockEstimator, self).__init__()
+
+    def transformSchema(self, schema):
+        outSchema = StructField(self.getOutputCol(), DoubleType(), True)
+        return schema.add(outSchema)
+
+    def _fit(self, dataset):
+        cnt = dataset.count()
+        model = MockModel()._set(factor=cnt)._resetUid(self.uid)
+        return self._copyValues(model)
+
+
+class PipelineTests(SparkSessionTestCase):
 
     def test_pipeline(self):
-        dataset = MockDataset()
+        data = self.spark.createDataFrame([(1,), (2,), (3,), (4,)], ["number"])
+
+        transformer0 = MockTransformer()
+        transformer0.setInputCol("number").setOutputCol("result0")
         estimator0 = MockEstimator()
+        estimator0.setInputCol(transformer0.getOutputCol()).setOutputCol("result1")
         transformer1 = MockTransformer()
-        estimator2 = MockEstimator()
-        transformer3 = MockTransformer()
-        pipeline = Pipeline(stages=[estimator0, transformer1, estimator2, transformer3])
-        pipeline_model = pipeline.fit(dataset, {estimator0.fake: 0, transformer1.fake: 1})
-        model0, transformer1, model2, transformer3 = pipeline_model.stages
-        self.assertEqual(0, model0.dataset_index)
-        self.assertEqual(0, model0.getFake())
-        self.assertEqual(1, transformer1.dataset_index)
-        self.assertEqual(1, transformer1.getFake())
-        self.assertEqual(2, dataset.index)
-        self.assertIsNone(model2.dataset_index, "The last model shouldn't be called in fit.")
-        self.assertIsNone(transformer3.dataset_index,
-                          "The last transformer shouldn't be called in fit.")
-        dataset = pipeline_model.transform(dataset)
-        self.assertEqual(2, model0.dataset_index)
-        self.assertEqual(3, transformer1.dataset_index)
-        self.assertEqual(4, model2.dataset_index)
-        self.assertEqual(5, transformer3.dataset_index)
-        self.assertEqual(6, dataset.index)
+        transformer1.setInputCol(estimator0.getOutputCol()).setOutputCol("result2")._set(factor=2)
+
+        pipeline = Pipeline(stages=[transformer0, estimator0, transformer1])
+
+        model = pipeline.fit(data)
+
+        self.assertEqual(len(model.stages), 3)
+        self.assertIsInstance(model.stages[0], MockTransformer)
+        self.assertEqual(model.stages[0].uid, transformer0.uid)
+        self.assertIsInstance(model.stages[1], MockModel)
+        self.assertEqual(model.stages[1].uid, estimator0.uid)
+        self.assertIsInstance(model.stages[2], MockTransformer)
+        self.assertEqual(model.stages[2].uid, transformer1.uid)
+
+        result = model.transform(data).select(transformer1.getOutputCol()).collect()
+        self.assertListEqual(
+            result, [Row(result2=8), Row(result2=9), Row(result2=10), Row(result2=11)])
 
 
 class TestParams(HasMaxIter, HasInputCol, HasSeed):
@@ -758,8 +764,16 @@ class PersistenceTest(SparkSessionTestCase):
             paramValue2 = m2.getOrDefault(m2.getParam(param.name))
             if isinstance(paramValue1, Params):
                 self._compare_pipelines(paramValue1, paramValue2)
-            else:
-                self.assertEqual(paramValue1, paramValue2)  # for general types param
+            elif isinstance(paramValue1, list):
+                if not paramValue1:
+                    self.assertEqual(paramValue2, [])
+                elif isinstance(paramValue1[0], Params):
+                    for p1, p2 in zip(paramValue1, paramValue2):
+                        self._compare_pipelines(p1, p2)
+                else:
+                    self.assertListEqual(paramValue1, paramValue2)
+            else:  # for general types param
+                self.assertEqual(paramValue1, paramValue2)
             # Assert parents are equal
             self.assertEqual(param.parent, m2.getParam(param.name).parent)
         else:

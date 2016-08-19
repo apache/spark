@@ -24,6 +24,7 @@ import sys
 import threading
 from threading import RLock
 from tempfile import NamedTemporaryFile
+from py4j.java_gateway import JavaObject
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -238,6 +239,7 @@ class SparkContext(object):
         Checks whether a SparkContext is initialized or not.
         Throws error if a SparkContext is already running.
         """
+
         with SparkContext._lock:
             if not SparkContext._gateway:
                 SparkContext._gateway = gateway or launch_gateway()
@@ -259,6 +261,29 @@ class SparkContext(object):
                             callsite.function, callsite.file, callsite.linenum))
                 else:
                     SparkContext._active_spark_context = instance
+
+        cls.__ensure_callback_server()
+
+    @classmethod
+    def __ensure_callback_server(cls):
+        gw = SparkContext._gateway
+
+        # start callback server
+        # getattr will fallback to JVM, so we cannot test by hasattr()
+        if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
+            gw.callback_server_parameters.eager_load = True
+            gw.callback_server_parameters.daemonize = True
+            gw.callback_server_parameters.daemonize_connections = True
+            gw.callback_server_parameters.port = 0
+            gw.start_callback_server(gw.callback_server_parameters)
+            cbport = gw._callback_server.server_socket.getsockname()[1]
+            gw._callback_server.port = cbport
+            # gateway with real port
+            gw._python_proxy_port = gw._callback_server.port
+            # get the GatewayServer object in JVM by ID
+            jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
+            # update the port of CallbackClient with real port
+            jgws.resetCallbackClient(jgws.getCallbackClient().getAddress(), gw._python_proxy_port)
 
     def __getnewargs__(self):
         # This method is called when attempting to pickle SparkContext, which is always an error:
