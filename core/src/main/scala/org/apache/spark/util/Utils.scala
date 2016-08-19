@@ -824,7 +824,7 @@ private[spark] object Utils extends Logging {
    */
   def randomizeInPlace[T](arr: Array[T], rand: Random = new Random): Array[T] = {
     for (i <- (arr.length - 1) to 1 by -1) {
-      val j = rand.nextInt(i)
+      val j = rand.nextInt(i + 1)
       val tmp = arr(j)
       arr(j) = arr(i)
       arr(i) = tmp

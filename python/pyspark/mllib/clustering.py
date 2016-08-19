@@ -416,7 +416,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     ...                 4.5605,  5.2043,  6.2734])
     >>> clusterdata_2 = sc.parallelize(data.reshape(5,3))
     >>> model = GaussianMixture.train(clusterdata_2, 2, convergenceTol=0.0001,
-    ...                               maxIterations=150, seed=10)
+    ...                               maxIterations=150, seed=4)
     >>> labels = model.predict(clusterdata_2).collect()
     >>> labels[0]==labels[1]
     True
