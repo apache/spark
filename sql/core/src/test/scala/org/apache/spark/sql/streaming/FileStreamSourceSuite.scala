@@ -591,7 +591,12 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
       /** Create a text file with a single data item */
       def createFile(data: Int): File = {
-        val file = stringToFile(new File(src, s"$data.txt"), data.toString)
+        // Use 2 character file names padded with zeros so that alphabetical and
+        // numeric order are the same for the generated file names.
+        val file = stringToFile(new File(src, f"$data%02d.txt"), data.toString)
+
+        // File modification times aren't currently used to decide what goes into
+        // the next batch, but they may be used in the future.
         if (lastFileModTime.nonEmpty) file.setLastModified(lastFileModTime.get + 1000)
         lastFileModTime = Some(file.lastModified)
         file
@@ -727,6 +732,48 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       }
     }
   }
+
+
+  test("deleteCommittedFiles option") {
+    withTempDirs { case (src, tmp) =>
+      val textStream = spark.readStream.format("text")
+        .option("deleteCommittedFiles", "false")
+        .load(src.getCanonicalPath)
+
+      testStream(textStream)(
+        AddTextFileData("kneel", src, tmp),
+        CheckAnswer("kneel"),
+        StopStream,
+        AddTextFileData("before", src, tmp),
+        StartStream(),
+        CheckAnswer("kneel", "before"),
+        AddTextFileData("zod", src, tmp),
+        CheckAnswer("kneel", "before", "zod")
+      )
+
+      assert(src.listFiles().size === 3)
+    }
+
+    withTempDirs { case (src, tmp) =>
+      val textStream = spark.readStream.format("text")
+        .option("deleteCommittedFiles", "true")
+        .load(src.getCanonicalPath)
+
+      testStream(textStream)(
+        AddTextFileData("it's only", src, tmp),
+        CheckAnswer("it's only"),
+        StopStream,
+        AddTextFileData("a", src, tmp),
+        StartStream(),
+        CheckAnswer("it's only", "a"),
+        AddTextFileData("model", src, tmp),
+        CheckAnswer("it's only", "a", "model")
+      )
+
+      assert(src.listFiles().size === 1)
+    }
+  }
+
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {

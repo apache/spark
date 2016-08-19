@@ -261,7 +261,7 @@ class StreamExecution(
             val srcOffset = src.getMinOffset
             if (srcOffset.isDefined && srcOffset.get > checkptOffset) {
               logWarning(s"Source $src lost offsets between $checkptOffset " +
-                s"and $srcOffset when resuming. Skipping ahead to $srcOffset.")
+                s"and ${srcOffset.get} when resuming. Skipping ahead to ${srcOffset.get}.")
               offsetChanges += (src -> srcOffset.get)
             }
         }

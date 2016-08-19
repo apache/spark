@@ -42,7 +42,7 @@ import org.apache.spark.util.collection.OpenHashSet
  *   <li><b>deleteCommittedFiles</b>: If true, the source will delete old files and
  *        clean up associated internal metadata when Spark has completed processing
  *        the data in those files.
- *        Default: False.
+ *        Default: true.
  * </ul>
  */
 class FileStreamSource(
@@ -85,10 +85,11 @@ class FileStreamSource(
   private def initialize() = {
     maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
+    minBatchId = maxBatchId
     metadataLog.get(None, Some(maxBatchId)).foreach {
       case (batchId, files) =>
         files.foreach(seenFiles.add)
-        minBatchId = math.max(minBatchId, batchId)
+        minBatchId = math.min(minBatchId, batchId)
     }
   }
 
@@ -127,6 +128,7 @@ class FileStreamSource(
 
   override def getMaxOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.offset == -1)
 
+
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     val startId = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L)
     val endId = end.asInstanceOf[LongOffset].offset
@@ -135,6 +137,7 @@ class FileStreamSource(
     val files = metadataLog.get(Some(startId + 1), Some(endId)).flatMap(_._2)
     logInfo(s"Processing ${files.length} files from ${startId + 1}:$endId")
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
+
     val newOptions = new CaseInsensitiveMap(options).filterKeys(_ != "path")
     val newDataSource =
       DataSource(
@@ -154,10 +157,10 @@ class FileStreamSource(
     if (end.isInstanceOf[LongOffset]) {
       val lastCommittedBatch = end.asInstanceOf[LongOffset].offset
 
-      // Build up a list of batches, then process them one by one
-      val firstCommittedBatch = math.max(minBatchId, 0)
-
       if (deleteCommittedFiles) {
+        // Build up a list of batches, then process them one by one
+        val firstCommittedBatch = math.max(minBatchId, 0)
+
         var batchId = 0L;
         for (batchId <- firstCommittedBatch to lastCommittedBatch) {
           val files = metadataLog.get(batchId)
@@ -169,14 +172,13 @@ class FileStreamSource(
             // Examples of problems to catch: Spark does not have permission to delete
             // the file; or the filesystem metadata is corrupt.
             files.get.foreach(f => fs.delete(new Path(f), true))
-
-            // TODO: Add a "remove" method to HDFSMetadataLog, then add code here to
-            // remove the metadata for each completed batch. It's important that we
-            // remove the metadata only after the files are deleted; otherwise we
-            // may not be able to tell what files to delete after a crash.
           }
 
         }
+
+        // Clean up metadata for the files we've removed. It's important to do this
+        // AFTER deleting the files.
+        metadataLog.trim(minBatchId)
       }
 
       minBatchId = lastCommittedBatch
@@ -187,7 +189,9 @@ class FileStreamSource(
     }
   }
 
-  override def stop() {}
+  override def stop(): Unit = {
+    logTrace(s"Stopping $this")
+  }
 
   // END methods from Source trait
   ////////////////////////////////
@@ -197,7 +201,13 @@ class FileStreamSource(
   /**
    * Scans the directory and creates batches from any new files found.
    *
-   * Returns the maximum offset that can be retrieved from the source.
+   * Updates and returns the maximum offset that can be retrieved from the source.
+   * If `maxFilesPerBatch` is set, will consume the first (`maxFilesPerBatch`) files
+   * in alphabetical order.
+   *
+   * Note that this implementation relies on the fact that StreamExecution calls
+   * getMaxOffset() exactly once per clock tick. Otherwise the logic for
+   * `maxFilesPerBatch` will be incorrect.
    *
    * `synchronized` on this method is for solving race conditions in tests. In the normal usage,
    * there is no race here, so the cost of `synchronized` should be rare.
@@ -207,36 +217,24 @@ class FileStreamSource(
     logTrace(s"Number of new files = ${newFiles.size})")
 
     // To make the source's behavior less nondeterministic, we process files in
-    // alphabetical order and ensure that every new file goes into a batch.
-    val remainingFiles = mutable.Queue[String]()
-    remainingFiles ++= newFiles.sorted
-
-    val batches = ListBuffer[Seq[String]]()
-    if (maxFilesPerBatch.nonEmpty) {
-      while (remainingFiles.size > 0) {
-        batches += remainingFiles.take(maxFilesPerBatch.get)
-      }
-    } else {
-      batches += remainingFiles
-    }
-
-    newFiles.foreach { file =>
-      seenFiles.add(file)
-      logDebug(s"New file: $file")
-    }
-
-    batches.foreach {
-      case batchFiles =>
-        maxBatchId += 1
-        metadataLog.add(maxBatchId, batchFiles)
-        logInfo(s"Max batch id increased to $maxBatchId with ${batchFiles.size} new files")
-    }
-
+    // alphabetical order.
     val batchFiles =
-      if (maxFilesPerBatch.nonEmpty) newFiles.take(maxFilesPerBatch.get) else newFiles
+      if (maxFilesPerBatch.nonEmpty) {
+        newFiles.sorted.take(maxFilesPerBatch.get)
+      } else {
+        newFiles
+      }
+
+    // Pretend we didn't see files that aren't in the batch.
     batchFiles.foreach { file =>
       seenFiles.add(file)
       logDebug(s"New file: $file")
+    }
+
+    if (batchFiles.size > 0) {
+      maxBatchId += 1
+      metadataLog.add(maxBatchId, batchFiles)
+      logInfo(s"Max batch id increased to $maxBatchId with ${batchFiles.size} new files")
     }
 
     new LongOffset(maxBatchId)
@@ -260,7 +258,7 @@ class FileStreamSource(
   }
 
   private def getDeleteCommittedFiles(): Boolean = {
-    val str = options.getOrElse("deleteCommittedFiles", "false")
+    val str = options.getOrElse("deleteCommittedFiles", "true")
     try {
       str.toBoolean
     } catch {

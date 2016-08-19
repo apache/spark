@@ -61,6 +61,10 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   @GuardedBy("this")
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
+  /**
+   * Last offset that was discarded, or -1 if no commits have occurred. Note that the value
+   * -1 is used in calculations below and isn't just an arbitrary constant.
+   */
   @GuardedBy("this")
   protected var lastCommittedOffset : LongOffset = new LongOffset(-1)
 
@@ -108,14 +112,15 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+    // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
     val startOrdinal =
       start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1
     val endOrdinal = end.asInstanceOf[LongOffset].offset.toInt + 1
 
-    // Internal buffer only holds the batches after lastCommittedOffset
+    // Internal buffer only holds the batches after lastCommittedOffset.
     val newBlocks = synchronized {
-      val sliceStart = startOrdinal - lastCommittedOffset.offset.toInt
-      val sliceEnd = endOrdinal - lastCommittedOffset.offset.toInt
+      val sliceStart = startOrdinal - lastCommittedOffset.offset.toInt - 1
+      val sliceEnd = endOrdinal - lastCommittedOffset.offset.toInt - 1
       batches.slice(sliceStart, sliceEnd)
     }
 
