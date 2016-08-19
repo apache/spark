@@ -1535,14 +1535,13 @@ class WrapperTests(MLlibTestCase):
         self.assertEqual(_java2py(self.sc, java_array), float_list)
 
     def test_java_array_of_class(self):
-        #vec_list = [DenseVector([0.0, 1.0]), DenseVector([1.0, 0.0])]
+        # test creating a JavaArray of Java DenseVectors
         v1 = DenseVector([0.0, 1.0])
         v2 = DenseVector([1.0, 0.0])
         vec_java_list = [_py2java(self.sc, v1), _py2java(self.sc, v2)]
-        java_array = JavaWrapper._new_java_array(vec_java_list, self.sc._gateway.jvm.org.apache.spark.ml.linalg.DenseVector)
-        self.assertEqual(_java2py(self.sc, java_array), vec_java_list)
-        #rdd_list = [_py2java()]
-        #java_array = JavaWrapper._new_java_array(rdd_list, self.sc._gateway.jvm.org.apache.spark.rdd.EmptyRDD)
+        java_class = self.sc._gateway.jvm.org.apache.spark.ml.linalg.DenseVector
+        java_array = JavaWrapper._new_java_array(vec_java_list, java_class)
+        self.assertEqual(_java2py(self.sc, java_array), [v1, v2])
 
 
 if __name__ == "__main__":
