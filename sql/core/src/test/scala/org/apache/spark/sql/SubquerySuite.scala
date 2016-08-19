@@ -649,6 +649,17 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("Dedup subqueries with uncorrelated scalar subquery in CTE") {
+    val df = sql("WITH t1 AS (SELECT 1 AS b, 2 AS c), " +
+      "t2 AS (SELECT a FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a) t " +
+      "WHERE a = (SELECT max(b) FROM t1)) SELECT * FROM t2 x UNION ALL SELECT * FROM t2 y")
+    checkAnswer(df, Array(Row(1), Row(1)))
+    val commonSubqueries = df.queryExecution.sparkPlan.collect {
+      case c: CommonSubqueryExec => c.subquery.child
+    }.distinct
+    assert(commonSubqueries.length == 1)
+  }
+
   test("Dedup subqueries with optimization: Project pushdown") {
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       val df = sql("WITH cte AS (SELECT a.a AS a, a.b AS b, b.a AS c, b.b AS d FROM l a, l b) " +
