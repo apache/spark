@@ -235,7 +235,6 @@ private[sql] class HiveSessionCatalog(
   private val hiveFunctions = Seq(
     "hash",
     "histogram_numeric",
-    "percentile",
-    "percentile_approx"
+    "percentile"
   )
 }
