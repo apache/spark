@@ -24,7 +24,6 @@ description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
 [Graph.outerJoinVertices]: api/scala/index.html#org.apache.spark.graphx.Graph@outerJoinVertices[U,VD2](RDD[(VertexId,U)])((VertexId,VD,Option[U])⇒VD2)(ClassTag[U],ClassTag[VD2]):Graph[VD2,ED]
 [Graph.aggregateMessages]: api/scala/index.html#org.apache.spark.graphx.Graph@aggregateMessages[A]((EdgeContext[VD,ED,A])⇒Unit,(A,A)⇒A,TripletFields)(ClassTag[A]):VertexRDD[A]
 [EdgeContext]: api/scala/index.html#org.apache.spark.graphx.EdgeContext
-[Graph.mapReduceTriplets]: api/scala/index.html#org.apache.spark.graphx.Graph@mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexId,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]
 [GraphOps.collectNeighborIds]: api/scala/index.html#org.apache.spark.graphx.GraphOps@collectNeighborIds(EdgeDirection):VertexRDD[Array[VertexId]]
 [GraphOps.collectNeighbors]: api/scala/index.html#org.apache.spark.graphx.GraphOps@collectNeighbors(EdgeDirection):VertexRDD[Array[(VertexId,VD)]]
 [RDD Persistence]: programming-guide.html#rdd-persistence
@@ -66,23 +65,6 @@ attached to each vertex and edge.  To support graph computation, GraphX exposes 
 operators (e.g., [subgraph](#structural_operators), [joinVertices](#join_operators), and
 [aggregateMessages](#aggregateMessages)) as well as an optimized variant of the [Pregel](#pregel) API. In addition, GraphX includes a growing collection of graph [algorithms](#graph_algorithms) and
 [builders](#graph_builders) to simplify graph analytics tasks.
-
-
-## Migrating from Spark 1.1
-
-GraphX in Spark 1.2 contains a few user facing API changes:
-
-1. To improve performance we have introduced a new version of
-[`mapReduceTriplets`][Graph.mapReduceTriplets] called
-[`aggregateMessages`][Graph.aggregateMessages] which takes the messages previously returned from
-[`mapReduceTriplets`][Graph.mapReduceTriplets] through a callback ([`EdgeContext`][EdgeContext])
-rather than by return value.
-We are deprecating [`mapReduceTriplets`][Graph.mapReduceTriplets] and encourage users to consult
-the [transition guide](#mrTripletsTransition).
-
-2. In Spark 1.0 and 1.1, the type signature of [`EdgeRDD`][EdgeRDD] switched from
-`EdgeRDD[ED]` to `EdgeRDD[ED, VD]` to enable some caching optimizations.  We have since discovered
-a more elegant solution and have restored the type signature to the more natural `EdgeRDD[ED]` type.
 
 # Getting Started
 
@@ -438,15 +420,15 @@ val graph = Graph(users, relationships, defaultUser)
 // Notice that there is a user 0 (for which we have no information) connected to users
 // 4 (peter) and 5 (franklin).
 graph.triplets.map(
-    triplet => triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
-  ).collect.foreach(println(_))
+  triplet => triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
+).collect.foreach(println(_))
 // Remove missing vertices as well as the edges to connected to them
 val validGraph = graph.subgraph(vpred = (id, attr) => attr._2 != "Missing")
 // The valid subgraph will disconnect users 4 and 5 by removing user 0
 validGraph.vertices.collect.foreach(println(_))
 validGraph.triplets.map(
-    triplet => triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
-  ).collect.foreach(println(_))
+  triplet => triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
+).collect.foreach(println(_))
 {% endhighlight %}
 
 > Note in the above example only the vertex predicate is provided.  The `subgraph` operator defaults
@@ -613,7 +595,7 @@ compute the average age of the more senior followers of each user.
 ### Map Reduce Triplets Transition Guide (Legacy)
 
 In earlier versions of GraphX neighborhood aggregation was accomplished using the
-[`mapReduceTriplets`][Graph.mapReduceTriplets] operator:
+`mapReduceTriplets` operator:
 
 {% highlight scala %}
 class Graph[VD, ED] {
@@ -624,7 +606,7 @@ class Graph[VD, ED] {
 }
 {% endhighlight %}
 
-The [`mapReduceTriplets`][Graph.mapReduceTriplets] operator takes a user defined map function which
+The `mapReduceTriplets` operator takes a user defined map function which
 is applied to each triplet and can yield *messages* which are aggregated using the user defined
 `reduce` function.
 However, we found the user of the returned iterator to be expensive and it inhibited our ability to

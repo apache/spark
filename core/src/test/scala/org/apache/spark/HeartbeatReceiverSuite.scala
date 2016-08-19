@@ -22,7 +22,6 @@ import java.util.concurrent.{ExecutorService, TimeUnit}
 import scala.collection.Map
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.mockito.Matchers
 import org.mockito.Matchers._
