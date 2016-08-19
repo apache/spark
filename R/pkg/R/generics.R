@@ -1332,3 +1332,7 @@ setGeneric("spark.gaussianMixture",
 #' @rdname write.ml
 #' @export
 setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })
+
+#' @rdname spark.als
+#' @export
+setGeneric("spark.als", function(data, ...) { standardGeneric("spark.als") })
