@@ -128,7 +128,7 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * (Scala-specific) Compute aggregates by specifying a map from column name to
+   * (Scala-specific) Compute aggregates by specifying the column names and
    * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
    *
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
