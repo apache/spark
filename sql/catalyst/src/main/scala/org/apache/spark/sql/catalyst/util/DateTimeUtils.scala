@@ -24,8 +24,6 @@ import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
 
-import org.apache.commons.lang3.time.FastDateFormat
-
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -63,11 +61,6 @@ object DateTimeUtils {
   final val MonthOf31Days = Set(1, 3, 5, 7, 8, 10, 12)
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
-
-  // These are ISO 8601 compliant `FastDateFormat`s. These are thread-safe and compatible
-  // with `SimpleDateFormat`.
-  val iso8601TimeFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSZZ")
-  val iso8601DateFormat = FastDateFormat.getInstance("yyyy-MM-dd")
 
   // Reuse the Calendar object in each thread as it is expensive to create in each method call.
   private val threadLocalGmtCalendar = new ThreadLocal[Calendar] {

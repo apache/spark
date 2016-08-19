@@ -77,27 +77,17 @@ private[sql] class JacksonGenerator(
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeString(row.getUTF8String(ordinal).toString)
 
-    case TimestampType if options.dateFormat != null =>
-      (row: SpecializedGetters, ordinal: Int) =>
-        val timestampString =
-          options.dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
-        gen.writeString(timestampString)
-
     case TimestampType =>
       (row: SpecializedGetters, ordinal: Int) =>
-        val timestamp = DateTimeUtils.toJavaTimestamp(row.getLong(ordinal))
-        gen.writeString(DateTimeUtils.iso8601TimeFormat.format(timestamp))
+        val timestampString =
+          options.timestampFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
+        gen.writeString(timestampString)
 
-    case DateType if options.dateFormat != null =>
+    case DateType =>
       (row: SpecializedGetters, ordinal: Int) =>
         val dateString =
           options.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
         gen.writeString(dateString)
-
-    case DateType =>
-      (row: SpecializedGetters, ordinal: Int) =>
-        val date = DateTimeUtils.toJavaDate(row.getInt(ordinal))
-        gen.writeString(DateTimeUtils.iso8601DateFormat.format(date))
 
     case BinaryType =>
       (row: SpecializedGetters, ordinal: Int) =>

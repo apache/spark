@@ -22,6 +22,7 @@ import java.nio.charset.UnsupportedCharsetException
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 
+import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
@@ -478,7 +479,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val options = Map(
       "header" -> "true",
       "inferSchema" -> "true",
-      "dateFormat" -> "dd/MM/yyyy HH:mm")
+      "timestampFormat" -> "dd/MM/yyyy HH:mm")
     val results = spark.read
       .format("csv")
       .options(options)
@@ -700,7 +701,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .format("csv")
         .option("inferSchema", "true")
         .option("header", "true")
-        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .option("timestampFormat", "dd/MM/yyyy HH:mm")
         .load(testFile(datesFile))
       timestamps.write
         .format("csv")
@@ -714,9 +715,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("inferSchema", "false")
         .load(iso8601timestampsPath)
 
+      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSZZ")
       val expectedTimestamps = timestamps.collect().map { r =>
         // This should be ISO8601 formatted string.
-        Row(DateTimeUtils.iso8601TimeFormat.format(r.toSeq.head))
+        Row(iso8501.format(r.toSeq.head))
       }
 
       checkAnswer(iso8601Timestamps, expectedTimestamps)
@@ -746,9 +748,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("inferSchema", "false")
         .load(iso8601datesPath)
 
+      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd")
       val expectedDates = dates.collect().map { r =>
         // This should be ISO8601 formatted string.
-        Row(DateTimeUtils.iso8601DateFormat.format(r.toSeq.head))
+        Row(iso8501.format(r.toSeq.head))
       }
 
       checkAnswer(iso8601dates, expectedDates)
@@ -819,12 +822,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .format("csv")
         .option("header", "true")
         .option("inferSchema", "true")
-        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .option("timestampFormat", "dd/MM/yyyy HH:mm")
         .load(testFile(datesFile))
       timestampsWithFormat.write
         .format("csv")
         .option("header", "true")
-        .option("dateFormat", "yyyy/MM/dd HH:mm")
+        .option("timestampFormat", "yyyy/MM/dd HH:mm")
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.

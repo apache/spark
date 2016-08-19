@@ -229,24 +229,12 @@ private[csv] class CsvOutputWriter(
 
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case DateType =>
-      if (params.dateFormat != null) {
-        (row: InternalRow, ordinal: Int) =>
-          params.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
-      } else {
-        (row: InternalRow, ordinal: Int) =>
-          val date = DateTimeUtils.toJavaDate(row.getInt(ordinal))
-          DateTimeUtils.iso8601DateFormat.format(date)
-      }
+      (row: InternalRow, ordinal: Int) =>
+        params.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
 
     case TimestampType =>
-      if (params.dateFormat != null) {
-        (row: InternalRow, ordinal: Int) =>
-          params.dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
-      } else {
-        (row: InternalRow, ordinal: Int) =>
-          val timestamp = DateTimeUtils.toJavaTimestamp(row.getLong(ordinal))
-          DateTimeUtils.iso8601TimeFormat.format(timestamp)
-      }
+      (row: InternalRow, ordinal: Int) =>
+        params.timestampFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
 
     case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
 

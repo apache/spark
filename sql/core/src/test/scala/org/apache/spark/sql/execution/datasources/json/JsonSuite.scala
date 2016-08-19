@@ -101,15 +101,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       DateTimeUtils.fromJavaDate(Date.valueOf(strDate)), enforceCorrectType(strDate, DateType))
 
     val ISO8601Time1 = "1970-01-01T01:00:01.0Z"
+    val ISO8601Time2 = "1970-01-01T02:00:01-01:00"
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(3601000)),
         enforceCorrectType(ISO8601Time1, TimestampType))
-    checkTypePromotion(DateTimeUtils.millisToDays(3601000),
-      enforceCorrectType(ISO8601Time1, DateType))
-    val ISO8601Time2 = "1970-01-01T02:00:01-01:00"
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(10801000)),
         enforceCorrectType(ISO8601Time2, TimestampType))
-    checkTypePromotion(DateTimeUtils.millisToDays(10801000),
-      enforceCorrectType(ISO8601Time2, DateType))
+
+    val ISO8601Date = "1970-01-01"
+    checkTypePromotion(DateTimeUtils.millisToDays(32400000),
+      enforceCorrectType(ISO8601Date, DateType))
   }
 
   test("Get compatible type") {
@@ -1701,11 +1701,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val timestampsWithFormatPath = s"${dir.getCanonicalPath}/timestampsWithFormat.json"
       val timestampsWithFormat = spark.read
         .schema(customSchema)
-        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .option("timestampFormat", "dd/MM/yyyy HH:mm")
         .json(datesRecords)
       timestampsWithFormat.write
         .format("json")
-        .option("dateFormat", "yyyy/MM/dd HH:mm")
+        .option("timestampFormat", "yyyy/MM/dd HH:mm")
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.

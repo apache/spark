@@ -56,7 +56,11 @@ private[sql] class JSONOptions(
 
   // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
   val dateFormat: FastDateFormat =
-    parameters.get("dateFormat").map(FastDateFormat.getInstance).orNull
+    FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"))
+
+  val timestampFormat: FastDateFormat =
+    FastDateFormat.getInstance(
+      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"))
 
   // Parse mode flags
   if (!ParseModes.isValidMode(parseMode)) {
