@@ -640,19 +640,34 @@ test_that("spark.lda with text input", {
   expect_true(all.equal(vocabulary, stats2$vocabulary))
 })
 
+test_that("spark.posterior and spark.perplexity", {
+  text <- read.text("data/mllib/sample_lda_data.txt")
+  model <- spark.lda(text, features = "value", k = 3)
+
+  # Assert perplexities are equal
+  stats <- summary(model)
+  logPerplexity <- spark.perplexity(model, text)
+  expect_equal(logPerplexity, stats$logPerplexity)
+
+  # Assert the sum of every topic distribution is equal to 1
+  posterior <- spark.posterior(model, text)
+  local.posterior <- collect(posterior)$topicDistribution
+  expect_equal(length(local.posterior), sum(unlist(local.posterior)))
+})
+
 test_that("spark.als", {
   data <- list(list(0, 0, 4.0), list(0, 1, 2.0), list(1, 1, 3.0), list(1, 2, 4.0),
-               list(2, 1, 1.0), list(2, 2, 5.0))
+  list(2, 1, 1.0), list(2, 2, 5.0))
   df <- createDataFrame(data, c("user", "item", "score"))
   model <- spark.als(df, ratingCol = "score", userCol = "user", itemCol = "item",
-                     rank = 10, maxIter = 5, seed = 0, reg = 0.1)
+  rank = 10, maxIter = 5, seed = 0, reg = 0.1)
   stats <- summary(model)
   expect_equal(stats$rank, 10)
   test <- createDataFrame(list(list(0, 2), list(1, 0), list(2, 0)), c("user", "item"))
   predictions <- collect(predict(model, test))
 
   expect_equal(predictions$prediction, c(-0.1380762, 2.6258414, -1.5018409),
-               tolerance = 1e-4)
+  tolerance = 1e-4)
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-als", fileext = ".tmp")
@@ -678,21 +693,6 @@ test_that("spark.als", {
   expect_equal(itemFactors$features[orderItem], itemFactors2$features[orderItem2])
 
   unlink(modelPath)
-})
-
-test_that("spark.posterior and spark.perplexity", {
-  text <- read.text("data/mllib/sample_lda_data.txt")
-  model <- spark.lda(text, features = "value", k = 3)
-
-  # Assert perplexities are equal
-  stats <- summary(model)
-  logPerplexity <- spark.perplexity(model, text)
-  expect_equal(logPerplexity, stats$logPerplexity)
-
-  # Assert the sum of every topic distribution is equal to 1
-  posterior <- spark.posterior(model, text)
-  local.posterior <- collect(posterior)$topicDistribution
-  expect_equal(length(local.posterior), sum(unlist(local.posterior)))
 })
 
 sparkR.session.stop()
