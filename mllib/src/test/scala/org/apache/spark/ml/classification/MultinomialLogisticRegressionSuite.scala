@@ -167,9 +167,13 @@ class MultinomialLogisticRegressionSuite
     val interceptsR = Vectors.dense(-2.2449338, 0.3778931, 1.8670407)
 
     assert(model1.coefficients ~== coefficientsR relTol 0.05)
+    assert(model1.coefficients.toArray.sum ~== 0.0 absTol eps)
     assert(model1.intercepts ~== interceptsR relTol 0.05)
+    assert(model1.intercepts.toArray.sum ~== 0.0 absTol eps)
     assert(model2.coefficients ~== coefficientsR relTol 0.05)
+    assert(model2.coefficients.toArray.sum ~== 0.0 absTol eps)
     assert(model2.intercepts ~== interceptsR relTol 0.05)
+    assert(model2.intercepts.toArray.sum ~== 0.0 absTol eps)
   }
 
   test("multinomial logistic regression without intercept without regularization") {
@@ -223,9 +227,13 @@ class MultinomialLogisticRegressionSuite
       0.2337022, -0.5793351, 0.1056770, 0.1159618), isTransposed = true)
 
     assert(model1.coefficients ~== coefficientsR relTol 0.05)
-    assert(model2.coefficients ~== coefficientsR relTol 0.05)
+    assert(model1.coefficients.toArray.sum ~== 0.0 absTol eps)
     assert(model1.intercepts.toArray === Array.fill(3)(0.0))
+    assert(model1.intercepts.toArray.sum ~== 0.0 absTol eps)
+    assert(model2.coefficients ~== coefficientsR relTol 0.05)
+    assert(model2.coefficients.toArray.sum ~== 0.0 absTol eps)
     assert(model2.intercepts.toArray === Array.fill(3)(0.0))
+    assert(model2.intercepts.toArray.sum ~== 0.0 absTol eps)
   }
 
   test("multinomial logistic regression with intercept with L1 regularization") {
@@ -322,8 +330,10 @@ class MultinomialLogisticRegressionSuite
 
     assert(model1.coefficients ~== coefficientsRStd absTol 0.02)
     assert(model1.intercepts ~== interceptsRStd relTol 0.1)
+    assert(model1.intercepts.toArray.sum ~== 0.0 absTol eps)
     assert(model2.coefficients ~== coefficientsR absTol 0.02)
     assert(model2.intercepts ~== interceptsR relTol 0.1)
+    assert(model2.intercepts.toArray.sum ~== 0.0 absTol eps)
   }
 
   test("multinomial logistic regression without intercept with L1 regularization") {
@@ -412,9 +422,11 @@ class MultinomialLogisticRegressionSuite
       0.0, 0.0, 0.0, 0.0), isTransposed = true)
 
     assert(model1.coefficients ~== coefficientsRStd absTol 0.01)
-    assert(model2.coefficients ~== coefficientsR absTol 0.01)
     assert(model1.intercepts.toArray === Array.fill(3)(0.0))
+    assert(model1.intercepts.toArray.sum ~== 0.0 absTol eps)
+    assert(model2.coefficients ~== coefficientsR absTol 0.01)
     assert(model2.intercepts.toArray === Array.fill(3)(0.0))
+    assert(model2.intercepts.toArray.sum ~== 0.0 absTol eps)
   }
 
   test("multinomial logistic regression with intercept with L2 regularization") {
@@ -506,8 +518,10 @@ class MultinomialLogisticRegressionSuite
 
     assert(model1.coefficients ~== coefficientsRStd relTol 0.05)
     assert(model1.intercepts ~== interceptsRStd relTol 0.05)
+    assert(model1.intercepts.toArray.sum ~== 0.0 absTol eps)
     assert(model2.coefficients ~== coefficientsR relTol 0.05)
     assert(model2.intercepts ~== interceptsR relTol 0.05)
+    assert(model2.intercepts.toArray.sum ~== 0.0 absTol eps)
   }
 
   test("multinomial logistic regression without intercept with L2 regularization") {
@@ -595,8 +609,10 @@ class MultinomialLogisticRegressionSuite
 
     assert(model1.coefficients ~== coefficientsRStd absTol 0.01)
     assert(model1.intercepts.toArray === Array.fill(3)(0.0))
+    assert(model1.intercepts.toArray.sum ~== 0.0 absTol eps)
     assert(model2.coefficients ~== coefficientsR absTol 0.01)
     assert(model2.intercepts.toArray === Array.fill(3)(0.0))
+    assert(model2.intercepts.toArray.sum ~== 0.0 absTol eps)
   }
 
   test("multinomial logistic regression with intercept with elasticnet regularization") {
@@ -690,9 +706,12 @@ class MultinomialLogisticRegressionSuite
 
     assert(model1.coefficients ~== coefficientsRStd absTol 0.01)
     assert(model1.intercepts ~== interceptsRStd absTol 0.01)
+    assert(model1.intercepts.toArray.sum ~== 0.0 absTol eps)
     assert(model2.coefficients ~== coefficientsR absTol 0.01)
     assert(model2.intercepts ~== interceptsR absTol 0.01)
+    assert(model2.intercepts.toArray.sum ~== 0.0 absTol eps)
   }
+
   test("multinomial logistic regression without intercept with elasticnet regularization") {
     val trainer1 = (new MultinomialLogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.5).setRegParam(0.1).setStandardization(true)
@@ -781,9 +800,18 @@ class MultinomialLogisticRegressionSuite
 
     assert(model1.coefficients ~== coefficientsRStd absTol 0.01)
     assert(model1.intercepts.toArray === Array.fill(3)(0.0))
+    assert(model1.intercepts.toArray.sum ~== 0.0 absTol eps)
     assert(model2.coefficients ~== coefficientsR absTol 0.01)
     assert(model2.intercepts.toArray === Array.fill(3)(0.0))
+    assert(model2.intercepts.toArray.sum ~== 0.0 absTol eps)
   }
+
+  /*
+  test("multinomial logistic regression with intercept with strong L1 regularization") {
+    // TODO: implement this test to check that the priors on the intercepts are correct
+    // TODO: when initial model becomes available
+  }
+   */
 
   test("prediction") {
     val model = new MultinomialLogisticRegressionModel("mLogReg",
@@ -878,8 +906,7 @@ class MultinomialLogisticRegressionSuite
     val thrown = intercept[IllegalArgumentException] {
       mlr.fit(df1)
     }
-    assert(thrown.getMessage.contains(
-      "less than the number of unique labels"))
+    assert(thrown.getMessage.contains("less than the number of unique labels"))
 
     // mlr should infer the number of classes if not specified
     val model3 = mlr.fit(dataset)
@@ -892,9 +919,6 @@ class MultinomialLogisticRegressionSuite
       LabeledPoint(4.0, Vectors.dense(1.0)),
       LabeledPoint(4.0, Vectors.dense(2.0)))
     )
-    val labelMeta = NominalAttribute.defaultAttr.withName("label").withNumValues(6).toMetadata()
-    val constantDataWithMetadata = constantData
-      .select(constantData("label").as("label", labelMeta), constantData("features"))
     val mlr = new MultinomialLogisticRegression
     val model = mlr.fit(constantData)
     val results = model.transform(constantData)
@@ -905,8 +929,25 @@ class MultinomialLogisticRegressionSuite
         assert(pred === 4.0)
     }
 
+    // force the model to be trained with only one class
+    val constantZeroData = spark.createDataFrame(Seq(
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(0.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0)))
+    )
+    val modelZeroLabel = mlr.setFitIntercept(false).fit(constantZeroData)
+    val resultsZero = modelZeroLabel.transform(constantZeroData)
+    resultsZero.select("rawPrediction", "probability", "prediction").collect().foreach {
+      case Row(raw: Vector, prob: Vector, pred: Double) =>
+        assert(prob === Vectors.dense(Array(1.0)))
+        assert(pred === 0.0)
+    }
+
     // ensure that the correct value is predicted when numClasses passed through metadata
-    val modelWithMetadata = mlr.fit(constantDataWithMetadata)
+    val labelMeta = NominalAttribute.defaultAttr.withName("label").withNumValues(6).toMetadata()
+    val constantDataWithMetadata = constantData
+      .select(constantData("label").as("label", labelMeta), constantData("features"))
+    val modelWithMetadata = mlr.setFitIntercept(true).fit(constantDataWithMetadata)
     val resultsWithMetadata = modelWithMetadata.transform(constantDataWithMetadata)
     resultsWithMetadata.select("rawPrediction", "probability", "prediction").collect().foreach {
       case Row(raw: Vector, prob: Vector, pred: Double) =>
@@ -967,7 +1008,6 @@ class MultinomialLogisticRegressionSuite
     assert(scaledPredictions.zip(basePredictions).forall { case (scaled, base) =>
       scaled.getDouble(0) === base.getDouble(0)
     })
-
   }
 
   test("read/write") {

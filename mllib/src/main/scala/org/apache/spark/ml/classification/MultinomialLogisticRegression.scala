@@ -292,14 +292,15 @@ class MultinomialLogisticRegression @Since("2.1.0") (
                P(1) = \exp(b_1) / Z
                ...
                P(K) = \exp(b_K) / Z
+               where Z = \sum_{k=1}^{K} \exp(b_k)
              }}}
-             Where Z is a normalizing constant. Hence,
+             Since this doesn't have a unique solution, one of the solutions that satisfies the
+             above equations is
              {{{
-              b_k = \log(P(k)) + \log(Z)
-                  = \log(count_k) - \log(count) + \log(Z)
-                  = \log(count_k) + \lambda
+               \exp(b_k) = count_k * \exp(\lambda)
+               b_k = \log(count_k) * \lambda
              }}}
-             The solution to this is not identifiable, so choose the phase \lambda such that the
+             \lambda is a free parameter, so choose the phase \lambda such that the
              mean is centered. This yields
              {{{
                b_k = \log(count_k)
@@ -447,8 +448,8 @@ class MultinomialLogisticRegressionModel private[spark] (
   private val scores: Vector => Vector = (features) => {
     val m = margins(features)
     val maxMarginIndex = m.argmax
-    val maxMargin = m(maxMarginIndex)
     val marginArray = m.toArray
+    val maxMargin = marginArray(maxMarginIndex)
 
     // adjust margins for overflow
     val sum = {
