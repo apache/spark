@@ -135,7 +135,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val dtModel = dt.fit(df)
     val dtVariances = dtModel.transform(df).select("variance").collect()
     val nSamples = dtVariances.size
-    (0 to nSamples - 1).foreach { i =>
+    (0 until nSamples).foreach { i =>
       assert(rfVariances(i).getDouble(0) ~== dtVariances(i).getDouble(0) absTol 1e-6)
     }
 
@@ -143,15 +143,14 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     rf.setNumTrees(20)
     val rfNewModel = rf.fit(df)
     val results = rfNewModel.transform(df).select("features", "variance").collect()
-    val features = col("features")
     val trees = rfNewModel.trees
     val numTrees = rfNewModel.getNumTrees
-    results.map { case Row(features: Vector, variance: Double) =>
-      val rootNodes = trees.map(_.rootNode.predictImpl(features))
-      val predsquared = rootNodes.map(x => math.pow(x.prediction, 2)).sum / numTrees
-      val treeVariance = rootNodes.map(_.impurityStats.calculate()).sum / numTrees
-      val predictions = rootNodes.map(_.prediction).sum / numTrees
-      val expectedVariance = -math.pow(predictions, 2) + treeVariance + predsquared
+    results.foreach { case Row(features: Vector, variance: Double) =>
+      val predEachTree = trees.map(_.rootNode.predictImpl(features))
+      val avgPredSquared = predEachTree.map(x => math.pow(x.prediction, 2)).sum / numTrees
+      val treeVariance = predEachTree.map(_.impurityStats.calculate()).sum / numTrees
+      val avgPrediction = predEachTree.map(_.prediction).sum / numTrees
+      val expectedVariance = -math.pow(avgPrediction, 2) + treeVariance + avgPredSquared
       assert(variance === expectedVariance,
         s"Expected variance $expectedVariance but got $variance.")
     }

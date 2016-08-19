@@ -95,7 +95,7 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
     super.setFeatureSubsetStrategy(value)
 
   @Since("2.1.0")
-  /** @group getParam */
+  /** @group setParam */
   def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
   override protected def train(dataset: Dataset[_]): RandomForestRegressionModel = {
@@ -174,7 +174,7 @@ class RandomForestRegressionModel private[ml] (
   private lazy val _treeWeights: Array[Double] = Array.fill[Double](_trees.length)(1.0)
 
   @Since("2.1.0")
-  /** @group getParam */
+  /** @group setParam */
   def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
   @Since("1.4.0")
@@ -202,8 +202,7 @@ class RandomForestRegressionModel private[ml] (
     val predictVarianceUDF = udf { (features: Any) =>
       bcastModel.value.predictVariance(features.asInstanceOf[Vector])
     }
-    output = output.withColumn($(varianceCol), predictVarianceUDF(col($(featuresCol))))
-    output.toDF
+    output.withColumn($(varianceCol), predictVarianceUDF(col($(featuresCol)))).toDF
   }
 
   override protected def predict(features: Vector): Double = {
