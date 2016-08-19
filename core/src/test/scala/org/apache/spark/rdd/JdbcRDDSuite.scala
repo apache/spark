@@ -90,7 +90,7 @@ class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkCont
       sc,
       () => { DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb") },
       "SELECT DATA FROM FOO ORDER BY ID OFFSET ? ROWS  FETCH NEXT ? ROWS ONLY",
-      1, 10, 10,
+      0, 10, 10,
       (r: ResultSet) => { r.getInt(1) } ).cache()
 
     assert(rdd.count === 100)
