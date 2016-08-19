@@ -609,7 +609,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 object CombineScanners extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case Project(fields, child: Scanner) if fields.forall(_.deterministic) =>
+    case Project(fields, child: Scanner) =>
       val aliasMap = AttributeMap(child.projectList.collect {
         case a: Alias => (a.toAttribute, a)
       })
@@ -1074,15 +1074,26 @@ object DecimalAggregates extends Rule[LogicalPlan] {
 /**
  * Converts local operations (i.e. ones that don't require data exchange) on LocalRelation to
  * another LocalRelation.
- *
- * This is relatively simple as it currently handles only a single case: Project.
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Project(projectList, LocalRelation(output, data))
+    case scanner @ Scanner(projectList, filters, LocalRelation(output, data))
         if !projectList.exists(hasUnevaluableExpr) =>
+      val aliasMap = projectList.collect {
+        case a: Alias => a.child -> a.toAttribute
+      }.toMap
+
       val projection = new InterpretedProjection(projectList, output)
-      LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+      val newProjectList = projectList.map(_.toAttribute)
+      val newFilters = filters.map { filter =>
+        filter.transformUp {
+          case a : Attribute =>
+            aliasMap.getOrElse(a, a)
+        }
+      }
+      val newRelation = LocalRelation(newProjectList, data.map(projection))
+
+      Scanner(newProjectList, newFilters, newRelation)
   }
 
   private def hasUnevaluableExpr(expr: Expression): Boolean = {
