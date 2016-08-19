@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, TypedImperativeAggregate}
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 /**
@@ -54,7 +54,15 @@ class SortBasedAggregationIterator(
     val bufferRowSize: Int = bufferSchema.length
 
     val genericMutableBuffer = new GenericMutableRow(bufferRowSize)
-    val useUnsafeBuffer = bufferSchema.map(_.dataType).forall(UnsafeRow.isMutable)
+
+    val allFieldsMutable = bufferSchema.map(_.dataType).forall(UnsafeRow.isMutable)
+
+    val hasTypedImperativeAggregate = aggregateFunctions.exists {
+      case agg: TypedImperativeAggregate[_] => true
+      case _ => false
+    }
+
+    val useUnsafeBuffer = allFieldsMutable && !hasTypedImperativeAggregate
 
     val buffer = if (useUnsafeBuffer) {
       val unsafeProjection =
@@ -89,6 +97,24 @@ class SortBasedAggregationIterator(
   // A SafeProjection to turn UnsafeRow into GenericInternalRow, because UnsafeRow can't be
   // compared to MutableRow (aggregation buffer) directly.
   private[this] val safeProj: Projection = FromUnsafeProjection(valueAttributes.map(_.dataType))
+
+  // Aggregation function which uses generic aggregation buffer object.
+  // @see [[TypedImperativeAggregate]] for more information
+  private val typedImperativeAggregates: Array[TypedImperativeAggregate[_]] = {
+    aggregateFunctions.collect {
+      case (ag: TypedImperativeAggregate[_]) => ag
+    }
+  }
+
+  // For TypedImperativeAggregate with generic aggregation buffer object, we need to call
+  // serializeAggregateBufferInPlace(...) explicitly to convert the aggregation buffer object
+  // to Spark Sql internally supported serializable storage format.
+  private def serializeTypedAggregateBuffer(aggregationBuffer: MutableRow): Unit = {
+    typedImperativeAggregates.foreach { agg =>
+      // In-place serialization
+      agg.serializeAggregateBufferInPlace(sortBasedAggregationBuffer)
+    }
+  }
 
   protected def initialize(): Unit = {
     if (inputIterator.hasNext) {
@@ -131,6 +157,11 @@ class SortBasedAggregationIterator(
         firstRowInNextGroup = currentRow.copy()
       }
     }
+
+    // Serializes the generic object stored in aggregation buffer for TypedImperativeAggregate
+    // aggregation functions.
+    serializeTypedAggregateBuffer(sortBasedAggregationBuffer)
+
     // We have not seen a new group. It means that there is no new row in the input
     // iter. The current group is the last group of the iter.
     if (!findNextPartition) {
@@ -162,6 +193,9 @@ class SortBasedAggregationIterator(
 
   def outputForEmptyGroupingKeyWithoutInput(): UnsafeRow = {
     initializeBuffer(sortBasedAggregationBuffer)
+    // Serializes the generic object stored in aggregation buffer for TypedImperativeAggregate
+    // aggregation functions.
+    serializeTypedAggregateBuffer(sortBasedAggregationBuffer)
     generateOutput(UnsafeRow.createFromByteArray(0, 0), sortBasedAggregationBuffer)
   }
 }
