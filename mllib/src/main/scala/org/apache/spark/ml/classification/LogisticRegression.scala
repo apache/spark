@@ -48,7 +48,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-  with HasStandardization with HasWeightCol with HasThreshold with HasTreeDepth{
+  with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth{
 
   /**
    * Set threshold in binary classification, in range [0, 1].
@@ -257,13 +257,15 @@ class LogisticRegression @Since("1.2.0") (
   override def getThresholds: Array[Double] = super.getThresholds
 
   /**
-   * Set suggested depth for treeAggregate or treeReduce (>= 2).
+   * Suggested depth for treeAggregate (>= 2).
+   * If the dimensions of features or the number of partitions are large,
+   * this param could be adjusted to a larger size.
    * Default is 2.
-   * @group setParam
+   * @group expertParam
    */
   @Since("2.1.0")
-  def setTreeDepth(value: Int): this.type = set(treeDepth, value)
-  setDefault(treeDepth -> 2)
+  def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
+  setDefault(aggregationDepth -> 2)
 
   private var optInitialModel: Option[LogisticRegressionModel] = None
 
@@ -303,7 +305,8 @@ class LogisticRegression @Since("1.2.0") (
           (c1._1.merge(c2._1), c1._2.merge(c2._2))
 
       instances.treeAggregate(
-        new MultivariateOnlineSummarizer, new MultiClassSummarizer)(seqOp, combOp, $(treeDepth))
+        new MultivariateOnlineSummarizer, new MultiClassSummarizer
+      )(seqOp, combOp, $(aggregationDepth))
     }
 
     val histogram = labelSummarizer.histogram
@@ -367,7 +370,7 @@ class LogisticRegression @Since("1.2.0") (
 
         val bcFeaturesStd = instances.context.broadcast(featuresStd)
         val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept),
-          $(standardization), bcFeaturesStd, regParamL2, multinomial = false, $(treeDepth))
+          $(standardization), bcFeaturesStd, regParamL2, multinomial = false, $(aggregationDepth))
 
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
           new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -1341,7 +1344,7 @@ private class LogisticCostFun(
     bcFeaturesStd: Broadcast[Array[Double]],
     regParamL2: Double,
     multinomial: Boolean,
-    treeDepth: Int) extends DiffFunction[BDV[Double]] {
+    depth: Int) extends DiffFunction[BDV[Double]] {
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val coeffs = Vectors.fromBreeze(coefficients)
@@ -1356,7 +1359,7 @@ private class LogisticCostFun(
       instances.treeAggregate(
         new LogisticAggregator(bcCoeffs, bcFeaturesStd, numClasses, fitIntercept,
           multinomial)
-      )(seqOp, combOp, treeDepth)
+      )(seqOp, combOp, depth)
     }
 
     val totalGradientArray = logisticAggregator.gradient.toArray

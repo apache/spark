@@ -334,10 +334,10 @@ private[ml] trait HasElasticNetParam extends Params {
 private[ml] trait HasTol extends Params {
 
   /**
-   * Param for the convergence tolerance for iterative algorithms.
+   * Param for the convergence tolerance for iterative algorithms (>= 0).
    * @group param
    */
-  final val tol: DoubleParam = new DoubleParam(this, "tol", "the convergence tolerance for iterative algorithms")
+  final val tol: DoubleParam = new DoubleParam(this, "tol", "the convergence tolerance for iterative algorithms (>= 0)", ParamValidators.gtEq(0))
 
   /** @group getParam */
   final def getTol: Double = $(tol)
@@ -349,10 +349,10 @@ private[ml] trait HasTol extends Params {
 private[ml] trait HasStepSize extends Params {
 
   /**
-   * Param for Step size to be used for each iteration of optimization.
+   * Param for Step size to be used for each iteration of optimization (> 0).
    * @group param
    */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization")
+  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization (> 0)", ParamValidators.gt(0))
 
   /** @group getParam */
   final def getStepSize: Double = $(stepSize)
@@ -391,19 +391,19 @@ private[ml] trait HasSolver extends Params {
 }
 
 /**
- * Trait for shared param treeDepth (default: 2).
+ * Trait for shared param aggregationDepth (default: 2).
  */
-private[ml] trait HasTreeDepth extends Params {
+private[ml] trait HasAggregationDepth extends Params {
 
   /**
-   * Param for suggested depth for treeAggregate or treeReduce (>= 2).
+   * Param for suggested depth for treeAggregate (>= 2).
    * @group param
    */
-  final val treeDepth: IntParam = new IntParam(this, "treeDepth", "suggested depth for treeAggregate or treeReduce (>= 2)", ParamValidators.gtEq(2))
+  final val aggregationDepth: IntParam = new IntParam(this, "aggregationDepth", "suggested depth for treeAggregate (>= 2)", ParamValidators.gtEq(2))
 
-  setDefault(treeDepth, 2)
+  setDefault(aggregationDepth, 2)
 
   /** @group getParam */
-  final def getTreeDepth: Int = $(treeDepth)
+  final def getAggregationDepth: Int = $(aggregationDepth)
 }
 // scalastyle:on

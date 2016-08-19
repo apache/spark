@@ -53,7 +53,7 @@ import org.apache.spark.storage.StorageLevel
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
     with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
-    with HasTreeDepth
+    with HasAggregationDepth
 
 /**
  * Linear regression.
@@ -174,13 +174,15 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   setDefault(solver -> "auto")
 
   /**
-   * Set suggested depth for treeAggregate or treeReduce (>= 2).
+   * Suggested depth for treeAggregate (>= 2).
+   * If the dimensions of features or the number of partitions are large,
+   * this param could be adjusted to a larger size.
    * Default is 2.
-   * @group setParam
+   * @group expertParam
    */
   @Since("2.1.0")
-  def setTreeDepth(value: Int): this.type = set(treeDepth, value)
-  setDefault(treeDepth -> 2)
+  def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
+  setDefault(aggregationDepth -> 2)
 
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = {
     // Extract the number of features before deciding optimization solver.
@@ -241,7 +243,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
       instances.treeAggregate(
         new MultivariateOnlineSummarizer, new MultivariateOnlineSummarizer
-      )(seqOp, combOp, $(treeDepth))
+      )(seqOp, combOp, $(aggregationDepth))
     }
 
     val yMean = ySummarizer.mean(0)
@@ -307,7 +309,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val effectiveL2RegParam = (1.0 - $(elasticNetParam)) * effectiveRegParam
 
     val costFun = new LeastSquaresCostFun(instances, yStd, yMean, $(fitIntercept),
-      $(standardization), bcFeaturesStd, bcFeaturesMean, effectiveL2RegParam, $(treeDepth))
+      $(standardization), bcFeaturesStd, bcFeaturesMean, effectiveL2RegParam, $(aggregationDepth))
 
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -1028,7 +1030,7 @@ private class LeastSquaresCostFun(
     bcFeaturesStd: Broadcast[Array[Double]],
     bcFeaturesMean: Broadcast[Array[Double]],
     effectiveL2regParam: Double,
-    treeDepth: Int) extends DiffFunction[BDV[Double]] {
+    depth: Int) extends DiffFunction[BDV[Double]] {
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val coeffs = Vectors.fromBreeze(coefficients)
@@ -1041,7 +1043,7 @@ private class LeastSquaresCostFun(
 
       instances.treeAggregate(
         new LeastSquaresAggregator(bcCoeffs, labelStd, labelMean, fitIntercept, bcFeaturesStd,
-          bcFeaturesMean))(seqOp, combOp, treeDepth)
+          bcFeaturesMean))(seqOp, combOp, depth)
     }
 
     val totalGradientArray = leastSquaresAggregator.gradient.toArray
