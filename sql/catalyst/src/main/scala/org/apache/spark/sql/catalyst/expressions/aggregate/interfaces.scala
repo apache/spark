@@ -389,3 +389,89 @@ abstract class DeclarativeAggregate
     def right: AttributeReference = inputAggBufferAttributes(aggBufferAttributes.indexOf(a))
   }
 }
+
+/**
+ * This traits allow user to define an AggregateFunction which can store **arbitrary** Java objects
+ * in Aggregation buffer during aggregation of each key group. This trait must be mixed with
+ * class ImperativeAggregate.
+ *
+ * Here is how it works in a typical aggregation flow (Partial mode aggregate at Mapper side, and
+ * Final mode aggregate at Reducer side).
+ *
+ * Stage 1: Partial aggregate at Mapper side:
+ *
+ *  1. Upon calling method `initialize(aggBuffer: MutableRow)`, user stores an arbitrary empty
+ *    object, object A for example, in aggBuffer. The object A will be used to store the
+ *    accumulated aggregation result.
+ *  1. Upon calling method `update(mutableAggBuffer: MutableRow, inputRow: InternalRow)` in
+ *    current group (group by key), user extracts object A from mutableAggBuffer, and then updates
+ *    object A with current inputRow. After updating, object A is stored back to mutableAggBuffer.
+ *  1. After processing all rows of current group, the framework will call method
+ *    `serializeObjectAggregationBufferInPlace(aggregationBuffer: MutableRow)` to serialize object A
+ *    to a serializable format in place.
+ *  1. The framework may spill the aggregationBuffer to disk if there is not enough memory.
+ *    It is safe since we have already convert aggregationBuffer to serializable format.
+ *  1. Spark framework moves on to next group, until all groups have been
+ *    processed.
+ *
+ * Shuffling exchange data to Reducer tasks...
+ *
+ * Stage 2: Final mode aggregate at Reducer side:
+ *
+ *  1. Upon calling method `initialize(aggBuffer: MutableRow)`, user stores a new empty object A1
+ *    in aggBuffer. The object A1 will be used to store the accumulated aggregation result.
+ *  1. Upon calling method `merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow)`, user
+ *    extracts object A1 from mutableAggBuffer, and extracts object A2 from inputAggBuffer. then
+ *    user needs to merge A1, and A2, and stores the merged result back to mutableAggBuffer.
+ *  1. After processing all inputAggBuffer of current group (group by key), the Spark framework will
+ *    call method `serializeObjectAggregationBufferInPlace(aggregationBuffer: MutableRow)` to
+ *    serialize object A1 to a serializable format in place.
+ *  1. The Spark framework may spill the aggregationBuffer to disk if there is not enough memory.
+ *    It is safe since we have already convert aggregationBuffer to serializable format.
+ *  1. Spark framework moves on to next group, until all groups have been processed.
+ */
+trait WithObjectAggregateBuffer {
+  this: ImperativeAggregate =>
+
+  /**
+   * Serializes and in-place replaces the object stored in Aggregation buffer. The framework
+   * calls this method every time after finishing updating/merging one group (group by key).
+   *
+   * aggregationBuffer before serialization:
+   *
+   * The object stored in aggregationBuffer can be **arbitrary** Java objects defined by user.
+   *
+   * aggregationBuffer after serialization:
+   *
+   * The object's type must be one of:
+   *
+   *  - Null
+   *  - Boolean
+   *  - Byte
+   *  - Short
+   *  - Int
+   *  - Long
+   *  - Float
+   *  - Double
+   *  - Array[Byte]
+   *  - org.apache.spark.sql.types.Decimal
+   *  - org.apache.spark.unsafe.types.UTF8String
+   *  - org.apache.spark.unsafe.types.CalendarInterval
+   *  - org.apache.spark.sql.catalyst.util.MapData
+   *  - org.apache.spark.sql.catalyst.util.ArrayData
+   *  - org.apache.spark.sql.catalyst.InternalRow
+   *
+   * Code example:
+   *
+   * {{{
+   *   override def serializeObjectAggregationBufferInPlace(aggregationBuffer: MutableRow): Unit = {
+   *     val obj = buffer.get(mutableAggBufferOffset, ObjectType(classOf[A])).asInstanceOf[A]
+   *     // Convert the obj to bytes, which is a serializable format.
+   *     buffer(mutableAggBufferOffset) = toBytes(obj)
+   *   }
+   * }}}
+   *
+   * @param aggregationBuffer aggregation buffer before serialization
+   */
+  def serializeObjectAggregationBufferInPlace(aggregationBuffer: MutableRow): Unit
+}
