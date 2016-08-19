@@ -29,7 +29,8 @@ exportMethods("glm",
               "spark.posterior",
               "spark.perplexity",
               "spark.isoreg",
-              "spark.gaussianMixture")
+              "spark.gaussianMixture",
+              "spark.als")
 
 # Job group lifecycle management methods
 export("setJobGroup",
