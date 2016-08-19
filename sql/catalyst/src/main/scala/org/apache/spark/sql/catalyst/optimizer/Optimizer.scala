@@ -2074,9 +2074,11 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer) extends Rule[LogicalPl
   // Optimized the subqueries which all have a Project parent node and the same results.
   private def optimizeProjectWithSubqueries(
       plan: LogicalPlan,
+      keyPlan: LogicalPlan,
       subqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
     plan transform {
-      case p @ Project(pList, SubqueryAlias(alias, subquery, v, true)) =>
+      case p @ Project(pList, s @ SubqueryAlias(alias, subquery, v, true))
+          if s.sameResult(keyPlan) =>
         val pListForAll: Seq[NamedExpression] = subqueries.flatMap { case Project(pList, child) =>
           val rewrites = buildRewrites(child, subquery)
           pList.map(pushToOtherPlan(_, rewrites))
@@ -2089,7 +2091,7 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer) extends Rule[LogicalPl
           // No optimization happens. Let's keep original subquery.
           p
         } else {
-          Project(pList, SubqueryAlias(alias, newSubquery, v, true))
+          Project(pList.map(_.toAttribute), SubqueryAlias(alias, newSubquery, v, true))
         }
     }
   }
@@ -2117,9 +2119,10 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer) extends Rule[LogicalPl
 
   private def optimizeFilterWithSubqueries(
       plan: LogicalPlan,
+      keyPlan: LogicalPlan,
       subqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
     plan transform {
-      case f @ Filter(cond, SubqueryAlias(alias, subquery, v, true)) =>
+      case f @ Filter(cond, s @ SubqueryAlias(alias, subquery, v, true)) if s.sameResult(keyPlan) =>
         val conditionForAll: Expression = subqueries.map { case Filter(otherCond, child) =>
           val rewrites = buildRewrites(child, subquery)
           pushToOtherPlan(otherCond, rewrites)
@@ -2169,15 +2172,15 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer) extends Rule[LogicalPl
     // 1. All subqueries have a Project on them.
     // 2. All subqueries have a Filter on them.
     var currentPlan = plan
-    subqueryMap.map { case (_, subqueries) =>
+    subqueryMap.map { case (key, subqueries) =>
       if (subqueries.length > 1) {
         val allProject = subqueries.forall(_.isInstanceOf[Project])
         if (allProject) {
-          currentPlan = optimizeProjectWithSubqueries(currentPlan, subqueries)
+          currentPlan = optimizeProjectWithSubqueries(currentPlan, key, subqueries)
         } else {
           val allFilter = subqueries.forall(_.isInstanceOf[Filter])
           if (allFilter) {
-            currentPlan = optimizeFilterWithSubqueries(currentPlan, subqueries)
+            currentPlan = optimizeFilterWithSubqueries(currentPlan, key, subqueries)
           }
         }
       }
