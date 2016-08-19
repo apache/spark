@@ -100,7 +100,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val acc: Accumulator[Int] = sc.accumulator(0)
 
     val d = sc.parallelize(1 to 20)
-    an [Exception] should be thrownBy {d.foreach{x => acc.value = x}}
+    an [SparkException] should be thrownBy {d.foreach{x => acc.value = x}}
   }
 
   test ("add value to collection accumulators") {
