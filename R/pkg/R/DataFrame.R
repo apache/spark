@@ -138,7 +138,7 @@ setMethod("schema",
 #' @note explain since 1.4.0
 setMethod("explain",
           signature(x = "SparkDataFrame"),
-          function(x, extended = FALSE, ...) {
+          function(x, extended = FALSE) {
             queryExec <- callJMethod(x@sdf, "queryExecution")
             if (extended) {
               cat(callJMethod(queryExec, "toString"))
@@ -541,7 +541,7 @@ setMethod("registerTempTable",
 #' @note insertInto since 1.4.0
 setMethod("insertInto",
           signature(x = "SparkDataFrame", tableName = "character"),
-          function(x, tableName, overwrite = FALSE, ...) {
+          function(x, tableName, overwrite = FALSE) {
             jmode <- convertToJSaveMode(ifelse(overwrite, "overwrite", "append"))
             write <- callJMethod(x@sdf, "write")
             write <- callJMethod(write, "mode", jmode)
@@ -631,7 +631,7 @@ setMethod("persist",
 #' @note unpersist since 1.4.0
 setMethod("unpersist",
           signature(x = "SparkDataFrame"),
-          function(x, blocking = TRUE, ...) {
+          function(x, blocking = TRUE) {
             callJMethod(x@sdf, "unpersist", blocking)
             x@env$isCached <- FALSE
             x
@@ -1029,7 +1029,7 @@ setMethod("dim",
 #' @note collect since 1.4.0
 setMethod("collect",
           signature(x = "SparkDataFrame"),
-          function(x, stringsAsFactors = FALSE, ...) {
+          function(x, stringsAsFactors = FALSE) {
             dtypes <- dtypes(x)
             ncol <- length(dtypes)
             if (ncol <= 0) {
@@ -2802,7 +2802,7 @@ setMethod("dropna",
 #' @note na.omit since 1.5.0
 setMethod("na.omit",
           signature(object = "SparkDataFrame"),
-          function(object, how = c("any", "all"), minNonNulls = NULL, cols = NULL, ...) {
+          function(object, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
             dropna(object, how, minNonNulls, cols)
           })
 

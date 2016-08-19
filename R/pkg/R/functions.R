@@ -845,7 +845,7 @@ setMethod("kurtosis",
 #' @note last since 1.4.0
 setMethod("last",
           signature(x = "characterOrColumn"),
-          function(x, na.rm = FALSE, ...) {
+          function(x, na.rm = FALSE) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
@@ -1289,7 +1289,7 @@ setMethod("round",
 #' @note bround since 2.0.0
 setMethod("bround",
           signature(x = "Column"),
-          function(x, scale = 0, ...) {
+          function(x, scale = 0) {
             jc <- callJStatic("org.apache.spark.sql.functions", "bround", x@jc, as.integer(scale))
             column(jc)
           })
@@ -1336,7 +1336,7 @@ setMethod("rtrim",
 #' @note sd since 1.6.0
 setMethod("sd",
           signature(x = "Column"),
-          function(x, na.rm) {
+          function(x) {
             # In R, sample standard deviation is calculated with the sd() function.
             stddev_samp(x)
           })
@@ -1850,7 +1850,7 @@ setMethod("upper",
 #' @note var since 1.6.0
 setMethod("var",
           signature(x = "Column"),
-          function(x, y, na.rm, use) {
+          function(x) {
             # In R, sample variance is calculated with the var() function.
             var_samp(x)
           })
@@ -2126,7 +2126,7 @@ setMethod("pmod", signature(y = "Column"),
 #' @note approxCountDistinct(Column, numeric) since 1.4.0
 setMethod("approxCountDistinct",
           signature(x = "Column"),
-          function(x, rsd = 0.05, ...) {
+          function(x, rsd = 0.05) {
             jc <- callJStatic("org.apache.spark.sql.functions", "approxCountDistinct", x@jc, rsd)
             column(jc)
           })
@@ -2695,7 +2695,7 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #'}
 #' @note from_unixtime since 1.5.0
 setMethod("from_unixtime", signature(x = "Column"),
-          function(x, format = "yyyy-MM-dd HH:mm:ss", ...) {
+          function(x, format = "yyyy-MM-dd HH:mm:ss") {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "from_unixtime",
                               x@jc, format)
@@ -2744,7 +2744,7 @@ setMethod("from_unixtime", signature(x = "Column"),
 #'}
 #' @note window since 2.0.0
 setMethod("window", signature(x = "Column"),
-          function(x, windowDuration, slideDuration = NULL, startTime = NULL, ...) {
+          function(x, windowDuration, slideDuration = NULL, startTime = NULL) {
             stopifnot(is.character(windowDuration))
             if (!is.null(slideDuration) && !is.null(startTime)) {
               stopifnot(is.character(slideDuration) && is.character(startTime))
@@ -2787,7 +2787,7 @@ setMethod("window", signature(x = "Column"),
 #' @examples \dontrun{locate('b', df$c, 1)}
 #' @note locate since 1.5.0
 setMethod("locate", signature(substr = "character", str = "Column"),
-          function(substr, str, pos = 1, ...) {
+          function(substr, str, pos = 1) {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "locate",
                               substr, str@jc, as.integer(pos))
@@ -3179,7 +3179,7 @@ setMethod("dense_rank",
 #' @note lag since 1.6.0
 setMethod("lag",
           signature(x = "characterOrColumn"),
-          function(x, offset, defaultValue = NULL, ...) {
+          function(x, offset, defaultValue = NULL) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
