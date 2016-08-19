@@ -89,7 +89,7 @@ setClass("ALSModel", representation(jobj = "jobj"))
 #' @name write.ml
 #' @export
 #' @seealso \link{spark.glm}, \link{glm}, \link{spark.gaussianMixture}
-#' @seealso \link{spark.als}, \link{spark.kmeans}, \link{spark.lda}, \link{spark.naiveBayes},
+#' @seealso \link{spark.als}, \link{spark.kmeans}, \link{spark.lda}, \link{spark.naiveBayes}
 #' @seealso \link{spark.survreg}, \link{spark.isoreg}
 #' @seealso \link{read.ml}
 NULL

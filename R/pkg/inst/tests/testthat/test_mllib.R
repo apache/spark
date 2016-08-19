@@ -638,6 +638,8 @@ test_that("spark.lda with text input", {
   expect_equal(logPerplexity, stats2$logPerplexity)
   expect_equal(vocabSize, stats2$vocabSize)
   expect_true(all.equal(vocabulary, stats2$vocabulary))
+
+  unlink(modelPath)
 })
 
 test_that("spark.posterior and spark.perplexity", {
