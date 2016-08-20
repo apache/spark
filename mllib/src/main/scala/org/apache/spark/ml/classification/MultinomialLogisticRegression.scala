@@ -165,12 +165,12 @@ class MultinomialLogisticRegression @Since("2.1.0") (
   override def setThresholds(value: Array[Double]): this.type = super.setThresholds(value)
 
   /**
-    * Suggested depth for treeAggregate (>= 2).
-    * If the dimensions of features or the number of partitions are large,
-    * this param could be adjusted to a larger size.
-    * Default is 2.
-    * @group expertSetParam
-    */
+   * Suggested depth for treeAggregate (>= 2).
+   * If the dimensions of features or the number of partitions are large,
+   * this param could be adjusted to a larger size.
+   * Default is 2.
+   * @group expertSetParam
+   */
   @Since("2.1.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
