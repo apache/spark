@@ -29,7 +29,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.StreamInputInfo
-import org.apache.spark.util.{SerializableConfiguration, TimeStampedHashMap, Utils}
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * This class represents an input stream that monitors a Hadoop-compatible filesystem for new
@@ -122,9 +122,6 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   // Set of files that were selected in the remembered batches
   @transient private var recentlySelectedFiles = new mutable.HashSet[String]()
 
-  // Read-through cache of file mod times, used to speed up mod time lookups
-  @transient private var fileToModTime = new TimeStampedHashMap[String, Long](true)
-
   // Timestamp of the last round of finding files
   @transient private var lastNewFileFindingTime = 0L
 
@@ -173,8 +170,6 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       logDebug("Cleared files are:\n" +
         oldFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n"))
     }
-    // Delete file mod times that weren't accessed in the last round of getting new files
-    fileToModTime.clearOldValues(lastNewFileFindingTime - 1)
   }
 
   /**
@@ -201,11 +196,10 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
           .map(_.getPath)
       val newFiles = directories.flatMap(dir =>
         fs.listStatus(dir)
-            .filter(isNewFile(_, currentTime, modTimeIgnoreThreshold ))
+            .filter(isNewFile(_, currentTime, modTimeIgnoreThreshold))
             .map(_.getPath.toString))
       val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
-      logDebug("# cached file times = " + fileToModTime.size)
       if (timeTaken > slideDuration.milliseconds) {
         logWarning(
           "Time taken to find new files exceeds the batch size. " +
@@ -297,7 +291,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 
   /** Get file mod time from cache or fetch it from the file system */
   private def getFileModTime(fs: FileStatus) = {
-    fileToModTime.getOrElseUpdate(fs.getPath.toString, fs.getModificationTime())
+    fs.getModificationTime()
   }
 
   private def directoryPath: Path = {
@@ -321,7 +315,6 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     generatedRDDs = new mutable.HashMap[Time, RDD[(K, V)]]()
     batchTimeToSelectedFiles = new mutable.HashMap[Time, Array[String]]
     recentlySelectedFiles = new mutable.HashSet[String]()
-    fileToModTime = new TimeStampedHashMap[String, Long](true)
   }
 
   /**
