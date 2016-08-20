@@ -35,8 +35,8 @@ import org.apache.spark.unsafe.Platform;
  */
 public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Closeable {
   private static final Logger logger = LoggerFactory.getLogger(UnsafeSorterSpillReader.class);
-  private static final int DEFAULT_BUFFER_SIZE_BYTES = 1024 * 1024; // 1 mb
-  private static final int MAX_BUFFER_SIZE_BYTES = 16777216;    // 16 mb
+  private static final int DEFAULT_BUFFER_SIZE_BYTES = 8192; // 8 kb
+  private static final int MAX_BUFFER_SIZE_BYTES = 16777216; // 16 mb
 
   private InputStream in;
   private DataInputStream din;
@@ -64,7 +64,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     if (bufferSizeBytes > MAX_BUFFER_SIZE_BYTES || bufferSizeBytes < DEFAULT_BUFFER_SIZE_BYTES) {
       // fall back to a sane default value
       logger.warn("Value of config \"spark.unsafe.sorter.spill.reader.buffer.size\" = {} not in " +
-                      "allowed range [{}, {}). Falling back to default value : {} bytes", bufferSizeBytes,
+                      "allowed range [{}, {}). Falling to default value : {} bytes", bufferSizeBytes,
                   DEFAULT_BUFFER_SIZE_BYTES, MAX_BUFFER_SIZE_BYTES, DEFAULT_BUFFER_SIZE_BYTES);
       bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;
     }
