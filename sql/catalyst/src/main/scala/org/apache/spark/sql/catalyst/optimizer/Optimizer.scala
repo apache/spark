@@ -817,9 +817,10 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).span(_.deterministic)
 
       if (pushDown.nonEmpty) {
-        val newCondition = (child.filters ++ pushDown).reduce(And)
-        val replaced = replaceAlias(newCondition, aliasMap)
-        val newScanner = child.copy(filters = splitConjunctivePredicates(replaced))
+        val replaced = replaceAlias(pushDown.reduce(And), aliasMap)
+        val newScanner =
+          child.copy(filters =
+            child.filters ++ (splitConjunctivePredicates(replaced).toSet -- child.filters))
         if (stayUp.nonEmpty) {
           Filter(stayUp.reduceLeft(And), newScanner)
         } else {
