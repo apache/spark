@@ -712,6 +712,20 @@ class Analyzer(
           withPosition(u) { plan.resolve(nameParts, resolver).getOrElse(u) }
         case UnresolvedExtractValue(child, fieldName) if child.resolved =>
           ExtractValue(child, fieldName, resolver)
+        case l: LazilyDeterminedAttribute =>
+          val foundPlanOpt = plan.findByBreadthFirst(_.planId == l.plan.planId)
+          val foundPlan = foundPlanOpt.getOrElse {
+            failAnalysis(s"""Cannot resolve column name "${l.name}" """)
+          }
+
+          if (foundPlan == l.plan) {
+            l.namedExpr
+          } else {
+            foundPlan.resolveQuoted(l.name, resolver).getOrElse {
+              failAnalysis(s"""Cannot resolve column name "${l.name}" """ +
+                s"""among (${foundPlan.schema.fieldNames.mkString(", ")})""")
+            }
+          }
       }
     } catch {
       case a: AnalysisException if !throws => expr
