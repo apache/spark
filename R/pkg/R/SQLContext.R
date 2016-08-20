@@ -218,7 +218,7 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   }
 
   if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
-    row <- first(rdd)
+    row <- firstRDD(rdd)
     names <- if (is.null(schema)) {
       names(row)
     } else {

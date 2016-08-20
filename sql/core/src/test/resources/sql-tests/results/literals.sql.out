@@ -41,7 +41,7 @@ struct<>
 -- !query 4 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Value out of range. Value:"128" Radix:10(line 1, pos 7)
+Numeric literal 128 does not fit in range [-128, 127] for type tinyint(line 1, pos 7)
 
 == SQL ==
 select 128Y
@@ -71,7 +71,7 @@ struct<>
 -- !query 7 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Value out of range. Value:"32768" Radix:10(line 1, pos 7)
+Numeric literal 32768 does not fit in range [-32768, 32767] for type smallint(line 1, pos 7)
 
 == SQL ==
 select 32768S
@@ -101,7 +101,7 @@ struct<>
 -- !query 10 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-For input string: "9223372036854775808"(line 1, pos 7)
+Numeric literal 9223372036854775808 does not fit in range [-9223372036854775808, 9223372036854775807] for type bigint(line 1, pos 7)
 
 == SQL ==
 select 9223372036854775808L

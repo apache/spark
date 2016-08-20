@@ -108,6 +108,5 @@ object StreamingQueryListener {
   @Experimental
   class QueryTerminated private[sql](
       val queryInfo: StreamingQueryInfo,
-      val exception: Option[String],
-      val stackTrace: Seq[StackTraceElement]) extends Event
+      val exception: Option[String]) extends Event
 }

@@ -476,4 +476,225 @@ test_that("spark.survreg", {
   }
 })
 
+test_that("spark.isotonicRegression", {
+  label <- c(7.0, 5.0, 3.0, 5.0, 1.0)
+  feature <- c(0.0, 1.0, 2.0, 3.0, 4.0)
+  weight <- c(1.0, 1.0, 1.0, 1.0, 1.0)
+  data <- as.data.frame(cbind(label, feature, weight))
+  df <- suppressWarnings(createDataFrame(data))
+
+  model <- spark.isoreg(df, label ~ feature, isotonic = FALSE,
+                        weightCol = "weight")
+  # only allow one variable on the right hand side of the formula
+  expect_error(model2 <- spark.isoreg(df, ~., isotonic = FALSE))
+  result <- summary(model, df)
+  expect_equal(result$predictions, list(7, 5, 4, 4, 1))
+
+  # Test model prediction
+  predict_data <- list(list(-2.0), list(-1.0), list(0.5),
+                       list(0.75), list(1.0), list(2.0), list(9.0))
+  predict_df <- createDataFrame(predict_data, c("feature"))
+  predict_result <- collect(select(predict(model, predict_df), "prediction"))
+  expect_equal(predict_result$prediction, c(7.0, 7.0, 6.0, 5.5, 5.0, 4.0, 1.0))
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-isotonicRegression", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  expect_equal(result, summary(model2, df))
+
+  unlink(modelPath)
+})
+
+test_that("spark.gaussianMixture", {
+  # R code to reproduce the result.
+  # nolint start
+  #' library(mvtnorm)
+  #' set.seed(100)
+  #' a <- rmvnorm(4, c(0, 0))
+  #' b <- rmvnorm(6, c(3, 4))
+  #' data <- rbind(a, b)
+  #' model <- mvnormalmixEM(data, k = 2)
+  #' model$lambda
+  #
+  #  [1] 0.4 0.6
+  #
+  #' model$mu
+  #
+  #  [1] -0.2614822  0.5128697
+  #  [1] 2.647284 4.544682
+  #
+  #' model$sigma
+  #
+  #  [[1]]
+  #  [,1]       [,2]
+  #  [1,] 0.08427399 0.00548772
+  #  [2,] 0.00548772 0.09090715
+  #
+  #  [[2]]
+  #  [,1]       [,2]
+  #  [1,]  0.1641373 -0.1673806
+  #  [2,] -0.1673806  0.7508951
+  # nolint end
+  data <- list(list(-0.50219235, 0.1315312), list(-0.07891709, 0.8867848),
+               list(0.11697127, 0.3186301), list(-0.58179068, 0.7145327),
+               list(2.17474057, 3.6401379), list(3.08988614, 4.0962745),
+               list(2.79836605, 4.7398405), list(3.12337950, 3.9706833),
+               list(2.61114575, 4.5108563), list(2.08618581, 6.3102968))
+  df <- createDataFrame(data, c("x1", "x2"))
+  model <- spark.gaussianMixture(df, ~ x1 + x2, k = 2)
+  stats <- summary(model)
+  rLambda <- c(0.50861, 0.49139)
+  rMu <- c(0.267, 1.195, 2.743, 4.730)
+  rSigma <- c(1.099, 1.339, 1.339, 1.798,
+              0.145, -0.309, -0.309, 0.716)
+  expect_equal(stats$lambda, rLambda, tolerance = 1e-3)
+  expect_equal(unlist(stats$mu), rMu, tolerance = 1e-3)
+  expect_equal(unlist(stats$sigma), rSigma, tolerance = 1e-3)
+  p <- collect(select(predict(model, df), "prediction"))
+  expect_equal(p$prediction, c(0, 0, 0, 0, 0, 1, 1, 1, 1, 1))
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-gaussianMixture", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+  expect_equal(stats$lambda, stats2$lambda)
+  expect_equal(unlist(stats$mu), unlist(stats2$mu))
+  expect_equal(unlist(stats$sigma), unlist(stats2$sigma))
+
+  unlink(modelPath)
+})
+
+test_that("spark.lda with libsvm", {
+  text <- read.df("data/mllib/sample_lda_libsvm_data.txt", source = "libsvm")
+  model <- spark.lda(text, optimizer = "em")
+
+  stats <- summary(model, 10)
+  isDistributed <- stats$isDistributed
+  logLikelihood <- stats$logLikelihood
+  logPerplexity <- stats$logPerplexity
+  vocabSize <- stats$vocabSize
+  topics <- stats$topicTopTerms
+  weights <- stats$topicTopTermsWeights
+  vocabulary <- stats$vocabulary
+
+  expect_false(isDistributed)
+  expect_true(logLikelihood <= 0 & is.finite(logLikelihood))
+  expect_true(logPerplexity >= 0 & is.finite(logPerplexity))
+  expect_equal(vocabSize, 11)
+  expect_true(is.null(vocabulary))
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-lda", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+
+  expect_false(stats2$isDistributed)
+  expect_equal(logLikelihood, stats2$logLikelihood)
+  expect_equal(logPerplexity, stats2$logPerplexity)
+  expect_equal(vocabSize, stats2$vocabSize)
+  expect_equal(vocabulary, stats2$vocabulary)
+
+  unlink(modelPath)
+})
+
+test_that("spark.lda with text input", {
+  text <- read.text("data/mllib/sample_lda_data.txt")
+  model <- spark.lda(text, optimizer = "online", features = "value")
+
+  stats <- summary(model)
+  isDistributed <- stats$isDistributed
+  logLikelihood <- stats$logLikelihood
+  logPerplexity <- stats$logPerplexity
+  vocabSize <- stats$vocabSize
+  topics <- stats$topicTopTerms
+  weights <- stats$topicTopTermsWeights
+  vocabulary <- stats$vocabulary
+
+  expect_false(isDistributed)
+  expect_true(logLikelihood <= 0 & is.finite(logLikelihood))
+  expect_true(logPerplexity >= 0 & is.finite(logPerplexity))
+  expect_equal(vocabSize, 10)
+  expect_true(setequal(stats$vocabulary, c("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")))
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-lda-text", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+
+  expect_false(stats2$isDistributed)
+  expect_equal(logLikelihood, stats2$logLikelihood)
+  expect_equal(logPerplexity, stats2$logPerplexity)
+  expect_equal(vocabSize, stats2$vocabSize)
+  expect_true(all.equal(vocabulary, stats2$vocabulary))
+
+  unlink(modelPath)
+})
+
+test_that("spark.posterior and spark.perplexity", {
+  text <- read.text("data/mllib/sample_lda_data.txt")
+  model <- spark.lda(text, features = "value", k = 3)
+
+  # Assert perplexities are equal
+  stats <- summary(model)
+  logPerplexity <- spark.perplexity(model, text)
+  expect_equal(logPerplexity, stats$logPerplexity)
+
+  # Assert the sum of every topic distribution is equal to 1
+  posterior <- spark.posterior(model, text)
+  local.posterior <- collect(posterior)$topicDistribution
+  expect_equal(length(local.posterior), sum(unlist(local.posterior)))
+})
+
+test_that("spark.als", {
+  data <- list(list(0, 0, 4.0), list(0, 1, 2.0), list(1, 1, 3.0), list(1, 2, 4.0),
+  list(2, 1, 1.0), list(2, 2, 5.0))
+  df <- createDataFrame(data, c("user", "item", "score"))
+  model <- spark.als(df, ratingCol = "score", userCol = "user", itemCol = "item",
+  rank = 10, maxIter = 5, seed = 0, reg = 0.1)
+  stats <- summary(model)
+  expect_equal(stats$rank, 10)
+  test <- createDataFrame(list(list(0, 2), list(1, 0), list(2, 0)), c("user", "item"))
+  predictions <- collect(predict(model, test))
+
+  expect_equal(predictions$prediction, c(-0.1380762, 2.6258414, -1.5018409),
+  tolerance = 1e-4)
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-als", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+  expect_equal(stats2$rating, "score")
+  userFactors <- collect(stats$userFactors)
+  itemFactors <- collect(stats$itemFactors)
+  userFactors2 <- collect(stats2$userFactors)
+  itemFactors2 <- collect(stats2$itemFactors)
+
+  orderUser <- order(userFactors$id)
+  orderUser2 <- order(userFactors2$id)
+  expect_equal(userFactors$id[orderUser], userFactors2$id[orderUser2])
+  expect_equal(userFactors$features[orderUser], userFactors2$features[orderUser2])
+
+  orderItem <- order(itemFactors$id)
+  orderItem2 <- order(itemFactors2$id)
+  expect_equal(itemFactors$id[orderItem], itemFactors2$id[orderItem2])
+  expect_equal(itemFactors$features[orderItem], itemFactors2$features[orderItem2])
+
+  unlink(modelPath)
+})
+
 sparkR.session.stop()
