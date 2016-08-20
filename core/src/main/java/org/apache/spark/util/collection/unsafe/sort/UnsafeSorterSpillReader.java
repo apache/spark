@@ -57,8 +57,10 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       BlockId blockId) throws IOException {
     assert (file.length() > 0);
     long bufferSizeBytes =
-        SparkEnv.get().conf().getSizeAsBytes("spark.unsafe.sorter.spill.reader.buffer.size",
-                                             DEFAULT_BUFFER_SIZE_BYTES);
+        SparkEnv.get() == null ?
+            DEFAULT_BUFFER_SIZE_BYTES:
+            SparkEnv.get().conf().getSizeAsBytes("spark.unsafe.sorter.spill.reader.buffer.size",
+                                                 DEFAULT_BUFFER_SIZE_BYTES);
     if (bufferSizeBytes > MAX_BUFFER_SIZE_BYTES || bufferSizeBytes < DEFAULT_BUFFER_SIZE_BYTES) {
       // fall back to a sane default value
       logger.warn("Value of config \"spark.unsafe.sorter.spill.reader.buffer.size\" = {} not in " +
