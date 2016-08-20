@@ -429,8 +429,8 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param isotonic Whether the output sequence should be isotonic/increasing (TRUE) or
 #'                 antitonic/decreasing (FALSE)
-#' @param featureIndex The index of the feature if \code{featuresCol} is a vector column (default: `0`),
-#'                     no effect otherwise
+#' @param featureIndex The index of the feature if \code{featuresCol} is a vector column
+#'                     (default: 0), no effect otherwise
 #' @param weightCol The weight column name.
 #' @return \code{spark.isoreg} returns a fitted Isotonic Regression model
 #' @rdname spark.isoreg

@@ -150,7 +150,7 @@ setMethod("explain",
 
 #' isLocal
 #'
-#' Returns True if the `collect` and `take` methods can be run locally
+#' Returns True if the \code{collect} and \code{take} methods can be run locally
 #' (without any Spark executors).
 #'
 #' @param x A SparkDataFrame
@@ -182,7 +182,7 @@ setMethod("isLocal",
 #' @param numRows the number of rows to print. Defaults to 20.
 #' @param truncate whether truncate long strings. If \code{TRUE}, strings more than
 #'                 20 characters will be truncated. However, if set greater than zero,
-#'                 truncates strings longer than `truncate` characters and all cells
+#'                 truncates strings longer than \code{truncate} characters and all cells
 #'                 will be aligned right.
 #' @param ... further arguments to be passed to or from other methods.
 #' @family SparkDataFrame functions
@@ -642,10 +642,10 @@ setMethod("unpersist",
 #' The following options for repartition are possible:
 #' \itemize{
 #'  \item{1.} {Return a new SparkDataFrame partitioned by
-#'                      the given columns into `numPartitions`.}
-#'  \item{2.} {Return a new SparkDataFrame that has exactly `numPartitions`.}
+#'                      the given columns into \code{numPartitions}.}
+#'  \item{2.} {Return a new SparkDataFrame that has exactly \code{numPartitions}.}
 #'  \item{3.} {Return a new SparkDataFrame partitioned by the given column(s),
-#'                      using `spark.sql.shuffle.partitions` as number of partitions.}
+#'                      using \code{spark.sql.shuffle.partitions} as number of partitions.}
 #'}
 #' @param x a SparkDataFrame.
 #' @param numPartitions the number of partitions to use.
@@ -1406,11 +1406,11 @@ setMethod("dapplyCollect",
 #'
 #' @param cols grouping columns.
 #' @param func a function to be applied to each group partition specified by grouping
-#'             column of the SparkDataFrame. The function `func` takes as argument
+#'             column of the SparkDataFrame. The function \code{func} takes as argument
 #'             a key - grouping columns and a data frame - a local R data.frame.
-#'             The output of `func` is a local R data.frame.
+#'             The output of \code{func} is a local R data.frame.
 #' @param schema the schema of the resulting SparkDataFrame after the function is applied.
-#'               The schema must match to output of `func`. It has to be defined for each
+#'               The schema must match to output of \code{func}. It has to be defined for each
 #'               output column with preferred output column name and corresponding data type.
 #' @return A SparkDataFrame.
 #' @family SparkDataFrame functions
@@ -1497,9 +1497,9 @@ setMethod("gapply",
 #'
 #' @param cols grouping columns.
 #' @param func a function to be applied to each group partition specified by grouping
-#'             column of the SparkDataFrame. The function `func` takes as argument
+#'             column of the SparkDataFrame. The function \code{func} takes as argument
 #'             a key - grouping columns and a data frame - a local R data.frame.
-#'             The output of `func` is a local R data.frame.
+#'             The output of \code{func} is a local R data.frame.
 #' @return A data.frame.
 #' @family SparkDataFrame functions
 #' @aliases gapplyCollect,SparkDataFrame-method
@@ -1747,7 +1747,7 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' @family subsetting functions
 #' @examples
 #' \dontrun{
-#'   # Columns can be selected using `[[` and `[`
+#'   # Columns can be selected using [[ and [
 #'   df[[2]] == df[["age"]]
 #'   df[,2] == df[,"age"]
 #'   df[,c("name", "age")]
@@ -1792,7 +1792,7 @@ setMethod("subset", signature(x = "SparkDataFrame"),
 #'   select(df, df$name, df$age + 1)
 #'   select(df, c("col1", "col2"))
 #'   select(df, list(df$name, df$age + 1))
-#'   # Similar to R data frames columns can also be selected using `$`
+#'   # Similar to R data frames columns can also be selected using $
 #'   df[,df$age]
 #' }
 #' @note select(SparkDataFrame, character) since 1.4.0
@@ -2443,7 +2443,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #' Return a new SparkDataFrame containing the union of rows
 #'
 #' Return a new SparkDataFrame containing the union of rows in this SparkDataFrame
-#' and another SparkDataFrame. This is equivalent to `UNION ALL` in SQL.
+#' and another SparkDataFrame. This is equivalent to \code{UNION ALL} in SQL.
 #' Note that this does not remove duplicate rows across the two SparkDataFrames.
 #'
 #' @param x A SparkDataFrame
@@ -2486,7 +2486,7 @@ setMethod("unionAll",
 
 #' Union two or more SparkDataFrames
 #'
-#' Union two or more SparkDataFrames. This is equivalent to `UNION ALL` in SQL.
+#' Union two or more SparkDataFrames. This is equivalent to \code{UNION ALL} in SQL.
 #' Note that this does not remove duplicate rows across the two SparkDataFrames.
 #'
 #' @param x a SparkDataFrame.
@@ -2519,7 +2519,7 @@ setMethod("rbind",
 #' Intersect
 #'
 #' Return a new SparkDataFrame containing rows only in both this SparkDataFrame
-#' and another SparkDataFrame. This is equivalent to `INTERSECT` in SQL.
+#' and another SparkDataFrame. This is equivalent to \code{INTERSECT} in SQL.
 #'
 #' @param x A SparkDataFrame
 #' @param y A SparkDataFrame
@@ -2547,7 +2547,7 @@ setMethod("intersect",
 #' except
 #'
 #' Return a new SparkDataFrame containing rows in this SparkDataFrame
-#' but not in another SparkDataFrame. This is equivalent to `EXCEPT` in SQL.
+#' but not in another SparkDataFrame. This is equivalent to \code{EXCEPT} in SQL.
 #'
 #' @param x a SparkDataFrame.
 #' @param y a SparkDataFrame.
@@ -2576,8 +2576,8 @@ setMethod("except",
 
 #' Save the contents of SparkDataFrame to a data source.
 #'
-#' The data source is specified by the `source` and a set of options (...).
-#' If `source` is not specified, the default data source configured by
+#' The data source is specified by the \code{source} and a set of options (...).
+#' If \code{source} is not specified, the default data source configured by
 #' spark.sql.sources.default will be used.
 #'
 #' Additionally, mode is used to specify the behavior of the save operation when data already
@@ -2613,7 +2613,7 @@ setMethod("except",
 #' @note write.df since 1.4.0
 setMethod("write.df",
           signature(df = "SparkDataFrame", path = "character"),
-          function(df, path, source = NULL, mode = "error", ...){
+          function(df, path, source = NULL, mode = "error", ...) {
             if (is.null(source)) {
               source <- getDefaultSqlSource()
             }
@@ -2635,14 +2635,14 @@ setMethod("write.df",
 #' @note saveDF since 1.4.0
 setMethod("saveDF",
           signature(df = "SparkDataFrame", path = "character"),
-          function(df, path, source = NULL, mode = "error", ...){
+          function(df, path, source = NULL, mode = "error", ...) {
             write.df(df, path, source, mode, ...)
           })
 
 #' Save the contents of the SparkDataFrame to a data source as a table
 #'
-#' The data source is specified by the `source` and a set of options (...).
-#' If `source` is not specified, the default data source configured by
+#' The data source is specified by the \code{source} and a set of options (...).
+#' If \code{source} is not specified, the default data source configured by
 #' spark.sql.sources.default will be used.
 #'
 #' Additionally, mode is used to specify the behavior of the save operation when
@@ -2675,7 +2675,7 @@ setMethod("saveDF",
 #' @note saveAsTable since 1.4.0
 setMethod("saveAsTable",
           signature(df = "SparkDataFrame", tableName = "character"),
-          function(df, tableName, source = NULL, mode="error", ...){
+          function(df, tableName, source = NULL, mode="error", ...) {
             if (is.null(source)) {
               source <- getDefaultSqlSource()
             }
@@ -2756,7 +2756,7 @@ setMethod("summary",
 #' @param minNonNulls if specified, drop rows that have less than
 #'                    minNonNulls non-null values.
 #'                    This overwrites the how parameter.
-#' @param cols optional list of column names to consider. In `fillna`,
+#' @param cols optional list of column names to consider. In \code{fillna},
 #'             columns specified in cols that do not have matching data
 #'             type are ignored. For example, if value is a character, and
 #'             subset contains a non-character column, then the non-character
@@ -2880,7 +2880,7 @@ setMethod("fillna",
 #'
 #' @param x a SparkDataFrame.
 #' @param row.names NULL or a character vector giving the row names for the data frame.
-#' @param optional If `TRUE`, converting column names is optional.
+#' @param optional If \code{TRUE}, converting column names is optional.
 #' @param ... additional arguments to pass to base::as.data.frame.
 #' @return A data.frame.
 #' @family SparkDataFrame functions
@@ -3058,7 +3058,7 @@ setMethod("str",
 #' @note drop since 2.0.0
 setMethod("drop",
           signature(x = "SparkDataFrame"),
-          function(x, col, ...) {
+          function(x, col) {
             stopifnot(class(col) == "character" || class(col) == "Column")
 
             if (class(col) == "Column") {
@@ -3218,8 +3218,8 @@ setMethod("histogram",
 #'         and to not change the existing data.
 #' }
 #'
-#' @param x s SparkDataFrame.
-#' @param url JDBC database url of the form `jdbc:subprotocol:subname`.
+#' @param x a SparkDataFrame.
+#' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}.
 #' @param tableName yhe name of the table in the external database.
 #' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default).
 #' @param ... additional JDBC database connection properties.
@@ -3237,7 +3237,7 @@ setMethod("histogram",
 #' @note write.jdbc since 2.0.0
 setMethod("write.jdbc",
           signature(x = "SparkDataFrame", url = "character", tableName = "character"),
-          function(x, url, tableName, mode = "error", ...){
+          function(x, url, tableName, mode = "error", ...) {
             jmode <- convertToJSaveMode(mode)
             jprops <- varargsToJProperties(...)
             write <- callJMethod(x@sdf, "write")
