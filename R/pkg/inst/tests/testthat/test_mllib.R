@@ -96,7 +96,7 @@ test_that("spark.glm summary", {
   expect_equal(stats$aic, rStats$aic)
 
   out <- capture.output(print(stats))
-  expect_equal(out[2], "Deviance Residuals:")
+  expect_match(out[2], "Deviance Residuals:")
   expect_true(any(grepl("AIC: 59.22", out)))
 
   # binomial family
@@ -507,7 +507,7 @@ test_that("spark.isotonicRegression", {
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)
   model2 <- read.ml(modelPath)
-  expect_equal(result, summary(model2, df))
+  expect_equal(result, summary(model2))
 
   unlink(modelPath)
 })
