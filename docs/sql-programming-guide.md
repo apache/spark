@@ -1058,6 +1058,20 @@ the Data Sources API. The following options are supported:
       The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (eg. Oracle with 10 rows).
     </td>
   </tr>
+  
+  <tr>
+    <td><code>truncate</code></td>
+    <td>
+     This is a JDBC writer related option. To truncate the existing table before inserting the new data. This option only works with <code>SaveMode.Overwrite</code>. Without this option, Spark will drop the entire table, including its table definitions as well. <code>truncate</code> way is more efficient and ideal for cleaning out data from existing temp table. Its default value is <code>false</code>. 
+   </td>
+  </tr>
+  
+  <tr>
+    <td><code>createTableOptions</code></td>
+    <td>
+     This is a JDBC writer related option. To allow certain options to append when creating a new table, which can be  table_options or partition_options. E.g., <code>CREATE TABLE t (name string) ENGINE=InnoDB </code>. By default, it is empty string.
+   </td>
+  </tr>
 </table>
 
 <div class="codetabs">
