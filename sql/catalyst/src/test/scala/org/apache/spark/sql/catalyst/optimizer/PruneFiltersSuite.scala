@@ -48,7 +48,7 @@ class PruneFiltersSuite extends PlanTest {
     val queryWithUselessFilter = query.where("x.b".attr.isNull)
 
     val optimized = Optimize.execute(queryWithUselessFilter.analyze)
-    val correctAnswer = query.analyze
+    val correctAnswer = x.scanner("x.b".attr.isNull).join(y, LeftOuter).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -65,7 +65,9 @@ class PruneFiltersSuite extends PlanTest {
     val queryWithUselessFilter = query.where('a.attr > 10)
 
     val optimized = Optimize.execute(queryWithUselessFilter.analyze)
-    val correctAnswer = query.analyze
+    val correctAnswer = tr1.scanner('a.attr > 10)
+      .union(tr2.scanner('d.attr > 10)
+      .union(tr3.scanner('g.attr > 10))).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -85,7 +87,8 @@ class PruneFiltersSuite extends PlanTest {
           "tr2.a".attr === "tr1.a".attr)
 
     val optimized = Optimize.execute(queryWithUselessFilter.analyze)
-    val correctAnswer = query.analyze
+    val correctAnswer = tr1.scanner("tr1.a".attr > 10 || "tr1.c".attr < 10)
+      .join(tr2.scanner('d.attr < 100), Inner, Some("tr1.a".attr === "tr2.a".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -104,8 +107,8 @@ class PruneFiltersSuite extends PlanTest {
 
     val optimized = Optimize.execute(queryWithExtraFilters.analyze)
     val correctAnswer = tr1
-      .where("tr1.a".attr > 10)
-      .join(tr2.where('d.attr < 100),
+      .scanner("tr1.a".attr > 10)
+      .join(tr2.scanner('d.attr < 100),
         Inner,
         Some("tr1.a".attr === "tr2.a".attr && "tr1.a".attr === "tr2.d".attr)).analyze
 
@@ -121,7 +124,7 @@ class PruneFiltersSuite extends PlanTest {
 
     val optimized = Optimize.execute(queryWithExtraFilters.analyze)
     val correctAnswer =
-      testRelation.where("b".attr.isNull).where("b".attr.isNotNull)
+      testRelation.scanner("b".attr.isNull).where("b".attr.isNotNull)
         .join(testRelation, LeftOuter).analyze
 
     comparePlans(optimized, correctAnswer)

@@ -103,6 +103,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       RemoveDispensableExpressions,
       SimplifyBinaryComparison,
       PruneFilters,
+      PruneScanners,
       EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
@@ -617,7 +618,7 @@ object CombineScanners extends Rule[LogicalPlan] with PredicateHelper {
       child.copy(projectList = fields.map { field =>
         aliasMap.getOrElse(field.toAttribute, field)
       })
-    case Filter(condition, child: Scanner) if condition.deterministic =>
+    case Filter(condition, child: Scanner) if child.projectList.forall(_.deterministic) =>
       val aliasMap = AttributeMap(child.projectList.collect {
         case a: Alias => (a.toAttribute, a.child)
       })
@@ -670,6 +671,31 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         val newCond = remainingPredicates.reduce(And)
         Filter(newCond, p)
+      }
+  }
+}
+
+/**
+ * Removes filters in [[Scanner]] operator that can be evaluated trivially.
+ */
+object PruneScanners extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case s @ Scanner(projectList, filters, _) =>
+      // Removes filters always evaluate to true
+      val newFilters = filters.collect {
+        case filter: Expression if !filter.fastEquals(Literal(true, BooleanType)) => filter
+      }
+
+      if (newFilters.exists { filter =>
+        filter.fastEquals(Literal(false, BooleanType)) || filter.fastEquals(Literal(null))}) {
+        // If there exists at lease one filter that always evaluate to null or false,
+        // replace the input with an empty relation.
+        Scanner(LocalRelation(projectList.map(_.toAttribute), data = Seq.empty))
+      } else if (filters.forall(newFilters.contains(_))) {
+        // No filter always evaluate to true, respect the original filters.
+        s
+      } else {
+        s.copy(filters = newFilters)
       }
   }
 }
@@ -781,7 +807,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         filter
       }
 
-    case filter @ Filter(condition, child: Scanner) =>
+    case filter @ Filter(condition, child: Scanner) if child.projectList.forall(_.deterministic) =>
       // Deterministic parts placed before any non-deterministic predicates in [[Filter]] could
       // be pushed down to [[Scanner]], combine with `Scanner.filters`.
       val aliasMap = AttributeMap(child.projectList.collect {
@@ -791,7 +817,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).span(_.deterministic)
 
       if (pushDown.nonEmpty) {
-        val newCondition = (pushDown ++ child.filters).reduce(And)
+        val newCondition = (child.filters ++ pushDown).reduce(And)
         val replaced = replaceAlias(newCondition, aliasMap)
         val newScanner = child.copy(filters = splitConjunctivePredicates(replaced))
         if (stayUp.nonEmpty) {

@@ -67,7 +67,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val query = Distinct(input)
     val optimized = Optimize.execute(query.analyze)
 
-    val correctAnswer = Aggregate(input.output, input.output, input)
+    val correctAnswer = Aggregate(input.output, input.output, input).analyze
 
     comparePlans(optimized, correctAnswer)
   }

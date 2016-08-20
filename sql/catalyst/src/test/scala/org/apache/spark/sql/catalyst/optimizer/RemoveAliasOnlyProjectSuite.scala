@@ -35,7 +35,7 @@ class RemoveAliasOnlyProjectSuite extends PlanTest with PredicateHelper {
     val relation = LocalRelation('a.int, 'b.int)
     val query = relation.select('a as 'a, 'b as 'b).analyze
     val optimized = Optimize.execute(query)
-    comparePlans(optimized, relation)
+    comparePlans(optimized, Scanner(relation))
   }
 
   test("all expressions in project list are aliased child output but with different order") {
@@ -49,7 +49,7 @@ class RemoveAliasOnlyProjectSuite extends PlanTest with PredicateHelper {
     val relation = LocalRelation('a.int, 'b.int)
     val query = relation.select('a as 'a, 'b).analyze
     val optimized = Optimize.execute(query)
-    comparePlans(optimized, relation)
+    comparePlans(optimized, Scanner(relation))
   }
 
   test("some expressions in project list are aliased child output but with different order") {

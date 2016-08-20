@@ -115,6 +115,17 @@ case class Filter(condition: Expression, child: LogicalPlan)
   }
 }
 
+/** Factory for constructing new `Scanner` nodes. */
+object Scanner extends PredicateHelper {
+  def apply(child: LogicalPlan): Scanner = {
+    Scanner(child.output, Nil, child)
+  }
+
+  def apply(condition: Expression, child: LogicalPlan): Scanner = {
+    Scanner(child.output, splitConjunctivePredicates(condition), child)
+  }
+}
+
 case class Scanner(projectList: Seq[NamedExpression], filters: Seq[Expression], child: LogicalPlan)
   extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)

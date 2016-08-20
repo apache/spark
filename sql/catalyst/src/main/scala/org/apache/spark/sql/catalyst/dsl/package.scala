@@ -298,6 +298,10 @@ package object dsl {
 
       def filter[T : Encoder](func: T => Boolean): LogicalPlan = TypedFilter(func, logicalPlan)
 
+      def scanner(): LogicalPlan = Scanner(logicalPlan)
+
+      def scanner(condition: Expression): LogicalPlan = Scanner(condition, logicalPlan)
+
       def serialize[T : Encoder]: LogicalPlan = CatalystSerde.serialize[T](logicalPlan)
 
       def deserialize[T : Encoder]: LogicalPlan = CatalystSerde.deserialize[T](logicalPlan)

@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.rules._
  */
 object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
   private def isEmptyLocalRelation(plan: LogicalPlan): Boolean = plan match {
+    case Scanner(_, _, r: LocalRelation) => r.data.isEmpty
     case p: LocalRelation => p.data.isEmpty
     case _ => false
   }
@@ -43,7 +44,7 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
     e.collectFirst { case _: AggregateFunction => () }.isDefined
   }
 
-  private def empty(plan: LogicalPlan) = LocalRelation(plan.output, data = Seq.empty)
+  private def empty(plan: LogicalPlan) = Scanner(LocalRelation(plan.output, data = Seq.empty))
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p: Union if p.children.forall(isEmptyLocalRelation) =>

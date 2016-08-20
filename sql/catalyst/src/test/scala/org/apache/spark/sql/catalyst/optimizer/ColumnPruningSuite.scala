@@ -134,14 +134,16 @@ class ColumnPruningSuite extends PlanTest {
   test("Column pruning on Filter") {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
     val plan1 = Filter('a > 1, input).analyze
-    comparePlans(Optimize.execute(plan1), plan1)
+    val expected1 = Scanner('a > 1, input).analyze
+    comparePlans(Optimize.execute(plan1), expected1)
     val query = Project('a :: Nil, Filter('c > Literal(0.0), input)).analyze
-    comparePlans(Optimize.execute(query), query)
+    val expectedQuery = Project('a :: Nil, Scanner('c > Literal(0.0), input)).analyze
+    comparePlans(Optimize.execute(query), expectedQuery)
     val plan2 = Filter('b > 1, Project(Seq('a, 'b), input)).analyze
-    val expected2 = Project(Seq('a, 'b), Filter('b > 1, input)).analyze
+    val expected2 = Project(Seq('a, 'b), Scanner('b > 1, input)).analyze
     comparePlans(Optimize.execute(plan2), expected2)
     val plan3 = Project(Seq('a), Filter('b > 1, Project(Seq('a, 'b), input))).analyze
-    val expected3 = Project(Seq('a), Filter('b > 1, input)).analyze
+    val expected3 = Project(Seq('a), Scanner('b > 1, input)).analyze
     comparePlans(Optimize.execute(plan3), expected3)
   }
 
