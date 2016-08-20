@@ -48,7 +48,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-  with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth{
+  with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth {
 
   /**
    * Set threshold in binary classification, in range [0, 1].
@@ -261,7 +261,7 @@ class LogisticRegression @Since("1.2.0") (
    * If the dimensions of features or the number of partitions are large,
    * this param could be adjusted to a larger size.
    * Default is 2.
-   * @group expertParam
+   * @group expertSetParam
    */
   @Since("2.1.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
@@ -1344,7 +1344,7 @@ private class LogisticCostFun(
     bcFeaturesStd: Broadcast[Array[Double]],
     regParamL2: Double,
     multinomial: Boolean,
-    depth: Int) extends DiffFunction[BDV[Double]] {
+    aggregationDepth: Int) extends DiffFunction[BDV[Double]] {
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val coeffs = Vectors.fromBreeze(coefficients)
@@ -1359,7 +1359,7 @@ private class LogisticCostFun(
       instances.treeAggregate(
         new LogisticAggregator(bcCoeffs, bcFeaturesStd, numClasses, fitIntercept,
           multinomial)
-      )(seqOp, combOp, depth)
+      )(seqOp, combOp, aggregationDepth)
     }
 
     val totalGradientArray = logisticAggregator.gradient.toArray

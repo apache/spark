@@ -178,7 +178,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * If the dimensions of features or the number of partitions are large,
    * this param could be adjusted to a larger size.
    * Default is 2.
-   * @group expertParam
+   * @group expertSetParam
    */
   @Since("2.1.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
@@ -1030,7 +1030,7 @@ private class LeastSquaresCostFun(
     bcFeaturesStd: Broadcast[Array[Double]],
     bcFeaturesMean: Broadcast[Array[Double]],
     effectiveL2regParam: Double,
-    depth: Int) extends DiffFunction[BDV[Double]] {
+    aggregationDepth: Int) extends DiffFunction[BDV[Double]] {
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val coeffs = Vectors.fromBreeze(coefficients)
@@ -1043,7 +1043,7 @@ private class LeastSquaresCostFun(
 
       instances.treeAggregate(
         new LeastSquaresAggregator(bcCoeffs, labelStd, labelMean, fitIntercept, bcFeaturesStd,
-          bcFeaturesMean))(seqOp, combOp, depth)
+          bcFeaturesMean))(seqOp, combOp, aggregationDepth)
     }
 
     val totalGradientArray = leastSquaresAggregator.gradient.toArray
