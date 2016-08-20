@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark.rdd.{RDD, UnionRDD}
@@ -196,15 +196,13 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
 
-      val newFileFilter = new PathFilter {
-        def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
-      }
-      val directoryFilter = new PathFilter {
-        override def accept(path: Path): Boolean = fs.getFileStatus(path).isDirectory
-      }
-      val directories = fs.globStatus(directoryPath, directoryFilter).map(_.getPath)
+      val directories = fs.globStatus(directoryPath)
+          .filter(_.isDirectory)
+          .map(_.getPath)
       val newFiles = directories.flatMap(dir =>
-        fs.listStatus(dir, newFileFilter).map(_.getPath.toString))
+        fs.listStatus(dir)
+            .filter(isNewFile(_, currentTime, modTimeIgnoreThreshold ))
+            .map(_.getPath.toString))
       val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
       logDebug("# cached file times = " + fileToModTime.size)
@@ -241,8 +239,13 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
    *   The files with mod time T+5 are not remembered and cannot be ignored (since, t+5 > t+1).
    *   Hence they can get selected as new files again. To prevent this, files whose mod time is more
    *   than current batch time are not considered.
+   * @param fs file status
+   * @param currentTime time of the batch
+   * @param modTimeIgnoreThreshold the ignore threshold
+   * @return true if the file has been modified within the batch window
    */
-  private def isNewFile(path: Path, currentTime: Long, modTimeIgnoreThreshold: Long): Boolean = {
+ private def isNewFile(fs: FileStatus, currentTime: Long, modTimeIgnoreThreshold: Long): Boolean = {
+    val path = fs.getPath
     val pathStr = path.toString
     // Reject file if it does not satisfy filter
     if (!filter(path)) {
@@ -250,7 +253,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       return false
     }
     // Reject file if it was created before the ignore time
-    val modTime = getFileModTime(path)
+    val modTime = getFileModTime(fs)
     if (modTime <= modTimeIgnoreThreshold) {
       // Use <= instead of < to avoid SPARK-4518
       logDebug(s"$pathStr ignored as mod time $modTime <= ignore time $modTimeIgnoreThreshold")
@@ -293,8 +296,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   }
 
   /** Get file mod time from cache or fetch it from the file system */
-  private def getFileModTime(path: Path) = {
-    fileToModTime.getOrElseUpdate(path.toString, fs.getFileStatus(path).getModificationTime())
+  private def getFileModTime(fs: FileStatus) = {
+    fileToModTime.getOrElseUpdate(fs.getPath.toString, fs.getModificationTime())
   }
 
   private def directoryPath: Path = {
