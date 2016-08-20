@@ -65,7 +65,8 @@ private[spark] class Client(
   import Client._
   import YarnSparkHadoopUtil._
 
-  val context: String = s"${sparkConf.get("spark.app.name")} running on Spark"
+
+  val context: String = s"${sparkConf.get("spark.app.name", "")} running on Spark"
   Utils.setCallerContext(context)
 
   def this(clientArgs: ClientArguments, spConf: SparkConf) =
