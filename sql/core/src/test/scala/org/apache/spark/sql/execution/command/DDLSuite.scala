@@ -634,13 +634,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(catalog.getTableMetadata(tableIdent1) === expectedTable)
   }
 
-  test("Analyze in-memory cataloged tables") {
+  test("Analyze in-memory cataloged tables(SimpleCatalogRelation)") {
     withTable("tbl") {
       sql("CREATE TABLE tbl(a INT, b INT) USING parquet")
       val e = intercept[AnalysisException] {
         sql("ANALYZE TABLE tbl COMPUTE STATISTICS")
       }.getMessage
-      e.contains("ANALYZE TABLE is only supported for Hive tables, but 'tbl'")
+      assert(e.contains("ANALYZE TABLE is only supported for Hive tables, " +
+        "but 'tbl' is a SimpleCatalogRelation"))
     }
   }
 

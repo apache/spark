@@ -620,7 +620,7 @@ class HiveDDLSuite
     }
   }
 
-  test("Analyze data source tables") {
+  test("Analyze data source tables(LogicalRelation)") {
     withTable("t1") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
@@ -629,7 +629,8 @@ class HiveDDLSuite
         val e = intercept[AnalysisException] {
           sql("ANALYZE TABLE t1 COMPUTE STATISTICS")
         }.getMessage
-        e.contains("ANALYZE TABLE is only supported for Hive tables, but 't1'")
+        assert(e.contains("ANALYZE TABLE is only supported for Hive tables, " +
+          "but 't1' is a LogicalRelation"))
       }
     }
   }
