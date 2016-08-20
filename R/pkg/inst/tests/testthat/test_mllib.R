@@ -95,6 +95,10 @@ test_that("spark.glm summary", {
   expect_equal(stats$df.residual, rStats$df.residual)
   expect_equal(stats$aic, rStats$aic)
 
+  out <- capture.output(print(stats))
+  expect_equal(out[1], "Deviance Residuals:")
+  expect_true(any(grepl("AIC: 59.22", out)))
+
   # binomial family
   df <- suppressWarnings(createDataFrame(iris))
   training <- df[df$Species %in% c("versicolor", "virginica"), ]
