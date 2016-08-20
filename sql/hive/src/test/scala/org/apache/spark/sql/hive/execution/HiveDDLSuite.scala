@@ -630,7 +630,6 @@ class HiveDDLSuite
           sql("ANALYZE TABLE t1 COMPUTE STATISTICS")
         }.getMessage
         e.contains("ANALYZE TABLE is only supported for Hive tables, but 't1'")
-
       }
     }
   }
