@@ -29,9 +29,9 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
-import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_PROVIDER
 import org.apache.spark.sql.hive.orc.OrcFileFormat
 import org.apache.spark.sql.types._
 
@@ -110,9 +110,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       tableIdent: TableIdentifier,
       alias: Option[String]): LogicalPlan = {
     val qualifiedTableName = getQualifiedTableName(tableIdent)
-    val table = client.getTable(qualifiedTableName.database, qualifiedTableName.name)
+    val table = sparkSession.sharedState.externalCatalog.getTable(
+      qualifiedTableName.database, qualifiedTableName.name)
 
-    if (table.properties.get(DATASOURCE_PROVIDER).isDefined) {
+    if (DDLUtils.isDatasourceTable(table)) {
       val dataSourceTable = cachedDataSourceTables(qualifiedTableName)
       val qualifiedTable = SubqueryAlias(qualifiedTableName.name, dataSourceTable, None)
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
@@ -127,8 +128,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     } else {
       val qualifiedTable =
         MetastoreRelation(
-          qualifiedTableName.database, qualifiedTableName.name)(
-          table.copy(provider = Some("hive")), client, sparkSession)
+          qualifiedTableName.database, qualifiedTableName.name)(table, client, sparkSession)
       alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
     }
   }

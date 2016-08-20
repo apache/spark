@@ -266,7 +266,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
 
         case (Some(serde), Some(path)) =>
           val message =
-            s"Persisting data source table $qualifiedTableName with a single input path " +
+            s"Persisting file based data source table $qualifiedTableName with an input path " +
               s"into Hive metastore in Hive compatible format."
           (Some(newHiveCompatibleMetastoreTable(serde, path)), message)
 
