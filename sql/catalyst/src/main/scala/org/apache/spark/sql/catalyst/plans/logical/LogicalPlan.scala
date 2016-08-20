@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
 
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
@@ -244,19 +244,31 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
       // One match, but we also need to extract the requested nested field.
       case Seq((a, nestedFields)) =>
-        // The foldLeft adds ExtractValues for every remaining parts of the identifier,
-        // and aliased it with the last part of the name.
-        // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
-        // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias the final
-        // expression as "c".
-        val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
-          ExtractValue(expr, Literal(fieldName), resolver))
-        Some(Alias(fieldExprs, nestedFields.last)())
+        a.dataType match {
+          case _: StructType | _: MapType | _: ArrayType =>
+            // The foldLeft adds ExtractValues for every remaining parts of the identifier,
+            // and aliased it with the last part of the name.
+            // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
+            // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias the final
+            // expression as "c".
+            val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
+              ExtractValue(expr, Literal(fieldName), resolver))
+            Some(Alias(fieldExprs, nestedFields.last)())
+          case _ =>
+            // The attribute's type is not a complex data structure, hence it can't contain
+            // any nested fields. Try to find the attribute that matches the full candidate's
+            // name.
+            input.find(a => resolver(a.name, name))
 
       // No matches.
       case Seq() =>
-        logTrace(s"Could not find $name in ${input.mkString(", ")}")
-        None
+        // Check whether the candidate's full name matches one of the attributes name.
+        // In this case "a.b.c" is not a struct field and should be considered as an attribute.
+        val attr = input.find(a => resolver(a.name, name))
+        if (attr.isEmpty) {
+          logTrace(s"Could not find $name in ${input.mkString(", ")}")
+        }
+        attr
 
       // More than one match.
       case ambiguousReferences =>
