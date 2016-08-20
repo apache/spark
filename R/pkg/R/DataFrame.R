@@ -1132,9 +1132,8 @@ setMethod("take",
 
 #' Head
 #'
-#' Return the first NUM rows of a SparkDataFrame as a R data.frame. If NUM is NULL,
-#' then head() returns the first 6 rows in keeping with the current data.frame
-#' convention in R.
+#' Return the first \code{num} rows of a SparkDataFrame as a R data.frame. If \code{num} is not
+#' specified, then head() returns the first 6 rows as with R data.frame.
 #'
 #' @param x a SparkDataFrame.
 #' @param num the number of rows to return. Default is 6.
@@ -1657,7 +1656,7 @@ setMethod("$", signature(x = "SparkDataFrame"),
             getColumn(x, name)
           })
 
-#' @param value a Column or NULL. If NULL, the specified Column is dropped.
+#' @param value a Column or \code{NULL}. If \code{NULL}, the specified Column is dropped.
 #' @rdname select
 #' @name $<-
 #' @aliases $<-,SparkDataFrame-method
@@ -2752,9 +2751,9 @@ setMethod("summary",
 #' @param how "any" or "all".
 #'            if "any", drop a row if it contains any nulls.
 #'            if "all", drop a row only if all its values are null.
-#'            if minNonNulls is specified, how is ignored.
+#'            if \code{minNonNulls} is specified, how is ignored.
 #' @param minNonNulls if specified, drop rows that have less than
-#'                    minNonNulls non-null values.
+#'                    \code{minNonNulls} non-null values.
 #'                    This overwrites the how parameter.
 #' @param cols optional list of column names to consider. In \code{fillna},
 #'             columns specified in cols that do not have matching data
@@ -2879,7 +2878,7 @@ setMethod("fillna",
 #' in your system to accommodate the contents.
 #'
 #' @param x a SparkDataFrame.
-#' @param row.names NULL or a character vector giving the row names for the data frame.
+#' @param row.names \code{NULL} or a character vector giving the row names for the data frame.
 #' @param optional If \code{TRUE}, converting column names is optional.
 #' @param ... additional arguments to pass to base::as.data.frame.
 #' @return A data.frame.
