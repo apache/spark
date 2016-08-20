@@ -96,7 +96,7 @@ test_that("spark.glm summary", {
   expect_equal(stats$aic, rStats$aic)
 
   out <- capture.output(print(stats))
-  expect_equal(out[1], "Deviance Residuals:")
+  expect_equal(out[2], "Deviance Residuals:")
   expect_true(any(grepl("AIC: 59.22", out)))
 
   # binomial family
@@ -491,7 +491,7 @@ test_that("spark.isotonicRegression", {
                         weightCol = "weight")
   # only allow one variable on the right hand side of the formula
   expect_error(model2 <- spark.isoreg(df, ~., isotonic = FALSE))
-  result <- summary(model, df)
+  result <- summary(model)
   expect_equal(result$predictions, list(7, 5, 4, 4, 1))
 
   # Test model prediction
