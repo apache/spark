@@ -611,20 +611,7 @@ class Analyzer(
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
             ExtractValue(child, fieldExpr, resolver)
-          case l: LazilyDeterminedAttribute =>
-            val foundPlanOpt = q.findByBreadthFirst(_.planId == l.plan.planId)
-            val foundPlan = foundPlanOpt.getOrElse {
-              failAnalysis(s"""Cannot resolve column name "${l.name}" """)
-            }
-
-            if (foundPlan == l.plan) {
-              l.namedExpr
-            } else {
-              foundPlan.resolveQuoted(l.name, resolver).getOrElse {
-                failAnalysis(s"""Cannot resolve column name "${l.name}" """ +
-                  s"""among (${foundPlan.schema.fieldNames.mkString(", ")})""")
-              }
-            }
+          case l: LazilyDeterminedAttribute => resolveLazilyDeterminedAttribute(l, q)
         }
     }
 
@@ -697,6 +684,25 @@ class Analyzer(
     exprs.exists(_.find(_.isInstanceOf[UnresolvedDeserializer]).isDefined)
   }
 
+  private def resolveLazilyDeterminedAttribute(
+      expr: LazilyDeterminedAttribute,
+      plan: LogicalPlan): Expression = {
+
+      val foundPlanOpt = plan.findByBreadthFirst(_.planId == expr.plan.planId)
+      val foundPlan = foundPlanOpt.getOrElse {
+        failAnalysis(s"""Cannot resolve column name "${expr.name}" """)
+      }
+
+      if (foundPlan == expr.plan) {
+        expr.namedExpr
+      } else {
+        foundPlan.resolveQuoted(expr.name, resolver).getOrElse {
+          failAnalysis(s"""Cannot resolve column name "${expr.name}" """ +
+            s"""among (${foundPlan.schema.fieldNames.mkString(", ")})""")
+        }
+      }
+  }
+
   protected[sql] def resolveExpression(
       expr: Expression,
       plan: LogicalPlan,
@@ -712,20 +718,7 @@ class Analyzer(
           withPosition(u) { plan.resolve(nameParts, resolver).getOrElse(u) }
         case UnresolvedExtractValue(child, fieldName) if child.resolved =>
           ExtractValue(child, fieldName, resolver)
-        case l: LazilyDeterminedAttribute =>
-          val foundPlanOpt = plan.findByBreadthFirst(_.planId == l.plan.planId)
-          val foundPlan = foundPlanOpt.getOrElse {
-            failAnalysis(s"""Cannot resolve column name "${l.name}" """)
-          }
-
-          if (foundPlan == l.plan) {
-            l.namedExpr
-          } else {
-            foundPlan.resolveQuoted(l.name, resolver).getOrElse {
-              failAnalysis(s"""Cannot resolve column name "${l.name}" """ +
-                s"""among (${foundPlan.schema.fieldNames.mkString(", ")})""")
-            }
-          }
+        case l: LazilyDeterminedAttribute => resolveLazilyDeterminedAttribute(l, plan)
       }
     } catch {
       case a: AnalysisException if !throws => expr
