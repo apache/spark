@@ -54,8 +54,10 @@ setMethod("show", "WindowSpec",
 #'
 #' Defines the partitioning columns in a WindowSpec.
 #'
-#' @param x a WindowSpec
-#' @return a WindowSpec
+#' @param x a WindowSpec.
+#' @param col a column to partition on (desribed by the name or Column).
+#' @param ... additional column(s) to partition on.
+#' @return A WindowSpec.
 #' @rdname partitionBy
 #' @name partitionBy
 #' @aliases partitionBy,WindowSpec-method
@@ -86,7 +88,7 @@ setMethod("partitionBy",
 #'
 #' Defines the ordering columns in a WindowSpec.
 #' @param x a WindowSpec
-#' @param col a character or Column object indicating an ordering column
+#' @param col a character or Column indicating an ordering column
 #' @param ... additional sorting fields
 #' @return A WindowSpec.
 #' @name orderBy
@@ -192,6 +194,9 @@ setMethod("rangeBetween",
 #'
 #' Define a windowing column.
 #'
+#' @param x a Column, usually one returned by window function(s).
+#' @param window a WindowSpec object. Can be created by `windowPartitionBy` or
+#'        `windowOrderBy` and configured by other WindowSpec methods.
 #' @rdname over
 #' @name over
 #' @aliases over,Column,WindowSpec-method
