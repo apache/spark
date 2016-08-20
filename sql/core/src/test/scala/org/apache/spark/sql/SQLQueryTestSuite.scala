@@ -276,13 +276,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     session.sql(
       """
         |CREATE OR REPLACE TEMPORARY VIEW src1 AS SELECT * FROM VALUES
-        |(201, CAST(null as String)),
+        |(201, null),
         |(86, "val_86"),
-        |(CAST(null as int), "val_null"),
+        |(null, "val_null"),
         |(165, "val_165"),
-        |(CAST(null as int), CAST(null as String)),
+        |(null, null),
         |(330, "val_330"),
-        |(165, CAST(null as String))
+        |(165, null)
         |as src1(key, value)
       """.stripMargin)
 
