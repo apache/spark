@@ -81,9 +81,9 @@ case class LogicalRelation(
 
   /**
    * Returns a new instance of this LogicalRelation. According to the semantics of
-   * MultiInstanceRelation, this method should returns a copy of this object with
-   * unique expression ids. Thus we don't respect the `expectedOutputAttributes` and
-   * create new instances of original output attributes.
+   * MultiInstanceRelation, this method returns a copy of this object with
+   * unique expression ids. We respect the `expectedOutputAttributes` and create
+   * new instances of attributes in it.
    */
   override def newInstance(): this.type = {
     LogicalRelation(
