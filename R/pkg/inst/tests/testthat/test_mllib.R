@@ -409,7 +409,7 @@ test_that("spark.naiveBayes", {
 
   # Test e1071::naiveBayes
   if (requireNamespace("e1071", quietly = TRUE)) {
-    expect_that(m <- e1071::naiveBayes(Survived ~ ., data = t1), not(throws_error()))
+    expect_error(m <- e1071::naiveBayes(Survived ~ ., data = t1), NA)
     expect_equal(as.character(predict(m, t1[1, ])), "Yes")
   }
 })
