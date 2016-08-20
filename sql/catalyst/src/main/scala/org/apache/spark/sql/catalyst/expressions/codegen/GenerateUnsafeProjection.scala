@@ -202,7 +202,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           final int $tmpCursor = $bufferHolder.cursor;
           ${writeStructToBuffer(ctx, element, t.map(_.dataType), bufferHolder)}
           $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
-          $arrayWriter.alignToEightBytes($bufferHolder.cursor - $tmpCursor);
         """
 
       case a @ ArrayType(et, _) =>
@@ -210,7 +209,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           final int $tmpCursor = $bufferHolder.cursor;
           ${writeArrayToBuffer(ctx, element, et, bufferHolder)}
           $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
-          $arrayWriter.alignToEightBytes($bufferHolder.cursor - $tmpCursor);
         """
 
       case m @ MapType(kt, vt, _) =>
@@ -218,7 +216,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           final int $tmpCursor = $bufferHolder.cursor;
           ${writeMapToBuffer(ctx, element, kt, vt, bufferHolder)}
           $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
-          $arrayWriter.alignToEightBytes($bufferHolder.cursor - $tmpCursor);
         """
 
       case t: DecimalType =>

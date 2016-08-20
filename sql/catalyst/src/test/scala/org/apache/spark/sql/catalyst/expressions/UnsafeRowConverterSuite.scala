@@ -301,7 +301,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
   private def testArrayInt(array: UnsafeArrayData, values: Seq[Int]): Unit = {
     assert(array.numElements == values.length)
     assert(array.getSizeInBytes ==
-      8 + scala.math.ceil(values.length / 64.toDouble) * 8 + 4 * values.length)
+      8 + scala.math.ceil(values.length / 64.toDouble) * 8 + roundedSize(4 * values.length))
     values.zipWithIndex.foreach {
       case (value, index) => assert(array.getInt(index) == value)
     }
@@ -340,7 +340,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val nestedArray = unsafeArray2.getArray(0)
     testArrayInt(nestedArray, Seq(3, 4))
 
-    assert(unsafeArray2.getSizeInBytes == 8 + 8 + 4 + nestedArray.getSizeInBytes)
+    assert(unsafeArray2.getSizeInBytes == 8 + 8 + 8 + nestedArray.getSizeInBytes)
 
     val array1Size = roundedSize(unsafeArray1.getSizeInBytes)
     val array2Size = roundedSize(unsafeArray2.getSizeInBytes)
@@ -383,7 +383,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       val nestedMap = valueArray.getMap(0)
       testMapInt(nestedMap, Seq(5, 6), Seq(7, 8))
 
-      assert(valueArray.getSizeInBytes == 8 + 8 + 4 + nestedMap.getSizeInBytes)
+      assert(valueArray.getSizeInBytes == 8 + 8 + 8 + roundedSize(nestedMap.getSizeInBytes))
     }
 
     assert(unsafeMap2.getSizeInBytes == 8 + keyArray.getSizeInBytes + valueArray.getSizeInBytes)
@@ -426,7 +426,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       assert(innerStruct.getLong(0) == 2L)
     }
 
-    assert(field2.getSizeInBytes == 8 + 8 + 4 + innerStruct.getSizeInBytes)
+    assert(field2.getSizeInBytes == 8 + 8 + 8 + innerStruct.getSizeInBytes)
 
     assert(unsafeRow.getSizeInBytes ==
       8 + 8 * 2 + field1.getSizeInBytes + roundedSize(field2.getSizeInBytes))
@@ -469,7 +469,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       assert(innerStruct.getSizeInBytes == 8 + 8)
       assert(innerStruct.getLong(0) == 4L)
 
-      assert(valueArray.getSizeInBytes == 8 + 8 + 4 + innerStruct.getSizeInBytes)
+      assert(valueArray.getSizeInBytes == 8 + 8 + 8 + innerStruct.getSizeInBytes)
     }
 
     assert(field2.getSizeInBytes == 8 + keyArray.getSizeInBytes + valueArray.getSizeInBytes)
@@ -498,7 +498,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val innerMap = field1.getMap(0)
     testMapInt(innerMap, Seq(1), Seq(2))
 
-    assert(field1.getSizeInBytes == 8 + 8 + 4 + innerMap.getSizeInBytes)
+    assert(field1.getSizeInBytes == 8 + 8 + 8 + roundedSize(innerMap.getSizeInBytes))
 
     val field2 = unsafeRow.getMap(1)
     assert(field2.numElements == 1)
@@ -514,7 +514,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       val innerArray = valueArray.getArray(0)
       testArrayInt(innerArray, Seq(4))
 
-      assert(valueArray.getSizeInBytes == 8 + 8 + 4 + innerArray.getSizeInBytes)
+      assert(valueArray.getSizeInBytes == 8 + 8 + 8 + innerArray.getSizeInBytes)
     }
 
     assert(field2.getSizeInBytes == 8 + keyArray.getSizeInBytes + valueArray.getSizeInBytes)
