@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.thrift.TException
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -37,10 +38,18 @@ import org.apache.spark.sql.hive.client.HiveClient
  * A persistent implementation of the system catalog using Hive.
  * All public methods must be synchronized for thread-safety.
  */
-private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configuration)
+private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configuration)
   extends ExternalCatalog with Logging {
 
   import CatalogTypes.TablePartitionSpec
+
+  /**
+   * A Hive client used to interact with the metastore.
+   */
+  // This needs to be a lazy val at here because TestHiveSharedState is overriding it.
+  private lazy val client: HiveClient = {
+    HiveUtils.newClientForMetadata(conf, hadoopConf)
+  }
 
   // Exceptions thrown by the hive client that we would like to wrap
   private val clientExceptions = Set(
@@ -80,6 +89,12 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
   private def requireTableExists(db: String, table: String): Unit = {
     withClient { getTable(db, table) }
   }
+
+  def getClient: HiveClient = client
+
+  def getNewClient: HiveClient = client.newSession()
+
+  def resetClient(): Unit = client.reset()
 
   // --------------------------------------------------------------------------
   // Databases
