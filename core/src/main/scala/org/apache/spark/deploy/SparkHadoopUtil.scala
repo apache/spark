@@ -107,11 +107,11 @@ class SparkHadoopUtil extends Logging {
         if (key.startsWith("spark.hadoop.")) {
           hadoopConf.set(key.substring("spark.hadoop.".length), value)
         }
-	// Copy any "fs.swift2d.foo=bar" properties into conf as "fs.swift2d.foo=bar"
-        else if (key.startsWith("fs.swift2d")){
+	// Copy any "fs.swift2d.foo=bar" or "fs.swift.foo=bar" properties into conf 
+        else if (key.startsWith("fs.swift")){
           hadoopConf.set(key, value)
         }
-        // Copy any "fs.s3x.foo=bar" properties into conf as "fs.s3x.foo=bar"
+        // Copy any "fs.s3.foo=bar" or "fs.s3a.foo=bar" or "fs.s3n.foo=bar" properties into conf 
         else if (key.startsWith("fs.s3")){
           hadoopConf.set(key, value)
         }
