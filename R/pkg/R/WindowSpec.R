@@ -44,6 +44,7 @@ windowSpec <- function(sws) {
 }
 
 #' @rdname show
+#' @export
 #' @note show(WindowSpec) since 2.0.0
 setMethod("show", "WindowSpec",
           function(object) {

@@ -642,7 +642,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @rdname spark.naiveBayes
 #' @aliases spark.naiveBayes,SparkDataFrame,formula-method
 #' @name spark.naiveBayes
-#' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
+#' @seealso e1071: \url{https://cran.r-project.org/package=e1071}
 #' @export
 #' @examples
 #' \dontrun{
@@ -834,7 +834,7 @@ read.ml <- function(path) {
 #'                Note that operator '.' is not supported currently.
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model.
 #' @rdname spark.survreg
-#' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/}
+#' @seealso survival: \url{https://cran.r-project.org/package=survival}
 #' @export
 #' @examples
 #' \dontrun{
@@ -889,10 +889,11 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @param customizedStopWords stopwords that need to be removed from the given corpus. Ignore the
 #'        parameter if libSVM-format column is used as the features column.
 #' @param maxVocabSize maximum vocabulary size, default 1 << 18
+#' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model
 #' @rdname spark.lda
 #' @aliases spark.lda,SparkDataFrame-method
-#' @seealso topicmodels: \url{https://cran.r-project.org/web/packages/topicmodels/}
+#' @seealso topicmodels: \url{https://cran.r-project.org/package=topicmodels}
 #' @export
 #' @examples
 #' \dontrun{
@@ -981,7 +982,7 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' @return \code{spark.gaussianMixture} returns a fitted multivariate gaussian mixture model.
 #' @rdname spark.gaussianMixture
 #' @name spark.gaussianMixture
-#' @seealso mixtools: \url{https://cran.r-project.org/web/packages/mixtools/}
+#' @seealso mixtools: \url{https://cran.r-project.org/package=mixtools}
 #' @export
 #' @examples
 #' \dontrun{
@@ -1094,7 +1095,7 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @param numUserBlocks number of user blocks used to parallelize computation (> 0).
 #' @param numItemBlocks number of item blocks used to parallelize computation (> 0).
 #' @param checkpointInterval number of checkpoint intervals (>= 1) or disable checkpoint (-1).
-#'
+#' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.als} returns a fitted ALS model
 #' @rdname spark.als
 #' @aliases spark.als,SparkDataFrame-method

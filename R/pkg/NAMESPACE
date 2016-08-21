@@ -1,5 +1,8 @@
 # Imports from base R
-importFrom(methods, setGeneric, setMethod, setOldClass)
+importFrom("methods", "setGeneric", "setMethod", "setOldClass")
+importFrom("methods", "is", "new", "signature")
+importFrom("stats", "gaussian", "rpois", "runif", "setNames")
+importFrom("utils", "download.file", "packageVersion", "untar")
 
 # Disable native libraries till we figure out how to package it
 # See SPARKR-7839
