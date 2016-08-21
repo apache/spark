@@ -1738,6 +1738,30 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("saveAsTable[append]: too many columns") {
+    import testImplicits._
+    withTable("saveAsTable_too_many_columns") {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_too_many_columns")
+      val e = intercept[AnalysisException] {
+        Seq((3, 4, 5)).toDF("i", "j", "k")
+          .write.mode("append").saveAsTable("saveAsTable_too_many_columns")
+      }
+      assert(e.getMessage.contains("doesn't match"))
+    }
+  }
+
+  test("saveAsTable[append]: less columns") {
+    import testImplicits._
+    withTable("saveAsTable_less_columns") {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_less_columns")
+      val e = intercept[AnalysisException] {
+        Seq((4)).toDF("j")
+          .write.mode("append").saveAsTable("saveAsTable_less_columns")
+      }
+      assert(e.getMessage.contains("doesn't match"))
+    }
+  }
+
   test("show functions") {
     withUserDefinedFunction("add_one" -> true) {
       val numFunctions = FunctionRegistry.functionSet.size.toLong
