@@ -123,26 +123,22 @@ private[ui] object RDDOperationGraph extends Logging {
     val addRDDIds = new mutable.HashSet[Int]()
     val dropRDDIds = new mutable.HashSet[Int]()
 
-    def isAllowed(ids: mutable.HashSet[Int], rdd: RDDInfo): Boolean = {
+    def isAllowed(rdd: RDDInfo): Boolean = {
       val parentIds = rdd.parentIds
       if (parentIds.size == 0) {
         rootNodeCount < retainedNodes
       } else {
-        if (ids.size > 0) {
-            parentIds.exists(id => ids.contains(id) || !dropRDDIds.contains(id))
-        } else {
-            true
-        }
+        parentIds.exists(id => addRDDIds.contains(id) || !dropRDDIds.contains(id))
       }
     }
 
     // Find nodes, edges, and operation scopes that belong to this stage
     stage.rddInfos.sortBy(_.id).foreach { rdd =>
-      val keepNode: Boolean = isAllowed(addRDDIds, rdd)
+      val keepNode = isAllowed(rdd)
       if (keepNode) {
         addRDDIds.add(rdd.id)
         edges ++= rdd.parentIds.filter(id => !dropRDDIds.contains(id))
-          .map { parentId => RDDOperationEdge(parentId, rdd.id) }
+          .map(parentId => RDDOperationEdge(parentId, rdd.id))
       } else {
         dropRDDIds.add(rdd.id)
       }
