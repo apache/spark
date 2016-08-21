@@ -1062,14 +1062,14 @@ the Data Sources API. The following options are supported:
   <tr>
     <td><code>truncate</code></td>
     <td>
-     This is a JDBC writer related option. To truncate the existing table before inserting the new data. This option only works with <code>SaveMode.Overwrite</code>. Without this option, Spark will drop the entire table, including its table definitions as well. <code>truncate</code> way is more efficient and ideal for cleaning out data from existing temp table. Its default value is <code>false</code>. 
+     This is a JDBC writer related option. When <code>SaveMode.Overwrite</code> is enabled, this option causes Spark to truncate an existing table instead of dropping and recreating it. This can be more efficient, and prevents the table metadata (e.g. indices) from being removed. However, it will not work in some cases, such as when the new data has a different schema. It defaults to <code>false</code>. 
    </td>
   </tr>
   
   <tr>
     <td><code>createTableOptions</code></td>
     <td>
-     This is a JDBC writer related option. To allow certain options to append when creating a new table, which can be  table_options or partition_options. E.g., <code>CREATE TABLE t (name string) ENGINE=InnoDB </code>. By default, it is empty string.
+     This is a JDBC writer related option. If specified, this option allows setting of database-specific table and partition options when creating a table. For example: <code>CREATE TABLE t (name string) ENGINE=InnoDB.</code>
    </td>
   </tr>
 </table>
