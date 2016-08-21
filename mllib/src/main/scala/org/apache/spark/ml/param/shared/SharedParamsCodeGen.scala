@@ -78,7 +78,9 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("weightCol", "weight column name. If this is not set or empty, we treat " +
         "all instance weights as 1.0"),
       ParamDesc[String]("solver", "the solver algorithm for optimization. If this is not set or " +
-        "empty, default value is 'auto'", Some("\"auto\"")))
+        "empty, default value is 'auto'", Some("\"auto\"")),
+      ParamDesc[Int]("aggregationDepth", "suggested depth for treeAggregate (>= 2)", Some("2"),
+        isValid = "ParamValidators.gtEq(2)"))
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
