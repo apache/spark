@@ -265,7 +265,7 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
 #' @param x summary object of fitted generalized linear model returned by \code{summary} function
 #' @export
 #' @note print.summary.GeneralizedLinearRegressionModel since 2.0.0
-print.summary.GeneralizedLinearRegressionModel <- function(x) {
+print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   if (x$is.loaded) {
     cat("\nSaved-loaded model does not support output 'Deviance Residuals'.\n")
   } else {
