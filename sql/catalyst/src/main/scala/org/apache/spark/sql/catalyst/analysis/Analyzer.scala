@@ -688,19 +688,19 @@ class Analyzer(
       expr: LazilyDeterminedAttribute,
       plan: LogicalPlan): Expression = {
 
-      val foundPlanOpt = plan.findByBreadthFirst(_.planId == expr.plan.planId)
-      val foundPlan = foundPlanOpt.getOrElse {
-        failAnalysis(s"""Cannot resolve column name "${expr.name}" """)
-      }
+    val foundPlanOpt = plan.findByBreadthFirst(_.planId == expr.plan.planId)
+    val foundPlan = foundPlanOpt.getOrElse {
+      failAnalysis(s"""Cannot resolve column name "${expr.name}" """)
+    }
 
-      if (foundPlan == expr.plan) {
-        expr.namedExpr
-      } else {
-        foundPlan.resolveQuoted(expr.name, resolver).getOrElse {
-          failAnalysis(s"""Cannot resolve column name "${expr.name}" """ +
-            s"""among (${foundPlan.schema.fieldNames.mkString(", ")})""")
-        }
+    if (foundPlan == expr.plan) {
+      expr.namedExpr
+    } else {
+      foundPlan.resolveQuoted(expr.name, resolver).getOrElse {
+        failAnalysis(s"""Cannot resolve column name "${expr.name}" """ +
+          s"""among (${foundPlan.schema.fieldNames.mkString(", ")})""")
       }
+    }
   }
 
   protected[sql] def resolveExpression(
