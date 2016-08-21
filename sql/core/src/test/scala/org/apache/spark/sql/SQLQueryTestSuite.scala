@@ -35,6 +35,16 @@ import org.apache.spark.sql.types.StructType
  * Each case is loaded from a file in "spark/sql/core/src/test/resources/sql-tests/inputs".
  * Each case has a golden result file in "spark/sql/core/src/test/resources/sql-tests/results".
  *
+ * To run the entire test suite:
+ * {{{
+ *   build/sbt "sql/test-only *SQLQueryTestSuite"
+ * }}}
+ *
+ * To run a single test file upon change:
+ * {{{
+ *   build/sbt "~sql/test-only *SQLQueryTestSuite -- -z inline-table.sql"
+ * }}}
+ *
  * To re-generate golden files, run:
  * {{{
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"

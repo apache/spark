@@ -445,12 +445,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Nil)
   }
 
-  test("index into array") {
-    checkAnswer(
-      sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
-      arrayData.map(d => Row(d.data, d.data(0), d.data(0) + d.data(1), d.data(1))).collect())
-  }
-
   test("left semi greater than predicate") {
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       checkAnswer(
@@ -470,16 +464,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.a and x.a >= y.b + 1"),
       Seq(Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2))
     )
-  }
-
-  test("index into array of arrays") {
-    checkAnswer(
-      sql(
-        "SELECT nestedData, nestedData[0][0], nestedData[0][0] + nestedData[0][1] FROM arrayData"),
-      arrayData.map(d =>
-        Row(d.nestedData,
-         d.nestedData(0)(0),
-         d.nestedData(0)(0) + d.nestedData(0)(1))).collect().toSeq)
   }
 
   test("agg") {
