@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
@@ -196,7 +197,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): AFTSurvivalRegressionModel = {
-    validateAndTransformSchema(dataset.schema, fitting = true)
+    transformSchema(dataset.schema, logging = true)
     val instances = extractAFTPoints(dataset)
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
@@ -219,7 +220,9 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
         "columns. This behavior is different from R survival::survreg.")
     }
 
-    val costFun = new AFTCostFun(instances, $(fitIntercept), featuresStd)
+    val bcFeaturesStd = instances.context.broadcast(featuresStd)
+
+    val costFun = new AFTCostFun(instances, $(fitIntercept), bcFeaturesStd)
     val optimizer = new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
 
     /*
@@ -247,6 +250,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       state.x.toArray.clone()
     }
 
+    bcFeaturesStd.destroy(blocking = false)
     if (handlePersistence) instances.unpersist()
 
     val rawCoefficients = parameters.slice(2, parameters.length)
@@ -326,7 +330,7 @@ class AFTSurvivalRegressionModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema)
+    transformSchema(dataset.schema, logging = true)
     val predictUDF = udf { features: Vector => predict(features) }
     val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
     if (hasQuantilesCol) {
@@ -412,70 +416,95 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
  * Two AFTAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
  *
- * Given the values of the covariates x^{'}, for random lifetime t_{i} of subjects i = 1, ..., n,
+ * Given the values of the covariates $x^{'}$, for random lifetime $t_{i}$ of subjects i = 1,..,n,
  * with possible right-censoring, the likelihood function under the AFT model is given as
- * {{{
- *   L(\beta,\sigma)=\prod_{i=1}^n[\frac{1}{\sigma}f_{0}
- *   (\frac{\log{t_{i}}-x^{'}\beta}{\sigma})]^{\delta_{i}}S_{0}
- *   (\frac{\log{t_{i}}-x^{'}\beta}{\sigma})^{1-\delta_{i}}
- * }}}
- * Where \delta_{i} is the indicator of the event has occurred i.e. uncensored or not.
- * Using \epsilon_{i}=\frac{\log{t_{i}}-x^{'}\beta}{\sigma}, the log-likelihood function
+ *
+ * <p><blockquote>
+ *    $$
+ *    L(\beta,\sigma)=\prod_{i=1}^n[\frac{1}{\sigma}f_{0}
+ *      (\frac{\log{t_{i}}-x^{'}\beta}{\sigma})]^{\delta_{i}}S_{0}
+ *    (\frac{\log{t_{i}}-x^{'}\beta}{\sigma})^{1-\delta_{i}}
+ *    $$
+ * </blockquote></p>
+ *
+ * Where $\delta_{i}$ is the indicator of the event has occurred i.e. uncensored or not.
+ * Using $\epsilon_{i}=\frac{\log{t_{i}}-x^{'}\beta}{\sigma}$, the log-likelihood function
  * assumes the form
- * {{{
- *   \iota(\beta,\sigma)=\sum_{i=1}^{n}[-\delta_{i}\log\sigma+
- *   \delta_{i}\log{f_{0}}(\epsilon_{i})+(1-\delta_{i})\log{S_{0}(\epsilon_{i})}]
- * }}}
- * Where S_{0}(\epsilon_{i}) is the baseline survivor function,
- * and f_{0}(\epsilon_{i}) is corresponding density function.
+ *
+ * <p><blockquote>
+ *    $$
+ *    \iota(\beta,\sigma)=\sum_{i=1}^{n}[-\delta_{i}\log\sigma+
+ *    \delta_{i}\log{f_{0}}(\epsilon_{i})+(1-\delta_{i})\log{S_{0}(\epsilon_{i})}]
+ *    $$
+ * </blockquote></p>
+ * Where $S_{0}(\epsilon_{i})$ is the baseline survivor function,
+ * and $f_{0}(\epsilon_{i})$ is corresponding density function.
  *
  * The most commonly used log-linear survival regression method is based on the Weibull
  * distribution of the survival time. The Weibull distribution for lifetime corresponding
  * to extreme value distribution for log of the lifetime,
- * and the S_{0}(\epsilon) function is
- * {{{
- *   S_{0}(\epsilon_{i})=\exp(-e^{\epsilon_{i}})
- * }}}
- * the f_{0}(\epsilon_{i}) function is
- * {{{
- *   f_{0}(\epsilon_{i})=e^{\epsilon_{i}}\exp(-e^{\epsilon_{i}})
- * }}}
+ * and the $S_{0}(\epsilon)$ function is
+ *
+ * <p><blockquote>
+ *    $$
+ *    S_{0}(\epsilon_{i})=\exp(-e^{\epsilon_{i}})
+ *    $$
+ * </blockquote></p>
+ *
+ * and the $f_{0}(\epsilon_{i})$ function is
+ *
+ * <p><blockquote>
+ *    $$
+ *    f_{0}(\epsilon_{i})=e^{\epsilon_{i}}\exp(-e^{\epsilon_{i}})
+ *    $$
+ * </blockquote></p>
+ *
  * The log-likelihood function for Weibull distribution of lifetime is
- * {{{
- *   \iota(\beta,\sigma)=
- *   -\sum_{i=1}^n[\delta_{i}\log\sigma-\delta_{i}\epsilon_{i}+e^{\epsilon_{i}}]
- * }}}
+ *
+ * <p><blockquote>
+ *    $$
+ *    \iota(\beta,\sigma)=
+ *    -\sum_{i=1}^n[\delta_{i}\log\sigma-\delta_{i}\epsilon_{i}+e^{\epsilon_{i}}]
+ *    $$
+ * </blockquote></p>
+ *
  * Due to minimizing the negative log-likelihood equivalent to maximum a posteriori probability,
- * the loss function we use to optimize is -\iota(\beta,\sigma).
- * The gradient functions for \beta and \log\sigma respectively are
- * {{{
- *   \frac{\partial (-\iota)}{\partial \beta}=
- *   \sum_{1=1}^{n}[\delta_{i}-e^{\epsilon_{i}}]\frac{x_{i}}{\sigma}
- * }}}
- * {{{
- *   \frac{\partial (-\iota)}{\partial (\log\sigma)}=
- *   \sum_{i=1}^{n}[\delta_{i}+(\delta_{i}-e^{\epsilon_{i}})\epsilon_{i}]
- * }}}
- * @param parameters including three part: The log of scale parameter, the intercept and
- *                regression coefficients corresponding to the features.
+ * the loss function we use to optimize is $-\iota(\beta,\sigma)$.
+ * The gradient functions for $\beta$ and $\log\sigma$ respectively are
+ *
+ * <p><blockquote>
+ *    $$
+ *    \frac{\partial (-\iota)}{\partial \beta}=
+ *    \sum_{1=1}^{n}[\delta_{i}-e^{\epsilon_{i}}]\frac{x_{i}}{\sigma} \\
+ *
+ *    \frac{\partial (-\iota)}{\partial (\log\sigma)}=
+ *    \sum_{i=1}^{n}[\delta_{i}+(\delta_{i}-e^{\epsilon_{i}})\epsilon_{i}]
+ *    $$
+ * </blockquote></p>
+ *
+ * @param bcParameters The broadcasted value includes three part: The log of scale parameter,
+ *                     the intercept and regression coefficients corresponding to the features.
  * @param fitIntercept Whether to fit an intercept term.
- * @param featuresStd The standard deviation values of the features.
+ * @param bcFeaturesStd The broadcast standard deviation values of the features.
  */
 private class AFTAggregator(
-    parameters: BDV[Double],
+    bcParameters: Broadcast[BDV[Double]],
     fitIntercept: Boolean,
-    featuresStd: Array[Double]) extends Serializable {
+    bcFeaturesStd: Broadcast[Array[Double]]) extends Serializable {
 
+  private val length = bcParameters.value.length
+  // make transient so we do not serialize between aggregation stages
+  @transient private lazy val parameters = bcParameters.value
   // the regression coefficients to the covariates
-  private val coefficients = parameters.slice(2, parameters.length)
-  private val intercept = parameters(1)
+  @transient private lazy val coefficients = parameters.slice(2, length)
+  @transient private lazy val intercept = parameters(1)
   // sigma is the scale parameter of the AFT model
-  private val sigma = math.exp(parameters(0))
+  @transient private lazy val sigma = math.exp(parameters(0))
 
   private var totalCnt: Long = 0L
   private var lossSum = 0.0
   // Here we optimize loss function over log(sigma), intercept and coefficients
-  private val gradientSumArray = Array.ofDim[Double](parameters.length)
+  private val gradientSumArray = Array.ofDim[Double](length)
 
   def count: Long = totalCnt
   def loss: Double = {
@@ -502,11 +531,13 @@ private class AFTAggregator(
     val ti = data.label
     val delta = data.censor
 
+    val localFeaturesStd = bcFeaturesStd.value
+
     val margin = {
       var sum = 0.0
       xi.foreachActive { (index, value) =>
-        if (featuresStd(index) != 0.0 && value != 0.0) {
-          sum += coefficients(index) * (value / featuresStd(index))
+        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+          sum += coefficients(index) * (value / localFeaturesStd(index))
         }
       }
       sum + intercept
@@ -520,8 +551,8 @@ private class AFTAggregator(
     gradientSumArray(0) += delta + multiplier * sigma * epsilon
     gradientSumArray(1) += { if (fitIntercept) multiplier else 0.0 }
     xi.foreachActive { (index, value) =>
-      if (featuresStd(index) != 0.0 && value != 0.0) {
-        gradientSumArray(index + 2) += multiplier * (value / featuresStd(index))
+      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+        gradientSumArray(index + 2) += multiplier * (value / localFeaturesStd(index))
       }
     }
 
@@ -543,8 +574,7 @@ private class AFTAggregator(
       lossSum += other.lossSum
 
       var i = 0
-      val len = this.gradientSumArray.length
-      while (i < len) {
+      while (i < length) {
         this.gradientSumArray(i) += other.gradientSumArray(i)
         i += 1
       }
@@ -561,12 +591,14 @@ private class AFTAggregator(
 private class AFTCostFun(
     data: RDD[AFTPoint],
     fitIntercept: Boolean,
-    featuresStd: Array[Double]) extends DiffFunction[BDV[Double]] {
+    bcFeaturesStd: Broadcast[Array[Double]]) extends DiffFunction[BDV[Double]] {
 
   override def calculate(parameters: BDV[Double]): (Double, BDV[Double]) = {
 
+    val bcParameters = data.context.broadcast(parameters)
+
     val aftAggregator = data.treeAggregate(
-      new AFTAggregator(parameters, fitIntercept, featuresStd))(
+      new AFTAggregator(bcParameters, fitIntercept, bcFeaturesStd))(
       seqOp = (c, v) => (c, v) match {
         case (aggregator, instance) => aggregator.add(instance)
       },
@@ -574,6 +606,7 @@ private class AFTCostFun(
         case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
       })
 
+    bcParameters.destroy(blocking = false)
     (aftAggregator.loss, aftAggregator.gradient)
   }
 }

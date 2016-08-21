@@ -34,7 +34,6 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
-        PushProjectThroughSample,
         CombineFilters,
         PushDownPredicate,
         BooleanSimplification,
@@ -110,6 +109,12 @@ class FilterPushdownSuite extends PlanTest {
 
     // We can not use comparePlans here because it normalized the plan.
     assert(optimized == correctAnswer)
+  }
+
+  test("SPARK-16994: filter should not be pushed through limit") {
+    val originalQuery = testRelation.limit(10).where('a === 1).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, originalQuery)
   }
 
   test("can't push without rewrite") {
@@ -583,22 +588,6 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
 
     comparePlans(optimized, originalQuery)
-  }
-
-  test("push project and filter down into sample") {
-    val x = testRelation.subquery('x)
-    val originalQuery =
-      Sample(0.0, 0.6, false, 11L, x)().select('a)
-
-    val originalQueryAnalyzed =
-      EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(originalQuery))
-
-    val optimized = Optimize.execute(originalQueryAnalyzed)
-
-    val correctAnswer =
-      Sample(0.0, 0.6, false, 11L, x.select('a))()
-
-    comparePlans(optimized, correctAnswer.analyze)
   }
 
   test("aggregate: push down filter when filter on group by expression") {

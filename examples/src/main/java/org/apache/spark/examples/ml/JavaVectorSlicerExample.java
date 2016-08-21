@@ -28,7 +28,7 @@ import org.apache.spark.ml.attribute.Attribute;
 import org.apache.spark.ml.attribute.AttributeGroup;
 import org.apache.spark.ml.attribute.NumericAttribute;
 import org.apache.spark.ml.feature.VectorSlicer;
-import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -65,9 +65,9 @@ public class JavaVectorSlicerExample {
     // or slicer.setIndices(new int[]{1, 2}), or slicer.setNames(new String[]{"f2", "f3"})
 
     Dataset<Row> output = vectorSlicer.transform(dataset);
-
-    System.out.println(output.select("userFeatures", "features").first());
+    output.show(false);
     // $example off$
+
     spark.stop();
   }
 }

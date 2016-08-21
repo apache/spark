@@ -61,9 +61,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         generator.flush()
       }
 
-      Utils.tryWithResource(factory.createParser(writer.toString)) { parser =>
-        parser.nextToken()
-        JacksonParser.convertRootField(factory, parser, dataType)
+      val dummyOption = new JSONOptions(Map.empty[String, String])
+      val dummySchema = StructType(Seq.empty)
+      val parser = new JacksonParser(dummySchema, "", dummyOption)
+
+      Utils.tryWithResource(factory.createParser(writer.toString)) { jsonParser =>
+        jsonParser.nextToken()
+        val converter = parser.makeRootConverter(dataType)
+        converter.apply(jsonParser)
       }
     }
 
@@ -1079,7 +1084,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("Corrupt records: PERMISSIVE mode") {
     // Test if we can query corrupt records.
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
-      withTempTable("jsonTable") {
+      withTempView("jsonTable") {
         val jsonDF = spark.read.json(corruptRecords)
         jsonDF.createOrReplaceTempView("jsonTable")
         val schema = StructType(
@@ -1515,7 +1520,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("SPARK-12057 additional corrupt records do not throw exceptions") {
     // Test if we can query corrupt records.
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
-      withTempTable("jsonTable") {
+      withTempView("jsonTable") {
         val schema = StructType(
           StructField("_unparsed", StringType, true) ::
             StructField("dummy", StringType, true) :: Nil)
@@ -1632,7 +1637,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("Casting long as timestamp") {
-    withTempTable("jsonTable") {
+    withTempView("jsonTable") {
       val schema = (new StructType).add("ts", TimestampType)
       val jsonDF = spark.read.schema(schema).json(timestampAsLong)
 

@@ -67,22 +67,22 @@ test_that("parallelize() on simple vectors and lists returns an RDD", {
 
 test_that("collect(), following a parallelize(), gives back the original collections", {
   numVectorRDD <- parallelize(jsc, numVector, 10)
-  expect_equal(collect(numVectorRDD), as.list(numVector))
+  expect_equal(collectRDD(numVectorRDD), as.list(numVector))
 
   numListRDD <- parallelize(jsc, numList, 1)
   numListRDD2 <- parallelize(jsc, numList, 4)
-  expect_equal(collect(numListRDD), as.list(numList))
-  expect_equal(collect(numListRDD2), as.list(numList))
+  expect_equal(collectRDD(numListRDD), as.list(numList))
+  expect_equal(collectRDD(numListRDD2), as.list(numList))
 
   strVectorRDD <- parallelize(jsc, strVector, 2)
   strVectorRDD2 <- parallelize(jsc, strVector, 3)
-  expect_equal(collect(strVectorRDD), as.list(strVector))
-  expect_equal(collect(strVectorRDD2), as.list(strVector))
+  expect_equal(collectRDD(strVectorRDD), as.list(strVector))
+  expect_equal(collectRDD(strVectorRDD2), as.list(strVector))
 
   strListRDD <- parallelize(jsc, strList, 4)
   strListRDD2 <- parallelize(jsc, strList, 1)
-  expect_equal(collect(strListRDD), as.list(strList))
-  expect_equal(collect(strListRDD2), as.list(strList))
+  expect_equal(collectRDD(strListRDD), as.list(strList))
+  expect_equal(collectRDD(strListRDD2), as.list(strList))
 })
 
 test_that("regression: collect() following a parallelize() does not drop elements", {
@@ -90,7 +90,7 @@ test_that("regression: collect() following a parallelize() does not drop element
   collLen <- 10
   numPart <- 6
   expected <- runif(collLen)
-  actual <- collect(parallelize(jsc, expected, numPart))
+  actual <- collectRDD(parallelize(jsc, expected, numPart))
   expect_equal(actual, as.list(expected))
 })
 
@@ -99,14 +99,14 @@ test_that("parallelize() and collect() work for lists of pairs (pairwise data)",
   numPairsRDDD1 <- parallelize(jsc, numPairs, 1)
   numPairsRDDD2 <- parallelize(jsc, numPairs, 2)
   numPairsRDDD3 <- parallelize(jsc, numPairs, 3)
-  expect_equal(collect(numPairsRDDD1), numPairs)
-  expect_equal(collect(numPairsRDDD2), numPairs)
-  expect_equal(collect(numPairsRDDD3), numPairs)
+  expect_equal(collectRDD(numPairsRDDD1), numPairs)
+  expect_equal(collectRDD(numPairsRDDD2), numPairs)
+  expect_equal(collectRDD(numPairsRDDD3), numPairs)
   # can also leave out the parameter name, if the params are supplied in order
   strPairsRDDD1 <- parallelize(jsc, strPairs, 1)
   strPairsRDDD2 <- parallelize(jsc, strPairs, 2)
-  expect_equal(collect(strPairsRDDD1), strPairs)
-  expect_equal(collect(strPairsRDDD2), strPairs)
+  expect_equal(collectRDD(strPairsRDDD1), strPairs)
+  expect_equal(collectRDD(strPairsRDDD2), strPairs)
 })
 
 sparkR.session.stop()

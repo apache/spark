@@ -24,7 +24,13 @@ exportMethods("glm",
               "spark.kmeans",
               "fitted",
               "spark.naiveBayes",
-              "spark.survreg")
+              "spark.survreg",
+              "spark.lda",
+              "spark.posterior",
+              "spark.perplexity",
+              "spark.isoreg",
+              "spark.gaussianMixture",
+              "spark.als")
 
 # Job group lifecycle management methods
 export("setJobGroup",
@@ -352,3 +358,5 @@ S3method(structField, character)
 S3method(structField, jobj)
 S3method(structType, jobj)
 S3method(structType, structField)
+
+export("install.spark")

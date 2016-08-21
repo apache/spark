@@ -1581,43 +1581,4 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |  }
         |}
       """.stripMargin)
-
-  testSchemaClipping(
-    "int32 parquet field with byte schema field",
-
-    parquetSchema =
-      """message root {
-        |  optional int32 value;
-        |}
-      """.stripMargin,
-
-    catalystSchema =
-      new StructType()
-        .add("value", ByteType, nullable = true),
-
-    expectedSchema =
-      """message root {
-        |  optional int32 value (INT_8);
-        |}
-      """.stripMargin)
-
-  testSchemaClipping(
-    "int32 parquet field with short schema field",
-
-    parquetSchema =
-      """message root {
-        |  optional int32 value;
-        |}
-      """.stripMargin,
-
-    catalystSchema =
-      new StructType()
-        .add("value", ShortType, nullable = true),
-
-    expectedSchema =
-      """message root {
-        |  optional int32 value (INT_16);
-        |}
-      """.stripMargin)
-
 }

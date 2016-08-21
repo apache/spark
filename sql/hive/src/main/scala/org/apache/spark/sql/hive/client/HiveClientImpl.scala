@@ -43,8 +43,10 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPa
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -139,14 +141,32 @@ private[hive] class HiveClientImpl(
         // so we should keep `conf` and reuse the existing instance of `CliSessionState`.
         originalState
       } else {
-        val hiveConf = new HiveConf(hadoopConf, classOf[SessionState])
+        val hiveConf = new HiveConf(classOf[SessionState])
+        // 1: we set all confs in the hadoopConf to this hiveConf.
+        // This hadoopConf contains user settings in Hadoop's core-site.xml file
+        // and Hive's hive-site.xml file. Note, we load hive-site.xml file manually in
+        // SharedState and put settings in this hadoopConf instead of relying on HiveConf
+        // to load user settings. Otherwise, HiveConf's initialize method will override
+        // settings in the hadoopConf. This issue only shows up when spark.sql.hive.metastore.jars
+        // is not set to builtin. When spark.sql.hive.metastore.jars is builtin, the classpath
+        // has hive-site.xml. So, HiveConf will use that to override its default values.
+        hadoopConf.iterator().asScala.foreach { entry =>
+          val key = entry.getKey
+          val value = entry.getValue
+          if (key.toLowerCase.contains("password")) {
+            logDebug(s"Applying Hadoop and Hive config to Hive Conf: $key=xxx")
+          } else {
+            logDebug(s"Applying Hadoop and Hive config to Hive Conf: $key=$value")
+          }
+          hiveConf.set(key, value)
+        }
         // HiveConf is a Hadoop Configuration, which has a field of classLoader and
         // the initial value will be the current thread's context class loader
         // (i.e. initClassLoader at here).
         // We call initialConf.setClassLoader(initClassLoader) at here to make
         // this action explicit.
         hiveConf.setClassLoader(initClassLoader)
-        // First, we set all spark confs to this hiveConf.
+        // 2: we set all spark confs to this hiveConf.
         sparkConf.getAll.foreach { case (k, v) =>
           if (k.toLowerCase.contains("password")) {
             logDebug(s"Applying Spark config to Hive Conf: $k=xxx")
@@ -155,7 +175,7 @@ private[hive] class HiveClientImpl(
           }
           hiveConf.set(k, v)
         }
-        // Second, we set all entries in config to this hiveConf.
+        // 3: we set all entries in config to this hiveConf.
         extraConfig.foreach { case (k, v) =>
           if (k.toLowerCase.contains("password")) {
             logDebug(s"Applying extra config to HiveConf: $k=xxx")
@@ -336,7 +356,7 @@ private[hive] class HiveClientImpl(
       // Note: Hive separates partition columns and the schema, but for us the
       // partition columns are part of the schema
       val partCols = h.getPartCols.asScala.map(fromHiveColumn)
-      val schema = h.getCols.asScala.map(fromHiveColumn) ++ partCols
+      val schema = StructType(h.getCols.asScala.map(fromHiveColumn) ++ partCols)
 
       // Skew spec, storage handler, and bucketing info can't be mapped to CatalogTable (yet)
       val unsupportedFeatures = ArrayBuffer.empty[String]
@@ -365,9 +385,9 @@ private[hive] class HiveClientImpl(
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
-        sortColumnNames = Seq(), // TODO: populate this
-        bucketColumnNames = h.getBucketCols.asScala,
-        numBuckets = h.getNumBuckets,
+        // We can not populate bucketing information for Hive tables as Spark SQL has a different
+        // implementation of hash function from Hive.
+        bucketSpec = None,
         owner = h.getOwner,
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
@@ -390,10 +410,11 @@ private[hive] class HiveClientImpl(
           outputFormat = Option(h.getOutputFormatClass).map(_.getName),
           serde = Option(h.getSerializationLib),
           compressed = h.getTTable.getSd.isCompressed,
-          serdeProperties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)
+          properties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)
             .map(_.asScala.toMap).orNull
         ),
-        properties = properties,
+        properties = properties.filter(kv => kv._1 != "comment"),
+        comment = properties.get("comment"),
         viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
         unsupportedFeatures = unsupportedFeatures)
@@ -721,16 +742,22 @@ private[hive] class HiveClientImpl(
     Utils.classForName(name)
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
-  private def toHiveColumn(c: CatalogColumn): FieldSchema = {
-    new FieldSchema(c.name, c.dataType, c.comment.orNull)
+  private def toHiveColumn(c: StructField): FieldSchema = {
+    new FieldSchema(c.name, c.dataType.catalogString, c.getComment().orNull)
   }
 
-  private def fromHiveColumn(hc: FieldSchema): CatalogColumn = {
-    new CatalogColumn(
+  private def fromHiveColumn(hc: FieldSchema): StructField = {
+    val columnType = try {
+      CatalystSqlParser.parseDataType(hc.getType)
+    } catch {
+      case e: ParseException =>
+        throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
+    }
+    val field = StructField(
       name = hc.getName,
-      dataType = hc.getType,
-      nullable = true,
-      comment = Option(hc.getComment))
+      dataType = columnType,
+      nullable = true)
+    Option(hc.getComment).map(field.withComment).getOrElse(field)
   }
 
   private def toHiveTable(table: CatalogTable): HiveTable = {
@@ -764,10 +791,7 @@ private[hive] class HiveClientImpl(
       hiveTable.setFields(schema.asJava)
     }
     hiveTable.setPartCols(partCols.asJava)
-    // TODO: set sort columns here too
-    hiveTable.setBucketCols(table.bucketColumnNames.asJava)
     hiveTable.setOwner(conf.getUser)
-    hiveTable.setNumBuckets(table.numBuckets)
     hiveTable.setCreateTime((table.createTime / 1000).toInt)
     hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
     table.storage.locationUri.foreach { loc => shim.setDataLocation(hiveTable, loc) }
@@ -775,7 +799,7 @@ private[hive] class HiveClientImpl(
     table.storage.outputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
     hiveTable.setSerializationLib(
       table.storage.serde.getOrElse("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-    table.storage.serdeProperties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
+    table.storage.properties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
     table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
     table.comment.foreach { c => hiveTable.setProperty("comment", c) }
     table.viewOriginalText.foreach { t => hiveTable.setViewOriginalText(t) }
@@ -799,7 +823,7 @@ private[hive] class HiveClientImpl(
     p.storage.inputFormat.foreach(storageDesc.setInputFormat)
     p.storage.outputFormat.foreach(storageDesc.setOutputFormat)
     p.storage.serde.foreach(serdeInfo.setSerializationLib)
-    serdeInfo.setParameters(p.storage.serdeProperties.asJava)
+    serdeInfo.setParameters(p.storage.properties.asJava)
     storageDesc.setSerdeInfo(serdeInfo)
     tpart.setDbName(ht.getDbName)
     tpart.setTableName(ht.getTableName)
@@ -818,7 +842,7 @@ private[hive] class HiveClientImpl(
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
         compressed = apiPartition.getSd.isCompressed,
-        serdeProperties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
+        properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
           .map(_.asScala.toMap).orNull))
   }
 }
