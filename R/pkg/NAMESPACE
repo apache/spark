@@ -1,7 +1,8 @@
 # Imports from base R
+# Do not include stats:: "rpois", "runif" - causes error at runtime
 importFrom("methods", "setGeneric", "setMethod", "setOldClass")
 importFrom("methods", "is", "new", "signature", "show")
-importFrom("stats", "gaussian", "rpois", "runif", "setNames")
+importFrom("stats", "gaussian", "setNames")
 importFrom("utils", "download.file", "packageVersion", "untar")
 
 # Disable native libraries till we figure out how to package it
