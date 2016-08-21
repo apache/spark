@@ -46,7 +46,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * @note vertex ids are unique.
    * @return an RDD containing the vertices in this graph
    */
-  @transient val vertices: VertexRDD[VD]
+  val vertices: VertexRDD[VD]
 
   /**
    * An RDD containing the edges and their associated attributes.  The entries in the RDD contain
@@ -59,7 +59,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * along with their vertex data.
    *
    */
-  @transient val edges: EdgeRDD[ED]
+  val edges: EdgeRDD[ED]
 
   /**
    * An RDD containing the edge triplets, which are edges along with the vertex data associated with
@@ -77,7 +77,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * val numInvalid = graph.triplets.map(e => if (e.src.data == e.dst.data) 1 else 0).sum
    * }}}
    */
-  @transient val triplets: RDD[EdgeTriplet[VD, ED]]
+  val triplets: RDD[EdgeTriplet[VD, ED]]
 
   /**
    * Caches the vertices and edges associated with this graph at the specified storage level,
@@ -297,7 +297,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
 
   /**
    * Restricts the graph to only the vertices and edges satisfying the predicates. The resulting
-   * subgraph satisifies
+   * subgraph satisfies
    *
    * {{{
    * V' = {v : for all v in V where vpred(v)}
@@ -316,7 +316,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * satisfy the predicates
    */
   def subgraph(
-      epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
+      epred: EdgeTriplet[VD, ED] => Boolean = (x => true),
       vpred: (VertexId, VD) => Boolean = ((v, d) => true))
     : Graph[VD, ED]
 
@@ -341,55 +341,6 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED]
 
   /**
-   * Aggregates values from the neighboring edges and vertices of each vertex.  The user supplied
-   * `mapFunc` function is invoked on each edge of the graph, generating 0 or more "messages" to be
-   * "sent" to either vertex in the edge.  The `reduceFunc` is then used to combine the output of
-   * the map phase destined to each vertex.
-   *
-   * This function is deprecated in 1.2.0 because of SPARK-3936. Use aggregateMessages instead.
-   *
-   * @tparam A the type of "message" to be sent to each vertex
-   *
-   * @param mapFunc the user defined map function which returns 0 or
-   * more messages to neighboring vertices
-   *
-   * @param reduceFunc the user defined reduce function which should
-   * be commutative and associative and is used to combine the output
-   * of the map phase
-   *
-   * @param activeSetOpt an efficient way to run the aggregation on a subset of the edges if
-   * desired. This is done by specifying a set of "active" vertices and an edge direction. The
-   * `sendMsg` function will then run only on edges connected to active vertices by edges in the
-   * specified direction. If the direction is `In`, `sendMsg` will only be run on edges with
-   * destination in the active set. If the direction is `Out`, `sendMsg` will only be run on edges
-   * originating from vertices in the active set. If the direction is `Either`, `sendMsg` will be
-   * run on edges with *either* vertex in the active set. If the direction is `Both`, `sendMsg`
-   * will be run on edges with *both* vertices in the active set. The active set must have the
-   * same index as the graph's vertices.
-   *
-   * @example We can use this function to compute the in-degree of each
-   * vertex
-   * {{{
-   * val rawGraph: Graph[(),()] = Graph.textFile("twittergraph")
-   * val inDeg: RDD[(VertexId, Int)] =
-   *   mapReduceTriplets[Int](et => Iterator((et.dst.id, 1)), _ + _)
-   * }}}
-   *
-   * @note By expressing computation at the edge level we achieve
-   * maximum parallelism.  This is one of the core functions in the
-   * Graph API in that enables neighborhood level computation. For
-   * example this function can be used to count neighbors satisfying a
-   * predicate or implement PageRank.
-   *
-   */
-  @deprecated("use aggregateMessages", "1.2.0")
-  def mapReduceTriplets[A: ClassTag](
-      mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
-      reduceFunc: (A, A) => A,
-      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None)
-    : VertexRDD[A]
-
-  /**
    * Aggregates values from the neighboring edges and vertices of each vertex. The user-supplied
    * `sendMsg` function is invoked on each edge of the graph, generating 0 or more messages to be
    * sent to either vertex in the edge. The `mergeMsg` function is then used to combine all messages
@@ -409,12 +360,12 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * {{{
    * val rawGraph: Graph[_, _] = Graph.textFile("twittergraph")
    * val inDeg: RDD[(VertexId, Int)] =
-   *   aggregateMessages[Int](ctx => ctx.sendToDst(1), _ + _)
+   *   rawGraph.aggregateMessages[Int](ctx => ctx.sendToDst(1), _ + _)
    * }}}
    *
    * @note By expressing computation at the edge level we achieve
    * maximum parallelism.  This is one of the core functions in the
-   * Graph API in that enables neighborhood level computation. For
+   * Graph API that enables neighborhood level computation. For
    * example this function can be used to count neighbors satisfying a
    * predicate or implement PageRank.
    *

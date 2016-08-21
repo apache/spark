@@ -17,14 +17,14 @@
 
 package org.apache.spark.deploy.master
 
-import akka.actor.ActorRef
-
-import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.curator.framework.CuratorFramework
-import org.apache.curator.framework.recipes.leader.{LeaderLatchListener, LeaderLatch}
+import org.apache.curator.framework.recipes.leader.{LeaderLatch, LeaderLatchListener}
 
-private[master] class ZooKeeperLeaderElectionAgent(val masterActor: LeaderElectable,
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkCuratorUtil
+import org.apache.spark.internal.Logging
+
+private[master] class ZooKeeperLeaderElectionAgent(val masterInstance: LeaderElectable,
     conf: SparkConf) extends LeaderLatchListener with LeaderElectionAgent with Logging  {
 
   val WORKING_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark") + "/leader_election"
@@ -75,10 +75,10 @@ private[master] class ZooKeeperLeaderElectionAgent(val masterActor: LeaderElecta
   private def updateLeadershipStatus(isLeader: Boolean) {
     if (isLeader && status == LeadershipStatus.NOT_LEADER) {
       status = LeadershipStatus.LEADER
-      masterActor.electedLeader()
+      masterInstance.electedLeader()
     } else if (!isLeader && status == LeadershipStatus.LEADER) {
       status = LeadershipStatus.NOT_LEADER
-      masterActor.revokedLeadership()
+      masterInstance.revokedLeadership()
     }
   }
 

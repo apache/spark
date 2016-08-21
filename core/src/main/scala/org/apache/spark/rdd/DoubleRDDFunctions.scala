@@ -17,8 +17,9 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.{TaskContext, Logging}
+import org.apache.spark.annotation.Since
+import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.MeanEvaluator
 import org.apache.spark.partial.PartialResult
@@ -30,58 +31,84 @@ import org.apache.spark.util.StatCounter
  */
 class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   /** Add up the elements in this RDD. */
-  def sum(): Double = {
-    self.reduce(_ + _)
+  def sum(): Double = self.withScope {
+    self.fold(0.0)(_ + _)
   }
 
   /**
    * Return a [[org.apache.spark.util.StatCounter]] object that captures the mean, variance and
    * count of the RDD's elements in one operation.
    */
-  def stats(): StatCounter = {
+  def stats(): StatCounter = self.withScope {
     self.mapPartitions(nums => Iterator(StatCounter(nums))).reduce((a, b) => a.merge(b))
   }
 
   /** Compute the mean of this RDD's elements. */
-  def mean(): Double = stats().mean
+  def mean(): Double = self.withScope {
+    stats().mean
+  }
 
-  /** Compute the variance of this RDD's elements. */
-  def variance(): Double = stats().variance
+  /** Compute the population variance of this RDD's elements. */
+  def variance(): Double = self.withScope {
+    stats().variance
+  }
 
-  /** Compute the standard deviation of this RDD's elements. */
-  def stdev(): Double = stats().stdev
+  /** Compute the population standard deviation of this RDD's elements. */
+  def stdev(): Double = self.withScope {
+    stats().stdev
+  }
 
   /**
    * Compute the sample standard deviation of this RDD's elements (which corrects for bias in
    * estimating the standard deviation by dividing by N-1 instead of N).
    */
-  def sampleStdev(): Double = stats().sampleStdev
+  def sampleStdev(): Double = self.withScope {
+    stats().sampleStdev
+  }
 
   /**
    * Compute the sample variance of this RDD's elements (which corrects for bias in
    * estimating the variance by dividing by N-1 instead of N).
    */
-  def sampleVariance(): Double = stats().sampleVariance
+  def sampleVariance(): Double = self.withScope {
+    stats().sampleVariance
+  }
 
   /**
-   * :: Experimental ::
+   * Compute the population standard deviation of this RDD's elements.
+   */
+  @Since("2.1.0")
+  def popStdev(): Double = self.withScope {
+    stats().popStdev
+  }
+
+  /**
+   * Compute the population variance of this RDD's elements.
+   */
+  @Since("2.1.0")
+  def popVariance(): Double = self.withScope {
+    stats().popVariance
+  }
+
+  /**
    * Approximate operation to return the mean within a timeout.
    */
-  @Experimental
-  def meanApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
+  def meanApprox(
+      timeout: Long,
+      confidence: Double = 0.95): PartialResult[BoundedDouble] = self.withScope {
     val processPartition = (ctx: TaskContext, ns: Iterator[Double]) => StatCounter(ns)
-    val evaluator = new MeanEvaluator(self.partitions.size, confidence)
+    val evaluator = new MeanEvaluator(self.partitions.length, confidence)
     self.context.runApproximateJob(self, processPartition, evaluator, timeout)
   }
 
   /**
-   * :: Experimental ::
    * Approximate operation to return the sum within a timeout.
    */
-  @Experimental
-  def sumApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
+  def sumApprox(
+      timeout: Long,
+      confidence: Double = 0.95): PartialResult[BoundedDouble] = self.withScope {
     val processPartition = (ctx: TaskContext, ns: Iterator[Double]) => StatCounter(ns)
-    val evaluator = new SumEvaluator(self.partitions.size, confidence)
+    val evaluator = new SumEvaluator(self.partitions.length, confidence)
     self.context.runApproximateJob(self, processPartition, evaluator, timeout)
   }
 
@@ -93,7 +120,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * If the RDD contains infinity, NaN throws an exception
    * If the elements in RDD do not vary (max == min) always returns a single bucket.
    */
-  def histogram(bucketCount: Int): Pair[Array[Double], Array[Long]] = {
+  def histogram(bucketCount: Int): (Array[Double], Array[Long]) = self.withScope {
     // Scala's built-in range has issues. See #SI-8782
     def customRange(min: Double, max: Double, steps: Int): IndexedSeq[Double] = {
       val span = max - min
@@ -102,7 +129,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
     // Compute the minimum and the maximum
     val (max: Double, min: Double) = self.mapPartitions { items =>
       Iterator(items.foldRight(Double.NegativeInfinity,
-        Double.PositiveInfinity)((e: Double, x: Pair[Double, Double]) =>
+        Double.PositiveInfinity)((e: Double, x: (Double, Double)) =>
         (x._1.max(e), x._2.min(e))))
     }.reduce { (maxmin1, maxmin2) =>
       (maxmin1._1.max(maxmin2._1), maxmin1._2.min(maxmin2._2))
@@ -132,7 +159,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    *  And on the input of 1 and 50 we would have a histogram of 1, 0, 1
    *
    * Note: if your histogram is evenly spaced (e.g. [0, 10, 20, 30]) this can be switched
-   * from an O(log n) inseration to O(1) per element. (where n = # buckets) if you set evenBuckets
+   * from an O(log n) insertion to O(1) per element. (where n = # buckets) if you set evenBuckets
    * to true.
    * buckets must be sorted and not contain any duplicates.
    * buckets array must be at least two elements
@@ -140,7 +167,9 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * the maximum value of the last position and all NaN entries will be counted
    * in that bucket.
    */
-  def histogram(buckets: Array[Double], evenBuckets: Boolean = false): Array[Long] = {
+  def histogram(
+      buckets: Array[Double],
+      evenBuckets: Boolean = false): Array[Long] = self.withScope {
     if (buckets.length < 2) {
       throw new IllegalArgumentException("buckets array must have at least two elements")
     }
@@ -154,8 +183,8 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
       val counters = new Array[Long](buckets.length - 1)
       while (iter.hasNext) {
         bucketFunction(iter.next()) match {
-          case Some(x: Int) => {counters(x) += 1}
-          case _ => {}
+          case Some(x: Int) => counters(x) += 1
+          case _ => // No-Op
         }
       }
       Iterator(counters)
@@ -191,25 +220,23 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
       }
     }
     // Determine the bucket function in constant time. Requires that buckets are evenly spaced
-    def fastBucketFunction(min: Double, increment: Double, count: Int)(e: Double): Option[Int] = {
+    def fastBucketFunction(min: Double, max: Double, count: Int)(e: Double): Option[Int] = {
       // If our input is not a number unless the increment is also NaN then we fail fast
-      if (e.isNaN()) {
-        return None
-      }
-      val bucketNumber = (e - min)/(increment)
-      // We do this rather than buckets.lengthCompare(bucketNumber)
-      // because Array[Double] fails to override it (for now).
-      if (bucketNumber > count || bucketNumber < 0) {
+      if (e.isNaN || e < min || e > max) {
         None
       } else {
-        Some(bucketNumber.toInt.min(count - 1))
+        // Compute ratio of e's distance along range to total range first, for better precision
+        val bucketNumber = (((e - min) / (max - min)) * count).toInt
+        // should be less than count, but will equal count if e == max, in which case
+        // it's part of the last end-range-inclusive bucket, so return count-1
+        Some(math.min(bucketNumber, count - 1))
       }
     }
     // Decide which bucket function to pass to histogramPartition. We decide here
-    // rather than having a general function so that the decission need only be made
+    // rather than having a general function so that the decision need only be made
     // once rather than once per shard
     val bucketFunction = if (evenBuckets) {
-      fastBucketFunction(buckets(0), buckets(1)-buckets(0), buckets.length-1) _
+      fastBucketFunction(buckets.head, buckets.last, buckets.length - 1) _
     } else {
       basicBucketFunction _
     }

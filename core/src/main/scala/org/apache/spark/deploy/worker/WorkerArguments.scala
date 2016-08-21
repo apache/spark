@@ -19,6 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.lang.management.ManagementFactory
 
+import scala.annotation.tailrec
+
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 import org.apache.spark.SparkConf
 
@@ -63,6 +65,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
 
   checkWorkerMemory()
 
+  @tailrec
   private def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
       Utils.checkHost(value, "ip no longer supported, please use hostname " + value)
@@ -105,7 +108,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
       if (masters != null) {  // Two positional arguments were given
         printUsageAndExit(1)
       }
-      masters = value.stripPrefix("spark://").split(",").map("spark://" + _)
+      masters = Utils.parseStandaloneMasterUrls(value)
       parse(tail)
 
     case Nil =>
@@ -121,6 +124,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
    * Print usage and exit JVM with the given exit code.
    */
   def printUsageAndExit(exitCode: Int) {
+    // scalastyle:off println
     System.err.println(
       "Usage: Worker [options] <master>\n" +
       "\n" +
@@ -136,6 +140,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
       "  --webui-port PORT        Port for web UI (default: 8081)\n" +
       "  --properties-file FILE   Path to a custom Spark properties file.\n" +
       "                           Default is conf/spark-defaults.conf.")
+    // scalastyle:on println
     System.exit(exitCode)
   }
 
@@ -147,6 +152,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
     val ibmVendor = System.getProperty("java.vendor").contains("IBM")
     var totalMb = 0
     try {
+      // scalastyle:off classforname
       val bean = ManagementFactory.getOperatingSystemMXBean()
       if (ibmVendor) {
         val beanClass = Class.forName("com.ibm.lang.management.OperatingSystemMXBean")
@@ -157,19 +163,21 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
         val method = beanClass.getDeclaredMethod("getTotalPhysicalMemorySize")
         totalMb = (method.invoke(bean).asInstanceOf[Long] / 1024 / 1024).toInt
       }
+      // scalastyle:on classforname
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         totalMb = 2*1024
+        // scalastyle:off println
         System.out.println("Failed to get total physical memory. Using " + totalMb + " MB")
-      }
+        // scalastyle:on println
     }
     // Leave out 1 GB for the operating system, but don't return a negative memory size
-    math.max(totalMb - 1024, 512)
+    math.max(totalMb - 1024, Utils.DEFAULT_DRIVER_MEM_MB)
   }
 
   def checkWorkerMemory(): Unit = {
     if (memory <= 0) {
-      val message = "Memory can't be 0, missing a M or G on the end of the memory specification?"
+      val message = "Memory is below 1MB, or missing a M/G at the end of the memory specification?"
       throw new IllegalStateException(message)
     }
   }

@@ -19,14 +19,13 @@ package org.apache.spark.mllib.clustering
 
 import scala.util.Random
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
-class KMeansSuite extends FunSuite with MLlibTestSparkContext {
+class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import org.apache.spark.mllib.clustering.KMeans.{K_MEANS_PARALLEL, RANDOM}
 
@@ -75,7 +74,7 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
     val center = Vectors.dense(1.0, 2.0, 3.0)
 
     // Make sure code runs.
-    var model = KMeans.train(data, k=2, maxIterations=1)
+    var model = KMeans.train(data, k = 2, maxIterations = 1)
     assert(model.clusterCenters.size === 2)
   }
 
@@ -87,7 +86,7 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
       2)
 
     // Make sure code runs.
-    var model = KMeans.train(data, k=3, maxIterations=1)
+    var model = KMeans.train(data, k = 3, maxIterations = 1)
     assert(model.clusterCenters.size === 3)
   }
 
@@ -199,9 +198,13 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
   test("k-means|| initialization") {
 
     case class VectorWithCompare(x: Vector) extends Ordered[VectorWithCompare] {
-      @Override def compare(that: VectorWithCompare): Int = {
-        if(this.x.toArray.foldLeft[Double](0.0)((acc, x) => acc + x * x) >
-          that.x.toArray.foldLeft[Double](0.0)((acc, x) => acc + x * x)) -1 else 1
+      override def compare(that: VectorWithCompare): Int = {
+        if (this.x.toArray.foldLeft[Double](0.0)((acc, x) => acc + x * x) >
+          that.x.toArray.foldLeft[Double](0.0)((acc, x) => acc + x * x)) {
+          -1
+        } else {
+          1
+        }
       }
     }
 
@@ -275,9 +278,31 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
       }
     }
   }
+
+  test("Initialize using given cluster centers") {
+    val points = Seq(
+      Vectors.dense(0.0, 0.0),
+      Vectors.dense(1.0, 0.0),
+      Vectors.dense(0.0, 1.0),
+      Vectors.dense(1.0, 1.0)
+    )
+    val rdd = sc.parallelize(points, 3)
+    // creating an initial model
+    val initialModel = new KMeansModel(Array(points(0), points(2)))
+
+    val returnModel = new KMeans()
+      .setK(2)
+      .setMaxIterations(0)
+      .setInitialModel(initialModel)
+      .run(rdd)
+   // comparing the returned model and the initial model
+    assert(returnModel.clusterCenters(0) === initialModel.clusterCenters(0))
+    assert(returnModel.clusterCenters(1) === initialModel.clusterCenters(1))
+  }
+
 }
 
-object KMeansSuite extends FunSuite {
+object KMeansSuite extends SparkFunSuite {
   def createModel(dim: Int, k: Int, isSparse: Boolean): KMeansModel = {
     val singlePoint = isSparse match {
       case true =>
@@ -301,7 +326,7 @@ object KMeansSuite extends FunSuite {
   }
 }
 
-class KMeansClusterSuite extends FunSuite with LocalClusterSparkContext {
+class KMeansClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   test("task size should be small in both training and prediction") {
     val m = 4

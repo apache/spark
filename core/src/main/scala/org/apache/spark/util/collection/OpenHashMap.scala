@@ -19,17 +19,16 @@ package org.apache.spark.util.collection
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.annotation.DeveloperApi
-
 /**
- * :: DeveloperApi ::
  * A fast hash map implementation for nullable keys. This hash map supports insertions and updates,
  * but not deletions. This map is about 5X faster than java.util.HashMap, while using much less
  * space overhead.
  *
  * Under the hood, it uses our OpenHashSet implementation.
+ *
+ * NOTE: when using numeric type as the value type, the user of this class should be careful to
+ * distinguish between the 0/0.0/0L and non-exist value
  */
-@DeveloperApi
 private[spark]
 class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
     initialCapacity: Int)
@@ -52,6 +51,15 @@ class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
   private var nullValue: V = null.asInstanceOf[V]
 
   override def size: Int = if (haveNullValue) _keySet.size + 1 else _keySet.size
+
+  /** Tests whether this map contains a binding for a key. */
+  def contains(k: K): Boolean = {
+    if (k == null) {
+      haveNullValue
+    } else {
+      _keySet.getPos(k) != OpenHashSet.INVALID_POS
+    }
+  }
 
   /** Get the value for a given key */
   def apply(k: K): V = {
@@ -109,7 +117,7 @@ class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
     }
   }
 
-  override def iterator = new Iterator[(K, V)] {
+  override def iterator: Iterator[(K, V)] = new Iterator[(K, V)] {
     var pos = -1
     var nextPair: (K, V) = computeNextPair()
 
@@ -132,9 +140,9 @@ class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
       }
     }
 
-    def hasNext = nextPair != null
+    def hasNext: Boolean = nextPair != null
 
-    def next() = {
+    def next(): (K, V) = {
       val pair = nextPair
       nextPair = computeNextPair()
       pair

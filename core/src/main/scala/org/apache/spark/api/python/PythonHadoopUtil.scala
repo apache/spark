@@ -17,22 +17,22 @@
 
 package org.apache.spark.api.python
 
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
-import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SerializableWritable, SparkException}
+import scala.collection.JavaConverters._
+import scala.util.{Failure, Success, Try}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io._
-import scala.util.{Failure, Success, Try}
-import org.apache.spark.annotation.Experimental
 
+import org.apache.spark.SparkException
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
+import org.apache.spark.rdd.RDD
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
- * :: Experimental ::
  * A trait for use with reading custom classes in PySpark. Implement this trait and add custom
  * transformation code by overriding the convert method.
  */
-@Experimental
 trait Converter[T, + U] extends Serializable {
   def convert(obj: T): U
 }
@@ -61,14 +61,13 @@ private[python] object Converter extends Logging {
  * Other objects are passed through without conversion.
  */
 private[python] class WritableToJavaConverter(
-    conf: Broadcast[SerializableWritable[Configuration]]) extends Converter[Any, Any] {
+    conf: Broadcast[SerializableConfiguration]) extends Converter[Any, Any] {
 
   /**
    * Converts a [[org.apache.hadoop.io.Writable]] to the underlying primitive, String or
    * object representation
    */
   private def convertWritable(writable: Writable): Any = {
-    import collection.JavaConversions._
     writable match {
       case iw: IntWritable => iw.get()
       case dw: DoubleWritable => dw.get()
@@ -89,9 +88,7 @@ private[python] class WritableToJavaConverter(
         aw.get().map(convertWritable(_))
       case mw: MapWritable =>
         val map = new java.util.HashMap[Any, Any]()
-        mw.foreach { case (k, v) =>
-          map.put(convertWritable(k), convertWritable(v))
-        }
+        mw.asScala.foreach { case (k, v) => map.put(convertWritable(k), convertWritable(v)) }
         map
       case w: Writable => WritableUtils.clone(w, conf.value.value)
       case other => other
@@ -122,7 +119,6 @@ private[python] class JavaToWritableConverter extends Converter[Any, Writable] {
    * supported out-of-the-box.
    */
   private def convertToWritable(obj: Any): Writable = {
-    import collection.JavaConversions._
     obj match {
       case i: java.lang.Integer => new IntWritable(i)
       case d: java.lang.Double => new DoubleWritable(d)
@@ -134,15 +130,14 @@ private[python] class JavaToWritableConverter extends Converter[Any, Writable] {
       case null => NullWritable.get()
       case map: java.util.Map[_, _] =>
         val mapWritable = new MapWritable()
-        map.foreach { case (k, v) =>
+        map.asScala.foreach { case (k, v) =>
           mapWritable.put(convertToWritable(k), convertToWritable(v))
         }
         mapWritable
-      case array: Array[Any] => {
+      case array: Array[Any] =>
         val arrayWriteable = new ArrayWritable(classOf[Writable])
         arrayWriteable.set(array.map(convertToWritable(_)))
         arrayWriteable
-      }
       case other => throw new SparkException(
         s"Data of type ${other.getClass.getName} cannot be used")
     }
@@ -161,9 +156,8 @@ private[python] object PythonHadoopUtil {
    * Convert a [[java.util.Map]] of properties to a [[org.apache.hadoop.conf.Configuration]]
    */
   def mapToConf(map: java.util.Map[String, String]): Configuration = {
-    import collection.JavaConversions._
     val conf = new Configuration()
-    map.foreach{ case (k, v) => conf.set(k, v) }
+    map.asScala.foreach { case (k, v) => conf.set(k, v) }
     conf
   }
 
@@ -172,9 +166,8 @@ private[python] object PythonHadoopUtil {
    * any matching keys in left
    */
   def mergeConfs(left: Configuration, right: Configuration): Configuration = {
-    import collection.JavaConversions._
     val copy = new Configuration(left)
-    right.iterator().foreach(entry => copy.set(entry.getKey, entry.getValue))
+    right.asScala.foreach(entry => copy.set(entry.getKey, entry.getValue))
     copy
   }
 

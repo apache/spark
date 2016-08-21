@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
-import scala.util.Random
 import scala.collection.mutable
+import scala.util.Random
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
+import org.apache.spark.sql.SparkSession
 
 /**
  * Transitive closure on a graph.
@@ -31,7 +31,7 @@ object SparkTC {
   val numVertices = 100
   val rand = new Random(42)
 
-  def generateGraph = {
+  def generateGraph: Seq[(Int, Int)] = {
     val edges: mutable.Set[(Int, Int)] = mutable.Set.empty
     while (edges.size < numEdges) {
       val from = rand.nextInt(numVertices)
@@ -42,10 +42,12 @@ object SparkTC {
   }
 
   def main(args: Array[String]) {
-    val sparkConf = new SparkConf().setAppName("SparkTC")
-    val spark = new SparkContext(sparkConf)
+    val spark = SparkSession
+      .builder
+      .appName("SparkTC")
+      .getOrCreate()
     val slices = if (args.length > 0) args(0).toInt else 2
-    var tc = spark.parallelize(generateGraph, slices).cache()
+    var tc = spark.sparkContext.parallelize(generateGraph, slices).cache()
 
     // Linear transitive closure: each round grows paths by one edge,
     // by joining the graph's edges with the already-discovered paths.
@@ -70,3 +72,4 @@ object SparkTC {
     spark.stop()
   }
 }
+// scalastyle:on println

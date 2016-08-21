@@ -44,20 +44,28 @@ which contains two batches of two objects:
 
 >>> rdd.glom().collect()
 [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]]
->>> rdd._jrdd.count()
-8L
+>>> int(rdd._jrdd.count())
+8
 >>> sc.stop()
 """
 
-import cPickle
-from itertools import chain, izip, product
+import sys
+from itertools import chain, product
 import marshal
 import struct
-import sys
 import types
 import collections
 import zlib
 import itertools
+
+if sys.version < '3':
+    import cPickle as pickle
+    protocol = 2
+    from itertools import izip as zip
+else:
+    import pickle
+    protocol = 3
+    xrange = range
 
 from pyspark import cloudpickle
 
@@ -97,7 +105,7 @@ class Serializer(object):
     # subclasses should override __eq__ as appropriate.
 
     def __eq__(self, other):
-        return isinstance(other, self.__class__)
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -212,12 +220,31 @@ class BatchedSerializer(Serializer):
     def _load_stream_without_unbatching(self, stream):
         return self.serializer.load_stream(stream)
 
-    def __eq__(self, other):
-        return (isinstance(other, BatchedSerializer) and
-                other.serializer == self.serializer and other.batchSize == self.batchSize)
-
     def __repr__(self):
         return "BatchedSerializer(%s, %d)" % (str(self.serializer), self.batchSize)
+
+
+class FlattenedValuesSerializer(BatchedSerializer):
+
+    """
+    Serializes a stream of list of pairs, split the list of values
+    which contain more than a certain number of objects to make them
+    have similar sizes.
+    """
+    def __init__(self, serializer, batchSize=10):
+        BatchedSerializer.__init__(self, serializer, batchSize)
+
+    def _batched(self, iterator):
+        n = self.batchSize
+        for key, values in iterator:
+            for i in range(0, len(values), n):
+                yield key, values[i:i + n]
+
+    def load_stream(self, stream):
+        return self.serializer.load_stream(stream)
+
+    def __repr__(self):
+        return "FlattenedValuesSerializer(%s, %d)" % (self.serializer, self.batchSize)
 
 
 class AutoBatchedSerializer(BatchedSerializer):
@@ -245,14 +272,10 @@ class AutoBatchedSerializer(BatchedSerializer):
             if size < best:
                 batch *= 2
             elif size > best * 10 and batch > 1:
-                batch /= 2
+                batch //= 2
 
-    def __eq__(self, other):
-        return (isinstance(other, AutoBatchedSerializer) and
-                other.serializer == self.serializer and other.bestSize == self.bestSize)
-
-    def __str__(self):
-        return "AutoBatchedSerializer(%s)" % str(self.serializer)
+    def __repr__(self):
+        return "AutoBatchedSerializer(%s)" % self.serializer
 
 
 class CartesianDeserializer(FramedSerializer):
@@ -262,6 +285,7 @@ class CartesianDeserializer(FramedSerializer):
     """
 
     def __init__(self, key_ser, val_ser):
+        FramedSerializer.__init__(self)
         self.key_ser = key_ser
         self.val_ser = val_ser
 
@@ -270,7 +294,7 @@ class CartesianDeserializer(FramedSerializer):
         val_stream = self.val_ser._load_stream_without_unbatching(stream)
         key_is_batched = isinstance(self.key_ser, BatchedSerializer)
         val_is_batched = isinstance(self.val_ser, BatchedSerializer)
-        for (keys, vals) in izip(key_stream, val_stream):
+        for (keys, vals) in zip(key_stream, val_stream):
             keys = keys if key_is_batched else [keys]
             vals = vals if val_is_batched else [vals]
             yield (keys, vals)
@@ -279,10 +303,6 @@ class CartesianDeserializer(FramedSerializer):
         for (keys, vals) in self.prepare_keys_values(stream):
             for pair in product(keys, vals):
                 yield pair
-
-    def __eq__(self, other):
-        return (isinstance(other, CartesianDeserializer) and
-                self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
     def __repr__(self):
         return "CartesianDeserializer(%s, %s)" % \
@@ -295,21 +315,13 @@ class PairDeserializer(CartesianDeserializer):
     Deserializes the JavaRDD zip() of two PythonRDDs.
     """
 
-    def __init__(self, key_ser, val_ser):
-        self.key_ser = key_ser
-        self.val_ser = val_ser
-
     def load_stream(self, stream):
         for (keys, vals) in self.prepare_keys_values(stream):
             if len(keys) != len(vals):
                 raise ValueError("Can not deserialize RDD with different number of items"
                                  " in pair: (%d, %d)" % (len(keys), len(vals)))
-            for pair in izip(keys, vals):
+            for pair in zip(keys, vals):
                 yield pair
-
-    def __eq__(self, other):
-        return (isinstance(other, PairDeserializer) and
-                self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
     def __repr__(self):
         return "PairDeserializer(%s, %s)" % (str(self.key_ser), str(self.val_ser))
@@ -347,6 +359,7 @@ def _hack_namedtuple(cls):
     def __reduce__(self):
         return (_restore, (name, fields, tuple(self)))
     cls.__reduce__ = __reduce__
+    cls._is_namedtuple_ = True
     return cls
 
 
@@ -359,8 +372,8 @@ def _hijack_namedtuple():
     global _old_namedtuple  # or it will put in closure
 
     def _copy_func(f):
-        return types.FunctionType(f.func_code, f.func_globals, f.func_name,
-                                  f.func_defaults, f.func_closure)
+        return types.FunctionType(f.__code__, f.__globals__, f.__name__,
+                                  f.__defaults__, f.__closure__)
 
     _old_namedtuple = _copy_func(collections.namedtuple)
 
@@ -369,15 +382,15 @@ def _hijack_namedtuple():
         return _hack_namedtuple(cls)
 
     # replace namedtuple with new one
-    collections.namedtuple.func_globals["_old_namedtuple"] = _old_namedtuple
-    collections.namedtuple.func_globals["_hack_namedtuple"] = _hack_namedtuple
-    collections.namedtuple.func_code = namedtuple.func_code
+    collections.namedtuple.__globals__["_old_namedtuple"] = _old_namedtuple
+    collections.namedtuple.__globals__["_hack_namedtuple"] = _hack_namedtuple
+    collections.namedtuple.__code__ = namedtuple.__code__
     collections.namedtuple.__hijack = 1
 
     # hack the cls already generated by namedtuple
     # those created in other module can be pickled as normal,
     # so only hack those in __main__ module
-    for n, o in sys.modules["__main__"].__dict__.iteritems():
+    for n, o in sys.modules["__main__"].__dict__.items():
         if (type(o) is type and o.__base__ is tuple
                 and hasattr(o, "_fields")
                 and "__reduce__" not in o.__dict__):
@@ -390,7 +403,7 @@ _hijack_namedtuple()
 class PickleSerializer(FramedSerializer):
 
     """
-    Serializes objects using Python's cPickle serializer:
+    Serializes objects using Python's pickle serializer:
 
         http://docs.python.org/2/library/pickle.html
 
@@ -399,10 +412,14 @@ class PickleSerializer(FramedSerializer):
     """
 
     def dumps(self, obj):
-        return cPickle.dumps(obj, 2)
+        return pickle.dumps(obj, protocol)
 
-    def loads(self, obj):
-        return cPickle.loads(obj)
+    if sys.version >= '3':
+        def loads(self, obj, encoding="bytes"):
+            return pickle.loads(obj, encoding=encoding)
+    else:
+        def loads(self, obj, encoding=None):
+            return pickle.loads(obj)
 
 
 class CloudPickleSerializer(PickleSerializer):
@@ -431,7 +448,7 @@ class MarshalSerializer(FramedSerializer):
 class AutoSerializer(FramedSerializer):
 
     """
-    Choose marshal or cPickle as serialization protocol automatically
+    Choose marshal or pickle as serialization protocol automatically
     """
 
     def __init__(self):
@@ -440,19 +457,19 @@ class AutoSerializer(FramedSerializer):
 
     def dumps(self, obj):
         if self._type is not None:
-            return 'P' + cPickle.dumps(obj, -1)
+            return b'P' + pickle.dumps(obj, -1)
         try:
-            return 'M' + marshal.dumps(obj)
+            return b'M' + marshal.dumps(obj)
         except Exception:
-            self._type = 'P'
-            return 'P' + cPickle.dumps(obj, -1)
+            self._type = b'P'
+            return b'P' + pickle.dumps(obj, -1)
 
     def loads(self, obj):
         _type = obj[0]
-        if _type == 'M':
+        if _type == b'M':
             return marshal.loads(obj[1:])
-        elif _type == 'P':
-            return cPickle.loads(obj[1:])
+        elif _type == b'P':
+            return pickle.loads(obj[1:])
         else:
             raise ValueError("invalid sevialization type: %s" % _type)
 
@@ -472,8 +489,8 @@ class CompressedSerializer(FramedSerializer):
     def loads(self, obj):
         return self.serializer.loads(zlib.decompress(obj))
 
-    def __eq__(self, other):
-        return isinstance(other, CompressedSerializer) and self.serializer == other.serializer
+    def __repr__(self):
+        return "CompressedSerializer(%s)" % self.serializer
 
 
 class UTF8Deserializer(Serializer):
@@ -482,7 +499,7 @@ class UTF8Deserializer(Serializer):
     Deserializes streams written by String.getBytes.
     """
 
-    def __init__(self, use_unicode=False):
+    def __init__(self, use_unicode=True):
         self.use_unicode = use_unicode
 
     def loads(self, stream):
@@ -503,13 +520,13 @@ class UTF8Deserializer(Serializer):
         except EOFError:
             return
 
-    def __eq__(self, other):
-        return isinstance(other, UTF8Deserializer) and self.use_unicode == other.use_unicode
+    def __repr__(self):
+        return "UTF8Deserializer(%s)" % self.use_unicode
 
 
 def read_long(stream):
     length = stream.read(8)
-    if length == "":
+    if not length:
         raise EOFError
     return struct.unpack("!q", length)[0]
 
@@ -524,7 +541,7 @@ def pack_long(value):
 
 def read_int(stream):
     length = stream.read(4)
-    if length == "":
+    if not length:
         raise EOFError
     return struct.unpack("!i", length)[0]
 
@@ -540,4 +557,6 @@ def write_with_length(obj, stream):
 
 if __name__ == '__main__':
     import doctest
-    doctest.testmod()
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        exit(-1)

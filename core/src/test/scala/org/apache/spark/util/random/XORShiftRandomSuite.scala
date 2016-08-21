@@ -17,18 +17,17 @@
 
 package org.apache.spark.util.random
 
-import org.scalatest.FunSuite
-import org.scalatest.Matchers
-
-import org.apache.commons.math3.stat.inference.ChiSquareTest
-
-import org.apache.spark.util.Utils.times
-
 import scala.language.reflectiveCalls
 
-class XORShiftRandomSuite extends FunSuite with Matchers {
+import org.apache.commons.math3.stat.inference.ChiSquareTest
+import org.scalatest.Matchers
 
-  def fixture = new {
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.util.Utils.times
+
+class XORShiftRandomSuite extends SparkFunSuite with Matchers {
+
+  private def fixture = new {
     val seed = 1L
     val xorRand = new XORShiftRandom(seed)
     val hundMil = 1e8.toInt
@@ -54,7 +53,7 @@ class XORShiftRandomSuite extends FunSuite with Matchers {
      * Perform the chi square test on the 5 rows of randomly generated numbers evenly divided into
      * 10 bins. chiSquareTest returns true iff the null hypothesis (that the classifications
      * represented by the counts in the columns of the input 2-way table are independent of the
-     * rows) can be rejected with 100 * (1 - alpha) percent confidence, where alpha is prespeficied
+     * rows) can be rejected with 100 * (1 - alpha) percent confidence, where alpha is prespecified
      * as 0.05
      */
     val chiTest = new ChiSquareTest
@@ -64,5 +63,20 @@ class XORShiftRandomSuite extends FunSuite with Matchers {
   test ("XORShift with zero seed") {
     val random = new XORShiftRandom(0L)
     assert(random.nextInt() != 0)
+  }
+
+  test ("hashSeed has random bits throughout") {
+    val totalBitCount = (0 until 10).map { seed =>
+      val hashed = XORShiftRandom.hashSeed(seed)
+      val bitCount = java.lang.Long.bitCount(hashed)
+      // make sure we have roughly equal numbers of 0s and 1s.  Mostly just check that we
+      // don't have all 0s or 1s in the high bits
+      bitCount should be > 20
+      bitCount should be < 44
+      bitCount
+    }.sum
+    // and over all the seeds, very close to equal numbers of 0s & 1s
+    totalBitCount should be > (32 * 10 - 30)
+    totalBitCount should be < (32 * 10 + 30)
   }
 }

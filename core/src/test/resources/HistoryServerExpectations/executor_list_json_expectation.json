@@ -1,0 +1,21 @@
+[ {
+  "id" : "<driver>",
+  "hostPort" : "localhost:57971",
+  "isActive" : true,
+  "rddBlocks" : 0,
+  "memoryUsed" : 0,
+  "diskUsed" : 0,
+  "totalCores" : 0,
+  "maxTasks" : 0,
+  "activeTasks" : 0,
+  "failedTasks" : 1,
+  "completedTasks" : 31,
+  "totalTasks" : 32,
+  "totalDuration" : 8820,
+  "totalGCTime" : 352,
+  "totalInputBytes" : 28000288,
+  "totalShuffleRead" : 0,
+  "totalShuffleWrite" : 13180,
+  "maxMemory" : 278302556,
+  "executorLogs" : { }
+} ]

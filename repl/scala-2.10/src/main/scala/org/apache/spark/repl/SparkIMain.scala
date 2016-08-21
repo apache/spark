@@ -37,7 +37,8 @@ import scala.reflect.{ ClassTag, classTag }
 import scala.tools.reflect.StdRuntimeTags._
 import scala.util.control.ControlThrowable
 
-import org.apache.spark.{Logging, HttpServer, SecurityManager, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 import org.apache.spark.annotation.DeveloperApi
 
@@ -72,7 +73,7 @@ import org.apache.spark.annotation.DeveloperApi
    *  all variables defined by that code.  To extract the result of an
    *  interpreted line to show the user, a second "result object" is created
    *  which imports the variables exported by the above object and then
-   *  exports members called "$eval" and "$print". To accomodate user expressions
+   *  exports members called "$eval" and "$print". To accommodate user expressions
    *  that read from variables or methods defined in previous statements, "import"
    *  statements are used.
    *
@@ -96,10 +97,9 @@ import org.apache.spark.annotation.DeveloperApi
 
     private val SPARK_DEBUG_REPL: Boolean = (System.getenv("SPARK_DEBUG_REPL") == "1")
     /** Local directory to save .class files too */
-    private lazy val outputDir = {
-      val tmp = System.getProperty("java.io.tmpdir")
-      val rootDir = conf.get("spark.repl.classdir",  tmp)
-      Utils.createTempDir(rootDir)
+    private[repl] val outputDir = {
+      val rootDir = conf.getOption("spark.repl.classdir").getOrElse(Utils.getLocalDir(conf))
+      Utils.createTempDir(root = rootDir, namePrefix = "repl")
     }
     if (SPARK_DEBUG_REPL) {
       echo("Output directory: " + outputDir)
@@ -114,8 +114,6 @@ import org.apache.spark.annotation.DeveloperApi
 
     private val virtualDirectory                              = new PlainFile(outputDir) // "directory" for classfiles
     /** Jetty server that will serve our classes to worker nodes */
-    private val classServerPort                               = conf.getInt("spark.replClassServer.port", 0)
-    private val classServer                                   = new HttpServer(conf, outputDir, new SecurityManager(conf), classServerPort, "HTTP class server")
     private var currentSettings: Settings             = initialSettings
     private var printResults                                  = true      // whether to print result lines
     private var totalSilence                                  = false     // whether to print anything
@@ -123,22 +121,6 @@ import org.apache.spark.annotation.DeveloperApi
     private var _isInitialized: Future[Boolean]       = null      // set up initialization future
     private var bindExceptions                        = true      // whether to bind the lastException variable
     private var _executionWrapper                     = ""        // code to be wrapped around all lines
-
-
-    // Start the classServer and store its URI in a spark system property
-    // (which will be passed to executors so that they can connect to it)
-    classServer.start()
-    if (SPARK_DEBUG_REPL) {
-      echo("Class server started, URI = " + classServer.uri)
-    }
-
-    /**
-     * URI of the class server used to feed REPL compiled classes.
-     *
-     * @return The string representing the class server uri
-     */
-    @DeveloperApi
-    def classServerUri = classServer.uri
 
     /** We're going to go to some trouble to initialize the compiler asynchronously.
      *  It's critical that nothing call into it until it's been initialized or we will
@@ -994,7 +976,6 @@ import org.apache.spark.annotation.DeveloperApi
   @DeveloperApi
   def close() {
     reporter.flush()
-    classServer.stop()
   }
 
   /**
@@ -1079,8 +1060,10 @@ import org.apache.spark.annotation.DeveloperApi
       throw new EvalException("Failed to load '" + path + "': " + ex.getMessage, ex)
 
     private def load(path: String): Class[_] = {
+      // scalastyle:off classforname
       try Class.forName(path, true, classLoader)
       catch { case ex: Throwable => evalError(path, unwrap(ex)) }
+      // scalastyle:on classforname
     }
 
     lazy val evalClass = load(evalPath)
@@ -1219,10 +1202,16 @@ import org.apache.spark.annotation.DeveloperApi
         )
       }
 
-      val preamble = """
-        |class %s extends Serializable {
-        |  %s%s%s
-      """.stripMargin.format(lineRep.readName, envLines.map("  " + _ + ";\n").mkString, importsPreamble, indentCode(toCompute))
+      val preamble = s"""
+        |class ${lineRep.readName} extends Serializable {
+        |  ${envLines.map("  " + _ + ";\n").mkString}
+        |  $importsPreamble
+        |
+        |  // If we need to construct any objects defined in the REPL on an executor we will need
+        |  // to pass the outer scope to the appropriate encoder.
+        |  org.apache.spark.sql.catalyst.encoders.OuterScopes.addOuterScope(this)
+        |  ${indentCode(toCompute)}
+      """.stripMargin
       val postamble = importsTrailer + "\n}" + "\n" +
         "object " + lineRep.readName + " {\n" +
         "  val INSTANCE = new " + lineRep.readName + "();\n" +
@@ -1527,7 +1516,7 @@ import org.apache.spark.annotation.DeveloperApi
     exprTyper.symbolOfLine(code)
 
   /**
-   * Constucts type information based on the provided expression's final
+   * Constructs type information based on the provided expression's final
    * result or the definition provided.
    *
    * @param expr The expression or definition
@@ -1761,7 +1750,9 @@ object SparkIMain {
         if (intp.totalSilence) ()
         else super.printMessage(msg)
       }
+      // scalastyle:off println
       else Console.println(msg)
+      // scalastyle:on println
     }
   }
 }

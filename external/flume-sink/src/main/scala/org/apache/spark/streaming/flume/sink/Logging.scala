@@ -26,20 +26,20 @@ import org.slf4j.{Logger, LoggerFactory}
 private[sink] trait Logging {
   // Make the log field transient so that objects with Logging can
   // be serialized and used on another machine
-  @transient private var log_ : Logger = null
+  @transient private var _log: Logger = null
 
   // Method to get or create the logger for this object
   protected def log: Logger = {
-    if (log_ == null) {
+    if (_log == null) {
       initializeIfNecessary()
       var className = this.getClass.getName
       // Ignore trailing $'s in the class names for Scala objects
       if (className.endsWith("$")) {
         className = className.substring(0, className.length - 1)
       }
-      log_ = LoggerFactory.getLogger(className)
+      _log = LoggerFactory.getLogger(className)
     }
-    log_
+    _log
   }
 
   // Log methods that take only a String
@@ -101,7 +101,7 @@ private[sink] trait Logging {
   private def initializeLogging() {
     Logging.initialized = true
 
-    // Force a call into slf4j to initialize it. Avoids this happening from mutliple threads
+    // Force a call into slf4j to initialize it. Avoids this happening from multiple threads
     // and triggering this: http://mailman.qos.ch/pipermail/slf4j-dev/2010-April/002956.html
     log
   }
@@ -113,7 +113,9 @@ private[sink] object Logging {
   try {
     // We use reflection here to handle the case where users remove the
     // slf4j-to-jul bridge order to route their logs to JUL.
+    // scalastyle:off classforname
     val bridgeClass = Class.forName("org.slf4j.bridge.SLF4JBridgeHandler")
+    // scalastyle:on classforname
     bridgeClass.getMethod("removeHandlersForRootLogger").invoke(null)
     val installed = bridgeClass.getMethod("isInstalled").invoke(null).asInstanceOf[Boolean]
     if (!installed) {

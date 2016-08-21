@@ -60,9 +60,11 @@ private[spark] class XORShiftRandom(init: Long) extends JavaRandom(init) {
 private[spark] object XORShiftRandom {
 
   /** Hash seeds to have 0/1 bits throughout. */
-  private def hashSeed(seed: Long): Long = {
+  private[random] def hashSeed(seed: Long): Long = {
     val bytes = ByteBuffer.allocate(java.lang.Long.SIZE).putLong(seed).array()
-    MurmurHash3.bytesHash(bytes)
+    val lowBits = MurmurHash3.bytesHash(bytes)
+    val highBits = MurmurHash3.bytesHash(bytes, lowBits)
+    (highBits.toLong << 32) | (lowBits.toLong & 0xFFFFFFFFL)
   }
 
   /**
@@ -70,12 +72,14 @@ private[spark] object XORShiftRandom {
    * @param args takes one argument - the number of random numbers to generate
    */
   def main(args: Array[String]): Unit = {
+    // scalastyle:off println
     if (args.length != 1) {
       println("Benchmark of XORShiftRandom vis-a-vis java.util.Random")
       println("Usage: XORShiftRandom number_of_random_numbers_to_generate")
       System.exit(1)
     }
     println(benchmark(args(0).toInt))
+    // scalastyle:on println
   }
 
   /**
@@ -83,7 +87,7 @@ private[spark] object XORShiftRandom {
    * @return Map of execution times for {@link java.util.Random java.util.Random}
    * and XORShift
    */
-  def benchmark(numIters: Int) = {
+  def benchmark(numIters: Int): Map[String, Long] = {
 
     val seed = 1L
     val million = 1e6.toInt

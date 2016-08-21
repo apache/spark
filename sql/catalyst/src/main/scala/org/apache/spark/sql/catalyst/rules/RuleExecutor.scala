@@ -17,9 +17,31 @@
 
 package org.apache.spark.sql.catalyst.rules
 
-import org.apache.spark.Logging
+import scala.collection.JavaConverters._
+
+import com.google.common.util.concurrent.AtomicLongMap
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.util.Utils
+
+object RuleExecutor {
+  protected val timeMap = AtomicLongMap.create[String]()
+
+  /** Resets statistics about time spent running specific rules */
+  def resetTime(): Unit = timeMap.clear()
+
+  /** Dump statistics about time spent running specific rules. */
+  def dumpTimeSpent(): String = {
+    val map = timeMap.asMap().asScala
+    val maxSize = map.keys.map(_.toString.length).max
+    map.toSeq.sortBy(_._2).reverseMap { case (k, v) =>
+      s"${k.padTo(maxSize, " ").mkString} $v"
+    }.mkString("\n", "\n", "")
+  }
+}
 
 abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
@@ -39,13 +61,14 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   protected case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
 
   /** Defines a sequence of rule batches, to be overridden by the implementation. */
-  protected val batches: Seq[Batch]
+  protected def batches: Seq[Batch]
+
 
   /**
    * Executes the batches of rules defined by the subclass. The batches are executed serially
    * using the defined execution strategy. Within each batch, rules are also executed serially.
    */
-  def apply(plan: TreeType): TreeType = {
+  def execute(plan: TreeType): TreeType = {
     var curPlan = plan
 
     batches.foreach { batch =>
@@ -58,7 +81,11 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
       while (continue) {
         curPlan = batch.rules.foldLeft(curPlan) {
           case (plan, rule) =>
+            val startTime = System.nanoTime()
             val result = rule(plan)
+            val runTime = System.nanoTime() - startTime
+            RuleExecutor.timeMap.addAndGet(rule.ruleName, runTime)
+
             if (!result.fastEquals(plan)) {
               logTrace(
                 s"""
@@ -73,7 +100,12 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
         if (iteration > batch.strategy.maxIterations) {
           // Only log if this is a rule that is supposed to run more than once.
           if (iteration != 2) {
-            logInfo(s"Max iterations (${iteration - 1}) reached for batch ${batch.name}")
+            val message = s"Max iterations (${iteration - 1}) reached for batch ${batch.name}"
+            if (Utils.isTesting) {
+              throw new TreeNodeException(curPlan, message, null)
+            } else {
+              logWarning(message)
+            }
           }
           continue = false
         }

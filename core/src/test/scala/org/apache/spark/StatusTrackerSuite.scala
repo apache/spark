@@ -21,12 +21,12 @@ import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
-import org.scalatest.{Matchers, FunSuite}
+import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.JobExecutionStatus._
 
-class StatusTrackerSuite extends FunSuite with Matchers with LocalSparkContext {
+class StatusTrackerSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
   test("basic status API usage") {
     sc = new SparkContext("local", "test", new SparkConf(false))
@@ -82,7 +82,34 @@ class StatusTrackerSuite extends FunSuite with Matchers with LocalSparkContext {
       secondJobFuture.jobIds.head
     }
     eventually(timeout(10 seconds)) {
-      sc.statusTracker.getJobIdsForGroup("my-job-group").toSet should be (Set(firstJobId, secondJobId))
+      sc.statusTracker.getJobIdsForGroup("my-job-group").toSet should be (
+        Set(firstJobId, secondJobId))
+    }
+  }
+
+  test("getJobIdsForGroup() with takeAsync()") {
+    sc = new SparkContext("local", "test", new SparkConf(false))
+    sc.setJobGroup("my-job-group2", "description")
+    sc.statusTracker.getJobIdsForGroup("my-job-group2") shouldBe empty
+    val firstJobFuture = sc.parallelize(1 to 1000, 1).takeAsync(1)
+    val firstJobId = eventually(timeout(10 seconds)) {
+      firstJobFuture.jobIds.head
+    }
+    eventually(timeout(10 seconds)) {
+      sc.statusTracker.getJobIdsForGroup("my-job-group2") should be (Seq(firstJobId))
+    }
+  }
+
+  test("getJobIdsForGroup() with takeAsync() across multiple partitions") {
+    sc = new SparkContext("local", "test", new SparkConf(false))
+    sc.setJobGroup("my-job-group2", "description")
+    sc.statusTracker.getJobIdsForGroup("my-job-group2") shouldBe empty
+    val firstJobFuture = sc.parallelize(1 to 1000, 2).takeAsync(999)
+    val firstJobId = eventually(timeout(10 seconds)) {
+      firstJobFuture.jobIds.head
+    }
+    eventually(timeout(10 seconds)) {
+      sc.statusTracker.getJobIdsForGroup("my-job-group2") should have size 2
     }
   }
 }

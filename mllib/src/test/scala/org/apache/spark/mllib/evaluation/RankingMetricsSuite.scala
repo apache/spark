@@ -17,20 +17,20 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 
-class RankingMetricsSuite extends FunSuite with MLlibTestSparkContext {
-  test("Ranking metrics: map, ndcg") {
+class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  test("Ranking metrics: MAP, NDCG") {
     val predictionAndLabels = sc.parallelize(
       Seq(
-        (Array[Int](1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Array[Int](1, 2, 3, 4, 5)),
-        (Array[Int](4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Array[Int](1, 2, 3)),
-        (Array[Int](1, 2, 3, 4, 5), Array[Int]())
+        (Array(1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Array(1, 2, 3, 4, 5)),
+        (Array(4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Array(1, 2, 3)),
+        (Array(1, 2, 3, 4, 5), Array[Int]())
       ), 2)
-    val eps: Double = 1E-5
+    val eps = 1.0E-5
 
     val metrics = new RankingMetrics(predictionAndLabels)
     val map = metrics.meanAveragePrecision
@@ -49,6 +49,21 @@ class RankingMetricsSuite extends FunSuite with MLlibTestSparkContext {
     assert(metrics.ndcgAt(5) ~== 0.328788 absTol eps)
     assert(metrics.ndcgAt(10) ~== 0.487913 absTol eps)
     assert(metrics.ndcgAt(15) ~== metrics.ndcgAt(10) absTol eps)
-
   }
+
+  test("MAP, NDCG with few predictions (SPARK-14886)") {
+    val predictionAndLabels = sc.parallelize(
+      Seq(
+        (Array(1, 6, 2), Array(1, 2, 3, 4, 5)),
+        (Array[Int](), Array(1, 2, 3))
+      ), 2)
+    val eps = 1.0E-5
+
+    val metrics = new RankingMetrics(predictionAndLabels)
+    assert(metrics.precisionAt(1) ~== 0.5 absTol eps)
+    assert(metrics.precisionAt(2) ~== 0.25 absTol eps)
+    assert(metrics.ndcgAt(1) ~== 0.5 absTol eps)
+    assert(metrics.ndcgAt(2) ~== 0.30657 absTol eps)
+  }
+
 }

@@ -19,9 +19,7 @@ package org.apache.spark.deploy.master
 
 import scala.collection.mutable
 
-import akka.actor.ActorRef
-
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] class WorkerInfo(
@@ -30,9 +28,8 @@ private[spark] class WorkerInfo(
     val port: Int,
     val cores: Int,
     val memory: Int,
-    val actor: ActorRef,
-    val webUiPort: Int,
-    val publicAddress: String)
+    val endpoint: RpcEndpointRef,
+    val webUiAddress: String)
   extends Serializable {
 
   Utils.checkHost(host, "Expected hostname")
@@ -100,11 +97,9 @@ private[spark] class WorkerInfo(
     coresUsed -= driver.desc.cores
   }
 
-  def webUiAddress : String = {
-    "http://" + this.publicAddress + ":" + this.webUiPort
-  }
-
-  def setState(state: WorkerState.Value) = {
+  def setState(state: WorkerState.Value): Unit = {
     this.state = state
   }
+
+  def isAlive(): Boolean = this.state == WorkerState.ALIVE
 }

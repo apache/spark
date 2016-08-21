@@ -26,6 +26,8 @@ package org.apache.spark.util
  */
 private[spark] class ManualClock(private var time: Long) extends Clock {
 
+  private var _isWaiting = false
+
   /**
    * @return `ManualClock` with initial time 0
    */
@@ -39,31 +41,37 @@ private[spark] class ManualClock(private var time: Long) extends Clock {
   /**
    * @param timeToSet new time (in milliseconds) that the clock should represent
    */
-  def setTime(timeToSet: Long) =
-    synchronized {
-      time = timeToSet
-      notifyAll()
-    }
+  def setTime(timeToSet: Long): Unit = synchronized {
+    time = timeToSet
+    notifyAll()
+  }
 
   /**
    * @param timeToAdd time (in milliseconds) to add to the clock's time
    */
-  def advance(timeToAdd: Long) =
-    synchronized {
-      time += timeToAdd
-      notifyAll()
-    }
+  def advance(timeToAdd: Long): Unit = synchronized {
+    time += timeToAdd
+    notifyAll()
+  }
 
   /**
    * @param targetTime block until the clock time is set or advanced to at least this time
    * @return current time reported by the clock when waiting finishes
    */
-  def waitTillTime(targetTime: Long): Long =
-    synchronized {
+  def waitTillTime(targetTime: Long): Long = synchronized {
+    _isWaiting = true
+    try {
       while (time < targetTime) {
-        wait(100)
+        wait(10)
       }
       getTimeMillis()
+    } finally {
+      _isWaiting = false
     }
+  }
 
+  /**
+   * Returns whether there is any thread being blocked in `waitTillTime`.
+   */
+  def isWaiting: Boolean = synchronized { _isWaiting }
 }

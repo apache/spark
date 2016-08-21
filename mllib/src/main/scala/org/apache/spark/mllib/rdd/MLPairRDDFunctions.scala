@@ -25,6 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.BoundedPriorityQueue
 
 /**
+ * :: DeveloperApi ::
  * Machine learning specific Pair RDD functions.
  */
 @DeveloperApi
@@ -42,16 +43,17 @@ class MLPairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)]) extends Se
     self.aggregateByKey(new BoundedPriorityQueue[V](num)(ord))(
       seqOp = (queue, item) => {
         queue += item
-        queue
       },
       combOp = (queue1, queue2) => {
         queue1 ++= queue2
-        queue1
       }
-    ).mapValues(_.toArray.sorted(ord.reverse))
+    ).mapValues(_.toArray.sorted(ord.reverse))  // This is a min-heap, so we reverse the order.
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 object MLPairRDDFunctions {
   /** Implicit conversion from a pair RDD to MLPairRDDFunctions. */

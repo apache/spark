@@ -30,8 +30,10 @@ except ImportError:
 
 class StatCounter(object):
 
-    def __init__(self, values=[]):
-        self.n = 0L    # Running count of our values
+    def __init__(self, values=None):
+        if values is None:
+            values = list()
+        self.n = 0    # Running count of our values
         self.mu = 0.0  # Running mean of our values
         self.m2 = 0.0  # Running variance numerator (sum of (x - mean)^2)
         self.maxValue = float("-inf")
@@ -87,7 +89,7 @@ class StatCounter(object):
         return copy.deepcopy(self)
 
     def count(self):
-        return self.n
+        return int(self.n)
 
     def mean(self):
         return self.mu
@@ -128,6 +130,28 @@ class StatCounter(object):
     #
     def sampleStdev(self):
         return sqrt(self.sampleVariance())
+
+    def asDict(self, sample=False):
+        """Returns the :class:`StatCounter` members as a ``dict``.
+
+        >>> sc.parallelize([1., 2., 3., 4.]).stats().asDict()
+        {'count': 4L,
+         'max': 4.0,
+         'mean': 2.5,
+         'min': 1.0,
+         'stdev': 1.2909944487358056,
+         'sum': 10.0,
+         'variance': 1.6666666666666667}
+        """
+        return {
+            'count': self.count(),
+            'mean': self.mean(),
+            'sum': self.sum(),
+            'min': self.min(),
+            'max': self.max(),
+            'stdev': self.stdev() if sample else self.sampleStdev(),
+            'variance': self.variance() if sample else self.sampleVariance()
+        }
 
     def __repr__(self):
         return ("(count: %s, mean: %s, stdev: %s, max: %s, min: %s)" %

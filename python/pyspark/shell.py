@@ -21,13 +21,6 @@ An interactive shell.
 This file is designed to be launched as a PYTHONSTARTUP script.
 """
 
-import sys
-if sys.version_info[0] != 2:
-    print("Error: Default Python used is Python%s" % sys.version_info.major)
-    print("\tSet env variable PYSPARK_PYTHON to Python2 binary and re-run it.")
-    sys.exit(1)
-
-
 import atexit
 import os
 import platform
@@ -36,26 +29,32 @@ import py4j
 
 import pyspark
 from pyspark.context import SparkContext
-from pyspark.sql import SQLContext, HiveContext
+from pyspark.sql import SparkSession, SQLContext
 from pyspark.storagelevel import StorageLevel
-
-# this is the deprecated equivalent of ADD_JARS
-add_files = None
-if os.environ.get("ADD_FILES") is not None:
-    add_files = os.environ.get("ADD_FILES").split(',')
 
 if os.environ.get("SPARK_EXECUTOR_URI"):
     SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
-sc = SparkContext(appName="PySparkShell", pyFiles=add_files)
-atexit.register(lambda: sc.stop())
+SparkContext._ensure_initialized()
 
 try:
     # Try to access HiveConf, it will raise exception if Hive is not added
-    sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
-    sqlCtx = HiveContext(sc)
+    SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()
+    spark = SparkSession.builder\
+        .enableHiveSupport()\
+        .getOrCreate()
 except py4j.protocol.Py4JError:
-    sqlCtx = SQLContext(sc)
+    spark = SparkSession.builder.getOrCreate()
+except TypeError:
+    spark = SparkSession.builder.getOrCreate()
+
+sc = spark.sparkContext
+sql = spark.sql
+atexit.register(lambda: sc.stop())
+
+# for compatibility
+sqlContext = spark._wrapped
+sqlCtx = sqlContext
 
 print("""Welcome to
       ____              __
@@ -68,14 +67,12 @@ print("Using Python version %s (%s, %s)" % (
     platform.python_version(),
     platform.python_build()[0],
     platform.python_build()[1]))
-print("SparkContext available as sc, %s available as sqlCtx." % sqlCtx.__class__.__name__)
-
-if add_files is not None:
-    print("Warning: ADD_FILES environment variable is deprecated, use --py-files argument instead")
-    print("Adding files: [%s]" % ", ".join(add_files))
+print("SparkSession available as 'spark'.")
 
 # The ./bin/pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,
 # which allows us to execute the user's PYTHONSTARTUP file:
 _pythonstartup = os.environ.get('OLD_PYTHONSTARTUP')
 if _pythonstartup and os.path.isfile(_pythonstartup):
-    execfile(_pythonstartup)
+    with open(_pythonstartup) as f:
+        code = compile(f.read(), _pythonstartup, 'exec')
+        exec(code)

@@ -41,4 +41,19 @@ private[spark] trait SchedulerBackend {
    */
   def applicationId(): String = appId
 
+  /**
+   * Get the attempt ID for this run, if the cluster manager supports multiple
+   * attempts. Applications run in client mode will not have attempt IDs.
+   *
+   * @return The application attempt id, if available.
+   */
+  def applicationAttemptId(): Option[String] = None
+
+  /**
+   * Get the URLs for the driver logs. These URLs are used to display the links in the UI
+   * Executors tab for the driver.
+   * @return Map containing the log names and their respective URLs
+   */
+  def getDriverLogUrls: Option[Map[String, String]] = None
+
 }

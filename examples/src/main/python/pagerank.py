@@ -18,13 +18,17 @@
 """
 This is an example implementation of PageRank. For more conventional use,
 Please refer to PageRank implementation provided by graphx
+
+Example Usage:
+bin/spark-submit examples/src/main/python/pagerank.py data/mllib/pagerank_data.txt 10
 """
+from __future__ import print_function
 
 import re
 import sys
 from operator import add
 
-from pyspark import SparkContext
+from pyspark.sql import SparkSession
 
 
 def computeContribs(urls, rank):
@@ -42,39 +46,43 @@ def parseNeighbors(urls):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print >> sys.stderr, "Usage: pagerank <file> <iterations>"
+        print("Usage: pagerank <file> <iterations>", file=sys.stderr)
         exit(-1)
 
-    print >> sys.stderr,  """WARN: This is a naive implementation of PageRank and is
-          given as an example! Please refer to PageRank implementation provided by graphx"""
+    print("WARN: This is a naive implementation of PageRank and is given as an example!\n" +
+          "Please refer to PageRank implementation provided by graphx",
+          file=sys.stderr)
 
     # Initialize the spark context.
-    sc = SparkContext(appName="PythonPageRank")
+    spark = SparkSession\
+        .builder\
+        .appName("PythonPageRank")\
+        .getOrCreate()
 
     # Loads in input file. It should be in format of:
     #     URL         neighbor URL
     #     URL         neighbor URL
     #     URL         neighbor URL
     #     ...
-    lines = sc.textFile(sys.argv[1], 1)
+    lines = spark.read.text(sys.argv[1]).rdd.map(lambda r: r[0])
 
     # Loads all URLs from input file and initialize their neighbors.
     links = lines.map(lambda urls: parseNeighbors(urls)).distinct().groupByKey().cache()
 
     # Loads all URLs with other URL(s) link to from input file and initialize ranks of them to one.
-    ranks = links.map(lambda (url, neighbors): (url, 1.0))
+    ranks = links.map(lambda url_neighbors: (url_neighbors[0], 1.0))
 
     # Calculates and updates URL ranks continuously using PageRank algorithm.
-    for iteration in xrange(int(sys.argv[2])):
+    for iteration in range(int(sys.argv[2])):
         # Calculates URL contributions to the rank of other URLs.
         contribs = links.join(ranks).flatMap(
-            lambda (url, (urls, rank)): computeContribs(urls, rank))
+            lambda url_urls_rank: computeContribs(url_urls_rank[1][0], url_urls_rank[1][1]))
 
         # Re-calculates URL ranks based on neighbor contributions.
         ranks = contribs.reduceByKey(add).mapValues(lambda rank: rank * 0.85 + 0.15)
 
     # Collects all URL ranks and dump them to console.
     for (link, rank) in ranks.collect():
-        print "%s has rank: %s." % (link, rank)
+        print("%s has rank: %s." % (link, rank))
 
-    sc.stop()
+    spark.stop()

@@ -16,14 +16,9 @@
  */
 
 .navbar {
-  height: 50px;
   font-size: 15px;
   margin-bottom: 15px;
-  min-width: 1200px
-}
-
-.navbar .navbar-inner {
-  height: 50px;
+  min-width: 600px;
 }
 
 .navbar .brand {
@@ -46,6 +41,7 @@
 .navbar-text {
   height: 50px;
   line-height: 3.3;
+  white-space: nowrap;
 }
 
 table.sortable thead {
@@ -85,15 +81,11 @@ table.sortable td {
   filter: progid:dximagetransform.microsoft.gradient(startColorstr='#FFA4EDFF', endColorstr='#FF94DDFF', GradientType=0);
 }
 
-span.kill-link {
+a.kill-link {
   margin-right: 2px;
   margin-left: 20px;
   color: gray;
   float: right;
-}
-
-span.kill-link a {
-  color: gray;
 }
 
 span.expand-details {
@@ -110,21 +102,26 @@ span.rest-uri {
 }
 
 pre {
-  font-size: 0.8em;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 6px;
+  margin: 0;
+  word-break: break-word;
+  border-radius: 3px;
 }
 
 .stage-details {
-  max-height: 100px;
   overflow-y: auto;
   margin: 0;
-  transition: max-height 0.5s ease-out, padding 0.5s ease-out;
+  display: block;
+  transition: max-height 0.25s ease-out, padding 0.25s ease-out;
 }
 
 .stage-details.collapsed {
-  max-height: 0;
   padding-top: 0;
   padding-bottom: 0;
   border: none;
+  display: none;
 }
 
 .description-input {
@@ -135,21 +132,30 @@ pre {
   display: block;
 }
 
+.description-input-full {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  white-space: normal;
+  display: block;
+}
+
 .stacktrace-details {
   max-height: 300px;
   overflow-y: auto;
   margin: 0;
-  transition: max-height 0.5s ease-out, padding 0.5s ease-out;
+  display: block;
+  transition: max-height 0.25s ease-out, padding 0.25s ease-out;
 }
 
 .stacktrace-details.collapsed {
-  max-height: 0;
   padding-top: 0;
   padding-bottom: 0;
   border: none;
+  display: none;
 }
 
-span.expand-additional-metrics {
+span.expand-additional-metrics, span.expand-dag-viz, span.collapse-table {
   cursor: pointer;
 }
 
@@ -157,12 +163,12 @@ span.additional-metric-title {
   cursor: pointer;
 }
 
-.additional-metrics.collapsed {
+.additional-metrics.collapsed, .collapsible-table.collapsed {
   display: none;
 }
 
 .tooltip {
- font-weight: normal;
+  font-weight: normal;
 }
 
 .arrow-open {
@@ -170,9 +176,9 @@ span.additional-metric-title {
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-top: 5px solid black;
-  float: left;
-  margin-top: 6px;
+  border-top: 5px solid #08c;
+  display: inline-block;
+  margin-bottom: 2px;
 }
 
 .arrow-closed {
@@ -180,8 +186,10 @@ span.additional-metric-title {
   height: 0;
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
-  border-left: 5px solid black;
+  border-left: 5px solid #08c;
   display: inline-block;
+  margin-left: 2px;
+  margin-right: 3px;
 }
 
 .version {
@@ -197,6 +205,45 @@ span.additional-metric-title {
 /* Hide all additional metrics by default. This is done here rather than using JavaScript to
  * avoid slow page loads for stage pages with large numbers (e.g., thousands) of tasks. */
 .scheduler_delay, .deserialization_time, .fetch_wait_time, .shuffle_read_remote,
-.serialization_time, .getting_result_time {
+.serialization_time, .getting_result_time, .peak_execution_memory {
   display: none;
+}
+
+.accordion-inner {
+  background: #f5f5f5;
+}
+
+.accordion-inner pre {
+  border: 0;
+  padding: 0;
+  background: none;
+}
+
+a.expandbutton {
+  cursor: pointer;
+}
+
+.threaddump-td-mouseover {
+  background-color: #49535a !important;
+  color: white;
+  cursor:pointer;
+}
+
+.table-head-clickable th a, .table-head-clickable th a:hover {
+  /* Make the entire header clickable, not just the text label */
+  display: block;
+  width: 100%;
+  /* Suppress the default link styling */
+  color: #333;
+  text-decoration: none;
+}
+
+.log-more-btn, .log-new-btn {
+  width: 100%
+}
+
+.no-new-alert {
+  text-align: center;
+  margin: 0;
+  padding: 4px 0;
 }

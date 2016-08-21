@@ -17,18 +17,73 @@
 
 package org.apache.spark.sql.sources
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.execution.datasources.DataSource
 
-class ResolvedDataSourceSuite extends FunSuite {
+class ResolvedDataSourceSuite extends SparkFunSuite {
+  private def getProvidingClass(name: String): Class[_] =
+    DataSource(sparkSession = null, className = name).providingClass
 
-  test("builtin sources") {
-    assert(ResolvedDataSource.lookupDataSource("jdbc") ===
-      classOf[org.apache.spark.sql.jdbc.DefaultSource])
+  test("jdbc") {
+    assert(
+      getProvidingClass("jdbc") ===
+      classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
+    assert(
+      getProvidingClass("org.apache.spark.sql.execution.datasources.jdbc") ===
+      classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
+    assert(
+      getProvidingClass("org.apache.spark.sql.jdbc") ===
+        classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
+  }
 
-    assert(ResolvedDataSource.lookupDataSource("json") ===
-      classOf[org.apache.spark.sql.json.DefaultSource])
+  test("json") {
+    assert(
+      getProvidingClass("json") ===
+      classOf[org.apache.spark.sql.execution.datasources.json.JsonFileFormat])
+    assert(
+      getProvidingClass("org.apache.spark.sql.execution.datasources.json") ===
+        classOf[org.apache.spark.sql.execution.datasources.json.JsonFileFormat])
+    assert(
+      getProvidingClass("org.apache.spark.sql.json") ===
+        classOf[org.apache.spark.sql.execution.datasources.json.JsonFileFormat])
+  }
 
-    assert(ResolvedDataSource.lookupDataSource("parquet") ===
-      classOf[org.apache.spark.sql.parquet.DefaultSource])
+  test("parquet") {
+    assert(
+      getProvidingClass("parquet") ===
+      classOf[org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat])
+    assert(
+      getProvidingClass("org.apache.spark.sql.execution.datasources.parquet") ===
+        classOf[org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat])
+    assert(
+      getProvidingClass("org.apache.spark.sql.parquet") ===
+        classOf[org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat])
+  }
+
+  test("csv") {
+    assert(
+      getProvidingClass("csv") ===
+        classOf[org.apache.spark.sql.execution.datasources.csv.CSVFileFormat])
+    assert(
+      getProvidingClass("com.databricks.spark.csv") ===
+        classOf[org.apache.spark.sql.execution.datasources.csv.CSVFileFormat])
+  }
+
+  test("error message for unknown data sources") {
+    val error1 = intercept[AnalysisException] {
+      getProvidingClass("avro")
+    }
+    assert(error1.getMessage.contains("spark-packages"))
+
+    val error2 = intercept[AnalysisException] {
+      getProvidingClass("com.databricks.spark.avro")
+    }
+    assert(error2.getMessage.contains("spark-packages"))
+
+    val error3 = intercept[ClassNotFoundException] {
+      getProvidingClass("asfdwefasdfasdf")
+    }
+    assert(error3.getMessage.contains("spark-packages"))
   }
 }

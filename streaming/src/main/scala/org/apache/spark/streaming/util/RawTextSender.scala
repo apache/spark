@@ -23,7 +23,8 @@ import java.nio.ByteBuffer
 
 import scala.io.Source
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.IntParam
 
@@ -35,7 +36,9 @@ private[streaming]
 object RawTextSender extends Logging {
   def main(args: Array[String]) {
     if (args.length != 4) {
+      // scalastyle:off println
       System.err.println("Usage: RawTextSender <port> <file> <blockSize> <bytesPerSec>")
+      // scalastyle:on println
       System.exit(1)
     }
     // Parse the arguments using a pattern match
@@ -72,7 +75,8 @@ object RawTextSender extends Logging {
       } catch {
         case e: IOException =>
           logError("Client disconnected")
-          socket.close()
+      } finally {
+        socket.close()
       }
     }
   }

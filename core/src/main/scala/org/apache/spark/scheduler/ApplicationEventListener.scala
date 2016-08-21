@@ -26,15 +26,19 @@ package org.apache.spark.scheduler
 private[spark] class ApplicationEventListener extends SparkListener {
   var appName: Option[String] = None
   var appId: Option[String] = None
+  var appAttemptId: Option[String] = None
   var sparkUser: Option[String] = None
   var startTime: Option[Long] = None
   var endTime: Option[Long] = None
   var viewAcls: Option[String] = None
   var adminAcls: Option[String] = None
+  var viewAclsGroups: Option[String] = None
+  var adminAclsGroups: Option[String] = None
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
     appName = Some(applicationStart.appName)
     appId = applicationStart.appId
+    appAttemptId = applicationStart.appAttemptId
     startTime = Some(applicationStart.time)
     sparkUser = Some(applicationStart.sparkUser)
   }
@@ -49,6 +53,8 @@ private[spark] class ApplicationEventListener extends SparkListener {
       val allProperties = environmentDetails("Spark Properties").toMap
       viewAcls = allProperties.get("spark.ui.view.acls")
       adminAcls = allProperties.get("spark.admin.acls")
+      viewAclsGroups = allProperties.get("spark.ui.view.acls.groups")
+      adminAclsGroups = allProperties.get("spark.admin.acls.groups")
     }
   }
 }

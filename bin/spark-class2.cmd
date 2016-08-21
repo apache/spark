@@ -20,8 +20,7 @@ rem
 rem Figure out where the Spark framework is installed
 set SPARK_HOME=%~dp0..
 
-rem Load environment variables from conf\spark-env.cmd, if it exists
-if exist "%SPARK_HOME%\conf\spark-env.cmd" call "%SPARK_HOME%\conf\spark-env.cmd"
+call "%SPARK_HOME%\bin\load-spark-env.cmd"
 
 rem Test that an argument was given
 if "x%1"=="x" (
@@ -29,33 +28,24 @@ if "x%1"=="x" (
   exit /b 1
 )
 
-set LAUNCHER_CP=0
-if exist %SPARK_HOME%\RELEASE goto find_release_launcher
-
-rem Look for the Spark launcher in both Scala build directories. The launcher doesn't use Scala so
-rem it doesn't really matter which one is picked up. Add the compiled classes directly to the
-rem classpath instead of looking for a jar file, since it's very common for people using sbt to use
-rem the "assembly" target instead of "package".
-set LAUNCHER_CLASSES=%SPARK_HOME%\launcher\target\scala-2.10\classes
-if exist %LAUNCHER_CLASSES% (
-  set LAUNCHER_CP=%LAUNCHER_CLASSES%
-)
-set LAUNCHER_CLASSES=%SPARK_HOME%\launcher\target\scala-2.11\classes
-if exist %LAUNCHER_CLASSES% (
-  set LAUNCHER_CP=%LAUNCHER_CLASSES%
-)
-goto check_launcher
-
-:find_release_launcher
-for %%d in (%SPARK_HOME%\lib\spark-launcher*.jar) do (
-  set LAUNCHER_CP=%%d
+rem Find Spark jars.
+if exist "%SPARK_HOME%\RELEASE" (
+  set SPARK_JARS_DIR="%SPARK_HOME%\jars"
+) else (
+  set SPARK_JARS_DIR="%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%\jars"
 )
 
-:check_launcher
-if "%LAUNCHER_CP%"=="0" (
-  echo Failed to find Spark launcher JAR.
+if not exist "%SPARK_JARS_DIR%"\ (
+  echo Failed to find Spark jars directory.
   echo You need to build Spark before running this program.
   exit /b 1
+)
+
+set LAUNCH_CLASSPATH=%SPARK_JARS_DIR%\*
+
+rem Add the launcher build dir to the classpath if requested.
+if not "x%SPARK_PREPEND_CLASSES%"=="x" (
+  set LAUNCH_CLASSPATH="%SPARK_HOME%\launcher\target\scala-%SPARK_SCALA_VERSION%\classes;%LAUNCH_CLASSPATH%"
 )
 
 rem Figure out where java is.
@@ -64,7 +54,10 @@ if not "x%JAVA_HOME%"=="x" set RUNNER=%JAVA_HOME%\bin\java
 
 rem The launcher library prints the command to be executed in a single line suitable for being
 rem executed by the batch interpreter. So read all the output of the launcher into a variable.
-for /f "tokens=*" %%i in ('cmd /C ""%RUNNER%" -cp %LAUNCHER_CP% org.apache.spark.launcher.Main %*"') do (
+set LAUNCHER_OUTPUT=%temp%\spark-class-launcher-output-%RANDOM%.txt
+"%RUNNER%" -Xmx128m -cp "%LAUNCH_CLASSPATH%" org.apache.spark.launcher.Main %* > %LAUNCHER_OUTPUT%
+for /f "tokens=*" %%i in (%LAUNCHER_OUTPUT%) do (
   set SPARK_CMD=%%i
 )
+del %LAUNCHER_OUTPUT%
 %SPARK_CMD%

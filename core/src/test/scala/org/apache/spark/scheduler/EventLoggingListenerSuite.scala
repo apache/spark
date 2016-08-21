@@ -25,10 +25,11 @@ import scala.io.Source
 
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.{FunSuiteLike, BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.io._
 import org.apache.spark.util.{JsonProtocol, Utils}
 
@@ -39,7 +40,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  * logging events, whether the parsing of the file names is correct, and whether the logged events
  * can be read and deserialized into actual SparkListenerEvents.
  */
-class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with BeforeAndAfter
+class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter
   with Logging {
   import EventLoggingListenerSuite._
 
@@ -61,17 +62,17 @@ class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with Bef
   test("Verify log file exist") {
     // Verify logging directory exists
     val conf = getLoggingConf(testDirPath)
-    val eventLogger = new EventLoggingListener("test", testDirPath.toUri().toString(), conf)
+    val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
     eventLogger.start()
 
     val logPath = new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS)
     assert(fileSystem.exists(logPath))
     val logStatus = fileSystem.getFileStatus(logPath)
-    assert(!logStatus.isDir)
+    assert(!logStatus.isDirectory)
 
     // Verify log is renamed after stop()
     eventLogger.stop()
-    assert(!fileSystem.getFileStatus(new Path(eventLogger.logPath)).isDir)
+    assert(!fileSystem.getFileStatus(new Path(eventLogger.logPath)).isDirectory)
   }
 
   test("Basic event logging") {
@@ -95,7 +96,7 @@ class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with Bef
   }
 
   test("Log overwriting") {
-    val logUri = EventLoggingListener.getLogPath(testDir.getAbsolutePath, "test")
+    val logUri = EventLoggingListener.getLogPath(testDir.toURI, "test", None)
     val logPath = new URI(logUri).getPath
     // Create file before writing the event log
     new FileOutputStream(new File(logPath)).close()
@@ -107,16 +108,19 @@ class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with Bef
 
   test("Event log name") {
     // without compression
-    assert(s"file:/base-dir/app1" === EventLoggingListener.getLogPath("/base-dir", "app1"))
+    assert(s"file:/base-dir/app1" === EventLoggingListener.getLogPath(
+      Utils.resolveURI("/base-dir"), "app1", None))
     // with compression
     assert(s"file:/base-dir/app1.lzf" ===
-      EventLoggingListener.getLogPath("/base-dir", "app1", Some("lzf")))
+      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"), "app1", None, Some("lzf")))
     // illegal characters in app ID
     assert(s"file:/base-dir/a-fine-mind_dollar_bills__1" ===
-      EventLoggingListener.getLogPath("/base-dir", "a fine:mind$dollar{bills}.1"))
+      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"),
+        "a fine:mind$dollar{bills}.1", None))
     // illegal characters in app ID with compression
     assert(s"file:/base-dir/a-fine-mind_dollar_bills__1.lz4" ===
-      EventLoggingListener.getLogPath("/base-dir", "a fine:mind$dollar{bills}.1", Some("lz4")))
+      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"),
+        "a fine:mind$dollar{bills}.1", None, Some("lz4")))
   }
 
   /* ----------------- *
@@ -137,15 +141,15 @@ class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with Bef
     val conf = getLoggingConf(testDirPath, compressionCodec)
     extraConf.foreach { case (k, v) => conf.set(k, v) }
     val logName = compressionCodec.map("test-" + _).getOrElse("test")
-    val eventLogger = new EventLoggingListener(logName, testDirPath.toUri().toString(), conf)
-    val listenerBus = new LiveListenerBus
+    val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
+    val listenerBus = new LiveListenerBus(sc)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
-      125L, "Mickey")
+      125L, "Mickey", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
 
     // A comprehensive test on JSON de/serialization of all events is in JsonProtocolSuite
     eventLogger.start()
-    listenerBus.start(sc)
+    listenerBus.start()
     listenerBus.addListener(eventLogger)
     listenerBus.postToAll(applicationStart)
     listenerBus.postToAll(applicationEnd)
@@ -173,14 +177,17 @@ class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with Bef
    * This runs a simple Spark job and asserts that the expected events are logged when expected.
    */
   private def testApplicationEventLogging(compressionCodec: Option[String] = None) {
+    // Set defaultFS to something that would cause an exception, to make sure we don't run
+    // into SPARK-6688.
     val conf = getLoggingConf(testDirPath, compressionCodec)
-    val sc = new SparkContext("local-cluster[2,2,512]", "test", conf)
+      .set("spark.hadoop.fs.defaultFS", "unsupported://example.com")
+    sc = new SparkContext("local-cluster[2,2,1024]", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
     val eventLogPath = eventLogger.logPath
-    val expectedLogDir = testDir.toURI().toString()
+    val expectedLogDir = testDir.toURI()
     assert(eventLogPath === EventLoggingListener.getLogPath(
-      expectedLogDir, sc.applicationId, compressionCodec.map(CompressionCodec.getShortName)))
+      expectedLogDir, sc.applicationId, None, compressionCodec.map(CompressionCodec.getShortName)))
 
     // Begin listening for events that trigger asserts
     val eventExistenceListener = new EventExistenceListener(eventLogger)
@@ -262,7 +269,7 @@ class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with Bef
 object EventLoggingListenerSuite {
 
   /** Get a SparkConf with event logging enabled. */
-  def getLoggingConf(logDir: Path, compressionCodec: Option[String] = None) = {
+  def getLoggingConf(logDir: Path, compressionCodec: Option[String] = None): SparkConf = {
     val conf = new SparkConf
     conf.set("spark.eventLog.enabled", "true")
     conf.set("spark.eventLog.testing", "true")
@@ -274,5 +281,5 @@ object EventLoggingListenerSuite {
     conf
   }
 
-  def getUniqueApplicationId = "test-" + System.currentTimeMillis
+  def getUniqueApplicationId: String = "test-" + System.currentTimeMillis
 }

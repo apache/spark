@@ -20,12 +20,12 @@ package org.apache.spark
 import scala.collection.mutable.ArrayBuffer
 import scala.math.abs
 
-import org.scalatest.{FunSuite, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.StatCounter
 
-class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMethodTester {
+class PartitioningSuite extends SparkFunSuite with SharedSparkContext with PrivateMethodTester {
 
   test("HashPartitioner equality") {
     val p2 = new HashPartitioner(2)
@@ -71,9 +71,9 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     val partitionSizes = List(1, 2, 10, 100, 500, 1000, 1500)
     val partitioners = partitionSizes.map(p => (p, new RangePartitioner(p, rdd)))
     val decoratedRangeBounds = PrivateMethod[Array[Int]]('rangeBounds)
-    partitioners.map { case (numPartitions, partitioner) =>
+    partitioners.foreach { case (numPartitions, partitioner) =>
       val rangeBounds = partitioner.invokePrivate(decoratedRangeBounds())
-      1.to(1000).map { element => {
+      for (element <- 1 to 1000) {
         val partition = partitioner.getPartition(element)
         if (numPartitions > 1) {
           if (partition < rangeBounds.size) {
@@ -85,19 +85,19 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
         } else {
           assert(partition === 0)
         }
-      }}
+      }
     }
   }
 
   test("RangePartitioner for keys that are not Comparable (but with Ordering)") {
     // Row does not extend Comparable, but has an implicit Ordering defined.
-    implicit object RowOrdering extends Ordering[Row] {
-      override def compare(x: Row, y: Row) = x.value - y.value
+    implicit object RowOrdering extends Ordering[Item] {
+      override def compare(x: Item, y: Item): Int = x.value - y.value
     }
 
-    val rdd = sc.parallelize(1 to 4500).map(x => (Row(x), Row(x)))
+    val rdd = sc.parallelize(1 to 4500).map(x => (Item(x), Item(x)))
     val partitioner = new RangePartitioner(1500, rdd)
-    partitioner.getPartition(Row(100))
+    partitioner.getPartition(Item(100))
   }
 
   test("RangPartitioner.sketch") {
@@ -163,8 +163,8 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     val hashP2 = new HashPartitioner(2)
     assert(rangeP2 === rangeP2)
     assert(hashP2 === hashP2)
-    assert(hashP2 != rangeP2)
-    assert(rangeP2 != hashP2)
+    assert(hashP2 !== rangeP2)
+    assert(rangeP2 !== hashP2)
   }
 
   test("partitioner preservation") {
@@ -212,20 +212,24 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     val arrPairs: RDD[(Array[Int], Int)] =
       sc.parallelize(Array(1, 2, 3, 4), 2).map(x => (Array(x), x))
 
-    assert(intercept[SparkException]{ arrs.distinct() }.getMessage.contains("array"))
+    def verify(testFun: => Unit): Unit = {
+      intercept[SparkException](testFun).getMessage.contains("array")
+    }
+
+    verify(arrs.distinct())
     // We can't catch all usages of arrays, since they might occur inside other collections:
     // assert(fails { arrPairs.distinct() })
-    assert(intercept[SparkException]{ arrPairs.partitionBy(new HashPartitioner(2)) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.join(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.leftOuterJoin(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.rightOuterJoin(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.fullOuterJoin(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.groupByKey() }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.countByKey() }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.countByKeyApprox(1) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.cogroup(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.reduceByKeyLocally(_ + _) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.reduceByKey(_ + _) }.getMessage.contains("array"))
+    verify(arrPairs.partitionBy(new HashPartitioner(2)))
+    verify(arrPairs.join(arrPairs))
+    verify(arrPairs.leftOuterJoin(arrPairs))
+    verify(arrPairs.rightOuterJoin(arrPairs))
+    verify(arrPairs.fullOuterJoin(arrPairs))
+    verify(arrPairs.groupByKey())
+    verify(arrPairs.countByKey())
+    verify(arrPairs.countByKeyApprox(1))
+    verify(arrPairs.cogroup(arrPairs))
+    verify(arrPairs.reduceByKeyLocally(_ + _))
+    verify(arrPairs.reduceByKey(_ + _))
   }
 
   test("zero-length partitions should be correctly handled") {
@@ -240,6 +244,10 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     assert(abs(6.0/2 - rdd.mean) < 0.01)
     assert(abs(1.0 - rdd.variance) < 0.01)
     assert(abs(1.0 - rdd.stdev) < 0.01)
+    assert(abs(rdd.variance - rdd.popVariance) < 1e-14)
+    assert(abs(rdd.stdev - rdd.popStdev) < 1e-14)
+    assert(abs(2.0 - rdd.sampleVariance) < 1e-14)
+    assert(abs(Math.sqrt(2.0) - rdd.sampleStdev) < 1e-14)
     assert(stats.max === 4.0)
     assert(stats.min === 2.0)
 
@@ -248,4 +256,4 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
 }
 
 
-private sealed case class Row(value: Int)
+private sealed case class Item(value: Int)

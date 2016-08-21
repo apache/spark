@@ -17,14 +17,13 @@
 
 package org.apache.spark.mllib.random
 
-import scala.math
+import org.apache.commons.math3.special.Gamma
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.StatCounter
 
 // TODO update tests to use TestingUtils for floating point comparison after PR 1367 is merged
-class RandomDataGeneratorSuite extends FunSuite {
+class RandomDataGeneratorSuite extends SparkFunSuite {
 
   def apiChecks(gen: RandomDataGenerator[Double]) {
     // resetting seed should generate the same sequence of random numbers
@@ -81,7 +80,7 @@ class RandomDataGeneratorSuite extends FunSuite {
   }
 
   test("LogNormalGenerator") {
-    List((0.0, 1.0), (0.0, 2.0), (2.0, 1.0), (2.0, 2.0)).map {
+    List((0.0, 1.0), (0.0, 2.0), (2.0, 1.0), (2.0, 2.0)).foreach {
       case (mean: Double, vari: Double) =>
         val normal = new LogNormalGenerator(mean, math.sqrt(vari))
         apiChecks(normal)
@@ -126,7 +125,7 @@ class RandomDataGeneratorSuite extends FunSuite {
 
   test("GammaGenerator") {
     // mean = 0.0 will not pass the API checks since 0.0 is always deterministically produced.
-    List((1.0, 2.0), (2.0, 2.0), (3.0, 2.0), (5.0, 1.0), (9.0, 0.5)).map {
+    List((1.0, 2.0), (2.0, 2.0), (3.0, 2.0), (5.0, 1.0), (9.0, 0.5)).foreach {
       case (shape: Double, scale: Double) =>
         val gamma = new GammaGenerator(shape, scale)
         apiChecks(gamma)
@@ -135,6 +134,20 @@ class RandomDataGeneratorSuite extends FunSuite {
         // var of gamma = shape * scale^2
         val expectedStd = math.sqrt(shape * scale * scale)
         distributionChecks(gamma, expectedMean, expectedStd, 0.1)
+    }
+  }
+
+  test("WeibullGenerator") {
+    List((1.0, 2.0), (2.0, 3.0), (2.5, 3.5), (10.4, 2.222)).foreach {
+      case (alpha: Double, beta: Double) =>
+        val weibull = new WeibullGenerator(alpha, beta)
+        apiChecks(weibull)
+
+        val expectedMean = math.exp(Gamma.logGamma(1 + (1 / alpha))) * beta
+        val expectedVariance = math.exp(
+          Gamma.logGamma(1 + (2 / alpha))) * beta * beta - expectedMean * expectedMean
+        val expectedStd = math.sqrt(expectedVariance)
+        distributionChecks(weibull, expectedMean, expectedStd, 0.1)
     }
   }
 }

@@ -17,25 +17,25 @@
 
 package org.apache.spark.sql.hive
 
-import org.scalatest.BeforeAndAfterAll
+import java.io.{File, PrintWriter}
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.{Row, SQLConf, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.command.AnalyzeTableCommand
 import org.apache.spark.sql.execution.joins._
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SQLTestUtils
 
-class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
-  TestHive.reset()
-  TestHive.cacheTables = false
+class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   test("parse analyze commands") {
     def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
-      val parsed = HiveQl.parseSql(analyzeCommand)
+      val parsed = spark.sessionState.sqlParser.parsePlan(analyzeCommand)
       val operators = parsed.collect {
-        case a: AnalyzeTable => a
+        case a: AnalyzeTableCommand => a
         case o => o
       }
 
@@ -51,38 +51,79 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS",
-      classOf[HiveNativeCommand])
+      classOf[AnalyzeTableCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
-      classOf[HiveNativeCommand])
+      classOf[AnalyzeTableCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
-      classOf[HiveNativeCommand])
+      classOf[AnalyzeTableCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS",
-      classOf[HiveNativeCommand])
+      classOf[AnalyzeTableCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      classOf[HiveNativeCommand])
+      classOf[AnalyzeTableCommand])
 
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS nOscAn",
-      classOf[AnalyzeTable])
+      classOf[AnalyzeTableCommand])
+  }
+
+  test("MetastoreRelations fallback to HDFS for size estimation") {
+    val enableFallBackToHdfsForStats = spark.sessionState.conf.fallBackToHdfsForStatsEnabled
+    try {
+      withTempDir { tempDir =>
+
+        // EXTERNAL OpenCSVSerde table pointing to LOCATION
+
+        val file1 = new File(tempDir + "/data1")
+        val writer1 = new PrintWriter(file1)
+        writer1.write("1,2")
+        writer1.close()
+
+        val file2 = new File(tempDir + "/data2")
+        val writer2 = new PrintWriter(file2)
+        writer2.write("1,2")
+        writer2.close()
+
+        sql(
+          s"""CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT)
+            ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+            WITH SERDEPROPERTIES (
+              \"separatorChar\" = \",\",
+              \"quoteChar\"     = \"\\\"\",
+              \"escapeChar\"    = \"\\\\\")
+            LOCATION '$tempDir'
+          """)
+
+        spark.conf.set(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key, true)
+
+        val relation = spark.sessionState.catalog.lookupRelation(TableIdentifier("csv_table"))
+          .asInstanceOf[MetastoreRelation]
+
+        val properties = relation.hiveQlTable.getParameters
+        assert(properties.get("totalSize").toLong <= 0, "external table totalSize must be <= 0")
+        assert(properties.get("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
+
+        val sizeInBytes = relation.statistics.sizeInBytes
+        assert(sizeInBytes === BigInt(file1.length() + file2.length()))
+      }
+    } finally {
+      spark.conf.set(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key, enableFallBackToHdfsForStats)
+      sql("DROP TABLE csv_table ")
+    }
   }
 
   test("analyze MetastoreRelations") {
     def queryTotalSize(tableName: String): BigInt =
-      catalog.lookupRelation(Seq(tableName)).statistics.sizeInBytes
+      spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName)).statistics.sizeInBytes
 
     // Non-partitioned table
     sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
 
-    // TODO: How does it works? needs to add it back for other hive version.
-    if (HiveShim.version =="0.12.0") {
-      assert(queryTotalSize("analyzeTable") === conf.defaultSizeInBytes)
-    }
     sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")
 
     assert(queryTotalSize("analyzeTable") === BigInt(11624))
@@ -110,7 +151,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         |SELECT * FROM src
       """.stripMargin).collect()
 
-    assert(queryTotalSize("analyzeTable_part") === conf.defaultSizeInBytes)
+    assert(queryTotalSize("analyzeTable_part") === spark.sessionState.conf.defaultSizeInBytes)
 
     sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
 
@@ -119,11 +160,12 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
     sql("DROP TABLE analyzeTable_part").collect()
 
     // Try to analyze a temp table
-    sql("""SELECT * FROM src""").registerTempTable("tempTable")
-    intercept[NotImplementedError] {
-      analyze("tempTable")
+    sql("""SELECT * FROM src""").createOrReplaceTempView("tempTable")
+    intercept[AnalysisException] {
+      sql("ANALYZE TABLE tempTable COMPUTE STATISTICS")
     }
-    catalog.unregisterTable(Seq("tempTable"))
+    spark.sessionState.catalog.dropTable(
+      TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
   }
 
   test("estimates the size of a test MetastoreRelation") {
@@ -142,7 +184,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         after: () => Unit,
         query: String,
         expectedAnswer: Seq[Row],
-        ct: ClassTag[_]) = {
+        ct: ClassTag[_]): Unit = {
       before()
 
       var df = sql(query)
@@ -151,31 +193,31 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
       val sizes = df.queryExecution.analyzed.collect {
         case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
       }
-      assert(sizes.size === 2 && sizes(0) <= conf.autoBroadcastJoinThreshold
-        && sizes(1) <= conf.autoBroadcastJoinThreshold,
+      assert(sizes.size === 2 && sizes(0) <= spark.sessionState.conf.autoBroadcastJoinThreshold
+        && sizes(1) <= spark.sessionState.conf.autoBroadcastJoinThreshold,
         s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
       // Using `sparkPlan` because for relevant patterns in HashJoin to be
       // matched, other strategies need to be applied.
-      var bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoin => j }
+      var bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
       assert(bhj.size === 1,
         s"actual query plans do not contain broadcast join: ${df.queryExecution}")
 
       checkAnswer(df, expectedAnswer) // check correctness of output
 
-      TestHive.conf.settings.synchronized {
-        val tmp = conf.autoBroadcastJoinThreshold
+      spark.sessionState.conf.settings.synchronized {
+        val tmp = spark.sessionState.conf.autoBroadcastJoinThreshold
 
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
+        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1""")
         df = sql(query)
-        bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoin => j }
+        bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
         assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
-        val shj = df.queryExecution.sparkPlan.collect { case j: ShuffledHashJoin => j }
+        val shj = df.queryExecution.sparkPlan.collect { case j: SortMergeJoinExec => j }
         assert(shj.size === 1,
-          "ShuffledHashJoin should be planned when BroadcastHashJoin is turned off")
+          "SortMergeJoin should be planned when BroadcastHashJoin is turned off")
 
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
+        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp""")
       }
 
       after()
@@ -207,37 +249,37 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         .isAssignableFrom(r.getClass) =>
         r.statistics.sizeInBytes
     }
-    assert(sizes.size === 2 && sizes(1) <= conf.autoBroadcastJoinThreshold
-      && sizes(0) <= conf.autoBroadcastJoinThreshold,
+    assert(sizes.size === 2 && sizes(1) <= spark.sessionState.conf.autoBroadcastJoinThreshold
+      && sizes(0) <= spark.sessionState.conf.autoBroadcastJoinThreshold,
       s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
     // Using `sparkPlan` because for relevant patterns in HashJoin to be
     // matched, other strategies need to be applied.
     var bhj = df.queryExecution.sparkPlan.collect {
-      case j: BroadcastLeftSemiJoinHash => j
+      case j: BroadcastHashJoinExec => j
     }
     assert(bhj.size === 1,
       s"actual query plans do not contain broadcast join: ${df.queryExecution}")
 
     checkAnswer(df, answer) // check correctness of output
 
-    TestHive.conf.settings.synchronized {
-      val tmp = conf.autoBroadcastJoinThreshold
+    spark.sessionState.conf.settings.synchronized {
+      val tmp = spark.sessionState.conf.autoBroadcastJoinThreshold
 
-      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1")
+      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1")
       df = sql(leftSemiJoinQuery)
       bhj = df.queryExecution.sparkPlan.collect {
-        case j: BroadcastLeftSemiJoinHash => j
+        case j: BroadcastHashJoinExec => j
       }
       assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
       val shj = df.queryExecution.sparkPlan.collect {
-        case j: LeftSemiJoinHash => j
+        case j: SortMergeJoinExec => j
       }
       assert(shj.size === 1,
-        "LeftSemiJoinHash should be planned when BroadcastHashJoin is turned off")
+        "SortMergeJoinExec should be planned when BroadcastHashJoin is turned off")
 
-      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp")
+      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp")
     }
 
   }

@@ -19,16 +19,13 @@ package org.apache.spark.input
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
-import com.google.common.io.ByteStreams
+import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat, CombineFileRecordReader, CombineFileSplit}
-
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.deploy.SparkHadoopUtil
 
 /**
  * A general format for reading whole files in as streams, byte arrays,
@@ -44,12 +41,8 @@ private[spark] abstract class StreamFileInputFormat[T]
    * which is set through setMaxSplitSize
    */
   def setMinPartitions(context: JobContext, minPartitions: Int) {
-    val files = listStatus(context)
-    val totalLen = files.map { file =>
-      if (file.isDir) 0L else file.getLen
-    }.sum
-
-    val maxSplitSize = Math.ceil(totalLen * 1.0 / files.length).toLong
+    val totalLen = listStatus(context).asScala.filterNot(_.isDirectory).map(_.getLen).sum
+    val maxSplitSize = math.ceil(totalLen / math.max(minPartitions, 1.0)).toLong
     super.setMaxSplitSize(maxSplitSize)
   }
 
@@ -73,20 +66,19 @@ private[spark] abstract class StreamBasedRecordReader[T](
   private var key = ""
   private var value: T = null.asInstanceOf[T]
 
-  override def initialize(split: InputSplit, context: TaskAttemptContext) = {}
-  override def close() = {}
+  override def initialize(split: InputSplit, context: TaskAttemptContext): Unit = {}
+  override def close(): Unit = {}
 
-  override def getProgress = if (processed) 1.0f else 0.0f
+  override def getProgress: Float = if (processed) 1.0f else 0.0f
 
-  override def getCurrentKey = key
+  override def getCurrentKey: String = key
 
-  override def getCurrentValue = value
+  override def getCurrentValue: T = value
 
-  override def nextKeyValue = {
+  override def nextKeyValue: Boolean = {
     if (!processed) {
       val fileIn = new PortableDataStream(split, context, index)
       value = parseStream(fileIn)
-      fileIn.close() // if it has not been open yet, close does nothing
       key = fileIn.getPath
       processed = true
       true
@@ -119,7 +111,8 @@ private[spark] class StreamRecordReader(
  * The format for the PortableDataStream files
  */
 private[spark] class StreamInputFormat extends StreamFileInputFormat[PortableDataStream] {
-  override def createRecordReader(split: InputSplit, taContext: TaskAttemptContext) = {
+  override def createRecordReader(split: InputSplit, taContext: TaskAttemptContext)
+    : CombineFileRecordReader[String, PortableDataStream] = {
     new CombineFileRecordReader[String, PortableDataStream](
       split.asInstanceOf[CombineFileSplit], taContext, classOf[StreamRecordReader])
   }
@@ -131,23 +124,15 @@ private[spark] class StreamInputFormat extends StreamFileInputFormat[PortableDat
  * @note TaskAttemptContext is not serializable resulting in the confBytes construct
  * @note CombineFileSplit is not serializable resulting in the splitBytes construct
  */
-@Experimental
 class PortableDataStream(
-    @transient isplit: CombineFileSplit,
-    @transient context: TaskAttemptContext,
+    isplit: CombineFileSplit,
+    context: TaskAttemptContext,
     index: Integer)
   extends Serializable {
 
-  // transient forces file to be reopened after being serialization
-  // it is also used for non-serializable classes
-
-  @transient private var fileIn: DataInputStream = null
-  @transient private var isOpen = false
-
   private val confBytes = {
     val baos = new ByteArrayOutputStream()
-    SparkHadoopUtil.get.getConfigurationFromJobContext(context).
-      write(new DataOutputStream(baos))
+    context.getConfiguration.write(new DataOutputStream(baos))
     baos.toByteArray
   }
 
@@ -179,39 +164,24 @@ class PortableDataStream(
   }
 
   /**
-   * Create a new DataInputStream from the split and context
+   * Create a new DataInputStream from the split and context. The user of this method is responsible
+   * for closing the stream after usage.
    */
   def open(): DataInputStream = {
-    if (!isOpen) {
-      val pathp = split.getPath(index)
-      val fs = pathp.getFileSystem(conf)
-      fileIn = fs.open(pathp)
-      isOpen = true
-    }
-    fileIn
+    val pathp = split.getPath(index)
+    val fs = pathp.getFileSystem(conf)
+    fs.open(pathp)
   }
 
   /**
    * Read the file as a byte array
    */
   def toArray(): Array[Byte] = {
-    open()
-    val innerBuffer = ByteStreams.toByteArray(fileIn)
-    close()
-    innerBuffer
-  }
-
-  /**
-   * Close the file (if it is currently open)
-   */
-  def close() = {
-    if (isOpen) {
-      try {
-        fileIn.close()
-        isOpen = false
-      } catch {
-        case ioe: java.io.IOException => // do nothing
-      }
+    val stream = open()
+    try {
+      ByteStreams.toByteArray(stream)
+    } finally {
+      Closeables.close(stream, true)
     }
   }
 

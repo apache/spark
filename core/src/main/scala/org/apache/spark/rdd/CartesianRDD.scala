@@ -27,8 +27,8 @@ import org.apache.spark.util.Utils
 private[spark]
 class CartesianPartition(
     idx: Int,
-    @transient rdd1: RDD[_],
-    @transient rdd2: RDD[_],
+    @transient private val rdd1: RDD[_],
+    @transient private val rdd2: RDD[_],
     s1Index: Int,
     s2Index: Int
   ) extends Partition {
@@ -50,14 +50,14 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
     sc: SparkContext,
     var rdd1 : RDD[T],
     var rdd2 : RDD[U])
-  extends RDD[Pair[T, U]](sc, Nil)
+  extends RDD[(T, U)](sc, Nil)
   with Serializable {
 
-  val numPartitionsInRdd2 = rdd2.partitions.size
+  val numPartitionsInRdd2 = rdd2.partitions.length
 
   override def getPartitions: Array[Partition] = {
     // create the cross product split
-    val array = new Array[Partition](rdd1.partitions.size * rdd2.partitions.size)
+    val array = new Array[Partition](rdd1.partitions.length * rdd2.partitions.length)
     for (s1 <- rdd1.partitions; s2 <- rdd2.partitions) {
       val idx = s1.index * numPartitionsInRdd2 + s2.index
       array(idx) = new CartesianPartition(idx, rdd1, rdd2, s1.index, s2.index)
@@ -70,7 +70,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
     (rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)).distinct
   }
 
-  override def compute(split: Partition, context: TaskContext) = {
+  override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
     val currSplit = split.asInstanceOf[CartesianPartition]
     for (x <- rdd1.iterator(currSplit.s1, context);
          y <- rdd2.iterator(currSplit.s2, context)) yield (x, y)

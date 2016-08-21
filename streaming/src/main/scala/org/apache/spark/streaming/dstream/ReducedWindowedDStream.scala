@@ -17,17 +17,13 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.{CoGroupedRDD, MapPartitionsRDD}
-import org.apache.spark.Partitioner
-import org.apache.spark.SparkContext._
-import org.apache.spark.storage.StorageLevel
-
-import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.streaming.{Duration, Interval, Time}
-
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+
+import org.apache.spark.Partitioner
+import org.apache.spark.rdd.{CoGroupedRDD, RDD}
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Duration, Interval, Time}
 
 private[streaming]
 class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
@@ -38,29 +34,29 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
     _windowDuration: Duration,
     _slideDuration: Duration,
     partitioner: Partitioner
-  ) extends DStream[(K,V)](parent.ssc) {
+  ) extends DStream[(K, V)](parent.ssc) {
 
-  assert(_windowDuration.isMultipleOf(parent.slideDuration),
+  require(_windowDuration.isMultipleOf(parent.slideDuration),
     "The window duration of ReducedWindowedDStream (" + _windowDuration + ") " +
       "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
   )
 
-  assert(_slideDuration.isMultipleOf(parent.slideDuration),
+  require(_slideDuration.isMultipleOf(parent.slideDuration),
     "The slide duration of ReducedWindowedDStream (" + _slideDuration + ") " +
       "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
   )
 
   // Reduce each batch of data using reduceByKey which will be further reduced by window
   // by ReducedWindowedDStream
-  val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
+  private val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
 
   // Persist RDDs to memory by default as these RDDs are going to be reused.
   super.persist(StorageLevel.MEMORY_ONLY_SER)
   reducedStream.persist(StorageLevel.MEMORY_ONLY_SER)
 
-  def windowDuration: Duration =  _windowDuration
+  def windowDuration: Duration = _windowDuration
 
-  override def dependencies = List(reducedStream)
+  override def dependencies: List[DStream[_]] = List(reducedStream)
 
   override def slideDuration: Duration = _slideDuration
 
@@ -68,7 +64,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
 
   override def parentRememberDuration: Duration = rememberDuration + windowDuration
 
-  override def persist(storageLevel: StorageLevel): DStream[(K,V)] = {
+  override def persist(storageLevel: StorageLevel): DStream[(K, V)] = {
     super.persist(storageLevel)
     reducedStream.persist(storageLevel)
     this
@@ -91,7 +87,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
 
     logDebug("Window time = " + windowDuration)
     logDebug("Slide time = " + slideDuration)
-    logDebug("ZeroTime = " + zeroTime)
+    logDebug("Zero time = " + zeroTime)
     logDebug("Current window = " + currentWindow)
     logDebug("Previous window = " + previousWindow)
 
@@ -118,7 +114,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
 
     // Get the RDD of the reduced value of the previous window
     val previousWindowRDD =
-      getOrCompute(previousWindow.endTime).getOrElse(ssc.sc.makeRDD(Seq[(K,V)]()))
+      getOrCompute(previousWindow.endTime).getOrElse(ssc.sc.makeRDD(Seq[(K, V)]()))
 
     // Make the list of RDDs that needs to cogrouped together for reducing their reduced values
     val allRDDs = new ArrayBuffer[RDD[(K, V)]]() += previousWindowRDD ++= oldRDDs ++= newRDDs
@@ -132,7 +128,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
     val numNewValues = newRDDs.size
 
     val mergeValues = (arrayOfValues: Array[Iterable[V]]) => {
-      if (arrayOfValues.size != 1 + numOldValues + numNewValues) {
+      if (arrayOfValues.length != 1 + numOldValues + numNewValues) {
         throw new Exception("Unexpected number of sequences of reduced values")
       }
       // Getting reduced values "old time steps" that will be removed from current window

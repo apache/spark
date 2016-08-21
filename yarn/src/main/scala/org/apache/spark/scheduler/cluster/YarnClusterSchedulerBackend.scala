@@ -17,10 +17,13 @@
 
 package org.apache.spark.scheduler.cluster
 
+import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
+import org.apache.hadoop.yarn.conf.YarnConfiguration
+
 import org.apache.spark.SparkContext
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
+import org.apache.spark.deploy.yarn.{ApplicationMaster, YarnSparkHadoopUtil}
 import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.util.IntParam
+import org.apache.spark.util.Utils
 
 private[spark] class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
@@ -28,23 +31,37 @@ private[spark] class YarnClusterSchedulerBackend(
   extends YarnSchedulerBackend(scheduler, sc) {
 
   override def start() {
+    val attemptId = ApplicationMaster.getAttemptId
+    bindToYarn(attemptId.getApplicationId(), Some(attemptId))
     super.start()
-    totalExpectedExecutors = DEFAULT_NUMBER_EXECUTORS
-    if (System.getenv("SPARK_EXECUTOR_INSTANCES") != null) {
-      totalExpectedExecutors = IntParam.unapply(System.getenv("SPARK_EXECUTOR_INSTANCES"))
-        .getOrElse(totalExpectedExecutors)
-    }
-    // System property can override environment variable.
-    totalExpectedExecutors = sc.getConf.getInt("spark.executor.instances", totalExpectedExecutors)
+    totalExpectedExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sc.conf)
   }
 
-  override def applicationId(): String =
-    // In YARN Cluster mode, spark.yarn.app.id is expect to be set
-    // before user application is launched.
-    // So, if spark.yarn.app.id is not set, it is something wrong.
-    sc.getConf.getOption("spark.yarn.app.id").getOrElse {
-      logError("Application ID is not set.")
-      super.applicationId
-    }
+  override def getDriverLogUrls: Option[Map[String, String]] = {
+    var driverLogs: Option[Map[String, String]] = None
+    try {
+      val yarnConf = new YarnConfiguration(sc.hadoopConfiguration)
+      val containerId = YarnSparkHadoopUtil.get.getContainerId
 
+      val httpAddress = System.getenv(Environment.NM_HOST.name()) +
+        ":" + System.getenv(Environment.NM_HTTP_PORT.name())
+      // lookup appropriate http scheme for container log urls
+      val yarnHttpPolicy = yarnConf.get(
+        YarnConfiguration.YARN_HTTP_POLICY_KEY,
+        YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
+      )
+      val user = Utils.getCurrentUserName()
+      val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
+      val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
+      logDebug(s"Base URL for logs: $baseUrl")
+      driverLogs = Some(Map(
+        "stderr" -> s"$baseUrl/stderr?start=-4096",
+        "stdout" -> s"$baseUrl/stdout?start=-4096"))
+    } catch {
+      case e: Exception =>
+        logInfo("Error while building AM log links, so AM" +
+          " logs link will not appear in application UI", e)
+    }
+    driverLogs
+  }
 }

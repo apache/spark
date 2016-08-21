@@ -20,27 +20,37 @@ package org.apache.spark.streaming.dstream
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.{BlockRDD, RDD}
-import org.apache.spark.storage.{BlockId, StorageLevel}
-import org.apache.spark.streaming._
+import org.apache.spark.storage.BlockId
+import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
-import org.apache.spark.streaming.receiver.{Receiver, WriteAheadLogBasedStoreResult}
-import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
+import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.scheduler.{RateController, ReceivedBlockInfo, StreamInputInfo}
+import org.apache.spark.streaming.scheduler.rate.RateEstimator
+import org.apache.spark.streaming.util.WriteAheadLogUtils
 
 /**
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
  * that has to start a receiver on worker nodes to receive external data.
  * Specific implementations of ReceiverInputDStream must
- * define `the getReceiver()` function that gets the receiver object of type
+ * define [[getReceiver]] function that gets the receiver object of type
  * [[org.apache.spark.streaming.receiver.Receiver]] that will be sent
  * to the workers to receive data.
- * @param ssc_ Streaming context that will execute this input stream
+ * @param _ssc Streaming context that will execute this input stream
  * @tparam T Class type of the object of this stream
  */
-abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
-  extends InputDStream[T](ssc_) {
+abstract class ReceiverInputDStream[T: ClassTag](_ssc: StreamingContext)
+  extends InputDStream[T](_ssc) {
 
-  /** This is an unique identifier for the receiver input stream. */
-  val id = ssc.getNewReceiverStreamId()
+  /**
+   * Asynchronously maintains & sends new rate limits to the receiver through the receiver tracker.
+   */
+  override protected[streaming] val rateController: Option[RateController] = {
+    if (RateController.isBackPressureEnabled(ssc.conf)) {
+      Some(new ReceiverRateController(id, RateEstimator.create(ssc.conf, ssc.graph.batchDuration)))
+    } else {
+      None
+    }
+  }
 
   /**
    * Gets the receiver object that will be sent to the worker nodes
@@ -67,31 +77,74 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
       } else {
         // Otherwise, ask the tracker for all the blocks that have been allocated to this stream
         // for this batch
-        val blockInfos =
-          ssc.scheduler.receiverTracker.getBlocksOfBatch(validTime).get(id).getOrElse(Seq.empty)
-        val blockStoreResults = blockInfos.map { _.blockStoreResult }
-        val blockIds = blockStoreResults.map { _.blockId.asInstanceOf[BlockId] }.toArray
+        val receiverTracker = ssc.scheduler.receiverTracker
+        val blockInfos = receiverTracker.getBlocksOfBatch(validTime).getOrElse(id, Seq.empty)
 
-        // Check whether all the results are of the same type
-        val resultTypes = blockStoreResults.map { _.getClass }.distinct
-        if (resultTypes.size > 1) {
-          logWarning("Multiple result types in block information, WAL information will be ignored.")
-        }
+        // Register the input blocks information into InputInfoTracker
+        val inputInfo = StreamInputInfo(id, blockInfos.flatMap(_.numRecords).sum)
+        ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
-        // If all the results are of type WriteAheadLogBasedStoreResult, then create
-        // WriteAheadLogBackedBlockRDD else create simple BlockRDD.
-        if (resultTypes.size == 1 && resultTypes.head == classOf[WriteAheadLogBasedStoreResult]) {
-          val logSegments = blockStoreResults.map {
-            _.asInstanceOf[WriteAheadLogBasedStoreResult].segment
-          }.toArray
-          // Since storeInBlockManager = false, the storage level does not matter.
-          new WriteAheadLogBackedBlockRDD[T](ssc.sparkContext,
-            blockIds, logSegments, storeInBlockManager = false, StorageLevel.MEMORY_ONLY_SER)
-        } else {
-          new BlockRDD[T](ssc.sc, blockIds)
-        }
+        // Create the BlockRDD
+        createBlockRDD(validTime, blockInfos)
       }
     }
     Some(blockRDD)
   }
+
+  private[streaming] def createBlockRDD(time: Time, blockInfos: Seq[ReceivedBlockInfo]): RDD[T] = {
+
+    if (blockInfos.nonEmpty) {
+      val blockIds = blockInfos.map { _.blockId.asInstanceOf[BlockId] }.toArray
+
+      // Are WAL record handles present with all the blocks
+      val areWALRecordHandlesPresent = blockInfos.forall { _.walRecordHandleOption.nonEmpty }
+
+      if (areWALRecordHandlesPresent) {
+        // If all the blocks have WAL record handle, then create a WALBackedBlockRDD
+        val isBlockIdValid = blockInfos.map { _.isBlockIdValid() }.toArray
+        val walRecordHandles = blockInfos.map { _.walRecordHandleOption.get }.toArray
+        new WriteAheadLogBackedBlockRDD[T](
+          ssc.sparkContext, blockIds, walRecordHandles, isBlockIdValid)
+      } else {
+        // Else, create a BlockRDD. However, if there are some blocks with WAL info but not
+        // others then that is unexpected and log a warning accordingly.
+        if (blockInfos.exists(_.walRecordHandleOption.nonEmpty)) {
+          if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
+            logError("Some blocks do not have Write Ahead Log information; " +
+              "this is unexpected and data may not be recoverable after driver failures")
+          } else {
+            logWarning("Some blocks have Write Ahead Log information; this is unexpected")
+          }
+        }
+        val validBlockIds = blockIds.filter { id =>
+          ssc.sparkContext.env.blockManager.master.contains(id)
+        }
+        if (validBlockIds.length != blockIds.length) {
+          logWarning("Some blocks could not be recovered as they were not found in memory. " +
+            "To prevent such data loss, enable Write Ahead Log (see programming guide " +
+            "for more details.")
+        }
+        new BlockRDD[T](ssc.sc, validBlockIds)
+      }
+    } else {
+      // If no block is ready now, creating WriteAheadLogBackedBlockRDD or BlockRDD
+      // according to the configuration
+      if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
+        new WriteAheadLogBackedBlockRDD[T](
+          ssc.sparkContext, Array.empty, Array.empty, Array.empty)
+      } else {
+        new BlockRDD[T](ssc.sc, Array.empty)
+      }
+    }
+  }
+
+  /**
+   * A RateController that sends the new rate to receivers, via the receiver tracker.
+   */
+  private[streaming] class ReceiverRateController(id: Int, estimator: RateEstimator)
+      extends RateController(id, estimator) {
+    override def publish(rate: Long): Unit =
+      ssc.scheduler.receiverTracker.sendRateUpdate(id, rate)
+  }
 }
+

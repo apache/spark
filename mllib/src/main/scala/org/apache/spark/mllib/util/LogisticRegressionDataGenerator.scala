@@ -19,11 +19,11 @@ package org.apache.spark.mllib.util
 
 import scala.util.Random
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.RDD
 
 /**
  * :: DeveloperApi ::
@@ -31,6 +31,7 @@ import org.apache.spark.mllib.linalg.Vectors
  * with probability `probOne` and scales features for positive examples by `eps`.
  */
 @DeveloperApi
+@Since("0.8.0")
 object LogisticRegressionDataGenerator {
 
   /**
@@ -43,6 +44,7 @@ object LogisticRegressionDataGenerator {
    * @param nparts Number of partitions of the generated RDD. Default value is 2.
    * @param probOne Probability that a label is 1 (and not 0). Default value is 0.5.
    */
+  @Since("0.8.0")
   def generateLogisticRDD(
     sc: SparkContext,
     nexamples: Int,
@@ -62,10 +64,13 @@ object LogisticRegressionDataGenerator {
     data
   }
 
+  @Since("0.8.0")
   def main(args: Array[String]) {
     if (args.length != 5) {
+      // scalastyle:off println
       println("Usage: LogisticRegressionGenerator " +
         "<master> <output_dir> <num_examples> <num_features> <num_partitions>")
+      // scalastyle:on println
       System.exit(1)
     }
 

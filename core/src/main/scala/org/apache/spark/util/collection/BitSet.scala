@@ -33,13 +33,24 @@ class BitSet(numBits: Int) extends Serializable {
   def capacity: Int = numWords * 64
 
   /**
+   * Clear all set bits.
+   */
+  def clear(): Unit = {
+    var i = 0
+    while (i < numWords) {
+      words(i) = 0L
+      i += 1
+    }
+  }
+
+  /**
    * Set all the bits up to a given index
    */
   def setUntil(bitIndex: Int) {
     val wordIndex = bitIndex >> 6 // divide by 64
     var i = 0
     while(i < wordIndex) { words(i) = -1; i += 1 }
-    if(wordIndex < words.size) {
+    if(wordIndex < words.length) {
       // Set the remaining bits (note that the mask could still be zero)
       val mask = ~(-1L << (bitIndex & 0x3f))
       words(wordIndex) |= mask
@@ -156,12 +167,12 @@ class BitSet(numBits: Int) extends Serializable {
   /**
    * Get an iterator over the set bits.
    */
-  def iterator = new Iterator[Int] {
+  def iterator: Iterator[Int] = new Iterator[Int] {
     var ind = nextSetBit(0)
     override def hasNext: Boolean = ind >= 0
-    override def next() = {
+    override def next(): Int = {
       val tmp = ind
-      ind  = nextSetBit(ind + 1)
+      ind = nextSetBit(ind + 1)
       tmp
     }
   }

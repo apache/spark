@@ -17,12 +17,12 @@
 
 package org.apache.spark.util
 
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.{BlockingQueue, LinkedBlockingDeque}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * An event loop to receive events from the caller and process all events in the event thread. It
@@ -47,13 +47,12 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
           try {
             onReceive(event)
           } catch {
-            case NonFatal(e) => {
+            case NonFatal(e) =>
               try {
                 onError(e)
               } catch {
                 case NonFatal(e) => logError("Unexpected error in " + name, e)
               }
-            }
           }
         }
       } catch {
@@ -76,9 +75,21 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
   def stop(): Unit = {
     if (stopped.compareAndSet(false, true)) {
       eventThread.interrupt()
-      eventThread.join()
-      // Call onStop after the event thread exits to make sure onReceive happens before onStop
-      onStop()
+      var onStopCalled = false
+      try {
+        eventThread.join()
+        // Call onStop after the event thread exits to make sure onReceive happens before onStop
+        onStopCalled = true
+        onStop()
+      } catch {
+        case ie: InterruptedException =>
+          Thread.currentThread().interrupt()
+          if (!onStopCalled) {
+            // ie is thrown from `eventThread.join()`. Otherwise, we should not call `onStop` since
+            // it's already called.
+            onStop()
+          }
+      }
     } else {
       // Keep quiet to allow calling `stop` multiple times.
     }

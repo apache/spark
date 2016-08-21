@@ -18,59 +18,126 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
+
+// MutableProjection is not accessible in Java
+abstract class BaseMutableProjection extends MutableProjection
 
 /**
  * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
- * input [[Row]] for a fixed set of [[Expression Expressions]].
+ * input [[InternalRow]] for a fixed set of [[Expression Expressions]].
+ * It exposes a `target` method, which is used to set the row that will be updated.
+ * The internal [[MutableRow]] object created internally is used only when `target` is not used.
  */
-object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
-  import scala.reflect.runtime.{universe => ru}
-  import scala.reflect.runtime.universe._
-
-  val mutableRowName = newTermName("mutableRow")
+object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableProjection] {
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
-    in.map(ExpressionCanonicalizer(_))
+    in.map(ExpressionCanonicalizer.execute)
 
   protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
     in.map(BindReferences.bindReference(_, inputSchema))
 
-  protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
-    val projectionCode = expressions.zipWithIndex.flatMap { case (e, i) =>
-      val evaluationCode = expressionEvaluator(e)
+  def generate(
+      expressions: Seq[Expression],
+      inputSchema: Seq[Attribute],
+      useSubexprElimination: Boolean): MutableProjection = {
+    create(canonicalize(bind(expressions, inputSchema)), useSubexprElimination)
+  }
 
-      evaluationCode.code :+
-      q"""
-        if(${evaluationCode.nullTerm})
-          mutableRow.setNullAt($i)
-        else
-          ${setColumn(mutableRowName, e.dataType, i, evaluationCode.primitiveTerm)}
-      """
+  protected def create(expressions: Seq[Expression]): MutableProjection = {
+    create(expressions, false)
+  }
+
+  private def create(
+      expressions: Seq[Expression],
+      useSubexprElimination: Boolean): MutableProjection = {
+    val ctx = newCodeGenContext()
+    val (validExpr, index) = expressions.zipWithIndex.filter {
+      case (NoOp, _) => false
+      case _ => true
+    }.unzip
+    val exprVals = ctx.generateExpressions(validExpr, useSubexprElimination)
+    val projectionCodes = exprVals.zip(index).map {
+      case (ev, i) =>
+        val e = expressions(i)
+        if (e.nullable) {
+          val isNull = s"isNull_$i"
+          val value = s"value_$i"
+          ctx.addMutableState("boolean", isNull, s"this.$isNull = true;")
+          ctx.addMutableState(ctx.javaType(e.dataType), value,
+            s"this.$value = ${ctx.defaultValue(e.dataType)};")
+          s"""
+            ${ev.code}
+            this.$isNull = ${ev.isNull};
+            this.$value = ${ev.value};
+           """
+        } else {
+          val value = s"value_$i"
+          ctx.addMutableState(ctx.javaType(e.dataType), value,
+            s"this.$value = ${ctx.defaultValue(e.dataType)};")
+          s"""
+            ${ev.code}
+            this.$value = ${ev.value};
+           """
+        }
     }
 
-    val code =
-      q"""
-        () => { new $mutableProjectionType {
+    // Evaluate all the subexpressions.
+    val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
-          private[this] var $mutableRowName: $mutableRowType =
-            new $genericMutableRowType(${expressions.size})
+    val updates = validExpr.zip(index).map {
+      case (e, i) =>
+        val ev = ExprCode("", s"this.isNull_$i", s"this.value_$i")
+        ctx.updateColumn("mutableRow", e.dataType, i, ev, e.nullable)
+    }
 
-          def target(row: $mutableRowType): $mutableProjectionType = {
-            $mutableRowName = row
-            this
-          }
+    val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)
+    val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
 
-          /* Provide immutable access to the last projected row. */
-          def currentValue: $rowType = mutableRow
+    val codeBody = s"""
+      public java.lang.Object generate(Object[] references) {
+        return new SpecificMutableProjection(references);
+      }
 
-          def apply(i: $rowType): $rowType = {
-            ..$projectionCode
-            mutableRow
-          }
-        } }
-      """
+      class SpecificMutableProjection extends ${classOf[BaseMutableProjection].getName} {
 
-    log.debug(s"code for ${expressions.mkString(",")}:\n$code")
-    toolBox.eval(code).asInstanceOf[() => MutableProjection]
+        private Object[] references;
+        private MutableRow mutableRow;
+        ${ctx.declareMutableStates()}
+        ${ctx.declareAddedFunctions()}
+
+        public SpecificMutableProjection(Object[] references) {
+          this.references = references;
+          mutableRow = new $genericMutableRowType(${expressions.size});
+          ${ctx.initMutableStates()}
+        }
+
+        public ${classOf[BaseMutableProjection].getName} target(MutableRow row) {
+          mutableRow = row;
+          return this;
+        }
+
+        /* Provide immutable access to the last projected row. */
+        public InternalRow currentValue() {
+          return (InternalRow) mutableRow;
+        }
+
+        public java.lang.Object apply(java.lang.Object _i) {
+          InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+          $evalSubexpr
+          $allProjections
+          // copy all the results into MutableRow
+          $allUpdates
+          return mutableRow;
+        }
+      }
+    """
+
+    val code = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
+    logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
+
+    val c = CodeGenerator.compile(code)
+    c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
   }
 }

@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 
 /**
  * Executes a roll up-style query against Apache logs.
- *  
+ *
  * Usage: LogQuery [logFile]
  */
 object LogQuery {
@@ -54,8 +54,8 @@ object LogQuery {
     // scalastyle:on
     /** Tracks the total query count and number of aggregate bytes for a particular group. */
     class Stats(val count: Int, val numBytes: Int) extends Serializable {
-      def merge(other: Stats) = new Stats(count + other.count, numBytes + other.numBytes)
-      override def toString = "bytes=%s\tn=%s".format(numBytes, count)
+      def merge(other: Stats): Stats = new Stats(count + other.count, numBytes + other.numBytes)
+      override def toString: String = "bytes=%s\tn=%s".format(numBytes, count)
     }
 
     def extractKey(line: String): (String, String, String) = {
@@ -83,3 +83,4 @@ object LogQuery {
     sc.stop()
   }
 }
+// scalastyle:on println

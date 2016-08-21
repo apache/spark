@@ -17,32 +17,30 @@
 
 package org.apache.spark.deploy.worker
 
-import akka.actor.{ActorSystem, AddressFromURIString, Props}
-import akka.testkit.TestActorRef
-import akka.remote.DisassociatedEvent
-import org.scalatest.FunSuite
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointAddress, RpcEnv}
 
-class WorkerWatcherSuite extends FunSuite {
+class WorkerWatcherSuite extends SparkFunSuite {
   test("WorkerWatcher shuts down on valid disassociation") {
-    val actorSystem = ActorSystem("test")
-    val targetWorkerUrl = "akka://1.2.3.4/user/Worker"
-    val targetWorkerAddress = AddressFromURIString(targetWorkerUrl)
-    val actorRef = TestActorRef[WorkerWatcher](Props(classOf[WorkerWatcher], targetWorkerUrl))(actorSystem)
-    val workerWatcher = actorRef.underlyingActor
-    workerWatcher.setTesting(testing = true)
-    actorRef.underlyingActor.receive(new DisassociatedEvent(null, targetWorkerAddress, false))
-    assert(actorRef.underlyingActor.isShutDown)
+    val conf = new SparkConf()
+    val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
+    val targetWorkerUrl = RpcEndpointAddress(RpcAddress("1.2.3.4", 1234), "Worker").toString
+    val workerWatcher = new WorkerWatcher(rpcEnv, targetWorkerUrl, isTesting = true)
+    rpcEnv.setupEndpoint("worker-watcher", workerWatcher)
+    workerWatcher.onDisconnected(RpcAddress("1.2.3.4", 1234))
+    assert(workerWatcher.isShutDown)
+    rpcEnv.shutdown()
   }
 
   test("WorkerWatcher stays alive on invalid disassociation") {
-    val actorSystem = ActorSystem("test")
-    val targetWorkerUrl = "akka://1.2.3.4/user/Worker"
-    val otherAkkaURL = "akka://4.3.2.1/user/OtherActor"
-    val otherAkkaAddress = AddressFromURIString(otherAkkaURL)
-    val actorRef = TestActorRef[WorkerWatcher](Props(classOf[WorkerWatcher], targetWorkerUrl))(actorSystem)
-    val workerWatcher = actorRef.underlyingActor
-    workerWatcher.setTesting(testing = true)
-    actorRef.underlyingActor.receive(new DisassociatedEvent(null, otherAkkaAddress, false))
-    assert(!actorRef.underlyingActor.isShutDown)
+    val conf = new SparkConf()
+    val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
+    val targetWorkerUrl = RpcEndpointAddress(RpcAddress("1.2.3.4", 1234), "Worker").toString
+    val otherRpcAddress = RpcAddress("4.3.2.1", 1234)
+    val workerWatcher = new WorkerWatcher(rpcEnv, targetWorkerUrl, isTesting = true)
+    rpcEnv.setupEndpoint("worker-watcher", workerWatcher)
+    workerWatcher.onDisconnected(otherRpcAddress)
+    assert(!workerWatcher.isShutDown)
+    rpcEnv.shutdown()
   }
 }

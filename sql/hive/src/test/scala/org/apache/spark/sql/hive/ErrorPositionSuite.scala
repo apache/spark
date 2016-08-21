@@ -17,14 +17,43 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{OutputStream, PrintStream}
-
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{AnalysisException, QueryTest}
-
 import scala.util.Try
 
-class ErrorPositionSuite extends QueryTest {
+import org.scalatest.BeforeAndAfterEach
+
+import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+
+class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterEach {
+  import spark.implicits._
+
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+    if (spark.catalog.listTables().collect().map(_.name).contains("src")) {
+      spark.catalog.dropTempView("src")
+    }
+    Seq((1, "")).toDF("key", "value").createOrReplaceTempView("src")
+    Seq((1, 1, 1)).toDF("a", "a", "b").createOrReplaceTempView("dupAttributes")
+  }
+
+  override protected def afterEach(): Unit = {
+    try {
+      spark.catalog.dropTempView("src")
+      spark.catalog.dropTempView("dupAttributes")
+    } finally {
+      super.afterEach()
+    }
+  }
+
+  positionTest("ambiguous attribute reference 1",
+    "SELECT a from dupAttributes", "a")
+
+  positionTest("ambiguous attribute reference 2",
+    "SELECT a, b from dupAttributes", "a")
+
+  positionTest("ambiguous attribute reference 3",
+    "SELECT b, a from dupAttributes", "a")
 
   positionTest("unresolved attribute 1",
     "SELECT x FROM src", "x")
@@ -92,25 +121,6 @@ class ErrorPositionSuite extends QueryTest {
       "SELECT 1 + array(1)", "1 + array")
   }
 
-  /** Hive can be very noisy, messing up the output of our tests. */
-  private def quietly[A](f: => A): A = {
-    val origErr = System.err
-    val origOut = System.out
-    try {
-      System.setErr(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-      System.setOut(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-
-      f
-    } finally {
-      System.setErr(origErr)
-      System.setOut(origOut)
-    }
-  }
-
   /**
    * Creates a test that checks to see if the error thrown when analyzing a given query includes
    * the location of the given token in the query string.
@@ -119,14 +129,18 @@ class ErrorPositionSuite extends QueryTest {
    * @param query the query to analyze
    * @param token a unique token in the string that should be indicated by the exception
    */
-  def positionTest(name: String, query: String, token: String) = {
-    def parseTree =
-      Try(quietly(HiveQl.dumpTree(HiveQl.getAst(query)))).getOrElse("<failed to parse>")
+  def positionTest(name: String, query: String, token: String): Unit = {
+    def ast = spark.sessionState.sqlParser.parsePlan(query)
+    def parseTree = Try(quietly(ast.treeString)).getOrElse("<failed to parse>")
 
     test(name) {
       val error = intercept[AnalysisException] {
-        quietly(sql(query))
+        quietly(spark.sql(query))
       }
+
+      assert(!error.getMessage.contains("Seq("))
+      assert(!error.getMessage.contains("List("))
+
       val (line, expectedLineNum) = query.split("\n").zipWithIndex.collect {
         case (l, i) if l.contains(token) => (l, i + 1)
       }.headOption.getOrElse(sys.error(s"Invalid test. Token $token not in $query"))
@@ -139,10 +153,7 @@ class ErrorPositionSuite extends QueryTest {
 
       val expectedStart = line.indexOf(token)
       val actualStart = error.startPosition.getOrElse {
-        fail(
-          s"start not returned for error on token $token\n" +
-            HiveQl.dumpTree(HiveQl.getAst(query))
-        )
+        fail(s"start not returned for error on token $token\n${ast.treeString}")
       }
       assert(expectedStart === actualStart,
        s"""Incorrect start position.

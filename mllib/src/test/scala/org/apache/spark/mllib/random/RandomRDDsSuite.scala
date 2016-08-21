@@ -19,11 +19,9 @@ package org.apache.spark.mllib.random
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkContext._
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.rdd.{RandomRDDPartition, RandomRDD}
+import org.apache.spark.mllib.rdd.{RandomRDD, RandomRDDPartition}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.StatCounter
@@ -34,7 +32,7 @@ import org.apache.spark.util.StatCounter
  *
  * TODO update tests to use TestingUtils for floating point comparison after PR 1367 is merged
  */
-class RandomRDDsSuite extends FunSuite with MLlibTestSparkContext with Serializable {
+class RandomRDDsSuite extends SparkFunSuite with MLlibTestSparkContext with Serializable {
 
   def testGeneratedRDD(rdd: RDD[Double],
       expectedSize: Long,
@@ -181,7 +179,8 @@ class RandomRDDsSuite extends FunSuite with MLlibTestSparkContext with Serializa
       val poisson = RandomRDDs.poissonVectorRDD(sc, poissonMean, rows, cols, parts, seed)
       testGeneratedVectorRDD(poisson, rows, cols, parts, poissonMean, math.sqrt(poissonMean), 0.1)
 
-      val exponential = RandomRDDs.exponentialVectorRDD(sc, exponentialMean, rows, cols, parts, seed)
+      val exponential =
+        RandomRDDs.exponentialVectorRDD(sc, exponentialMean, rows, cols, parts, seed)
       testGeneratedVectorRDD(exponential, rows, cols, parts, exponentialMean, exponentialMean, 0.1)
 
       val gamma = RandomRDDs.gammaVectorRDD(sc, gammaShape, gammaScale, rows, cols, parts, seed)
@@ -197,7 +196,7 @@ private[random] class MockDistro extends RandomDataGenerator[Double] {
   // This allows us to check that each partition has a different seed
   override def nextValue(): Double = seed.toDouble
 
-  override def setSeed(seed: Long) = this.seed = seed
+  override def setSeed(seed: Long): Unit = this.seed = seed
 
   override def copy(): MockDistro = new MockDistro
 }

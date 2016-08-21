@@ -17,39 +17,39 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataOutput, DataInput}
+import java.{util => ju}
+import java.io.{DataInput, DataOutput}
+import java.nio.charset.StandardCharsets
 
-import com.google.common.base.Charsets.UTF_8
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.io._
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
+
+import org.apache.spark.SparkException
 import org.apache.spark.api.java.JavaSparkContext
-import org.apache.spark.{SparkContext, SparkException}
 
 /**
  * A class to test Pyrolite serialization on the Scala side, that will be deserialized
  * in Python
- * @param str
- * @param int
- * @param double
  */
 case class TestWritable(var str: String, var int: Int, var double: Double) extends Writable {
   def this() = this("", 0, 0.0)
 
-  def getStr = str
+  def getStr: String = str
   def setStr(str: String) { this.str = str }
-  def getInt = int
+  def getInt: Int = int
   def setInt(int: Int) { this.int = int }
-  def getDouble = double
+  def getDouble: Double = double
   def setDouble(double: Double) { this.double = double }
 
-  def write(out: DataOutput) = {
+  def write(out: DataOutput): Unit = {
     out.writeUTF(str)
     out.writeInt(int)
     out.writeDouble(double)
   }
 
-  def readFields(in: DataInput) = {
+  def readFields(in: DataInput): Unit = {
     str = in.readUTF()
     int = in.readInt()
     double = in.readDouble()
@@ -57,36 +57,34 @@ case class TestWritable(var str: String, var int: Int, var double: Double) exten
 }
 
 private[python] class TestInputKeyConverter extends Converter[Any, Any] {
-  override def convert(obj: Any) = {
+  override def convert(obj: Any): Char = {
     obj.asInstanceOf[IntWritable].get().toChar
   }
 }
 
 private[python] class TestInputValueConverter extends Converter[Any, Any] {
-  import collection.JavaConversions._
-  override def convert(obj: Any) = {
+  override def convert(obj: Any): ju.List[Double] = {
     val m = obj.asInstanceOf[MapWritable]
-    seqAsJavaList(m.keySet.map(w => w.asInstanceOf[DoubleWritable].get()).toSeq)
+    m.keySet.asScala.map(_.asInstanceOf[DoubleWritable].get()).toSeq.asJava
   }
 }
 
 private[python] class TestOutputKeyConverter extends Converter[Any, Any] {
-  override def convert(obj: Any) = {
+  override def convert(obj: Any): Text = {
     new Text(obj.asInstanceOf[Int].toString)
   }
 }
 
 private[python] class TestOutputValueConverter extends Converter[Any, Any] {
-  import collection.JavaConversions._
-  override def convert(obj: Any) = {
-    new DoubleWritable(obj.asInstanceOf[java.util.Map[Double, _]].keySet().head)
+  override def convert(obj: Any): DoubleWritable = {
+    new DoubleWritable(obj.asInstanceOf[java.util.Map[Double, _]].keySet().iterator().next())
   }
 }
 
 private[python] class DoubleArrayWritable extends ArrayWritable(classOf[DoubleWritable])
 
 private[python] class DoubleArrayToWritableConverter extends Converter[Any, Writable] {
-  override def convert(obj: Any) = obj match {
+  override def convert(obj: Any): DoubleArrayWritable = obj match {
     case arr if arr.getClass.isArray && arr.getClass.getComponentType == classOf[Double] =>
       val daw = new DoubleArrayWritable
       daw.set(arr.asInstanceOf[Array[Double]].map(new DoubleWritable(_)))
@@ -136,7 +134,7 @@ object WriteInputFormatTestDataGenerator {
     sc.parallelize(intKeys).saveAsSequenceFile(intPath)
     sc.parallelize(intKeys.map{ case (k, v) => (k.toDouble, v) }).saveAsSequenceFile(doublePath)
     sc.parallelize(intKeys.map{ case (k, v) => (k.toString, v) }).saveAsSequenceFile(textPath)
-    sc.parallelize(intKeys.map{ case (k, v) => (k, v.getBytes(UTF_8)) }
+    sc.parallelize(intKeys.map{ case (k, v) => (k, v.getBytes(StandardCharsets.UTF_8)) }
       ).saveAsSequenceFile(bytesPath)
     val bools = Seq((1, true), (2, true), (2, false), (3, true), (2, false), (1, false))
     sc.parallelize(bools).saveAsSequenceFile(boolPath)

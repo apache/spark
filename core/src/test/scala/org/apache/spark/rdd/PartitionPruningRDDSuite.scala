@@ -17,12 +17,9 @@
 
 package org.apache.spark.rdd
 
-import org.scalatest.FunSuite
+import org.apache.spark.{Partition, SharedSparkContext, SparkFunSuite, TaskContext}
 
-import org.apache.spark.{Partition, SharedSparkContext, TaskContext}
-
-class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {
-
+class PartitionPruningRDDSuite extends SparkFunSuite with SharedSparkContext {
 
   test("Pruned Partitions inherit locality prefs correctly") {
 
@@ -74,8 +71,6 @@ class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {
 }
 
 class TestPartition(i: Int, value: Int) extends Partition with Serializable {
-  def index = i
-
-  def testValue = this.value
-
+  def index: Int = i
+  def testValue: Int = this.value
 }

@@ -17,15 +17,15 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.storage.BlockManagerId
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkConf
-import org.apache.spark.serializer.JavaSerializer
-
 import scala.util.Random
 
-class MapStatusSuite extends FunSuite {
+import org.roaringbitmap.RoaringBitmap
+
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.storage.BlockManagerId
+
+class MapStatusSuite extends SparkFunSuite {
 
   test("compressSize") {
     assert(MapStatus.compressSize(0L) === 0)
@@ -79,7 +79,7 @@ class MapStatusSuite extends FunSuite {
 
   test("HighlyCompressedMapStatus: estimated size should be the average non-empty block size") {
     val sizes = Array.tabulate[Long](3000) { i => i.toLong }
-    val avg = sizes.sum / sizes.filter(_ != 0).length
+    val avg = sizes.sum / sizes.count(_ != 0)
     val loc = BlockManagerId("a", "b", 10)
     val status = MapStatus(loc, sizes)
     val status1 = compressAndDecompressMapStatus(status)
@@ -97,5 +97,35 @@ class MapStatusSuite extends FunSuite {
     val ser = new JavaSerializer(new SparkConf)
     val buf = ser.newInstance().serialize(status)
     ser.newInstance().deserialize[MapStatus](buf)
+  }
+
+  test("RoaringBitmap: runOptimize succeeded") {
+    val r = new RoaringBitmap
+    (1 to 200000).foreach(i =>
+      if (i % 200 != 0) {
+        r.add(i)
+      }
+    )
+    val size1 = r.getSizeInBytes
+    val success = r.runOptimize()
+    r.trim()
+    val size2 = r.getSizeInBytes
+    assert(size1 > size2)
+    assert(success)
+  }
+
+  test("RoaringBitmap: runOptimize failed") {
+    val r = new RoaringBitmap
+    (1 to 200000).foreach(i =>
+      if (i % 200 == 0) {
+        r.add(i)
+      }
+    )
+    val size1 = r.getSizeInBytes
+    val success = r.runOptimize()
+    r.trim()
+    val size2 = r.getSizeInBytes
+    assert(size1 === size2)
+    assert(!success)
   }
 }

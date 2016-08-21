@@ -17,15 +17,14 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
-import org.scalatest.FunSuite
-
 import breeze.linalg.{diag => brzDiag, DenseMatrix => BDM, DenseVector => BDV}
 
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 
-class IndexedRowMatrixSuite extends FunSuite with MLlibTestSparkContext {
+class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   val m = 4
   val n = 3
@@ -109,7 +108,7 @@ class IndexedRowMatrixSuite extends FunSuite with MLlibTestSparkContext {
     val C = A.multiply(B)
     val localA = A.toBreeze()
     val localC = C.toBreeze()
-    val expected = localA * B.toBreeze.asInstanceOf[BDM[Double]]
+    val expected = localA * B.asBreeze.asInstanceOf[BDM[Double]]
     assert(localC === expected)
   }
 
@@ -120,7 +119,7 @@ class IndexedRowMatrixSuite extends FunSuite with MLlibTestSparkContext {
       (90.0, 12.0, 24.0),
       (12.0, 17.0, 22.0),
       (24.0, 22.0, 30.0))
-    assert(G.toBreeze === expected)
+    assert(G.asBreeze === expected)
   }
 
   test("svd") {
@@ -129,17 +128,40 @@ class IndexedRowMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(svd.U.isInstanceOf[IndexedRowMatrix])
     val localA = A.toBreeze()
     val U = svd.U.toBreeze()
-    val s = svd.s.toBreeze.asInstanceOf[BDV[Double]]
-    val V = svd.V.toBreeze.asInstanceOf[BDM[Double]]
+    val s = svd.s.asBreeze.asInstanceOf[BDV[Double]]
+    val V = svd.V.asBreeze.asInstanceOf[BDM[Double]]
     assert(closeToZero(U.t * U - BDM.eye[Double](n)))
     assert(closeToZero(V.t * V - BDM.eye[Double](n)))
     assert(closeToZero(U * brzDiag(s) * V.t - localA))
+  }
+
+  test("validate matrix sizes of svd") {
+    val k = 2
+    val A = new IndexedRowMatrix(indexedRows)
+    val svd = A.computeSVD(k, computeU = true)
+    assert(svd.U.numRows() === m)
+    assert(svd.U.numCols() === k)
+    assert(svd.s.size === k)
+    assert(svd.V.numRows === n)
+    assert(svd.V.numCols === k)
   }
 
   test("validate k in svd") {
     val A = new IndexedRowMatrix(indexedRows)
     intercept[IllegalArgumentException] {
       A.computeSVD(-1)
+    }
+  }
+
+  test("similar columns") {
+    val A = new IndexedRowMatrix(indexedRows)
+    val gram = A.computeGramianMatrix().asBreeze.toDenseMatrix
+
+    val G = A.columnSimilarities().toBreeze()
+
+    for (i <- 0 until n; j <- i + 1 until n) {
+      val trueResult = gram(i, j) / scala.math.sqrt(gram(i, i) * gram(j, j))
+      assert(math.abs(G(i, j) - trueResult) < 1e-6)
     }
   }
 

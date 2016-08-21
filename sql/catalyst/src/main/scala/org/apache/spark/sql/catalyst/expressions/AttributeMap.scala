@@ -23,7 +23,9 @@ package org.apache.spark.sql.catalyst.expressions
  * of the name, or the expected nullability).
  */
 object AttributeMap {
-  def apply[A](kvs: Seq[(Attribute, A)]) = new AttributeMap(kvs.map(kv => (kv._1.exprId, kv)).toMap)
+  def apply[A](kvs: Seq[(Attribute, A)]): AttributeMap[A] = {
+    new AttributeMap(kvs.map(kv => (kv._1.exprId, kv)).toMap)
+  }
 }
 
 class AttributeMap[A](baseMap: Map[ExprId, (Attribute, A)])

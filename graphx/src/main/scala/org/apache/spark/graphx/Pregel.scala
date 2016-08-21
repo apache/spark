@@ -18,8 +18,8 @@
 package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
-import org.apache.spark.Logging
 
+import org.apache.spark.internal.Logging
 
 /**
  * Implements a Pregel-like bulk-synchronous message-passing API.
@@ -78,8 +78,8 @@ object Pregel extends Logging {
    *
    * @param graph the input graph.
    *
-   * @param initialMsg the message each vertex will receive at the on
-   * the first iteration
+   * @param initialMsg the message each vertex will receive at the first
+   * iteration
    *
    * @param maxIterations the maximum number of iterations to run for
    *
@@ -119,42 +119,42 @@ object Pregel extends Logging {
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] =
   {
+    require(maxIterations > 0, s"Maximum number of iterations must be greater than 0," +
+      s" but got ${maxIterations}")
+
     var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
     // compute the messages
-    var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
+    var messages = GraphXUtils.mapReduceTriplets(g, sendMsg, mergeMsg)
     var activeMessages = messages.count()
     // Loop
     var prevG: Graph[VD, ED] = null
     var i = 0
     while (activeMessages > 0 && i < maxIterations) {
-      // Receive the messages. Vertices that didn't get any messages do not appear in newVerts.
-      val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
-      // Update the graph with the new vertices.
+      // Receive the messages and update the vertices.
       prevG = g
-      g = g.outerJoinVertices(newVerts) { (vid, old, newOpt) => newOpt.getOrElse(old) }
-      g.cache()
+      g = g.joinVertices(messages)(vprog).cache()
 
       val oldMessages = messages
-      // Send new messages. Vertices that didn't get any messages don't appear in newVerts, so don't
-      // get to send messages. We must cache messages so it can be materialized on the next line,
-      // allowing us to uncache the previous iteration.
-      messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, activeDirection))).cache()
-      // The call to count() materializes `messages`, `newVerts`, and the vertices of `g`. This
-      // hides oldMessages (depended on by newVerts), newVerts (depended on by messages), and the
-      // vertices of prevG (depended on by newVerts, oldMessages, and the vertices of g).
+      // Send new messages, skipping edges where neither side received a message. We must cache
+      // messages so it can be materialized on the next line, allowing us to uncache the previous
+      // iteration.
+      messages = GraphXUtils.mapReduceTriplets(
+        g, sendMsg, mergeMsg, Some((oldMessages, activeDirection))).cache()
+      // The call to count() materializes `messages` and the vertices of `g`. This hides oldMessages
+      // (depended on by the vertices of g) and the vertices of prevG (depended on by oldMessages
+      // and the vertices of g).
       activeMessages = messages.count()
 
       logInfo("Pregel finished iteration " + i)
 
       // Unpersist the RDDs hidden by newly-materialized RDDs
-      oldMessages.unpersist(blocking=false)
-      newVerts.unpersist(blocking=false)
-      prevG.unpersistVertices(blocking=false)
-      prevG.edges.unpersist(blocking=false)
+      oldMessages.unpersist(blocking = false)
+      prevG.unpersistVertices(blocking = false)
+      prevG.edges.unpersist(blocking = false)
       // count the iteration
       i += 1
     }
-
+    messages.unpersist(blocking = false)
     g
   } // end of apply
 

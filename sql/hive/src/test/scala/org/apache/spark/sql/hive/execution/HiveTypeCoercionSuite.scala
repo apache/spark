@@ -18,30 +18,40 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo}
-import org.apache.spark.sql.execution.Project
+import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
  * A set of tests that validate type promotion and coercion rules.
  */
 class HiveTypeCoercionSuite extends HiveComparisonTest {
-  val baseTypes = Seq("1", "1.0", "1L", "1S", "1Y", "'1'")
+  val baseTypes = Seq(
+    ("1", "1"),
+    ("1.0", "CAST(1.0 AS DOUBLE)"),
+    ("1L", "1L"),
+    ("1S", "1S"),
+    ("1Y", "1Y"),
+    ("'1'", "'1'"))
 
-  baseTypes.foreach { i =>
-    baseTypes.foreach { j =>
-      createQueryTest(s"$i + $j", s"SELECT $i + $j FROM src LIMIT 1")
+  baseTypes.foreach { case (ni, si) =>
+    baseTypes.foreach { case (nj, sj) =>
+      createQueryTest(s"$ni + $nj", s"SELECT $si + $sj FROM src LIMIT 1")
     }
   }
 
   val nullVal = "null"
-  baseTypes.init.foreach { i =>
-    createQueryTest(s"case when then $i else $nullVal end ", s"SELECT case when true then $i else $nullVal end FROM src limit 1")
-    createQueryTest(s"case when then $nullVal else $i end ", s"SELECT case when true then $nullVal else $i end FROM src limit 1")
+  baseTypes.init.foreach { case (i, s) =>
+    createQueryTest(s"case when then $i else $nullVal end ",
+      s"SELECT case when true then $s else $nullVal end FROM src limit 1")
+    createQueryTest(s"case when then $nullVal else $i end ",
+      s"SELECT case when true then $nullVal else $s end FROM src limit 1")
   }
 
   test("[SPARK-2210] boolean cast on boolean value should be removed") {
     val q = "select cast(cast(key=0 as boolean) as boolean) from src"
-    val project = TestHive.sql(q).queryExecution.executedPlan.collect { case e: Project => e }.head
+    val project = TestHive.sql(q).queryExecution.sparkPlan.collect {
+      case e: ProjectExec => e
+    }.head
 
     // No cast expression introduced
     project.transformAllExpressions { case c: Cast =>
@@ -56,11 +66,5 @@ class HiveTypeCoercionSuite extends HiveComparisonTest {
       e
     }
     assert(numEquals === 1)
-  }
-
-  test("COALESCE with different types") {
-    intercept[RuntimeException] {
-      TestHive.sql("""SELECT COALESCE(1, true, "abc") FROM src limit 1""").collect()
-    }
   }
 }

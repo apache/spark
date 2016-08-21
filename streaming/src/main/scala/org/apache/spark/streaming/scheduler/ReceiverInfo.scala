@@ -17,7 +17,6 @@
 
 package org.apache.spark.streaming.scheduler
 
-import akka.actor.ActorRef
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -28,10 +27,11 @@ import org.apache.spark.annotation.DeveloperApi
 case class ReceiverInfo(
     streamId: Int,
     name: String,
-    private[streaming] val actor: ActorRef,
     active: Boolean,
     location: String,
+    executorId: String,
     lastErrorMessage: String = "",
-    lastError: String = ""
+    lastError: String = "",
+    lastErrorTime: Long = -1L
    ) {
 }

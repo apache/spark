@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -40,23 +41,29 @@ object DenseGaussianMixture {
 
   private def run(inputFile: String, k: Int, convergenceTol: Double, maxIterations: Int) {
     val conf = new SparkConf().setAppName("Gaussian Mixture Model EM example")
-    val ctx  = new SparkContext(conf)
-    
+    val ctx = new SparkContext(conf)
+
     val data = ctx.textFile(inputFile).map { line =>
       Vectors.dense(line.trim.split(' ').map(_.toDouble))
     }.cache()
-      
+
     val clusters = new GaussianMixture()
       .setK(k)
       .setConvergenceTol(convergenceTol)
       .setMaxIterations(maxIterations)
       .run(data)
-    
+
     for (i <- 0 until clusters.k) {
-      println("weight=%f\nmu=%s\nsigma=\n%s\n" format 
+      println("weight=%f\nmu=%s\nsigma=\n%s\n" format
         (clusters.weights(i), clusters.gaussians(i).mu, clusters.gaussians(i).sigma))
     }
-    
+
+    println("The membership value of each vector to all mixture components (first <= 100):")
+    val membership = clusters.predictSoft(data)
+    membership.take(100).foreach { x =>
+      print(" " + x.mkString(","))
+    }
+    println()
     println("Cluster labels (first <= 100):")
     val clusterLabels = clusters.predict(data)
     clusterLabels.take(100).foreach { x =>
@@ -65,3 +72,4 @@ object DenseGaussianMixture {
     println()
   }
 }
+// scalastyle:on println

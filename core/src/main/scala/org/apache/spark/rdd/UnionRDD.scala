@@ -20,6 +20,8 @@ package org.apache.spark.rdd
 import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.parallel.ForkJoinTaskSupport
+import scala.concurrent.forkjoin.ForkJoinPool
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, TaskContext}
@@ -37,14 +39,14 @@ import org.apache.spark.util.Utils
  */
 private[spark] class UnionPartition[T: ClassTag](
     idx: Int,
-    @transient rdd: RDD[T],
+    @transient private val rdd: RDD[T],
     val parentRddIndex: Int,
-    @transient parentRddPartitionIndex: Int)
+    @transient private val parentRddPartitionIndex: Int)
   extends Partition {
 
   var parentPartition: Partition = rdd.partitions(parentRddPartitionIndex)
 
-  def preferredLocations() = rdd.preferredLocations(parentPartition)
+  def preferredLocations(): Seq[String] = rdd.preferredLocations(parentPartition)
 
   override val index: Int = idx
 
@@ -62,8 +64,22 @@ class UnionRDD[T: ClassTag](
     var rdds: Seq[RDD[T]])
   extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies
 
+  // visible for testing
+  private[spark] val isPartitionListingParallel: Boolean =
+    rdds.length > conf.getInt("spark.rdd.parallelListingThreshold", 10)
+
+  @transient private lazy val partitionEvalTaskSupport =
+      new ForkJoinTaskSupport(new ForkJoinPool(8))
+
   override def getPartitions: Array[Partition] = {
-    val array = new Array[Partition](rdds.map(_.partitions.size).sum)
+    val parRDDs = if (isPartitionListingParallel) {
+      val parArray = rdds.par
+      parArray.tasksupport = partitionEvalTaskSupport
+      parArray
+    } else {
+      rdds
+    }
+    val array = new Array[Partition](parRDDs.map(_.partitions.length).seq.sum)
     var pos = 0
     for ((rdd, rddIndex) <- rdds.zipWithIndex; split <- rdd.partitions) {
       array(pos) = new UnionPartition(pos, rdd, rddIndex, split.index)
@@ -76,8 +92,8 @@ class UnionRDD[T: ClassTag](
     val deps = new ArrayBuffer[Dependency[_]]
     var pos = 0
     for (rdd <- rdds) {
-      deps += new RangeDependency(rdd, 0, pos, rdd.partitions.size)
-      pos += rdd.partitions.size
+      deps += new RangeDependency(rdd, 0, pos, rdd.partitions.length)
+      pos += rdd.partitions.length
     }
     deps
   }

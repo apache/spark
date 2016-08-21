@@ -20,14 +20,12 @@ package org.apache.spark.graphx
 import scala.reflect.ClassTag
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd._
-import org.apache.spark.storage.StorageLevel
-
 import org.apache.spark.graphx.impl.RoutingTablePartition
 import org.apache.spark.graphx.impl.ShippableVertexPartition
 import org.apache.spark.graphx.impl.VertexAttributeBlock
 import org.apache.spark.graphx.impl.VertexRDDImpl
+import org.apache.spark.rdd._
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Extends `RDD[(VertexId, VD)]` by ensuring that there is only one entry for each vertex and by
@@ -55,8 +53,8 @@ import org.apache.spark.graphx.impl.VertexRDDImpl
  * @tparam VD the vertex attribute associated with each vertex in the set.
  */
 abstract class VertexRDD[VD](
-    @transient sc: SparkContext,
-    @transient deps: Seq[Dependency[_]]) extends RDD[(VertexId, VD)](sc, deps) {
+    sc: SparkContext,
+    deps: Seq[Dependency[_]]) extends RDD[(VertexId, VD)](sc, deps) {
 
   implicit protected def vdTag: ClassTag[VD]
 
@@ -120,6 +118,22 @@ abstract class VertexRDD[VD](
    * original VertexRDD.  The resulting VertexRDD retains the same index.
    */
   def mapValues[VD2: ClassTag](f: (VertexId, VD) => VD2): VertexRDD[VD2]
+
+  /**
+   * For each VertexId present in both `this` and `other`, minus will act as a set difference
+   * operation returning only those unique VertexId's present in `this`.
+   *
+   * @param other an RDD to run the set operation against
+   */
+  def minus(other: RDD[(VertexId, VD)]): VertexRDD[VD]
+
+  /**
+   * For each VertexId present in both `this` and `other`, minus will act as a set difference
+   * operation returning only those unique VertexId's present in `this`.
+   *
+   * @param other a VertexRDD to run the set operation against
+   */
+  def minus(other: VertexRDD[VD]): VertexRDD[VD]
 
   /**
    * For each vertex present in both `this` and `other`, `diff` returns only those vertices with
@@ -261,7 +275,7 @@ object VertexRDD {
   def apply[VD: ClassTag](vertices: RDD[(VertexId, VD)]): VertexRDD[VD] = {
     val vPartitioned: RDD[(VertexId, VD)] = vertices.partitioner match {
       case Some(p) => vertices
-      case None => vertices.partitionBy(new HashPartitioner(vertices.partitions.size))
+      case None => vertices.partitionBy(new HashPartitioner(vertices.partitions.length))
     }
     val vertexPartitions = vPartitioned.mapPartitions(
       iter => Iterator(ShippableVertexPartition(iter)),
@@ -302,7 +316,7 @@ object VertexRDD {
     ): VertexRDD[VD] = {
     val vPartitioned: RDD[(VertexId, VD)] = vertices.partitioner match {
       case Some(p) => vertices
-      case None => vertices.partitionBy(new HashPartitioner(vertices.partitions.size))
+      case None => vertices.partitionBy(new HashPartitioner(vertices.partitions.length))
     }
     val routingTables = createRoutingTables(edges, vPartitioned.partitioner.get)
     val vertexPartitions = vPartitioned.zipPartitions(routingTables, preservesPartitioning = true) {
@@ -343,7 +357,7 @@ object VertexRDD {
       Function.tupled(RoutingTablePartition.edgePartitionToMsgs)))
       .setName("VertexRDD.createRoutingTables - vid2pid (aggregation)")
 
-    val numEdgePartitions = edges.partitions.size
+    val numEdgePartitions = edges.partitions.length
     vid2pid.partitionBy(vertexPartitioner).mapPartitions(
       iter => Iterator(RoutingTablePartition.fromMsgs(numEdgePartitions, iter)),
       preservesPartitioning = true)

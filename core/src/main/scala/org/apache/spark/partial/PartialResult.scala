@@ -17,9 +17,6 @@
 
 package org.apache.spark.partial
 
-import org.apache.spark.annotation.Experimental
-
-@Experimental
 class PartialResult[R](initialVal: R, isFinal: Boolean) {
   private var finalValue: Option[R] = if (isFinal) Some(initialVal) else None
   private var failure: Option[Exception] = None
@@ -99,7 +96,7 @@ class PartialResult[R](initialVal: R, isFinal: Boolean) {
           case None => "(partial: " + initialValue + ")"
         }
       }
-      def getFinalValueInternal() = PartialResult.this.getFinalValueInternal().map(f)
+      def getFinalValueInternal(): Option[T] = PartialResult.this.getFinalValueInternal().map(f)
     }
   }
 

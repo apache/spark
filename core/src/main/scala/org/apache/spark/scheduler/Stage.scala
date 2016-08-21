@@ -20,125 +20,119 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.HashSet
 
 import org.apache.spark._
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.CallSite
 
 /**
- * A stage is a set of independent tasks all computing the same function that need to run as part
+ * A stage is a set of parallel tasks all computing the same function that need to run as part
  * of a Spark job, where all the tasks have the same shuffle dependencies. Each DAG of tasks run
  * by the scheduler is split up into stages at the boundaries where shuffle occurs, and then the
  * DAGScheduler runs these stages in topological order.
  *
  * Each Stage can either be a shuffle map stage, in which case its tasks' results are input for
- * another stage, or a result stage, in which case its tasks directly compute the action that
- * initiated a job (e.g. count(), save(), etc). For shuffle map stages, we also track the nodes
- * that each output partition is on.
+ * other stage(s), or a result stage, in which case its tasks directly compute a Spark action
+ * (e.g. count(), save(), etc) by running a function on an RDD. For shuffle map stages, we also
+ * track the nodes that each output partition is on.
  *
- * Each Stage also has a jobId, identifying the job that first submitted the stage.  When FIFO
+ * Each Stage also has a firstJobId, identifying the job that first submitted the stage.  When FIFO
  * scheduling is used, this allows Stages from earlier jobs to be computed first or recovered
  * faster on failure.
  *
- * The callSite provides a location in user code which relates to the stage. For a shuffle map
- * stage, the callSite gives the user code that created the RDD being shuffled. For a result
- * stage, the callSite gives the user code that executes the associated action (e.g. count()).
+ * Finally, a single stage can be re-executed in multiple attempts due to fault recovery. In that
+ * case, the Stage object will track multiple StageInfo objects to pass to listeners or the web UI.
+ * The latest one will be accessible through latestInfo.
  *
- * A single stage can consist of multiple attempts. In that case, the latestInfo field will
- * be updated for each attempt.
- *
+ * @param id Unique stage ID
+ * @param rdd RDD that this stage runs on: for a shuffle map stage, it's the RDD we run map tasks
+ *   on, while for a result stage, it's the target RDD that we ran an action on
+ * @param numTasks Total number of tasks in stage; result stages in particular may not need to
+ *   compute all partitions, e.g. for first(), lookup(), and take().
+ * @param parents List of stages that this stage depends on (through shuffle dependencies).
+ * @param firstJobId ID of the first job this stage was part of, for FIFO scheduling.
+ * @param callSite Location in the user program associated with this stage: either where the target
+ *   RDD was created, for a shuffle map stage, or where the action for a result stage was called.
  */
-private[spark] class Stage(
+private[scheduler] abstract class Stage(
     val id: Int,
     val rdd: RDD[_],
     val numTasks: Int,
-    val shuffleDep: Option[ShuffleDependency[_, _, _]],  // Output shuffle if stage is a map stage
     val parents: List[Stage],
-    val jobId: Int,
+    val firstJobId: Int,
     val callSite: CallSite)
   extends Logging {
 
-  val isShuffleMap = shuffleDep.isDefined
-  val numPartitions = rdd.partitions.size
-  val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
-  var numAvailableOutputs = 0
+  val numPartitions = rdd.partitions.length
 
   /** Set of jobs that this stage belongs to. */
   val jobIds = new HashSet[Int]
 
-  /** For stages that are the final (consists of only ResultTasks), link to the ActiveJob. */
-  var resultOfJob: Option[ActiveJob] = None
-  var pendingTasks = new HashSet[Task[_]]
+  val pendingPartitions = new HashSet[Int]
 
-  private var nextAttemptId = 0
+  /** The ID to use for the next new attempt for this stage. */
+  private var nextAttemptId: Int = 0
 
-  val name = callSite.shortForm
-  val details = callSite.longForm
+  val name: String = callSite.shortForm
+  val details: String = callSite.longForm
 
-  /** Pointer to the latest [StageInfo] object, set by DAGScheduler. */
-  var latestInfo: StageInfo = StageInfo.fromStage(this)
+  /**
+   * Pointer to the [StageInfo] object for the most recent attempt. This needs to be initialized
+   * here, before any attempts have actually been created, because the DAGScheduler uses this
+   * StageInfo to tell SparkListeners when a job starts (which happens before any stage attempts
+   * have been created).
+   */
+  private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId)
 
-  def isAvailable: Boolean = {
-    if (!isShuffleMap) {
-      true
-    } else {
-      numAvailableOutputs == numPartitions
-    }
-  }
+  /**
+   * Set of stage attempt IDs that have failed with a FetchFailure. We keep track of these
+   * failures in order to avoid endless retries if a stage keeps failing with a FetchFailure.
+   * We keep track of each attempt ID that has failed to avoid recording duplicate failures if
+   * multiple tasks from the same stage attempt fail (SPARK-5945).
+   */
+  private val fetchFailedAttemptIds = new HashSet[Int]
 
-  def addOutputLoc(partition: Int, status: MapStatus) {
-    val prevList = outputLocs(partition)
-    outputLocs(partition) = status :: prevList
-    if (prevList == Nil) {
-      numAvailableOutputs += 1
-    }
-  }
-
-  def removeOutputLoc(partition: Int, bmAddress: BlockManagerId) {
-    val prevList = outputLocs(partition)
-    val newList = prevList.filterNot(_.location == bmAddress)
-    outputLocs(partition) = newList
-    if (prevList != Nil && newList == Nil) {
-      numAvailableOutputs -= 1
-    }
+  private[scheduler] def clearFailures() : Unit = {
+    fetchFailedAttemptIds.clear()
   }
 
   /**
-   * Removes all shuffle outputs associated with this executor. Note that this will also remove
-   * outputs which are served by an external shuffle server (if one exists), as they are still
-   * registered with this execId.
+   * Check whether we should abort the failedStage due to multiple consecutive fetch failures.
+   *
+   * This method updates the running set of failed stage attempts and returns
+   * true if the number of failures exceeds the allowable number of failures.
    */
-  def removeOutputsOnExecutor(execId: String) {
-    var becameUnavailable = false
-    for (partition <- 0 until numPartitions) {
-      val prevList = outputLocs(partition)
-      val newList = prevList.filterNot(_.location.executorId == execId)
-      outputLocs(partition) = newList
-      if (prevList != Nil && newList == Nil) {
-        becameUnavailable = true
-        numAvailableOutputs -= 1
-      }
-    }
-    if (becameUnavailable) {
-      logInfo("%s is now unavailable on executor %s (%d/%d, %s)".format(
-        this, execId, numAvailableOutputs, numPartitions, isAvailable))
-    }
+  private[scheduler] def failedOnFetchAndShouldAbort(stageAttemptId: Int): Boolean = {
+    fetchFailedAttemptIds.add(stageAttemptId)
+    fetchFailedAttemptIds.size >= Stage.MAX_CONSECUTIVE_FETCH_FAILURES
   }
 
-  /** Return a new attempt id, starting with 0. */
-  def newAttemptId(): Int = {
-    val id = nextAttemptId
+  /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
+  def makeNewStageAttempt(
+      numPartitionsToCompute: Int,
+      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty): Unit = {
+    val metrics = new TaskMetrics
+    metrics.register(rdd.sparkContext)
+    _latestInfo = StageInfo.fromStage(
+      this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences)
     nextAttemptId += 1
-    id
   }
 
-  def attemptId: Int = nextAttemptId
+  /** Returns the StageInfo for the most recent attempt for this stage. */
+  def latestInfo: StageInfo = _latestInfo
 
-  override def toString = "Stage " + id
+  override final def hashCode(): Int = id
 
-  override def hashCode(): Int = id
-
-  override def equals(other: Any): Boolean = other match {
+  override final def equals(other: Any): Boolean = other match {
     case stage: Stage => stage != null && stage.id == id
     case _ => false
   }
+
+  /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
+  def findMissingPartitions(): Seq[Int]
+}
+
+private[scheduler] object Stage {
+  // The number of consecutive failures allowed before a stage is aborted
+  val MAX_CONSECUTIVE_FETCH_FAILURES = 4
 }

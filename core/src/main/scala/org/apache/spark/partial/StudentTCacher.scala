@@ -17,7 +17,7 @@
 
 package org.apache.spark.partial
 
-import org.apache.commons.math3.distribution.{TDistribution, NormalDistribution}
+import org.apache.commons.math3.distribution.{NormalDistribution, TDistribution}
 
 /**
  * A utility class for caching Student's T distribution values for a given confidence level

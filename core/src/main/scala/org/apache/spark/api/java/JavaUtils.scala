@@ -17,21 +17,22 @@
 
 package org.apache.spark.api.java
 
-import com.google.common.base.Optional
-
 import java.{util => ju}
+import java.util.Map.Entry
+
 import scala.collection.mutable
 
 private[spark] object JavaUtils {
   def optionToOptional[T](option: Option[T]): Optional[T] =
-    option match {
-      case Some(value) => Optional.of(value)
-      case None => Optional.absent()
+    if (option.isDefined) {
+      Optional.of(option.get)
+    } else {
+      Optional.empty[T]
     }
 
   // Workaround for SPARK-3926 / SI-8911
-  def mapAsSerializableJavaMap[A, B](underlying: collection.Map[A, B]) =
-    new SerializableMapWrapper(underlying)
+  def mapAsSerializableJavaMap[A, B](underlying: collection.Map[A, B]): SerializableMapWrapper[A, B]
+    = new SerializableMapWrapper(underlying)
 
   // Implementation is copied from scala.collection.convert.Wrappers.MapWrapper,
   // but implements java.io.Serializable. It can't just be subclassed to make it
@@ -40,36 +41,33 @@ private[spark] object JavaUtils {
   class SerializableMapWrapper[A, B](underlying: collection.Map[A, B])
     extends ju.AbstractMap[A, B] with java.io.Serializable { self =>
 
-    override def size = underlying.size
+    override def size: Int = underlying.size
 
     override def get(key: AnyRef): B = try {
-      underlying get key.asInstanceOf[A] match {
-        case None => null.asInstanceOf[B]
-        case Some(v) => v
-      }
+      underlying.getOrElse(key.asInstanceOf[A], null.asInstanceOf[B])
     } catch {
       case ex: ClassCastException => null.asInstanceOf[B]
     }
 
     override def entrySet: ju.Set[ju.Map.Entry[A, B]] = new ju.AbstractSet[ju.Map.Entry[A, B]] {
-      def size = self.size
+      override def size: Int = self.size
 
-      def iterator = new ju.Iterator[ju.Map.Entry[A, B]] {
+      override def iterator: ju.Iterator[ju.Map.Entry[A, B]] = new ju.Iterator[ju.Map.Entry[A, B]] {
         val ui = underlying.iterator
         var prev : Option[A] = None
 
-        def hasNext = ui.hasNext
+        def hasNext: Boolean = ui.hasNext
 
-        def next() = {
-          val (k, v) = ui.next
+        def next(): Entry[A, B] = {
+          val (k, v) = ui.next()
           prev = Some(k)
           new ju.Map.Entry[A, B] {
             import scala.util.hashing.byteswap32
-            def getKey = k
-            def getValue = v
-            def setValue(v1 : B) = self.put(k, v1)
-            override def hashCode = byteswap32(k.hashCode) + (byteswap32(v.hashCode) << 16)
-            override def equals(other: Any) = other match {
+            override def getKey: A = k
+            override def getValue: B = v
+            override def setValue(v1 : B): B = self.put(k, v1)
+            override def hashCode: Int = byteswap32(k.hashCode) + (byteswap32(v.hashCode) << 16)
+            override def equals(other: Any): Boolean = other match {
               case e: ju.Map.Entry[_, _] => k == e.getKey && v == e.getValue
               case _ => false
             }
@@ -81,7 +79,7 @@ private[spark] object JavaUtils {
             case Some(k) =>
               underlying match {
                 case mm: mutable.Map[A, _] =>
-                  mm remove k
+                  mm.remove(k)
                   prev = None
                 case _ =>
                   throw new UnsupportedOperationException("remove")

@@ -17,13 +17,36 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.io.{PrintWriter, ByteArrayOutputStream, FileInputStream, File}
+import java.io._
+import java.nio.charset.StandardCharsets
 
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.{NumericType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 package object util {
 
-  def fileToString(file: File, encoding: String = "UTF-8") = {
+  /** Silences output to stderr or stdout for the duration of f */
+  def quietly[A](f: => A): A = {
+    val origErr = System.err
+    val origOut = System.out
+    try {
+      System.setErr(new PrintStream(new OutputStream {
+        def write(b: Int) = {}
+      }))
+      System.setOut(new PrintStream(new OutputStream {
+        def write(b: Int) = {}
+      }))
+
+      f
+    } finally {
+      System.setErr(origErr)
+      System.setOut(origOut)
+    }
+  }
+
+  def fileToString(file: File, encoding: String = "UTF-8"): String = {
     val inStream = new FileInputStream(file)
     val outStream = new ByteArrayOutputStream
     try {
@@ -42,10 +65,9 @@ package object util {
     new String(outStream.toByteArray, encoding)
   }
 
-  def resourceToString(
-      resource:String,
-      encoding: String = "UTF-8",
-      classLoader: ClassLoader = Utils.getSparkClassLoader) = {
+  def resourceToBytes(
+      resource: String,
+      classLoader: ClassLoader = Utils.getSparkClassLoader): Array[Byte] = {
     val inStream = classLoader.getResourceAsStream(resource)
     val outStream = new ByteArrayOutputStream
     try {
@@ -61,7 +83,14 @@ package object util {
     finally {
       inStream.close()
     }
-    new String(outStream.toByteArray, encoding)
+    outStream.toByteArray
+  }
+
+  def resourceToString(
+      resource: String,
+      encoding: String = "UTF-8",
+      classLoader: ClassLoader = Utils.getSparkClassLoader): String = {
+    new String(resourceToBytes(resource, classLoader), encoding)
   }
 
   def stringToFile(file: File, str: String): File = {
@@ -76,12 +105,12 @@ package object util {
   }
 
   def sideBySide(left: Seq[String], right: Seq[String]): Seq[String] = {
-    val maxLeftSize = left.map(_.size).max
+    val maxLeftSize = left.map(_.length).max
     val leftPadded = left ++ Seq.fill(math.max(right.size - left.size, 0))("")
     val rightPadded = right ++ Seq.fill(math.max(left.size - right.size, 0))("")
 
     leftPadded.zip(rightPadded).map {
-      case (l, r) => (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.size) + 3)) + r
+      case (l, r) => (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.length) + 3)) + r
     }
   }
 
@@ -90,18 +119,41 @@ package object util {
     val writer = new PrintWriter(out)
     t.printStackTrace(writer)
     writer.flush()
-    new String(out.toByteArray)
+    new String(out.toByteArray, StandardCharsets.UTF_8)
   }
 
-  def stringOrNull(a: AnyRef) = if (a == null) null else a.toString
+  def stringOrNull(a: AnyRef): String = if (a == null) null else a.toString
 
   def benchmark[A](f: => A): A = {
     val startTime = System.nanoTime()
     val ret = f
     val endTime = System.nanoTime()
+    // scalastyle:off println
     println(s"${(endTime - startTime).toDouble / 1000000}ms")
+    // scalastyle:on println
     ret
   }
+
+  // Replaces attributes, string literals, complex type extractors with their pretty form so that
+  // generated column names don't contain back-ticks or double-quotes.
+  def usePrettyExpression(e: Expression): Expression = e transform {
+    case a: Attribute => new PrettyAttribute(a)
+    case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
+    case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
+    case e: GetStructField =>
+      val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
+      PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
+    case e: GetArrayStructFields =>
+      PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
+  }
+
+  def quoteIdentifier(name: String): String = {
+    // Escapes back-ticks within the identifier name with double-back-ticks, and then quote the
+    // identifier with back-ticks.
+    "`" + name.replace("`", "``") + "`"
+  }
+
+  def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
   /* FIX ME
   implicit class debugLogging(a: Any) {

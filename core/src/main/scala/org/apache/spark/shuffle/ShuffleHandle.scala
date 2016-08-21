@@ -17,9 +17,12 @@
 
 package org.apache.spark.shuffle
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
  * An opaque handle to a shuffle, used by a ShuffleManager to pass information about it to tasks.
  *
  * @param shuffleId ID of the shuffle
  */
-private[spark] abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {}
+@DeveloperApi
+abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {}

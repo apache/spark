@@ -44,7 +44,7 @@ class BlockManagerId private (
 
   def executorId: String = executorId_
 
-  if (null != host_){
+  if (null != host_) {
     Utils.checkHost(host_, "Expected hostname")
     assert (port_ > 0)
   }
@@ -60,7 +60,10 @@ class BlockManagerId private (
 
   def port: Int = port_
 
-  def isDriver: Boolean = { executorId == SparkContext.DRIVER_IDENTIFIER }
+  def isDriver: Boolean = {
+    executorId == SparkContext.DRIVER_IDENTIFIER ||
+      executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
+  }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeUTF(executorId_)
@@ -77,11 +80,11 @@ class BlockManagerId private (
   @throws(classOf[IOException])
   private def readResolve(): Object = BlockManagerId.getCachedBlockManagerId(this)
 
-  override def toString = s"BlockManagerId($executorId, $host, $port)"
+  override def toString: String = s"BlockManagerId($executorId, $host, $port)"
 
   override def hashCode: Int = (executorId.hashCode * 41 + host.hashCode) * 41 + port
 
-  override def equals(that: Any) = that match {
+  override def equals(that: Any): Boolean = that match {
     case id: BlockManagerId =>
       executorId == id.executorId && port == id.port && host == id.host
     case _ =>
@@ -100,10 +103,10 @@ private[spark] object BlockManagerId {
    * @param port Port of the block manager.
    * @return A new [[org.apache.spark.storage.BlockManagerId]].
    */
-  def apply(execId: String, host: String, port: Int) =
+  def apply(execId: String, host: String, port: Int): BlockManagerId =
     getCachedBlockManagerId(new BlockManagerId(execId, host, port))
 
-  def apply(in: ObjectInput) = {
+  def apply(in: ObjectInput): BlockManagerId = {
     val obj = new BlockManagerId()
     obj.readExternal(in)
     getCachedBlockManagerId(obj)

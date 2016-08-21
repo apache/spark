@@ -17,8 +17,9 @@
 
 package org.apache.spark.mllib.util
 
-import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.scalatest.exceptions.TestFailedException
+
+import org.apache.spark.mllib.linalg.{Matrix, Vector}
 
 object TestingUtils {
 
@@ -95,16 +96,16 @@ object TestingUtils {
     /**
      * Comparison using absolute tolerance.
      */
-    def absTol(eps: Double): CompareDoubleRightSide = CompareDoubleRightSide(AbsoluteErrorComparison,
-      x, eps, ABS_TOL_MSG)
+    def absTol(eps: Double): CompareDoubleRightSide =
+      CompareDoubleRightSide(AbsoluteErrorComparison, x, eps, ABS_TOL_MSG)
 
     /**
      * Comparison using relative tolerance.
      */
-    def relTol(eps: Double): CompareDoubleRightSide = CompareDoubleRightSide(RelativeErrorComparison,
-      x, eps, REL_TOL_MSG)
+    def relTol(eps: Double): CompareDoubleRightSide =
+      CompareDoubleRightSide(RelativeErrorComparison, x, eps, REL_TOL_MSG)
 
-    override def toString = x.toString
+    override def toString: String = x.toString
   }
 
   case class CompareVectorRightSide(
@@ -166,7 +167,7 @@ object TestingUtils {
         x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 relTol eps)
       }, x, eps, REL_TOL_MSG)
 
-    override def toString = x.toString
+    override def toString: String = x.toString
   }
 
   case class CompareMatrixRightSide(
@@ -229,7 +230,7 @@ object TestingUtils {
         x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 relTol eps)
       }, x, eps, REL_TOL_MSG)
 
-    override def toString = x.toString
+    override def toString: String = x.toString
   }
 
 }

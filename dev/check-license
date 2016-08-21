@@ -24,29 +24,27 @@ acquire_rat_jar () {
 
   JAR="$rat_jar"
 
-  if [[ ! -f "$rat_jar" ]]; then
-    # Download rat launch jar if it hasn't been downloaded yet
-    if [ ! -f "$JAR" ]; then
-      # Download
-      printf "Attempting to fetch rat\n"
-      JAR_DL="${JAR}.part"
-      if [ $(command -v curl) ]; then
-        curl -L --silent "${URL}" > "$JAR_DL" && mv "$JAR_DL" "$JAR"
-      elif [ $(command -v wget) ]; then
-        wget --quiet ${URL} -O "$JAR_DL" && mv "$JAR_DL" "$JAR"
-      else
-        printf "You do not have curl or wget installed, please install rat manually.\n"
-        exit -1
-      fi
-    fi
-
-    unzip -tq $JAR &> /dev/null
-    if [ $? -ne 0 ]; then
-      # We failed to download
-      printf "Our attempt to download rat locally to ${JAR} failed. Please install rat manually.\n"
+  # Download rat launch jar if it hasn't been downloaded yet
+  if [ ! -f "$JAR" ]; then
+    # Download
+    printf "Attempting to fetch rat\n"
+    JAR_DL="${JAR}.part"
+    if [ $(command -v curl) ]; then
+      curl -L --silent "${URL}" > "$JAR_DL" && mv "$JAR_DL" "$JAR"
+    elif [ $(command -v wget) ]; then
+      wget --quiet ${URL} -O "$JAR_DL" && mv "$JAR_DL" "$JAR"
+    else
+      printf "You do not have curl or wget installed, please install rat manually.\n"
       exit -1
     fi
-    printf "Launching rat from ${JAR}\n"
+  fi
+
+  unzip -tq "$JAR" &> /dev/null
+  if [ $? -ne 0 ]; then 
+    # We failed to download
+    rm "$JAR"
+    printf "Our attempt to download rat locally to ${JAR} failed. Please install rat manually.\n"
+    exit -1
   fi
 }
 
@@ -60,7 +58,7 @@ else
     declare java_cmd=java
 fi
 
-export RAT_VERSION=0.10
+export RAT_VERSION=0.11
 export rat_jar="$FWDIR"/lib/apache-rat-${RAT_VERSION}.jar
 mkdir -p "$FWDIR"/lib
 
@@ -69,9 +67,15 @@ mkdir -p "$FWDIR"/lib
     exit 1
 }
 
-$java_cmd -jar "$rat_jar" -E "$FWDIR"/.rat-excludes  -d "$FWDIR" > rat-results.txt
+mkdir target
+$java_cmd -jar "$rat_jar" -E "$FWDIR"/dev/.rat-excludes -d "$FWDIR" > target/rat-results.txt
 
-ERRORS="$(cat rat-results.txt | grep -e "??")"
+if [ $? -ne 0 ]; then
+   echo "RAT exited abnormally"
+   exit 1
+fi
+
+ERRORS="$(cat target/rat-results.txt | grep -e "??")"
 
 if test ! -z "$ERRORS"; then 
     echo "Could not find Apache license headers in the following files:"
