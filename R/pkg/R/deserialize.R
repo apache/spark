@@ -62,18 +62,18 @@ readTypedObject <- function(con, type) {
 
 readString <- function(con) {
   stringLen <- readInt(con)
-  raw <- readBin(con, raw(), stringLen, endian = "big")
+  raw <- readBinFully(con, raw(), stringLen, endian = "big")
   string <- rawToChar(raw)
   Encoding(string) <- "UTF-8"
   string
 }
 
 readInt <- function(con) {
-  readBin(con, integer(), n = 1, endian = "big")
+  readBinFully(con, integer(), n = 1, endian = "big")
 }
 
 readDouble <- function(con) {
-  readBin(con, double(), n = 1, endian = "big")
+  readBinFully(con, double(), n = 1, endian = "big")
 }
 
 readBoolean <- function(con) {
@@ -81,7 +81,7 @@ readBoolean <- function(con) {
 }
 
 readType <- function(con) {
-  rawToChar(readBin(con, "raw", n = 1L))
+  rawToChar(readBinFully(con, "raw", n = 1L))
 }
 
 readDate <- function(con) {
@@ -150,11 +150,11 @@ readStruct <- function(con) {
 
 readRaw <- function(con) {
   dataLen <- readInt(con)
-  readBin(con, raw(), as.integer(dataLen), endian = "big")
+  readBinFully(con, raw(), as.integer(dataLen), endian = "big")
 }
 
 readRawLen <- function(con, dataLen) {
-  readBin(con, raw(), as.integer(dataLen), endian = "big")
+  readBinFully(con, raw(), as.integer(dataLen), endian = "big")
 }
 
 readDeserialize <- function(con) {
@@ -163,7 +163,7 @@ readDeserialize <- function(con) {
   # return firstData
   dataLen <- readInt(con)
   firstData <- unserialize(
-      readBin(con, raw(), as.integer(dataLen), endian = "big"))
+      readBinFully(con, raw(), as.integer(dataLen), endian = "big"))
 
   # Else, read things into a list
   dataLen <- readInt(con)
@@ -171,7 +171,7 @@ readDeserialize <- function(con) {
     data <- list(firstData)
     while (length(dataLen) > 0 && dataLen > 0) {
       data[[length(data) + 1L]] <- unserialize(
-          readBin(con, raw(), as.integer(dataLen), endian = "big"))
+          readBinFully(con, raw(), as.integer(dataLen), endian = "big"))
       dataLen <- readInt(con)
     }
     unlist(data, recursive = FALSE)
@@ -235,4 +235,8 @@ readRowList <- function(obj) {
   rawObj <- rawConnection(obj, "r+")
   on.exit(close(rawObj))
   readObject(rawObj)
+}
+
+readBinFully <- function(con, what, n = 1L, size  = NA_integer_, endian) {
+  readBin(con, what, n, as.integer(size), endian = "big")
 }
