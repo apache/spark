@@ -85,6 +85,9 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(3.0)),
         Row(null, new java.math.BigDecimal(2.0)))
     )
+
+    assert(df1.groupBy("key").columns.sameElements(Array("key")))
+    assert(df1.groupBy("value1", "value2").columns.sameElements(Array("value1", "value2")))
   }
 
   test("SPARK-17124 agg should be ordering preserving") {
