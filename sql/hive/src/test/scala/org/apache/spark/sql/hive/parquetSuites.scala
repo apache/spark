@@ -589,6 +589,13 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       }
     }
   }
+
+  test("self-join") {
+    val table = spark.table("normal_parquet")
+    val selfJoin = table.as("t1").join(table.as("t2"))
+    checkAnswer(selfJoin,
+      sql("SELECT * FROM normal_parquet x JOIN normal_parquet y"))
+  }
 }
 
 /**

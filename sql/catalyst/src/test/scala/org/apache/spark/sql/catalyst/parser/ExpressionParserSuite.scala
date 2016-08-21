@@ -375,18 +375,21 @@ class ExpressionParserSuite extends PlanTest {
 
     // Tiny Int Literal
     assertEqual("10Y", Literal(10.toByte))
-    intercept("-1000Y")
+    intercept("-1000Y", s"does not fit in range [${Byte.MinValue}, ${Byte.MaxValue}]")
 
     // Small Int Literal
     assertEqual("10S", Literal(10.toShort))
-    intercept("40000S")
+    intercept("40000S", s"does not fit in range [${Short.MinValue}, ${Short.MaxValue}]")
 
     // Long Int Literal
     assertEqual("10L", Literal(10L))
-    intercept("78732472347982492793712334L")
+    intercept("78732472347982492793712334L",
+        s"does not fit in range [${Long.MinValue}, ${Long.MaxValue}]")
 
     // Double Literal
     assertEqual("10.0D", Literal(10.0D))
+    intercept("-1.8E308D", s"does not fit in range")
+    intercept("1.8E308D", s"does not fit in range")
     // TODO we need to figure out if we should throw an exception here!
     assertEqual("1E309", Literal(Double.PositiveInfinity))
   }
@@ -501,5 +504,10 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
     assertEqual("1 - f('o', o(bar))", Literal(1) - 'f.function("o", 'o.function('bar)))
     intercept("1 - f('o', o(bar)) hello * world", "mismatched input '*'")
+  }
+
+  test("current date/timestamp braceless expressions") {
+    assertEqual("current_date", CurrentDate())
+    assertEqual("current_timestamp", CurrentTimestamp())
   }
 }

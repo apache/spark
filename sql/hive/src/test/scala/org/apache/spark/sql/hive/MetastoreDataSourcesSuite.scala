@@ -375,7 +375,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier("ctasJsonTable"))
       val filesystemPath = new Path(expectedPath)
       val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
-      if (fs.exists(filesystemPath)) fs.delete(filesystemPath, true)
+      fs.delete(filesystemPath, true)
 
       // It is a managed table when we do not specify the location.
       sql(
@@ -741,7 +741,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           DATASOURCE_SCHEMA -> schema.json,
           "EXTERNAL" -> "FALSE"))
 
-      sharedState.externalCatalog.createTable("default", hiveTable, ignoreIfExists = false)
+      sharedState.externalCatalog.createTable(hiveTable, ignoreIfExists = false)
 
       sessionState.refreshTable(tableName)
       val actualSchema = table(tableName).schema

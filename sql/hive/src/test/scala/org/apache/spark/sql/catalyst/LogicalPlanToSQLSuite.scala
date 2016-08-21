@@ -41,8 +41,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   import testImplicits._
 
   // Used for generating new query answer files by saving
-  private val regenerateGoldenFiles: Boolean =
-    Option(System.getenv("SPARK_GENERATE_GOLDEN_FILES")) == Some("1")
+  private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
   private val goldenSQLPath = "src/test/resources/sqlgen/"
 
   protected override def beforeAll(): Unit = {
@@ -1102,5 +1101,13 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       sql("create table orc_t stored as orc as select 1 as c1, 'abc' as c2")
       checkSQL("select * from orc_t", "select_orc_table")
     }
+  }
+
+  test("inline tables") {
+    checkSQL(
+      """
+        |select * from values ("one", 1), ("two", 2), ("three", null) as data(a, b) where b > 1
+      """.stripMargin,
+      "inline_tables")
   }
 }

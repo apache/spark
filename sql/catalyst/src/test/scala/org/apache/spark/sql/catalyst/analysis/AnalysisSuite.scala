@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.ShouldMatchers
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -377,8 +377,8 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     val query =
       Project(Seq($"x.key", $"y.key"),
         Join(
-          Project(Seq($"x.key"), SubqueryAlias("x", input)),
-          Project(Seq($"y.key"), SubqueryAlias("y", input)),
+          Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
+          Project(Seq($"y.key"), SubqueryAlias("y", input, None)),
           Inner, None))
 
     assertAnalysisSuccess(query)

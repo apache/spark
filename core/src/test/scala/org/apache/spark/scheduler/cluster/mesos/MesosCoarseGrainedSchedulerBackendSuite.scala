@@ -17,10 +17,9 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import java.util.Collections
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos._
@@ -33,6 +32,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.mesos.Utils._
 
@@ -47,6 +47,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   private var backend: MesosCoarseGrainedSchedulerBackend = _
   private var externalShuffleClient: MesosExternalShuffleClient = _
   private var driverEndpoint: RpcEndpointRef = _
+  @volatile private var stopCalled = false
 
   test("mesos supports killing and limiting executors") {
     setBackend()
@@ -209,6 +210,46 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
       .registerDriverWithShuffleService(anyString, anyInt, anyLong, anyLong)
   }
 
+  test("Port offer decline when there is no appropriate range") {
+    setBackend(Map("spark.blockManager.port" -> "30100"))
+    val offeredPorts = (31100L, 31200L)
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+
+    val offer1 = createOffer("o1", "s1", mem, cpu, Some(offeredPorts))
+    backend.resourceOffers(driver, List(offer1).asJava)
+    verify(driver, times(1)).declineOffer(offer1.getId)
+  }
+
+  test("Port offer accepted when ephemeral ports are used") {
+    setBackend()
+    val offeredPorts = (31100L, 31200L)
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+
+    val offer1 = createOffer("o1", "s1", mem, cpu, Some(offeredPorts))
+    backend.resourceOffers(driver, List(offer1).asJava)
+    verifyTaskLaunched(driver, "o1")
+  }
+
+  test("Port offer accepted with user defined port numbers") {
+    val port = 30100
+    setBackend(Map("spark.blockManager.port" -> s"$port"))
+    val offeredPorts = (30000L, 31000L)
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+
+    val offer1 = createOffer("o1", "s1", mem, cpu, Some(offeredPorts))
+    backend.resourceOffers(driver, List(offer1).asJava)
+    val taskInfo = verifyTaskLaunched(driver, "o1")
+
+    val taskPortResources = taskInfo.head.getResourcesList.asScala.
+    find(r => r.getType == Value.Type.RANGES && r.getName == "ports")
+
+    val isPortInOffer = (r: Resource) => {
+      r.getRanges().getRangeList
+        .asScala.exists(range => range.getBegin == port && range.getEnd == port)
+    }
+    assert(taskPortResources.exists(isPortInOffer))
+  }
+
   test("mesos kills an executor when told") {
     setBackend()
 
@@ -341,6 +382,47 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(!dockerInfo.getForcePullImage)
   }
 
+  test("Do not call removeExecutor() after backend is stopped") {
+    setBackend()
+
+    // launches a task on a valid offer
+    val offers = List((backend.executorMemory(sc), 1))
+    offerResources(offers)
+    verifyTaskLaunched(driver, "o1")
+
+    // launches a thread simulating status update
+    val statusUpdateThread = new Thread {
+      override def run(): Unit = {
+        while (!stopCalled) {
+          Thread.sleep(100)
+        }
+
+        val status = createTaskStatus("0", "s1", TaskState.TASK_FINISHED)
+        backend.statusUpdate(driver, status)
+      }
+    }.start
+
+    backend.stop()
+    // Any method of the backend involving sending messages to the driver endpoint should not
+    // be called after the backend is stopped.
+    verify(driverEndpoint, never()).askWithRetry(isA(classOf[RemoveExecutor]))(any[ClassTag[_]])
+  }
+
+  test("mesos supports spark.executor.uri") {
+    val url = "spark.spark.spark.com"
+    setBackend(Map(
+      "spark.executor.uri" -> url
+    ), false)
+
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+
+    val offer1 = createOffer("o1", "s1", mem, cpu)
+    backend.resourceOffers(driver, List(offer1).asJava)
+
+    val launchedTasks = verifyTaskLaunched(driver, "o1")
+    assert(launchedTasks.head.getCommand.getUrisList.asScala(0).getValue == url)
+  }
+
   private def verifyDeclinedOffer(driver: SchedulerDriver,
       offerId: OfferID,
       filter: Boolean = false): Unit = {
@@ -396,18 +478,26 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
         mesosDriver = newDriver
       }
 
+      override def stopExecutors(): Unit = {
+        stopCalled = true
+      }
+
       markRegistered()
     }
     backend.start()
     backend
   }
 
-  private def setBackend(sparkConfVars: Map[String, String] = null) {
+  private def setBackend(sparkConfVars: Map[String, String] = null,
+      setHome: Boolean = true) {
     sparkConf = (new SparkConf)
       .setMaster("local[*]")
       .setAppName("test-mesos-dynamic-alloc")
-      .setSparkHome("/path")
       .set("spark.mesos.driver.webui.url", "http://webui")
+
+    if (setHome) {
+      sparkConf.setSparkHome("/path")
+    }
 
     if (sparkConfVars != null) {
       sparkConf.setAll(sparkConfVars)
