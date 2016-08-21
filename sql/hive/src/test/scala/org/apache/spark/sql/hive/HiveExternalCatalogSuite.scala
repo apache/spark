@@ -21,7 +21,9 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 /**
  * Test suite for the [[HiveExternalCatalog]].
@@ -41,6 +43,26 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
       new HiveExternalCatalog(client, new Configuration())
   }
 
+  import utils._
+
   protected override def resetState(): Unit = client.reset()
+
+  def catalogPartitionsEqual(
+    parts: Seq[CatalogTablePartition],
+    expectedAnswer: Seq[CatalogTablePartition]): Boolean = {
+    parts.map(_.spec).toSet == expectedAnswer.map(_.spec).toSet
+  }
+
+  test("list partitions by filter") {
+    val catalog = newBasicCatalog()
+    val filter1: Seq[Expression] = Seq(
+      EqualTo(AttributeReference("a", IntegerType)(), Literal(1)))
+    assert(catalogPartitionsEqual(
+      catalog.listPartitionsByFilter("db2", "tbl2", filter1), Seq(part1)))
+    val filter2: Seq[Expression] = Seq(
+      EqualTo(AttributeReference("b", StringType)(), Literal("2")))
+    assert(catalogPartitionsEqual(
+      catalog.listPartitionsByFilter("db2", "tbl2", filter2), Seq(part1)))
+  }
 
 }
