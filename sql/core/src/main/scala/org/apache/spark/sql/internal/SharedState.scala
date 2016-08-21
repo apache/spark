@@ -126,8 +126,9 @@ object SharedState {
   private def reflect[T, Arg1 <: AnyRef, Arg2 <: AnyRef](
       className: String,
       ctorArg1: Arg1,
-      ctorArg2: Arg2)(implicit ctorArgTag1: ClassTag[Arg1],
-        ctorArgTag2: ClassTag[Arg2]): T = {
+      ctorArg2: Arg2)(
+      implicit ctorArgTag1: ClassTag[Arg1],
+      ctorArgTag2: ClassTag[Arg2]): T = {
     try {
       val clazz = Utils.classForName(className)
       val ctor = clazz.getDeclaredConstructor(ctorArgTag1.runtimeClass, ctorArgTag2.runtimeClass)
