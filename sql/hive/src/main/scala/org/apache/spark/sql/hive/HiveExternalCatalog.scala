@@ -46,8 +46,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   /**
    * A Hive client used to interact with the metastore.
    */
-  // This needs to be a lazy val at here because TestHiveSharedState is overriding it.
-  private lazy val client: HiveClient = {
+  private val client: HiveClient = {
     HiveUtils.newClientForMetadata(conf, hadoopConf)
   }
 
@@ -90,11 +89,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     withClient { getTable(db, table) }
   }
 
+  /**
+   * Return the existing [[HiveClient]] used to interact with the metastore.
+   */
   def getClient: HiveClient = client
 
+  /**
+   * Return a [[HiveClient]] as a new session
+   */
   def getNewClient: HiveClient = client.newSession()
-
-  def resetClient(): Unit = client.reset()
 
   // --------------------------------------------------------------------------
   // Databases
