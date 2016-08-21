@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.plans.logical.Scanner
+
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -146,14 +148,14 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
     assertCached(spark.table("testData"))
     assert(spark.table("testData").queryExecution.withCachedData match {
-      case _: InMemoryRelation => true
+      case Scanner(_, _, _: InMemoryRelation) => true
       case _ => false
     })
 
     spark.catalog.uncacheTable("testData")
     assert(!spark.catalog.isCached("testData"))
     assert(spark.table("testData").queryExecution.withCachedData match {
-      case _: InMemoryRelation => false
+      case Scanner(_, _, _: InMemoryRelation) => false
       case _ => true
     })
   }
