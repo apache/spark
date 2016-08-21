@@ -2065,18 +2065,10 @@ object EliminateUnions extends Rule[LogicalPlan] {
 * This eliminates the need for specual care in [[CleanupAliases]] when removing aliases.
 */
 object ResolveCreateStruct extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressionsDown {
-    case ct : CreateStruct => ct.toCreateNamedStruct
-    case ct : CreateStructUnsafe => ct.toCreateNamedStructUnsafe
-  }
-
-  private def mkNamedStructArgs( structType : StructType, attributeExpressions: Seq[Expression]) = {
-    for {
-      (name, expression) <- structType.fieldNames.zip(attributeExpressions)
-      nameLiteral = Literal(name)
-      newChild <- Seq(nameLiteral, expression)
-    } yield{
-      newChild
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case aPlan : LogicalPlan => aPlan transformExpressionsDown {
+      case ct : CreateStruct => ct.toCreateNamedStruct
+      case ct : CreateStructUnsafe => ct.toCreateNamedStructUnsafe
     }
   }
 }
