@@ -40,6 +40,15 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
   protected def resetState(): Unit = { }
 
+  // Clear all state before each test
+  override def beforeEach(): Unit = {
+    try {
+      resetState()
+    } finally {
+      super.beforeEach()
+    }
+  }
+
   // Clear all state after each test
   override def afterEach(): Unit = {
     try {
