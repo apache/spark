@@ -131,7 +131,7 @@ predict_internal <- function(object, newData) {
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
-#' @param weightCol the weight column name. If this is not set or NULL, we treat all instance
+#' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
 #' @param tol positive convergence tolerance of iterations.
 #' @param maxIter integer giving the maximal number of IRLS iterations.
@@ -197,7 +197,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
-#' @param weightCol the weight column name. If this is not set or NULL, we treat all instance
+#' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
 #' @param epsilon positive convergence tolerance of iterations.
 #' @param maxit integer giving the maximal number of IRLS iterations.
@@ -434,8 +434,8 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param isotonic Whether the output sequence should be isotonic/increasing (TRUE) or
 #'                 antitonic/decreasing (FALSE)
-#' @param featureIndex The index of the feature if \code{featuresCol} is a vector column (default: `0`),
-#'                     no effect otherwise
+#' @param featureIndex The index of the feature if \code{featuresCol} is a vector column
+#'                     (default: 0), no effect otherwise
 #' @param weightCol The weight column name.
 #' @return \code{spark.isoreg} returns a fitted Isotonic Regression model
 #' @rdname spark.isoreg
@@ -647,7 +647,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @rdname spark.naiveBayes
 #' @aliases spark.naiveBayes,SparkDataFrame,formula-method
 #' @name spark.naiveBayes
-#' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
+#' @seealso e1071: \url{https://cran.r-project.org/package=e1071}
 #' @export
 #' @examples
 #' \dontrun{
@@ -815,7 +815,7 @@ read.ml <- function(path) {
 #'                Note that operator '.' is not supported currently.
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model.
 #' @rdname spark.survreg
-#' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/}
+#' @seealso survival: \url{https://cran.r-project.org/package=survival}
 #' @export
 #' @examples
 #' \dontrun{
@@ -870,10 +870,11 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @param customizedStopWords stopwords that need to be removed from the given corpus. Ignore the
 #'        parameter if libSVM-format column is used as the features column.
 #' @param maxVocabSize maximum vocabulary size, default 1 << 18
+#' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model
 #' @rdname spark.lda
 #' @aliases spark.lda,SparkDataFrame-method
-#' @seealso topicmodels: \url{https://cran.r-project.org/web/packages/topicmodels/}
+#' @seealso topicmodels: \url{https://cran.r-project.org/package=topicmodels}
 #' @export
 #' @examples
 #' \dontrun{
@@ -962,7 +963,7 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' @return \code{spark.gaussianMixture} returns a fitted multivariate gaussian mixture model.
 #' @rdname spark.gaussianMixture
 #' @name spark.gaussianMixture
-#' @seealso mixtools: \url{https://cran.r-project.org/web/packages/mixtools/}
+#' @seealso mixtools: \url{https://cran.r-project.org/package=mixtools}
 #' @export
 #' @examples
 #' \dontrun{
@@ -1075,7 +1076,7 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @param numUserBlocks number of user blocks used to parallelize computation (> 0).
 #' @param numItemBlocks number of item blocks used to parallelize computation (> 0).
 #' @param checkpointInterval number of checkpoint intervals (>= 1) or disable checkpoint (-1).
-#'
+#' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.als} returns a fitted ALS model
 #' @rdname spark.als
 #' @aliases spark.als,SparkDataFrame-method
