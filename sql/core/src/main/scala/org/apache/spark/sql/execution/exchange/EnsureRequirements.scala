@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.aggregate.AggUtils
+import org.apache.spark.sql.execution.aggregate.{Aggregate, AggUtils}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -155,36 +155,28 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     assert(requiredChildDistributions.length == operator.children.length)
     assert(requiredChildOrderings.length == operator.children.length)
 
-    // Ensure that the operator's children satisfy their output distribution requirements:
-    val childrenWithDist = operator.children.zip(requiredChildDistributions)
-
     def createShuffleExchange(dist: Distribution, child: SparkPlan) =
       ShuffleExchange(createPartitioning(dist, defaultNumPreShufflePartitions), child)
 
-    var (parent, children) = if (!AggUtils.isAggregate(operator)) {
-      val newChildren = childrenWithDist.map {
-        case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
-          child
-        case (child, BroadcastDistribution(mode)) =>
-          BroadcastExchangeExec(mode, child)
-        case (child, distribution) =>
-          createShuffleExchange(distribution, child)
-      }
-      (operator, newChildren)
-    } else {
-      val (child, distribution) = childrenWithDist.head
-      if (!child.outputPartitioning.satisfies(distribution)) {
-        if (AggUtils.supportPartialAggregate(operator)) {
-          // If an aggregation needs a shuffle and support partial aggregations, a map-side partial
-          // aggregation and a shuffle are added as children.
-          val (mergeAgg, mapSideAgg) = AggUtils.createPartialAggregate(operator)
-          (mergeAgg, createShuffleExchange(distribution, mapSideAgg) :: Nil)
-        } else {
-          (operator, createShuffleExchange(distribution, child) :: Nil)
+    var (parent, children) = operator match {
+      case agg if AggUtils.supportPartialAggregate(agg) &&
+          !operator.outputPartitioning.satisfies(requiredChildDistributions.head) =>
+        // If an aggregation needs a shuffle and support partial aggregations, a map-side partial
+        // aggregation and a shuffle are added as children.
+        val (mergeAgg, mapSideAgg) = AggUtils.createPartialAggregate(operator)
+        (mergeAgg, createShuffleExchange(requiredChildDistributions.head, mapSideAgg) :: Nil)
+      case _ =>
+        // Ensure that the operator's children satisfy their output distribution requirements:
+        val childrenWithDist = operator.children.zip(requiredChildDistributions)
+        val newChildren = childrenWithDist.map {
+          case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
+            child
+          case (child, BroadcastDistribution(mode)) =>
+            BroadcastExchangeExec(mode, child)
+          case (child, distribution) =>
+            createShuffleExchange(distribution, child)
         }
-      } else {
-        (operator, child :: Nil)
-      }
+        (operator, newChildren)
     }
 
     // If the operator has multiple children and specifies child output distributions (e.g. join),

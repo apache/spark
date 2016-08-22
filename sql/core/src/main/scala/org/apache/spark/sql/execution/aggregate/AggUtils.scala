@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.execution.aggregate.{Aggregate => AggregateExec}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateStoreSaveExec}
 
@@ -27,20 +28,11 @@ import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateSto
  */
 object AggUtils {
 
-  private[execution] def isAggregate(operator: SparkPlan): Boolean = {
-    operator.isInstanceOf[HashAggregateExec] || operator.isInstanceOf[SortAggregateExec]
-  }
-
-  private[execution] def supportPartialAggregate(operator: SparkPlan): Boolean = {
-    assert(isAggregate(operator))
-    def supportPartial(exprs: Seq[AggregateExpression]) =
-      exprs.map(_.aggregateFunction).forall(_.supportsPartial)
-    operator match {
-      case agg @ HashAggregateExec(_, _, aggregateExpressions, _, _, _, _) =>
-        supportPartial(aggregateExpressions)
-      case agg @ SortAggregateExec(_, _, aggregateExpressions, _, _, _, _) =>
-        supportPartial(aggregateExpressions)
-    }
+  private[execution] def supportPartialAggregate(operator: SparkPlan): Boolean = operator match {
+    case agg: AggregateExec =>
+      agg.aggregateExpressions.map(_.aggregateFunction).forall(_.supportsPartial)
+    case _ =>
+      false
   }
 
   private def createPartialAggregateExec(
@@ -86,23 +78,18 @@ object AggUtils {
 
   private[execution] def createPartialAggregate(operator: SparkPlan)
       : (SparkPlan, SparkPlan) = operator match {
-    case agg @ HashAggregateExec(_, groupingExpressions, aggregateExpressions, _, _, _, child) =>
+    case agg: Aggregate =>
       val mapSideAgg = createPartialAggregateExec(
-        groupingExpressions, aggregateExpressions, child)
-      val mergeAgg = agg.copy(
-        groupingExpressions = groupingExpressions.map(_.toAttribute),
-        aggregateExpressions = updateMergeAggregateMode(aggregateExpressions),
-        initialInputBufferOffset = groupingExpressions.length)
-
-      (mergeAgg, mapSideAgg)
-
-    case agg @ SortAggregateExec(_, groupingExpressions, aggregateExpressions, _, _, _, child) =>
-      val mapSideAgg = createPartialAggregateExec(
-        groupingExpressions, aggregateExpressions, child)
-      val mergeAgg = agg.copy(
-        groupingExpressions = groupingExpressions.map(_.toAttribute),
-        aggregateExpressions = updateMergeAggregateMode(aggregateExpressions),
-        initialInputBufferOffset = groupingExpressions.length)
+        agg.groupingExpressions, agg.aggregateExpressions, agg.child)
+      val mergeAgg = createAggregateExec(
+        requiredChildDistributionExpressions = agg.requiredChildDistributionExpressions,
+        groupingExpressions = agg.groupingExpressions.map(_.toAttribute),
+        aggregateExpressions = updateMergeAggregateMode(agg.aggregateExpressions),
+        aggregateAttributes = agg.aggregateAttributes,
+        initialInputBufferOffset = agg.groupingExpressions.length,
+        resultExpressions = agg.resultExpressions,
+        child = agg.child
+      )
 
       (mergeAgg, mapSideAgg)
   }
