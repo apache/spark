@@ -44,7 +44,7 @@ public abstract class ManagedBuffer {
    * returned ByteBuffer should not affect the content of this buffer.
    */
   // TODO: Deprecate this, usage may require expensive memory mapping or allocation.
-  public abstract ByteBuffer nioByteBuffer() throws IOException;
+  public abstract ChunkedByteBuffer nioByteBuffer() throws IOException;
 
   /**
    * Exposes this buffer's data as an InputStream. The underlying implementation does not

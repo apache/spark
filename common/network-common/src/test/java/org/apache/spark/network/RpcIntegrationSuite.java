@@ -17,6 +17,7 @@
 
 package org.apache.spark.network;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -34,6 +35,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
@@ -58,12 +60,18 @@ public class RpcIntegrationSuite {
       @Override
       public void receive(
           TransportClient client,
-          ByteBuffer message,
+          ChunkedByteBuffer message,
           RpcResponseCallback callback) {
-        String msg = JavaUtils.bytesToString(message);
+        String msg ;
+        try {
+          msg = JavaUtils.bytesToString(message.toByteBuffer());
+        } catch (IOException e) {
+          throw new RuntimeException("Thrown: ", e);
+        }
         String[] parts = msg.split("/");
         if (parts[0].equals("hello")) {
-          callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
+          callback.onSuccess(ChunkedByteBuffer.wrap(
+              JavaUtils.stringToBytes("Hello, " + parts[1] + "!")));
         } else if (parts[0].equals("return error")) {
           callback.onFailure(new RuntimeException("Returned: " + parts[1]));
         } else if (parts[0].equals("throw error")) {
@@ -72,8 +80,14 @@ public class RpcIntegrationSuite {
       }
 
       @Override
-      public void receive(TransportClient client, ByteBuffer message) {
-        oneWayMsgs.add(JavaUtils.bytesToString(message));
+      public void receive(TransportClient client, ChunkedByteBuffer message) {
+        String msg;
+        try {
+          msg = JavaUtils.bytesToString(message.toByteBuffer());
+        } catch (IOException e) {
+          throw new RuntimeException("Thrown: ", e);
+        }
+        oneWayMsgs.add(msg);
       }
 
       @Override
@@ -106,8 +120,13 @@ public class RpcIntegrationSuite {
 
     RpcResponseCallback callback = new RpcResponseCallback() {
       @Override
-      public void onSuccess(ByteBuffer message) {
-        String response = JavaUtils.bytesToString(message);
+      public void onSuccess(ChunkedByteBuffer message) {
+        String response ;
+        try {
+          response = JavaUtils.bytesToString(message.toByteBuffer());
+        } catch (IOException e) {
+          throw new RuntimeException("Thrown: ", e);
+        }
         res.successMessages.add(response);
         sem.release();
       }
@@ -120,7 +139,7 @@ public class RpcIntegrationSuite {
     };
 
     for (String command : commands) {
-      client.sendRpc(JavaUtils.stringToBytes(command), callback);
+      client.sendRpc(ChunkedByteBuffer.wrap(JavaUtils.stringToBytes(command)), callback);
     }
 
     if (!sem.tryAcquire(commands.length, 5, TimeUnit.SECONDS)) {
@@ -177,7 +196,7 @@ public class RpcIntegrationSuite {
     final String message = "no reply";
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     try {
-      client.send(JavaUtils.stringToBytes(message));
+      client.send(ChunkedByteBuffer.wrap(JavaUtils.stringToBytes(message)));
       assertEquals(0, client.getHandler().numOutstandingRequests());
 
       // Make sure the message arrives.

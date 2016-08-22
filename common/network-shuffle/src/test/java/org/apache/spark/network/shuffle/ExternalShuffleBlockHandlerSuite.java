@@ -30,6 +30,7 @@ import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.*;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -62,11 +63,12 @@ public class ExternalShuffleBlockHandlerSuite {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
     ExecutorShuffleInfo config = new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort");
-    ByteBuffer registerMessage = new RegisterExecutor("app0", "exec1", config).toByteBuffer();
+    ChunkedByteBuffer registerMessage = new RegisterExecutor("app0", "exec1", config).
+        toChunkedByteBuffer();
     handler.receive(client, registerMessage, callback);
     verify(blockResolver, times(1)).registerExecutor("app0", "exec1", config);
 
-    verify(callback, times(1)).onSuccess(any(ByteBuffer.class));
+    verify(callback, times(1)).onSuccess(any(ChunkedByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));
     // Verify register executor request latency metrics
     Timer registerExecutorRequestLatencyMillis = (Timer) ((ExternalShuffleBlockHandler) handler)
@@ -85,13 +87,13 @@ public class ExternalShuffleBlockHandlerSuite {
     ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
     when(blockResolver.getBlockData("app0", "exec1", "b0")).thenReturn(block0Marker);
     when(blockResolver.getBlockData("app0", "exec1", "b1")).thenReturn(block1Marker);
-    ByteBuffer openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" })
-      .toByteBuffer();
+    ChunkedByteBuffer openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" })
+      .toChunkedByteBuffer();
     handler.receive(client, openBlocks, callback);
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b0");
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b1");
 
-    ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
+    ArgumentCaptor<ChunkedByteBuffer> response = ArgumentCaptor.forClass(ChunkedByteBuffer.class);
     verify(callback, times(1)).onSuccess(response.capture());
     verify(callback, never()).onFailure((Throwable) any());
 
@@ -126,7 +128,7 @@ public class ExternalShuffleBlockHandlerSuite {
   public void testBadMessages() {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
-    ByteBuffer unserializableMsg = ByteBuffer.wrap(new byte[] { 0x12, 0x34, 0x56 });
+    ChunkedByteBuffer unserializableMsg =ChunkedByteBuffer.wrap(new byte[] { 0x12, 0x34, 0x56 });
     try {
       handler.receive(client, unserializableMsg, callback);
       fail("Should have thrown");
@@ -134,8 +136,8 @@ public class ExternalShuffleBlockHandlerSuite {
       // pass
     }
 
-    ByteBuffer unexpectedMsg = new UploadBlock("a", "e", "b", new byte[1],
-      new byte[2]).toByteBuffer();
+    ChunkedByteBuffer unexpectedMsg = new UploadBlock("a", "e", "b", new byte[1],
+      new byte[2]).toChunkedByteBuffer();
     try {
       handler.receive(client, unexpectedMsg, callback);
       fail("Should have thrown");
@@ -143,7 +145,7 @@ public class ExternalShuffleBlockHandlerSuite {
       // pass
     }
 
-    verify(callback, never()).onSuccess(any(ByteBuffer.class));
+    verify(callback, never()).onSuccess(any(ChunkedByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));
   }
 }

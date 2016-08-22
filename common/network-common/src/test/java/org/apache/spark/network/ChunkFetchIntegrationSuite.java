@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.io.Closeables;
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -107,7 +108,7 @@ public class ChunkFetchIntegrationSuite {
       @Override
       public void receive(
           TransportClient client,
-          ByteBuffer message,
+          ChunkedByteBuffer message,
           RpcResponseCallback callback) {
         throw new UnsupportedOperationException();
       }
@@ -230,8 +231,8 @@ public class ChunkFetchIntegrationSuite {
   }
 
   private void assertBuffersEqual(ManagedBuffer buffer0, ManagedBuffer buffer1) throws Exception {
-    ByteBuffer nio0 = buffer0.nioByteBuffer();
-    ByteBuffer nio1 = buffer1.nioByteBuffer();
+    ByteBuffer nio0 = buffer0.nioByteBuffer().toByteBuffer();
+    ByteBuffer nio1 = buffer1.nioByteBuffer().toByteBuffer();
 
     int len = nio0.remaining();
     assertEquals(nio0.remaining(), nio1.remaining());

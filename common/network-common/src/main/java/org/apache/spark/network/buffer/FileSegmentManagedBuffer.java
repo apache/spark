@@ -55,7 +55,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public ByteBuffer nioByteBuffer() throws IOException {
+  public ChunkedByteBuffer nioByteBuffer() throws IOException {
     FileChannel channel = null;
     try {
       channel = new RandomAccessFile(file, "r").getChannel();
@@ -71,9 +71,21 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
           }
         }
         buf.flip();
-        return buf;
+        return  new ChunkedByteBuffer(buf);
       } else {
-        return channel.map(FileChannel.MapMode.READ_ONLY, offset, length);
+        int pageSize = 32 * 1024;
+        int numPage = (int) Math.ceil((double) length / pageSize);
+        ByteBuffer[] buffers = new ByteBuffer[numPage];
+        long len = length;
+        long off = offset;
+        for (int i = 0; i < buffers.length; i++) {
+          long pageLen = Math.min(len, pageSize);
+          buffers[i] = channel.map(FileChannel.MapMode.READ_ONLY, off, pageLen);
+          len -= pageLen;
+          off += pageLen;
+        }
+        return new ChunkedByteBuffer(buffers);
+        // return channel.map(FileChannel.MapMode.READ_ONLY, offset, length);
       }
     } catch (IOException e) {
       try {

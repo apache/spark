@@ -27,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.TransportContext;
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.client.TransportClientFactory;
@@ -140,7 +141,8 @@ public class ExternalShuffleClient extends ShuffleClient {
     checkInit();
     TransportClient client = clientFactory.createUnmanagedClient(host, port);
     try {
-      ByteBuffer registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteBuffer();
+      ChunkedByteBuffer registerMessage = new RegisterExecutor(appId, execId, executorInfo).
+          toChunkedByteBuffer();
       client.sendRpcSync(registerMessage, 5000 /* timeoutMs */);
     } finally {
       client.close();

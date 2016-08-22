@@ -32,7 +32,7 @@ import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.network._
-import org.apache.spark.network.buffer.{ManagedBuffer, NettyManagedBuffer}
+import org.apache.spark.network.buffer._
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
@@ -42,7 +42,6 @@ import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
-import org.apache.spark.util.io.ChunkedByteBuffer
 
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
@@ -293,7 +292,7 @@ private[spark] class BlockManager(
       data: ManagedBuffer,
       level: StorageLevel,
       classTag: ClassTag[_]): Boolean = {
-    putBytes(blockId, new ChunkedByteBuffer(data.nioByteBuffer()), level)(classTag)
+    putBytes(blockId, data.nioByteBuffer(), level)(classTag)
   }
 
   /**
@@ -441,12 +440,12 @@ private[spark] class BlockManager(
             if (level.deserialized) {
               val diskValues = serializerManager.dataDeserializeStream(
                 blockId,
-                diskBytes.toInputStream(dispose = true))(info.classTag)
+                diskBytes.toInputStream(true))(info.classTag)
               maybeCacheDiskValuesInMemory(info, blockId, level, diskValues)
             } else {
               val stream = maybeCacheDiskBytesInMemory(info, blockId, level, diskBytes)
-                .map {_.toInputStream(dispose = false)}
-                .getOrElse { diskBytes.toInputStream(dispose = true) }
+                .map {_.toInputStream(false)}
+                .getOrElse { diskBytes.toInputStream( true) }
               serializerManager.dataDeserializeStream(blockId, stream)(info.classTag)
             }
           }
@@ -470,8 +469,7 @@ private[spark] class BlockManager(
       // TODO: This should gracefully handle case where local block is not available. Currently
       // downstream code will throw an exception.
       Option(
-        new ChunkedByteBuffer(
-          shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId]).nioByteBuffer()))
+        shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId]).nioByteBuffer())
     } else {
       blockInfoManager.lockForReading(blockId).map { info => doGetLocalBytes(blockId, info) }
     }
@@ -522,7 +520,7 @@ private[spark] class BlockManager(
   private def getRemoteValues(blockId: BlockId): Option[BlockResult] = {
     getRemoteBytes(blockId).map { data =>
       val values =
-        serializerManager.dataDeserializeStream(blockId, data.toInputStream(dispose = true))
+        serializerManager.dataDeserializeStream(blockId, data.toInputStream(true))
       new BlockResult(values, DataReadMethod.Network, data.size)
     }
   }
@@ -586,7 +584,7 @@ private[spark] class BlockManager(
       }
 
       if (data != null) {
-        return Some(new ChunkedByteBuffer(data))
+        return Some(data)
       }
       logDebug(s"The value of block $blockId is null")
     }
@@ -1019,7 +1017,11 @@ private[spark] class BlockManager(
             // If the file size is bigger than the free memory, OOM will happen. So if we
             // cannot put it into MemoryStore, copyForMemory should not be created. That's why
             // this action is put into a `() => ChunkedByteBuffer` and created lazily.
-            diskBytes.copy(allocator)
+            val out = new ChunkedByteBufferOutputStream(32 * 1024, new Allocator {
+              override def allocate(len: Int) = allocator(len)
+            })
+            Utils.copyStream(diskBytes.toInputStream(), out, true)
+            out.toChunkedByteBuffer
           })
           if (putSucceeded) {
             diskBytes.dispose()

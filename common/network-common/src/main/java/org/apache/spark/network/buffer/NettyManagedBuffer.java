@@ -24,6 +24,7 @@ import java.nio.ByteBuffer;
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.CompositeByteBuf;
 
 /**
  * A {@link ManagedBuffer} backed by a Netty {@link ByteBuf}.
@@ -41,8 +42,15 @@ public class NettyManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public ByteBuffer nioByteBuffer() throws IOException {
-    return buf.nioBuffer();
+  public ChunkedByteBuffer nioByteBuffer() throws IOException {
+    if (buf instanceof CompositeByteBuf) {
+      CompositeByteBuf compositeByteBuf = (CompositeByteBuf) buf;
+      ByteBuffer[] buffers = compositeByteBuf.nioBuffers(compositeByteBuf.readerIndex(),
+          compositeByteBuf.readableBytes());
+      return new ChunkedByteBuffer(buffers);
+    } else {
+      return new ChunkedByteBuffer(buf.nioBuffer());
+    }
   }
 
   @Override

@@ -18,10 +18,13 @@
 package org.apache.spark.network.protocol;
 
 import com.google.common.base.Objects;
+import com.sun.corba.se.impl.ior.ByteBuffer;
 import io.netty.buffer.ByteBuf;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
+import org.apache.spark.network.buffer.NioManagedBuffer;
 
 /**
  * Response to {@link ChunkFetchRequest} when a chunk exists and has been successfully fetched.
