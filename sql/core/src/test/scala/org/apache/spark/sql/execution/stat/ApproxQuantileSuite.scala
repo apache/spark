@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.stat
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.stat.StatFunctions.QuantileSummaries
-
+import org.apache.spark.sql.catalyst.util.QuantileSummaries
 
 class ApproxQuantileSuite extends SparkFunSuite {
 
