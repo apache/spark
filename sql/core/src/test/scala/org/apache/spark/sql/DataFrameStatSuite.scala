@@ -152,6 +152,28 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("tabulation of single variable, with and without weights") {
+
+    val obs1 = ("1", "M", 10, "P", 2d)
+    val obs2 = ("2", "M", 12, "S", 4d)
+    val obs3 = ("3", "M", 13, "B", 1d)
+    val obs4 = ("4", "F", 11, "P", 1d)
+    val obs5 = ("5", "F", 13, "M", 3d)
+    val df = Seq(obs1, obs2, obs3, obs4, obs5).toDF("id", "gender", "age", "educ", "w")
+
+    val tabWithoutWeights = df.stat.tab("gender")
+    tabWithoutWeights.select("Frequency").collect().map(_.getDouble(0)) should
+      contain theSameElementsInOrderAs Seq(2d, 3d)
+    tabWithoutWeights.select("Proportion").collect().map(_.getDouble(0)) should
+      contain theSameElementsInOrderAs Seq(0.4, 0.6)
+
+    val tabWithWeights = df.stat.tab("gender", "w")
+    tabWithWeights.select("Frequency").collect().map(_.getDouble(0)) should
+      contain theSameElementsInOrderAs Seq(4d*5/11, 7d*5/11)
+    tabWithWeights.select("Proportion").collect().map(_.getDouble(0)) should
+      contain theSameElementsInOrderAs Seq(4d/11, 7d/11)
+  }
+
   test("crosstab") {
     val rng = new Random()
     val data = Seq.tabulate(25)(i => (rng.nextInt(5), rng.nextInt(10)))

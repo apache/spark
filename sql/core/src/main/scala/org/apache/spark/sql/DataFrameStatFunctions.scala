@@ -180,6 +180,45 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
+    * One-way table of frequencies
+    *
+    * @param col the name of the column over which to tabulate frequencies
+    * @param maybeWeightCol the name of the column with the weights
+    * @param frequencyColumnName the name to give the column with the frequencies
+    * @param proportionColumnName the name to give the column with the proportions
+    * @return a dataframe with the tabulation
+    */
+  def tab(col: String,
+          maybeWeightCol: Option[String] = None,
+          frequencyColumnName: String = "Frequency",
+          proportionColumnName: String = "Proportion"): DataFrame =
+    StatFunctions.tabulate(df, col, maybeWeightCol, frequencyColumnName, proportionColumnName)
+
+  /**
+    * One-way table of frequencies
+    *
+    * @param col the name of the column over which to tabulate frequencies
+    * @param weightCol the name of the column with the weights
+    * @param frequencyColumnName the name to give the column with the frequencies
+    * @param proportionColumnName the name to give the column with the proportions
+    * @return a dataframe with the tabulation
+    */
+  def tab(col: String,
+          weightCol: String,
+          frequencyColumnName: String,
+          proportionColumnName: String): DataFrame =
+    tab(col, Some(weightCol), frequencyColumnName, proportionColumnName)
+
+  /**
+    * One-way table of frequencies
+    *
+    * @param col the name of the column over which to tabulate frequencies
+    * @param weightCol the name of the column with the weights
+    * @return a dataframe with the tabulation
+    */
+  def tab(col: String, weightCol: String): DataFrame = tab(col, Some(weightCol))
+
+  /**
    * Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
    * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].

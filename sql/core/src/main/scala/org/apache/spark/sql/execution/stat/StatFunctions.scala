@@ -55,7 +55,6 @@ object StatFunctions extends Logging {
    * @param relativeError The relative target precision to achieve (>= 0).
    *   If set to zero, the exact quantiles are computed, which could be very expensive.
    *   Note that values greater than 1 are accepted but give the same result as 1.
-   *
    * @return for each column, returns the requested approximations
    */
   def multipleApproxQuantiles(
@@ -130,6 +129,7 @@ object StatFunctions extends Logging {
      * Returns a summary with the given observation inserted into the summary.
      * This method may either modify in place the current summary (and return the same summary,
      * modified in place), or it may create a new summary from scratch it necessary.
+     *
      * @param x the new observation to insert into the summary
      */
     def insert(x: Double): QuantileSummaries = {
@@ -298,6 +298,7 @@ object StatFunctions extends Logging {
 
     /**
      * Statistics from the Greenwald-Khanna paper.
+     *
      * @param value the sampled value
      * @param g the minimum rank jump from the previous value's minimum rank
      * @param delta the maximum span of the rank.
@@ -404,6 +405,7 @@ object StatFunctions extends Logging {
 
   /**
    * Calculate the covariance of two numerical columns of a DataFrame.
+   *
    * @param df The DataFrame
    * @param cols the column names
    * @return the covariance of the two columns.
@@ -411,6 +413,45 @@ object StatFunctions extends Logging {
   def calculateCov(df: DataFrame, cols: Seq[String]): Double = {
     val counts = collectStatisticalData(df, cols, "covariance")
     counts.cov
+  }
+
+  /**
+    * Calculate the covariance of two numerical columns of a DataFrame.
+    *
+    * @param df The DataFrame
+    * @param col1 the name of the column over which to tabulate the values
+    * @param maybeWeightCol the column with the weights
+    * @param frequencyColumnName the name of the column created with the frequency tabulation
+    * @param proportionColumnName the name of the column created with the percent tabulation
+    * @return a dataframe with the tabulation.
+  */
+  private[sql] def tabulate(
+     df: DataFrame,
+     col1: String,
+     maybeWeightCol: Option[String],
+     frequencyColumnName: String,
+     proportionColumnName: String): DataFrame = {
+
+    import df.sqlContext.implicits._
+
+    val createdWeightColName = "__weight__"
+    val (dfWithWeightColumn, weightCol) = maybeWeightCol
+      .fold( (df.withColumn(createdWeightColName, lit(1d)), createdWeightColName) )( weightCol =>
+        (df, weightCol)
+      )
+
+    dfWithWeightColumn.agg(sum(weightCol), count(weightCol))
+    .map{ row => (row.getDouble(0), row.getLong(1)) }
+    .collect().headOption
+    .fold(df) { case (sumOfWeights, numberOfObservations) =>
+
+      dfWithWeightColumn.groupBy(col1).agg(count(col1), sum(weightCol) as weightCol)
+        .withColumn(frequencyColumnName, col(weightCol) * numberOfObservations / sumOfWeights)
+        .withColumn(proportionColumnName, col(frequencyColumnName) / numberOfObservations)
+        .drop(weightCol)
+
+    }
+
   }
 
   /** Generate a table of frequencies for the elements of two columns. */
