@@ -977,8 +977,7 @@ private[spark] class BlockManager(
           // [SPARK-16550] Erase the typed classTag when using default serialization, since
           // NettyBlockRpcServer crashes when deserializing repl-defined classes.
           // TODO(ekl) remove this once the classloader issue on the remote end is fixed.
-          val remoteClassTag = classTag
-          if (!serializerManager.canUseKryo(classTag)) {
+          val remoteClassTag = if (!serializerManager.canUseKryo(classTag)) {
             scala.reflect.classTag[Any]
           } else {
             classTag
