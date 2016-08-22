@@ -205,6 +205,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   test("range") {
     checkSQL("select * from range(100)", "range")
+    checkSQL("select * from range(1, 100, 20, 10)", "range_with_splits")
   }
 
   test("in") {
