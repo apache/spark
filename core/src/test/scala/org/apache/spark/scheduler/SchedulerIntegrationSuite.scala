@@ -31,6 +31,7 @@ import org.scalatest.Assertions.AssertionsHelper
 
 import org.apache.spark._
 import org.apache.spark.TaskState._
+import org.apache.spark.internal.config.BLACKLIST_ENABLED
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
@@ -642,7 +643,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
       val duration = Duration(1, SECONDS)
       awaitJobTermination(jobFuture, duration)
-      failure.getMessage.contains("test task failure")
+      assert(failure.getMessage.contains("test task failure"))
     }
     assertDataStructuresEmpty(noFailure = false)
   }
@@ -651,6 +652,6 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
   def testNoBlacklist(name: String)(body: => Unit): Unit = {
     // in these simple tests, we only have one executor, so it doens't make sense to turn on the
     // blacklist.  Just an artifact of this simple test-framework still kinda acting like local-mode
-    testScheduler(name, extraConfs = Seq("spark.scheduler.blacklist.enabled" -> "false"))(body)
+    testScheduler(name, extraConfs = Seq(BLACKLIST_ENABLED.key -> "false"))(body)
   }
 }

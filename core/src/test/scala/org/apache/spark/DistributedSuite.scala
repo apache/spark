@@ -292,7 +292,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
     DistributedSuite.amMaster = true
     val conf = new SparkConf().setAppName("test").setMaster(clusterUrl)
-      .set("spark.scheduler.blacklist.enabled", "false")
+      .set(BLACKLIST_ENABLED, false)
     sc = new SparkContext(conf)
     for (i <- 1 to 3) {
       val data = sc.parallelize(Seq(true, true), 2)
