@@ -212,7 +212,7 @@ hadoop_version_name <- function(hadoopVersion) {
 # adapt to Spark context
 spark_cache_path <- function() {
   if (.Platform$OS.type == "windows") {
-    winAppPath <- Sys.getenv("%LOCALAPPDATA%", unset = NA)
+    winAppPath <- Sys.getenv("LOCALAPPDATA", unset = NA)
     if (is.na(winAppPath)) {
       msg <- paste("%LOCALAPPDATA% not found.",
                    "Please define the environment variable",
