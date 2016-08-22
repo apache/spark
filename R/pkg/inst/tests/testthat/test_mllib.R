@@ -95,6 +95,10 @@ test_that("spark.glm summary", {
   expect_equal(stats$df.residual, rStats$df.residual)
   expect_equal(stats$aic, rStats$aic)
 
+  out <- capture.output(print(stats))
+  expect_match(out[2], "Deviance Residuals:")
+  expect_true(any(grepl("AIC: 59.22", out)))
+
   # binomial family
   df <- suppressWarnings(createDataFrame(iris))
   training <- df[df$Species %in% c("versicolor", "virginica"), ]
@@ -409,7 +413,7 @@ test_that("spark.naiveBayes", {
 
   # Test e1071::naiveBayes
   if (requireNamespace("e1071", quietly = TRUE)) {
-    expect_that(m <- e1071::naiveBayes(Survived ~ ., data = t1), not(throws_error()))
+    expect_error(m <- e1071::naiveBayes(Survived ~ ., data = t1), NA)
     expect_equal(as.character(predict(m, t1[1, ])), "Yes")
   }
 })
@@ -487,7 +491,7 @@ test_that("spark.isotonicRegression", {
                         weightCol = "weight")
   # only allow one variable on the right hand side of the formula
   expect_error(model2 <- spark.isoreg(df, ~., isotonic = FALSE))
-  result <- summary(model, df)
+  result <- summary(model)
   expect_equal(result$predictions, list(7, 5, 4, 4, 1))
 
   # Test model prediction
@@ -503,7 +507,7 @@ test_that("spark.isotonicRegression", {
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)
   model2 <- read.ml(modelPath)
-  expect_equal(result, summary(model2, df))
+  expect_equal(result, summary(model2))
 
   unlink(modelPath)
 })

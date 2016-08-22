@@ -5,6 +5,8 @@ Version: 2.0.0
 Date: 2016-07-07
 Author: The Apache Software Foundation
 Maintainer: Shivaram Venkataraman <shivaram@cs.berkeley.edu>
+            Xiangrui Meng <meng@databricks.com>
+            Felix Cheung <felixcheung_m@hotmail.com>
 Depends:
     R (>= 3.0),
     methods
