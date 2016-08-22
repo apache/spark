@@ -274,7 +274,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
     Seq((251, "val_251"), (86, "val_86"), (165, "val_165"), (330, "val_330"), (165, "val_165"))
       .toDF("key", "value")
-      .createOrReplaceTempView("src")
+      .createOrReplaceTempView("duplicateRowData")
 
     session.sql(
       """

@@ -17,11 +17,13 @@ FROM (
   SELECT a.c1 AS c1, a.c2 AS c2, b.c3 AS c3, b.c4 AS c4
   FROM
   (
-    SELECT src1.key AS c1, src1.value AS c2 FROM src src1 WHERE src1.key > 100 and src1.key < 300
+    SELECT src1.key AS c1, src1.value AS c2
+    FROM duplicateRowData src1 WHERE src1.key > 100 and src1.key < 300
   ) a
   LEFT OUTER JOIN
   (
-    SELECT src2.key AS c3, src2.value AS c4 FROM src src2 WHERE src2.key > 200 and src2.key < 400
+    SELECT src2.key AS c3, src2.value AS c4
+    FROM duplicateRowData src2 WHERE src2.key > 200 and src2.key < 400
   ) b
   ON (a.c1 = b.c3)
 ) c;
@@ -32,11 +34,13 @@ FROM (
   SELECT a.c1 AS c1, a.c2 AS c2, b.c3 AS c3, b.c4 AS c4
   FROM
   (
-    SELECT src1.key AS c1, src1.value AS c2 FROM src src1 WHERE src1.key > 100 and src1.key < 300
+    SELECT src1.key AS c1, src1.value AS c2
+    FROM duplicateRowData src1 WHERE src1.key > 100 and src1.key < 300
   ) a
   RIGHT OUTER JOIN
   (
-    SELECT src2.key AS c3, src2.value AS c4 FROM src src2 WHERE src2.key > 200 and src2.key < 400
+    SELECT src2.key AS c3, src2.value AS c4
+    FROM duplicateRowData src2 WHERE src2.key > 200 and src2.key < 400
   ) b
   ON (a.c1 = b.c3)
 ) c;
@@ -47,11 +51,13 @@ FROM (
  SELECT a.c1 AS c1, a.c2 AS c2, b.c3 AS c3, b.c4 AS c4
  FROM
  (
-   SELECT src1.key AS c1, src1.value AS c2 FROM src src1 WHERE src1.key > 100 and src1.key < 300
+   SELECT src1.key AS c1, src1.value AS c2
+   FROM duplicateRowData src1 WHERE src1.key > 100 and src1.key < 300
  ) a
  FULL OUTER JOIN
  (
-   SELECT src2.key AS c3, src2.value AS c4 FROM src src2 WHERE src2.key > 200 and src2.key < 400
+   SELECT src2.key AS c3, src2.value AS c4
+   FROM duplicateRowData src2 WHERE src2.key > 200 and src2.key < 400
  ) b
  ON (a.c1 = b.c3)
 ) c;
@@ -62,16 +68,19 @@ FROM (
   SELECT a.c1 AS c1, a.c2 AS c2, b.c3 AS c3, b.c4 AS c4, c.c5 AS c5, c.c6 AS c6
   FROM
   (
-    SELECT src1.key AS c1, src1.value AS c2 FROM src src1 WHERE src1.key > 10 and src1.key < 150
+    SELECT src1.key AS c1, src1.value AS c2
+    FROM duplicateRowData src1 WHERE src1.key > 10 and src1.key < 150
   ) a
   FULL OUTER JOIN
   (
-    SELECT src2.key AS c3, src2.value AS c4 FROM src src2 WHERE src2.key > 150 and src2.key < 300
+    SELECT src2.key AS c3, src2.value AS c4
+    FROM duplicateRowData src2 WHERE src2.key > 150 and src2.key < 300
   ) b
   ON (a.c1 = b.c3)
   LEFT OUTER JOIN
   (
-    SELECT src3.key AS c5, src3.value AS c6 FROM src src3 WHERE src3.key > 200 and src3.key < 400
+    SELECT src3.key AS c5, src3.value AS c6
+    FROM duplicateRowData src3 WHERE src3.key > 200 and src3.key < 400
   ) c
   ON (a.c1 = c.c5)
 ) c;
@@ -82,11 +91,13 @@ FROM (
  SELECT a.c1 AS c1, a.c2 AS c2, b.c3 AS c3, b.c4 AS c4
  FROM
  (
-   SELECT src1.key AS c1, src1.value AS c2 FROM src src1 WHERE src1.key > 100 and src1.key < 300
+   SELECT src1.key AS c1, src1.value AS c2
+   FROM duplicateRowData src1 WHERE src1.key > 100 and src1.key < 300
  ) a
  LEFT OUTER JOIN
  (
-   SELECT src2.key AS c3, src2.value AS c4 FROM src src2 WHERE src2.key > 200 and src2.key < 400
+   SELECT src2.key AS c3, src2.value AS c4
+   FROM duplicateRowData src2 WHERE src2.key > 200 and src2.key < 400
  ) b
  ON (a.c1 = b.c3)
 ) c
@@ -96,7 +107,8 @@ where c.c3 IS NULL AND c.c1 IS NOT NULL;
 SELECT a.key, a.value, b.key, b.value
 FROM
   (
-    SELECT src1.key as key, count(src1.value) AS value FROM src src1 group by src1.key
+    SELECT src1.key as key, count(src1.value) AS value
+    FROM duplicateRowData src1 group by src1.key
   ) a
   FULL OUTER JOIN
   (
@@ -109,7 +121,8 @@ ON (a.key = b.key);
 SELECT a.key, a.value, b.key, b.value1, b.value2
 FROM
   (
-    SELECT src1.key as key, count(src1.value) AS value FROM src src1 group by src1.key
+    SELECT src1.key as key, count(src1.value) AS value
+    FROM duplicateRowData src1 group by src1.key
   ) a
   FULL OUTER JOIN
   (
@@ -122,144 +135,163 @@ ON (a.key = b.key);
 -- inner join + right-outer join #1
 SELECT a.k1,a.v1,a.k2,a.v2,a.k3,a.v3
 FROM (
-  SELECT src1.key as k1, src1.value as v1, src2.key as k2, src2.value as v2 , src3.key as k3, src3.value as v3
-  FROM src src1 JOIN src src2 ON (src1.key = src2.key AND src1.key < 200)
-    RIGHT OUTER JOIN src src3 ON (src1.key = src3.key AND src3.key < 300)
+  SELECT src1.key as k1, src1.value as v1, src2.key as k2, src2.value as v2 , src3.key as k3,
+    src3.value as v3
+  FROM duplicateRowData src1 JOIN duplicateRowData src2 ON (src1.key = src2.key AND src1.key < 200)
+    RIGHT OUTER JOIN duplicateRowData src3 ON (src1.key = src3.key AND src3.key < 300)
   SORT BY k1,v1,k2,v2,k3,v3
 )a;
 
 -- inner join + right-outer join #2
 SELECT a.k1,a.v1,a.k2,a.v2,a.k3,a.v3
 FROM (
-  SELECT src1.key as k1, src1.value as v1, src2.key as k2, src2.value as v2 , src3.key as k3, src3.value as v3
-  FROM src src1 JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key < 100)
-    RIGHT OUTER JOIN src src3 ON (src1.key = src3.key AND src3.key < 300)
+  SELECT src1.key as k1, src1.value as v1, src2.key as k2, src2.value as v2 , src3.key as k3,
+    src3.value as v3
+  FROM duplicateRowData src1
+    JOIN duplicateRowData src2
+      ON (src1.key = src2.key AND src1.key < 200 AND src2.key < 100)
+    RIGHT OUTER JOIN duplicateRowData src3
+      ON (src1.key = src3.key AND src3.key < 300)
   SORT BY k1,v1,k2,v2,k3,v3
 )a;
 
 -- left outer join + right outer join
 SELECT *
 FROM
-  src src1
-  LEFT OUTER JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
-  RIGHT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
+  duplicateRowData src1
+  LEFT OUTER JOIN duplicateRowData src2
+    ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
+  RIGHT OUTER JOIN duplicateRowData src3
+    ON (src2.key = src3.key AND src3.key < 200)
 SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
 -- left outer + right outer
-SELECT * FROM src src1
- LEFT OUTER JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
- RIGHT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
+SELECT * FROM duplicateRowData src1
+ LEFT OUTER JOIN duplicateRowData src2
+   ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
+ RIGHT OUTER JOIN duplicateRowData src3
+   ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
 -- right outer + right outer
-SELECT * FROM src src1
- RIGHT OUTER JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
- RIGHT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
+SELECT * FROM duplicateRowData src1
+ RIGHT OUTER JOIN duplicateRowData src2
+   ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
+ RIGHT OUTER JOIN duplicateRowData src3
+   ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
 -- left outer + left outer
-SELECT * FROM src src1
- LEFT OUTER JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
- LEFT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
+SELECT * FROM duplicateRowData src1
+ LEFT OUTER JOIN duplicateRowData src2
+   ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
+ LEFT OUTER JOIN duplicateRowData src3
+   ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
 -- right outer + left outer
-SELECT * FROM src src1
- RIGHT OUTER JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
- LEFT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
+SELECT * FROM duplicateRowData src1
+ RIGHT OUTER JOIN duplicateRowData src2
+   ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
+ LEFT OUTER JOIN duplicateRowData src3
+   ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
 -- inner + left outer
-SELECT * FROM src src1
- JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
- LEFT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
+SELECT * FROM duplicateRowData src1
+ JOIN duplicateRowData src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
+ LEFT OUTER JOIN duplicateRowData src3 ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
 -- inner + right outer
-SELECT * FROM src src1
- JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
- RIGHT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
+SELECT * FROM duplicateRowData src1
+ JOIN duplicateRowData src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
+ RIGHT OUTER JOIN duplicateRowData src3 ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
 -- left + inner outer
-SELECT * FROM src src1
- LEFT OUTER JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
- JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
+SELECT * FROM duplicateRowData src1
+ LEFT OUTER JOIN duplicateRowData src2
+   ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
+ JOIN duplicateRowData src3
+   ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
 -- right + inner join
-SELECT * FROM src src1
- RIGHT OUTER JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
- JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
+SELECT * FROM duplicateRowData src1
+ RIGHT OUTER JOIN duplicateRowData src2
+   ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
+ JOIN duplicateRowData src3
+   ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
 -- left outer join with sorted by nested table expression
 FROM
-(SELECT src.* FROM src sort by key) x
+(SELECT duplicateRowData.* FROM duplicateRowData sort by key) x
 LEFT OUTER JOIN
-(SELECT src.* FROM src sort by value) Y
+(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Y
 ON (x.key = Y.key)
 select Y.key,Y.value;
 
 -- right outer join with sorted by nested table expression
 FROM
-(SELECT src.* FROM src sort by key) x
+(SELECT duplicateRowData.* FROM duplicateRowData sort by key) x
 RIGHT OUTER JOIN
-(SELECT src.* FROM src sort by value) Y
+(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Y
 ON (x.key = Y.key)
 select Y.key,Y.value;
 
 -- inner + left outer with sorted by nested table expression
 FROM
-(SELECT src.* FROM src sort by key) x
+(SELECT duplicateRowData.* FROM duplicateRowData sort by key) x
 JOIN
-(SELECT src.* FROM src sort by value) Y
+(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Y
 ON (x.key = Y.key)
 LEFT OUTER JOIN
-(SELECT src.* FROM src sort by value) Z
+(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Z
 ON (x.key = Z.key)
 select Y.key,Y.value;
 
 -- left + left outer with sorted by nested table expression
 FROM
-(SELECT src.* FROM src sort by key) x
+(SELECT duplicateRowData.* FROM duplicateRowData sort by key) x
 LEFT OUTER JOIN
-(SELECT src.* FROM src sort by value) Y
+(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Y
 ON (x.key = Y.key)
 LEFT OUTER JOIN
-(SELECT src.* FROM src sort by value) Z
+(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Z
 ON (x.key = Z.key)
 select Y.key,Y.value;
 
 -- left + right outer with sorted by nested table expression
 FROM
-(SELECT src.* FROM src sort by key) x
+(SELECT duplicateRowData.* FROM duplicateRowData sort by key) x
 LEFT OUTER JOIN
-(SELECT src.* FROM src sort by value) Y
+(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Y
 ON (x.key = Y.key)
 RIGHT OUTER JOIN
-(SELECT src.* FROM src sort by value) Z
+(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Z
 ON (x.key = Z.key)
 select Y.key,Y.value;
 
 -- right + right outer with sorted by nested table expression
 FROM
-(SELECT src.* FROM src sort by key) x
+(SELECT duplicateRowData.* FROM duplicateRowData sort by key) x
 RIGHT OUTER JOIN
-(SELECT src.* FROM src sort by value) Y
+(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Y
 ON (x.key = Y.key)
 RIGHT OUTER JOIN
-(SELECT src.* FROM src sort by value) Z
+(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Z
 ON (x.key = Z.key)
 select Y.key,Y.value;
 
 -- right outer + inner with sorted by nested table expression
 FROM
-(SELECT src.* FROM src sort by key) x
+(SELECT duplicateRowData.* FROM duplicateRowData sort by key) x
 RIGHT OUTER JOIN
-(SELECT src.* FROM src sort by value) Y
+(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Y
 ON (x.key = Y.key)
 JOIN
-(SELECT src.* FROM src sort by value) Z
+(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Z
 ON (x.key = Z.key)
 select Y.key,Y.value;
