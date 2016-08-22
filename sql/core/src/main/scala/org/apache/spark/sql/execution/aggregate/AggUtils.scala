@@ -19,21 +19,29 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution.aggregate.{Aggregate => AggregateExec}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateStoreSaveExec}
 
 /**
+ * A pattern that finds aggregate operators to support partial aggregations.
+ */
+object ExtractPartialAggregate {
+
+  def unapply(plan: SparkPlan): Option[Distribution] = plan match {
+    case agg: AggregateExec
+        if agg.aggregateExpressions.map(_.aggregateFunction).forall(_.supportsPartial) =>
+      Some(agg.requiredChildDistribution.head)
+    case _ =>
+      None
+  }
+}
+
+/**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
 object AggUtils {
-
-  private[execution] def supportPartialAggregate(operator: SparkPlan): Boolean = operator match {
-    case agg: AggregateExec =>
-      agg.aggregateExpressions.map(_.aggregateFunction).forall(_.supportsPartial)
-    case _ =>
-      false
-  }
 
   private def createPartialAggregateExec(
       groupingExpressions: Seq[NamedExpression],
