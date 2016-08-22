@@ -600,6 +600,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         Row(1) :: Nil)
      }
    }
+
   test("SPARK-16161: Correlated subqueries with various levels of correlation.") {
     withTempView("t1", "t2", "t3", "t4") {
       Seq((1, 1), (2, 2), (3, 3)).toDF("c1", "c2").createOrReplaceTempView("t1")

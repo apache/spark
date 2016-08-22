@@ -915,27 +915,21 @@ class Analyzer(
     private def resolveOuterReferences(
         plan: LogicalPlan,
         outers: Seq[LogicalPlan]): LogicalPlan = {
-      var throwError = false
       plan transformDown {
         case q: LogicalPlan if q.childrenResolved && !q.resolved =>
           q transformExpressions {
             case u @ UnresolvedAttribute(nameParts) =>
               withPosition(u) {
-                try {
-                  val outer = outers.iterator
-                  var expr = Option.empty[NamedExpression]
-                  while (expr.isEmpty && outer.hasNext) {
-                    expr = outer.next().resolve(nameParts, resolver)
-                  }
-                  expr match {
-                    case Some(outerAttr) => OuterReference(outerAttr)
-                    case None =>
-                      throwError = true
-                      failAnalysis(s"Correlated column in subquery cannot be resolved:" +
-                        s" ${nameParts.mkString(".")}")
-                  }
-                } catch {
-                  case _: AnalysisException if !throwError => u
+                val outer = outers.iterator
+                var expr = Option.empty[NamedExpression]
+                while (expr.isEmpty && outer.hasNext) {
+                  expr = outer.next().resolve(nameParts, resolver)
+                }
+                expr match {
+                  case Some(outerAttr) => OuterReference(outerAttr)
+                  case None =>
+                    failAnalysis(s"Correlated column in subquery cannot be resolved:" +
+                      s" ${nameParts.mkString(".")}")
                 }
               }
           }
