@@ -208,6 +208,9 @@ class SQLBuilder private (
     case p: LocalRelation =>
       p.toSQL(newSubqueryName())
 
+    case p: Range =>
+      p.toSQL()
+
     case OneRowRelation =>
       ""
 
