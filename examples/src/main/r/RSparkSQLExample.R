@@ -18,7 +18,7 @@
 library(SparkR)
 
 # $example on:init_session$
-sparkR.session(appName = "MyApp", sparkConfig = list(spark.some.config.option = "some-value"))
+sparkR.session(appName = "R Spark SQL basic example", sparkConfig = list(spark.some.config.option = "some-value"))
 # $example off:init_session$
 
 

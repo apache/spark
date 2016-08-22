@@ -726,9 +726,9 @@ However, note that all of the operations applicable on static DataFrames/Dataset
 
     + Full outer join with a streaming Dataset is not supported
 
-    + Left outer join with a streaming Dataset on the left is not supported
+    + Left outer join with a streaming Dataset on the right is not supported
 
-    + Right outer join with a streaming Dataset on the right is not supported
+    + Right outer join with a streaming Dataset on the left is not supported
 
 - Any kind of joins between two streaming Datasets are not yet supported.
 
