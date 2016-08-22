@@ -10,6 +10,7 @@ Depends:
     methods
 Suggests:
     testthat,
+    e1071,
     survival
 Description: The SparkR package provides an R frontend for Apache Spark.
 License: Apache License (== 2.0)
