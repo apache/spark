@@ -865,10 +865,9 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("header", true)
         .load(path.getAbsolutePath)
         .schema
-      val expectedFields = Seq("a0", "a1", "c", "a3", "b4", "b5").map {
-        name => StructField(name, StringType, true)
-      }
-      assert(actualSchema == StructType(expectedFields))
+      val fields = Seq("a0", "a1", "c", "a3", "b4", "b5").map(StructField(_, StringType, true))
+      val expectedSchema = StructType(fields)
+      assert(actualSchema == expectedSchema)
     }
   }
 }
