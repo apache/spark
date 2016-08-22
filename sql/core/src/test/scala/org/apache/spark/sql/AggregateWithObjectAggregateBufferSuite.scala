@@ -128,9 +128,9 @@ object AggregateWithObjectAggregateBufferSuite {
       new MaxValue((buffer.getInt(offset)))
     }
 
-    override def serializeObjectAggregationBufferInPlace(buffer: MutableRow): Unit = {
+    override def serializeObjectAggregateBuffer(buffer: InternalRow, target: MutableRow): Unit = {
       val bufferMax = buffer.get(mutableAggBufferOffset, null).asInstanceOf[MaxValue]
-      buffer(mutableAggBufferOffset) = bufferMax.value
+      target(mutableAggBufferOffset) = bufferMax.value
     }
 
     override def eval(buffer: InternalRow): Any = {

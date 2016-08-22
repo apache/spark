@@ -109,7 +109,8 @@ class SortBasedAggregationIterator(
   // stored in aggregation buffer to serializable format.
   private def serializeObjectAggregationBuffer(aggregationBuffer: MutableRow): Unit = {
     aggFunctionsWithObjectAggregationBuffer.foreach { agg =>
-      agg.serializeObjectAggregationBufferInPlace(sortBasedAggregationBuffer)
+      // Serializes and **in-place** replaces the object stored in sortBasedAggregationBuffer
+      agg.serializeObjectAggregateBuffer(sortBasedAggregationBuffer, sortBasedAggregationBuffer)
     }
   }
 
