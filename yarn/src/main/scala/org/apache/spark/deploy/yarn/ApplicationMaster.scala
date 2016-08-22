@@ -198,7 +198,7 @@ private[spark] class ApplicationMaster(
         System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
       }
 
-      val context = s"${System.getProperty("spark.app.name")} running on Spark"
+      val context = s"Spark_${System.getProperty("spark.app.name")}"
       Utils.setCallerContext(context)
 
       logInfo("ApplicationAttemptId: " + appAttemptId)

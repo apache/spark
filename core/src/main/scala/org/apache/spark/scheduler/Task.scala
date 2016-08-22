@@ -82,8 +82,8 @@ private[spark] abstract class Task[T](
     taskThread = Thread.currentThread()
 
     val callerContext =
-      s"JobId_${jobId.getOrElse("0")}_StageID_${stageId}_stageAttemptId_${stageAttemptId}" +
-        s"_taskID_${taskAttemptId}_attemptNumber_${attemptNumber} on Spark"
+      s"Spark_JobId_${jobId.getOrElse("0")}_StageID_${stageId}_stageAttemptId_${stageAttemptId}" +
+        s"_taskID_${taskAttemptId}_attemptNumber_${attemptNumber}"
     Utils.setCallerContext(callerContext)
 
     if (_killed) {
