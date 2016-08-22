@@ -15,14 +15,26 @@
  * limitations under the License.
  */
 
-import sbt._
-import sbt.Keys._
+package org.apache.spark.sql.catalyst.util
+
+import java.util.TimeZone
 
 /**
- * This plugin project is there because we use our custom fork of sbt-pom-reader plugin. This is
- * a plugin project so that this gets compiled first and is available on the classpath for SBT build.
+ * Helper functions for testing date and time functionality.
  */
-object SparkPluginDef extends Build {
-  lazy val root = Project("plugins", file(".")) dependsOn(sbtPomReader)
-  lazy val sbtPomReader = uri("https://github.com/ScrapCodes/sbt-pom-reader.git#ignore_artifact_id")
+object DateTimeTestUtils {
+
+  val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)
+
+  def withDefaultTimeZone[T](newDefaultTimeZone: TimeZone)(block: => T): T = {
+    val originalDefaultTimeZone = TimeZone.getDefault
+    try {
+      DateTimeUtils.resetThreadLocals()
+      TimeZone.setDefault(newDefaultTimeZone)
+      block
+    } finally {
+      TimeZone.setDefault(originalDefaultTimeZone)
+      DateTimeUtils.resetThreadLocals()
+    }
+  }
 }

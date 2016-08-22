@@ -459,7 +459,9 @@ private[spark] class Executor(
             // JobProgressListener will hold an reference of it during
             // onExecutorMetricsUpdate(), then JobProgressListener can not see
             // the changes of metrics any more, so make a deep copy of it
-            val copiedMetrics = Utils.deserialize[TaskMetrics](Utils.serialize(metrics))
+            val copiedMetrics = Utils.deserialize[TaskMetrics](
+              Utils.serialize(metrics),
+              Utils.getContextOrSparkClassLoader)
             tasksMetrics += ((taskRunner.taskId, copiedMetrics))
           } else {
             // It will be copied by serialization

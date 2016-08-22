@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.NonSerializable
 
 import java.io.{IOException, NotSerializableException, ObjectInputStream}
@@ -236,6 +237,17 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
       assert(FailureSuiteState.tasksRun === 4)
     }
     FailureSuiteState.clear()
+  }
+
+  test("failure because cached RDD files are missing") {
+    sc = new SparkContext("local[1,2]", "test")
+    val rdd = sc.parallelize(1 to 2, 2).persist(StorageLevel.DISK_ONLY)
+    rdd.count()
+    // Directly delete all files from the disk store, triggering failures when reading cached data:
+    SparkEnv.get.blockManager.diskBlockManager.getAllFiles().foreach(_.delete())
+    // Each task should fail once due to missing cached data, but then should succeed on its second
+    // attempt because the missing cache locations will be purged and the blocks will be recomputed.
+    rdd.count()
   }
 
   // TODO: Need to add tests with shuffle fetch failures.

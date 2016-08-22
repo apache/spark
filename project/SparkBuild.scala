@@ -569,8 +569,7 @@ object Unidoc {
       ignoreUndocumentedPackages((unidocAllSources in (JavaUnidoc, unidoc)).value)
     },
 
-    // Javadoc options: create a window title, and group key packages on index page
-    javacOptions in doc := Seq(
+    javacOptions in (JavaUnidoc, unidoc) := Seq(
       "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
       "-public",
       "-group", "Core Java API", packageList("api.java", "api.java.function"),
