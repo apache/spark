@@ -142,9 +142,20 @@ case class Scanner(projectList: Seq[NamedExpression], filters: Seq[Expression], 
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
-  override def validConstraints: Set[Expression] =
+  override def validConstraints: Set[Expression] = {
+    val aliasMap = projectList.collect {
+      case a: Alias => (a.child, a.toAttribute)
+    }.toMap
+    val replaced = filters.map {
+      case filter: Expression =>
+        filter.transformUp {
+          case a : Attribute =>
+            aliasMap.getOrElse(a, a)
+        }
+    }
     child.constraints
-      .union(filters.filterNot(SubqueryExpression.hasCorrelatedSubquery).toSet)
+      .union(replaced.filterNot(SubqueryExpression.hasCorrelatedSubquery).toSet)
+  }
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {

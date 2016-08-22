@@ -159,7 +159,7 @@ class PlannerSuite extends SharedSQLContext {
 
       withTempView("testPushed") {
         val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
-        assert(exp.toString.contains("PushedFilters: [IsNotNull(key), EqualTo(key,15)]"))
+        assert(exp.toString.contains("PushedFilters: [EqualTo(key,15), IsNotNull(key)]"))
       }
     }
   }

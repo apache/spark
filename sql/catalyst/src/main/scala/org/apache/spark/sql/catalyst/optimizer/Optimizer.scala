@@ -559,10 +559,18 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
       }
 
     case scanner @ Scanner(projectList, filters, child) =>
+      val aliasMap = AttributeMap(projectList.collect {
+        case a: Alias => (a.toAttribute, a.child)
+      })
+
       val newFilters = scanner.constraints --
         (child.constraints ++ filters)
+
       if (newFilters.nonEmpty) {
-        Scanner(projectList, newFilters.toSeq ++ filters, child)
+        val replaced = replaceAlias(newFilters.reduce(And), aliasMap)
+        Scanner(projectList,
+          filters ++ (splitConjunctivePredicates(replaced).toSet -- filters),
+          child)
       } else {
         scanner
       }
