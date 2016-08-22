@@ -33,7 +33,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
 
 @Since("2.1.0")
-object ChiSqSelectorType extends Enumeration {
+private[spark] object ChiSqSelectorType extends Enumeration {
   type SelectorType = Value
   val KBest, Percentile, Fpr = Value
 }
@@ -180,7 +180,7 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
 @Since("2.1.0")
 class ChiSqSelector @Since("2.1.0") () extends Serializable {
   private var numTopFeatures: Int = 50
-  private var percentile: Double = 10.0
+  private var percentile: Double = 0.1
   private var alpha: Double = 0.05
   private var selectorType = ChiSqSelectorType.KBest
 
@@ -199,7 +199,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
 
   @Since("2.1.0")
   def setPercentile(value: Double): this.type = {
-    require(value <= 100 && value >= 0, "Percentile should be larger than 0 and less than 100")
+    require(value <= 1 && value >= 0, "Percentile should be larger than 0 and less than 100")
     percentile = value
     selectorType = ChiSqSelectorType.Percentile
     this
@@ -227,20 +227,21 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
    */
   @Since("1.3.0")
   def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
-    var indices = selectorType match {
-      case ChiSqSelectorType.KBest => Statistics.chiSqTest(data)
+    val chiSqTestResult = Statistics.chiSqTest(data)
+    val features = selectorType match {
+      case ChiSqSelectorType.KBest => chiSqTestResult
         .zipWithIndex.sortBy { case (res, _) => -res.statistic }
         .take(numTopFeatures)
-        .map { case (_, indices) => indices }
-      case ChiSqSelectorType.Percentile => Statistics.chiSqTest(data)
+      case ChiSqSelectorType.Percentile => chiSqTestResult
         .zipWithIndex.sortBy { case (res, _) => -res.statistic }
-        .take((data.count() * percentile / 100).toInt)
-        .map { case (_, indices) => indices }
-      case ChiSqSelectorType.Fpr => Statistics.chiSqTest(data)
+        .take((chiSqTestResult.length * percentile).toInt)
+      case ChiSqSelectorType.Fpr => chiSqTestResult
         .zipWithIndex.filter{ case (res, _) => res.pValue < alpha }
-        .map { case (_, indices) => indices }
-      case _ => throw new IllegalStateException("Unknown ChiSqSelector Type")
+      case errorType =>
+        throw new IllegalStateException("Unknown ChiSqSelector Type: $errorType")
     }
+    val indices = features.map { case (_, indices) => indices }
     new ChiSqSelectorModel(indices)
   }
 }
+

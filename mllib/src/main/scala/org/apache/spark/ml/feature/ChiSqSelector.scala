@@ -72,6 +72,13 @@ private[feature] trait ChiSqSelectorParams extends Params
   /** @group getParam */
   def getAlpha: Double = $(alpha)
 
+  /**
+   * The ChiSqSelector supports KBest, Percentile, Fpr selection,
+   * which is the same as ChiSqSelectorType defined in MLLIB.
+   * when call setNumTopFeatures, the selectorType is set to KBest
+   * when call setPercentile, the selectorType is set to Percentile
+   * when call setFpr, the selectorType is set to Fpr
+   */
   final val selectorType = new Param[String](this, "selectorType",
     "ChiSqSelector Type: KBest, Percentile, Fpr")
   setDefault(selectorType -> ChiSqSelectorType.KBest.toString)
@@ -130,14 +137,15 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
         case Row(label: Double, features: Vector) =>
           OldLabeledPoint(label, OldVectors.fromML(features))
       }
-    var model = $(selectorType) match {
-      case "KBest" =>
+    var model = ChiSqSelectorType.withName($(selectorType)) match {
+      case ChiSqSelectorType.KBest =>
         new feature.ChiSqSelector().setNumTopFeatures($(numTopFeatures)).fit(input)
-      case "Percentile" =>
+      case ChiSqSelectorType.Percentile =>
         new feature.ChiSqSelector().setPercentile($(percentile)).fit(input)
-      case "Fpr" =>
+      case ChiSqSelectorType.Fpr =>
         new feature.ChiSqSelector().setAlpha($(alpha)).fit(input)
-      case _ => throw new IllegalStateException("Unknown ChiSqSelector Type.")
+      case errorType =>
+        throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
     }
     copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
   }
