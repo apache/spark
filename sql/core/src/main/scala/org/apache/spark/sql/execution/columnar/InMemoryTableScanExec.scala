@@ -139,9 +139,9 @@ case class InMemoryTableScanExec(
         .map(_._1)
         .distinct
       if (validPartitions.isEmpty) {
-        new EmptyRDD[CachedBatch](sparkContext)
+        sparkContext.emptyRDD[CachedBatch]
       } else {
-        new PartitionPruningRDD[CachedBatch](relation.cachedColumnBuffers,
+        PartitionPruningRDD.create[CachedBatch](relation.cachedColumnBuffers,
           index => {
             if (validPartitions.contains(index)) {
               true
