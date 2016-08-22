@@ -76,7 +76,7 @@ struct<key:int,value:string>
 
 -- !query 4
 SELECT src1.key, src2.value
-FROM srcpart src1 JOIN duplicateRowData src2 ON (src1.key = src2.key)
+FROM partitionedData src1 JOIN duplicateRowData src2 ON (src1.key = src2.key)
 WHERE src1.ds = '2008-04-08' and src1.hr = '12'
 -- !query 4 schema
 struct<key:int,value:string>
@@ -162,9 +162,10 @@ struct<c1:int,c4:string>
 
 
 -- !query 9
-FROM duplicateRowData JOIN srcpart
-ON duplicateRowData.key = srcpart.key AND srcpart.ds = '2008-04-08' and duplicateRowData.key > 200
-SELECT duplicateRowData.key, srcpart.value
+FROM duplicateRowData JOIN partitionedData
+ON duplicateRowData.key = partitionedData.key AND partitionedData.ds = '2008-04-08'
+  AND duplicateRowData.key > 200
+SELECT duplicateRowData.key, partitionedData.value
 -- !query 9 schema
 struct<key:int,value:string>
 -- !query 9 output
@@ -226,7 +227,7 @@ struct<key:int,value:string,key:int,value:string>
 
 -- !query 13
 SELECT src1.key, src2.value
-FROM srcpart src1 JOIN duplicateRowData src2 ON (src1.key = src2.key)
+FROM partitionedData src1 JOIN duplicateRowData src2 ON (src1.key = src2.key)
 where (src1.ds = '2008-04-08' or src1.ds = '2008-04-09' )and (src1.hr = '12' or src1.hr = '11')
 -- !query 13 schema
 struct<key:int,value:string>

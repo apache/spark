@@ -243,19 +243,21 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private def loadTestData(session: SparkSession): Unit = {
     import session.implicits._
 
-    // All column values are unique
+    // A data set containing non-duplicate column values
     (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
       .createOrReplaceTempView("uniqueRowData")
 
-    // Each column have duplicate values, but all the rows are unique
+    // A data set containing duplicate values for each column (but all the rows are unique)
     Seq((1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2))
       .toDF("a", "b")
       .createOrReplaceTempView("duplicateColumnValueData")
 
+    // A data set containing a complex data type: ARRAY
     ((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
       .toDF("arraycol", "nestedarraycol")
       .createOrReplaceTempView("arraydata")
 
+    // A data set containing a complex data type: MAP
     (Tuple1(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
       Tuple1(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
       Tuple1(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::
@@ -264,18 +266,22 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       .toDF("mapcol")
       .createOrReplaceTempView("mapdata")
 
+    // A data set containing uppercase column names and column values
     Seq((1, "a"), (2, "b"), (3, "c"), (4, "d"))
       .toDF("n", "l")
       .createOrReplaceTempView("lowerCaseData")
 
+    // A data set containing uppercase column names and column values
     Seq((1, "A"), (2, "B"), (3, "C"), (4, "D"), (5, "E"), (6, "F"))
       .toDF("N", "L")
       .createOrReplaceTempView("upperCaseData")
 
+    // A data set containing duplicate rows
     Seq((251, "val_251"), (86, "val_86"), (165, "val_165"), (330, "val_330"), (165, "val_165"))
       .toDF("key", "value")
       .createOrReplaceTempView("duplicateRowData")
 
+    // A data set containing null
     session.sql(
       """
         |CREATE OR REPLACE TEMPORARY VIEW nullData AS SELECT * FROM VALUES
@@ -289,6 +295,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         |as nullData(key, value)
       """.stripMargin)
 
+    // A data set with logical partition columns ("ds" and "hr")
     Seq((251, "val_251", "2008-04-08", "11"),
       (251, "val_251", "2008-04-09", "11"),
       (251, "val_251", "2008-04-08", "12"),
@@ -310,7 +317,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       (165, "val_165", "2008-04-08", "12"),
       (165, "val_165", "2008-04-09", "12"))
       .toDF("key", "value", "ds", "hr")
-      .createOrReplaceTempView("srcpart")
+      .createOrReplaceTempView("partitionedData")
   }
 
   private val originalTimeZone = TimeZone.getDefault

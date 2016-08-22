@@ -25,7 +25,7 @@ FROM duplicateRowData src1 JOIN duplicateRowData src2 ON (src1.key = src2.key)
 
 -- inner join + join condition + filter
 SELECT src1.key, src2.value
-FROM srcpart src1 JOIN duplicateRowData src2 ON (src1.key = src2.key)
+FROM partitionedData src1 JOIN duplicateRowData src2 ON (src1.key = src2.key)
 WHERE src1.ds = '2008-04-08' and src1.hr = '12';
 
 -- equi inner join + table.star expansion in nested table expression
@@ -67,9 +67,10 @@ FROM
   ON src1.c1 + src2.c3 = src3.c5 AND src3.c5 < 400;
 
 -- join two different tables
-FROM duplicateRowData JOIN srcpart
-ON duplicateRowData.key = srcpart.key AND srcpart.ds = '2008-04-08' and duplicateRowData.key > 200
-SELECT duplicateRowData.key, srcpart.value;
+FROM duplicateRowData JOIN partitionedData
+ON duplicateRowData.key = partitionedData.key AND partitionedData.ds = '2008-04-08'
+  AND duplicateRowData.key > 200
+SELECT duplicateRowData.key, partitionedData.value;
 
 -- join + sort by
 SELECT a.k1, a.v1, a.k2, a.v2
@@ -93,7 +94,7 @@ FROM duplicateRowData src1 JOIN duplicateRowData src2 ON (src1.key = src2.key);
 
 -- join + disjunctive conditions
 SELECT src1.key, src2.value
-FROM srcpart src1 JOIN duplicateRowData src2 ON (src1.key = src2.key)
+FROM partitionedData src1 JOIN duplicateRowData src2 ON (src1.key = src2.key)
 where (src1.ds = '2008-04-08' or src1.ds = '2008-04-09' )and (src1.hr = '12' or src1.hr = '11');
 
 -- nested join
