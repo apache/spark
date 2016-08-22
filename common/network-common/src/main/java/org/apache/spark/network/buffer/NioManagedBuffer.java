@@ -29,25 +29,29 @@ import io.netty.buffer.Unpooled;
  * A {@link ManagedBuffer} backed by {@link ByteBuffer}.
  */
 public class NioManagedBuffer extends ManagedBuffer {
-  private final ByteBuffer buf;
+  private final ChunkedByteBuffer buf;
+
+  public NioManagedBuffer(ChunkedByteBuffer buf) {
+    this.buf = buf;
+  }
 
   public NioManagedBuffer(ByteBuffer buf) {
-    this.buf = buf;
+    this(new ChunkedByteBuffer(buf));
   }
 
   @Override
   public long size() {
-    return buf.remaining();
+    return buf.size();
   }
 
   @Override
-  public ByteBuffer nioByteBuffer() throws IOException {
-    return buf.duplicate();
+  public ChunkedByteBuffer nioByteBuffer() throws IOException {
+    return new ChunkedByteBuffer(buf.getChunks());
   }
 
   @Override
   public InputStream createInputStream() throws IOException {
-    return new ByteBufInputStream(Unpooled.wrappedBuffer(buf));
+    return buf.toInputStream();
   }
 
   @Override
@@ -62,7 +66,7 @@ public class NioManagedBuffer extends ManagedBuffer {
 
   @Override
   public Object convertToNetty() throws IOException {
-    return Unpooled.wrappedBuffer(buf);
+    return buf.toNetty();
   }
 
   @Override

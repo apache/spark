@@ -21,6 +21,7 @@ import java.nio.ByteBuffer;
 
 import io.netty.channel.Channel;
 import io.netty.channel.local.LocalChannel;
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -103,7 +104,7 @@ public class TransportResponseHandlerSuite {
 
     ByteBuffer resp = ByteBuffer.allocate(10);
     handler.handle(new RpcResponse(12345, new NioManagedBuffer(resp)));
-    verify(callback, times(1)).onSuccess(eq(ByteBuffer.allocate(10)));
+    verify(callback, times(1)).onSuccess(eq(ChunkedByteBuffer.wrap(ByteBuffer.allocate(10))));
     assertEquals(0, handler.numOutstandingRequests());
   }
 

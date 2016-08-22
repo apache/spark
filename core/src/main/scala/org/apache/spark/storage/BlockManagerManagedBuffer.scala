@@ -17,8 +17,9 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.network.buffer.{ManagedBuffer, NettyManagedBuffer}
-import org.apache.spark.util.io.ChunkedByteBuffer
+import java.io.InputStream
+
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, ManagedBuffer, NettyManagedBuffer}
 
 /**
  * This [[ManagedBuffer]] wraps a [[ChunkedByteBuffer]] retrieved from the [[BlockManager]]
@@ -29,19 +30,34 @@ import org.apache.spark.util.io.ChunkedByteBuffer
  * to the network layer's notion of retain / release counts.
  */
 private[storage] class BlockManagerManagedBuffer(
-    blockInfoManager: BlockInfoManager,
-    blockId: BlockId,
-    chunkedBuffer: ChunkedByteBuffer) extends NettyManagedBuffer(chunkedBuffer.toNetty) {
+  blockInfoManager: BlockInfoManager,
+  blockId: BlockId,
+  managedBuffer: ManagedBuffer) extends ManagedBuffer {
 
-  override def retain(): ManagedBuffer = {
-    super.retain()
+  def this(blockInfoManager: BlockInfoManager,
+    blockId: BlockId,
+    chunkedBuffer: ChunkedByteBuffer) {
+    this(blockInfoManager, blockId, new NettyManagedBuffer(chunkedBuffer.toNetty))
+  }
+
+  def size: Long = managedBuffer.size()
+
+  def nioByteBuffer: ChunkedByteBuffer = managedBuffer.nioByteBuffer()
+
+  def createInputStream: InputStream = managedBuffer.createInputStream()
+
+  def retain: ManagedBuffer = {
+    managedBuffer.retain()
     val locked = blockInfoManager.lockForReading(blockId, blocking = false)
     assert(locked.isDefined)
     this
   }
 
-  override def release(): ManagedBuffer = {
+  def release: ManagedBuffer = {
     blockInfoManager.unlock(blockId)
-    super.release()
+    managedBuffer.release()
+    this
   }
+
+  def convertToNetty: AnyRef = managedBuffer.convertToNetty()
 }

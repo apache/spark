@@ -25,6 +25,7 @@ import javax.security.sasl.SaslException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,10 +76,11 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         SaslMessage msg = new SaslMessage(appId, payload);
         ByteBuf buf = Unpooled.buffer(msg.encodedLength() + (int) msg.body().size());
         msg.encode(buf);
-        buf.writeBytes(msg.body().nioByteBuffer());
+        buf.writeBytes(msg.body().nioByteBuffer().toArray());
 
-        ByteBuffer response = client.sendRpcSync(buf.nioBuffer(), conf.saslRTTimeoutMs());
-        payload = saslClient.response(JavaUtils.bufferToArray(response));
+        ChunkedByteBuffer response = client.sendRpcSync(ChunkedByteBuffer.wrap(buf.nioBuffer()),
+            conf.saslRTTimeoutMs());
+        payload = saslClient.response(response.toArray());
       }
 
       client.setClientId(appId);

@@ -31,6 +31,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.memory.MemoryManager
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.{FakeTask, Task}
 import org.apache.spark.serializer.JavaSerializer
@@ -93,7 +94,7 @@ class ExecutorSuite extends SparkFunSuite {
             // save the returned `taskState` and `testFailedReason` into `executorSuiteHelper`
             val taskState = invocationOnMock.getArguments()(1).asInstanceOf[TaskState]
             executorSuiteHelper.taskState = taskState
-            val taskEndReason = invocationOnMock.getArguments()(2).asInstanceOf[ByteBuffer]
+            val taskEndReason = invocationOnMock.getArguments()(2).asInstanceOf[ChunkedByteBuffer]
             executorSuiteHelper.testFailedReason
               = serializer.newInstance().deserialize(taskEndReason)
             // let the main test thread check `taskState` and `testFailedReason`

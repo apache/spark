@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.network._
-import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, ManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap, TransportClientFactory}
 import org.apache.spark.network.sasl.{SaslClientBootstrap, SaslServerBootstrap}
 import org.apache.spark.network.server._
@@ -128,14 +128,15 @@ private[spark] class NettyBlockTransferService(
 
     // StorageLevel and ClassTag are serialized as bytes using our JavaSerializer.
     // Everything else is encoded using our binary protocol.
-    val metadata = JavaUtils.bufferToArray(serializer.newInstance().serialize((level, classTag)))
+    val metadata = serializer.newInstance().serialize((level, classTag)).toArray
 
     // Convert or copy nio buffer into array in order to serialize it.
-    val array = JavaUtils.bufferToArray(blockData.nioByteBuffer())
+    val array = blockData.nioByteBuffer().toArray
 
-    client.sendRpc(new UploadBlock(appId, execId, blockId.toString, metadata, array).toByteBuffer,
+    client.sendRpc(new UploadBlock(appId, execId, blockId.toString, metadata, array).
+      toChunkedByteBuffer,
       new RpcResponseCallback {
-        override def onSuccess(response: ByteBuffer): Unit = {
+        override def onSuccess(response: ChunkedByteBuffer): Unit = {
           logTrace(s"Successfully uploaded block $blockId")
           result.success((): Unit)
         }

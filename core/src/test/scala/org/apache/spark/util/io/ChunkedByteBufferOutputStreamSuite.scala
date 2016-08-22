@@ -17,22 +17,21 @@
 
 package org.apache.spark.util.io
 
-import java.nio.ByteBuffer
-
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.network.buffer.ChunkedByteBufferOutputStream
 
 
 class ChunkedByteBufferOutputStreamSuite extends SparkFunSuite {
 
   test("empty output") {
-    val o = new ChunkedByteBufferOutputStream(1024, ByteBuffer.allocate)
+    val o = new ChunkedByteBufferOutputStream(1024)
     assert(o.toChunkedByteBuffer.size === 0)
   }
 
   test("write a single byte") {
-    val o = new ChunkedByteBufferOutputStream(1024, ByteBuffer.allocate)
+    val o = new ChunkedByteBufferOutputStream(1024)
     o.write(10)
     val chunkedByteBuffer = o.toChunkedByteBuffer
     assert(chunkedByteBuffer.getChunks().length === 1)
@@ -40,7 +39,7 @@ class ChunkedByteBufferOutputStreamSuite extends SparkFunSuite {
   }
 
   test("write a single near boundary") {
-    val o = new ChunkedByteBufferOutputStream(10, ByteBuffer.allocate)
+    val o = new ChunkedByteBufferOutputStream(10)
     o.write(new Array[Byte](9))
     o.write(99)
     val chunkedByteBuffer = o.toChunkedByteBuffer
@@ -49,7 +48,7 @@ class ChunkedByteBufferOutputStreamSuite extends SparkFunSuite {
   }
 
   test("write a single at boundary") {
-    val o = new ChunkedByteBufferOutputStream(10, ByteBuffer.allocate)
+    val o = new ChunkedByteBufferOutputStream(10)
     o.write(new Array[Byte](10))
     o.write(99)
     val arrays = o.toChunkedByteBuffer.getChunks().map(_.array())
@@ -61,7 +60,7 @@ class ChunkedByteBufferOutputStreamSuite extends SparkFunSuite {
   test("single chunk output") {
     val ref = new Array[Byte](8)
     Random.nextBytes(ref)
-    val o = new ChunkedByteBufferOutputStream(10, ByteBuffer.allocate)
+    val o = new ChunkedByteBufferOutputStream(10)
     o.write(ref)
     val arrays = o.toChunkedByteBuffer.getChunks().map(_.array())
     assert(arrays.length === 1)
@@ -72,7 +71,7 @@ class ChunkedByteBufferOutputStreamSuite extends SparkFunSuite {
   test("single chunk output at boundary size") {
     val ref = new Array[Byte](10)
     Random.nextBytes(ref)
-    val o = new ChunkedByteBufferOutputStream(10, ByteBuffer.allocate)
+    val o = new ChunkedByteBufferOutputStream(10)
     o.write(ref)
     val arrays = o.toChunkedByteBuffer.getChunks().map(_.array())
     assert(arrays.length === 1)
@@ -83,7 +82,7 @@ class ChunkedByteBufferOutputStreamSuite extends SparkFunSuite {
   test("multiple chunk output") {
     val ref = new Array[Byte](26)
     Random.nextBytes(ref)
-    val o = new ChunkedByteBufferOutputStream(10, ByteBuffer.allocate)
+    val o = new ChunkedByteBufferOutputStream(10)
     o.write(ref)
     val arrays = o.toChunkedByteBuffer.getChunks().map(_.array())
     assert(arrays.length === 3)
@@ -99,7 +98,7 @@ class ChunkedByteBufferOutputStreamSuite extends SparkFunSuite {
   test("multiple chunk output at boundary size") {
     val ref = new Array[Byte](30)
     Random.nextBytes(ref)
-    val o = new ChunkedByteBufferOutputStream(10, ByteBuffer.allocate)
+    val o = new ChunkedByteBufferOutputStream(10)
     o.write(ref)
     val arrays = o.toChunkedByteBuffer.getChunks().map(_.array())
     assert(arrays.length === 3)
