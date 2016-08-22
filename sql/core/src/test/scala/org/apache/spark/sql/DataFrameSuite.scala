@@ -1571,6 +1571,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(dfa.drop($"dfa.id"), Row(2) :: Row(3) :: Nil)
     checkAnswer(dfa.drop($"id"), Row(2) :: Row(3) :: Nil)
 
+    checkAnswer(dfa.join(dfb, dfa("id") === dfb("id")).drop("dfa.id"),
+      Row(2, 1, 0) :: Row(2, 1, 1) :: Nil)
+    checkAnswer(dfa.join(dfb, dfa("id") === dfb("id")).drop("dfa.id", "dfb.id"),
+      Row(2, 0) :: Row(2, 1) :: Nil)
+
     checkAnswer(dfb.dropDuplicates(Array("dfb.id")), Row(1, 0) :: Nil)
     checkAnswer(dfb.dropDuplicates(Array("dfb.b")), Row(1, 0) :: Row(1, 1) :: Nil)
     checkAnswer(dfb.dropDuplicates(Array("id")), Row(1, 0) :: Nil)
