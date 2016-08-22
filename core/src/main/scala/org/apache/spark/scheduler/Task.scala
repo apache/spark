@@ -55,7 +55,9 @@ private[spark] abstract class Task[T](
     // The default value is only used in tests.
     val metrics: TaskMetrics = TaskMetrics.registered,
     @transient var localProperties: Properties = new Properties,
-    val jobId: Option[Int] = None) extends Serializable {
+    val jobId: Option[Int] = None,
+    val appId: Option[String] = None,
+    val appAttemptId: Option[String] = None) extends Serializable {
 
   /**
    * Called by [[org.apache.spark.executor.Executor]] to run this task.
@@ -82,7 +84,8 @@ private[spark] abstract class Task[T](
     taskThread = Thread.currentThread()
 
     val callerContext =
-      s"Spark_JobId_${jobId.getOrElse("0")}_StageID_${stageId}_stageAttemptId_${stageAttemptId}" +
+      s"Spark_AppId_${appId.getOrElse("")}_AppAttemptId_${appAttemptId.getOrElse("None")}" +
+        s"_JobId_${jobId.getOrElse("0")}_StageID_${stageId}_stageAttemptId_${stageAttemptId}" +
         s"_taskID_${taskAttemptId}_attemptNumber_${attemptNumber}"
     Utils.setCallerContext(callerContext)
 
