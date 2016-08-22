@@ -18,8 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -206,67 +204,10 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("ALTER VIEW: alter a temporary view when a permanent VIEW with same name exists") {
-    verifyAlterViewWithIdenticalName(isTempAlteredView = true)
-  }
-
-  test("ALTER VIEW: alter a persistent view when a temp VIEW with same name exists") {
-    verifyAlterViewWithIdenticalName(isTempAlteredView = false)
-  }
-
-  private def verifyAlterViewWithIdenticalName (isTempAlteredView: Boolean) = {
-    withView("testView", "default.testView") {
-      val catalog = spark.sessionState.catalog
-      val oldViewQuery = "SELECT id FROM jt"
-      val newViewQuery = "SELECT  id, id1 FROM jt"
-      sql(s"CREATE VIEW default.testView AS $oldViewQuery")
-      sql(s"CREATE TEMPORARY VIEW testView AS $oldViewQuery")
-      if (isTempAlteredView) {
-        // When the database is not specified, we will first try to alter the temporary view
-        sql(s"ALTER VIEW testView AS $newViewQuery")
-      } else {
-        // When the database is specified, we will try to alter the permanent view, no matter
-        // whether the temporary view with the same name exists or not.
-        sql(s"ALTER VIEW default.testView AS $newViewQuery")
-      }
-
-      val persistentView = catalog.getTableMetadata(
-        TableIdentifier(table = "testView", database = Some("default")))
-      assert(persistentView.tableType == CatalogTableType.VIEW)
-      val tempView = catalog.getTableMetadata(TableIdentifier("testView"))
-      assert(tempView.tableType == CatalogTableType.VIEW)
-      assert(tempView.viewOriginalText.isEmpty)
-
-      if (isTempAlteredView) {
-        // View Text of the persistent view default.testView is changed
-        assert(persistentView.viewOriginalText == Option(oldViewQuery))
-        // temp view testView is changed
-        checkAnswer(
-          sql(newViewQuery),
-          sql("select * from testView"))
-      } else {
-        // View Text of the persistent view default.testView is changed
-        assert(persistentView.viewOriginalText == Option(newViewQuery))
-        // temp view testView is not changed
-        checkAnswer(
-          sql(oldViewQuery),
-          sql("select * from testView"))
-      }
-    }
-  }
-
-  test("CREATE VIEW: should allow CREATE permanent VIEW when a temp VIEW with same name exists") {
+  test("should allow CREATE permanent VIEW when a TEMPORARY VIEW with same name exists") {
     withView("testView", "default.testView") {
       sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
       sql("CREATE VIEW testView AS SELECT id FROM jt")
-
-      // Both temporary and permanent view have been successfully created.
-      val catalog = spark.sessionState.catalog
-      val persistentView = catalog.getTableMetadata(
-        TableIdentifier(table = "testView", database = Some("default")))
-      assert(persistentView.tableType == CatalogTableType.VIEW)
-      val tempView = catalog.getTableMetadata(TableIdentifier("testView"))
-      assert(tempView.tableType == CatalogTableType.VIEW)
     }
   }
 
