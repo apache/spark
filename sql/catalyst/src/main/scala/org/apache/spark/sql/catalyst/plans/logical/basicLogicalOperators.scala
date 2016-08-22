@@ -432,7 +432,7 @@ case class Range(
     start: Long,
     end: Long,
     step: Long,
-    numSlices: Int,
+    numSlices: Option[Int],
     output: Seq[Attribute])
   extends LeafNode with MultiInstanceRelation {
 
@@ -446,6 +446,14 @@ case class Range(
     } else {
       // the remainder has the same sign with range, could add 1 more
       (safeEnd - safeStart) / step + 1
+    }
+  }
+
+  def toSQL(): String = {
+    if (numSlices.isDefined) {
+      s"SELECT id AS `${output.head.name}` FROM range($start, $end, $step, ${numSlices.get})"
+    } else {
+      s"SELECT id AS `${output.head.name}` FROM range($start, $end, $step)"
     }
   }
 
