@@ -51,6 +51,7 @@ private[scheduler] class BlacklistTracker (
     conf: SparkConf,
     clock: Clock = new SystemClock()) extends Logging {
 
+  BlacklistTracker.validateBlacklistConfs(conf)
   private val MAX_FAILURES_PER_EXEC = conf.get(config.MAX_FAILURES_PER_EXEC)
   private val MAX_FAILED_EXEC_PER_NODE = conf.get(config.MAX_FAILED_EXEC_PER_NODE)
   val BLACKLIST_TIMEOUT_MILLIS = BlacklistTracker.getBlacklistTimeout(conf)
@@ -248,6 +249,65 @@ private[scheduler] object BlacklistTracker extends Logging {
         Utils.timeStringAsMs(DEFAULT_TIMEOUT)
       }
     }
+  }
+
+  /**
+   * Verify that blacklist configurations are consistent; if not, throw an exception.  Should only
+   * be called if blacklisting is enabled.
+   *
+   * The configuration for the blacklist is expected to adhere to a few invariants.  Default
+   * values follow these rules of course, but users may unwittingly change one configuration
+   * without making the corresponding adjustment elsewhere.  This ensures we fail-fast when
+   * there are such misconfigurations.
+   */
+  def validateBlacklistConfs(conf: SparkConf): Unit = {
+
+    def mustBePos(k: String, v: String): Unit = {
+      throw new IllegalArgumentException(s"$k was $v, but must be > 0.")
+    }
+
+    // undocumented escape hatch for validation -- just for tests that want to run in an "unsafe"
+    // configuration.
+    if (!conf.get("spark.blacklist.testing.skipValidation", "false").toBoolean) {
+
+      Seq(
+        config.MAX_TASK_ATTEMPTS_PER_EXECUTOR,
+        config.MAX_TASK_ATTEMPTS_PER_NODE,
+        config.MAX_FAILURES_PER_EXEC_STAGE,
+        config.MAX_FAILED_EXEC_PER_NODE_STAGE,
+        config.MAX_FAILURES_PER_EXEC,
+        config.MAX_FAILED_EXEC_PER_NODE
+      ).foreach { config =>
+        val v = conf.get(config)
+        if (v <= 0) {
+          mustBePos(config.key, v.toString)
+        }
+      }
+
+      val timeout = getBlacklistTimeout(conf)
+      if (timeout <= 0) {
+        // first, figure out where the timeout came from, to include the right conf in the message.
+        conf.get(config.BLACKLIST_TIMEOUT_CONF) match {
+          case Some(t) =>
+            mustBePos(config.BLACKLIST_TIMEOUT_CONF.key, timeout.toString)
+          case None =>
+            mustBePos(config.BLACKLIST_LEGACY_TIMEOUT_CONF.key, timeout.toString)
+        }
+      }
+
+      val maxTaskFailures = conf.getInt("spark.task.maxFailures", 4)
+      val maxNodeAttempts = conf.get(config.MAX_TASK_ATTEMPTS_PER_NODE)
+
+      if (maxTaskFailures <= maxNodeAttempts) {
+        throw new IllegalArgumentException(s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
+          s"( = ${maxNodeAttempts}) was <= spark.task.maxFailures " +
+          s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
+          s"Spark will not be robust to one failed disk.  Increase " +
+          s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} or spark.task.maxFailures, or disable " +
+          s"blacklisting with ${config.BLACKLIST_ENABLED.key}")
+      }
+    }
+
   }
 }
 

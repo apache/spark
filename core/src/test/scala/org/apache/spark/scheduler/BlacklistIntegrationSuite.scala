@@ -65,7 +65,10 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
       "spark.task.maxFailures" -> "4",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "5",
-      "spark.testing.nCoresPerExecutor" -> "10"
+      "spark.testing.nCoresPerExecutor" -> "10",
+      // Blacklisting will normally immediately complain that this config is invalid -- the point
+      // of this test is to expose that the configuration is unsafe, so skip the validation.
+      "spark.blacklist.testing.skipValidation" -> "true"
     )
   ) {
     // to reliably reproduce the failure, we have to use 1 task.  That way, we ensure this

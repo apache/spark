@@ -418,4 +418,46 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       assert(10 * 60 * 60 * 1000L == BlacklistTracker.getBlacklistTimeout(distConf))
     }
   }
+
+  test("check blacklist configuration invariants") {
+    val conf = new SparkConf().setMaster("yarn-cluster")
+    Seq(
+      (2, 2),
+      (2, 3),
+      (3, 3)
+    ).foreach { case (maxTaskFailures, maxNodeAttempts) =>
+      conf.set("spark.task.maxFailures", maxTaskFailures.toString)
+      conf.set(config.MAX_TASK_ATTEMPTS_PER_NODE.key, maxNodeAttempts.toString)
+      val excMsg = intercept[IllegalArgumentException] {
+        BlacklistTracker.validateBlacklistConfs(conf)
+      }.getMessage()
+      assert(excMsg.contains(s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
+        s"( = ${maxNodeAttempts}) was <= spark.task.maxFailures " +
+        s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
+        s"Spark will not be robust to one failed disk.  Increase " +
+        s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key } or spark.task.maxFailures, or disable " +
+        s"blacklisting with ${config.BLACKLIST_ENABLED.key}"))
+    }
+
+    conf.remove("spark.task.maxFailures")
+    conf.remove(config.MAX_TASK_ATTEMPTS_PER_NODE)
+
+
+    Seq(
+      config.MAX_TASK_ATTEMPTS_PER_EXECUTOR,
+      config.MAX_TASK_ATTEMPTS_PER_NODE,
+      config.MAX_FAILURES_PER_EXEC_STAGE,
+      config.MAX_FAILED_EXEC_PER_NODE_STAGE,
+      config.MAX_FAILURES_PER_EXEC,
+      config.MAX_FAILED_EXEC_PER_NODE,
+      config.BLACKLIST_TIMEOUT_CONF
+    ).foreach { config =>
+      conf.set(config.key, "0")
+      val excMsg = intercept[IllegalArgumentException] {
+        BlacklistTracker.validateBlacklistConfs(conf)
+      }.getMessage()
+      assert(excMsg.contains(s"${config.key} was 0, but must be > 0."))
+      conf.remove(config)
+    }
+  }
 }
