@@ -320,14 +320,15 @@ sparkRHive.init <- function(jsc = NULL) {
 #' For details on how to initialize and use SparkR, refer to SparkR programming guide at
 #' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
 #'
-#' @param master The Spark master URL
-#' @param appName Application name to register with cluster manager
-#' @param sparkHome Spark Home directory
-#' @param sparkConfig Named list of Spark configuration to set on worker nodes
-#' @param sparkJars Character vector of jar files to pass to the worker nodes
-#' @param sparkPackages Character vector of packages from spark-packages.org
-#' @param enableHiveSupport Enable support for Hive, fallback if not built with Hive support; once
+#' @param master the Spark master URL.
+#' @param appName application name to register with cluster manager.
+#' @param sparkHome Spark Home directory.
+#' @param sparkConfig named list of Spark configuration to set on worker nodes.
+#' @param sparkJars character vector of jar files to pass to the worker nodes.
+#' @param sparkPackages character vector of packages from spark-packages.org
+#' @param enableHiveSupport enable support for Hive, fallback if not built with Hive support; once
 #'        set, this cannot be turned off on an existing session
+#' @param ... named Spark properties passed to the method.
 #' @export
 #' @examples
 #'\dontrun{
@@ -413,9 +414,9 @@ sparkR.session <- function(
 #' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
 #' different value or cleared.
 #'
-#' @param groupid the ID to be assigned to job groups
-#' @param description description for the job group ID
-#' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation
+#' @param groupId the ID to be assigned to job groups.
+#' @param description description for the job group ID.
+#' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation.
 #' @rdname setJobGroup
 #' @name setJobGroup
 #' @examples

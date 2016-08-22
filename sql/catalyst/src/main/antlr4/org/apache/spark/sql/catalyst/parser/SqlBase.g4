@@ -433,6 +433,7 @@ relationPrimary
     | '(' queryNoWith ')' sample? (AS? strictIdentifier)?           #aliasedQuery
     | '(' relation ')' sample? (AS? strictIdentifier)?              #aliasedRelation
     | inlineTable                                                   #inlineTableDefault2
+    | identifier '(' (expression (',' expression)*)? ')'            #tableValuedFunction
     ;
 
 inlineTable
@@ -625,13 +626,13 @@ quotedIdentifier
     ;
 
 number
-    : DECIMAL_VALUE            #decimalLiteral
-    | SCIENTIFIC_DECIMAL_VALUE #scientificDecimalLiteral
-    | INTEGER_VALUE            #integerLiteral
-    | BIGINT_LITERAL           #bigIntLiteral
-    | SMALLINT_LITERAL         #smallIntLiteral
-    | TINYINT_LITERAL          #tinyIntLiteral
-    | DOUBLE_LITERAL           #doubleLiteral
+    : MINUS? DECIMAL_VALUE            #decimalLiteral
+    | MINUS? SCIENTIFIC_DECIMAL_VALUE #scientificDecimalLiteral
+    | MINUS? INTEGER_VALUE            #integerLiteral
+    | MINUS? BIGINT_LITERAL           #bigIntLiteral
+    | MINUS? SMALLINT_LITERAL         #smallIntLiteral
+    | MINUS? TINYINT_LITERAL          #tinyIntLiteral
+    | MINUS? DOUBLE_LITERAL           #doubleLiteral
     ;
 
 nonReserved
