@@ -619,6 +619,8 @@ object NullPropagation extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
+      case e @ WindowExpression(Cast(Literal(0L, _), _), _) =>
+        Cast(Literal(0L), e.dataType)
       case e @ AggregateExpression(Count(exprs), _, _, _) if !exprs.exists(nonNullLiteral) =>
         Cast(Literal(0L), e.dataType)
       case e @ IsNull(c) if !c.nullable => Literal.create(false, BooleanType)
@@ -1208,15 +1210,26 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         filter
       }
 
-    // two filters should be combine together by other rules
-    case filter @ Filter(_, _: Filter) => filter
-    // should not push predicates through sample, or will generate different results.
-    case filter @ Filter(_, _: Sample) => filter
-
-    case filter @ Filter(condition, u: UnaryNode) if u.expressions.forall(_.deterministic) =>
+    case filter @ Filter(condition, u: UnaryNode)
+        if canPushThrough(u) && u.expressions.forall(_.deterministic) =>
       pushDownPredicate(filter, u.child) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
+  }
+
+  private def canPushThrough(p: UnaryNode): Boolean = p match {
+    // Note that some operators (e.g. project, aggregate, union) are being handled separately
+    // (earlier in this rule).
+    case _: AppendColumns => true
+    case _: BroadcastHint => true
+    case _: Distinct => true
+    case _: Generate => true
+    case _: Pivot => true
+    case _: RedistributeData => true
+    case _: Repartition => true
+    case _: ScriptTransformation => true
+    case _: Sort => true
+    case _ => false
   }
 
   private def pushDownPredicate(

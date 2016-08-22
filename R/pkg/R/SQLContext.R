@@ -165,9 +165,9 @@ getDefaultSqlSource <- function() {
 #'
 #' Converts R data.frame or list into SparkDataFrame.
 #'
-#' @param data An RDD or list or data.frame
-#' @param schema a list of column names or named list (StructType), optional
-#' @return a SparkDataFrame
+#' @param data an RDD or list or data.frame.
+#' @param schema a list of column names or named list (StructType), optional.
+#' @return A SparkDataFrame.
 #' @rdname createDataFrame
 #' @export
 #' @examples
@@ -257,23 +257,25 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
 }
 
 createDataFrame <- function(x, ...) {
-  dispatchFunc("createDataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
+  dispatchFunc("createDataFrame(data, schema = NULL)", x, ...)
 }
 
+#' @param samplingRatio Currently not used.
 #' @rdname createDataFrame
 #' @aliases createDataFrame
 #' @export
 #' @method as.DataFrame default
 #' @note as.DataFrame since 1.6.0
 as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
-  createDataFrame(data, schema, samplingRatio)
+  createDataFrame(data, schema)
 }
 
+#' @param ... additional argument(s).
 #' @rdname createDataFrame
 #' @aliases as.DataFrame
 #' @export
-as.DataFrame <- function(x, ...) {
-  dispatchFunc("as.DataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
+as.DataFrame <- function(data, ...) {
+  dispatchFunc("as.DataFrame(data, schema = NULL)", data, ...)
 }
 
 #' toDF
@@ -398,7 +400,7 @@ read.orc <- function(path) {
 #'
 #' Loads a Parquet file, returning the result as a SparkDataFrame.
 #'
-#' @param path Path of file to read. A vector of multiple paths is allowed.
+#' @param path path of file to read. A vector of multiple paths is allowed.
 #' @return SparkDataFrame
 #' @rdname read.parquet
 #' @export
@@ -418,6 +420,7 @@ read.parquet <- function(x, ...) {
   dispatchFunc("read.parquet(...)", x, ...)
 }
 
+#' @param ... argument(s) passed to the method.
 #' @rdname read.parquet
 #' @name parquetFile
 #' @export
@@ -727,6 +730,7 @@ dropTempView <- function(viewName) {
 #' @param source The name of external data source
 #' @param schema The data schema defined in structType
 #' @param na.strings Default string value for NA when source is "csv"
+#' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.df
 #' @name read.df
@@ -791,10 +795,11 @@ loadDF <- function(x, ...) {
 #' If `source` is not specified, the default data source configured by
 #' "spark.sql.sources.default" will be used.
 #'
-#' @param tableName A name of the table
-#' @param path The path of files to load
-#' @param source the name of external data source
-#' @return SparkDataFrame
+#' @param tableName a name of the table.
+#' @param path the path of files to load.
+#' @param source the name of external data source.
+#' @param ... additional argument(s) passed to the method.
+#' @return A SparkDataFrame.
 #' @rdname createExternalTable
 #' @export
 #' @examples
@@ -840,6 +845,7 @@ createExternalTable <- function(x, ...) {
 #'                      clause expressions used to split the column `partitionColumn` evenly.
 #'                      This defaults to SparkContext.defaultParallelism when unset.
 #' @param predicates a list of conditions in the where clause; each one defines one partition
+#' @param ... additional JDBC database connection named propertie(s).
 #' @return SparkDataFrame
 #' @rdname read.jdbc
 #' @name read.jdbc

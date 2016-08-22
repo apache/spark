@@ -230,6 +230,17 @@ class PipelineTests(PySparkTestCase):
         self.assertEqual(5, transformer3.dataset_index)
         self.assertEqual(6, dataset.index)
 
+    def test_identity_pipeline(self):
+        dataset = MockDataset()
+
+        def doTransform(pipeline):
+            pipeline_model = pipeline.fit(dataset)
+            return pipeline_model.transform(dataset)
+        # check that empty pipeline did not perform any transformation
+        self.assertEqual(dataset.index, doTransform(Pipeline(stages=[])).index)
+        # check that failure to set stages param will raise KeyError for missing param
+        self.assertRaises(KeyError, lambda: doTransform(Pipeline()))
+
 
 class TestParams(HasMaxIter, HasInputCol, HasSeed):
     """
