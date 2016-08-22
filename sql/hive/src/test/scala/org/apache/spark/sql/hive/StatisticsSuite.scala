@@ -159,13 +159,27 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
 
     sql("DROP TABLE analyzeTable_part").collect()
 
-    // Try to analyze a temp table
+    // Try to analyze a temp table which is not analyzable.
     sql("""SELECT * FROM src""").createOrReplaceTempView("tempTable")
     intercept[AnalysisException] {
       sql("ANALYZE TABLE tempTable COMPUTE STATISTICS")
     }
     spark.sessionState.catalog.dropTable(
       TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
+
+    withTempPath { path =>
+      val dataPath = path.getCanonicalPath
+      spark.range(10).write.format("parquet").save(dataPath)
+      withView("view1") {
+        // Create a temporary view which is a [[LogicalRelation]] wrapping a datasource relation.
+        sql(s"CREATE TEMPORARY VIEW view1 USING parquet OPTIONS(path '$dataPath')")
+        val df = spark.sessionState.catalog.lookupRelation(TableIdentifier("view1"))
+        // Before ANALYZE TABLE, HadoopFsRelation calculates statistics from file sizes.
+        assert(queryTotalSize("view1") > 80)
+        sql("ANALYZE TABLE view1 COMPUTE STATISTICS")
+        assert(queryTotalSize("view1") == 80)
+      }
+    }
   }
 
   test("estimates the size of a test MetastoreRelation") {

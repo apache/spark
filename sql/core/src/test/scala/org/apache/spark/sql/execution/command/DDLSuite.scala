@@ -1658,6 +1658,44 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("Run analyze table command on temporary view which is analyzable") {
+    withTempPath { path =>
+      val dataPath = path.getCanonicalPath
+      spark.range(10).write.format("parquet").save(dataPath)
+      withView("view1") {
+        // Create a temporary view which is a [[LogicalRelation]] wrapping a datasource relation.
+        sql(s"CREATE TEMPORARY VIEW view1 USING parquet OPTIONS(path '$dataPath')")
+
+        val df = spark.sessionState.catalog.lookupRelation(TableIdentifier("view1"))
+
+        // Before ANALYZE TABLE, HadoopFsRelation calculates statistics from file sizes.
+        val sizeBefore =
+          spark.sessionState.catalog.lookupRelation(TableIdentifier("view1")).statistics.sizeInBytes
+        assert(sizeBefore > 80)
+
+        sql("ANALYZE TABLE view1 COMPUTE STATISTICS")
+
+        val sizeAfter =
+          spark.sessionState.catalog.lookupRelation(TableIdentifier("view1")).statistics.sizeInBytes
+        assert(sizeAfter == 80)
+      }
+    }
+  }
+
+  test("Run analyze table command on temporary view which is not analyzable") {
+    withTable("tab1") {
+      spark.range(10).write.saveAsTable("tab1")
+      withView("view1") {
+        // Create a temporary view which is represented as a query plan.
+        sql("CREATE TEMPORARY VIEW view1 (col1) AS SELECT * FROM tab1")
+        val df = spark.sessionState.catalog.lookupRelation(TableIdentifier("view1"))
+        intercept[AnalysisException] {
+          sql("ANALYZE TABLE view1 COMPUTE STATISTICS")
+        }
+      }
+    }
+  }
+
   test("create temporary view with mismatched schema") {
     withTable("tab1") {
       spark.range(10).write.saveAsTable("tab1")

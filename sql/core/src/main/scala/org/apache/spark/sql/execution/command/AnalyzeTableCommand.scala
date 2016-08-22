@@ -22,8 +22,9 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, SessionCatalog}
 
 
 /**
@@ -34,73 +35,88 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
  * in the Hive metastore.
  */
 case class AnalyzeTableCommand(tableName: String) extends RunnableCommand {
+  private def getTable(catalog: SessionCatalog, name: TableIdentifier): CatalogTable = {
+    try {
+      catalog.getTableMetadata(name)
+    } catch {
+      case _: NoSuchTableException =>
+        throw new AnalysisException(s"Target table in ANALYZE TABLE does not exist: $name")
+    }
+  }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
+    val catalogTable: CatalogTable = getTable(catalog, tableIdent)
     val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
+    val tableParameters = catalogTable.properties
+    val oldTotalSize = tableParameters.get("totalSize").map(_.toLong).getOrElse(0L)
 
-    relation match {
-      case relation: CatalogRelation =>
-        val catalogTable: CatalogTable = relation.catalogTable
-        // This method is mainly based on
-        // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
-        // in Hive 0.13 (except that we do not use fs.getContentSummary).
-        // TODO: Generalize statistics collection.
-        // TODO: Why fs.getContentSummary returns wrong size on Jenkins?
-        // Can we use fs.getContentSummary in future?
-        // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
-        // countFileSize to count the table size.
-        val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
+    val newTotalSize =
+      if (catalog.isAnalyzableTemporaryTable(tableIdent)) {
+        val rowCount = sparkSession.table(tableName).count()
+        val outputRowSize = relation.output.map(_.dataType.defaultSize).sum
+        rowCount * outputRowSize
+      } else {
+        relation match {
+          case relation: CatalogRelation =>
+            // This method is mainly based on
+            // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
+            // in Hive 0.13 (except that we do not use fs.getContentSummary).
+            // TODO: Generalize statistics collection.
+            // TODO: Why fs.getContentSummary returns wrong size on Jenkins?
+            // Can we use fs.getContentSummary in future?
+            // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
+            // countFileSize to count the table size.
+            val stagingDir =
+              sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
 
-        def calculateTableSize(fs: FileSystem, path: Path): Long = {
-          val fileStatus = fs.getFileStatus(path)
-          val size = if (fileStatus.isDirectory) {
-            fs.listStatus(path)
-              .map { status =>
-                if (!status.getPath.getName.startsWith(stagingDir)) {
-                  calculateTableSize(fs, status.getPath)
-                } else {
-                  0L
-                }
-              }.sum
-          } else {
-            fileStatus.getLen
-          }
+            def calculateTableSize(fs: FileSystem, path: Path): Long = {
+              val fileStatus = fs.getFileStatus(path)
+              val size = if (fileStatus.isDirectory) {
+                fs.listStatus(path)
+                  .map { status =>
+                    if (!status.getPath.getName.startsWith(stagingDir)) {
+                      calculateTableSize(fs, status.getPath)
+                    } else {
+                      0L
+                    }
+                  }.sum
+              } else {
+                fileStatus.getLen
+              }
 
-          size
-        }
-
-        val tableParameters = catalogTable.properties
-        val oldTotalSize = tableParameters.get("totalSize").map(_.toLong).getOrElse(0L)
-        val newTotalSize =
-          catalogTable.storage.locationUri.map { p =>
-            val path = new Path(p)
-            try {
-              val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
-              calculateTableSize(fs, path)
-            } catch {
-              case NonFatal(e) =>
-                logWarning(
-                  s"Failed to get the size of table ${catalogTable.identifier.table} in the " +
-                    s"database ${catalogTable.identifier.database} because of ${e.toString}", e)
-                0L
+              size
             }
-          }.getOrElse(0L)
 
-        // Update the Hive metastore if the total size of the table is different than the size
-        // recorded in the Hive metastore.
-        // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
-        if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          sessionState.catalog.alterTable(
-            catalogTable.copy(
-              properties = relation.catalogTable.properties +
-                (AnalyzeTableCommand.TOTAL_SIZE_FIELD -> newTotalSize.toString)))
+            catalogTable.storage.locationUri.map { p =>
+              val path = new Path(p)
+              try {
+                val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+                calculateTableSize(fs, path)
+              } catch {
+                case NonFatal(e) =>
+                  logWarning(
+                    s"Failed to get the size of table ${catalogTable.identifier.table} in the " +
+                      s"database ${catalogTable.identifier.database} because of ${e.toString}", e)
+                  0L
+              }
+            }.getOrElse(0L)
+
+          case otherRelation =>
+            throw new AnalysisException(s"ANALYZE TABLE is only supported for Hive tables, " +
+              s"but '${tableIdent.unquotedString}' is a ${otherRelation.nodeName}.")
         }
-
-      case otherRelation =>
-        throw new AnalysisException(s"ANALYZE TABLE is only supported for Hive tables, " +
-          s"but '${tableIdent.unquotedString}' is a ${otherRelation.nodeName}.")
+      }
+    // Update the table properties if the total size of the table is different than the size
+    // recorded in the catalog.
+    // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
+    if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
+      sessionState.catalog.alterTable(
+        catalogTable.copy(
+          properties = catalogTable.properties +
+            (AnalyzeTableCommand.TOTAL_SIZE_FIELD -> newTotalSize.toString)))
     }
     Seq.empty[Row]
   }
