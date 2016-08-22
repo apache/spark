@@ -154,7 +154,7 @@ private[shared] object SharedParamsCodeGen {
     } else {
       ""
     }
-    val groupParam = if (param.isExpertParam) {
+    val groupStr = if (param.isExpertParam) {
       Array("expertParam", "expertGetParam")
     } else {
       Array("param", "getParam")
@@ -173,11 +173,11 @@ private[shared] object SharedParamsCodeGen {
       |
       |  /**
       |   * Param for $doc.
-      |   * @group ${groupParam(0)}
+      |   * @group ${groupStr(0)}
       |   */
       |  final val $name: $Param = new $Param(this, "$name", "$doc"$isValid)
       |$setDefault
-      |  /** @group ${groupParam(1)} */
+      |  /** @group ${groupStr(1)} */
       |  $methodStr get$Name: $T = $$($name)
       |}
       |""".stripMargin
