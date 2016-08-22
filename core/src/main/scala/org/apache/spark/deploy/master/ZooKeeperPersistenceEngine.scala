@@ -28,6 +28,7 @@ import org.apache.zookeeper.CreateMode
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkCuratorUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.serializer.Serializer
 
 
@@ -51,7 +52,7 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
 
   override def read[T: ClassTag](prefix: String): Seq[T] = {
     zk.getChildren.forPath(WORKING_DIR).asScala
-      .filter(_.startsWith(prefix)).flatMap(deserializeFromFile[T])
+      .filter(_.startsWith(prefix)).flatMap(t => deserializeFromFile[T](t))
   }
 
   override def close() {
@@ -59,7 +60,7 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
   }
 
   private def serializeIntoFile(path: String, value: AnyRef) {
-    val serialized = serializer.newInstance().serialize(value)
+    val serialized = serializer.newInstance().serialize(value).toByteBuffer
     val bytes = new Array[Byte](serialized.remaining())
     serialized.get(bytes)
     zk.create().withMode(CreateMode.PERSISTENT).forPath(path, bytes)
@@ -68,7 +69,7 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
   private def deserializeFromFile[T](filename: String)(implicit m: ClassTag[T]): Option[T] = {
     val fileData = zk.getData().forPath(WORKING_DIR + "/" + filename)
     try {
-      Some(serializer.newInstance().deserialize[T](ByteBuffer.wrap(fileData)))
+      Some(serializer.newInstance().deserialize[T](ChunkedByteBuffer.wrap(fileData)))
     } catch {
       case e: Exception =>
         logWarning("Exception while reading persisted file, deleting", e)

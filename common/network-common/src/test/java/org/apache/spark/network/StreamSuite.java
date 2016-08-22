@@ -37,6 +37,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
@@ -118,7 +119,7 @@ public class StreamSuite {
       @Override
       public void receive(
           TransportClient client,
-          ByteBuffer message,
+          ChunkedByteBuffer message,
           RpcResponseCallback callback) {
         throw new UnsupportedOperationException();
       }

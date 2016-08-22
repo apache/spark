@@ -19,6 +19,7 @@ package org.apache.spark.network;
 
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.Uninterruptibles;
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
@@ -91,11 +92,11 @@ public class RequestTimeoutIntegrationSuite {
       @Override
       public void receive(
           TransportClient client,
-          ByteBuffer message,
+          ChunkedByteBuffer message,
           RpcResponseCallback callback) {
         try {
           semaphore.acquire();
-          callback.onSuccess(ByteBuffer.allocate(responseSize));
+          callback.onSuccess(ChunkedByteBuffer.wrap(ByteBuffer.allocate(responseSize)));
         } catch (InterruptedException e) {
           // do nothing
         }
@@ -114,13 +115,13 @@ public class RequestTimeoutIntegrationSuite {
 
     // First completes quickly (semaphore starts at 1).
     TestCallback callback0 = new TestCallback();
-    client.sendRpc(ByteBuffer.allocate(0), callback0);
+    client.sendRpc(ChunkedByteBuffer.wrap(ByteBuffer.allocate(0)), callback0);
     callback0.latch.await();
     assertEquals(responseSize, callback0.successLength);
 
     // Second times out after 10 seconds, with slack. Must be IOException.
     TestCallback callback1 = new TestCallback();
-    client.sendRpc(ByteBuffer.allocate(0), callback1);
+    client.sendRpc(ChunkedByteBuffer.wrap(ByteBuffer.allocate(0)), callback1);
     callback1.latch.await(60, TimeUnit.SECONDS);
     assertNotNull(callback1.failure);
     assertTrue(callback1.failure instanceof IOException);
@@ -138,11 +139,11 @@ public class RequestTimeoutIntegrationSuite {
       @Override
       public void receive(
           TransportClient client,
-          ByteBuffer message,
+          ChunkedByteBuffer message,
           RpcResponseCallback callback) {
         try {
           semaphore.acquire();
-          callback.onSuccess(ByteBuffer.allocate(responseSize));
+          callback.onSuccess(ChunkedByteBuffer.wrap(ByteBuffer.allocate(responseSize)));
         } catch (InterruptedException e) {
           // do nothing
         }
@@ -162,7 +163,7 @@ public class RequestTimeoutIntegrationSuite {
     TransportClient client0 =
       clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     TestCallback callback0 = new TestCallback();
-    client0.sendRpc(ByteBuffer.allocate(0), callback0);
+    client0.sendRpc(ChunkedByteBuffer.wrap(ByteBuffer.allocate(0)), callback0);
     callback0.latch.await();
     assertTrue(callback0.failure instanceof IOException);
     assertFalse(client0.isActive());
@@ -172,7 +173,7 @@ public class RequestTimeoutIntegrationSuite {
     TransportClient client1 =
       clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     TestCallback callback1 = new TestCallback();
-    client1.sendRpc(ByteBuffer.allocate(0), callback1);
+    client1.sendRpc(ChunkedByteBuffer.wrap(ByteBuffer.allocate(0)), callback1);
     callback1.latch.await();
     assertEquals(responseSize, callback1.successLength);
     assertNull(callback1.failure);
@@ -194,7 +195,7 @@ public class RequestTimeoutIntegrationSuite {
       @Override
       public void receive(
           TransportClient client,
-          ByteBuffer message,
+          ChunkedByteBuffer message,
           RpcResponseCallback callback) {
         throw new UnsupportedOperationException();
       }
@@ -236,13 +237,13 @@ public class RequestTimeoutIntegrationSuite {
    */
   static class TestCallback implements RpcResponseCallback, ChunkReceivedCallback {
 
-    int successLength = -1;
+    long successLength = -1;
     Throwable failure;
     final CountDownLatch latch = new CountDownLatch(1);
 
     @Override
-    public void onSuccess(ByteBuffer response) {
-      successLength = response.remaining();
+    public void onSuccess(ChunkedByteBuffer response) {
+      successLength = response.size();
       latch.countDown();
     }
 
@@ -255,7 +256,7 @@ public class RequestTimeoutIntegrationSuite {
     @Override
     public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
       try {
-        successLength = buffer.nioByteBuffer().remaining();
+        successLength = buffer.nioByteBuffer().size();
       } catch (IOException e) {
         // weird
       } finally {

@@ -39,6 +39,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
@@ -135,13 +136,13 @@ public class OneForOneBlockFetcherSuite {
       @Override
       public Void answer(InvocationOnMock invocationOnMock) throws Throwable {
         BlockTransferMessage message = BlockTransferMessage.Decoder.fromByteBuffer(
-          (ByteBuffer) invocationOnMock.getArguments()[0]);
+          (ChunkedByteBuffer) invocationOnMock.getArguments()[0]);
         RpcResponseCallback callback = (RpcResponseCallback) invocationOnMock.getArguments()[1];
-        callback.onSuccess(new StreamHandle(123, blocks.size()).toByteBuffer());
+        callback.onSuccess(new StreamHandle(123, blocks.size()).toChunkedByteBuffer());
         assertEquals(new OpenBlocks("app-id", "exec-id", blockIds), message);
         return null;
       }
-    }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
+    }).when(client).sendRpc(any(ChunkedByteBuffer.class), any(RpcResponseCallback.class));
 
     // Respond to each chunk request with a single buffer from our blocks array.
     final AtomicInteger expectedChunkIndex = new AtomicInteger(0);

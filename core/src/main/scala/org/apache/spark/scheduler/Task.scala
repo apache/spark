@@ -28,6 +28,7 @@ import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{AccumulatorV2, ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
@@ -202,9 +203,9 @@ private[spark] object Task {
       currentFiles: mutable.Map[String, Long],
       currentJars: mutable.Map[String, Long],
       serializer: SerializerInstance)
-    : ByteBuffer = {
+    : ChunkedByteBuffer = {
 
-    val out = new ByteBufferOutputStream(4096)
+    val out = new ChunkedByteBufferOutputStream(4 * 1024)
     val dataOut = new DataOutputStream(out)
 
     // Write currentFiles
@@ -228,9 +229,9 @@ private[spark] object Task {
 
     // Write the task itself and finish
     dataOut.flush()
-    val taskBytes = serializer.serialize(task)
+    val taskBytes = serializer.serialize(task).toByteBuffer
     Utils.writeByteBuffer(taskBytes, out)
-    out.toByteBuffer
+    out.toChunkedByteBuffer
   }
 
   /**
@@ -240,10 +241,10 @@ private[spark] object Task {
    *
    * @return (taskFiles, taskJars, taskBytes)
    */
-  def deserializeWithDependencies(serializedTask: ByteBuffer)
-    : (HashMap[String, Long], HashMap[String, Long], Properties, ByteBuffer) = {
+  def deserializeWithDependencies(serializedTask: ChunkedByteBuffer)
+    : (HashMap[String, Long], HashMap[String, Long], Properties, ChunkedByteBuffer) = {
 
-    val in = new ByteBufferInputStream(serializedTask)
+    val in = serializedTask.toInputStream
     val dataIn = new DataInputStream(in)
 
     // Read task's files
@@ -266,7 +267,7 @@ private[spark] object Task {
     val taskProps = Utils.deserialize[Properties](propBytes)
 
     // Create a sub-buffer for the rest of the data, which is the serialized Task object
-    val subBuffer = serializedTask.slice()  // ByteBufferInputStream will have read just up to task
+    val subBuffer = in.toChunkedByteBuffer
     (taskFiles, taskJars, taskProps, subBuffer)
   }
 }

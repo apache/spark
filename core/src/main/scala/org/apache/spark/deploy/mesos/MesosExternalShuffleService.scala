@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage
@@ -62,7 +63,7 @@ private[mesos] class MesosExternalShuffleBlockHandler(
             s"registered")
         }
         connectedApps.put(appId, appState)
-        callback.onSuccess(ByteBuffer.allocate(0))
+        callback.onSuccess(ChunkedByteBuffer.wrap(ByteBuffer.allocate(0)))
       case Heartbeat(appId) =>
         val address = client.getSocketAddress
         Option(connectedApps.get(appId)) match {
