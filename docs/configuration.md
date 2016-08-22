@@ -1199,7 +1199,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.blacklist.task.maxTaskAttemptsPerExecutor</code></td>
-  <td>2</td>
+  <td>1</td>
   <td>
     (Experimental) For a given task, how many times it can be retried on one executor before the
     executor is blacklisted for that task.

@@ -213,7 +213,7 @@ case object TaskResultLost extends TaskFailedReason {
 @DeveloperApi
 case object TaskKilled extends TaskFailedReason {
   override def toErrorString: String = "TaskKilled (killed intentionally)"
-  override val countTowardsTaskFailures: Boolean = false
+  override def countTowardsTaskFailures: Boolean = false
 }
 
 /**
@@ -232,7 +232,7 @@ case class TaskCommitDenied(
    * towards failing the stage. This is intended to prevent spurious stage failures in cases
    * where many speculative tasks are launched and denied to commit.
    */
-  override val countTowardsTaskFailures: Boolean = false
+  override def countTowardsTaskFailures: Boolean = false
 }
 
 /**
