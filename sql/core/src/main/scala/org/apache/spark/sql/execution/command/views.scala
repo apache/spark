@@ -105,7 +105,13 @@ case class CreateViewCommand(
     }
     val sessionState = sparkSession.sessionState
 
-    if (isTemporary) {
+    // 1) CREATE VIEW: create a temp view when users explicitly specify the keyword TEMPORARY;
+    //                 otherwise, create a permanent view no matter whether the temporary view
+    //                 with the same name exists or not.
+    // 2) ALTER VIEW: alter the temporary view if the temp view exists; otherwise, try to alter
+    //                the permanent view. Here, it follows the same resolution like DROP VIEW,
+    //                since users are unable to specify the keyword TEMPORARY.
+    if (isTemporary || (replace && sessionState.catalog.isTemporaryTable(name))) {
       createTemporaryView(sparkSession, analyzedPlan)
     } else {
       // Adds default database for permanent table if it doesn't exist, so that tableExists()
