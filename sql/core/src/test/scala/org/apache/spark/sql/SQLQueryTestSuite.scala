@@ -278,7 +278,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
     session.sql(
       """
-        |CREATE OR REPLACE TEMPORARY VIEW src1 AS SELECT * FROM VALUES
+        |CREATE OR REPLACE TEMPORARY VIEW nullData AS SELECT * FROM VALUES
         |(201, null),
         |(86, "val_86"),
         |(null, "val_null"),
@@ -286,7 +286,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         |(null, null),
         |(330, "val_330"),
         |(165, null)
-        |as src1(key, value)
+        |as nullData(key, value)
       """.stripMargin)
 
     Seq((251, "val_251", "2008-04-08", "11"),

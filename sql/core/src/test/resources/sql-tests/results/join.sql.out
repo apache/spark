@@ -315,7 +315,7 @@ struct<sum(cnt):bigint>
 
 -- !query 17
 SELECT x.key, count(1)
-FROM src1 x JOIN duplicateRowData y
+FROM nullData x JOIN duplicateRowData y
 ON (x.key = y.key) group by x.key order by x.key
 -- !query 17 schema
 struct<key:int,count(1):bigint>
@@ -396,7 +396,7 @@ FROM
      UNION ALL
   SELECT x1.key as key, x1.value as value from duplicateRowData x1 where x1.key > 100
 ) subq1
-JOIN src1 x ON (x.key = subq1.key)
+JOIN nullData x ON (x.key = subq1.key)
 -- !query 21 schema
 struct<key:int,value:string,value:string>
 -- !query 21 output
@@ -419,7 +419,7 @@ FROM
      UNION ALL
   SELECT x1.key as key, count(1) as cnt from duplicateRowData x1 where x1.key > 100 group by x1.key
 ) subq1
-JOIN src1 x ON (x.key = subq1.key)
+JOIN nullData x ON (x.key = subq1.key)
 -- !query 22 schema
 struct<key:int,value:string,cnt:bigint>
 -- !query 22 output
@@ -660,7 +660,7 @@ NULL	NULL	6	F
 
 
 -- !query 33
-SELECT * FROM src1 as a JOIN src1 as b on a.value <=> b.value
+SELECT * FROM nullData as a JOIN nullData as b on a.value <=> b.value
 -- !query 33 schema
 struct<key:int,value:string,key:int,value:string>
 -- !query 33 output

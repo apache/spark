@@ -113,7 +113,7 @@ FROM
   FULL OUTER JOIN
   (
     SELECT src2.key as key, count(distinct(src2.value)) AS value
-    FROM src1 src2 group by src2.key
+    FROM nullData src2 group by src2.key
   ) b
 ON (a.key = b.key);
 
@@ -128,7 +128,7 @@ FROM
   (
     SELECT src2.key as key, count(distinct(src2.value)) AS value1,
       count(distinct(src2.key)) AS value2
-    FROM src1 src2 group by src2.key
+    FROM nullData src2 group by src2.key
   ) b
 ON (a.key = b.key);
 

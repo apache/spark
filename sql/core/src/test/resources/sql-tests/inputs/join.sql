@@ -117,7 +117,7 @@ SELECT sum(a.cnt) FROM tst1 a JOIN tst1 b ON a.key = b.key;
 
 -- aggregate over join results
 SELECT x.key, count(1)
-FROM src1 x JOIN duplicateRowData y
+FROM nullData x JOIN duplicateRowData y
 ON (x.key = y.key) group by x.key order by x.key;
 
 -- join over set operation over aggregate
@@ -160,7 +160,7 @@ FROM
      UNION ALL
   SELECT x1.key as key, x1.value as value from duplicateRowData x1 where x1.key > 100
 ) subq1
-JOIN src1 x ON (x.key = subq1.key);
+JOIN nullData x ON (x.key = subq1.key);
 
 -- join over set operation over aggregate
 SELECT x.key, x.value, subq1.cnt
@@ -169,7 +169,7 @@ FROM
      UNION ALL
   SELECT x1.key as key, count(1) as cnt from duplicateRowData x1 where x1.key > 100 group by x1.key
 ) subq1
-JOIN src1 x ON (x.key = subq1.key);
+JOIN nullData x ON (x.key = subq1.key);
 
 -- self join with aliases
 SELECT x.key, COUNT(*)
@@ -225,4 +225,4 @@ SeleCT * from
     oN leftTable.N = rightTable.N;
 
 -- Supporting relational operator '<=>' in Spark SQL
-SELECT * FROM src1 as a JOIN src1 as b on a.value <=> b.value;
+SELECT * FROM nullData as a JOIN nullData as b on a.value <=> b.value;
