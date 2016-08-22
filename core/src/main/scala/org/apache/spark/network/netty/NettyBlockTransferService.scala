@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
 
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap, TransportClientFactory}
@@ -34,7 +35,6 @@ import org.apache.spark.network.shuffle.protocol.UploadBlock
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage.{BlockId, StorageLevel}
-import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
 /**
