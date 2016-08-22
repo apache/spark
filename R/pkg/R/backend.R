@@ -25,9 +25,21 @@ isInstanceOf <- function(jobj, className) {
   callJMethod(cls, "isInstance", jobj)
 }
 
-# Call a Java method named methodName on the object
-# specified by objId. objId should be a "jobj" returned
-# from the SparkRBackend.
+#' Call a Java method in the JVM running the Spark driver.
+#'
+#' @param objId object to invoke the method on. Should be a "jobj" created by newJObject.
+#' @param methodName method name to call.
+#' @param ... parameters to pass to the Java method.
+#' @export
+#' @seealso callJStatic, newJObject
+#' @examples
+#' \dontrun{
+#' sparkR.session() # Need to have a Spark JVM running before calling newJObject
+#' # Create a Java ArrayList and populate it
+#' jarray <- newJObject("java.util.ArrayList")
+#' callJMethod(jarray, "add", 42L)
+#' callJMethod(jarray, "get", 0L) # Will print 42
+#' }
 callJMethod <- function(objId, methodName, ...) {
   stopifnot(class(objId) == "jobj")
   if (!isValidJobj(objId)) {
@@ -37,12 +49,38 @@ callJMethod <- function(objId, methodName, ...) {
   invokeJava(isStatic = FALSE, objId$id, methodName, ...)
 }
 
-# Call a static method on a specified className
+#' Call a static method in the JVM running the Spark driver.
+#'
+#' @param className class containing the static method to invoke.
+#' @param methodName name of static method to invoke.
+#' @param ... parameters to pass to the Java method.
+#' @export
+#' @seealso callJMethod, newJObject
+#' @examples
+#' \dontrun{
+#' sparkR.session() # Need to have a Spark JVM running before calling callJStatic
+#' callJStatic("java.lang.System", "currentTimeMillis")
+#' callJStatic("java.lang.System", "getProperty", "java.home")
+#' }
 callJStatic <- function(className, methodName, ...) {
   invokeJava(isStatic = TRUE, className, methodName, ...)
 }
 
-# Create a new object of the specified class name
+#' Create a new Java object in the JVM running the Spark driver.
+#'
+#' @param className name of the class to create
+#' @param ... arguments to be passed to the constructor
+#' @export
+#' @seealso callJMethod, callJStatic
+#' @examples
+#' \dontrun{
+#' sparkR.session() # Need to have a Spark JVM running before calling newJObject
+#' # Create a Java ArrayList and populate it
+#' jarray <- newJObject("java.util.ArrayList")
+#' callJMethod(jarray, "add", 42L)
+#' callJMethod(jarray, "get", 0L) # Will print 42
+#' }
+#' @note newJObject since 2.0.1
 newJObject <- function(className, ...) {
   invokeJava(isStatic = TRUE, className, methodName = "<init>", ...)
 }
