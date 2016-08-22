@@ -284,7 +284,7 @@ setMethod("%in%",
 #' otherwise
 #'
 #' If values in the specified column are null, returns the value.
-#' Can be used in conjunction with `when` to specify a default value for expressions.
+#' Can be used in conjunction with \code{when} to specify a default value for expressions.
 #'
 #' @param x a Column.
 #' @param value value to replace when the corresponding entry in \code{x} is NA.
