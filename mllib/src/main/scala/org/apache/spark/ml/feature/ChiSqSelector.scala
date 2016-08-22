@@ -27,6 +27,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
+import org.apache.spark.mllib.feature.ChiSqSelectorType
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.rdd.RDD
@@ -73,7 +74,7 @@ private[feature] trait ChiSqSelectorParams extends Params
 
   final val selectorType = new Param[String](this, "selectorType",
     "ChiSqSelector Type: KBest, Percentile, Fpr")
-  setDefault(selectorType -> "KBest")
+  setDefault(selectorType -> ChiSqSelectorType.KBest.toString)
 
   /** @group getParam */
   def getChiSqSelectorType: String = $(selectorType)
@@ -90,25 +91,22 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("chiSqSelector"))
 
-  @Since("2.1.0")
-  var chiSqSelector: feature.ChiSqSelector = null
-
   /** @group setParam */
   @Since("2.1.0")
   def setNumTopFeatures(value: Int): this.type = {
-    set(selectorType, "KBest")
+    set(selectorType, ChiSqSelectorType.KBest.toString)
     set(numTopFeatures, value)
   }
 
   @Since("2.1.0")
   def setPercentile(value: Double): this.type = {
-    set(selectorType, "Percentile")
+    set(selectorType, ChiSqSelectorType.Percentile.toString)
     set(percentile, value)
   }
 
   @Since("2.1.0")
   def setAlpha(value: Double): this.type = {
-    set(selectorType, "Fpr")
+    set(selectorType, ChiSqSelectorType.Fpr.toString)
     set(alpha, value)
   }
 
@@ -132,37 +130,15 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
         case Row(label: Double, features: Vector) =>
           OldLabeledPoint(label, OldVectors.fromML(features))
       }
-    $(selectorType) match {
+    var model = $(selectorType) match {
       case "KBest" =>
-        chiSqSelector = new feature.ChiSqSelector().setNumTopFeatures($(numTopFeatures))
+        new feature.ChiSqSelector().setNumTopFeatures($(numTopFeatures)).fit(input)
       case "Percentile" =>
-        chiSqSelector = new feature.ChiSqSelector().setPercentile($(percentile))
+        new feature.ChiSqSelector().setPercentile($(percentile)).fit(input)
       case "Fpr" =>
-        chiSqSelector = new feature.ChiSqSelector().setAlpha($(alpha))
-      case _ => throw new Exception("Unknown ChiSqSelector Type.")
+        new feature.ChiSqSelector().setAlpha($(alpha)).fit(input)
+      case _ => throw new IllegalStateException("Unknown ChiSqSelector Type.")
     }
-    val model = chiSqSelector.fit(input)
-    copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
-  }
-
-  @Since("2.1.0")
-  def selectKBest(value: Int): ChiSqSelectorModel = {
-    require(chiSqSelector != null, "ChiSqSelector has not been created.")
-    val model = chiSqSelector.selectKBest(value)
-    copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
-  }
-
-  @Since("2.1.0")
-  def selectPercentile(value: Double): ChiSqSelectorModel = {
-    require(chiSqSelector != null, "ChiSqSelector has not been created.")
-    val model = chiSqSelector.selectPercentile(value)
-    copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
-  }
-
-  @Since("2.1.0")
-  def selectFpr(value: Double): ChiSqSelectorModel = {
-    require(chiSqSelector != null, "ChiSqSelector has not been created.")
-    val model = chiSqSelector.selectFpr(value)
     copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
   }
 

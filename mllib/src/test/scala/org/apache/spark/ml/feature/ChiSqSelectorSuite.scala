@@ -60,7 +60,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
         assert(vec1 ~== vec2 absTol 1e-1)
     }
 
-    selector.selectPercentile(34).transform(df)
+    selector.setPercentile(34).fit(df).transform(df)
     .select("filtered", "preFilteredData").collect().foreach {
       case Row(vec1: Vector, vec2: Vector) =>
         assert(vec1 ~== vec2 absTol 1e-1)

@@ -27,7 +27,6 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.Statistics
-import org.apache.spark.mllib.stat.test.ChiSqTestResult
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
@@ -184,7 +183,6 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
   private var percentile: Double = 10.0
   private var alpha: Double = 0.05
   private var selectorType = ChiSqSelectorType.KBest
-  private var chiSqTestResult: Array[ChiSqTestResult] = _
 
   @Since("1.3.0")
   def this(numTopFeatures: Int) {
@@ -201,6 +199,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
 
   @Since("2.1.0")
   def setPercentile(value: Double): this.type = {
+    require(value <= 100 && value >= 0, "Percentile should be larger than 0 and less than 100")
     percentile = value
     selectorType = ChiSqSelectorType.Percentile
     this
@@ -228,35 +227,20 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
    */
   @Since("1.3.0")
   def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
-    chiSqTestResult = Statistics.chiSqTest(data)
-    selectorType match {
-      case ChiSqSelectorType.KBest => selectKBest(numTopFeatures)
-      case ChiSqSelectorType.Percentile => selectPercentile(percentile)
-      case ChiSqSelectorType.Fpr => selectFpr(alpha)
-      case _ => throw new Exception("Unknown ChiSqSelector Type")
+    var indices = selectorType match {
+      case ChiSqSelectorType.KBest => Statistics.chiSqTest(data)
+        .zipWithIndex.sortBy { case (res, _) => -res.statistic }
+        .take(numTopFeatures)
+        .map { case (_, indices) => indices }
+      case ChiSqSelectorType.Percentile => Statistics.chiSqTest(data)
+        .zipWithIndex.sortBy { case (res, _) => -res.statistic }
+        .take((data.count() * percentile / 100).toInt)
+        .map { case (_, indices) => indices }
+      case ChiSqSelectorType.Fpr => Statistics.chiSqTest(data)
+        .zipWithIndex.filter{ case (res, _) => res.pValue < alpha }
+        .map { case (_, indices) => indices }
+      case _ => throw new IllegalStateException("Unknown ChiSqSelector Type")
     }
-  }
-
-  @Since("2.1.0")
-  def selectKBest(value: Int): ChiSqSelectorModel = {
-    val indices = chiSqTestResult.zipWithIndex.sortBy { case (res, _) => -res.statistic }
-    .take(numTopFeatures)
-    .map { case (_, indices) => indices }
-    new ChiSqSelectorModel(indices)
-  }
-
-  @Since("2.1.0")
-  def selectPercentile(value: Double): ChiSqSelectorModel = {
-    val indices = chiSqTestResult.zipWithIndex.sortBy { case (res, _) => -res.statistic }
-    .take((chiSqTestResult.length * percentile / 100).toInt)
-    .map { case (_, indices) => indices }
-    new ChiSqSelectorModel(indices)
-  }
-
-  @Since("2.1.0")
-  def selectFpr(value: Double): ChiSqSelectorModel = {
-    val indices = chiSqTestResult.zipWithIndex.filter{ case (res, _) => res.pValue < alpha }
-    .map { case (_, indices) => indices }
     new ChiSqSelectorModel(indices)
   }
 }
