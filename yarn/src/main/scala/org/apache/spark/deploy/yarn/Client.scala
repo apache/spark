@@ -65,10 +65,6 @@ private[spark] class Client(
   import Client._
   import YarnSparkHadoopUtil._
 
-
-  val context: String = s"Spark_${sparkConf.get("spark.app.name", "")}"
-  Utils.setCallerContext(context)
-
   def this(clientArgs: ClientArguments, spConf: SparkConf) =
     this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf)
 
@@ -164,6 +160,9 @@ private[spark] class Client(
       appId = newAppResponse.getApplicationId()
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
       launcherBackend.setAppId(appId.toString)
+
+      val context: String = s"Spark_AppName_${sparkConf.get("spark.app.name", "")}_AppId_$appId"
+      Utils.setCallerContext(context)
 
       // Verify whether the cluster has enough resources for our AM
       verifyClusterResources(newAppResponse)
