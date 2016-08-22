@@ -1752,6 +1752,15 @@ showDF(properties, numRows = 200, truncate = FALSE)
     Executable for executing R scripts in client modes for driver. Ignored in cluster modes.
   </td>
 </tr>
+<tr>
+  <td><code>spark.r.shell.command</code></td>
+  <td>R</td>
+  <td>
+    Executable for executing R shell in both client mode and cluster mode. For now sparkr shell only supports
+    client mode, but this property will be propagated to remote driver in cluster mode and can be used by driver if user want to implement
+    sparkr shell in cluster mode.
+  </td>
+</tr>
 </table>
 
 #### Deploy
