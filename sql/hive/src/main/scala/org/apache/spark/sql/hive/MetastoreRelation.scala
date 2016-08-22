@@ -80,7 +80,6 @@ private[hive] case class MetastoreRelation(
     tTable.setTableType(catalogTable.tableType match {
       case CatalogTableType.EXTERNAL => HiveTableType.EXTERNAL_TABLE.toString
       case CatalogTableType.MANAGED => HiveTableType.MANAGED_TABLE.toString
-      case CatalogTableType.INDEX => HiveTableType.INDEX_TABLE.toString
       case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW.toString
     })
 
