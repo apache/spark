@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.AggUtils
-import org.apache.spark.sql.execution.aggregate.ExtractPartialAggregate
+import org.apache.spark.sql.execution.aggregate.PartialAggregate
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -160,8 +160,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       ShuffleExchange(createPartitioning(dist, defaultNumPreShufflePartitions), child)
 
     var (parent, children) = operator match {
-      case ExtractPartialAggregate(childDist)
-          if !operator.outputPartitioning.satisfies(childDist) =>
+      case PartialAggregate(childDist) if !operator.outputPartitioning.satisfies(childDist) =>
         // If an aggregation needs a shuffle and support partial aggregations, a map-side partial
         // aggregation and a shuffle are added as children.
         val (mergeAgg, mapSideAgg) = AggUtils.createPartialAggregate(operator)

@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateSto
 /**
  * A pattern that finds aggregate operators to support partial aggregations.
  */
-object ExtractPartialAggregate {
+object PartialAggregate {
 
   def unapply(plan: SparkPlan): Option[Distribution] = plan match {
     case agg: AggregateExec
