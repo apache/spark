@@ -90,12 +90,14 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
 
   # can use dir.exists(packageLocalDir) under R 3.2.0 or later
   if (!is.na(file.info(packageLocalDir)$isdir) && !overwrite) {
-    fmt <- "Spark %s for Hadoop %s is found, and SPARK_HOME set to %s"
+    fmt <- "%s for Hadoop %s found, with SPARK_HOME set to %s"
     msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion),
                    packageLocalDir)
     message(msg)
     Sys.setenv(SPARK_HOME = packageLocalDir)
     return(invisible(packageLocalDir))
+  } else {
+    message("Spark not found in the cache directory. Installation will start.")
   }
 
   packageLocalPath <- paste0(packageLocalDir, ".tgz")
@@ -125,20 +127,24 @@ robust_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, 
     message(msg)
     success <- direct_download_tar(mirrorUrl, version, hadoopVersion,
                                    packageName, packageLocalPath)
-    if (success) return()
+    if (success) {
+      return()
+    } else {
+      message(paste0("Unable to download from mirrorUrl: ", mirrorUrl))
+    }
   } else {
-    message("Mirror site not provided.")
+    message("MirrorUrl not provided.")
   }
 
   # step 2: use url suggested from apache website
-  message("Looking for site suggested from apache website...")
+  message("Looking for preferred site from apache website...")
   mirrorUrl <- get_preferred_mirror(version, packageName)
   if (!is.null(mirrorUrl)) {
     success <- direct_download_tar(mirrorUrl, version, hadoopVersion,
                                    packageName, packageLocalPath)
     if (success) return()
   } else {
-    message("Unable to find suggested mirror site.")
+    message("Unable to find preferred mirror site.")
   }
 
   # step 3: use backup option
@@ -180,7 +186,7 @@ get_preferred_mirror <- function(version, packageName) {
 direct_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath) {
   packageRemotePath <- paste0(
     file.path(mirrorUrl, version, packageName), ".tgz")
-  fmt <- paste("Downloading Spark %s for Hadoop %s from:\n- %s")
+  fmt <- paste("Downloading %s for Hadoop %s from:\n- %s")
   msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion),
                  packageRemotePath)
   message(msg)
