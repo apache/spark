@@ -286,8 +286,7 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
     " on", format(unlist(x[c("df.null", "df.residual")])), " degrees of freedom\n"),
     1L, paste, collapse = " "), sep = "")
   cat("AIC: ", format(x$aic, digits = 4L), "\n\n",
-    "Number of Fisher Scoring iterations: ", x$iter, "\n", sep = "")
-  cat("\n")
+    "Number of Fisher Scoring iterations: ", x$iter, "\n\n", sep = "")
   invisible(x)
   }
 
@@ -477,8 +476,8 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
             }
 
             jobj <- callJStatic("org.apache.spark.ml.r.IsotonicRegressionWrapper", "fit",
-            data@sdf, formula, as.logical(isotonic), as.integer(featureIndex),
-              as.character(weightCol))
+                                data@sdf, formula, as.logical(isotonic), as.integer(featureIndex),
+                                as.character(weightCol))
             new("IsotonicRegressionModel", jobj = jobj)
           })
 
@@ -617,7 +616,7 @@ setMethod("summary", signature(object = "KMeansModel"),
               dataFrame(callJMethod(jobj, "cluster"))
             }
             list(coefficients = coefficients, size = size,
-                   cluster = cluster, is.loaded = is.loaded)
+                 cluster = cluster, is.loaded = is.loaded)
           })
 
 #  Predicted values based on a k-means model
@@ -787,17 +786,17 @@ read.ml <- function(path) {
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.AFTSurvivalRegressionWrapper")) {
     new("AFTSurvivalRegressionModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper")) {
-      new("GeneralizedLinearRegressionModel", jobj = jobj)
+    new("GeneralizedLinearRegressionModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.KMeansWrapper")) {
-      new("KMeansModel", jobj = jobj)
+    new("KMeansModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.LDAWrapper")) {
-      new("LDAModel", jobj = jobj)
+    new("LDAModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.IsotonicRegressionWrapper")) {
-      new("IsotonicRegressionModel", jobj = jobj)
+    new("IsotonicRegressionModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GaussianMixtureWrapper")) {
-      new("GaussianMixtureModel", jobj = jobj)
+    new("GaussianMixtureModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.ALSWrapper")) {
-      new("ALSModel", jobj = jobj)
+    new("ALSModel", jobj = jobj)
   } else {
     stop(paste("Unsupported model: ", jobj))
   }
@@ -1035,7 +1034,7 @@ setMethod("summary", signature(object = "GaussianMixtureModel"),
               dataFrame(callJMethod(jobj, "posterior"))
             }
             list(lambda = lambda, mu = mu, sigma = sigma,
-                   posterior = posterior, is.loaded = is.loaded)
+                 posterior = posterior, is.loaded = is.loaded)
           })
 
 #  Predicted values based on a gaussian mixture model
@@ -1154,7 +1153,7 @@ setMethod("summary", signature(object = "ALSModel"),
             itemFactors <- dataFrame(callJMethod(jobj, "itemFactors"))
             rank <- callJMethod(jobj, "rank")
             list(user = user, item = item, rating = rating, userFactors = userFactors,
-                          itemFactors = itemFactors, rank = rank)
+                 itemFactors = itemFactors, rank = rank)
           })
 
 
