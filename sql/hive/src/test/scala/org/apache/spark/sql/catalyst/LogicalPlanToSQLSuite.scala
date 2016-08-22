@@ -1102,4 +1102,12 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       checkSQL("select * from orc_t", "select_orc_table")
     }
   }
+
+  test("inline tables") {
+    checkSQL(
+      """
+        |select * from values ("one", 1), ("two", 2), ("three", null) as data(a, b) where b > 1
+      """.stripMargin,
+      "inline_tables")
+  }
 }

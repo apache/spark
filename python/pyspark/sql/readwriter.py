@@ -401,8 +401,9 @@ class DataFrameReader(OptionUtils):
         :param numPartitions: the number of partitions
         :param predicates: a list of expressions suitable for inclusion in WHERE clauses;
                            each one defines one partition of the :class:`DataFrame`
-        :param properties: a dictionary of JDBC database connection arguments; normally,
-                           at least a "user" and "password" property should be included
+        :param properties: a dictionary of JDBC database connection arguments. Normally at
+                           least properties "user" and "password" with their corresponding values.
+                           For example { 'user' : 'SYSTEM', 'password' : 'mypassword' }
         :return: a DataFrame
         """
         if properties is None:
@@ -716,9 +717,9 @@ class DataFrameWriter(OptionUtils):
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
-        :param properties: JDBC database connection arguments, a list of
-                           arbitrary string tag/value. Normally at least a
-                           "user" and "password" property should be included.
+        :param properties: a dictionary of JDBC database connection arguments. Normally at
+                           least properties "user" and "password" with their corresponding values.
+                           For example { 'user' : 'SYSTEM', 'password' : 'mypassword' }
         """
         if properties is None:
             properties = dict()
