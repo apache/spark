@@ -558,6 +558,15 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
         filter
       }
 
+    case scanner @ Scanner(projectList, filters, child) =>
+      val newFilters = scanner.constraints --
+        (child.constraints ++ filters)
+      if (newFilters.nonEmpty) {
+        Scanner(projectList, newFilters.toSeq ++ filters, child)
+      } else {
+        scanner
+      }
+
     case join @ Join(left, right, joinType, conditionOpt) =>
       // Only consider constraints that can be pushed down completely to either the left or the
       // right child

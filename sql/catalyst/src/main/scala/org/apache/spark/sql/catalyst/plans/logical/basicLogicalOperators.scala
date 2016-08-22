@@ -144,7 +144,6 @@ case class Scanner(projectList: Seq[NamedExpression], filters: Seq[Expression], 
 
   override def validConstraints: Set[Expression] =
     child.constraints
-      .union(getAliasedConstraints(projectList))
       .union(filters.filterNot(SubqueryExpression.hasCorrelatedSubquery).toSet)
 }
 
