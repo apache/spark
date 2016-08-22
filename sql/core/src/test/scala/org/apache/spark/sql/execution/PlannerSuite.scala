@@ -70,24 +70,31 @@ class PlannerSuite extends SharedSQLContext {
       s"The plan of query $query does not have partial aggregations.")
   }
 
-  test("non-partial aggregation for distinct aggregates") {
+  test("non-partial aggregation for aggregates") {
     withTempView("testNonPartialAggregation") {
       val schema = StructType(StructField(s"value", IntegerType, true) :: Nil)
       val row = Row.fromSeq(Seq.fill(1)(null))
       val rowRDD = sparkContext.parallelize(row :: Nil)
-      spark.createDataFrame(rowRDD, schema).createOrReplaceTempView("testNonPartialAggregation")
+      spark.createDataFrame(rowRDD, schema).repartition($"value")
+        .createOrReplaceTempView("testNonPartialAggregation")
 
-      val planned = sql(
+      val planned1 = sql("SELECT SUM(value) FROM testNonPartialAggregation GROUP BY value")
+        .queryExecution.executedPlan
+
+      // If input data are already partitioned and the same columns are used in grouping keys and
+      // aggregation values, no partial aggregation exist in query plans.
+      val aggOps1 = planned1.collect { case n if n.nodeName contains "Aggregate" => n }
+      assert(aggOps1.size == 1, s"The plan $planned1 has partial aggregations.")
+
+      val planned2 = sql(
         """
           |SELECT t.value, SUM(DISTINCT t.value)
           |FROM (SELECT * FROM testNonPartialAggregation ORDER BY value) t
           |GROUP BY t.value
         """.stripMargin).queryExecution.executedPlan
 
-      // If input data are already partitioned and the same columns are used in grouping keys and
-      // aggregation values, no partial aggregation exist in query plans.
-      val aggOps = planned.collect { case n if n.nodeName contains "Aggregate" => n }
-      assert(aggOps.size == 2, s"The plan $planned has partial aggregations.")
+      val aggOps2 = planned1.collect { case n if n.nodeName contains "Aggregate" => n }
+      assert(aggOps2.size == 1, s"The plan $planned2 has partial aggregations.")
     }
   }
 
