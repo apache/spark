@@ -138,7 +138,7 @@ private[ui] object RDDOperationGraph extends Logging {
       if (keepNode) {
         addRDDIds.add(rdd.id)
         edges ++= rdd.parentIds.filter(id => !dropRDDIds.contains(id))
-          .map(parentId => RDDOperationEdge(parentId, rdd.id))
+          .map { parentId => RDDOperationEdge(parentId, rdd.id) }
       } else {
         dropRDDIds.add(rdd.id)
       }

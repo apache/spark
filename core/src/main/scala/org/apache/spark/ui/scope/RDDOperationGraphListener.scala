@@ -43,7 +43,7 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
 
   // How many root nodes to retain in DAG Graph
   private[ui] val retainedNodes =
-    conf.getInt("spark.ui.retainedNodes", SparkUI.DEFAULT_RETAINED_NODES)
+    conf.getInt("spark.ui.dagGraph.retainedRootRDDs", Int.MaxValue)
 
   // How many jobs or stages to retain graph metadata for
   private val retainedJobs =
