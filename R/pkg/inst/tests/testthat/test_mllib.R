@@ -512,49 +512,52 @@ test_that("spark.gaussianMixture", {
   # R code to reproduce the result.
   # nolint start
   #' library(mvtnorm)
-  #' set.seed(100)
-  #' a <- rmvnorm(4, c(0, 0))
-  #' b <- rmvnorm(6, c(3, 4))
+  #' set.seed(1)
+  #' a <- rmvnorm(7, c(0, 0))
+  #' b <- rmvnorm(8, c(10, 10))
   #' data <- rbind(a, b)
   #' model <- mvnormalmixEM(data, k = 2)
   #' model$lambda
   #
-  #  [1] 0.4 0.6
+  #  [1] 0.4666667 0.5333333
   #
   #' model$mu
   #
-  #  [1] -0.2614822  0.5128697
-  #  [1] 2.647284 4.544682
+  #  [1] 0.11731091 -0.06192351
+  #  [1] 10.363673  9.897081
   #
   #' model$sigma
   #
   #  [[1]]
-  #  [,1]       [,2]
-  #  [1,] 0.08427399 0.00548772
-  #  [2,] 0.00548772 0.09090715
+  #             [,1]       [,2]
+  #  [1,] 0.62049934 0.06880802
+  #  [2,] 0.06880802 1.27431874
   #
   #  [[2]]
-  #  [,1]       [,2]
-  #  [1,]  0.1641373 -0.1673806
-  #  [2,] -0.1673806  0.7508951
+  #            [,1]     [,2]
+  #  [1,] 0.2961543 0.160783
+  #  [2,] 0.1607830 1.008878
   # nolint end
-  data <- list(list(-0.50219235, 0.1315312), list(-0.07891709, 0.8867848),
-               list(0.11697127, 0.3186301), list(-0.58179068, 0.7145327),
-               list(2.17474057, 3.6401379), list(3.08988614, 4.0962745),
-               list(2.79836605, 4.7398405), list(3.12337950, 3.9706833),
-               list(2.61114575, 4.5108563), list(2.08618581, 6.3102968))
+  data <- list(list(-0.6264538, 0.1836433), list(-0.8356286, 1.5952808),
+               list(0.3295078, -0.8204684), list(0.4874291, 0.7383247),
+               list(0.5757814, -0.3053884), list(1.5117812, 0.3898432),
+               list(-0.6212406, -2.2146999), list(11.1249309, 9.9550664),
+               list(9.9838097, 10.9438362), list(10.8212212, 10.5939013),
+               list(10.9189774, 10.7821363), list(10.0745650, 8.0106483),
+               list(10.6198257, 9.9438713), list(9.8442045, 8.5292476),
+               list(9.5218499, 10.4179416))
   df <- createDataFrame(data, c("x1", "x2"))
   model <- spark.gaussianMixture(df, ~ x1 + x2, k = 2)
   stats <- summary(model)
-  rLambda <- c(0.50861, 0.49139)
-  rMu <- c(0.267, 1.195, 2.743, 4.730)
-  rSigma <- c(1.099, 1.339, 1.339, 1.798,
-              0.145, -0.309, -0.309, 0.716)
+  rLambda <- c(0.4666667, 0.5333333)
+  rMu <- c(0.11731091, -0.06192351, 10.363673, 9.897081)
+  rSigma <- c(0.62049934, 0.06880802, 0.06880802, 1.27431874,
+              0.2961543, 0.160783, 0.1607830, 1.008878)
   expect_equal(stats$lambda, rLambda, tolerance = 1e-3)
   expect_equal(unlist(stats$mu), rMu, tolerance = 1e-3)
   expect_equal(unlist(stats$sigma), rSigma, tolerance = 1e-3)
   p <- collect(select(predict(model, df), "prediction"))
-  expect_equal(p$prediction, c(0, 0, 0, 0, 0, 1, 1, 1, 1, 1))
+  expect_equal(p$prediction, c(0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1))
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-gaussianMixture", fileext = ".tmp")
