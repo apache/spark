@@ -59,7 +59,7 @@ private[feature] trait ChiSqSelectorParams extends Params
   final val percentile = new DoubleParam(this, "percentile",
     "Percentile of features that selector will select, ordered by statistics value descending.",
     ParamValidators.gtEq(0))
-  setDefault(percentile -> 10)
+  setDefault(percentile -> 0.1)
 
   /** @group getParam */
   def getPercentile: Double = $(percentile)

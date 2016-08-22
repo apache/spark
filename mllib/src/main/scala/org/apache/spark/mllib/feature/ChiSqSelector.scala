@@ -76,7 +76,11 @@ class ChiSqSelectorModel @Since("1.3.0") (
    * @param filterIndices indices of features to filter
    */
   private def compress(features: Vector, filterIndices: Array[Int]): Vector = {
-    val orderedIndices = filterIndices.sorted
+    val orderedIndices = if (isSorted(filterIndices)) {
+      filterIndices
+    } else {
+      filterIndices.sorted
+    }
     features match {
       case SparseVector(size, indices, values) =>
         val newSize = orderedIndices.length
