@@ -82,3 +82,4 @@ spark-warehouse/
 *.Rproj
 *.Rproj.*
 
+.Rproj.user

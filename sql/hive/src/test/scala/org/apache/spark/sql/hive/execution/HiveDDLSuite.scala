@@ -135,8 +135,11 @@ class HiveDDLSuite
         sql(s"CREATE VIEW $viewName COMMENT 'no comment' AS SELECT * FROM $tabName")
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
         val viewMetadata = catalog.getTableMetadata(TableIdentifier(viewName, Some("default")))
-        assert(tableMetadata.properties.get("comment") == Option("BLABLA"))
-        assert(viewMetadata.properties.get("comment") == Option("no comment"))
+        assert(tableMetadata.comment == Option("BLABLA"))
+        assert(viewMetadata.comment == Option("no comment"))
+        // Ensure that `comment` is removed from the table property
+        assert(tableMetadata.properties.get("comment").isEmpty)
+        assert(viewMetadata.properties.get("comment").isEmpty)
       }
     }
   }
@@ -687,6 +690,29 @@ class HiveDDLSuite
           Row("Sort Columns:", "[c]", "")
         )
       ))
+    }
+  }
+
+  test("datasource table property keys are not allowed") {
+    import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_PREFIX
+
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(a INT) STORED AS parquet")
+
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE tbl SET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo' = 'loser')")
+      }
+      assert(e.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+
+      val e2 = intercept[AnalysisException] {
+        sql(s"ALTER TABLE tbl UNSET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo')")
+      }
+      assert(e2.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+
+      val e3 = intercept[AnalysisException] {
+        sql(s"CREATE TABLE tbl TBLPROPERTIES ('${DATASOURCE_PREFIX}foo'='anything')")
+      }
+      assert(e3.getMessage.contains(DATASOURCE_PREFIX + "foo"))
     }
   }
 }
