@@ -25,6 +25,7 @@ setOldClass("jobj")
 #' table. The number of distinct values for each column should be less than 1e4. At most 1e6
 #' non-zero pair frequencies will be returned.
 #'
+#' @param x a SparkDataFrame
 #' @param col1 name of the first column. Distinct items will make the first item of each row.
 #' @param col2 name of the second column. Distinct items will make the column names of the output.
 #' @return a local R data.frame representing the contingency table. The first column of each row
@@ -53,10 +54,9 @@ setMethod("crosstab",
 
 #' Calculate the sample covariance of two numerical columns of a SparkDataFrame.
 #'
-#' @param x A SparkDataFrame
-#' @param col1 the name of the first column
-#' @param col2 the name of the second column
-#' @return the covariance of the two columns.
+#' @param colName1 the name of the first column
+#' @param colName2 the name of the second column
+#' @return The covariance of the two columns.
 #'
 #' @rdname cov
 #' @name cov
@@ -71,19 +71,18 @@ setMethod("crosstab",
 #' @note cov since 1.6.0
 setMethod("cov",
           signature(x = "SparkDataFrame"),
-          function(x, col1, col2) {
-            stopifnot(class(col1) == "character" && class(col2) == "character")
+          function(x, colName1, colName2) {
+            stopifnot(class(colName1) == "character" && class(colName2) == "character")
             statFunctions <- callJMethod(x@sdf, "stat")
-            callJMethod(statFunctions, "cov", col1, col2)
+            callJMethod(statFunctions, "cov", colName1, colName2)
           })
 
 #' Calculates the correlation of two columns of a SparkDataFrame.
 #' Currently only supports the Pearson Correlation Coefficient.
 #' For Spearman Correlation, consider using RDD methods found in MLlib's Statistics.
 #'
-#' @param x A SparkDataFrame
-#' @param col1 the name of the first column
-#' @param col2 the name of the second column
+#' @param colName1 the name of the first column
+#' @param colName2 the name of the second column
 #' @param method Optional. A character specifying the method for calculating the correlation.
 #'               only "pearson" is allowed now.
 #' @return The Pearson Correlation Coefficient as a Double.
@@ -102,10 +101,10 @@ setMethod("cov",
 #' @note corr since 1.6.0
 setMethod("corr",
           signature(x = "SparkDataFrame"),
-          function(x, col1, col2, method = "pearson") {
-            stopifnot(class(col1) == "character" && class(col2) == "character")
+          function(x, colName1, colName2, method = "pearson") {
+            stopifnot(class(colName1) == "character" && class(colName2) == "character")
             statFunctions <- callJMethod(x@sdf, "stat")
-            callJMethod(statFunctions, "corr", col1, col2, method)
+            callJMethod(statFunctions, "corr", colName1, colName2, method)
           })
 
 
