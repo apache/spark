@@ -43,12 +43,12 @@ class TestJavaSerializerImpl extends Serializer {
     }
 
     @Override
-    public <T> T deserialize(ChunkedByteBuffer bytes, ClassLoader loader, ClassTag<T> evidence$1) {
+    public <T> T deserialize(InputStream bytes, ClassLoader loader, ClassTag<T> evidence$1) {
       return null;
     }
 
     @Override
-    public <T> T deserialize(ChunkedByteBuffer bytes, ClassTag<T> evidence$1) {
+    public <T> T deserialize(InputStream bytes, ClassTag<T> evidence$1) {
       return null;
     }
 

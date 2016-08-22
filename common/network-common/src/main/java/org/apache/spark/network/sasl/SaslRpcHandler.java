@@ -17,12 +17,9 @@
 
 package org.apache.spark.network.sasl;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
+import java.io.InputStream;
 import javax.security.sasl.Sasl;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,7 +29,6 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -75,19 +71,20 @@ class SaslRpcHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(TransportClient client, ChunkedByteBuffer message, RpcResponseCallback callback) {
+  public void receive(
+      TransportClient client, InputStream message,
+      RpcResponseCallback callback) throws Exception {
     if (isComplete) {
       // Authentication complete, delegate to base handler.
       delegate.receive(client, message, callback);
       return;
     }
 
-    ByteBuf nettyBuf = message.toNetty();
     SaslMessage saslMessage;
     try {
-      saslMessage = SaslMessage.decode(nettyBuf);
+      saslMessage = SaslMessage.decode(message);
     } finally {
-      nettyBuf.release();
+      message.close();
     }
 
     if (saslServer == null) {
@@ -97,12 +94,7 @@ class SaslRpcHandler extends RpcHandler {
         conf.saslServerAlwaysEncrypt());
     }
 
-    byte[] response;
-    try {
-      response = saslServer.response(saslMessage.body().nioByteBuffer().toArray());
-    } catch (IOException ioe) {
-      throw new RuntimeException(ioe);
-    }
+    byte[] response; response = saslServer.response(saslMessage.body().nioByteBuffer().toArray());
     callback.onSuccess(ChunkedByteBuffer.wrap(response));
 
     // Setup encryption after the SASL response is sent, otherwise the client can't parse the
@@ -125,7 +117,7 @@ class SaslRpcHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(TransportClient client, ChunkedByteBuffer message) {
+  public void receive(TransportClient client, InputStream message) throws Exception {
     delegate.receive(client, message);
   }
 

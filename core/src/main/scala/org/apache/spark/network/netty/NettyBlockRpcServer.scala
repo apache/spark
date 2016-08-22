@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.netty
 
+import java.io.{DataInputStream, InputStream}
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
@@ -49,9 +50,9 @@ class NettyBlockRpcServer(
 
   override def receive(
       client: TransportClient,
-      rpcMessage: ChunkedByteBuffer,
+      rpcMessage: InputStream,
       responseContext: RpcResponseCallback): Unit = {
-    val message = BlockTransferMessage.Decoder.fromByteBuffer(rpcMessage)
+    val message = BlockTransferMessage.Decoder.fromDataInputStream(rpcMessage)
     logTrace(s"Received request: $message")
 
     message match {
@@ -70,7 +71,7 @@ class NettyBlockRpcServer(
             .deserialize(ChunkedByteBuffer.wrap(uploadBlock.metadata))
             .asInstanceOf[(StorageLevel, ClassTag[_])]
         }
-        val data = new NioManagedBuffer(ByteBuffer.wrap(uploadBlock.blockData))
+        val data = new NioManagedBuffer(uploadBlock.blockData)
         val blockId = BlockId(uploadBlock.blockId)
         blockManager.putBlockData(blockId, data, level, classTag)
         responseContext.onSuccess(ChunkedByteBuffer.allocate(0))

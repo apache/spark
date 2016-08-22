@@ -18,6 +18,7 @@
 package org.apache.spark.network;
 
 import java.io.File;
+import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.Collections;
@@ -32,7 +33,6 @@ import java.util.concurrent.TimeUnit;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.io.Closeables;
-import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -108,7 +108,7 @@ public class ChunkFetchIntegrationSuite {
       @Override
       public void receive(
           TransportClient client,
-          ChunkedByteBuffer message,
+          InputStream message,
           RpcResponseCallback callback) {
         throw new UnsupportedOperationException();
       }

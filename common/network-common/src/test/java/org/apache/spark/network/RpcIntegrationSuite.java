@@ -17,8 +17,7 @@
 
 package org.apache.spark.network;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -53,6 +52,10 @@ public class RpcIntegrationSuite {
   static RpcHandler rpcHandler;
   static List<String> oneWayMsgs;
 
+  private static String inputStreamToString(InputStream in) throws Exception {
+    return JavaUtils.bytesToString(ChunkedByteBuffer.wrap(in, 1024).toByteBuffer());
+  }
+
   @BeforeClass
   public static void setUp() throws Exception {
     TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
@@ -60,14 +63,9 @@ public class RpcIntegrationSuite {
       @Override
       public void receive(
           TransportClient client,
-          ChunkedByteBuffer message,
-          RpcResponseCallback callback) {
-        String msg ;
-        try {
-          msg = JavaUtils.bytesToString(message.toByteBuffer());
-        } catch (IOException e) {
-          throw new RuntimeException("Thrown: ", e);
-        }
+          InputStream message,
+          RpcResponseCallback callback) throws Exception {
+        String msg = inputStreamToString(message);
         String[] parts = msg.split("/");
         if (parts[0].equals("hello")) {
           callback.onSuccess(ChunkedByteBuffer.wrap(
@@ -80,13 +78,8 @@ public class RpcIntegrationSuite {
       }
 
       @Override
-      public void receive(TransportClient client, ChunkedByteBuffer message) {
-        String msg;
-        try {
-          msg = JavaUtils.bytesToString(message.toByteBuffer());
-        } catch (IOException e) {
-          throw new RuntimeException("Thrown: ", e);
-        }
+      public void receive(TransportClient client, InputStream message) throws Exception {
+        String msg = inputStreamToString(message);
         oneWayMsgs.add(msg);
       }
 
@@ -121,12 +114,7 @@ public class RpcIntegrationSuite {
     RpcResponseCallback callback = new RpcResponseCallback() {
       @Override
       public void onSuccess(ChunkedByteBuffer message) {
-        String response ;
-        try {
-          response = JavaUtils.bytesToString(message.toByteBuffer());
-        } catch (IOException e) {
-          throw new RuntimeException("Thrown: ", e);
-        }
+        String response = JavaUtils.bytesToString(message.toByteBuffer());
         res.successMessages.add(response);
         sem.release();
       }

@@ -21,6 +21,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -37,7 +38,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
@@ -119,7 +119,7 @@ public class StreamSuite {
       @Override
       public void receive(
           TransportClient client,
-          ChunkedByteBuffer message,
+          InputStream message,
           RpcResponseCallback callback) {
         throw new UnsupportedOperationException();
       }

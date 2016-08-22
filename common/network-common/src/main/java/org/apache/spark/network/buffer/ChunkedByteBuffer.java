@@ -17,12 +17,19 @@
 
 package org.apache.spark.network.buffer;
 
-import java.io.*;
+import java.io.Externalizable;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import java.util.Arrays;
 
+import com.google.common.base.Objects;
+import com.google.common.io.ByteStreams;
 import sun.nio.ch.DirectBuffer;
 import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
@@ -31,6 +38,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.util.ByteArrayWritableChannel;
+import org.apache.spark.network.util.JavaUtils;
 
 public class ChunkedByteBuffer implements Externalizable {
   private static final Logger logger = LoggerFactory.getLogger(ChunkedByteBuffer.class);
@@ -130,6 +138,9 @@ public class ChunkedByteBuffer implements Externalizable {
    * Wrap this buffer to view it as a Netty ByteBuf.
    */
   public ByteBuf toNetty() {
+    long len = size();
+    Preconditions.checkArgument(size() <= Integer.MAX_VALUE,
+        "Too large frame: %s", new Object[]{Long.valueOf(len)});
     return Unpooled.wrappedBuffer(getChunks());
   }
 
@@ -138,17 +149,24 @@ public class ChunkedByteBuffer implements Externalizable {
    *
    * @throws UnsupportedOperationException if this buffer's size exceeds the maximum array size.
    */
-  public byte[] toArray() throws IOException, UnsupportedOperationException {
-    long len = size();
-    if (len >= Integer.MAX_VALUE) {
-      throw new UnsupportedOperationException(
-          "cannot call toArray because buffer size (" + len +
-              " bytes) exceeds maximum array size");
+  public byte[] toArray() {
+    try {
+      if (chunks.length == 1) {
+        return JavaUtils.bufferToArray(chunks[0]);
+      } else {
+        long len = size();
+        if (len >= Integer.MAX_VALUE) {
+          throw new UnsupportedOperationException("cannot call toArray because buffer size (" +
+              len + " bytes) exceeds maximum array size");
+        }
+        ByteArrayWritableChannel byteChannel = new ByteArrayWritableChannel((int) len);
+        writeFully(byteChannel);
+        byteChannel.close();
+        return byteChannel.getData();
+      }
+    } catch (Throwable e) {
+      throw new RuntimeException(e);
     }
-    ByteArrayWritableChannel byteChannel = new ByteArrayWritableChannel((int) len);
-    writeFully(byteChannel);
-    byteChannel.close();
-    return byteChannel.getData();
   }
 
   /**
@@ -156,7 +174,7 @@ public class ChunkedByteBuffer implements Externalizable {
    *
    * @throws UnsupportedOperationException if this buffer's size exceeds the max ByteBuffer size.
    */
-  public ByteBuffer toByteBuffer() throws IOException, UnsupportedOperationException {
+  public ByteBuffer toByteBuffer() {
     if (chunks.length == 1) {
       return chunks[0].duplicate();
     } else {
@@ -256,6 +274,20 @@ public class ChunkedByteBuffer implements Externalizable {
     return new ChunkedByteBuffer(getChunks());
   }
 
+  @Override
+  public int hashCode() {
+    return Arrays.hashCode(getChunks());
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    if (other != null && other instanceof ChunkedByteBuffer) {
+      ChunkedByteBuffer o = (ChunkedByteBuffer) other;
+      return Objects.equal(getChunks(), o.getChunks());
+    }
+    return false;
+  }
+
   public static void dispose(ByteBuffer buffer) {
     if (buffer != null && buffer instanceof MappedByteBuffer) {
       logger.trace("Unmapping" + buffer);
@@ -288,5 +320,38 @@ public class ChunkedByteBuffer implements Externalizable {
 
   public static ChunkedByteBuffer allocate(int capacity, Allocator allocator) {
     return new ChunkedByteBuffer(allocator.allocate(capacity));
+  }
+
+  public static ChunkedByteBuffer wrap(
+      byte[] bytes, int off, int len, int chunkSize) {
+    return wrap(bytes, off, len, chunkSize, new Allocator() {
+      public ByteBuffer allocate(int len) {
+        return ByteBuffer.allocate(len);
+      }
+    });
+  }
+
+  public static ChunkedByteBuffer wrap(
+      byte[] bytes, int off, int len, int chunkSize, Allocator allocator) {
+    assert bytes.length >= off + len;
+    int numChunk = (int) Math.ceil(((double) len) / chunkSize);
+    ByteBuffer[] chunks = new ByteBuffer[numChunk];
+    for (int i = 0; i < numChunk; i++) {
+      int bufLen = Math.min(len, chunkSize);
+      ByteBuffer chunk = allocator.allocate(bufLen);
+      chunk.put(bytes, off, bufLen);
+      chunk.flip();
+      chunks[i] = chunk;
+      off += bufLen;
+      len -= bufLen;
+    }
+    return wrap(chunks);
+  }
+
+  public static ChunkedByteBuffer wrap(InputStream in, int chunkSize) throws IOException {
+    ChunkedByteBufferOutputStream out = new ChunkedByteBufferOutputStream(chunkSize);
+    ByteStreams.copy(in, out);
+    out.close();
+    return out.toChunkedByteBuffer();
   }
 }

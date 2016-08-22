@@ -17,7 +17,9 @@
 
 package org.apache.spark.network.protocol;
 
-import io.netty.buffer.ByteBuf;
+import java.io.OutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 
 /**
  * Interface for an object which can be encoded into a ByteBuf. Multiple Encodable objects are
@@ -37,5 +39,5 @@ public interface Encodable {
    * Serializes this object by writing into the given ByteBuf.
    * This method must write exactly encodedLength() bytes.
    */
-  void encode(ByteBuf buf);
+  void encode(OutputStream output) throws IOException;
 }

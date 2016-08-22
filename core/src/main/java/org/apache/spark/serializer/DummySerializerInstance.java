@@ -82,12 +82,12 @@ public final class DummySerializerInstance extends SerializerInstance {
   }
 
   @Override
-  public <T> T deserialize(ChunkedByteBuffer bytes, ClassLoader loader, ClassTag<T> ev1) {
+  public <T> T deserialize(InputStream bytes, ClassLoader loader, ClassTag<T> ev1) {
     throw new UnsupportedOperationException();
   }
 
   @Override
-  public <T> T deserialize(ChunkedByteBuffer bytes, ClassTag<T> ev1) {
+  public <T> T deserialize(InputStream bytes, ClassTag<T> ev1) {
     throw new UnsupportedOperationException();
   }
 }

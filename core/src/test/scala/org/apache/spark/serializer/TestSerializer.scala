@@ -42,10 +42,10 @@ class TestSerializerInstance extends SerializerInstance {
   override def deserializeStream(s: InputStream): TestDeserializationStream =
     new TestDeserializationStream
 
-  override def deserialize[T: ClassTag](bytes: ChunkedByteBuffer): T =
+  override def deserialize[T: ClassTag](bytes: InputStream): T =
     throw new UnsupportedOperationException
 
-  override def deserialize[T: ClassTag](bytes: ChunkedByteBuffer, loader: ClassLoader): T =
+  override def deserialize[T: ClassTag](bytes: InputStream, loader: ClassLoader): T =
     throw new UnsupportedOperationException
 }
 

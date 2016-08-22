@@ -17,14 +17,15 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
-import com.sun.corba.se.impl.ior.ByteBuffer;
-import io.netty.buffer.ByteBuf;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
-import org.apache.spark.network.buffer.ChunkedByteBuffer;
+import com.google.common.base.Objects;
+
+import org.apache.spark.network.buffer.InputStreamManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NettyManagedBuffer;
-import org.apache.spark.network.buffer.NioManagedBuffer;
+
 
 /**
  * Response to {@link ChunkFetchRequest} when a chunk exists and has been successfully fetched.
@@ -46,13 +47,14 @@ public final class ChunkFetchSuccess extends AbstractResponseMessage {
 
   @Override
   public int encodedLength() {
-    return streamChunkId.encodedLength();
+    return streamChunkId.encodedLength() + 8;
   }
 
   /** Encoding does NOT include 'buffer' itself. See {@link MessageEncoder}. */
   @Override
-  public void encode(ByteBuf buf) {
+  public void encode(OutputStream buf) throws IOException {
     streamChunkId.encode(buf);
+    Encoders.Longs.encode(buf, body().size());
   }
 
   @Override
@@ -61,10 +63,10 @@ public final class ChunkFetchSuccess extends AbstractResponseMessage {
   }
 
   /** Decoding uses the given ByteBuf as our data, and will retain() it. */
-  public static ChunkFetchSuccess decode(ByteBuf buf) {
+  public static ChunkFetchSuccess decode(InputStream buf) throws IOException {
     StreamChunkId streamChunkId = StreamChunkId.decode(buf);
-    buf.retain();
-    NettyManagedBuffer managedBuf = new NettyManagedBuffer(buf.duplicate());
+    long limit = Encoders.Longs.decode(buf);
+    ManagedBuffer managedBuf = new InputStreamManagedBuffer(buf, limit);
     return new ChunkFetchSuccess(streamChunkId, managedBuf);
   }
 

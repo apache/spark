@@ -179,8 +179,8 @@ private class UnsafeRowSerializerInstance(
   // These methods are never called by shuffle code.
   override def serialize[T: ClassTag](t: T): ChunkedByteBuffer =
     throw new UnsupportedOperationException
-  override def deserialize[T: ClassTag](bytes: ChunkedByteBuffer): T =
+  override def deserialize[T: ClassTag](bytes: InputStream): T =
     throw new UnsupportedOperationException
-  override def deserialize[T: ClassTag](bytes: ChunkedByteBuffer, loader: ClassLoader): T =
+  override def deserialize[T: ClassTag](bytes: InputStream, loader: ClassLoader): T =
     throw new UnsupportedOperationException
 }

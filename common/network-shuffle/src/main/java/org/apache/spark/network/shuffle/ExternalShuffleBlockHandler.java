@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
@@ -79,9 +80,15 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(TransportClient client, ChunkedByteBuffer message, RpcResponseCallback callback) {
-    BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message);
-    handleMessage(msgObj, client, callback);
+  public void receive(TransportClient client, InputStream message, RpcResponseCallback callback) {
+    BlockTransferMessage msgObj = null;
+    try {
+      msgObj = BlockTransferMessage.Decoder.fromDataInputStream(message);
+    } catch (IOException e) {
+      callback.onFailure(e);
+    }
+
+    if (msgObj != null) handleMessage(msgObj, client, callback);
   }
 
   protected void handleMessage(

@@ -17,25 +17,27 @@
 
 package org.apache.spark.network.shuffle;
 
-import org.junit.Test;
+import java.io.IOException;
 
+import org.junit.Test;
 import static org.junit.Assert.*;
 
 import org.apache.spark.network.shuffle.protocol.*;
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 
 /** Verifies that all BlockTransferMessages can be serialized correctly. */
 public class BlockTransferMessagesSuite {
   @Test
-  public void serializeOpenShuffleBlocks() {
-    checkSerializeDeserialize(new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }));
+  public void serializeOpenShuffleBlocks() throws IOException {
+    checkSerializeDeserialize(new OpenBlocks("app-1", "exec-2", new String[]{"b1", "b2"}));
     checkSerializeDeserialize(new RegisterExecutor("app-1", "exec-2", new ExecutorShuffleInfo(
-      new String[] { "/local1", "/local2" }, 32, "MyShuffleManager")));
-    checkSerializeDeserialize(new UploadBlock("app-1", "exec-2", "block-3", new byte[] { 1, 2 },
-      new byte[] { 4, 5, 6, 7} ));
+        new String[]{"/local1", "/local2"}, 32, "MyShuffleManager")));
+    checkSerializeDeserialize(new UploadBlock("app-1", "exec-2", "block-3", new byte[]{1, 2},
+        ChunkedByteBuffer.wrap( new byte[]{4, 5, 6, 7})));
     checkSerializeDeserialize(new StreamHandle(12345, 16));
   }
 
-  private void checkSerializeDeserialize(BlockTransferMessage msg) {
+  private void checkSerializeDeserialize(BlockTransferMessage msg) throws IOException {
     BlockTransferMessage msg2 = BlockTransferMessage.Decoder.
         fromByteBuffer(msg.toChunkedByteBuffer());
     assertEquals(msg, msg2);

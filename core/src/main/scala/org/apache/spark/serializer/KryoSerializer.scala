@@ -312,10 +312,10 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
     out.toChunkedByteBuffer
   }
 
-  override def deserialize[T: ClassTag](bytes: ChunkedByteBuffer): T = {
+  override def deserialize[T: ClassTag](in: InputStream): T = {
     val kryo = borrowKryo()
     try {
-      input.setInputStream(bytes.toInputStream())
+      input.setInputStream(in)
       // input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
@@ -331,7 +331,21 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
     try {
       kryo.setClassLoader(loader)
       input.setInputStream(bytes.toInputStream())
-      // input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      kryo.readClassAndObject(input).asInstanceOf[T]
+    } finally {
+      input.close()
+      input.setInputStream(null)
+      kryo.setClassLoader(oldClassLoader)
+      releaseKryo(kryo)
+    }
+  }
+
+  override def deserialize[T: ClassTag](bytes: InputStream, loader: ClassLoader): T = {
+    val kryo = borrowKryo()
+    val oldClassLoader = kryo.getClassLoader
+    try {
+      kryo.setClassLoader(loader)
+      input.setInputStream(bytes)
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
       input.close()

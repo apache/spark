@@ -105,14 +105,12 @@ private[spark] class JavaSerializerInstance(
     bos.toChunkedByteBuffer
   }
 
-  override def deserialize[T: ClassTag](bytes: ChunkedByteBuffer): T = {
-    val bis = bytes.toInputStream()
+  override def deserialize[T: ClassTag](bis: InputStream): T = {
     val in = deserializeStream(bis)
     in.readObject()
   }
 
-  override def deserialize[T: ClassTag](bytes: ChunkedByteBuffer, loader: ClassLoader): T = {
-    val bis = bytes.toInputStream()
+  override def deserialize[T: ClassTag](bis: InputStream, loader: ClassLoader): T = {
     val in = deserializeStream(bis, loader)
     in.readObject()
   }

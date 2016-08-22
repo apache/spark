@@ -113,9 +113,17 @@ abstract class Serializer {
 abstract class SerializerInstance {
   def serialize[T: ClassTag](t: T): ChunkedByteBuffer
 
-  def deserialize[T: ClassTag](bytes: ChunkedByteBuffer): T
+  def deserialize[T: ClassTag](bytes: ChunkedByteBuffer): T = {
+    deserialize(bytes.toInputStream())
+  }
 
-  def deserialize[T: ClassTag](bytes: ChunkedByteBuffer, loader: ClassLoader): T
+  def deserialize[T: ClassTag](bytes: ChunkedByteBuffer, loader: ClassLoader): T = {
+    deserialize(bytes.toInputStream(), loader)
+  }
+
+  def deserialize[T: ClassTag](in: InputStream): T
+
+  def deserialize[T: ClassTag](in: InputStream, loader: ClassLoader): T
 
   def serializeStream(s: OutputStream): SerializationStream
 

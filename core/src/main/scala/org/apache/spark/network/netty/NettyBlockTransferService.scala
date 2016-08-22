@@ -131,7 +131,7 @@ private[spark] class NettyBlockTransferService(
     val metadata = serializer.newInstance().serialize((level, classTag)).toArray
 
     // Convert or copy nio buffer into array in order to serialize it.
-    val array = blockData.nioByteBuffer().toArray
+    val array = blockData.nioByteBuffer()
 
     client.sendRpc(new UploadBlock(appId, execId, blockId.toString, metadata, array).
       toChunkedByteBuffer,

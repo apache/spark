@@ -35,6 +35,7 @@ import org.junit.*;
 import static org.junit.Assert.*;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
@@ -92,8 +93,8 @@ public class RequestTimeoutIntegrationSuite {
       @Override
       public void receive(
           TransportClient client,
-          ChunkedByteBuffer message,
-          RpcResponseCallback callback) {
+          InputStream message,
+          RpcResponseCallback callback) throws Exception {
         try {
           semaphore.acquire();
           callback.onSuccess(ChunkedByteBuffer.wrap(ByteBuffer.allocate(responseSize)));
@@ -139,7 +140,7 @@ public class RequestTimeoutIntegrationSuite {
       @Override
       public void receive(
           TransportClient client,
-          ChunkedByteBuffer message,
+          InputStream message,
           RpcResponseCallback callback) {
         try {
           semaphore.acquire();
@@ -195,8 +196,8 @@ public class RequestTimeoutIntegrationSuite {
       @Override
       public void receive(
           TransportClient client,
-          ChunkedByteBuffer message,
-          RpcResponseCallback callback) {
+          InputStream message,
+          RpcResponseCallback callback) throws Exception {
         throw new UnsupportedOperationException();
       }
 

@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.server;
 
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 import org.slf4j.Logger;
@@ -47,8 +48,8 @@ public abstract class RpcHandler {
    */
   public abstract void receive(
       TransportClient client,
-      ChunkedByteBuffer message,
-      RpcResponseCallback callback);
+      InputStream message,
+      RpcResponseCallback callback) throws Exception;
 
   /**
    * Returns the StreamManager which contains the state about which streams are currently being
@@ -58,14 +59,14 @@ public abstract class RpcHandler {
 
   /**
    * Receives an RPC message that does not expect a reply. The default implementation will
-   * call "{@link #receive(TransportClient, ChunkedByteBuffer, RpcResponseCallback)}" and log a warning if
+   * call "{@link #receive(TransportClient, InputStream, RpcResponseCallback)}" and log a warning if
    * any of the callback methods are called.
    *
    * @param client A channel client which enables the handler to make requests back to the sender
    *               of this RPC. This will always be the exact same object for a particular channel.
    * @param message The serialized bytes of the RPC.
    */
-  public void receive(TransportClient client, ChunkedByteBuffer message) {
+  public void receive(TransportClient client, InputStream message) throws Exception {
     receive(client, message, ONE_WAY_CALLBACK);
   }
 

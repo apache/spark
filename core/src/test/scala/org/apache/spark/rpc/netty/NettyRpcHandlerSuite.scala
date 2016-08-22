@@ -17,6 +17,7 @@
 
 package org.apache.spark.rpc.netty
 
+import java.io.InputStream
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 
@@ -34,7 +35,7 @@ class NettyRpcHandlerSuite extends SparkFunSuite {
 
   val env = mock(classOf[NettyRpcEnv])
   val sm = mock(classOf[StreamManager])
-  when(env.deserialize(any(classOf[TransportClient]), any(classOf[ChunkedByteBuffer]))(any()))
+  when(env.deserialize(any(classOf[TransportClient]), any(classOf[InputStream]))(any()))
     .thenReturn(RequestMessage(RpcAddress("localhost", 12345), null, null))
 
   test("receive") {
