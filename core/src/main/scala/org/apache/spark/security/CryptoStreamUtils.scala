@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.crypto
+package org.apache.spark.security
 
 import java.io.{InputStream, OutputStream}
 import java.util.Properties
@@ -22,22 +22,27 @@ import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 
 import org.apache.commons.crypto.random._
 import org.apache.commons.crypto.stream._
+import org.apache.hadoop.io.Text
 
 import org.apache.spark.SparkConf
-import org.apache.spark.crypto.CryptoConf._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.config._
 
 /**
- * A util class for manipulating file shuffle encryption and decryption streams.
+ * A util class for manipulating IO encryption and decryption streams.
  */
 private[spark] object CryptoStreamUtils {
+  /**
+   * Constants and variables for spark IO encryption
+   */
+  val SPARK_IO_TOKEN = new Text("SPARK_IO_TOKEN")
+
   // The initialization vector length in bytes.
   val IV_LENGTH_IN_BYTES = 16
   // The prefix of Crypto related configurations in Spark configuration.
   val SPARK_COMMONS_CRYPTO_CONF_PREFIX = "spark.commons.crypto."
   // The prefix for the configurations passing to Commons-crypto library.
   val COMMONS_CRYPTO_CONF_PREFIX = "commons.crypto."
-
 
   /**
    * Helper method to wrap [[OutputStream]] with [[CryptoOutputStream]] for encryption.
@@ -47,12 +52,11 @@ private[spark] object CryptoStreamUtils {
       sparkConf: SparkConf): OutputStream = {
     val properties = toCryptoConf(sparkConf, SPARK_COMMONS_CRYPTO_CONF_PREFIX,
       COMMONS_CRYPTO_CONF_PREFIX)
-    val iv: Array[Byte] = createInitializationVector(properties)
+    val iv = createInitializationVector(properties)
     os.write(iv)
     val credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
-    val key = credentials.getSecretKey(SPARK_SHUFFLE_TOKEN)
-    val transformationStr = sparkConf.get(
-      "spark.shuffle.crypto.cipher.transformation", "AES/CTR/NoPadding")
+    val key = credentials.getSecretKey(SPARK_IO_TOKEN)
+    val transformationStr = sparkConf.get(SPARK_IO_CRYPTO_CIPHER_TRANSFORMATION)
     new CryptoOutputStream(transformationStr, properties, os,
       new SecretKeySpec(key, "AES"), new IvParameterSpec(iv))
   }
@@ -68,16 +72,14 @@ private[spark] object CryptoStreamUtils {
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
     is.read(iv, 0, iv.length)
     val credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
-    val key = credentials.getSecretKey(SPARK_SHUFFLE_TOKEN)
-    val transformationStr = sparkConf.get(
-      "spark.shuffle.crypto.cipher.transformation", "AES/CTR/NoPadding")
+    val key = credentials.getSecretKey(SPARK_IO_TOKEN)
+    val transformationStr = sparkConf.get(SPARK_IO_CRYPTO_CIPHER_TRANSFORMATION)
     new CryptoInputStream(transformationStr, properties, is,
       new SecretKeySpec(key, "AES"), new IvParameterSpec(iv))
   }
 
   /**
-   * Get Commons-crypto configurations from Spark configurations identified
-   * by prefix.
+   * Get Commons-crypto configurations from Spark configurations identified by prefix.
    */
   def toCryptoConf(
       conf: SparkConf,

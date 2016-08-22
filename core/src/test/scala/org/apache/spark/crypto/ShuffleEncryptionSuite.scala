@@ -19,11 +19,12 @@ package org.apache.spark.crypto
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.spark.security.CryptoStreamUtils
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.crypto.CryptoConf._
-import org.apache.spark.crypto.CryptoStreamUtils.{COMMONS_CRYPTO_CONF_PREFIX, SPARK_COMMONS_CRYPTO_CONF_PREFIX}
-
+import org.apache.spark.internal.config._
+import CryptoStreamUtils._
+import org.apache.spark.serializer.SerializerManager
 
 private[spark] class ShuffleEncryptionSuite extends SparkFunSuite {
   val ugi = UserGroupInformation.createUserForTesting("testuser", Array("testgroup"))
@@ -51,7 +52,7 @@ private[spark] class ShuffleEncryptionSuite extends SparkFunSuite {
         val credentials = UserGroupInformation.getCurrentUser.getCredentials()
         val conf = new SparkConf()
         initCredentials(conf, credentials)
-        assert(credentials.getSecretKey(SPARK_SHUFFLE_TOKEN) === null)
+        assert(credentials.getSecretKey(SPARK_IO_TOKEN) === null)
       }
     })
   }
@@ -61,12 +62,12 @@ private[spark] class ShuffleEncryptionSuite extends SparkFunSuite {
       override def run(): Unit = {
         val credentials = UserGroupInformation.getCurrentUser.getCredentials()
         val conf = new SparkConf()
-        conf.set(SPARK_SHUFFLE_ENCRYPTION_ENABLED, true.toString)
+        conf.set(SPARK_IO_ENCRYPTION_ENABLED, true)
         initCredentials(conf, credentials)
-        var key = credentials.getSecretKey(SPARK_SHUFFLE_TOKEN)
+        var key = credentials.getSecretKey(SPARK_IO_TOKEN)
         assert(key !== null)
         val actual = key.length * (java.lang.Byte.SIZE)
-        assert(actual === DEFAULT_SPARK_SHUFFLE_ENCRYPTION_KEY_SIZE_BITS)
+        assert(actual === 128)
       }
     })
   }
@@ -76,10 +77,10 @@ private[spark] class ShuffleEncryptionSuite extends SparkFunSuite {
       override def run(): Unit = {
         val credentials = UserGroupInformation.getCurrentUser.getCredentials()
         val conf = new SparkConf()
-        conf.set(SPARK_SHUFFLE_ENCRYPTION_KEY_SIZE_BITS, 256.toString)
-        conf.set(SPARK_SHUFFLE_ENCRYPTION_ENABLED, true.toString)
+        conf.set(SPARK_IO_ENCRYPTION_KEY_SIZE_BITS, 256)
+        conf.set(SPARK_IO_ENCRYPTION_ENABLED, true)
         initCredentials(conf, credentials)
-        var key = credentials.getSecretKey(SPARK_SHUFFLE_TOKEN)
+        var key = credentials.getSecretKey(SPARK_IO_TOKEN)
         assert(key !== null)
         val actual = key.length * (java.lang.Byte.SIZE)
         assert(actual === 256)
@@ -92,8 +93,8 @@ private[spark] class ShuffleEncryptionSuite extends SparkFunSuite {
       override def run(): Unit = {
         val credentials = UserGroupInformation.getCurrentUser.getCredentials()
         val conf = new SparkConf()
-        conf.set(SPARK_SHUFFLE_ENCRYPTION_KEY_SIZE_BITS, 328.toString)
-        conf.set(SPARK_SHUFFLE_ENCRYPTION_ENABLED, true.toString)
+        conf.set(SPARK_IO_ENCRYPTION_KEY_SIZE_BITS, 328)
+        conf.set(SPARK_IO_ENCRYPTION_ENABLED, true)
         val thrown = intercept[IllegalArgumentException] {
           initCredentials(conf, credentials)
         }
@@ -102,8 +103,8 @@ private[spark] class ShuffleEncryptionSuite extends SparkFunSuite {
   }
 
   private[this] def initCredentials(conf: SparkConf, credentials: Credentials): Unit = {
-    if (CryptoConf.isShuffleEncryptionEnabled(conf)) {
-      CryptoConf.initSparkShuffleCredentials(conf, credentials)
+    if (conf.get(SPARK_IO_ENCRYPTION_ENABLED)) {
+      SerializerManager.initShuffleEncryptionKey(conf, credentials)
     }
   }
 }

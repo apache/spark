@@ -19,18 +19,22 @@ package org.apache.spark.serializer
 
 import java.io.{BufferedInputStream, BufferedOutputStream, InputStream, OutputStream}
 import java.nio.ByteBuffer
+import javax.crypto.KeyGenerator
 
+import org.apache.hadoop.security.Credentials
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
-import org.apache.spark.crypto.{CryptoConf, CryptoStreamUtils}
+import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.security.CryptoStreamUtils
+import org.apache.spark.security.CryptoStreamUtils._
 import org.apache.spark.storage._
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 /**
- * Component which configures serialization and compression for various Spark components, including
- * automatic selection of which [[Serializer]] to use for shuffles.
+ * Component which configures serialization, compression and encryption for various Spark
+ * components, including automatic selection of which [[Serializer]] to use for shuffles.
  */
 private[spark] class SerializerManager(defaultSerializer: Serializer, conf: SparkConf) {
 
@@ -62,8 +66,8 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
   // Whether to compress shuffle output temporarily spilled to disk
   private[this] val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
 
-  // Whether to encrypt shuffle file encryption
-  private[this] val enableShuffleFileEncryption = CryptoConf.isShuffleEncryptionEnabled(conf)
+  // Whether to encrypt IO encryption
+  private[this] val enableIOEncryption = conf.get(SPARK_IO_ENCRYPTION_ENABLED)
 
   /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
    * the initialization of the compression codec until it is first used. The reason is that a Spark
@@ -107,17 +111,31 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
   }
 
   /**
+   * Wrap an input stream for encryption and compression
+   */
+  def wrapStream(blockId: BlockId, s: InputStream): InputStream = {
+    wrapForCompression(blockId, wrapForEncryption(s))
+  }
+
+  /**
+   * Wrap an output stream for encryption and compression
+   */
+  def wrapStream(blockId: BlockId, s: OutputStream): OutputStream = {
+    wrapForEncryption(wrapForCompression(blockId, s))
+  }
+
+  /**
    * Wrap an input stream for encryption if shuffle encryption is enabled
    */
   def wrapForEncryption(s: InputStream): InputStream = {
-    if (enableShuffleFileEncryption) CryptoStreamUtils.createCryptoInputStream(s, conf) else s
+    if (enableIOEncryption) CryptoStreamUtils.createCryptoInputStream(s, conf) else s
   }
 
   /**
    * Wrap an output stream for encryption if shuffle encryption is enabled
    */
   def wrapForEncryption(s: OutputStream): OutputStream = {
-    if (enableShuffleFileEncryption) CryptoStreamUtils.createCryptoOutputStream(s, conf) else s
+    if (enableIOEncryption) CryptoStreamUtils.createCryptoOutputStream(s, conf) else s
   }
 
   /**
@@ -141,8 +159,7 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       values: Iterator[T]): Unit = {
     val byteStream = new BufferedOutputStream(outputStream)
     val ser = getSerializer(implicitly[ClassTag[T]]).newInstance()
-    ser.serializeStream(wrapForEncryption(wrapForCompression(blockId, byteStream))).writeAll(
-      values).close()
+    ser.serializeStream(wrapStream(blockId, byteStream)).writeAll(values).close()
   }
 
   /** Serializes into a chunked byte buffer. */
@@ -172,7 +189,25 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
     val stream = new BufferedInputStream(inputStream)
     getSerializer(implicitly[ClassTag[T]])
       .newInstance()
-      .deserializeStream(wrapForCompression(blockId, wrapForEncryption(stream)))
+      .deserializeStream(wrapStream(blockId, stream))
       .asIterator.asInstanceOf[Iterator[T]]
+  }
+}
+
+private[spark] object SerializerManager {
+  /**
+   * Setup the cryptographic key used by IO encryption in credentials. The key is generated using
+   * [[KeyGenerator]]. The algorithm and key length is specified by the [[SparkConf]].
+   */
+  def initShuffleEncryptionKey(conf: SparkConf, credentials: Credentials): Unit = {
+    if (credentials.getSecretKey(SPARK_IO_TOKEN) == null) {
+      val keyLen = conf.get(SPARK_IO_ENCRYPTION_KEY_SIZE_BITS)
+      val IOKeyGenAlgorithm = conf.get(SPARK_IO_ENCRYPTION_KEYGEN_ALGORITHM)
+      val keyGen = KeyGenerator.getInstance(IOKeyGenAlgorithm)
+      keyGen.init(keyLen)
+
+      val IOKey = keyGen.generateKey()
+      credentials.addSecretKey(SPARK_IO_TOKEN, IOKey.getEncoded)
+    }
   }
 }

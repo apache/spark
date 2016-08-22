@@ -48,13 +48,13 @@ import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException}
-import org.apache.spark.crypto.CryptoConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
+import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.util.Utils
 
 private[spark] class Client(
@@ -1005,8 +1005,8 @@ private[spark] class Client(
     amContainer.setApplicationACLs(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
 
-    if (CryptoConf.isShuffleEncryptionEnabled(sparkConf)) {
-      CryptoConf.initSparkShuffleCredentials(sparkConf, credentials)
+    if (sparkConf.get(SPARK_IO_ENCRYPTION_ENABLED)) {
+      SerializerManager.initShuffleEncryptionKey(sparkConf, credentials)
     }
     setupSecurityToken(amContainer)
 

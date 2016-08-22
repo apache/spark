@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 import java.security.PrivilegedExceptionAction
 import java.util.{ArrayList => JArrayList, LinkedList => JLinkedList, UUID}
 
+
 import scala.runtime.AbstractFunction1
 
 import com.google.common.collect.HashMultiset
@@ -37,24 +38,22 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
 import org.apache.spark._
-import org.apache.spark.crypto.{CryptoConf, CryptoStreamUtils}
-import org.apache.spark.crypto.CryptoConf._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
+import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.network.buffer.NioManagedBuffer
 import org.apache.spark.network.util.LimitedInputStream
-import org.apache.spark.serializer.{DeserializationStream, KryoSerializer, SerializerInstance,
-SerializerManager}
-import org.apache.spark.shuffle.{BaseShuffleHandle, BlockStoreShuffleReader,
-  IndexShuffleBlockResolver, RecordingManagedBuffer}
+import org.apache.spark.security.CryptoStreamUtils
+import org.apache.spark.serializer._
+import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.sort.{SerializedShuffleHandle, UnsafeShuffleWriter}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
-private[spark] class YarnShuffleEncryptionSuite extends SparkFunSuite with Matchers with
-                                                        BeforeAndAfterAll with BeforeAndAfterEach {
+private[spark] class YarnIOEncryptionSuite extends SparkFunSuite with Matchers with
+  BeforeAndAfterAll with BeforeAndAfterEach {
   @Mock(answer = RETURNS_SMART_NULLS) private[this] var blockManager: BlockManager = _
   @Mock(answer = RETURNS_SMART_NULLS) private[this] var blockResolver: IndexShuffleBlockResolver = _
   @Mock(answer = RETURNS_SMART_NULLS) private[this] var diskBlockManager: DiskBlockManager = _
@@ -102,9 +101,9 @@ private[spark] class YarnShuffleEncryptionSuite extends SparkFunSuite with Match
     System.setProperty("SPARK_YARN_MODE", "true")
     ugi.doAs(new PrivilegedExceptionAction[Unit]() {
       override def run(): Unit = {
-        conf.set(SPARK_SHUFFLE_ENCRYPTION_ENABLED, true.toString)
+        conf.set(SPARK_IO_ENCRYPTION_ENABLED, true)
         val creds = new Credentials()
-        CryptoConf.initSparkShuffleCredentials(conf, creds)
+        SerializerManager.initShuffleEncryptionKey(conf, creds)
         SparkHadoopUtil.get.addCurrentUserCredentials(creds)
       }
     })
@@ -127,32 +126,30 @@ private[spark] class YarnShuffleEncryptionSuite extends SparkFunSuite with Match
     conf.set("spark.shuffle.spill.compress", false.toString)
     Utils.deleteRecursively(tempDir)
     val leakedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
-    if (leakedMemory != 0) {
-      fail("Test leaked " + leakedMemory + " bytes of managed memory")
-    }
+    assert (leakedMemory === 0)
   }
 
-  test("yarn shuffle encryption read and write") {
+  test("Yarn IO encryption read and write") {
     ugi.doAs(new PrivilegedExceptionAction[Unit] {
       override def run(): Unit = {
         conf.set("spark.shuffle.compress", false.toString)
         conf.set("spark.shuffle.spill.compress", false.toString)
-        testYarnShuffleEncryptionWriteRead()
+        testYarnIOEncryptionWriteRead()
       }
     })
   }
 
-  test("yarn shuffle encryption read and write with shuffle compression enabled") {
+  test("Yarn IO encryption read and write with shuffle compression enabled") {
     ugi.doAs(new PrivilegedExceptionAction[Unit] {
       override def run(): Unit = {
         conf.set("spark.shuffle.compress", true.toString)
         conf.set("spark.shuffle.spill.compress", true.toString)
-        testYarnShuffleEncryptionWriteRead()
+        testYarnIOEncryptionWriteRead()
       }
     })
   }
 
-  private[this] def testYarnShuffleEncryptionWriteRead(): Unit = {
+  private[this] def testYarnIOEncryptionWriteRead(): Unit = {
     val dataToWrite = new JArrayList[Product2[Int, Int]]()
     for (i <- 0 to NUM_PARTITITONS) {
       dataToWrite.add((i, i))
@@ -207,7 +204,7 @@ private[spark] class YarnShuffleEncryptionSuite extends SparkFunSuite with Match
               val args = invocationOnMock.getArguments
               new DiskBlockObjectWriter(args(1).asInstanceOf[File],
                 args(2).asInstanceOf[SerializerInstance],
-                args(3).asInstanceOf[Integer], new CompressStream(), new EncryptStream(), false,
+                args(3).asInstanceOf[Integer], new WrapStream(), false,
                 args(4).asInstanceOf[ShuffleWriteMetrics], args(0).asInstanceOf[BlockId])
             }
           })
@@ -244,27 +241,20 @@ private[spark] class YarnShuffleEncryptionSuite extends SparkFunSuite with Match
     val localBlockManagerId = BlockManagerId("test-client", "test-client", 1)
     when(blockManager.blockManagerId).thenReturn(localBlockManagerId)
 
-    // Create a return function to use for the mocked wrapForCompression method to initial a
-    // compressed input stream if spark.shuffle.compress is enabled
-    val compressionFunction = new Answer[InputStream] {
+    // Create a return function to use for the mocked wrapStream method to initial an
+    // encrypted and compressed input stream if encryption and compression enabled
+    val wrapFunction = new Answer[InputStream] {
       override def answer(invocation: InvocationOnMock): InputStream = {
-        if (conf.getBoolean("spark.shuffle.compress", false)) {
-          CompressionCodec.createCodec(conf).compressedInputStream(
-            invocation.getArguments()(1).asInstanceOf[InputStream])
+        val encryptedStream = if (conf.get(SPARK_IO_ENCRYPTION_ENABLED)) {
+          CryptoStreamUtils.createCryptoInputStream(
+            invocation.getArguments()(1).asInstanceOf[InputStream], conf)
         } else {
           invocation.getArguments()(1).asInstanceOf[InputStream]
         }
-      }
-    }
-    // Create a return function to use for the mocked wrapForEncryption method to initial a
-    // encrypted input stream if spark.shuffle.encryption.enabled is enabled
-    val encryptionFunction = new Answer[InputStream] {
-      override def answer(invocation: InvocationOnMock): InputStream = {
-        if (CryptoConf.isShuffleEncryptionEnabled(conf)) {
-          CryptoStreamUtils.createCryptoInputStream(
-            invocation.getArguments()(0).asInstanceOf[InputStream], conf)
+        if (conf.getBoolean("spark.shuffle.compress", false)) {
+          CompressionCodec.createCodec(conf).compressedInputStream(encryptedStream)
         } else {
-          invocation.getArguments()(0).asInstanceOf[InputStream]
+          encryptedStream
         }
       }
     }
@@ -289,10 +279,8 @@ private[spark] class YarnShuffleEncryptionSuite extends SparkFunSuite with Match
         // fetch shuffle data.
         val shuffleBlockId = ShuffleBlockId(SHUFFLE_ID, mapId, REDUCE_ID)
         when(blockManager.getBlockData(shuffleBlockId)).thenReturn(managedBuffer)
-        when(serializerManager.wrapForCompression(meq(shuffleBlockId),
-          isA(classOf[InputStream]))).thenAnswer(compressionFunction)
-        when(serializerManager.wrapForEncryption(isA(classOf[InputStream]))).thenAnswer(
-          encryptionFunction)
+        when(serializerManager.wrapStream(meq(shuffleBlockId),
+          isA(classOf[InputStream]))).thenAnswer(wrapFunction)
       }
     }
 
@@ -303,10 +291,8 @@ private[spark] class YarnShuffleEncryptionSuite extends SparkFunSuite with Match
       (shuffleBlockId, partitionSizesInMergedFile(mapId))
     }
     val mapSizesByExecutorId = Seq((localBlockManagerId, shuffleBlockIdsAndSizes))
-    when(mapOutputTracker.getMapSizesByExecutorId(SHUFFLE_ID, REDUCE_ID, REDUCE_ID + 1)).thenReturn
-    {
-      mapSizesByExecutorId
-    }
+    when(mapOutputTracker.getMapSizesByExecutorId(SHUFFLE_ID, REDUCE_ID, REDUCE_ID + 1))
+      .thenReturn(mapSizesByExecutorId)
   }
 
   @throws(classOf[IOException])
@@ -333,22 +319,17 @@ private[spark] class YarnShuffleEncryptionSuite extends SparkFunSuite with Match
     recordsList
   }
 
-  private[this] final class CompressStream extends AbstractFunction1[OutputStream, OutputStream] {
+  private[this] final class WrapStream extends AbstractFunction1[OutputStream, OutputStream] {
     override def apply(stream: OutputStream): OutputStream = {
-      if (conf.getBoolean("spark.shuffle.compress", false)) {
-        CompressionCodec.createCodec(conf).compressedOutputStream(stream)
-      } else {
-        stream
-      }
-    }
-  }
-
-  private[this] final class EncryptStream extends AbstractFunction1[OutputStream, OutputStream] {
-    override def apply(stream: OutputStream): OutputStream = {
-      if (CryptoConf.isShuffleEncryptionEnabled(conf)) {
+      val encryptedStream = if (conf.get(SPARK_IO_ENCRYPTION_ENABLED)) {
         CryptoStreamUtils.createCryptoOutputStream(stream, conf)
       } else {
         stream
+      }
+      if (conf.getBoolean("spark.shuffle.compress", false)) {
+        CompressionCodec.createCodec(conf).compressedOutputStream(encryptedStream)
+      } else {
+        encryptedStream
       }
     }
   }

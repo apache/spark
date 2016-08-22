@@ -53,8 +53,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
     // Wrap the streams for compression and encryption based on configuration
     val wrappedStreams = blockFetcherItr.map { case (blockId, inputStream) =>
-      val eis = serializerManager.wrapForEncryption(inputStream)
-      serializerManager.wrapForCompression(blockId, eis)
+      serializerManager.wrapStream(blockId, inputStream)
     }
 
     val serializerInstance = dep.serializer.newInstance()
