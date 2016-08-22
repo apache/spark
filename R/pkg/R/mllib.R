@@ -648,15 +648,15 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html
 #' #multilayer-perceptron-classifier}{Multilayerperceptron classifier}.
 #'
-#' @param data A \code{SparkDataFrame} of observations and labels for model fitting
-#' @param blockSize BlockSize parameter
-#' @param layers Integer vector containing the number of nodes for each layer
-#' @param solver Solver parameter, supported options: "gd" (minibatch gradient descent) or "l-bfgs"
-#' @param maxIter Maximum iteration number
-#' @param tol Convergence tolerance of iterations
-#' @param stepSize StepSize parameter
-#' @param seed Seed parameter for weights initialization
-#' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model
+#' @param data a \code{SparkDataFrame} of observations and labels for model fitting.
+#' @param blockSize blockSize parameter.
+#' @param layers integer vector containing the number of nodes for each layer
+#' @param solver solver parameter, supported options: "gd" (minibatch gradient descent) or "l-bfgs".
+#' @param maxIter maximum iteration number.
+#' @param tol convergence tolerance of iterations.
+#' @param stepSize stepSize parameter.
+#' @param seed seed parameter for weights initialization.
+#' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model.
 #' @rdname spark.mlp
 #' @aliases spark.mlp,SparkDataFrame-method
 #' @name spark.mlp
@@ -690,42 +690,41 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame"),
                                 "fit", data@sdf, as.integer(blockSize), as.array(layers),
                                 as.character(solver), as.integer(maxIter), as.numeric(tol),
                                 as.numeric(stepSize), as.integer(seed))
-            return(new("MultilayerPerceptronClassificationModel", jobj = jobj))
+            new("MultilayerPerceptronClassificationModel", jobj = jobj)
           })
 
 # Makes predictions from a model produced by spark.mlp().
 
-#' @param object A Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
-#' @param newData A SparkDataFrame for testing
+#' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}.
+#' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
-#' "prediction"
+#' "prediction".
 #' @rdname spark.mlp
 #' @aliases predict,MultilayerPerceptronClassificationModel-method
 #' @export
 #' @note predict(MultilayerPerceptronClassificationModel) since 2.1.0
 setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel"),
           function(object, newData) {
-            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+            predict_internal(object, newData)
           })
 
 # Returns the summary of a Multilayer Perceptron Classification Model produced by \code{spark.mlp}
 
-#' @param object A Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
-#' @param ... Currently not used
+#' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
 #' @return \code{summary} returns a list containing \code{layers}, the label distribution, and
-#'         \code{tables}, conditional probabilities given the target label
+#'         \code{tables}, conditional probabilities given the target label.
 #' @rdname spark.mlp
 #' @export
 #' @aliases summary,MultilayerPerceptronClassificationModel-method
 #' @note summary(MultilayerPerceptronClassificationModel) since 2.1.0
 setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
-          function(object, ...) {
+          function(object) {
             jobj <- object@jobj
             labelCount <- callJMethod(jobj, "labelCount")
             layers <- unlist(callJMethod(jobj, "layers"))
             weights <- callJMethod(jobj, "weights")
             weights <- matrix(weights, nrow = length(weights))
-            return(list(labelCount = labelCount, layers = layers, weights = weights))
+            list(labelCount = labelCount, layers = layers, weights = weights)
           })
 
 #' Naive Bayes Models
@@ -833,9 +832,9 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 
 # Saves the Multilayer Perceptron Classification Model to the input path.
 
-#' @param object A Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
-#' @param path The directory where the model is saved
-#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}.
+#' @param path the directory where the model is saved.
+#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.mlp
@@ -850,7 +849,7 @@ setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationMode
             if (overwrite) {
               writer <- callJMethod(writer, "overwrite")
             }
-            invisible(callJMethod(writer, "save", path))
+            write_internal(object, path, overwrite)
           })
 
 #  Save fitted IsotonicRegressionModel to the input path
@@ -919,7 +918,7 @@ read.ml <- function(path) {
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.ALSWrapper")) {
     new("ALSModel", jobj = jobj)
   } else {
-    stop(paste("Unsupported model: ", jobj))
+    stop("Unsupported model: ", jobj)
   }
 }
 

@@ -1331,6 +1331,7 @@ setGeneric("spark.kmeans", function(data, formula, ...) { standardGeneric("spark
 setGeneric("fitted")
 
 #' @rdname spark.mlp
+#' @param ... Additional parameters to tune MLP.
 #' @export
 setGeneric("spark.mlp", function(data, formula, ...) { standardGeneric("spark.mlp") })
 
