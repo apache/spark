@@ -240,10 +240,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         val inferredSchema =
           defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles())
         val schema = if (fileType == "parquet") {
+          // For Parquet, get correct schema by merging Metastore schema data types
+          // and Parquet schema field names.
           inferredSchema.map { schema =>
             ParquetFileFormat.mergeMetastoreParquetSchema(metastoreSchema, schema)
           }.getOrElse(metastoreSchema)
         } else {
+          // For others (e.g orc), fall back to metastore schema if needed.
           inferredSchema.getOrElse(metastoreSchema)
         }
 

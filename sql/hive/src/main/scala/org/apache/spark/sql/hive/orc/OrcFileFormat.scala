@@ -57,6 +57,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
+    // Safe to ignore FileNotFoundException in case no files are found.
     val schema = Try(OrcFileOperator.readSchema(
         files.map(_.getPath.toUri.toString),
         Some(sparkSession.sessionState.newHadoopConf())))
