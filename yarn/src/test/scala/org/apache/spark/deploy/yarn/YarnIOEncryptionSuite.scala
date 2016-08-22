@@ -21,7 +21,6 @@ import java.nio.ByteBuffer
 import java.security.PrivilegedExceptionAction
 import java.util.{ArrayList => JArrayList, LinkedList => JLinkedList, UUID}
 
-
 import scala.runtime.AbstractFunction1
 
 import com.google.common.collect.HashMultiset

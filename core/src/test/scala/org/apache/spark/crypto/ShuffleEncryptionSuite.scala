@@ -19,11 +19,11 @@ package org.apache.spark.crypto
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.spark.security.CryptoStreamUtils
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
-import CryptoStreamUtils._
+import org.apache.spark.security.CryptoStreamUtils
+import org.apache.spark.security.CryptoStreamUtils._
 import org.apache.spark.serializer.SerializerManager
 
 private[spark] class ShuffleEncryptionSuite extends SparkFunSuite {
