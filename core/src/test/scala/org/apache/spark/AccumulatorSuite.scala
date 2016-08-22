@@ -171,7 +171,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
       d.foreach {
         x => acc.localValue ++= x
       }
-      acc.value should be ( (0 to maxI).toSet)
+      acc.value should be ((0 to maxI).toSet)
       resetSparkContext()
     }
   }
