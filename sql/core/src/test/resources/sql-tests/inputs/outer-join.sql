@@ -11,7 +11,7 @@ SELECT * FROM lowercasedata l RIGHT OUTER JOIN uppercasedata u ON l.n = u.N;
 SELECT * FROM uppercasedata u LEFT OUTER JOIN lowercasedata l ON l.n = u.N;
 
 
--- left-outer join over two nested table expressions (auto_join4.q)
+-- left-outer join over two nested table expressions
 SELECT c.c1, c.c2, c.c3, c.c4
 FROM (
   SELECT a.c1 AS c1, a.c2 AS c2, b.c3 AS c3, b.c4 AS c4
@@ -26,7 +26,7 @@ FROM (
   ON (a.c1 = b.c3)
 ) c;
 
--- right-outer join over two nested table expressions (auto_join5.q)
+-- right-outer join over two nested table expressions
 SELECT c.c1, c.c2, c.c3, c.c4
 FROM (
   SELECT a.c1 AS c1, a.c2 AS c2, b.c3 AS c3, b.c4 AS c4
@@ -41,7 +41,7 @@ FROM (
   ON (a.c1 = b.c3)
 ) c;
 
--- full-outer join over two nested table expressions (auto_join6.q)
+-- full-outer join over two nested table expressions
 SELECT c.c1, c.c2, c.c3, c.c4
 FROM (
  SELECT a.c1 AS c1, a.c2 AS c2, b.c3 AS c3, b.c4 AS c4
@@ -56,7 +56,7 @@ FROM (
  ON (a.c1 = b.c3)
 ) c;
 
--- full-outer join + left-outer join over nested table expressions (auto_join7.q)
+-- full-outer join + left-outer join over nested table expressions
 SELECT c.c1, c.c2, c.c3, c.c4, c.c5, c.c6
 FROM (
   SELECT a.c1 AS c1, a.c2 AS c2, b.c3 AS c3, b.c4 AS c4, c.c5 AS c5, c.c6 AS c6
@@ -76,7 +76,7 @@ FROM (
   ON (a.c1 = c.c5)
 ) c;
 
--- left-outer join + join condition + filter (auto_join8.q)
+-- left-outer join + join condition + filter
 SELECT c.c1, c.c2, c.c3, c.c4
 FROM (
  SELECT a.c1 AS c1, a.c2 AS c2, b.c3 AS c3, b.c4 AS c4
@@ -92,7 +92,7 @@ FROM (
 ) c
 where c.c3 IS NULL AND c.c1 IS NOT NULL;
 
--- full outer join over Aggregate (auto_join18.q)
+-- full outer join over Aggregate
 SELECT a.key, a.value, b.key, b.value
 FROM
   (
@@ -105,7 +105,7 @@ FROM
   ) b
 ON (a.key = b.key);
 
--- full outer join + multi distinct (auto_join18_multi_distinct.q)
+-- full outer join + multi distinct
 SELECT a.key, a.value, b.key, b.value1, b.value2
 FROM
   (
@@ -119,7 +119,7 @@ FROM
   ) b
 ON (a.key = b.key);
 
--- inner join + right-outer join #1 (auto_join20.q)
+-- inner join + right-outer join #1
 SELECT a.k1,a.v1,a.k2,a.v2,a.k3,a.v3
 FROM (
   SELECT src1.key as k1, src1.value as v1, src2.key as k2, src2.value as v2 , src3.key as k3, src3.value as v3
@@ -128,7 +128,7 @@ FROM (
   SORT BY k1,v1,k2,v2,k3,v3
 )a;
 
--- inner join + right-outer join #2 (auto_join20.q)
+-- inner join + right-outer join #2
 SELECT a.k1,a.v1,a.k2,a.v2,a.k3,a.v3
 FROM (
   SELECT src1.key as k1, src1.value as v1, src2.key as k2, src2.value as v2 , src3.key as k3, src3.value as v3
@@ -137,7 +137,7 @@ FROM (
   SORT BY k1,v1,k2,v2,k3,v3
 )a;
 
--- left outer join + right outer join (auto_join21.q)
+-- left outer join + right outer join
 SELECT *
 FROM
   src src1
@@ -145,55 +145,55 @@ FROM
   RIGHT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
 SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
--- left outer + right outer (auto_join28.q)
+-- left outer + right outer
 SELECT * FROM src src1
  LEFT OUTER JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
  RIGHT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
--- right outer + right outer (auto_join28.q)
+-- right outer + right outer
 SELECT * FROM src src1
  RIGHT OUTER JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
  RIGHT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
--- left outer + left outer (auto_join28.q)
+-- left outer + left outer
 SELECT * FROM src src1
  LEFT OUTER JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
  LEFT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
--- right outer + left outer (auto_join28.q)
+-- right outer + left outer
 SELECT * FROM src src1
  RIGHT OUTER JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
  LEFT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
--- inner + left outer (auto_join29.q)
+-- inner + left outer
 SELECT * FROM src src1
  JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
  LEFT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
--- inner + right outer (auto_join29.q)
+-- inner + right outer
 SELECT * FROM src src1
  JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
  RIGHT OUTER JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
--- left + inner outer (auto_join29.q)
+-- left + inner outer
 SELECT * FROM src src1
  LEFT OUTER JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
  JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
--- right + inner join (auto_join29.q)
+-- right + inner join
 SELECT * FROM src src1
  RIGHT OUTER JOIN src src2 ON (src1.key = src2.key AND src1.key < 200 AND src2.key > 200)
  JOIN src src3 ON (src2.key = src3.key AND src3.key < 200)
  SORT BY src1.key, src1.value, src2.key, src2.value, src3.key, src3.value;
 
--- left outer join with sorted by nested table expression (auto_join30.q)
+-- left outer join with sorted by nested table expression
 FROM
 (SELECT src.* FROM src sort by key) x
 LEFT OUTER JOIN
@@ -201,7 +201,7 @@ LEFT OUTER JOIN
 ON (x.key = Y.key)
 select Y.key,Y.value;
 
--- right outer join with sorted by nested table expression (auto_join30.q)
+-- right outer join with sorted by nested table expression
 FROM
 (SELECT src.* FROM src sort by key) x
 RIGHT OUTER JOIN
@@ -209,7 +209,7 @@ RIGHT OUTER JOIN
 ON (x.key = Y.key)
 select Y.key,Y.value;
 
--- inner + left outer with sorted by nested table expression (auto_join30.q)
+-- inner + left outer with sorted by nested table expression
 FROM
 (SELECT src.* FROM src sort by key) x
 JOIN
@@ -220,7 +220,7 @@ LEFT OUTER JOIN
 ON (x.key = Z.key)
 select Y.key,Y.value;
 
--- left + left outer with sorted by nested table expression (auto_join30.q)
+-- left + left outer with sorted by nested table expression
 FROM
 (SELECT src.* FROM src sort by key) x
 LEFT OUTER JOIN
@@ -231,7 +231,7 @@ LEFT OUTER JOIN
 ON (x.key = Z.key)
 select Y.key,Y.value;
 
--- left + right outer with sorted by nested table expression (auto_join30.q)
+-- left + right outer with sorted by nested table expression
 FROM
 (SELECT src.* FROM src sort by key) x
 LEFT OUTER JOIN
@@ -242,7 +242,7 @@ RIGHT OUTER JOIN
 ON (x.key = Z.key)
 select Y.key,Y.value;
 
--- right + right outer with sorted by nested table expression (auto_join30.q)
+-- right + right outer with sorted by nested table expression
 FROM
 (SELECT src.* FROM src sort by key) x
 RIGHT OUTER JOIN
@@ -253,7 +253,7 @@ RIGHT OUTER JOIN
 ON (x.key = Z.key)
 select Y.key,Y.value;
 
--- right outer + inner with sorted by nested table expression (auto_join31.q)
+-- right outer + inner with sorted by nested table expression
 FROM
 (SELECT src.* FROM src sort by key) x
 RIGHT OUTER JOIN
