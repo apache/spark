@@ -41,7 +41,7 @@ case class HashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryExecNode with Aggregate with CodegenSupport {
+  extends AggregateExec with CodegenSupport {
 
   require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 

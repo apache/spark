@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
-import org.apache.spark.sql.execution.aggregate.{Aggregate => AggregateExec}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateStoreSaveExec}
 
@@ -86,7 +85,7 @@ object AggUtils {
 
   private[execution] def createPartialAggregate(operator: SparkPlan)
       : (SparkPlan, SparkPlan) = operator match {
-    case agg: Aggregate =>
+    case agg: AggregateExec =>
       val mapSideAgg = createPartialAggregateExec(
         agg.groupingExpressions, agg.aggregateExpressions, agg.child)
       val mergeAgg = createAggregateExec(

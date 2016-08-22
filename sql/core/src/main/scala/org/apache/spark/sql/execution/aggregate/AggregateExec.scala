@@ -21,20 +21,19 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.UnaryExecNode
 
 /**
  * A base class for aggregate implementation.
  */
-trait Aggregate {
-  self: SparkPlan =>
+abstract class AggregateExec extends UnaryExecNode {
 
-  val requiredChildDistributionExpressions: Option[Seq[Expression]]
-  val groupingExpressions: Seq[NamedExpression]
-  val aggregateExpressions: Seq[AggregateExpression]
-  val aggregateAttributes: Seq[Attribute]
-  val initialInputBufferOffset: Int
-  val resultExpressions: Seq[NamedExpression]
-  val child: SparkPlan
+  def requiredChildDistributionExpressions: Option[Seq[Expression]]
+  def groupingExpressions: Seq[NamedExpression]
+  def aggregateExpressions: Seq[AggregateExpression]
+  def aggregateAttributes: Seq[Attribute]
+  def initialInputBufferOffset: Int
+  def resultExpressions: Seq[NamedExpression]
 
   protected[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -46,7 +45,6 @@ trait Aggregate {
       AttributeSet(aggregateBufferAttributes)
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
-
 
   override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {
