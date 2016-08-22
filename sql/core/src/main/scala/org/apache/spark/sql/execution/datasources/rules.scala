@@ -81,8 +81,9 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
           "when creating and will be inferred at runtime")
       }
       if (tableDesc.partitionColumnNames.nonEmpty) {
-        failAnalysis("Cannot specify partition information if the table schema is not specified " +
-          "when creating and will be inferred at runtime")
+        failAnalysis("It is not allowed to specify partition columns when the table schema is " +
+          "not defined. When the table schema is not provided, schema and partition columns " +
+          "will be inferred.")
       }
       c
 
