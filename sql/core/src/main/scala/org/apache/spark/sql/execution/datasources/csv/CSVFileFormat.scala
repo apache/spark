@@ -84,10 +84,10 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       row.zipWithIndex.map { case (value, index) =>
         if (value == null || value.isEmpty || value == options.nullValue) {
           // When there are empty strings or the values set in `nullValue`, put the
-          // index as a post-fix.
+          // index as the suffix.
           s"_c$index"
         } else if (duplicates.contains(value)) {
-          // When there are duplicates, put the index as a post-fix.
+          // When there are duplicates, put the index as the suffix.
           s"$value$index"
         } else {
           value
