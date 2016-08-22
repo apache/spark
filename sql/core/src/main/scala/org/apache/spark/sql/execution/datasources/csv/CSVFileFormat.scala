@@ -59,14 +59,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val rdd = baseRdd(sparkSession, csvOptions, paths)
     val firstLine = findFirstLine(csvOptions, rdd)
     val firstRow = new CsvReader(csvOptions).parseLine(firstLine)
-
-    val header = if (csvOptions.headerFlag) {
-      firstRow.zipWithIndex.map { case (value, index) =>
-        if (value == null || value.isEmpty || value == csvOptions.nullValue) s"_c$index" else value
-      }
-    } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
-    }
+    val header = makeSafeHeader(firstRow, csvOptions)
 
     val parsedRdd = tokenRdd(sparkSession, csvOptions, header, paths)
     val schema = if (csvOptions.inferSchemaFlag) {
@@ -74,11 +67,35 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     } else {
       // By default fields are assumed to be StringType
       val schemaFields = header.map { fieldName =>
-        StructField(fieldName.toString, StringType, nullable = true)
+        StructField(fieldName, StringType, nullable = true)
       }
       StructType(schemaFields)
     }
     Some(schema)
+  }
+
+  /**
+   * Generates a header from the given row which is null-safe and duplicates-safe.
+   */
+  private def makeSafeHeader(row: Array[String], options: CSVOptions): Array[String] = {
+    if (options.headerFlag) {
+      val duplicates = row.diff(row.distinct).distinct
+
+      row.zipWithIndex.map { case (value, index) =>
+        if (value == null || value.isEmpty || value == options.nullValue) {
+          // When there are empty strings or the values set in `nullValue`, put the
+          // index as a post-fix.
+          s"_c$index"
+        } else if (duplicates.contains(value)) {
+          // When there are duplicates, put the index as a post-fix.
+          s"$value$index"
+        } else {
+          value
+        }
+      }
+    } else {
+      row.zipWithIndex.map { case (value, index) => s"_c$index" }
+    }
   }
 
   override def prepareWrite(
