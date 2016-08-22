@@ -181,14 +181,14 @@ SELECT * FROM uppercasedata u JOIN lowercasedata l ON u.n = l.N;
 
 -- inner join with multiple-match-per-row filtering predicates (where)
 SELECT * FROM
-  (SELECT * FROM testdata2 WHERE a = 1) x JOIN
-  (SELECT * FROM testdata2 WHERE a = 1) y
+  (SELECT * FROM duplicateColumnValueData WHERE a = 1) x JOIN
+  (SELECT * FROM duplicateColumnValueData WHERE a = 1) y
 WHERE x.a = y.a;
 
 -- inner join with no-match-per-row filtering predicates (where)
 SELECT * FROM
-  (SELECT * FROM testData2 WHERE a = 1) x JOIN
-  (SELECT * FROM testData2 WHERE a = 2) y
+  (SELECT * FROM duplicateColumnValueData WHERE a = 1) x JOIN
+  (SELECT * FROM duplicateColumnValueData WHERE a = 2) y
 WHERE x.a = y.a;
 
 -- inner join ON with table name as qualifier
@@ -200,19 +200,19 @@ SELECT upperCaseData.N, upperCaseData.L FROM upperCaseData JOIN lowerCaseData
 
 -- SPARK-4120 Join of multiple tables does not work in SparkSQL
 SELECT a.key, b.key, c.key
-FROM testData a,testData b,testData c
+FROM uniqueRowData a,uniqueRowData b,uniqueRowData c
 where a.key = b.key and a.key = c.key and a.key < 5;
 
 -- big inner join, 4 matches per row
 SELECT x.key, x.value, y.key, y.value, count(1) FROM
-  (SELECT * FROM testData UNION ALL
-   SELECT * FROM testData UNION ALL
-   SELECT * FROM testData UNION ALL
-   SELECT * FROM testData) x JOIN
-  (SELECT * FROM testData UNION ALL
-   SELECT * FROM testData UNION ALL
-   SELECT * FROM testData UNION ALL
-   SELECT * FROM testData) y
+  (SELECT * FROM uniqueRowData UNION ALL
+   SELECT * FROM uniqueRowData UNION ALL
+   SELECT * FROM uniqueRowData UNION ALL
+   SELECT * FROM uniqueRowData) x JOIN
+  (SELECT * FROM uniqueRowData UNION ALL
+   SELECT * FROM uniqueRowData UNION ALL
+   SELECT * FROM uniqueRowData UNION ALL
+   SELECT * FROM uniqueRowData) y
 WHERE x.key = y.key group by x.key, x.value, y.key, y.value;
 
 -- mixed-case keywords

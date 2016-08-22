@@ -3,7 +3,7 @@
 
 
 -- !query 0
-select * from testdata limit 2
+select * from uniqueRowData limit 2
 -- !query 0 schema
 struct<key:int,value:string>
 -- !query 0 output
@@ -30,7 +30,7 @@ struct<mapcol:map<int,string>>
 
 
 -- !query 3
-select * from testdata limit 2 + 1
+select * from uniqueRowData limit 2 + 1
 -- !query 3 schema
 struct<key:int,value:string>
 -- !query 3 output
@@ -40,7 +40,7 @@ struct<key:int,value:string>
 
 
 -- !query 4
-select * from testdata limit CAST(1 AS int)
+select * from uniqueRowData limit CAST(1 AS int)
 -- !query 4 schema
 struct<key:int,value:string>
 -- !query 4 output
@@ -48,7 +48,7 @@ struct<key:int,value:string>
 
 
 -- !query 5
-select * from testdata limit -1
+select * from uniqueRowData limit -1
 -- !query 5 schema
 struct<>
 -- !query 5 output
@@ -57,16 +57,16 @@ The limit expression must be equal to or greater than 0, but got -1;
 
 
 -- !query 6
-select * from testdata limit key > 3
+select * from uniqueRowData limit key > 3
 -- !query 6 schema
 struct<>
 -- !query 6 output
 org.apache.spark.sql.AnalysisException
-The limit expression must evaluate to a constant value, but got (testdata.`key` > 3);
+The limit expression must evaluate to a constant value, but got (uniquerowdata.`key` > 3);
 
 
 -- !query 7
-select * from testdata limit true
+select * from uniqueRowData limit true
 -- !query 7 schema
 struct<>
 -- !query 7 output
@@ -75,7 +75,7 @@ The limit expression must be integer type, but got boolean;
 
 
 -- !query 8
-select * from testdata limit 'a'
+select * from uniqueRowData limit 'a'
 -- !query 8 schema
 struct<>
 -- !query 8 output

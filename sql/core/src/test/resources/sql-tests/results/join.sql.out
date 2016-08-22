@@ -465,8 +465,8 @@ struct<N:int,L:string,n:int,l:string>
 
 -- !query 26
 SELECT * FROM
-  (SELECT * FROM testdata2 WHERE a = 1) x JOIN
-  (SELECT * FROM testdata2 WHERE a = 1) y
+  (SELECT * FROM duplicateColumnValueData WHERE a = 1) x JOIN
+  (SELECT * FROM duplicateColumnValueData WHERE a = 1) y
 WHERE x.a = y.a
 -- !query 26 schema
 struct<a:int,b:int,a:int,b:int>
@@ -479,8 +479,8 @@ struct<a:int,b:int,a:int,b:int>
 
 -- !query 27
 SELECT * FROM
-  (SELECT * FROM testData2 WHERE a = 1) x JOIN
-  (SELECT * FROM testData2 WHERE a = 2) y
+  (SELECT * FROM duplicateColumnValueData WHERE a = 1) x JOIN
+  (SELECT * FROM duplicateColumnValueData WHERE a = 2) y
 WHERE x.a = y.a
 -- !query 27 schema
 struct<a:int,b:int,a:int,b:int>
@@ -513,7 +513,7 @@ struct<N:int,L:string>
 
 -- !query 30
 SELECT a.key, b.key, c.key
-FROM testData a,testData b,testData c
+FROM uniqueRowData a,uniqueRowData b,uniqueRowData c
 where a.key = b.key and a.key = c.key and a.key < 5
 -- !query 30 schema
 struct<key:int,key:int,key:int>
@@ -526,14 +526,14 @@ struct<key:int,key:int,key:int>
 
 -- !query 31
 SELECT x.key, x.value, y.key, y.value, count(1) FROM
-  (SELECT * FROM testData UNION ALL
-   SELECT * FROM testData UNION ALL
-   SELECT * FROM testData UNION ALL
-   SELECT * FROM testData) x JOIN
-  (SELECT * FROM testData UNION ALL
-   SELECT * FROM testData UNION ALL
-   SELECT * FROM testData UNION ALL
-   SELECT * FROM testData) y
+  (SELECT * FROM uniqueRowData UNION ALL
+   SELECT * FROM uniqueRowData UNION ALL
+   SELECT * FROM uniqueRowData UNION ALL
+   SELECT * FROM uniqueRowData) x JOIN
+  (SELECT * FROM uniqueRowData UNION ALL
+   SELECT * FROM uniqueRowData UNION ALL
+   SELECT * FROM uniqueRowData UNION ALL
+   SELECT * FROM uniqueRowData) y
 WHERE x.key = y.key group by x.key, x.value, y.key, y.value
 -- !query 31 schema
 struct<key:int,value:string,key:int,value:string,count(1):bigint>

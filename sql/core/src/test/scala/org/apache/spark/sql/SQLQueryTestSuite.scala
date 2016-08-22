@@ -243,11 +243,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private def loadTestData(session: SparkSession): Unit = {
     import session.implicits._
 
-    (1 to 100).map(i => (i, i.toString)).toDF("key", "value").createOrReplaceTempView("testdata")
+    // All column values are unique
+    (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+      .createOrReplaceTempView("uniqueRowData")
 
+    // Each column have duplicate values, but all the rows are unique
     Seq((1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2))
       .toDF("a", "b")
-      .createOrReplaceTempView("testData2")
+      .createOrReplaceTempView("duplicateColumnValueData")
 
     ((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
       .toDF("arraycol", "nestedarraycol")

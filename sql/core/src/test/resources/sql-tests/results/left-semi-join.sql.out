@@ -3,7 +3,9 @@
 
 
 -- !query 0
-SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2
+SELECT *
+FROM duplicateColumnValueData x LEFT SEMI JOIN duplicateColumnValueData y
+ON x.a >= y.a + 2
 -- !query 0 schema
 struct<a:int,b:int>
 -- !query 0 output
@@ -12,7 +14,9 @@ struct<a:int,b:int>
 
 
 -- !query 1
-SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.b and x.a >= y.a + 2
+SELECT *
+FROM duplicateColumnValueData x LEFT SEMI JOIN duplicateColumnValueData y
+ON x.b = y.b and x.a >= y.a + 2
 -- !query 1 schema
 struct<a:int,b:int>
 -- !query 1 output
@@ -21,7 +25,9 @@ struct<a:int,b:int>
 
 
 -- !query 2
-SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.a and x.a >= y.b + 1
+SELECT *
+FROM duplicateColumnValueData x LEFT SEMI JOIN duplicateColumnValueData y
+ON x.b = y.a and x.a >= y.b + 1
 -- !query 2 schema
 struct<a:int,b:int>
 -- !query 2 output
