@@ -17,8 +17,7 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.network.buffer.{ManagedBuffer, NettyManagedBuffer}
-import org.apache.spark.util.io.ChunkedByteBuffer
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, ManagedBuffer, NettyManagedBuffer}
 
 /**
  * This [[ManagedBuffer]] wraps a [[ChunkedByteBuffer]] retrieved from the [[BlockManager]]

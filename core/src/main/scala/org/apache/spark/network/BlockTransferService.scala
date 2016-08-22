@@ -25,10 +25,11 @@ import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.buffer.{ChunkedByteBufferOutputStream, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.storage.{BlockId, StorageLevel}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.SparkException
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark]
 abstract class BlockTransferService extends ShuffleClient with Closeable with Logging {
@@ -95,13 +96,22 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
           result.failure(exception)
         }
         override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-          val ret = ByteBuffer.allocate(data.size.toInt)
-          ret.put(data.nioByteBuffer())
-          ret.flip()
-          result.success(new NioManagedBuffer(ret))
+          result.success(data.retain())
         }
       })
-    ThreadUtils.awaitResult(result.future, Duration.Inf)
+    val data = ThreadUtils.awaitResult(result.future, Duration.Inf)
+    val dataSize = data.size()
+    val chunkSize = math.min(data.size(), 32 * 1024).toInt
+    val out = new ChunkedByteBufferOutputStream(chunkSize)
+    try {
+      Utils.copyStream(data.createInputStream(), out, closeStreams = true)
+      if (out.size() != dataSize) {
+        throw new SparkException(s"buffer size ${out.size()} but expected $dataSize")
+      }
+    } finally {
+      data.release()
+    }
+    new NioManagedBuffer(out.toChunkedByteBuffer)
   }
 
   /**

@@ -17,8 +17,6 @@
 
 package org.apache.spark.network.server;
 
-import java.nio.ByteBuffer;
-
 import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -26,6 +24,7 @@ import io.netty.channel.ChannelFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -155,9 +154,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   private void processRpcRequest(final RpcRequest req) {
     try {
-      rpcHandler.receive(reverseClient, req.body().nioByteBuffer(), new RpcResponseCallback() {
+      rpcHandler.receive(reverseClient, req.body().createInputStream(), new RpcResponseCallback() {
         @Override
-        public void onSuccess(ByteBuffer response) {
+        public void onSuccess(ChunkedByteBuffer response) {
           respond(new RpcResponse(req.requestId, new NioManagedBuffer(response)));
         }
 
@@ -176,7 +175,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   private void processOneWayMessage(OneWayMessage req) {
     try {
-      rpcHandler.receive(reverseClient, req.body().nioByteBuffer());
+      rpcHandler.receive(reverseClient, req.body().createInputStream());
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() for one-way message.", e);
     } finally {

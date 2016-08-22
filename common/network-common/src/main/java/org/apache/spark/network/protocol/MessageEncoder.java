@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.protocol;
 
+import java.io.DataOutputStream;
 import java.util.List;
 
 import io.netty.buffer.ByteBuf;
@@ -25,6 +26,8 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.spark.network.buffer.ChunkedByteBufferOutputStream;
 
 /**
  * Encoder used by the server side to encode server-to-client responses.
@@ -75,18 +78,23 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
     // sent.
     int headerLength = 8 + msgType.encodedLength() + in.encodedLength();
     long frameLength = headerLength + (isBodyInFrame ? bodyLength : 0);
-    ByteBuf header = ctx.alloc().heapBuffer(headerLength);
+
+    ChunkedByteBufferOutputStream outputStream= new ChunkedByteBufferOutputStream(32 * 1024);
+    DataOutputStream header = new DataOutputStream(outputStream);
     header.writeLong(frameLength);
     msgType.encode(header);
     in.encode(header);
-    assert header.writableBytes() == 0;
+    header.close();
+    assert outputStream.size() == headerLength;
+
+    ByteBuf headerObj = outputStream.toChunkedByteBuffer().toNetty();
 
     if (body != null) {
       // We transfer ownership of the reference on in.body() to MessageWithHeader.
       // This reference will be freed when MessageWithHeader.deallocate() is called.
-      out.add(new MessageWithHeader(in.body(), header, body, bodyLength));
+      out.add(new MessageWithHeader(in.body(), headerObj, body, bodyLength));
     } else {
-      out.add(header);
+      out.add(headerObj);
     }
   }
 

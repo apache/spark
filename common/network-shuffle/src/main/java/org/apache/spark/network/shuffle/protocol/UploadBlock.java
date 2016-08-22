@@ -17,11 +17,16 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Arrays;
 
 import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
+import com.google.common.io.ByteStreams;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
+import org.apache.spark.network.buffer.ChunkedByteBufferOutputStream;
 import org.apache.spark.network.protocol.Encoders;
 
 // Needed by ScalaDoc. See SPARK-7726
@@ -36,7 +41,7 @@ public class UploadBlock extends BlockTransferMessage {
   // TODO: StorageLevel is serialized separately in here because StorageLevel is not available in
   // this package. We should avoid this hack.
   public final byte[] metadata;
-  public final byte[] blockData;
+  public final ChunkedByteBuffer blockData;
 
   /**
    * @param metadata Meta-information about block, typically StorageLevel.
@@ -47,7 +52,7 @@ public class UploadBlock extends BlockTransferMessage {
       String execId,
       String blockId,
       byte[] metadata,
-      byte[] blockData) {
+      ChunkedByteBuffer blockData) {
     this.appId = appId;
     this.execId = execId;
     this.blockId = blockId;
@@ -61,7 +66,7 @@ public class UploadBlock extends BlockTransferMessage {
   @Override
   public int hashCode() {
     int objectsHashCode = Objects.hashCode(appId, execId, blockId);
-    return (objectsHashCode * 41 + Arrays.hashCode(metadata)) * 41 + Arrays.hashCode(blockData);
+    return (objectsHashCode * 41 + metadata.hashCode()) * 41 + blockData.hashCode();
   }
 
   @Override
@@ -71,7 +76,7 @@ public class UploadBlock extends BlockTransferMessage {
       .add("execId", execId)
       .add("blockId", blockId)
       .add("metadata size", metadata.length)
-      .add("block size", blockData.length)
+      .add("block size", blockData.size())
       .toString();
   }
 
@@ -83,35 +88,52 @@ public class UploadBlock extends BlockTransferMessage {
         && Objects.equal(execId, o.execId)
         && Objects.equal(blockId, o.blockId)
         && Arrays.equals(metadata, o.metadata)
-        && Arrays.equals(blockData, o.blockData);
+        && Objects.equal(blockData, o.blockData);
     }
     return false;
   }
 
   @Override
-  public int encodedLength() {
+  public long encodedLength() {
     return Encoders.Strings.encodedLength(appId)
       + Encoders.Strings.encodedLength(execId)
       + Encoders.Strings.encodedLength(blockId)
       + Encoders.ByteArrays.encodedLength(metadata)
-      + Encoders.ByteArrays.encodedLength(blockData);
+      + blockData.size();
   }
 
   @Override
-  public void encode(ByteBuf buf) {
-    Encoders.Strings.encode(buf, appId);
-    Encoders.Strings.encode(buf, execId);
-    Encoders.Strings.encode(buf, blockId);
-    Encoders.ByteArrays.encode(buf, metadata);
-    Encoders.ByteArrays.encode(buf, blockData);
+  public void encode(OutputStream out) throws IOException {
+    Encoders.Strings.encode(out, appId);
+    Encoders.Strings.encode(out, execId);
+    Encoders.Strings.encode(out, blockId);
+    Encoders.ByteArrays.encode(out, metadata);
+    long bl = blockData.size();
+    Encoders.Longs.encode(out, bl);
+    copy(blockData.toInputStream(), out, bl);
   }
 
-  public static UploadBlock decode(ByteBuf buf) {
-    String appId = Encoders.Strings.decode(buf);
-    String execId = Encoders.Strings.decode(buf);
-    String blockId = Encoders.Strings.decode(buf);
-    byte[] metadata = Encoders.ByteArrays.decode(buf);
-    byte[] blockData = Encoders.ByteArrays.decode(buf);
-    return new UploadBlock(appId, execId, blockId, metadata, blockData);
+  public static UploadBlock decode(InputStream in) throws IOException {
+    String appId = Encoders.Strings.decode(in);
+    String execId = Encoders.Strings.decode(in);
+    String blockId = Encoders.Strings.decode(in);
+    byte[] metadata = Encoders.ByteArrays.decode(in);
+    long bl = Encoders.Longs.decode(in);
+    ChunkedByteBufferOutputStream blockData = new ChunkedByteBufferOutputStream(32 * 1024);
+    copy(in, blockData, bl);
+    return new UploadBlock(appId, execId, blockId,
+        metadata, blockData.toChunkedByteBuffer());
+  }
+
+  private static int BUF_SIZE = 4 * 1024;
+
+  public static void copy(InputStream from, OutputStream to, long total) throws IOException {
+    byte[] buf = new byte[BUF_SIZE];
+    while (total > 0) {
+      int len = (int) Math.min(BUF_SIZE, total);
+      ByteStreams.readFully(from, buf, 0, len);
+      to.write(buf, 0, len);
+      total -= len;
+    }
   }
 }

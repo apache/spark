@@ -33,12 +33,12 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler.{AccumulableInfo, DirectTaskResult, IndirectTaskResult, Task}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
-import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Spark executor, backed by a threadpool to run tasks.
@@ -62,7 +62,7 @@ private[spark] class Executor(
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
   private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
-  private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
+  private val EMPTY_BYTE_BUFFER = ChunkedByteBuffer.wrap(new Array[Byte](0))
 
   private val conf = env.conf
 
@@ -140,7 +140,7 @@ private[spark] class Executor(
       taskId: Long,
       attemptNumber: Int,
       taskName: String,
-      serializedTask: ByteBuffer): Unit = {
+      serializedTask: ChunkedByteBuffer): Unit = {
     val tr = new TaskRunner(context, taskId = taskId, attemptNumber = attemptNumber, taskName,
       serializedTask)
     runningTasks.put(taskId, tr)
@@ -189,7 +189,7 @@ private[spark] class Executor(
       val taskId: Long,
       val attemptNumber: Int,
       taskName: String,
-      serializedTask: ByteBuffer)
+      serializedTask: ChunkedByteBuffer)
     extends Runnable {
 
     /** Whether this task has been killed. */
@@ -327,20 +327,21 @@ private[spark] class Executor(
         // TODO: do not serialize value twice
         val directResult = new DirectTaskResult(valueBytes, accumUpdates)
         val serializedDirectResult = ser.serialize(directResult)
-        val resultSize = serializedDirectResult.limit
+        val resultSize = serializedDirectResult.size().toInt
 
         // directSend = sending directly back to the driver
-        val serializedResult: ByteBuffer = {
+        val serializedResult: ChunkedByteBuffer = {
           if (maxResultSize > 0 && resultSize > maxResultSize) {
             logWarning(s"Finished $taskName (TID $taskId). Result is larger than maxResultSize " +
               s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
               s"dropping it.")
-            ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
+            ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId),
+              resultSize))
           } else if (resultSize > maxDirectResultSize) {
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
               blockId,
-              new ChunkedByteBuffer(serializedDirectResult.duplicate()),
+              serializedDirectResult,
               StorageLevel.MEMORY_AND_DISK_SER)
             logInfo(
               s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")

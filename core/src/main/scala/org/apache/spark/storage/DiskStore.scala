@@ -25,8 +25,8 @@ import com.google.common.io.Closeables
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.util.Utils
-import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Stores BlockManager blocks on disk.

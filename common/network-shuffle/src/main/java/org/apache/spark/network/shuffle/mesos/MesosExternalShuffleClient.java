@@ -24,6 +24,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.shuffle.protocol.mesos.ShuffleServiceHeartbeat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,7 +73,8 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
       long heartbeatIntervalMs) throws IOException {
 
     checkInit();
-    ByteBuffer registerDriver = new RegisterDriver(appId, heartbeatTimeoutMs).toByteBuffer();
+    ChunkedByteBuffer registerDriver = new RegisterDriver(appId, heartbeatTimeoutMs).
+        toChunkedByteBuffer();
     TransportClient client = clientFactory.createClient(host, port);
     client.sendRpc(registerDriver, new RegisterDriverCallback(client, heartbeatIntervalMs));
   }
@@ -87,7 +89,7 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
     }
 
     @Override
-    public void onSuccess(ByteBuffer response) {
+    public void onSuccess(ChunkedByteBuffer response) {
       heartbeaterThread.scheduleAtFixedRate(
           new Heartbeater(client), 0, heartbeatIntervalMs, TimeUnit.MILLISECONDS);
       logger.info("Successfully registered app " + appId + " with external shuffle service.");
@@ -117,7 +119,7 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
     @Override
     public void run() {
       // TODO: Stop sending heartbeats if the shuffle service has lost the app due to timeout
-      client.send(new ShuffleServiceHeartbeat(appId).toByteBuffer());
+      client.send(new ShuffleServiceHeartbeat(appId).toChunkedByteBuffer());
     }
   }
 }

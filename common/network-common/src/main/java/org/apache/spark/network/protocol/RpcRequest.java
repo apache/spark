@@ -17,11 +17,14 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
+import com.google.common.base.Objects;
+
+import org.apache.spark.network.buffer.InputStreamManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NettyManagedBuffer;
 
 /**
  * A generic RPC which is handled by a remote {@link org.apache.spark.network.server.RpcHandler}.
@@ -45,21 +48,20 @@ public final class RpcRequest extends AbstractMessage implements RequestMessage 
     // The integer (a.k.a. the body size) is not really used, since that information is already
     // encoded in the frame length. But this maintains backwards compatibility with versions of
     // RpcRequest that use Encoders.ByteArrays.
-    return 8 + 4;
+    return 8 + 8;
   }
 
   @Override
-  public void encode(ByteBuf buf) {
-    buf.writeLong(requestId);
-    // See comment in encodedLength().
-    buf.writeInt((int) body().size());
+  public void encode(OutputStream out) throws IOException {
+    Encoders.Longs.encode(out, requestId);
+    Encoders.Longs.encode(out, body().size());
   }
 
-  public static RpcRequest decode(ByteBuf buf) {
-    long requestId = buf.readLong();
-    // See comment in encodedLength().
-    buf.readInt();
-    return new RpcRequest(requestId, new NettyManagedBuffer(buf.retain()));
+  public static RpcRequest decode(InputStream in) throws IOException {
+    long requestId = Encoders.Longs.decode(in);
+    long limit = Encoders.Longs.decode(in);
+    ManagedBuffer managedBuf = new InputStreamManagedBuffer(in, limit);
+    return new RpcRequest(requestId, managedBuf);
   }
 
   @Override

@@ -29,6 +29,7 @@ import org.apache.spark.{SparkConf, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.scheduler.cluster.mesos.MesosTaskLaunchData
 import org.apache.spark.util.Utils
 
@@ -40,12 +41,12 @@ private[spark] class MesosExecutorBackend
   var executor: Executor = null
   var driver: ExecutorDriver = null
 
-  override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
+  override def statusUpdate(taskId: Long, state: TaskState, data: ChunkedByteBuffer) {
     val mesosTaskId = TaskID.newBuilder().setValue(taskId.toString).build()
     driver.sendStatusUpdate(MesosTaskStatus.newBuilder()
       .setTaskId(mesosTaskId)
       .setState(TaskState.toMesos(state))
-      .setData(ByteString.copyFrom(data))
+      .setData(ByteString.copyFrom(data.toByteBuffer))
       .build())
   }
 
@@ -90,7 +91,7 @@ private[spark] class MesosExecutorBackend
     } else {
       SparkHadoopUtil.get.runAsSparkUser { () =>
         executor.launchTask(this, taskId = taskId, attemptNumber = taskData.attemptNumber,
-          taskInfo.getName, taskData.serializedTask)
+          taskInfo.getName, ChunkedByteBuffer.wrap(taskData.serializedTask))
       }
     }
   }

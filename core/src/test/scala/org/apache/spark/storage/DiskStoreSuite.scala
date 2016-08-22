@@ -21,7 +21,7 @@ import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.util.io.ChunkedByteBuffer
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 
 class DiskStoreSuite extends SparkFunSuite {
 
