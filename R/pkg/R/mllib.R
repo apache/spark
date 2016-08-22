@@ -429,7 +429,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @rdname spark.naiveBayes
 #' @aliases spark.naiveBayes,SparkDataFrame,formula-method
 #' @name spark.naiveBayes
-#' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
+#' @seealso e1071: \url{https://cran.r-project.org/package=e1071}
 #' @export
 #' @examples
 #' \dontrun{
@@ -575,7 +575,7 @@ read.ml <- function(path) {
 #'                Note that operator '.' is not supported currently.
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model.
 #' @rdname spark.survreg
-#' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/}
+#' @seealso survival: \url{https://cran.r-project.org/package=survival}
 #' @export
 #' @examples
 #' \dontrun{
@@ -603,7 +603,6 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
                                 "fit", formula, data@sdf)
             return(new("AFTSurvivalRegressionModel", jobj = jobj))
           })
-
 
 # Returns a summary of the AFT survival regression model produced by spark.survreg,
 # similarly to R's summary().
