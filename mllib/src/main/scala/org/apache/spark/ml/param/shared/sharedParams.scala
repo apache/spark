@@ -403,7 +403,7 @@ private[ml] trait HasAggregationDepth extends Params {
 
   setDefault(aggregationDepth, 2)
 
-  /** @group getExpertParam */
+  /** @group expertGetParam */
   final def getAggregationDepth: Int = $(aggregationDepth)
 }
 // scalastyle:on
