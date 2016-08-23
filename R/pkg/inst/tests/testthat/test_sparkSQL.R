@@ -526,6 +526,17 @@ test_that(
   expect_is(newdf, "SparkDataFrame")
   expect_equal(count(newdf), 1)
   dropTempView("table1")
+
+  createOrReplaceTempView(df, "dfView")
+  sqlCast <- collect(sql("select cast('2' as decimal) as x from dfView limit 1"))
+  out <- capture.output(sqlCast)
+  expect_true(is.data.frame(sqlCast))
+  expect_equal(names(sqlCast)[1], "x")
+  expect_equal(nrow(sqlCast), 1)
+  expect_equal(ncol(sqlCast), 1)
+  expect_equal(out[1], "  x")
+  expect_equal(out[2], "1 2")
+  dropTempView("dfView")
 })
 
 test_that("test cache, uncache and clearCache", {
@@ -668,15 +679,6 @@ test_that("collect() returns a data.frame", {
   df <- createDataFrame(list(list(1, 2)), schema = c("name", "name"))
   ldf <- collect(df)
   expect_equal(names(ldf), c("name", "name"))
-  createOrReplaceTempView(df, "dfView")
-  sqlCast <- collect(sql("select cast('2' as decimal) as x from dfView limit 1"))
-  out <- capture.output(sqlCast)
-  expect_true(is.data.frame(sqlCast))
-  expect_equal(names(sqlCast)[1], "x")
-  expect_equal(nrow(sqlCast), 1)
-  expect_equal(ncol(sqlCast), 1)
-  expect_equal(out[1], "  x")
-  expect_equal(out[2], "1 2")
 })
 
 test_that("limit() returns DataFrame with the correct number of rows", {
@@ -2100,7 +2102,7 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   expect_equal(coltypes(DF), c("integer", "logical", "POSIXct"))
   createOrReplaceTempView(DF, "DFView")
   sqlCast <- sql("select cast('2' as decimal) as x from DFView limit 1")
-  expect_equal(coltypes(sqlCast), "double")
+  expect_equal(coltypes(sqlCast), "numeric")
 
   # Test complex types
   x <- createDataFrame(list(list(as.environment(
@@ -2132,13 +2134,6 @@ test_that("Method str()", {
   colnames(iris2) <- c("Sepal_Length", "Sepal_Width", "Petal_Length", "Petal_Width", "Species")
   iris2$col <- TRUE
   irisDF2 <- createDataFrame(iris2)
-  createOrReplaceTempView(irisDF2, "irisView")
-
-  sqlCast <- sql("select cast('2' as decimal) as x from irisView limit 1")
-  castStr <- capture.output(str(sqlCast))
-  expect_equal(length(castStr), 2)
-  expect_equal(castStr[1], "'SparkDataFrame': 1 variables:")
-  expect_equal(castStr[2], " $ x: dou 2")
 
   out <- capture.output(str(irisDF2))
   expect_equal(length(out), 7)
@@ -2150,6 +2145,14 @@ test_that("Method str()", {
   expect_equal(out[6], paste0(" $ Species     : chr \"setosa\" \"setosa\" \"",
                               "setosa\" \"setosa\" \"setosa\" \"setosa\""))
   expect_equal(out[7], " $ col         : logi TRUE TRUE TRUE TRUE TRUE TRUE")
+
+  createOrReplaceTempView(irisDF2, "irisView")
+
+  sqlCast <- sql("select cast('2' as decimal) as x from irisView limit 1")
+  castStr <- capture.output(str(sqlCast))
+  expect_equal(length(castStr), 2)
+  expect_equal(castStr[1], "'SparkDataFrame': 1 variables:")
+  expect_equal(castStr[2], " $ x: num 2")
 
   # A random dataset with many columns. This test is to check str limits
   # the number of columns. Therefore, it will suffice to check for the

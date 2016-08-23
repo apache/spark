@@ -401,7 +401,7 @@ setMethod("coltypes",
                   if (is.null(specialtype)) {
                     stop(paste("Unsupported data type: ", x))
                   }
-                  type <- specialtype
+                  type <- PRIMITIVE_TYPES[[specialtype]]
                 }
               }
               type
