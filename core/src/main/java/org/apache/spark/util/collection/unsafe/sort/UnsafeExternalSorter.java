@@ -523,7 +523,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           // call.
           for (MemoryBlock page : allocatedPages) {
             if (!loaded || page.pageNumber != ((UnsafeInMemorySorter.SortedIterator)upstream)
-                    .getCurrentPageNumber()) {
+              .getCurrentPageNumber()) {
               released += page.size();
               freePage(page);
             } else {

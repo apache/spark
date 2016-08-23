@@ -62,7 +62,7 @@ public final class JavaStructuredNetworkWordCount {
 
     // Split the lines into words
     Dataset<String> words = lines.as(Encoders.STRING())
-            .flatMap(new FlatMapFunction<String, String>() {
+      .flatMap(new FlatMapFunction<String, String>() {
       @Override
       public Iterator<String> call(String x) {
         return Arrays.asList(x.split(" ")).iterator();
