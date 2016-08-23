@@ -28,6 +28,7 @@ import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
@@ -251,6 +252,18 @@ object JdbcUtils extends Logging {
       i = i + 1
     }
     new StructType(fields)
+  }
+
+  /**
+   * Convert a [[ResultSet]] into an iterator of Catalyst Rows.
+   */
+  def resultSetToRows(
+      resultSet: ResultSet,
+      schema: StructType,
+      inputMetrics: InputMetrics): Iterator[Row] = {
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val internalRows = resultSetToSparkInternalRows(resultSet, schema, inputMetrics)
+    internalRows.map(encoder.fromRow)
   }
 
   private[spark] def resultSetToSparkInternalRows(
