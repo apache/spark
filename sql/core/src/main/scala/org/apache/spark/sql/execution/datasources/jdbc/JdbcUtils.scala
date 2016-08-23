@@ -160,7 +160,7 @@ object JdbcUtils extends Logging {
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
   }
 
-  def resultSetToSparkInternalRows(
+  private[spark] def resultSetToSparkInternalRows(
       resultSet: ResultSet,
       schema: StructType,
       inputMetrics: InputMetrics): Iterator[InternalRow] = {
