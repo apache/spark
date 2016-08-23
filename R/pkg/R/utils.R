@@ -707,7 +707,7 @@ instructionForInstall <- function(mode) {
            "- If not, you may run install.spark function to do the job. ",
            "Please make sure the Spark and the Hadoop versions ",
            "match the versions on the cluster. ",
-           "Currently only Spark 2.0 is supported. ",
+           "SparkR package is compatible with Spark 2.0.0.",
            "If you need further help, ",
            "contact the administrators of the cluster.")
   } else {

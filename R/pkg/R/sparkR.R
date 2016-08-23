@@ -366,27 +366,28 @@ sparkR.session <- function(
     }
     overrideEnvs(sparkConfigMap, paramMap)
   }
-  # do not download if it is run in the sparkR shell
-  if (!is_sparkR_shell()) {
-    if (!is.na(file.info(sparkHome)$isdir)) {
-      msg <- paste0("Spark package found in SPARK_HOME: ", sparkHome)
-      message(msg)
-    } else {
-      if (!nzchar(master) || is_master_local(master)) {
-        msg <- paste0("Spark not found in SPARK_HOME: ",
-                      sparkHome)
-        message(msg)
-        packageLocalDir <- install.spark()
-        sparkHome <- packageLocalDir
-      } else {
-        msg <- paste0("Spark not found in SPARK_HOME: ",
-                     sparkHome, "\n", instructionForInstall("remote"))
-        stop(msg)
-      }
-    }
-  }
 
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
+    # do not download if it is run in the sparkR shell
+    if (!is_sparkR_shell()) {
+      if (!is.na(file.info(sparkHome)$isdir)) {
+        msg <- paste0("Spark package found in SPARK_HOME: ", sparkHome)
+        message(msg)
+      } else {
+        if (!nzchar(master) || is_master_local(master)) {
+          msg <- paste0("Spark not found in SPARK_HOME: ",
+                        sparkHome)
+          message(msg)
+          packageLocalDir <- install.spark()
+          sparkHome <- packageLocalDir
+        } else {
+          msg <- paste0("Spark not found in SPARK_HOME: ",
+                        sparkHome, "\n", instructionForInstall("remote"))
+          stop(msg)
+        }
+      }
+    }
+
     sparkExecutorEnvMap <- new.env()
     sparkR.sparkContext(master, appName, sparkHome, sparkConfigMap, sparkExecutorEnvMap,
        sparkJars, sparkPackages)
