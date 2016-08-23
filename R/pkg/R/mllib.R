@@ -645,8 +645,8 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #' Only categorical data is supported.
 #' For more details, see
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html
-#' #multilayer-perceptron-classifier}{Multilayerperceptron classifier}.
+#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html}
+#' {Multilayerperceptron classifier}.
 #'
 #' @param data a \code{SparkDataFrame} of observations and labels for model fitting.
 #' @param blockSize blockSize parameter.
