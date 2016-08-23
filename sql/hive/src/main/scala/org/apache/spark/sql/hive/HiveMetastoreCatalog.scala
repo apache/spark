@@ -249,7 +249,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           case "orc" =>
             inferredSchema.getOrElse(metastoreSchema)
           case _ =>
-            inferredSchema.get
+            throw new RuntimeException(s"Cannot convert a $fileType to a HadoopFsRelation")
         }
 
         val relation = HadoopFsRelation(
