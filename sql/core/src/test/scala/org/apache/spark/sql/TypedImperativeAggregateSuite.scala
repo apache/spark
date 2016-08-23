@@ -20,11 +20,11 @@ package org.apache.spark.sql
 import org.apache.spark.sql.TypedImperativeAggregateSuite.TypedMax
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{TypedImperativeAggregate}
 import org.apache.spark.sql.execution.aggregate.SortAggregateExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegerType, UserDefinedType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegerType}
 
 class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
 
@@ -119,7 +119,6 @@ object TypedImperativeAggregateSuite {
       mutableAggBufferOffset: Int = 0,
       inputAggBufferOffset: Int = 0) extends TypedImperativeAggregate[MaxValue] {
 
-    override lazy val aggregationBufferType: UserDefinedType[MaxValue] = new MaxValueUDT()
 
     override def createAggregationBuffer(): MaxValue = {
       new MaxValue(Int.MinValue)
@@ -152,27 +151,24 @@ object TypedImperativeAggregateSuite {
 
     override def dataType: DataType = IntegerType
 
-    override def withNewMutableAggBufferOffset(newOffset: Int): ImperativeAggregate =
+    override def withNewMutableAggBufferOffset(newOffset: Int): TypedImperativeAggregate[MaxValue] =
       copy(mutableAggBufferOffset = newOffset)
 
-    override def withNewInputAggBufferOffset(newOffset: Int): ImperativeAggregate =
+    override def withNewInputAggBufferOffset(newOffset: Int): TypedImperativeAggregate[MaxValue] =
       copy(inputAggBufferOffset = newOffset)
 
-  }
+    override def aggregationBufferClass: Class[MaxValue] = classOf[MaxValue]
 
-  private class MaxValue(var value: Int)
+    override def serialize(buffer: MaxValue): Any = buffer.value
 
-  private class MaxValueUDT extends UserDefinedType[MaxValue] {
-    override def sqlType: DataType = IntegerType
+    override def aggregationBufferStorageFormatSqlType: DataType = IntegerType
 
-    override def serialize(obj: MaxValue): Any = obj.value
-
-    override def userClass: Class[MaxValue] = classOf[MaxValue]
-
-    override def deserialize(datum: Any): MaxValue = {
-      datum match {
+    override def deserialize(storageFormat: Any): MaxValue = {
+      storageFormat match {
         case i: Int => new MaxValue(i)
       }
     }
   }
+
+  private class MaxValue(var value: Int)
 }

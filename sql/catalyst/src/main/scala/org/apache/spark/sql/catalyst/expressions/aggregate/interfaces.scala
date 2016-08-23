@@ -433,14 +433,7 @@ abstract class DeclarativeAggregate
  *     calls method `eval(buffer: T)` to generate the final output for this group.
  *  5. The framework moves on to next group, until all groups have been processed.
  */
-abstract class TypedImperativeAggregate[T >: Null] extends ImperativeAggregate {
-
-  /**
-   * Spark Sql type of user-defined aggregation buffer object. It needs to be an `UserDefinedType`
-   * so that the framework knows how to serialize the aggregation buffer object to Spark sql
-   * internally supported storage format.
-   */
-  def aggregationBufferType: UserDefinedType[T]
+abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
 
   /**
    * Creates an empty aggregation buffer object. This is called before processing each key group
@@ -478,6 +471,43 @@ abstract class TypedImperativeAggregate[T >: Null] extends ImperativeAggregate {
    */
   def eval(buffer: T): Any
 
+  /** Returns the class of aggregation buffer object */
+  def aggregationBufferClass: Class[T]
+
+  /** Serializes the aggregation buffer object T to Spark-sql internally supported storage format */
+  def serialize(buffer: T): Any
+
+  /** De-serializes the storage format, and produces aggregation buffer object T */
+  def deserialize(storageFormat: Any): T
+
+  /**
+   * Returns the aggregation-buffer-object storage format's Sql type.
+   *
+   * Here is a list of supported storage format and corresponding Sql type:
+   *
+   * {{{
+   *   aggregation buffer object's Storage format    |  storage format's Sql type
+   * ------------------------------------------------------------------------------------------
+   *   Array[Byte] (*)                               |  BinaryType (*)
+   *   Null                                          |  NullType
+   *   Boolean                                       |  BooleanType
+   *   Byte                                          |  ByteType
+   *   Short                                         |  ShortType
+   *   Int                                           |  IntegerType
+   *   Long                                          |  LongType
+   *   Float                                         |  FloatType
+   *   Double                                        |  DoubleType
+   *   org.apache.spark.sql.types.Decimal            |  DecimalType
+   *   org.apache.spark.unsafe.types.UTF8String      |  StringType
+   *   org.apache.spark.unsafe.types.CalendarInterval|  CalendarIntervalType
+   *   org.apache.spark.sql.catalyst.util.MapData    |  MapType
+   *   org.apache.spark.sql.catalyst.util.ArrayData  |  ArrayType
+   *   org.apache.spark.sql.catalyst.InternalRow     |
+   * }}}
+   *
+   */
+  def aggregationBufferStorageFormatSqlType: DataType
+
   final override def initialize(buffer: MutableRow): Unit = {
     val bufferObject = createAggregationBuffer()
     buffer.update(mutableAggBufferOffset, bufferObject)
@@ -496,7 +526,7 @@ abstract class TypedImperativeAggregate[T >: Null] extends ImperativeAggregate {
 
   final override def eval(buffer: InternalRow): Any = {
     val bufferObject = field(buffer, mutableAggBufferOffset)
-    if (bufferObject.getClass == aggregationBufferType.userClass) {
+    if (bufferObject.getClass == aggregationBufferClass) {
       // When used in Window frame aggregation, eval(buffer: InternalRow) is called directly
       // on the object aggregation buffer without intermediate serializing/de-serializing.
       eval(bufferObject.asInstanceOf[T])
@@ -505,17 +535,13 @@ abstract class TypedImperativeAggregate[T >: Null] extends ImperativeAggregate {
     }
   }
 
-  private def deserialize(input: AnyRef): T = {
-    aggregationBufferType.deserialize(input)
-  }
-
   private def field(input: InternalRow, offset: Int): AnyRef = {
     input.get(offset, null)
   }
 
-  final override val aggBufferAttributes: Seq[AttributeReference] = {
+  final override lazy val aggBufferAttributes: Seq[AttributeReference] = {
     // Underlying storage type for the aggregation buffer object
-    Seq(AttributeReference("buf", aggregationBufferType.sqlType)())
+    Seq(AttributeReference("buf", aggregationBufferStorageFormatSqlType)())
   }
 
   final override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
@@ -531,6 +557,6 @@ abstract class TypedImperativeAggregate[T >: Null] extends ImperativeAggregate {
    */
   final def serializeAggregateBufferInPlace(buffer: MutableRow): Unit = {
     val bufferObject = field(buffer, mutableAggBufferOffset).asInstanceOf[T]
-    buffer(mutableAggBufferOffset) = aggregationBufferType.serialize(bufferObject)
+    buffer(mutableAggBufferOffset) = serialize(bufferObject)
   }
 }
