@@ -48,6 +48,7 @@ groupedData <- function(sgd) {
 
 #' @rdname show
 #' @aliases show,GroupedData-method
+#' @export
 #' @note show(GroupedData) since 1.4.0
 setMethod("show", "GroupedData",
           function(object) {
