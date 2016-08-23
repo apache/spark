@@ -697,4 +697,3 @@ isMasterLocal <- function(master) {
 isSparkRShell <- function() {
   grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
 }
-
