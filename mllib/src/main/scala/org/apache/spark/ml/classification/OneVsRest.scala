@@ -135,11 +135,6 @@ final class OneVsRestModel private[ml] (
     @Since("1.4.0") val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams with MLWritable {
 
-  /** A Python-friendly auxiliary constructor. */
-  private[ml] def this(uid: String, models: JList[_ <: ClassificationModel[_, _]]) = {
-    this(uid, Metadata.empty, models.asScala.toArray)
-  }
-
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = false, getClassifier.featuresDataType)
