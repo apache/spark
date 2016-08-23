@@ -54,6 +54,10 @@ abstract class Collect extends ImperativeAggregate {
 
   override def inputAggBufferAttributes: Seq[AttributeReference] = Nil
 
+  // Both `CollectList` and `CollectSet` are non-deterministic since their results depend on the
+  // actual order of input rows.
+  override def deterministic: Boolean = false
+
   protected[this] val buffer: Growable[Any] with Iterable[Any]
 
   override def initialize(b: MutableRow): Unit = {
