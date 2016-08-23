@@ -656,6 +656,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param tol convergence tolerance of iterations.
 #' @param stepSize stepSize parameter.
 #' @param seed seed parameter for weights initialization.
+#' @param ... additional arguments passed to the method.
 #' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model.
 #' @rdname spark.mlp
 #' @aliases spark.mlp,SparkDataFrame-method
