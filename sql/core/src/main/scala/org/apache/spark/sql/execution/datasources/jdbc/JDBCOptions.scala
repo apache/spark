@@ -20,14 +20,21 @@ package org.apache.spark.sql.execution.datasources.jdbc
 /**
  * Options for the JDBC data source.
  */
-private[jdbc] class JDBCOptions(
+class JDBCOptions(
     @transient private val parameters: Map[String, String])
   extends Serializable {
 
+  // ------------------------------------------------------------
+  // Required parameters
+  // ------------------------------------------------------------
   // a JDBC URL
   val url = parameters.getOrElse("url", sys.error("Option 'url' not specified"))
   // name of table
   val table = parameters.getOrElse("dbtable", sys.error("Option 'dbtable' not specified"))
+
+  // ------------------------------------------------------------
+  // Optional parameter list
+  // ------------------------------------------------------------
   // the column used to partition
   val partitionColumn = parameters.getOrElse("partitionColumn", null)
   // the lower bound of partition column
@@ -36,4 +43,14 @@ private[jdbc] class JDBCOptions(
   val upperBound = parameters.getOrElse("upperBound", null)
   // the number of partitions
   val numPartitions = parameters.getOrElse("numPartitions", null)
+
+  // ------------------------------------------------------------
+  // The options for DataFrameWriter
+  // ------------------------------------------------------------
+  // if to truncate the table from the JDBC database
+  val isTruncate = parameters.getOrElse("truncate", "false").toBoolean
+  // the create table option , which can be table_options or partition_options.
+  // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+  // TODO: to reuse the existing partition parameters for those partition specific options
+  val createTableOptions = parameters.getOrElse("createTableOptions", "")
 }

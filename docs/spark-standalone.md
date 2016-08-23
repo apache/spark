@@ -298,9 +298,9 @@ application at a time. You can cap the number of cores by setting `spark.cores.m
 
 {% highlight scala %}
 val conf = new SparkConf()
-             .setMaster(...)
-             .setAppName(...)
-             .set("spark.cores.max", "10")
+  .setMaster(...)
+  .setAppName(...)
+  .set("spark.cores.max", "10")
 val sc = new SparkContext(conf)
 {% endhighlight %}
 

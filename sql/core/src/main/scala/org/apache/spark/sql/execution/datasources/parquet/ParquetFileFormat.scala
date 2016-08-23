@@ -44,7 +44,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
@@ -236,7 +235,8 @@ class ParquetFileFormat
     // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
     val leaves = allFiles.filter { f =>
       isSummaryFile(f.getPath) ||
-          !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
+        !((f.getPath.getName.startsWith("_") && !f.getPath.getName.contains("=")) ||
+          f.getPath.getName.startsWith("."))
     }.toArray.sortBy(_.getPath.toString)
 
     FileTypes(
@@ -546,8 +546,7 @@ private[parquet] class ParquetOutputWriter(
         //     partitions in the case of dynamic partitioning.
         override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
           val configuration = context.getConfiguration
-          val uniqueWriteJobId = configuration.get(
-            CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
+          val uniqueWriteJobId = configuration.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
           val taskAttemptId = context.getTaskAttemptID
           val split = taskAttemptId.getTaskID.getId
           val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")

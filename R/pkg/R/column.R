@@ -163,8 +163,9 @@ setMethod("alias",
 #' @family colum_func
 #' @aliases substr,Column-method
 #'
-#' @param start starting position
-#' @param stop ending position
+#' @param x a Column.
+#' @param start starting position.
+#' @param stop ending position.
 #' @note substr since 1.4.0
 setMethod("substr", signature(x = "Column"),
           function(x, start, stop) {
@@ -219,6 +220,7 @@ setMethod("endsWith", signature(x = "Column"),
 #' @family colum_func
 #' @aliases between,Column-method
 #'
+#' @param x a Column
 #' @param bounds lower and upper bounds
 #' @note between since 1.5.0
 setMethod("between", signature(x = "Column"),
@@ -233,6 +235,11 @@ setMethod("between", signature(x = "Column"),
 
 #' Casts the column to a different data type.
 #'
+#' @param x a Column.
+#' @param dataType a character object describing the target data type.
+#'        See
+#'        \href{https://spark.apache.org/docs/latest/sparkr.html#data-type-mapping-between-r-and-spark}{
+#'        Spark Data Types} for available data types.
 #' @rdname cast
 #' @name cast
 #' @family colum_func
@@ -254,10 +261,12 @@ setMethod("cast",
 
 #' Match a column with given values.
 #'
+#' @param x a Column.
+#' @param table a collection of values (coercible to list) to compare with.
 #' @rdname match
 #' @name %in%
 #' @aliases %in%,Column-method
-#' @return a matched values as a result of comparing with given values.
+#' @return A matched values as a result of comparing with given values.
 #' @export
 #' @examples
 #' \dontrun{
@@ -275,8 +284,11 @@ setMethod("%in%",
 #' otherwise
 #'
 #' If values in the specified column are null, returns the value.
-#' Can be used in conjunction with `when` to specify a default value for expressions.
+#' Can be used in conjunction with \code{when} to specify a default value for expressions.
 #'
+#' @param x a Column.
+#' @param value value to replace when the corresponding entry in \code{x} is NA.
+#'              Can be a single value or a Column.
 #' @rdname otherwise
 #' @name otherwise
 #' @family colum_func
