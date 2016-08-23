@@ -97,7 +97,7 @@ setClass("ALSModel", representation(jobj = "jobj"))
 #' @export
 #' @seealso \link{spark.glm}, \link{glm},
 #' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
-#' @seealso \link{spark.lda}, \link{spark.naiveBayes}, \link{spark.survreg}, \link{spark.mlp}
+#' @seealso \link{spark.lda}, \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
 #' @seealso \link{read.ml}
 NULL
 
@@ -110,7 +110,7 @@ NULL
 #' @export
 #' @seealso \link{spark.glm}, \link{glm},
 #' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
-#' @seealso \link{spark.naiveBayes}, \link{spark.survreg}, link{spark.mlp}
+#' @seealso \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
 NULL
 
 write_internal <- function(object, path, overwrite = FALSE) {
