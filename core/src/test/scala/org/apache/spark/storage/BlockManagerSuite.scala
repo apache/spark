@@ -1248,7 +1248,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         prepareBlockIds: Array[String],
         releaseBlocks: Array[String],
         listener: BlockPreparingListener): Unit = {
-      listener.onBlockPrepareSuccess("mockBlockId", new NioManagedBuffer(ByteBuffer.allocate(1)))
+      listener.onBlockPrepareSuccess()
     }
 
     override def fetchBlockSync(

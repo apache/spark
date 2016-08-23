@@ -31,58 +31,58 @@ import org.apache.spark.network.shuffle.protocol.PrepareBlocks;
 
 
 public class BlockToPrepareInfoSender {
-    private final Logger logger = LoggerFactory.getLogger(BlockToPrepareInfoSender.class);
+  private final Logger logger = LoggerFactory.getLogger(BlockToPrepareInfoSender.class);
 
-    private final TransportClient client;
-    private final PrepareBlocks prepareMessage;
-    private final String[] blockIds;
-    private final String[] blocksToRelease;
-    private final BlockPreparingListener listener;
-    private final PrepareRequestReceivedCallBack requestReceivedCallBack;
+  private final TransportClient client;
+  private final PrepareBlocks prepareMessage;
+  private final String[] blockIds;
+  private final String[] blocksToRelease;
+  private final BlockPreparingListener listener;
+  private final PrepareRequestReceivedCallBack requestReceivedCallBack;
 
-    public BlockToPrepareInfoSender(TransportClient client,
-                                    String appId,
-                                    String execId,
-                                    String[] blockIds,
-                                    String[] blocksToRelease,
-                                    BlockPreparingListener listener) {
-        this.client = client;
-        this.prepareMessage = new PrepareBlocks(appId, execId, blockIds, blocksToRelease);
-        this.blockIds = blockIds;
-        this.blocksToRelease = blocksToRelease;
-        this.listener = listener;
-        this.requestReceivedCallBack = new PrepareCallBack();
+  public BlockToPrepareInfoSender(
+      TransportClient client,
+      String appId,
+      String execId,
+      String[] blockIds,
+      String[] blocksToRelease,
+      BlockPreparingListener listener) {
+    this.client = client;
+    this.prepareMessage = new PrepareBlocks(appId, execId, blockIds, blocksToRelease);
+    this.blockIds = blockIds;
+    this.blocksToRelease = blocksToRelease;
+    this.listener = listener;
+    this.requestReceivedCallBack = new PrepareCallBack();
+  }
+
+  private class PrepareCallBack implements  PrepareRequestReceivedCallBack {
+    @Override
+    public void onSuccess() {
+      listener.onBlockPrepareSuccess();
     }
 
-    private class PrepareCallBack implements  PrepareRequestReceivedCallBack {
-        @Override
-        public void onSuccess() {
-            listener.onBlockPrepareSuccess();
-        }
+    @Override
+    public void onFailure(Throwable e) {
+      listener.onBlockPrepareFailure(e);
+    }
+  }
 
-        @Override
-        public void onFailure(Throwable e) {
-            listener.onBlockPrepareFailure(e);
-        }
+  public void start() {
+    if (blockIds.length == 0) {
+//    throw new IllegalArgumentException("Zero-size blockIds array");
+      logger.warn("Zero-size blockIds array");
     }
 
-    public void start() {
-        if (blockIds.length == 0) {
-//            throw new IllegalArgumentException("Zero-size blockIds array");
-            logger.warn("Zero-size blockIds array");
-        }
+    client.sendRpc(prepareMessage.toByteBuffer(), new RpcResponseCallback() {
+      @Override
+      public void onSuccess(ByteBuffer response) {
+        logger.debug("Successfully send prepare block's info, ready for the next step");
+      }
 
-        logger.debug("PrepareMessageSender start method called");
-        client.sendRpc(prepareMessage.toByteBuffer(), new RpcResponseCallback() {
-            @Override
-            public void onSuccess(ByteBuffer response) {
-                logger.debug("Successfully send prepare block's info, ready for the next step");
-            }
-
-            @Override
-            public void onFailure(Throwable e) {
-                logger.error("Failed while send the prepare message");
-            }
-        });
-    }
+      @Override
+      public void onFailure(Throwable e) {
+        logger.error("Failed while send the prepare message");
+       }
+    });
+  }
 }

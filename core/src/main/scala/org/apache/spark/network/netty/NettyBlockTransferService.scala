@@ -115,18 +115,19 @@ private[spark] class NettyBlockTransferService(
   }
 
   override def prepareBlocks(
-                              host: String,
-                              port: Int,
-                              execId: String,
-                              prepareBlockIds: Array[String],
-                              releaseBlockIds: Array[String],
-                              listener: BlockPreparingListener): Unit = {
-    logDebug(s"send prepare block info to $host:$port (executor id $execId)")
+      host: String,
+      port: Int,
+      execId: String,
+      prepareBlockIds: Array[String],
+      releaseBlockIds: Array[String],
+      listener: BlockPreparingListener): Unit = {
 
     try{
       val blockPrepareStarter = new PreparerStarter {
-        override def createAndStart(prepareBlockIds: Array[String], releaseBlockIds: Array[String],
-                                    listener: BlockPreparingListener): Unit = {
+        override def createAndStart(
+            prepareBlockIds: Array[String],
+            releaseBlockIds: Array[String],
+            listener: BlockPreparingListener): Unit = {
           val client = clientFactory.createClient(host, port)
           new BlockToPrepareInfoSender(client, appId, execId, prepareBlockIds.toArray,
             releaseBlockIds, listener).start()
@@ -136,7 +137,7 @@ private[spark] class NettyBlockTransferService(
       val maxRetries = transportConf.maxIORetries()
       if (maxRetries > 0) {
         new RetryingBlockPreparer(transportConf, blockPrepareStarter, prepareBlockIds,
-          releaseBlockIds, listener).start()
+            releaseBlockIds, listener).start()
       } else {
         blockPrepareStarter.createAndStart(prepareBlockIds, releaseBlockIds, listener)
       }

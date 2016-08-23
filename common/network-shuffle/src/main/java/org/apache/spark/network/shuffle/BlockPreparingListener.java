@@ -18,6 +18,6 @@
 package org.apache.spark.network.shuffle;
 
 public interface BlockPreparingListener {
-    void onBlockPrepareSuccess();
-    void onBlockPrepareFailure(Throwable exception);
+  void onBlockPrepareSuccess();
+  void onBlockPrepareFailure(Throwable exception);
 }

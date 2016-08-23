@@ -154,13 +154,13 @@ public class ExternalShuffleClient extends ShuffleClient {
 
   @Override
   public void prepareBlocks(
-          final String host,
-          final int port,
-          final String execId,
-          String[] prepareBlockIds,
-          final String[] releaseBlockIds,
-          BlockPreparingListener listener) {
-    logger.debug("send prepare block info to {}:{} (executor id {})", host, port, execId);
+      final String host,
+      final int port,
+      final String execId,
+      String[] prepareBlockIds,
+      final String[] releaseBlockIds,
+      BlockPreparingListener listener) {
+    logger.debug("Send prepare block info to {}:{} (executor id {})", host, port, execId);
 
     try {
       RetryingBlockPreparer.PreparerStarter blockPrepareStarter = new RetryingBlockPreparer.PreparerStarter() {
