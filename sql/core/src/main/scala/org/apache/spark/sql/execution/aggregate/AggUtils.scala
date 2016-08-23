@@ -83,8 +83,13 @@ object AggUtils {
     aggregateExpressions.map(e => e.copy(mode = updateMode(e.mode)))
   }
 
-  private[execution] def createPartialAggregate(operator: SparkPlan)
-      : (SparkPlan, SparkPlan) = operator match {
+  /**
+   * Builds new merge and map-side [[AggregateExec]]s from an input aggregate operator.
+   * If an aggregation needs a shuffle for satisfying its own distribution and supports partial
+   * aggregations, a map-side aggregation is appended before the shuffle in
+   * [[org.apache.spark.sql.execution.exchange.EnsureRequirements]].
+   */
+  def createMapMergeAggregatePair(operator: SparkPlan): (SparkPlan, SparkPlan) = operator match {
     case agg: AggregateExec =>
       val mapSideAgg = createPartialAggregateExec(
         agg.groupingExpressions, agg.aggregateExpressions, agg.child)
