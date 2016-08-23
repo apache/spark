@@ -25,6 +25,8 @@ isInstanceOf <- function(jobj, className) {
   callJMethod(cls, "isInstance", jobj)
 }
 
+#' Call Java Methods
+#'
 #' Call a Java method in the JVM running the Spark driver.
 #'
 #' @param objId object to invoke the method on. Should be a "jobj" created by newJObject.
@@ -49,6 +51,8 @@ callJMethod <- function(objId, methodName, ...) {
   invokeJava(isStatic = FALSE, objId$id, methodName, ...)
 }
 
+#' Call Static Java Methods
+#'
 #' Call a static method in the JVM running the Spark driver.
 #'
 #' @param className class containing the static method to invoke.
@@ -66,6 +70,8 @@ callJStatic <- function(className, methodName, ...) {
   invokeJava(isStatic = TRUE, className, methodName, ...)
 }
 
+#' Create Java Objects
+#'
 #' Create a new Java object in the JVM running the Spark driver.
 #'
 #' @param className name of the class to create
