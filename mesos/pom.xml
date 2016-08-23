@@ -61,7 +61,13 @@
       </exclusions>
     </dependency>
 
-    <!-- Promote shaded deps to compile scope -->
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- Explicitly depend on shaded dependencies from the parent, since shaded deps aren't transitive -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
