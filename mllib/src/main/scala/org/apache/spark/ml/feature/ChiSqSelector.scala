@@ -137,16 +137,18 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
         case Row(label: Double, features: Vector) =>
           OldLabeledPoint(label, OldVectors.fromML(features))
       }
-    var model = ChiSqSelectorType.withName($(selectorType)) match {
+    var selector = new feature.ChiSqSelector()
+    ChiSqSelectorType.withName($(selectorType)) match {
       case ChiSqSelectorType.KBest =>
-        new feature.ChiSqSelector().setNumTopFeatures($(numTopFeatures)).fit(input)
+        selector.setNumTopFeatures($(numTopFeatures))
       case ChiSqSelectorType.Percentile =>
-        new feature.ChiSqSelector().setPercentile($(percentile)).fit(input)
+        selector.setPercentile($(percentile))
       case ChiSqSelectorType.Fpr =>
-        new feature.ChiSqSelector().setAlpha($(alpha)).fit(input)
+        selector.setAlpha($(alpha))
       case errorType =>
         throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
     }
+    val model = selector.fit(input)
     copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
   }
 
