@@ -102,7 +102,7 @@ private[spark] class YarnIOEncryptionSuite extends SparkFunSuite with Matchers w
       override def run(): Unit = {
         conf.set(SPARK_IO_ENCRYPTION_ENABLED, true)
         val creds = new Credentials()
-        SerializerManager.initShuffleEncryptionKey(conf, creds)
+        SecurityManager.initIOEncryptionKey(conf, creds)
         SparkHadoopUtil.get.addCurrentUserCredentials(creds)
       }
     })

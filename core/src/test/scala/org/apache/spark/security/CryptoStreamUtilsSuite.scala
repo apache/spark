@@ -14,33 +14,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.crypto
+package org.apache.spark.security
 
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
-import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.security.CryptoStreamUtils._
-import org.apache.spark.serializer.SerializerManager
 
-private[spark] class ShuffleEncryptionSuite extends SparkFunSuite {
+private[spark] class CryptoStreamUtilsSuite extends SparkFunSuite {
   val ugi = UserGroupInformation.createUserForTesting("testuser", Array("testgroup"))
 
   test("Crypto configuration conversion") {
-    val sparkKey1 = s"${SPARK_COMMONS_CRYPTO_CONF_PREFIX}a.b.c"
+    val sparkKey1 = s"${SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX}a.b.c"
     val sparkVal1 = "val1"
     val cryptoKey1 = s"${COMMONS_CRYPTO_CONF_PREFIX}a.b.c"
 
-    val sparkKey2 = SPARK_COMMONS_CRYPTO_CONF_PREFIX.stripSuffix(".") + "A.b.c"
+    val sparkKey2 = SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX.stripSuffix(".") + "A.b.c"
     val sparkVal2 = "val2"
     val cryptoKey2 = s"${COMMONS_CRYPTO_CONF_PREFIX}A.b.c"
     val conf = new SparkConf()
     conf.set(sparkKey1, sparkVal1)
     conf.set(sparkKey2, sparkVal2)
-    val props = CryptoStreamUtils.toCryptoConf(conf, SPARK_COMMONS_CRYPTO_CONF_PREFIX,
+    val props = CryptoStreamUtils.toCryptoConf(conf, SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX,
       COMMONS_CRYPTO_CONF_PREFIX)
     assert(props.getProperty(cryptoKey1) === sparkVal1)
     assert(!props.containsKey(cryptoKey2))
@@ -104,7 +102,7 @@ private[spark] class ShuffleEncryptionSuite extends SparkFunSuite {
 
   private[this] def initCredentials(conf: SparkConf, credentials: Credentials): Unit = {
     if (conf.get(SPARK_IO_ENCRYPTION_ENABLED)) {
-      SerializerManager.initShuffleEncryptionKey(conf, credentials)
+      SecurityManager.initIOEncryptionKey(conf, credentials)
     }
   }
 }

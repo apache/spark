@@ -19,16 +19,13 @@ package org.apache.spark.serializer
 
 import java.io.{BufferedInputStream, BufferedOutputStream, InputStream, OutputStream}
 import java.nio.ByteBuffer
-import javax.crypto.KeyGenerator
 
-import org.apache.hadoop.security.Credentials
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.security.CryptoStreamUtils
-import org.apache.spark.security.CryptoStreamUtils._
 import org.apache.spark.storage._
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
@@ -66,7 +63,7 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
   // Whether to compress shuffle output temporarily spilled to disk
   private[this] val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
 
-  // Whether to encrypt IO encryption
+  // Whether to enable IO encryption
   private[this] val enableIOEncryption = conf.get(SPARK_IO_ENCRYPTION_ENABLED)
 
   /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
@@ -191,23 +188,5 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       .newInstance()
       .deserializeStream(wrapStream(blockId, stream))
       .asIterator.asInstanceOf[Iterator[T]]
-  }
-}
-
-private[spark] object SerializerManager {
-  /**
-   * Setup the cryptographic key used by IO encryption in credentials. The key is generated using
-   * [[KeyGenerator]]. The algorithm and key length is specified by the [[SparkConf]].
-   */
-  def initShuffleEncryptionKey(conf: SparkConf, credentials: Credentials): Unit = {
-    if (credentials.getSecretKey(SPARK_IO_TOKEN) == null) {
-      val keyLen = conf.get(SPARK_IO_ENCRYPTION_KEY_SIZE_BITS)
-      val IOKeyGenAlgorithm = conf.get(SPARK_IO_ENCRYPTION_KEYGEN_ALGORITHM)
-      val keyGen = KeyGenerator.getInstance(IOKeyGenAlgorithm)
-      keyGen.init(keyLen)
-
-      val IOKey = keyGen.generateKey()
-      credentials.addSecretKey(SPARK_IO_TOKEN, IOKey.getEncoded)
-    }
   }
 }

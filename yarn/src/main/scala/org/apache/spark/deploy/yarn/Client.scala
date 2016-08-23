@@ -54,7 +54,6 @@ import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
-import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.util.Utils
 
 private[spark] class Client(
@@ -1006,7 +1005,7 @@ private[spark] class Client(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
 
     if (sparkConf.get(SPARK_IO_ENCRYPTION_ENABLED)) {
-      SerializerManager.initShuffleEncryptionKey(sparkConf, credentials)
+      SecurityManager.initIOEncryptionKey(sparkConf, credentials)
     }
     setupSecurityToken(amContainer)
 

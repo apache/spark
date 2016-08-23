@@ -39,9 +39,9 @@ private[spark] object CryptoStreamUtils {
 
   // The initialization vector length in bytes.
   val IV_LENGTH_IN_BYTES = 16
-  // The prefix of Crypto related configurations in Spark configuration.
-  val SPARK_COMMONS_CRYPTO_CONF_PREFIX = "spark.commons.crypto."
-  // The prefix for the configurations passing to Commons-crypto library.
+  // The prefix of IO encryption related configurations in Spark configuration.
+  val SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX = "spark.io.encryption.commons.config."
+  // The prefix for the configurations passing to Apache Commons Crypto library.
   val COMMONS_CRYPTO_CONF_PREFIX = "commons.crypto."
 
   /**
@@ -50,7 +50,7 @@ private[spark] object CryptoStreamUtils {
   def createCryptoOutputStream(
       os: OutputStream,
       sparkConf: SparkConf): OutputStream = {
-    val properties = toCryptoConf(sparkConf, SPARK_COMMONS_CRYPTO_CONF_PREFIX,
+    val properties = toCryptoConf(sparkConf, SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX,
       COMMONS_CRYPTO_CONF_PREFIX)
     val iv = createInitializationVector(properties)
     os.write(iv)
@@ -67,7 +67,7 @@ private[spark] object CryptoStreamUtils {
   def createCryptoInputStream(
       is: InputStream,
       sparkConf: SparkConf): InputStream = {
-    val properties = toCryptoConf(sparkConf, SPARK_COMMONS_CRYPTO_CONF_PREFIX,
+    val properties = toCryptoConf(sparkConf, SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX,
       COMMONS_CRYPTO_CONF_PREFIX)
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
     is.read(iv, 0, iv.length)
@@ -89,7 +89,7 @@ private[spark] object CryptoStreamUtils {
     conf.getAll.foreach { case (k, v) =>
       if (k.startsWith(sparkPrefix)) {
         props.put(COMMONS_CRYPTO_CONF_PREFIX + k.substring(
-          SPARK_COMMONS_CRYPTO_CONF_PREFIX.length()), v)
+          SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX.length()), v)
       }
     }
     props
