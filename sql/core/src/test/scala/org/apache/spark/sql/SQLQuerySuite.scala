@@ -22,9 +22,6 @@ import java.math.MathContext
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
@@ -124,29 +121,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         sql("SELECT t1.b FROM cachedData, cachedData t1 GROUP BY t1.b"),
         Row(0) :: Row(81) :: Nil)
     }
-  }
-
-  test("self join with aliases") {
-    Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str").createOrReplaceTempView("df")
-
-    checkAnswer(
-      sql(
-        """
-          |SELECT x.str, COUNT(*)
-          |FROM df x JOIN df y ON x.str = y.str
-          |GROUP BY x.str
-        """.stripMargin),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
-  }
-
-  test("support table.star") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT r.*
-          |FROM testData l join testData2 r on (l.key = r.a)
-        """.stripMargin),
-      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
   }
 
   test("self join with alias in agg") {
@@ -445,25 +419,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Nil)
   }
 
-  test("left semi greater than predicate") {
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2"),
-        Seq(Row(3, 1), Row(3, 2))
-      )
-    }
+  test("index into array") {
+    checkAnswer(
+      sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
+      arrayData.map(d => Row(d.data, d.data(0), d.data(0) + d.data(1), d.data(1))).collect())
   }
 
-  test("left semi greater than predicate and equal operator") {
+  test("index into array of arrays") {
     checkAnswer(
-      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.b and x.a >= y.a + 2"),
-      Seq(Row(3, 1), Row(3, 2))
-    )
-
-    checkAnswer(
-      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.a and x.a >= y.b + 1"),
-      Seq(Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2))
-    )
+      sql(
+        "SELECT nestedData, nestedData[0][0], nestedData[0][0] + nestedData[0][1] FROM arrayData"),
+      arrayData.map(d =>
+        Row(d.nestedData,
+         d.nestedData(0)(0),
+         d.nestedData(0)(0) + d.nestedData(0)(1))).collect().toSeq)
   }
 
   test("agg") {
@@ -654,129 +623,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("inner join where, one match per row") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM uppercasedata JOIN lowercasedata WHERE n = N"),
-        Seq(
-          Row(1, "A", 1, "a"),
-          Row(2, "B", 2, "b"),
-          Row(3, "C", 3, "c"),
-          Row(4, "D", 4, "d")))
-    }
-  }
-
-  test("inner join ON, one match per row") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM uppercasedata JOIN lowercasedata ON n = N"),
-        Seq(
-          Row(1, "A", 1, "a"),
-          Row(2, "B", 2, "b"),
-          Row(3, "C", 3, "c"),
-          Row(4, "D", 4, "d")))
-    }
-  }
-
-  test("inner join, where, multiple matches") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswer(
-        sql(
-          """
-          |SELECT * FROM
-          |  (SELECT * FROM testdata2 WHERE a = 1) x JOIN
-          |  (SELECT * FROM testdata2 WHERE a = 1) y
-          |WHERE x.a = y.a""".stripMargin),
-        Row(1, 1, 1, 1) ::
-        Row(1, 1, 1, 2) ::
-        Row(1, 2, 1, 1) ::
-        Row(1, 2, 1, 2) :: Nil)
-    }
-  }
-
-  test("inner join, no matches") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT * FROM
-          |  (SELECT * FROM testData2 WHERE a = 1) x JOIN
-          |  (SELECT * FROM testData2 WHERE a = 2) y
-          |WHERE x.a = y.a""".stripMargin),
-      Nil)
-  }
-
-  test("big inner join, 4 matches per row") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT * FROM
-          |  (SELECT * FROM testData UNION ALL
-          |   SELECT * FROM testData UNION ALL
-          |   SELECT * FROM testData UNION ALL
-          |   SELECT * FROM testData) x JOIN
-          |  (SELECT * FROM testData UNION ALL
-          |   SELECT * FROM testData UNION ALL
-          |   SELECT * FROM testData UNION ALL
-          |   SELECT * FROM testData) y
-          |WHERE x.key = y.key""".stripMargin),
-      testData.rdd.flatMap(
-        row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
-  }
-
-  test("cartesian product join") {
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      checkAnswer(
-        testData3.join(testData3),
-        Row(1, null, 1, null) ::
-          Row(1, null, 2, 2) ::
-          Row(2, 2, 1, null) ::
-          Row(2, 2, 2, 2) :: Nil)
-    }
-  }
-
-  test("left outer join") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM uppercasedata LEFT OUTER JOIN lowercasedata ON n = N"),
-        Row(1, "A", 1, "a") ::
-          Row(2, "B", 2, "b") ::
-          Row(3, "C", 3, "c") ::
-          Row(4, "D", 4, "d") ::
-          Row(5, "E", null, null) ::
-          Row(6, "F", null, null) :: Nil)
-    }
-  }
-
-  test("right outer join") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM lowercasedata RIGHT OUTER JOIN uppercasedata ON n = N"),
-        Row(1, "a", 1, "A") ::
-          Row(2, "b", 2, "B") ::
-          Row(3, "c", 3, "C") ::
-          Row(4, "d", 4, "D") ::
-          Row(null, null, 5, "E") ::
-          Row(null, null, 6, "F") :: Nil)
-    }
-  }
-
-  test("full outer join") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT * FROM
-          |  (SELECT * FROM upperCaseData WHERE N <= 4) leftTable FULL OUTER JOIN
-          |  (SELECT * FROM upperCaseData WHERE N >= 3) rightTable
-          |    ON leftTable.N = rightTable.N
-        """.stripMargin),
-      Row(1, "A", null, null) ::
-      Row(2, "B", null, null) ::
-      Row(3, "C", 3, "C") ::
-      Row (4, "D", 4, "D") ::
-      Row(null, null, 5, "E") ::
-      Row(null, null, 6, "F") :: Nil)
-  }
-
   test("SPARK-11111 null-safe join should not use cartesian product") {
     val df = sql("select count(*) from testData a join testData b on (a.key <=> b.key)")
     val cp = df.queryExecution.sparkPlan.collect {
@@ -808,48 +654,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(2, "b", 2) :: Nil)
   }
 
-  test("mixed-case keywords") {
-    checkAnswer(
-      sql(
-        """
-          |SeleCT * from
-          |  (select * from upperCaseData WherE N <= 4) leftTable fuLL OUtER joiN
-          |  (sElEcT * FROM upperCaseData whERe N >= 3) rightTable
-          |    oN leftTable.N = rightTable.N
-        """.stripMargin),
-      Row(1, "A", null, null) ::
-      Row(2, "B", null, null) ::
-      Row(3, "C", 3, "C") ::
-      Row(4, "D", 4, "D") ::
-      Row(null, null, 5, "E") ::
-      Row(null, null, 6, "F") :: Nil)
-  }
-
   test("select with table name as qualifier") {
     checkAnswer(
       sql("SELECT testData.value FROM testData WHERE testData.key = 1"),
       Row("1"))
-  }
-
-  test("inner join ON with table name as qualifier") {
-    checkAnswer(
-      sql("SELECT * FROM upperCaseData JOIN lowerCaseData ON lowerCaseData.n = upperCaseData.N"),
-      Seq(
-        Row(1, "A", 1, "a"),
-        Row(2, "B", 2, "b"),
-        Row(3, "C", 3, "c"),
-        Row(4, "D", 4, "d")))
-  }
-
-  test("qualified select with inner join ON with table name as qualifier") {
-    checkAnswer(
-      sql("SELECT upperCaseData.N, upperCaseData.L FROM upperCaseData JOIN lowerCaseData " +
-        "ON lowerCaseData.n = upperCaseData.N"),
-      Seq(
-        Row(1, "A"),
-        Row(2, "B"),
-        Row(3, "C"),
-        Row(4, "D")))
   }
 
   test("system function upper()") {
@@ -1186,17 +994,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("Multiple join") {
-    checkAnswer(
-      sql(
-        """SELECT a.key, b.key, c.key
-          |FROM testData a
-          |JOIN testData b ON a.key = b.key
-          |JOIN testData c ON a.key = c.key
-        """.stripMargin),
-      (1 to 100).map(i => Row(i, i, i)))
-  }
-
   test("SPARK-3483 Special chars in column names") {
     val data = sparkContext.parallelize(
       Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
@@ -1218,16 +1015,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-3814 Support Bitwise ~ operator") {
     checkAnswer(sql("SELECT ~key FROM testData WHERE key = 1 "), Row(-2))
-  }
-
-  test("SPARK-4120 Join of multiple tables does not work in SparkSQL") {
-    checkAnswer(
-      sql(
-        """SELECT a.key, b.key, c.key
-          |FROM testData a,testData b,testData c
-          |where a.key = b.key and a.key = c.key
-        """.stripMargin),
-      (1 to 100).map(i => Row(i, i, i)))
   }
 
   test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
@@ -1264,18 +1051,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT a, b FROM testData2 ORDER BY a desc, b"),
       Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2))
     )
-  }
-
-  test("Supporting relational operator '<=>' in Spark SQL") {
-    val nullCheckData1 = TestData(1, "1") :: TestData(2, null) :: Nil
-    val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
-    rdd1.toDF().createOrReplaceTempView("nulldata1")
-    val nullCheckData2 = TestData(1, "1") :: TestData(2, null) :: Nil
-    val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
-    rdd2.toDF().createOrReplaceTempView("nulldata2")
-    checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
-      "nulldata2 on nulldata1.value <=> nulldata2.value"),
-        (1 to 2).map(i => Row(i)))
   }
 
   test("Multi-column COUNT(DISTINCT ...)") {
@@ -1677,31 +1452,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
     assert(e.message.contains("Unsupported data source type for direct query on files: " +
       "org.apache.spark.sql.execution.datasources.jdbc"))
-  }
-
-  test("SortMergeJoin returns wrong results when using UnsafeRows") {
-    // This test is for the fix of https://issues.apache.org/jira/browse/SPARK-10737.
-    // This bug will be triggered when Tungsten is enabled and there are multiple
-    // SortMergeJoin operators executed in the same task.
-    val confs = SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1" :: Nil
-    withSQLConf(confs: _*) {
-      val df1 = (1 to 50).map(i => (s"str_$i", i)).toDF("i", "j")
-      val df2 =
-        df1
-          .join(df1.select(df1("i")), "i")
-          .select(df1("i"), df1("j"))
-
-      val df3 = df2.withColumnRenamed("i", "i1").withColumnRenamed("j", "j1")
-      val df4 =
-        df2
-          .join(df3, df2("i") === df3("i1"))
-          .withColumn("diff", $"j" - $"j1")
-          .select(df2("i"), df2("j"), $"diff")
-
-      checkAnswer(
-        df4,
-        df1.withColumn("diff", lit(0)))
-    }
   }
 
   test("SPARK-11303: filter should not be pushed down into sample") {
@@ -2200,70 +1950,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df.select(hash($"i", $"j")),
         sql("SELECT hash(i, j) from tbl")
       )
-    }
-  }
-
-  test("join with using clause") {
-    val df1 = Seq(("r1c1", "r1c2", "t1r1c3"),
-      ("r2c1", "r2c2", "t1r2c3"), ("r3c1x", "r3c2", "t1r3c3")).toDF("c1", "c2", "c3")
-    val df2 = Seq(("r1c1", "r1c2", "t2r1c3"),
-      ("r2c1", "r2c2", "t2r2c3"), ("r3c1y", "r3c2", "t2r3c3")).toDF("c1", "c2", "c3")
-    val df3 = Seq((null, "r1c2", "t3r1c3"),
-      ("r2c1", "r2c2", "t3r2c3"), ("r3c1y", "r3c2", "t3r3c3")).toDF("c1", "c2", "c3")
-    withTempView("t1", "t2", "t3") {
-      df1.createOrReplaceTempView("t1")
-      df2.createOrReplaceTempView("t2")
-      df3.createOrReplaceTempView("t3")
-      // inner join with one using column
-      checkAnswer(
-        sql("SELECT * FROM t1 join t2 using (c1)"),
-        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
-          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") :: Nil)
-
-      // inner join with two using columns
-      checkAnswer(
-        sql("SELECT * FROM t1 join t2 using (c1, c2)"),
-        Row("r1c1", "r1c2", "t1r1c3", "t2r1c3") ::
-          Row("r2c1", "r2c2", "t1r2c3", "t2r2c3") :: Nil)
-
-      // Left outer join with one using column.
-      checkAnswer(
-        sql("SELECT * FROM t1 left join t2 using (c1)"),
-        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
-          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
-          Row("r3c1x", "r3c2", "t1r3c3", null, null) :: Nil)
-
-      // Right outer join with one using column.
-      checkAnswer(
-        sql("SELECT * FROM t1 right join t2 using (c1)"),
-        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
-          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
-          Row("r3c1y", null, null, "r3c2", "t2r3c3") :: Nil)
-
-      // Full outer join with one using column.
-      checkAnswer(
-        sql("SELECT * FROM t1 full outer join t2 using (c1)"),
-        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
-          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
-          Row("r3c1x", "r3c2", "t1r3c3", null, null) ::
-          Row("r3c1y", null,
-            null, "r3c2", "t2r3c3") :: Nil)
-
-      // Full outer join with null value in join column.
-      checkAnswer(
-        sql("SELECT * FROM t1 full outer join t3 using (c1)"),
-        Row("r1c1", "r1c2", "t1r1c3", null, null) ::
-          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t3r2c3") ::
-          Row("r3c1x", "r3c2", "t1r3c3", null, null) ::
-          Row("r3c1y", null, null, "r3c2", "t3r3c3") ::
-          Row(null, null, null, "r1c2", "t3r1c3") :: Nil)
-
-      // Self join with using columns.
-      checkAnswer(
-        sql("SELECT * FROM t1 join t1 using (c1)"),
-        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t1r1c3") ::
-          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t1r2c3") ::
-          Row("r3c1x", "r3c2", "t1r3c3", "r3c2", "t1r3c3") :: Nil)
     }
   }
 
