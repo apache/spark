@@ -152,7 +152,7 @@ public class RetryingBlockPreparer {
                 if (this == currentListener) {
                     initiateRetry();
                 } else {
-                    logger.error(String.format("BM@PrepareBlock failed to send blocks' info, " +
+                    logger.error(String.format("PrepareBlock failed to send blocks' info, " +
                             "and will not retry (%s retries)", retryCount), exception);
                     shouldForwardFailure = true;
                 }
