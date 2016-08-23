@@ -17,17 +17,23 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, DriverManager, PreparedStatement, SQLException}
+import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet}
 import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
+import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.NextIterator
 
 /**
  * Util functions for JDBC tables.
@@ -152,6 +158,180 @@ object JdbcUtils extends Logging {
   private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
+  }
+
+  def resultSetToSparkInternalRows(
+      resultSet: ResultSet,
+      schema: StructType,
+      inputMetrics: InputMetrics): Iterator[InternalRow] = {
+    new NextIterator[InternalRow] {
+      private[this] val rs = resultSet
+      private[this] val getters: Array[JDBCValueGetter] = makeGetters(schema)
+      private[this] val mutableRow = new SpecificMutableRow(schema.fields.map(x => x.dataType))
+
+      override protected def close(): Unit = {
+        try {
+          rs.close()
+        } catch {
+          case e: Exception => logWarning("Exception closing resultset", e)
+        }
+      }
+
+      override protected def getNext(): InternalRow = {
+        if (rs.next()) {
+          inputMetrics.incRecordsRead(1)
+          var i = 0
+          while (i < getters.length) {
+            getters(i).apply(rs, mutableRow, i)
+            if (rs.wasNull) mutableRow.setNullAt(i)
+            i = i + 1
+          }
+          mutableRow
+        } else {
+          finished = true
+          null.asInstanceOf[InternalRow]
+        }
+      }
+    }
+  }
+
+  // A `JDBCValueGetter` is responsible for getting a value from `ResultSet` into a field
+  // for `MutableRow`. The last argument `Int` means the index for the value to be set in
+  // the row and also used for the value in `ResultSet`.
+  private type JDBCValueGetter = (ResultSet, MutableRow, Int) => Unit
+
+  /**
+   * Creates `JDBCValueGetter`s according to [[StructType]], which can set
+   * each value from `ResultSet` to each field of [[MutableRow]] correctly.
+   */
+  private def makeGetters(schema: StructType): Array[JDBCValueGetter] =
+    schema.fields.map(sf => makeGetter(sf.dataType, sf.metadata))
+
+  private def makeGetter(dt: DataType, metadata: Metadata): JDBCValueGetter = dt match {
+    case BooleanType =>
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        row.setBoolean(pos, rs.getBoolean(pos + 1))
+
+    case DateType =>
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        // DateTimeUtils.fromJavaDate does not handle null value, so we need to check it.
+        val dateVal = rs.getDate(pos + 1)
+        if (dateVal != null) {
+          row.setInt(pos, DateTimeUtils.fromJavaDate(dateVal))
+        } else {
+          row.update(pos, null)
+        }
+
+    // When connecting with Oracle DB through JDBC, the precision and scale of BigDecimal
+    // object returned by ResultSet.getBigDecimal is not correctly matched to the table
+    // schema reported by ResultSetMetaData.getPrecision and ResultSetMetaData.getScale.
+    // If inserting values like 19999 into a column with NUMBER(12, 2) type, you get through
+    // a BigDecimal object with scale as 0. But the dataframe schema has correct type as
+    // DecimalType(12, 2). Thus, after saving the dataframe into parquet file and then
+    // retrieve it, you will get wrong result 199.99.
+    // So it is needed to set precision and scale for Decimal based on JDBC metadata.
+    case DecimalType.Fixed(p, s) =>
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        val decimal =
+          nullSafeConvert[java.math.BigDecimal](rs.getBigDecimal(pos + 1), d => Decimal(d, p, s))
+        row.update(pos, decimal)
+
+    case DoubleType =>
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        row.setDouble(pos, rs.getDouble(pos + 1))
+
+    case FloatType =>
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        row.setFloat(pos, rs.getFloat(pos + 1))
+
+    case IntegerType =>
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        row.setInt(pos, rs.getInt(pos + 1))
+
+    case LongType if metadata.contains("binarylong") =>
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        val bytes = rs.getBytes(pos + 1)
+        var ans = 0L
+        var j = 0
+        while (j < bytes.size) {
+          ans = 256 * ans + (255 & bytes(j))
+          j = j + 1
+        }
+        row.setLong(pos, ans)
+
+    case LongType =>
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        row.setLong(pos, rs.getLong(pos + 1))
+
+    case StringType =>
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
+        row.update(pos, UTF8String.fromString(rs.getString(pos + 1)))
+
+    case TimestampType =>
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        val t = rs.getTimestamp(pos + 1)
+        if (t != null) {
+          row.setLong(pos, DateTimeUtils.fromJavaTimestamp(t))
+        } else {
+          row.update(pos, null)
+        }
+
+    case BinaryType =>
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        row.update(pos, rs.getBytes(pos + 1))
+
+    case ArrayType(et, _) =>
+      val elementConversion = et match {
+        case TimestampType =>
+          (array: Object) =>
+            array.asInstanceOf[Array[java.sql.Timestamp]].map { timestamp =>
+              nullSafeConvert(timestamp, DateTimeUtils.fromJavaTimestamp)
+            }
+
+        case StringType =>
+          (array: Object) =>
+            array.asInstanceOf[Array[java.lang.String]]
+              .map(UTF8String.fromString)
+
+        case DateType =>
+          (array: Object) =>
+            array.asInstanceOf[Array[java.sql.Date]].map { date =>
+              nullSafeConvert(date, DateTimeUtils.fromJavaDate)
+            }
+
+        case dt: DecimalType =>
+          (array: Object) =>
+            array.asInstanceOf[Array[java.math.BigDecimal]].map { decimal =>
+              nullSafeConvert[java.math.BigDecimal](
+                decimal, d => Decimal(d, dt.precision, dt.scale))
+            }
+
+        case LongType if metadata.contains("binarylong") =>
+          throw new IllegalArgumentException(s"Unsupported array element " +
+            s"type ${dt.simpleString} based on binary")
+
+        case ArrayType(_, _) =>
+          throw new IllegalArgumentException("Nested arrays unsupported")
+
+        case _ => (array: Object) => array.asInstanceOf[Array[Any]]
+      }
+
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        val array = nullSafeConvert[Object](
+          rs.getArray(pos + 1).getArray,
+          array => new GenericArrayData(elementConversion.apply(array)))
+        row.update(pos, array)
+
+    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
+  }
+
+  private def nullSafeConvert[T](input: T, f: T => Any): Any = {
+    if (input == null) {
+      null
+    } else {
+      f(input)
+    }
   }
 
   // A `JDBCValueSetter` is responsible for setting a value from `Row` into a field for
