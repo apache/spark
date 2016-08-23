@@ -122,7 +122,7 @@ private[spark] class NettyBlockTransferService(
       releaseBlockIds: Array[String],
       listener: BlockPreparingListener): Unit = {
 
-    try{
+    try {
       val blockPrepareStarter = new PreparerStarter {
         override def createAndStart(
             prepareBlockIds: Array[String],
