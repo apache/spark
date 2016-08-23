@@ -8,7 +8,7 @@ Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
              person("Xiangrui", "Meng", role = "aut",
                     email = "meng@databricks.com"),
              person("Felix", "Cheung", role = "aut",
-                    email = "felixcheung_m@hotmail.com"),
+                    email = "felixcheung@apache.org"),
              person(family = "The Apache Software Foundation", role = c("aut", "cph")))
 URL: http://www.apache.org/ http://spark.apache.org/
 BugReports: https://issues.apache.org/jira/secure/CreateIssueDetails!init.jspa?pid=12315420&components=12325400&issuetype=4
