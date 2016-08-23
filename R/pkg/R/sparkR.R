@@ -382,7 +382,7 @@ sparkR.session <- function(
           sparkHome <- packageLocalDir
         } else {
           msg <- paste0("Spark not found in SPARK_HOME: ",
-                        sparkHome, "\n", instructionForInstall("remote"))
+                        sparkHome, "\n", installInstruction("remote"))
           stop(msg)
         }
       }

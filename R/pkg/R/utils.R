@@ -698,7 +698,7 @@ is_sparkR_shell <- function() {
   grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
 }
 
-instructionForInstall <- function(mode) {
+installInstruction <- function(mode) {
   if (mode == "remote") {
     paste0("Connecting to a remote Spark master. ",
            "Please make sure Spark package is also installed in this machine.\n",
