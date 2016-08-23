@@ -415,8 +415,8 @@ abstract class DeclarativeAggregate
  *  2. Upon each input row, the framework calls
  *     `update(buffer: T, input: InternalRow): Unit` to update the aggregation buffer object T.
  *  3. After processing all rows of current group (group by key), the framework will serialize
- *     aggregation buffer object T to SparkSQL internally supported underlying storage format, and
- *     persist the serializable format to disk if needed.
+ *     aggregation buffer object T to storage format (Array[Byte]) and persist the Array[Byte]
+ *     to disk if needed.
  *  4. The framework moves on to next group, until all groups have been processed.
  *
  * Shuffling exchange data to Reducer tasks...
@@ -426,7 +426,7 @@ abstract class DeclarativeAggregate
  *  1. The framework calls `createAggregationBuffer(): T` to create an empty internal aggregation
  *     buffer object (type T) for merging.
  *  2. For each aggregation output of Stage 1, The framework de-serializes the storage
- *     format and generates one input aggregation object (type T).
+ *     format (Array[Byte]) and produces one input aggregation object (type T).
  *  3. For each input aggregation object, the framework calls `merge(buffer: T, input: T): Unit`
  *     to merge the input aggregation object into aggregation buffer object.
  *  4. After processing all input aggregation objects of current group (group by key), the framework
@@ -474,39 +474,11 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   /** Returns the class of aggregation buffer object */
   def aggregationBufferClass: Class[T]
 
-  /** Serializes the aggregation buffer object T to Spark-sql internally supported storage format */
-  def serialize(buffer: T): Any
+  /** Serializes the aggregation buffer object T to Array[Byte] */
+  def serialize(buffer: T): Array[Byte]
 
-  /** De-serializes the storage format, and produces aggregation buffer object T */
-  def deserialize(storageFormat: Any): T
-
-  /**
-   * Returns the aggregation-buffer-object storage format's Sql type.
-   *
-   * Here is a list of supported storage format and corresponding Sql type:
-   *
-   * {{{
-   *   aggregation buffer object's Storage format    |  storage format's Sql type
-   * ------------------------------------------------------------------------------------------
-   *   Array[Byte] (*)                               |  BinaryType (*)
-   *   Null                                          |  NullType
-   *   Boolean                                       |  BooleanType
-   *   Byte                                          |  ByteType
-   *   Short                                         |  ShortType
-   *   Int                                           |  IntegerType
-   *   Long                                          |  LongType
-   *   Float                                         |  FloatType
-   *   Double                                        |  DoubleType
-   *   org.apache.spark.sql.types.Decimal            |  DecimalType
-   *   org.apache.spark.unsafe.types.UTF8String      |  StringType
-   *   org.apache.spark.unsafe.types.CalendarInterval|  CalendarIntervalType
-   *   org.apache.spark.sql.catalyst.util.MapData    |  MapType
-   *   org.apache.spark.sql.catalyst.util.ArrayData  |  ArrayType
-   *   org.apache.spark.sql.catalyst.InternalRow     |
-   * }}}
-   *
-   */
-  def aggregationBufferStorageFormatSqlType: DataType
+  /** De-serializes the serialized format Array[Byte], and produces aggregation buffer object T */
+  def deserialize(storageFormat: Array[Byte]): T
 
   final override def initialize(buffer: MutableRow): Unit = {
     val bufferObject = createAggregationBuffer()
@@ -519,29 +491,29 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   }
 
   final override def merge(buffer: MutableRow, inputBuffer: InternalRow): Unit = {
-    val bufferObject = field(buffer, mutableAggBufferOffset).asInstanceOf[T]
-    val inputObject = deserialize(field(inputBuffer, inputAggBufferOffset))
+    val bufferObject = field[T](buffer, mutableAggBufferOffset)
+    val inputObject = deserialize(field[Array[Byte]](inputBuffer, inputAggBufferOffset))
     merge(bufferObject, inputObject)
   }
 
   final override def eval(buffer: InternalRow): Any = {
-    val bufferObject = field(buffer, mutableAggBufferOffset)
+    val bufferObject = field[AnyRef](buffer, mutableAggBufferOffset)
     if (bufferObject.getClass == aggregationBufferClass) {
       // When used in Window frame aggregation, eval(buffer: InternalRow) is called directly
       // on the object aggregation buffer without intermediate serializing/de-serializing.
       eval(bufferObject.asInstanceOf[T])
     } else {
-      eval(deserialize(bufferObject))
+      eval(deserialize(bufferObject.asInstanceOf[Array[Byte]]))
     }
   }
 
-  private def field(input: InternalRow, offset: Int): AnyRef = {
-    input.get(offset, null)
+  private def field[U](input: InternalRow, fieldIndex: Int): U = {
+    input.get(fieldIndex, null).asInstanceOf[U]
   }
 
   final override lazy val aggBufferAttributes: Seq[AttributeReference] = {
     // Underlying storage type for the aggregation buffer object
-    Seq(AttributeReference("buf", aggregationBufferStorageFormatSqlType)())
+    Seq(AttributeReference("buf", BinaryType)())
   }
 
   final override lazy val inputAggBufferAttributes: Seq[AttributeReference] =

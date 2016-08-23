@@ -17,21 +17,27 @@
 
 package org.apache.spark.sql
 
+import com.google.common.primitives.Ints
+
 import org.apache.spark.sql.TypedImperativeAggregateSuite.TypedMax
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericMutableRow, SpecificMutableRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.execution.aggregate.SortAggregateExec
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegerType}
+import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, IntegerType, LongType}
 
 class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
 
   import testImplicits._
 
-  private val data = Seq((1, 0), (3, 1), (2, 0), (6, 3), (3, 1), (4, 1), (5, 0))
+  private val random = new java.util.Random()
 
+  private val data = (0 until 1000).map { _ =>
+    (random.nextInt(10), random.nextInt(100))
+  }
   test("aggregate with object aggregate buffer") {
     val agg = new TypedMax(BoundReference(0, IntegerType, nullable = false))
 
@@ -55,37 +61,66 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
 
     assert(mergeBuffer.value == data.map(_._1).max)
     assert(agg.eval(mergeBuffer) == data.map(_._1).max)
+
+    // Tests low level eval(row: InternalRow) API.
+    val array: Array[Any] = Array(mergeBuffer)
+    val row = new GenericMutableRow(array)
+
+    // Evaluates directly on row consist of aggregation buffer object.
+    assert(agg.eval(row) == data.map(_._1).max)
+
+    // Serializes the aggregation buffer object and then evals.
+    agg.serializeAggregateBufferInPlace(row)
+    assert(agg.eval(row) == data.map(_._1).max)
+  }
+
+  test("supports SpecificMutableRow as mutable row") {
+    val aggregationBufferSchema = Seq(IntegerType, LongType, BinaryType, IntegerType)
+    val aggBufferOffset = 2
+    val inputBufferObject = 1
+    val buffer = new SpecificMutableRow(aggregationBufferSchema)
+    val agg = new TypedMax(BoundReference(inputBufferObject, IntegerType, nullable = false))
+      .withNewMutableAggBufferOffset(aggBufferOffset)
+      .withNewInputAggBufferOffset(inputBufferObject)
+
+    agg.initialize(buffer)
+    data.foreach { kv =>
+      val input = InternalRow(kv._1, kv._2)
+      agg.update(buffer, input)
+    }
+    assert(agg.eval(buffer) == data.map(_._2).max)
   }
 
   test("dataframe aggregate with object aggregate buffer, should not use HashAggregate") {
     val df = data.toDF("a", "b")
     val max = new TypedMax($"a".expr)
 
-    // Always use SortAggregateExec instead of HashAggregateExec for planning even if the aggregate
-    //  buffer attributes are mutable fields (every field can be mutated inline like int, long...)
-    val allFieldsMutable = max.aggBufferSchema.map(_.dataType).forall(UnsafeRow.isMutable)
+    // Always uses SortAggregateExec
     val sparkPlan = df.select(Column(max.toAggregateExpression())).queryExecution.sparkPlan
-    assert(allFieldsMutable == true && sparkPlan.isInstanceOf[SortAggregateExec])
+    assert(sparkPlan.isInstanceOf[SortAggregateExec])
   }
 
   test("dataframe aggregate with object aggregate buffer, no group by") {
-    val df = data.toDF("a", "b").coalesce(2)
-    checkAnswer(
-      df.select(typedMax($"a"), count($"a"), typedMax($"b"), count($"b")),
-      Seq(Row(6, 7, 3, 7))
-    )
+    val df = data.toDF("key", "value").coalesce(2)
+    val query = df.select(typedMax($"key"), count($"key"), typedMax($"value"), count($"value"))
+    val maxKey = data.map(_._1).max
+    val countKey = data.size
+    val maxValue = data.map(_._2).max
+    val countValue = data.size
+    val expected = Seq(Row(maxKey, countKey, maxValue, countValue))
+    checkAnswer(query, expected)
   }
 
   test("dataframe aggregate with object aggregate buffer, with group by") {
-    val df = data.toDF("a", "b").coalesce(2)
-    checkAnswer(
-      df.groupBy($"b").agg(typedMax($"a"), count($"a"), typedMax($"a")),
-      Seq(
-        Row(0, 5, 3, 5),
-        Row(1, 4, 3, 4),
-        Row(3, 6, 1, 6)
-      )
-    )
+    val df = data.toDF("value", "key").coalesce(2)
+    val query = df.groupBy($"key").agg(typedMax($"value"), count($"value"), typedMax($"value"))
+    val expected = data.groupBy(_._2).toSeq.map { group =>
+      val (key, values) = group
+      val valueMax = values.map(_._1).max
+      val countValue = values.size
+      Row(key, valueMax, countValue, valueMax)
+    }
+    checkAnswer(query, expected)
   }
 
   test("dataframe aggregate with object aggregate buffer, empty inputs, no group by") {
@@ -100,6 +135,36 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       empty.groupBy($"b").agg(typedMax($"a"), count($"a"), typedMax($"a")),
       Seq.empty[Row])
+  }
+
+  test("TypedImperativeAggregate should not break Window function") {
+    val df = data.toDF("key", "value")
+    // OVER (PARTITION BY a ORDER BY b ROW BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    val w = Window.orderBy("value").partitionBy("key").rowsBetween(Long.MinValue, 0)
+
+    val query = df.select(sum($"key").over(w), typedMax($"key").over(w), sum($"value").over(w),
+      typedMax($"value").over(w))
+
+    val expected = data.groupBy(_._1).toSeq.flatMap { group =>
+      val (key, values) = group
+      val sortedValues = values.map(_._2).sorted
+
+      var outputRows = Seq.empty[Row]
+      var i = 0
+      while (i < sortedValues.size) {
+        val unboundedPrecedingAndCurrent = sortedValues.slice(0, i + 1)
+        val sumKey = key * unboundedPrecedingAndCurrent.size
+        val maxKey = key
+        val sumValue = unboundedPrecedingAndCurrent.sum
+        val maxValue = unboundedPrecedingAndCurrent.max
+
+        outputRows :+= Row(sumKey, maxKey, sumValue, maxValue)
+        i += 1
+      }
+
+      outputRows
+    }
+    checkAnswer(query, expected)
   }
 
   private def typedMax(column: Column): Column = {
@@ -159,14 +224,10 @@ object TypedImperativeAggregateSuite {
 
     override def aggregationBufferClass: Class[MaxValue] = classOf[MaxValue]
 
-    override def serialize(buffer: MaxValue): Any = buffer.value
+    override def serialize(buffer: MaxValue): Array[Byte] = Ints.toByteArray(buffer.value)
 
-    override def aggregationBufferStorageFormatSqlType: DataType = IntegerType
-
-    override def deserialize(storageFormat: Any): MaxValue = {
-      storageFormat match {
-        case i: Int => new MaxValue(i)
-      }
+    override def deserialize(storageFormat: Array[Byte]): MaxValue = {
+      new MaxValue(Ints.fromByteArray(storageFormat))
     }
   }
 
