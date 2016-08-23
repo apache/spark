@@ -692,4 +692,27 @@ class HiveDDLSuite
       ))
     }
   }
+
+  test("datasource table property keys are not allowed") {
+    import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_PREFIX
+
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(a INT) STORED AS parquet")
+
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE tbl SET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo' = 'loser')")
+      }
+      assert(e.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+
+      val e2 = intercept[AnalysisException] {
+        sql(s"ALTER TABLE tbl UNSET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo')")
+      }
+      assert(e2.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+
+      val e3 = intercept[AnalysisException] {
+        sql(s"CREATE TABLE tbl TBLPROPERTIES ('${DATASOURCE_PREFIX}foo'='anything')")
+      }
+      assert(e3.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+    }
+  }
 }

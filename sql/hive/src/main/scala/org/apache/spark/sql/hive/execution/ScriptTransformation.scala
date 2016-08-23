@@ -51,7 +51,6 @@ import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfig
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
  */
-private[hive]
 case class ScriptTransformation(
     input: Seq[Expression],
     script: String,
@@ -338,7 +337,6 @@ private class ScriptTransformationWriterThread(
   }
 }
 
-private[hive]
 object HiveScriptIOSchema {
   def apply(input: ScriptInputOutputSchema): HiveScriptIOSchema = {
     HiveScriptIOSchema(
@@ -357,7 +355,6 @@ object HiveScriptIOSchema {
 /**
  * The wrapper class of Hive input and output schema properties
  */
-private[hive]
 case class HiveScriptIOSchema (
     inputRowFormat: Seq[(String, String)],
     outputRowFormat: Seq[(String, String)],
