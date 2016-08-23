@@ -845,10 +845,6 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationModel",
           path = "character"),
           function(object, path, overwrite = FALSE) {
-            writer <- callJMethod(object@jobj, "write")
-            if (overwrite) {
-              writer <- callJMethod(writer, "overwrite")
-            }
             write_internal(object, path, overwrite)
           })
 
