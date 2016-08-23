@@ -392,25 +392,6 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           checkAnswer(df, emptyDF)
         }
       }
-
-      withTempPath { dir =>
-        withTable("empty_text_partitioned") {
-          spark.sql(
-            s"""CREATE TABLE empty_text_partitioned(key INT, value STRING)
-                | PARTITIONED BY (p INT) STORED AS TEXTFILE
-              """.stripMargin)
-
-          val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
-          emptyDF.createOrReplaceTempView("empty_text")
-
-          // Query empty table
-          val df = spark.sql(
-            s"""SELECT key, value FROM empty_text_partitioned
-                | WHERE key > 10
-                      """.stripMargin)
-          checkAnswer(df, emptyDF)
-        }
-      }
     }
   }
 
