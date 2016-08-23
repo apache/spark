@@ -57,4 +57,20 @@ class FileStreamSourceSuite extends SparkFunSuite {
     assert(map.isNewFile(FileEntry("e", 20)))
   }
 
+  test("SeenFilesMap should only consider a file old if it is earlier than last purge time") {
+    val map = new SeenFilesMap(maxAgeMs = 10)
+
+    map.add(FileEntry("a", 20))
+    assert(map.size == 1)
+
+    // Timestamp 5 should still considered a new file because purge time should be 0
+    assert(map.isNewFile(FileEntry("b", 9)))
+    assert(map.isNewFile(FileEntry("b", 10)))
+
+    // Once purge, purge time should be 10 and then b would be a old file if it is less than 10.
+    map.purge()
+    assert(!map.isNewFile(FileEntry("b", 9)))
+    assert(map.isNewFile(FileEntry("b", 10)))
+  }
+
 }

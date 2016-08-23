@@ -29,6 +29,8 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * A very simple source that reads files from the given directory as they appear.
+ *
+ * TODO: Clean up the metadata log files periodically.
  */
 class FileStreamSource(
     sparkSession: SparkSession,
@@ -183,15 +185,17 @@ object FileStreamSource {
     /** Mapping from file to its timestamp. */
     private val map = new java.util.HashMap[String, Timestamp]
 
-    private var lastTimestamp: Timestamp = 0L
+    /** Timestamp of the latest file. */
+    private var latestTimestamp: Timestamp = 0L
 
-    private def ageThreshold: Timestamp = lastTimestamp - maxAgeMs
+    /** Timestamp for the last purge operation. */
+    private var lastPurgeTimestamp: Timestamp = 0L
 
     /** Add a new file to the map. */
     def add(file: FileEntry): Unit = {
       map.put(file.path, file.timestamp)
-      if (file.timestamp > lastTimestamp) {
-        lastTimestamp = file.timestamp
+      if (file.timestamp > latestTimestamp) {
+        latestTimestamp = file.timestamp
       }
     }
 
@@ -200,16 +204,19 @@ object FileStreamSource {
      * if it is new enough that we are still tracking, and we have not seen it before.
      */
     def isNewFile(file: FileEntry): Boolean = {
-      file.timestamp > ageThreshold && !map.containsKey(file.path)
+      // Note that we are testing against lastPurgeTimestamp here so we'd never miss a file that
+      // is older than (latestTimestamp - maxAgeMs) but has not been purged yet.
+      file.timestamp >= lastPurgeTimestamp && !map.containsKey(file.path)
     }
 
     /** Removes aged entries and returns the number of files removed. */
     def purge(): Int = {
+      lastPurgeTimestamp = latestTimestamp - maxAgeMs
       val iter = map.entrySet().iterator()
       var count = 0
       while (iter.hasNext) {
         val entry = iter.next()
-        if (entry.getValue < lastTimestamp - maxAgeMs) {
+        if (entry.getValue < lastPurgeTimestamp) {
           count += 1
           iter.remove()
         }
