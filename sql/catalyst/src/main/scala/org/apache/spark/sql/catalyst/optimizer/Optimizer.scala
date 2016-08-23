@@ -2079,7 +2079,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
  * Project and Filter can be optimized with the wrapped logical plans. Thus, this rule
  * considers the optimization of the wrapped logical plans and operators on SubqueryAlias.
  */
-case class OptimizeCommonSubqueries(optimizer: Optimizer) extends Rule[LogicalPlan] {
+case class OptimizeCommonSubqueries(optimizer: Optimizer)
+    extends Rule[LogicalPlan] with PredicateHelper {
   // Optimized the subqueries which all have a Project parent node and the same results.
   private def optimizeProjectWithSubqueries(
       plan: LogicalPlan,
@@ -2118,7 +2119,7 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer) extends Rule[LogicalPl
    */
   private def pushToOtherPlan[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
     val result = e transform {
-      case a: Attribute => rewrites(a)
+      case a: Attribute => rewrites.get(a).getOrElse(a)
     }
 
     // We must promise the compiler that we did not discard the names in the case of project
@@ -2130,14 +2131,35 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer) extends Rule[LogicalPl
       plan: LogicalPlan,
       keyPlan: LogicalPlan,
       subqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
+    val firstCondExprs = splitConjunctivePredicates(subqueries(0).asInstanceOf[Filter].condition)
+    val firstPushdownCondition: Expression = (Seq(subqueries(0).asInstanceOf[Filter].condition) ++
+      subqueries.tail.flatMap {
+        case Filter(otherCond, child) =>
+          val rewrites = buildRewrites(child, subqueries(0).asInstanceOf[Filter].child)
+          val newCond = pushToOtherPlan(otherCond, rewrites)
+          val condExprs = splitConjunctivePredicates(newCond)
+          val common = firstCondExprs.filter(e => condExprs.exists(e.semanticEquals))
+          if (common.isEmpty) {
+            Seq(newCond)
+          } else {
+            val diff = condExprs.filterNot(e => common.exists(e.semanticEquals))
+            if (!diff.isEmpty) {
+              Seq(diff.reduce(And))
+            } else {
+              Seq()
+            }
+          }
+      }).reduce(Or)
+
     plan transform {
       case f @ Filter(cond, s @ SubqueryAlias(alias, subquery, v, true)) if s.sameResult(keyPlan) =>
-        val conditionForAll: Expression = subqueries.map { case Filter(otherCond, child) =>
-          val rewrites = buildRewrites(child, subquery)
-          pushToOtherPlan(otherCond, rewrites)
-        }.reduce(Or)
+        val pushdownCond: Expression = subqueries.foldLeft(firstPushdownCondition) {
+          case (currentCond, sub) =>
+            val rewrites = buildRewrites(sub.asInstanceOf[Filter].child, subquery)
+            pushToOtherPlan(currentCond, rewrites)
+        }
 
-        val newSubquery = Filter(conditionForAll, subquery)
+        val newSubquery = Filter(pushdownCond, subquery)
         val optimized = optimizer.execute(newSubquery)
         // Check if any optimization is performed.
         if (optimized.sameResult(newSubquery)) {

@@ -646,6 +646,27 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       }
       assert(doubleConditions.length == 1 &&
         doubleConditions(0)._1 == "b" && doubleConditions(0)._2 == 1.0)
+
+      val df2 = sql("WITH cte AS (SELECT a.a AS a, a.b AS b, b.a AS c, b.b AS d FROM l a, l b) " +
+        "SELECT * FROM cte x, cte y WHERE x.b = y.b AND x.a = 1 AND x.b = 1 + 1")
+
+      val commonSubqueries2 = df2.queryExecution.sparkPlan.collect {
+        case c: CommonSubqueryExec => c.subquery.child
+      }.distinct
+      assert(commonSubqueries2.length == 1)
+      val pushdownFilter2 = commonSubqueries2(0).collect {
+        case f: FilterExec => f
+      }
+      assert(pushdownFilter2.length == 1)
+      val intConditions2 = pushdownFilter2(0).asInstanceOf[FilterExec].condition.collect {
+        case EqualTo(a: AttributeReference, Literal(i, IntegerType)) => (a.name, i)
+      }
+      assert(intConditions2.length == 1 && intConditions2(0)._1 == "a" && intConditions2(0)._2 == 1)
+      val doubleConditions2 = pushdownFilter2(0).asInstanceOf[FilterExec].condition.collect {
+        case EqualTo(a: AttributeReference, Literal(d, DoubleType)) => (a.name, d)
+      }
+      assert(doubleConditions2.length == 1 &&
+        doubleConditions2(0)._1 == "b" && doubleConditions2(0)._2 == 2.0)
     }
   }
 
