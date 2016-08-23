@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, DriverManager, PreparedStatement}
+import java.sql.{Connection, Driver, DriverManager, PreparedStatement, SQLException}
 import java.util.Properties
 
 import scala.collection.JavaConverters._
@@ -233,6 +233,17 @@ object JdbcUtils extends Logging {
         conn.commit()
       }
       committed = true
+    } catch {
+      case e: SQLException =>
+        val cause = e.getNextException
+        if (e.getCause != cause) {
+          if (e.getCause == null) {
+            e.initCause(cause)
+          } else {
+            e.addSuppressed(cause)
+          }
+        }
+        throw e
     } finally {
       if (!committed) {
         // The stage must fail.  We got here through an exception path, so
