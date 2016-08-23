@@ -603,8 +603,6 @@ case class HashAggregateExec(
 
     // create grouping key
     ctx.currentVars = input
-    // make sure that the generated code will not be splitted as multiple functions
-    ctx.INPUT_ROW = null
     val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
       ctx, groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
     val vectorizedRowKeys = ctx.generateExpressions(

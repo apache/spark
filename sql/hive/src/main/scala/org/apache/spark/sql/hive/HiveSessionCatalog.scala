@@ -68,7 +68,7 @@ private[sql] class HiveSessionCatalog(
       val database = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
       val newName = name.copy(database = Option(database), table = table)
       val metadata = getTableMetadata(newName)
-      if (DDLUtils.isDatasourceTable(metadata.properties)) {
+      if (DDLUtils.isDatasourceTable(metadata)) {
         val dataSourceTable = metadataCache.getTable(newName)
         val qualifiedTable = SubqueryAlias(table, dataSourceTable, None)
         // Then, if alias is specified, wrap the table with a Subquery using the alias.
