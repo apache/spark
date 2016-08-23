@@ -203,7 +203,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
 
   @Since("2.1.0")
   def setPercentile(value: Double): this.type = {
-    require(value <= 1 && value >= 0, "Percentile should be larger than 0 and less than 100")
+    require(value <= 1 && value >= 0, "Percentile should be larger than 0 and less than 1")
     percentile = value
     selectorType = ChiSqSelectorType.Percentile
     this
@@ -211,6 +211,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
 
   @Since("2.1.0")
   def setAlpha(value: Double): this.type = {
+    require(value <= 1 && value >= 0, "alpha value should be larger than 0 and less than 1")
     alpha = value
     selectorType = ChiSqSelectorType.Fpr
     this
