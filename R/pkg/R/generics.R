@@ -1333,7 +1333,7 @@ setGeneric("fitted")
 #' @rdname spark.mlp
 #' @param ... Additional parameters to tune MLP.
 #' @export
-setGeneric("spark.mlp", function(data, formula, ...) { standardGeneric("spark.mlp") })
+setGeneric("spark.mlp", function(data, ...) { standardGeneric("spark.mlp") })
 
 #' @rdname spark.naiveBayes
 #' @export

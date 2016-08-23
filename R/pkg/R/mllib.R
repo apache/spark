@@ -696,7 +696,6 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame"),
 
 # Makes predictions from a model produced by spark.mlp().
 
-#' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}.
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
 #' "prediction".
@@ -833,7 +832,6 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 
 # Saves the Multilayer Perceptron Classification Model to the input path.
 
-#' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}.
 #' @param path the directory where the model is saved.
 #' @param overwrite overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
