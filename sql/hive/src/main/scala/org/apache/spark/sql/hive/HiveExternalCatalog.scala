@@ -31,7 +31,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -246,7 +245,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
 
       val qualifiedTableName = tableDefinition.identifier.quotedString
       val maybeSerde = HiveSerDe.sourceToSerDe(tableDefinition.provider.get)
-      val maybePath = new CaseInsensitiveMap(tableDefinition.storage.properties).get("path")
+      val maybePath = tableDefinition.storage.properties.get("path")
       val skipHiveMetadata = tableDefinition.storage.properties
         .getOrElse("skipHiveMetadata", "false").toBoolean
 
