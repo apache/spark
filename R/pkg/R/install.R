@@ -50,9 +50,7 @@
 #'                 \itemize{
 #'                   \item Mac OS X: \file{~/Library/Caches/spark}
 #'                   \item Unix: \env{$XDG_CACHE_HOME} if defined, otherwise \file{~/.cache/spark}
-#'                   \item Windows: \file{\%LOCALAPPDATA\%\\spark\\spark\\Cache}. See
-#'                         \href{https://www.microsoft.com/security/portal/mmpc/shared/variables.aspx}{
-#'                         Windows Common Folder Variables} about \%LOCALAPPDATA\%
+#'                   \item Windows: \file{\%LOCALAPPDATA\%\\spark\\spark\\Cache}.
 #'                 }
 #' @param overwrite If \code{TRUE}, download and overwrite the existing tar file in localDir
 #'                  and force re-install Spark (in case the local directory or file is corrupted)
