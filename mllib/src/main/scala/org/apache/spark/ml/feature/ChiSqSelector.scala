@@ -58,7 +58,7 @@ private[feature] trait ChiSqSelectorParams extends Params
 
   final val percentile = new DoubleParam(this, "percentile",
     "Percentile of features that selector will select, ordered by statistics value descending.",
-    ParamValidators.gtEq(0))
+    ParamValidators.inRange(0, 1))
   setDefault(percentile -> 0.1)
 
   /** @group getParam */
@@ -66,7 +66,7 @@ private[feature] trait ChiSqSelectorParams extends Params
 
   final val alpha = new DoubleParam(this, "alpha",
     "The highest p-value for features to be kept.",
-    ParamValidators.gtEq(0))
+    ParamValidators.inRange(0, 1))
   setDefault(alpha -> 0.05)
 
   /** @group getParam */

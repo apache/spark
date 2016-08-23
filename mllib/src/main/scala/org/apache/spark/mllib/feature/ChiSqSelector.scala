@@ -47,16 +47,6 @@ private[spark] object ChiSqSelectorType extends Enumeration {
 class ChiSqSelectorModel @Since("1.3.0") (
   @Since("1.3.0") val selectedFeatures: Array[Int]) extends VectorTransformer with Saveable {
 
-  protected def isSorted(array: Array[Int]): Boolean = {
-    var i = 1
-    val len = array.length
-    while (i < len) {
-      if (array(i) < array(i-1)) return false
-      i += 1
-    }
-    true
-  }
-
   /**
    * Applies transformation on a vector.
    *
@@ -76,11 +66,7 @@ class ChiSqSelectorModel @Since("1.3.0") (
    * @param filterIndices indices of features to filter
    */
   private def compress(features: Vector, filterIndices: Array[Int]): Vector = {
-    val orderedIndices = if (isSorted(filterIndices)) {
-      filterIndices
-    } else {
-      filterIndices.sorted
-    }
+    val orderedIndices = filterIndices.sorted
     features match {
       case SparseVector(size, indices, values) =>
         val newSize = orderedIndices.length
@@ -203,7 +189,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
 
   @Since("2.1.0")
   def setPercentile(value: Double): this.type = {
-    require(value <= 1 && value >= 0, "Percentile should be larger than 0 and less than 1")
+    require(0.0 <= value && value <= 1.0, "Percentile must be in [0,1]")
     percentile = value
     selectorType = ChiSqSelectorType.Percentile
     this
@@ -211,7 +197,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
 
   @Since("2.1.0")
   def setAlpha(value: Double): this.type = {
-    require(value <= 1 && value >= 0, "alpha value should be larger than 0 and less than 1")
+    require(0.0 <= value && value <= 1.0, "Alpha must be in [0,1]")
     alpha = value
     selectorType = ChiSqSelectorType.Fpr
     this
@@ -243,7 +229,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
       case ChiSqSelectorType.Fpr => chiSqTestResult
         .zipWithIndex.filter{ case (res, _) => res.pValue < alpha }
       case errorType =>
-        throw new IllegalStateException("Unknown ChiSqSelector Type: $errorType")
+        throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
     }
     val indices = features.map { case (_, indices) => indices }
     new ChiSqSelectorModel(indices)
