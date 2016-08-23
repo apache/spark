@@ -57,8 +57,8 @@ case class CreateHiveTableAsSelectLogicalPlan(
 
 /**
  * A command to create a MANAGED table with the same definition of the given existing table.
- * The source table cannot be an Index table. In the target table definition, the table comment is
- * always empty but the column comments are identical to the ones defined in the source table.
+ * In the target table definition, the table comment is always empty but the column comments
+ * are identical to the ones defined in the source table.
  *
  * The CatalogTable attributes copied from the source table are storage(inputFormat,
  * outputFormat, serde, compressed, properties), schema, provider, partitionColumnNames,
@@ -83,7 +83,6 @@ case class CreateTableLikeCommand(
     }
 
     val sourceTableDesc = catalog.getTableMetadata(sourceTable)
-    val sourceStorageFormat = sourceTableDesc.storage
 
     sourceTableDesc.tableType match {
       case CatalogTableType.MANAGED | CatalogTableType.EXTERNAL | CatalogTableType.VIEW => // OK
@@ -99,14 +98,9 @@ case class CreateTableLikeCommand(
       } else {
         sourceTableDesc.storage.properties
       }
-    val newStorage =
-      CatalogStorageFormat(
-        locationUri = None,
-        inputFormat = sourceStorageFormat.inputFormat,
-        outputFormat = sourceStorageFormat.outputFormat,
-        serde = sourceStorageFormat.serde,
-        compressed = sourceStorageFormat.compressed,
-        properties = newSerdeProp)
+    val newStorage = sourceTableDesc.storage.copy(
+      locationUri = None,
+      properties = newSerdeProp)
 
     val newTableDesc =
       CatalogTable(
