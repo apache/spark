@@ -61,12 +61,6 @@
       </exclusions>
     </dependency>
 
-    <dependency>
-      <groupId>org.mockito</groupId>
-      <artifactId>mockito-core</artifactId>
-      <scope>test</scope>
-    </dependency>
-
     <!-- Promote shaded deps to compile scope -->
     <dependency>
       <groupId>com.google.guava</groupId>

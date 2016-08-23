@@ -461,7 +461,7 @@ yarn = Module(
 mesos = Module(
     name="mesos",
     dependencies=[],
-    source_file_regexes=["mesos/"]
+    source_file_regexes=["mesos/"],
     sbt_test_goals=["mesos/test"]
 )
 
