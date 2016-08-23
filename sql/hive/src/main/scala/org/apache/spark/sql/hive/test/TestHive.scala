@@ -144,6 +144,8 @@ private[hive] class TestHiveSparkSession(
     existingSharedState.getOrElse(new SharedState(sc))
   }
 
+  // TODO: Let's remove TestHiveSessionState. Otherwise, we are not really testing the reflection
+  // logic based on the setting of CATALOG_IMPLEMENTATION.
   @transient
   override lazy val sessionState: TestHiveSessionState =
     new TestHiveSessionState(self)

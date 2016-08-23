@@ -52,7 +52,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   /**
    * A Hive client used to interact with the metastore.
    */
-  private val client: HiveClient = {
+  val client: HiveClient = {
     HiveUtils.newClientForMetadata(conf, hadoopConf)
   }
 
@@ -94,11 +94,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   private def requireTableExists(db: String, table: String): Unit = {
     withClient { getTable(db, table) }
   }
-
-  /**
-   * Return the existing [[HiveClient]] used to interact with the metastore.
-   */
-  def getClient: HiveClient = client
 
   /**
    * Return a [[HiveClient]] as a new session
