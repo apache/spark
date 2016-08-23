@@ -42,10 +42,10 @@ import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
  *              (excluding the head buffer)
  */
 class QuantileSummaries(
-  val compressThreshold: Int,
-  val relativeError: Double,
-  val sampled: Array[Stats] = Array.empty,
-  val count: Long = 0L) extends Serializable {
+    val compressThreshold: Int,
+    val relativeError: Double,
+    val sampled: Array[Stats] = Array.empty,
+    val count: Long = 0L) extends Serializable {
 
   // a buffer of latest samples seen so far
   private val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty
@@ -231,8 +231,8 @@ object QuantileSummaries {
   case class Stats(value: Double, g: Int, delta: Int)
 
   private def compressImmut(
-    currentSamples: IndexedSeq[Stats],
-    mergeThreshold: Double): Array[Stats] = {
+      currentSamples: IndexedSeq[Stats],
+      mergeThreshold: Double): Array[Stats] = {
     if (currentSamples.isEmpty) {
       return Array.empty[Stats]
     }
