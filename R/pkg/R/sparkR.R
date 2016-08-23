@@ -368,7 +368,8 @@ sparkR.session <- function(
   }
 
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
-    sparkLocalInstall(sparkHome, master)
+    retHome <- sparkLocalInstall(sparkHome, master)
+    if (!is.null(retHome)) sparkHome <- retHome
     sparkExecutorEnvMap <- new.env()
     sparkR.sparkContext(master, appName, sparkHome, sparkConfigMap, sparkExecutorEnvMap,
        sparkJars, sparkPackages)
@@ -547,7 +548,6 @@ sparkLocalInstall <- function(sparkHome, master) {
                       sparkHome)
         message(msg)
         packageLocalDir <- install.spark()
-        sparkHome <- packageLocalDir
       } else {
         msg <- paste0("Spark not found in SPARK_HOME: ",
                       sparkHome, "\n", installInstruction("remote"))
