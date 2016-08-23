@@ -433,6 +433,9 @@ case class AlterTableDropPartitionCommand(
 
 }
 
+
+case class PartitionStatistics(numFiles: Int, totalSize: Long)
+
 /**
  * Recover Partitions in ALTER TABLE: recover all the partition in the directory of a table and
  * update the catalog.
@@ -447,7 +450,7 @@ case class AlterTableRecoverPartitionsCommand(
     tableName: TableIdentifier,
     cmd: String = "ALTER TABLE RECOVER PARTITIONS") extends RunnableCommand {
 
-  // These are two fast stats in Hive Metastore
+  // These are list of statistics that can be collected quickly without requiring a scan of the data
   // see https://github.com/apache/hive/blob/master/
   //   common/src/java/org/apache/hadoop/hive/common/StatsSetupConst.java
   val NUM_FILES = "numFiles"
@@ -509,7 +512,7 @@ case class AlterTableRecoverPartitionsCommand(
     val partitionStats = if (spark.sqlContext.conf.gatherFastStats) {
       gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
     } else {
-      GenMap.empty[String, (Int, Long)]
+      GenMap.empty[String, PartitionStatistics]
     }
     logInfo(s"Finished to gather the fast stats for all $total partitions.")
 
@@ -569,7 +572,7 @@ case class AlterTableRecoverPartitionsCommand(
       partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)],
       fs: FileSystem,
       pathFilter: PathFilter,
-      threshold: Int): GenMap[String, (Int, Long)] = {
+      threshold: Int): GenMap[String, PartitionStatistics] = {
     if (partitionSpecsAndLocs.length > threshold) {
       val hadoopConf = spark.sparkContext.hadoopConfiguration
       val serializableConfiguration = new SerializableConfiguration(hadoopConf)
@@ -588,13 +591,13 @@ case class AlterTableRecoverPartitionsCommand(
           paths.map(new Path(_)).map{ path =>
             val fs = path.getFileSystem(serializableConfiguration.value)
             val statuses = fs.listStatus(path, pathFilter)
-            (path.toString, (statuses.length, statuses.map(_.getLen).sum))
+            (path.toString, PartitionStatistics(statuses.length, statuses.map(_.getLen).sum))
           }
         }.collectAsMap()
     } else {
       partitionSpecsAndLocs.map { case (_, location) =>
         val statuses = fs.listStatus(location, pathFilter)
-        (location.toString, (statuses.length, statuses.map(_.getLen).sum))
+        (location.toString, PartitionStatistics(statuses.length, statuses.map(_.getLen).sum))
       }.toMap
     }
   }
@@ -603,22 +606,24 @@ case class AlterTableRecoverPartitionsCommand(
       spark: SparkSession,
       table: CatalogTable,
       partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)],
-      partitionStats: GenMap[String, (Int, Long)]): Unit = {
+      partitionStats: GenMap[String, PartitionStatistics]): Unit = {
     val total = partitionSpecsAndLocs.length
     var done = 0L
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
     // we should split them into smaller batches. Since Hive client is not thread safe, we cannot
     // do this in parallel.
-    partitionSpecsAndLocs.toIterator.grouped(1000).foreach { batch =>
+    val batchSize = 100
+    partitionSpecsAndLocs.toIterator.grouped(batchSize).foreach { batch =>
       val now = System.currentTimeMillis() / 1000
       val parts = batch.map { case (spec, location) =>
-        val params = partitionStats.get(location.toString).map { case (numFiles, totalSize) =>
-          // This two fast stat could prevent Hive metastore to list the files again.
-          Map(NUM_FILES -> numFiles.toString,
-            TOTAL_SIZE -> totalSize.toString,
-            // Workaround a bug in HiveMetastore that try to mutate a read-only parameters.
-            // see metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java
-            DDL_TIME -> now.toString)
+        val params = partitionStats.get(location.toString).map {
+          case PartitionStatistics(numFiles, totalSize) =>
+            // This two fast stat could prevent Hive metastore to list the files again.
+            Map(NUM_FILES -> numFiles.toString,
+              TOTAL_SIZE -> totalSize.toString,
+              // Workaround a bug in HiveMetastore that try to mutate a read-only parameters.
+              // see metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java
+              DDL_TIME -> now.toString)
         }.getOrElse(Map.empty)
         // inherit table storage format (possibly except for location)
         CatalogTablePartition(

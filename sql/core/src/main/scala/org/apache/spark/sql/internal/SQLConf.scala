@@ -313,7 +313,8 @@ object SQLConf {
   val GATHER_FASTSTAT = SQLConfigBuilder("spark.sql.hive.gatherFastStats")
       .internal()
       .doc("When true, fast stats (number of files and total size of all files) will be gathered" +
-        "while reparing table partitions.")
+        " in parallel while repairing table partitions to avoid the sequential listing in Hive" +
+        " metastore.")
       .booleanConf
       .createWithDefault(false)
 
