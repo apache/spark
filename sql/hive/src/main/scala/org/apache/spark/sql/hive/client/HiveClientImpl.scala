@@ -27,10 +27,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.UserGroupInformation
@@ -356,12 +357,43 @@ private[hive] class HiveClientImpl(
       tableName: String): Option[CatalogTable] = withHiveState {
     logDebug(s"Looking up $dbName.$tableName")
     Option(client.getTable(dbName, tableName, false)).map { h =>
+      val cols = h.getCols.asScala.map(fromHiveColumn)
+      val partCols = h.getPartCols.asScala.map(fromHiveColumn)
+
       // Note: Hive separates partition columns and the schema, but for us the
       // partition columns are part of the schema
-      val partCols = h.getPartCols.asScala.map(fromHiveColumn)
-      val schema = StructType(h.getCols.asScala.map(fromHiveColumn) ++ partCols)
+      val schema = StructType(cols ++ partCols)
 
-      // Skew spec, storage handler, and bucketing info can't be mapped to CatalogTable (yet)
+      val bucketSpec = if (h.getNumBuckets > 0) {
+        val sortColumnOrders = h.getSortCols.asScala
+        // Currently Spark only supports columns to be sorted in ascending order
+        // but Hive can support both ascending and descending order. If all the columns
+        // are sorted in ascending order, only then propagate the sortedness information
+        // to downstream processing / optimizations in Spark
+        // TODO: In future we can have Spark support columns sorted in descending order
+        val allAscendingSorted =
+          sortColumnOrders.forall(_.getOrder == HIVE_COLUMN_ORDER_ASC)
+
+        val sortColumnNames = if (allAscendingSorted) {
+          sortColumnOrders.map { sortOrder =>
+            val columnName = sortOrder.getCol
+
+            if (!cols.exists(_.name.equalsIgnoreCase(columnName))) {
+              throw new AnalysisException(s"No match found for sort column name = $columnName " +
+                s"in table $dbName.$tableName. " +
+                s"Known table columns are ${cols.mkString("[", ", ", "]")}")
+            }
+            columnName
+          }
+        } else {
+          Seq()
+        }
+        Option(BucketSpec(h.getNumBuckets, h.getBucketCols.asScala, sortColumnNames))
+      } else {
+        None
+      }
+
+      // Skew spec and storage handler can't be mapped to CatalogTable (yet)
       val unsupportedFeatures = ArrayBuffer.empty[String]
 
       if (!h.getSkewedColNames.isEmpty) {
@@ -370,10 +402,6 @@ private[hive] class HiveClientImpl(
 
       if (h.getStorageHandler != null) {
         unsupportedFeatures += "storage handler"
-      }
-
-      if (!h.getBucketCols.isEmpty) {
-        unsupportedFeatures += "bucketing"
       }
 
       val properties = Option(h.getParameters).map(_.asScala.toMap).orNull
@@ -389,9 +417,7 @@ private[hive] class HiveClientImpl(
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
-        // We can not populate bucketing information for Hive tables as Spark SQL has a different
-        // implementation of hash function from Hive.
-        bucketSpec = None,
+        bucketSpec = bucketSpec,
         owner = h.getOwner,
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
@@ -785,6 +811,23 @@ private[hive] class HiveClientImpl(
       hiveTable.setFields(schema.asJava)
     }
     hiveTable.setPartCols(partCols.asJava)
+
+    table.bucketSpec match {
+      case Some(bucketSpec) =>
+        hiveTable.setNumBuckets(bucketSpec.numBuckets)
+        hiveTable.setBucketCols(bucketSpec.bucketColumnNames.toList.asJava)
+
+        if (bucketSpec.sortColumnNames.nonEmpty) {
+          hiveTable.setSortCols(
+            bucketSpec.sortColumnNames
+              .map(col => new Order(col, HIVE_COLUMN_ORDER_ASC))
+              .toList
+              .asJava
+          )
+        }
+      case _ =>
+    }
+
     hiveTable.setOwner(conf.getUser)
     hiveTable.setCreateTime((table.createTime / 1000).toInt)
     hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)

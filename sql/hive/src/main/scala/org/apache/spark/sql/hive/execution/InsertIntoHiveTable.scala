@@ -20,10 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io.IOException
 import java.net.URI
 import java.text.SimpleDateFormat
-import java.util
 import java.util.{Date, Random}
-
-import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -35,13 +32,13 @@ import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, SortOrder}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.SparkException
 import org.apache.spark.util.SerializableJobConf
-
 
 case class InsertIntoHiveTable(
     table: MetastoreRelation,
@@ -292,6 +289,51 @@ case class InsertIntoHiveTable(
   }
 
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
+
+  override val (requiredChildDistribution, requiredChildOrdering):
+      (Seq[Distribution], Seq[Seq[SortOrder]]) = {
+
+    val (requiredDistribution, requiredOrdering) = table.catalogTable.bucketSpec match {
+      case Some(bucketSpec) =>
+        val numBuckets = bucketSpec.numBuckets
+        if (numBuckets < 1) {
+          (UnspecifiedDistribution, Nil)
+        } else {
+          def toAttribute(colName: String, colType: String): Attribute =
+            child.output.find(_.name == colName).getOrElse {
+              throw new AnalysisException(
+                s"Could not find $colType column $colName for output table " +
+                  s"${table.catalogTable.qualifiedName} in the child operator's output columns : " +
+                  s"(${child.output.map(_.name).mkString(", ")})")
+            }
+
+          val bucketColumns = bucketSpec.bucketColumnNames.map(toAttribute(_, "bucket"))
+
+          if (bucketColumns.size == bucketSpec.bucketColumnNames.size) {
+            val hashExpression = HashPartitioning(bucketColumns, numBuckets).partitionIdExpression
+
+            // TODO : ClusteredDistribution does NOT guarantee the number of clusters so this
+            // may not produce desired number of buckets in all cases.
+            val childDistribution = ClusteredDistribution(Seq(hashExpression))
+
+            val sortColumnNames = bucketSpec.sortColumnNames
+            val childOrdering = if (sortColumnNames.nonEmpty) {
+              sortColumnNames.map(col => SortOrder(toAttribute(col, "sort"), Ascending))
+            } else {
+              Nil
+            }
+            (childDistribution, childOrdering)
+          } else {
+            (UnspecifiedDistribution, Nil)
+          }
+        }
+
+      case None =>
+        (UnspecifiedDistribution, Nil)
+    }
+
+    (Seq.fill(children.size)(requiredDistribution), Seq.fill(children.size)(requiredOrdering))
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult.asInstanceOf[Seq[InternalRow]], 1)
