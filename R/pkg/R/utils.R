@@ -690,27 +690,11 @@ getSparkContext <- function() {
   sc
 }
 
-is_master_local <- function(master) {
+isMasterLocal <- function(master) {
   grepl("^local(\\[([0-9]+|\\*)\\])?$", master, perl = TRUE)
 }
 
-is_sparkR_shell <- function() {
+isSparkRShell <- function() {
   grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
 }
 
-installInstruction <- function(mode) {
-  if (mode == "remote") {
-    paste0("Connecting to a remote Spark master. ",
-           "Please make sure Spark package is also installed in this machine.\n",
-           "- If there is one, set the path in sparkHome parameter or ",
-           "environment variable SPARK_HOME.\n",
-           "- If not, you may run install.spark function to do the job. ",
-           "Please make sure the Spark and the Hadoop versions ",
-           "match the versions on the cluster. ",
-           "SparkR package is compatible with Spark 2.0.0.",
-           "If you need further help, ",
-           "contact the administrators of the cluster.")
-  } else {
-    stop(paste0("No instruction found for ", mode, " mode."))
-  }
-}

@@ -368,26 +368,7 @@ sparkR.session <- function(
   }
 
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
-    # do not download if it is run in the sparkR shell
-    if (!is_sparkR_shell()) {
-      if (!is.na(file.info(sparkHome)$isdir)) {
-        msg <- paste0("Spark package found in SPARK_HOME: ", sparkHome)
-        message(msg)
-      } else {
-        if (!nzchar(master) || is_master_local(master)) {
-          msg <- paste0("Spark not found in SPARK_HOME: ",
-                        sparkHome)
-          message(msg)
-          packageLocalDir <- install.spark()
-          sparkHome <- packageLocalDir
-        } else {
-          msg <- paste0("Spark not found in SPARK_HOME: ",
-                        sparkHome, "\n", installInstruction("remote"))
-          stop(msg)
-        }
-      }
-    }
-
+    sparkLocalInstall(sparkHome, master)
     sparkExecutorEnvMap <- new.env()
     sparkR.sparkContext(master, appName, sparkHome, sparkConfigMap, sparkExecutorEnvMap,
        sparkJars, sparkPackages)
@@ -549,4 +530,29 @@ processSparkPackages <- function(packages) {
     warning("sparkPackages as a comma-separated string is deprecated, use character vector instead")
   }
   splittedPackages
+}
+
+# Utility function that checks and install Spark to local folder if not found
+#
+# Installation will not be triggered if it's called from sparkR shell
+# or if the master url is not local
+sparkLocalInstall <- function(sparkHome, master) {
+  if (!isSparkRShell()) {
+    if (!is.na(file.info(sparkHome)$isdir)) {
+      msg <- paste0("Spark package found in SPARK_HOME: ", sparkHome)
+      message(msg)
+    } else {
+      if (!nzchar(master) || isMasterLocal(master)) {
+        msg <- paste0("Spark not found in SPARK_HOME: ",
+                      sparkHome)
+        message(msg)
+        packageLocalDir <- install.spark()
+        sparkHome <- packageLocalDir
+      } else {
+        msg <- paste0("Spark not found in SPARK_HOME: ",
+                      sparkHome, "\n", installInstruction("remote"))
+        stop(msg)
+      }
+    }
+  }
 }
