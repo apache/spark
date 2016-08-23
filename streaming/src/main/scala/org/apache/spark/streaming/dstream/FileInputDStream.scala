@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.dstream
 
-import java.io.{IOException, ObjectInputStream}
+import java.io.{FileNotFoundException, IOException, ObjectInputStream}
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.StreamInputInfo
@@ -191,9 +192,13 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
 
-      val directories = fs.globStatus(directoryPath)
-          .filter(_.isDirectory)
-          .map(_.getPath)
+      val directories = if (SparkHadoopUtil.get.isGlobPath(directoryPath)) {
+        fs.globStatus(directoryPath)
+            .filter(_.isDirectory)
+            .map(_.getPath)
+      } else {
+        List(directoryPath).toArray
+      }
       val newFiles = directories.flatMap(dir =>
         fs.listStatus(dir)
             .filter(isNewFile(_, currentTime, modTimeIgnoreThreshold))
@@ -202,15 +207,18 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       logInfo("Finding new files took " + timeTaken + " ms")
       if (timeTaken > slideDuration.milliseconds) {
         logWarning(
-          "Time taken to find new files exceeds the batch size. " +
+          s"Time taken to find new files $timeTaken exceeds the batch size. " +
             "Consider increasing the batch size or reducing the number of " +
             "files in the monitored directory."
         )
       }
       newFiles
     } catch {
+      case e: FileNotFoundException =>
+        logWarning(s"No directory to scan: $directoryPath")
+        Array.empty
       case e: Exception =>
-        logWarning("Error finding new files", e)
+        logWarning(s"Error finding new files under $directoryPath", e)
         reset()
         Array.empty
     }

@@ -629,13 +629,39 @@ methods for creating DStreams from files as input sources.
     </div>
     </div>
 
-	Spark Streaming will monitor the directory `dataDirectory` and process any files created in that directory (files written in nested directories not supported). Note that
+	Spark Streaming will monitor the directory `dataDirectory` and process any files created in that directory.
 
-     + The files must have the same data format.
-     + The files must be created in the `dataDirectory` by atomically *moving* or *renaming* them into
-     the data directory.
-     + Once moved, the files must not be changed. So if the files are being continuously appended, the new data will not be read.
+     + A simple directory can be supplied (`hdfs://namenode:8040/logs/`). All files directly
+       underneath this path will be processed as they are discovered.
+     + A regular expression can be supplied instead, such as
+       `s3a://bucket/logs/[2015,2016]-??-??-friday`.
+       Here, the DStream will consist of all files directly under those directories
+       matching the regular expression.
+       That is: it is a pattern of directories, not of files in directories.
+     + All files must be in the same data format.
+     + All files must be created in/moved under the `dataDirectory` directory/directories by
+       an atomic operation. In HDFS and similar filesystems, this can be done *renaming* them
+       into the data directory from another part of the same filesystem.
+     * If a wildcard is used to identify directories, such as `hdfs://namenode:8040/logs/2016*`,
+       renaming an entire directory to match the path will add the directory to the list of matching
+       directories. However, unless the modification time of the individual files are within
+       that of the current window, they will not be recognized as new files.
+     + Once read, changes to the files will not be picked up.
+       So if the files are being continuously appended, the new data will not be read.
 
+    Special points for object stores
+
+     + Wildcard lookup may be very slow with some object stores.
+     + File renaming is slow; it is `O(data)`.
+     + Directory rename is even slower and not atomic.
+     + Objects created directly though a single PUT operation are atomic, irrespective of
+       the language or library used.
+     + Writing a file to an object store using the Hadoop APIs is atomic; the object is only
+       created via a PUT operation in the final  `OutputStream.close()` call.
+
+    For this reason, applications using an object store as the direct destination of data
+    can consider using PUT operations to directly publish data for a DStream to pick up.
+    
 	For simple text files, there is an easier method `streamingContext.textFileStream(dataDirectory)`. And file streams do not require running a receiver, hence does not require allocating cores.
 
 	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
