@@ -21,11 +21,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
-
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
-
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.memory.UnifiedMemoryManager
@@ -36,6 +34,8 @@ import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.StorageLevel._
+
+import scala.collection.mutable
 
 /** Testsuite that tests block replication in BlockManager */
 class BlockManagerReplicationSuite extends SparkFunSuite
@@ -345,6 +345,47 @@ class BlockManagerReplicationSuite extends SparkFunSuite
       assert(replicateAndGetNumCopies("a7", 3) === 3)
     }
   }
+
+  /**
+   * Test if we get the required number of peers when using random sampling from
+   * RandomBlockReplicationPolicy
+   */
+  test(s"block replication - random block replication policy") {
+    val numBlockManagers = 10
+    val storeSize = 1000
+    val blockManagers = (1 to numBlockManagers).map { i =>
+      BlockManagerId(s"store-$i", "localhost", 1000 + i, None)
+    }
+    val candidateBlockManager = BlockManagerId("test-store", "localhost", 1000, None)
+    val replicationPolicy = new RandomBlockReplicationPolicy
+    val blockId = "test-block"
+
+    (1 to 10).foreach {numReplicas =>
+      logInfo(s"Num replicas : $numReplicas")
+      val randomPeers = replicationPolicy.prioritize(
+        candidateBlockManager,
+        blockManagers,
+        mutable.HashSet.empty[BlockManagerId],
+        blockId,
+        numReplicas
+      )
+      logInfo(s"Random peers : ${randomPeers.mkString(", ")}")
+      assert(randomPeers.size === numReplicas)
+
+      // choosing n peers out of n
+      val secondPass = replicationPolicy.prioritize(
+        candidateBlockManager,
+        randomPeers,
+        mutable.HashSet.empty[BlockManagerId],
+        blockId,
+        numReplicas
+      )
+      logInfo(s"Random peers : ${secondPass.mkString(", ")}")
+      assert(secondPass.size === numReplicas)
+    }
+
+  }
+
 
   /**
    * Test replication of blocks with different storage levels (various combinations of

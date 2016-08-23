@@ -82,11 +82,7 @@ class BlockManagerId private (
     host_ = in.readUTF()
     port_ = in.readInt()
     val isTopologyInfoAvailable = in.readBoolean()
-    topologyInfo_ = if (isTopologyInfoAvailable) {
-      Some(in.readUTF())
-    } else {
-      None
-    }
+    topologyInfo_ = if (isTopologyInfoAvailable) Option(in.readUTF()) else None
   }
 
   @throws(classOf[IOException])
@@ -124,10 +120,10 @@ private[spark] object BlockManagerId {
    * @return A new [[org.apache.spark.storage.BlockManagerId]].
    */
   def apply(
-    execId: String,
-    host: String,
-    port: Int,
-    topologyInfo: Option[String] = None): BlockManagerId =
+      execId: String,
+      host: String,
+      port: Int,
+      topologyInfo: Option[String] = None): BlockManagerId =
     getCachedBlockManagerId(new BlockManagerId(execId, host, port, topologyInfo))
 
   def apply(in: ObjectInput): BlockManagerId = {

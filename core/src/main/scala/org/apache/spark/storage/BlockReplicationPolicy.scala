@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.annotation.DeveloperApi
@@ -30,7 +31,7 @@ import org.apache.spark.internal.Logging
  * again to get a fresh prioritization.
  */
 @DeveloperApi
-trait BlockReplicationPrioritization {
+trait BlockReplicationPolicy {
 
   /**
    * Method to prioritize a bunch of candidate peers of a block
@@ -40,18 +41,21 @@ trait BlockReplicationPrioritization {
    * @param peersReplicatedTo Set of peers already replicated to
    * @param blockId BlockId of the block being replicated. This can be used as a source of
    *                randomness if needed.
-   * @return A prioritized list of peers. Lower the index of a peer, higher its priority
+   * @param numPeersToReplicateTo Number of peers we need to replicate to
+   * @return A prioritized list of peers. Lower the index of a peer, higher its priority.
+   *         This returns a list of size at most `numPeersToReplicateTo`.
    */
   def prioritize(
-    blockManagerId: BlockManagerId,
-    peers: Seq[BlockManagerId],
-    peersReplicatedTo: Set[BlockManagerId],
-    blockId: BlockId): Seq[BlockManagerId]
+      blockManagerId: BlockManagerId,
+      peers: Seq[BlockManagerId],
+      peersReplicatedTo: mutable.HashSet[BlockManagerId],
+      blockId: BlockId,
+      numPeersToReplicateTo: Int): List[BlockManagerId]
 }
 
 @DeveloperApi
-class DefaultBlockReplicationPrioritization
-  extends BlockReplicationPrioritization
+class RandomBlockReplicationPolicy
+  extends BlockReplicationPolicy
   with Logging {
 
   /**
@@ -66,15 +70,43 @@ class DefaultBlockReplicationPrioritization
    * @return A prioritized list of peers. Lower the index of a peer, higher its priority
    */
   override def prioritize(
-    blockManagerId: BlockManagerId,
-    peers: Seq[BlockManagerId],
-    peersReplicatedTo: Set[BlockManagerId],
-    blockId: BlockId): Seq[BlockManagerId] = {
+      blockManagerId: BlockManagerId,
+      peers: Seq[BlockManagerId],
+      peersReplicatedTo: mutable.HashSet[BlockManagerId],
+      blockId: BlockId,
+      numReplicas: Int): List[BlockManagerId] = {
     val random = new Random(blockId.hashCode)
-
     logDebug(s"Input peers : ${peers.mkString(", ")}")
-    val ret = random.shuffle(peers)
-    logDebug(s"Prioritized peers : ${ret.mkString(", ")}")
-    ret
+    val prioritizedPeers = if (peers.size > numReplicas) {
+      getSampleIds(peers.size, numReplicas, random).map(peers(_))
+    } else {
+      if (peers.size < numReplicas) {
+        logWarning(s"Expecting ${numReplicas} replicas with only ${peers.size} peer/s.")
+      }
+      random.shuffle(peers).toList
+    }
+    logDebug(s"Prioritized peers : ${prioritizedPeers.mkString(", ")}")
+    prioritizedPeers
+  }
+
+  /**
+   * Uses sampling algorithm by Robert Floyd. Finds a random sample in O(n) while
+   * minimizing space usage
+   * [[http://math.stackexchange.com/questions/178690/
+   * whats-the-proof-of-correctness-for-robert-floyds-algorithm-for-selecting-a-sin]]
+   *
+   * @param n total number of indices
+   * @param m number of samples needed
+   * @param r random number generator
+   * @return list of m random unique indices
+   */
+  private def getSampleIds(n: Int, m: Int, r: Random): List[Int] = {
+    val indices = (n - m + 1 to n).foldLeft(Set.empty[Int]) {case (s, i) =>
+      val t = r.nextInt(i) + 1
+      if (s.contains(t)) s + i else s + t
+    }
+    // we shuffle the result to ensure a random arrangement within the sample
+    // to avoid any bias from set implementations
+    r.shuffle(indices.map(_ - 1).toList)
   }
 }

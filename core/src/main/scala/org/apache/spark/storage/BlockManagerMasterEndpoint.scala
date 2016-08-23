@@ -61,7 +61,7 @@ class BlockManagerMasterEndpoint(
       "org.apache.spark.storage.DefaultTopologyMapper")
     val clazz = Utils.classForName(topologyMapperClassName)
     val mapper =
-      clazz.getConstructor(conf.getClass).newInstance(conf).asInstanceOf[TopologyMapper]
+      clazz.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[TopologyMapper]
     logInfo(s"Using $topologyMapperClassName for getting topology information")
     mapper
   }
@@ -310,16 +310,20 @@ class BlockManagerMasterEndpoint(
     ).map(_.flatten.toSeq)
   }
 
-  private def register(dummyId: BlockManagerId,
-    maxMemSize: Long,
-    slaveEndpoint: RpcEndpointRef): BlockManagerId = {
+  /**
+   * Returns the BlockManagerId with topology information populated, if available.
+   */
+  private def register(
+      idWithoutTopologyInfo: BlockManagerId,
+      maxMemSize: Long,
+      slaveEndpoint: RpcEndpointRef): BlockManagerId = {
     // the dummy id is not expected to contain the topology information.
     // we get that info here and respond back with a more fleshed out block manager id
     val id = BlockManagerId(
-      dummyId.executorId,
-      dummyId.host,
-      dummyId.port,
-      Some(topologyMapper.getTopologyForHost(dummyId.host)))
+      idWithoutTopologyInfo.executorId,
+      idWithoutTopologyInfo.host,
+      idWithoutTopologyInfo.port,
+      topologyMapper.getTopologyForHost(idWithoutTopologyInfo.host))
 
     val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {

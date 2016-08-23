@@ -20,8 +20,8 @@ package org.apache.spark.storage
 import java.io._
 import java.nio.ByteBuffer
 
-import scala.annotation.tailrec
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable
+import scala.collection.mutable.HashMap
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -44,6 +44,7 @@ import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
+
 
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
@@ -148,7 +149,7 @@ private[spark] class BlockManager(
   private val peerFetchLock = new Object
   private var lastPeerFetchTime = 0L
 
-  private var blockReplicationPrioritizer: BlockReplicationPrioritization = _
+  private var blockReplicationPolicy: BlockReplicationPolicy = _
 
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as
@@ -163,13 +164,13 @@ private[spark] class BlockManager(
     blockTransferService.init(this)
     shuffleClient.init(appId)
 
-    blockReplicationPrioritizer = {
+    blockReplicationPolicy = {
       val priorityClass = conf.get(
         "spark.replication.topologyawareness.prioritizer",
-        "org.apache.spark.storage.DefaultBlockReplicationPrioritization")
+        "org.apache.spark.storage.RandomBlockReplicationPolicy")
       val clazz = Utils.classForName(priorityClass)
-      val ret = clazz.newInstance.asInstanceOf[BlockReplicationPrioritization]
-      logInfo(s"Using $priorityClass for prioritizing peers")
+      val ret = clazz.newInstance.asInstanceOf[BlockReplicationPolicy]
+      logInfo(s"Using $priorityClass for block replication policy")
       ret
     }
 
@@ -1133,17 +1134,12 @@ private[spark] class BlockManager(
   /**
    * Replicate block to another node. Note that this is a blocking call that returns after
    * the block has been replicated.
-   *
-   * @param blockId
-   * @param data
-   * @param level
-   * @param classTag
    */
   private def replicate(
-    blockId: BlockId,
-    data: ChunkedByteBuffer,
-    level: StorageLevel,
-    classTag: ClassTag[_]): Unit = {
+      blockId: BlockId,
+      data: ChunkedByteBuffer,
+      level: StorageLevel,
+      classTag: ClassTag[_]): Unit = {
 
     val maxReplicationFailures = conf.getInt("spark.storage.maxReplicationFailures", 1)
     val tLevel = StorageLevel(
@@ -1155,20 +1151,25 @@ private[spark] class BlockManager(
 
     val numPeersToReplicateTo = level.replication - 1
 
-    val startTime = System.currentTimeMillis
+    val startTime = System.nanoTime
 
-    var peersForReplication =
-      blockReplicationPrioritizer.prioritize(blockManagerId, getPeers(false), Set.empty, blockId)
-    var peersReplicatedTo = Set.empty[BlockManagerId]
-    var peersFailedToReplicateTo = Set.empty[BlockManagerId]
+    var peersReplicatedTo = mutable.HashSet.empty[BlockManagerId]
+    var peersFailedToReplicateTo = mutable.HashSet.empty[BlockManagerId]
     var numFailures = 0
 
+    var peersForReplication = blockReplicationPolicy.prioritize(
+      blockManagerId,
+      getPeers(false),
+      mutable.HashSet.empty,
+      blockId,
+      numPeersToReplicateTo)
+
     while(numFailures <= maxReplicationFailures &&
-      !peersForReplication.isEmpty &&
-      peersReplicatedTo.size != numPeersToReplicateTo) {
+        !peersForReplication.isEmpty &&
+        peersReplicatedTo.size != numPeersToReplicateTo) {
       val peer = peersForReplication.head
       try {
-        val onePeerStartTime = System.currentTimeMillis
+        val onePeerStartTime = System.nanoTime
         logTrace(s"Trying to replicate $blockId of ${data.size} bytes to $peer")
         blockTransferService.uploadBlockSync(
           peer.host,
@@ -1179,7 +1180,7 @@ private[spark] class BlockManager(
           tLevel,
           classTag)
         logTrace(s"Replicated $blockId of ${data.size} bytes to $peer" +
-          s" in ${System.currentTimeMillis - onePeerStartTime} ms")
+          s" in ${(System.nanoTime - onePeerStartTime).toDouble / 1e6} ms")
         peersForReplication = peersForReplication.tail
         peersReplicatedTo += peer
       } catch {
@@ -1194,16 +1195,17 @@ private[spark] class BlockManager(
           }
 
           numFailures += 1
-          peersForReplication = blockReplicationPrioritizer.prioritize(
+          peersForReplication = blockReplicationPolicy.prioritize(
             blockManagerId,
             filteredPeers,
             peersReplicatedTo,
-            blockId)
+            blockId,
+            numPeersToReplicateTo - peersReplicatedTo.size)
       }
     }
 
     logDebug(s"Replicating $blockId of ${data.size} bytes to " +
-      s"${peersReplicatedTo.size} peer(s) took ${System.currentTimeMillis - startTime} ms")
+      s"${peersReplicatedTo.size} peer(s) took ${(System.nanoTime - startTime) / 1e6} ms")
     if (peersReplicatedTo.size < numPeersToReplicateTo) {
       logWarning(s"Block $blockId replicated to only " +
         s"${peersReplicatedTo.size} peer(s) instead of $numPeersToReplicateTo peers")

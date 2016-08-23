@@ -17,12 +17,9 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, FileInputStream}
-import java.util.Properties
-
+import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
-import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
 /**
@@ -41,15 +38,20 @@ abstract class TopologyMapper(conf: SparkConf) {
    *         For example : ‘/myrack/myhost’, where ‘/’ is the topology delimiter,
    *         ‘myrack’ is the topology identifier, and ‘myhost’ is the individual host.
    *         This function only returns the topology information without the hostname.
+   *         This information can be used when choosing executors for block replication
+   *         to discern executors from a different rack than a candidate executor, for example.
+   *
+   *         An implementation can choose to use empty strings or None in case topology info
+   *         is not available. This would imply that all such executors belong to the same rack.
    */
-  def getTopologyForHost(hostname: String): String
+  def getTopologyForHost(hostname: String): Option[String]
 }
 
 @DeveloperApi
 class DefaultTopologyMapper(conf: SparkConf) extends TopologyMapper(conf) with Logging {
-  override def getTopologyForHost(hostname: String): String = {
+  override def getTopologyForHost(hostname: String): Option[String] = {
     logDebug(s"Got a request for $hostname")
-    "DefaultRack"
+    Some("DefaultRack")
   }
 }
 
@@ -67,15 +69,14 @@ class FileBasedTopologyMapper(conf: SparkConf) extends TopologyMapper(conf) with
   require(topologyFile.isDefined, "Please provide topology file for FileBasedTopologyMapper.")
   val topologyMap = Utils.getPropertiesFromFile(topologyFile.get)
 
-  override def getTopologyForHost(hostname: String): String = {
+  override def getTopologyForHost(hostname: String): Option[String] = {
     val topology = topologyMap.get(hostname)
     if (topology.isDefined) {
       logDebug(s"$hostname -> ${topology.get}")
-      topology.get
     } else {
       logWarning(s"$hostname does not have any topology information")
-      ""
     }
+    topology
   }
 }
 
