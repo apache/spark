@@ -96,11 +96,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Return a [[HiveClient]] as a new session
-   */
-  def getNewClient: HiveClient = client.newSession()
-
-  /**
    * If the given table properties contains datasource properties, throw an exception. We will do
    * this check when create or alter a table, i.e. when we try to write table metadata to Hive
    * metastore.
