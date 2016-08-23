@@ -486,18 +486,18 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   }
 
   final override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    val bufferObject = field(buffer, mutableAggBufferOffset).asInstanceOf[T]
+    val bufferObject = getField(buffer, mutableAggBufferOffset).asInstanceOf[T]
     update(bufferObject, input)
   }
 
   final override def merge(buffer: MutableRow, inputBuffer: InternalRow): Unit = {
-    val bufferObject = field[T](buffer, mutableAggBufferOffset)
-    val inputObject = deserialize(field[Array[Byte]](inputBuffer, inputAggBufferOffset))
+    val bufferObject = getField[T](buffer, mutableAggBufferOffset)
+    val inputObject = deserialize(getField[Array[Byte]](inputBuffer, inputAggBufferOffset))
     merge(bufferObject, inputObject)
   }
 
   final override def eval(buffer: InternalRow): Any = {
-    val bufferObject = field[AnyRef](buffer, mutableAggBufferOffset)
+    val bufferObject = getField[AnyRef](buffer, mutableAggBufferOffset)
     if (bufferObject.getClass == aggregationBufferClass) {
       // When used in Window frame aggregation, eval(buffer: InternalRow) is called directly
       // on the object aggregation buffer without intermediate serializing/de-serializing.
@@ -507,7 +507,7 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
     }
   }
 
-  private def field[U](input: InternalRow, fieldIndex: Int): U = {
+  private def getField[U](input: InternalRow, fieldIndex: Int): U = {
     input.get(fieldIndex, null).asInstanceOf[U]
   }
 
@@ -528,7 +528,7 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
    * The framework calls this method every time after updating/merging one group (group by key).
    */
   final def serializeAggregateBufferInPlace(buffer: MutableRow): Unit = {
-    val bufferObject = field(buffer, mutableAggBufferOffset).asInstanceOf[T]
+    val bufferObject = getField(buffer, mutableAggBufferOffset).asInstanceOf[T]
     buffer(mutableAggBufferOffset) = serialize(bufferObject)
   }
 }

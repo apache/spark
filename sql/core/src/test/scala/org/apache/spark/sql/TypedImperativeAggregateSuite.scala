@@ -63,8 +63,7 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     assert(agg.eval(mergeBuffer) == data.map(_._1).max)
 
     // Tests low level eval(row: InternalRow) API.
-    val array: Array[Any] = Array(mergeBuffer)
-    val row = new GenericMutableRow(array)
+    val row = new GenericMutableRow(Array(mergeBuffer): Array[Any])
 
     // Evaluates directly on row consist of aggregation buffer object.
     assert(agg.eval(row) == data.map(_._1).max)
