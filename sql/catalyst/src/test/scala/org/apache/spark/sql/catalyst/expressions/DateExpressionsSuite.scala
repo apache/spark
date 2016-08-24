@@ -310,6 +310,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       AddMonths(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -980528)
     checkConsistencyBetweenInterpretedAndCodegen(AddMonths, DateType, IntegerType)
+    checkEvaluation(AddMonths(Literal(Timestamp.valueOf("2015-01-30 12:00:00")), Literal(1)),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-02-28 12:00:00")))
   }
 
   test("months_between") {

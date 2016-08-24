@@ -783,27 +783,34 @@ case class TimeSub(start: Expression, interval: Expression)
 /**
  * Returns the date that is num_months after start_date.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, num_months) - Returns the date that is num_months after start_date.",
+  usage = "_FUNC_(start_date, num_months) - Returns the date/timestamp that is num_months after start_date.",
   extended = "> SELECT _FUNC_('2016-08-31', 1);\n '2016-09-30'")
+// scalastyle:on line.size.limit
 case class AddMonths(startDate: Expression, numMonths: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = startDate
   override def right: Expression = numMonths
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DateType, TimestampType), IntegerType)
 
-  override def dataType: DataType = DateType
+  override def dataType: DataType = startDate.dataType
 
-  override def nullSafeEval(start: Any, months: Any): Any = {
-    DateTimeUtils.dateAddMonths(start.asInstanceOf[Int], months.asInstanceOf[Int])
+  override def nullSafeEval(start: Any, months: Any): Any = startDate.dataType match {
+    case DateType =>
+      DateTimeUtils.dateAddMonths(start.asInstanceOf[Int], months.asInstanceOf[Int])
+    case TimestampType =>
+      DateTimeUtils.timestampAddInterval(start.asInstanceOf[Long], months.asInstanceOf[Int], 0)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (sd, m) => {
-      s"""$dtu.dateAddMonths($sd, $m)"""
+    defineCodeGen(ctx, ev, (sd, m) => startDate.dataType match {
+      case DateType => s"""$dtu.dateAddMonths($sd, $m)"""
+      case TimestampType => s"""$dtu.timestampAddInterval($sd, $m, 0)"""
     })
   }
 
