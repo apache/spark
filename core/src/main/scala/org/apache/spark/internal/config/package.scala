@@ -120,22 +120,21 @@ package object config {
     .intConf
     .createWithDefault(100000)
 
-  private[spark] val SPARK_IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
+  private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
     .booleanConf
     .createWithDefault(false)
 
-  private[spark] val SPARK_IO_ENCRYPTION_KEYGEN_ALGORITHM =
+  private[spark] val IO_ENCRYPTION_KEYGEN_ALGORITHM =
     ConfigBuilder("spark.io.encryption.keygen.algorithm")
       .stringConf
       .createWithDefault("HmacSHA1")
 
-  private[spark] val SPARK_IO_ENCRYPTION_KEY_SIZE_BITS =
-    ConfigBuilder("spark.io.encryption.keySizeBits")
-      .intConf
-      .checkValues(Set(128, 192, 256))
-      .createWithDefault(128)
+  private[spark] val IO_ENCRYPTION_KEY_SIZE_BITS = ConfigBuilder("spark.io.encryption.keySizeBits")
+    .intConf
+    .checkValues(Set(128, 192, 256))
+    .createWithDefault(128)
 
-  private[spark] val SPARK_IO_CRYPTO_CIPHER_TRANSFORMATION =
+  private[spark] val IO_CRYPTO_CIPHER_TRANSFORMATION =
     ConfigBuilder("spark.io.crypto.cipher.transformation")
       .stringConf
       .createWithDefaultString("AES/CTR/NoPadding")

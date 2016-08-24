@@ -414,7 +414,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
 
     if (master == "yarn" && deployMode == "client") System.setProperty("SPARK_YARN_MODE", "true")
-    if (_conf.get(SPARK_IO_ENCRYPTION_ENABLED) && !SparkHadoopUtil.get.isYarnMode()) {
+    if (_conf.get(IO_ENCRYPTION_ENABLED) && !SparkHadoopUtil.get.isYarnMode()) {
       throw new SparkException("IO encryption is only supported in YARN mode, please disable it " +
         "by setting spark.io.encryption.enabled to false")
     }

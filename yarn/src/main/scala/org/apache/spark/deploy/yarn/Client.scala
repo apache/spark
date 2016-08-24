@@ -1004,7 +1004,7 @@ private[spark] class Client(
     amContainer.setApplicationACLs(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
 
-    if (sparkConf.get(SPARK_IO_ENCRYPTION_ENABLED)) {
+    if (sparkConf.get(IO_ENCRYPTION_ENABLED)) {
       SecurityManager.initIOEncryptionKey(sparkConf, credentials)
     }
     setupSecurityToken(amContainer)

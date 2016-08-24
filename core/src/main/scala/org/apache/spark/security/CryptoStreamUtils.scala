@@ -56,7 +56,7 @@ private[spark] object CryptoStreamUtils {
     os.write(iv)
     val credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
     val key = credentials.getSecretKey(SPARK_IO_TOKEN)
-    val transformationStr = sparkConf.get(SPARK_IO_CRYPTO_CIPHER_TRANSFORMATION)
+    val transformationStr = sparkConf.get(IO_CRYPTO_CIPHER_TRANSFORMATION)
     new CryptoOutputStream(transformationStr, properties, os,
       new SecretKeySpec(key, "AES"), new IvParameterSpec(iv))
   }
@@ -73,7 +73,7 @@ private[spark] object CryptoStreamUtils {
     is.read(iv, 0, iv.length)
     val credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
     val key = credentials.getSecretKey(SPARK_IO_TOKEN)
-    val transformationStr = sparkConf.get(SPARK_IO_CRYPTO_CIPHER_TRANSFORMATION)
+    val transformationStr = sparkConf.get(IO_CRYPTO_CIPHER_TRANSFORMATION)
     new CryptoInputStream(transformationStr, properties, is,
       new SecretKeySpec(key, "AES"), new IvParameterSpec(iv))
   }

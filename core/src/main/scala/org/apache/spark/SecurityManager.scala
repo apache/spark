@@ -565,13 +565,13 @@ private[spark] object SecurityManager {
    */
   def initIOEncryptionKey(conf: SparkConf, credentials: Credentials): Unit = {
     if (credentials.getSecretKey(SPARK_IO_TOKEN) == null) {
-      val keyLen = conf.get(SPARK_IO_ENCRYPTION_KEY_SIZE_BITS)
-      val IOKeyGenAlgorithm = conf.get(SPARK_IO_ENCRYPTION_KEYGEN_ALGORITHM)
-      val keyGen = KeyGenerator.getInstance(IOKeyGenAlgorithm)
+      val keyLen = conf.get(IO_ENCRYPTION_KEY_SIZE_BITS)
+      val ioKeyGenAlgorithm = conf.get(IO_ENCRYPTION_KEYGEN_ALGORITHM)
+      val keyGen = KeyGenerator.getInstance(ioKeyGenAlgorithm)
       keyGen.init(keyLen)
 
-      val IOKey = keyGen.generateKey()
-      credentials.addSecretKey(SPARK_IO_TOKEN, IOKey.getEncoded)
+      val ioKey = keyGen.generateKey()
+      credentials.addSecretKey(SPARK_IO_TOKEN, ioKey.getEncoded)
     }
   }
 }

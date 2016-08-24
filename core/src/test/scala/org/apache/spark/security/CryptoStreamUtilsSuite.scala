@@ -24,7 +24,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.security.CryptoStreamUtils._
 
-private[spark] class CryptoStreamUtilsSuite extends SparkFunSuite {
+class CryptoStreamUtilsSuite extends SparkFunSuite {
   val ugi = UserGroupInformation.createUserForTesting("testuser", Array("testgroup"))
 
   test("Crypto configuration conversion") {
@@ -60,7 +60,7 @@ private[spark] class CryptoStreamUtilsSuite extends SparkFunSuite {
       override def run(): Unit = {
         val credentials = UserGroupInformation.getCurrentUser.getCredentials()
         val conf = new SparkConf()
-        conf.set(SPARK_IO_ENCRYPTION_ENABLED, true)
+        conf.set(IO_ENCRYPTION_ENABLED, true)
         initCredentials(conf, credentials)
         var key = credentials.getSecretKey(SPARK_IO_TOKEN)
         assert(key !== null)
@@ -75,8 +75,8 @@ private[spark] class CryptoStreamUtilsSuite extends SparkFunSuite {
       override def run(): Unit = {
         val credentials = UserGroupInformation.getCurrentUser.getCredentials()
         val conf = new SparkConf()
-        conf.set(SPARK_IO_ENCRYPTION_KEY_SIZE_BITS, 256)
-        conf.set(SPARK_IO_ENCRYPTION_ENABLED, true)
+        conf.set(IO_ENCRYPTION_KEY_SIZE_BITS, 256)
+        conf.set(IO_ENCRYPTION_ENABLED, true)
         initCredentials(conf, credentials)
         var key = credentials.getSecretKey(SPARK_IO_TOKEN)
         assert(key !== null)
@@ -91,8 +91,8 @@ private[spark] class CryptoStreamUtilsSuite extends SparkFunSuite {
       override def run(): Unit = {
         val credentials = UserGroupInformation.getCurrentUser.getCredentials()
         val conf = new SparkConf()
-        conf.set(SPARK_IO_ENCRYPTION_KEY_SIZE_BITS, 328)
-        conf.set(SPARK_IO_ENCRYPTION_ENABLED, true)
+        conf.set(IO_ENCRYPTION_KEY_SIZE_BITS, 328)
+        conf.set(IO_ENCRYPTION_ENABLED, true)
         val thrown = intercept[IllegalArgumentException] {
           initCredentials(conf, credentials)
         }
@@ -101,7 +101,7 @@ private[spark] class CryptoStreamUtilsSuite extends SparkFunSuite {
   }
 
   private[this] def initCredentials(conf: SparkConf, credentials: Credentials): Unit = {
-    if (conf.get(SPARK_IO_ENCRYPTION_ENABLED)) {
+    if (conf.get(IO_ENCRYPTION_ENABLED)) {
       SecurityManager.initIOEncryptionKey(conf, credentials)
     }
   }

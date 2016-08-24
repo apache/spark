@@ -64,7 +64,7 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
   private[this] val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
 
   // Whether to enable IO encryption
-  private[this] val enableIOEncryption = conf.get(SPARK_IO_ENCRYPTION_ENABLED)
+  private[this] val enableIOEncryption = conf.get(IO_ENCRYPTION_ENABLED)
 
   /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
    * the initialization of the compression codec until it is first used. The reason is that a Spark

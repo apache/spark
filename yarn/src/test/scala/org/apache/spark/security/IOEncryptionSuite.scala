@@ -14,27 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.yarn
+package org.apache.spark.security
 
 import java.io._
 import java.nio.ByteBuffer
 import java.security.PrivilegedExceptionAction
 import java.util.{ArrayList => JArrayList, LinkedList => JLinkedList, UUID}
 
-import scala.runtime.AbstractFunction1
-
 import com.google.common.collect.HashMultiset
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.junit.Assert.assertEquals
-import org.mockito.Mock
-import org.mockito.MockitoAnnotations
-import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
+import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.Matchers.{eq => meq, _}
 import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
+import scala.runtime.AbstractFunction1
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -44,15 +42,14 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.network.buffer.NioManagedBuffer
 import org.apache.spark.network.util.LimitedInputStream
-import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer._
 import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.sort.{SerializedShuffleHandle, UnsafeShuffleWriter}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
-private[spark] class YarnIOEncryptionSuite extends SparkFunSuite with Matchers with
-  BeforeAndAfterAll with BeforeAndAfterEach {
+class IOEncryptionSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
+  with BeforeAndAfterEach {
   @Mock(answer = RETURNS_SMART_NULLS) private[this] var blockManager: BlockManager = _
   @Mock(answer = RETURNS_SMART_NULLS) private[this] var blockResolver: IndexShuffleBlockResolver = _
   @Mock(answer = RETURNS_SMART_NULLS) private[this] var diskBlockManager: DiskBlockManager = _
@@ -87,7 +84,6 @@ private[spark] class YarnIOEncryptionSuite extends SparkFunSuite with Matchers w
     new BaseShuffleHandle(SHUFFLE_ID, NUM_MAPS, dependency)
   }
 
-
   // Make a mocked MapOutputTracker for the shuffle reader to use to determine what
   // shuffle data to read.
   private[this] val mapOutputTracker = mock(classOf[MapOutputTracker])
@@ -100,7 +96,7 @@ private[spark] class YarnIOEncryptionSuite extends SparkFunSuite with Matchers w
     System.setProperty("SPARK_YARN_MODE", "true")
     ugi.doAs(new PrivilegedExceptionAction[Unit]() {
       override def run(): Unit = {
-        conf.set(SPARK_IO_ENCRYPTION_ENABLED, true)
+        conf.set(IO_ENCRYPTION_ENABLED, true)
         val creds = new Credentials()
         SecurityManager.initIOEncryptionKey(conf, creds)
         SparkHadoopUtil.get.addCurrentUserCredentials(creds)
@@ -110,6 +106,7 @@ private[spark] class YarnIOEncryptionSuite extends SparkFunSuite with Matchers w
 
   override def afterAll(): Unit = {
     SparkEnv.set(null)
+    System.clearProperty("SPARK_YARN_MODE")
   }
 
   override def beforeEach(): Unit = {
@@ -244,7 +241,7 @@ private[spark] class YarnIOEncryptionSuite extends SparkFunSuite with Matchers w
     // encrypted and compressed input stream if encryption and compression enabled
     val wrapFunction = new Answer[InputStream] {
       override def answer(invocation: InvocationOnMock): InputStream = {
-        val encryptedStream = if (conf.get(SPARK_IO_ENCRYPTION_ENABLED)) {
+        val encryptedStream = if (conf.get(IO_ENCRYPTION_ENABLED)) {
           CryptoStreamUtils.createCryptoInputStream(
             invocation.getArguments()(1).asInstanceOf[InputStream], conf)
         } else {
@@ -320,7 +317,7 @@ private[spark] class YarnIOEncryptionSuite extends SparkFunSuite with Matchers w
 
   private[this] final class WrapStream extends AbstractFunction1[OutputStream, OutputStream] {
     override def apply(stream: OutputStream): OutputStream = {
-      val encryptedStream = if (conf.get(SPARK_IO_ENCRYPTION_ENABLED)) {
+      val encryptedStream = if (conf.get(IO_ENCRYPTION_ENABLED)) {
         CryptoStreamUtils.createCryptoOutputStream(stream, conf)
       } else {
         stream
