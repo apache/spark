@@ -920,11 +920,8 @@ class Analyzer(
           q transformExpressions {
             case u @ UnresolvedAttribute(nameParts) =>
               withPosition(u) {
-                val outer = outers.iterator
-                var expr = Option.empty[NamedExpression]
-                while (expr.isEmpty && outer.hasNext) {
-                  expr = outer.next().resolve(nameParts, resolver)
-                }
+                val expr = outers.iterator.map(_.resolve(nameParts, resolver))
+                  .collectFirst{case Some(attr) => attr}
                 expr match {
                   case Some(outerAttr) => OuterReference(outerAttr)
                   case None =>
