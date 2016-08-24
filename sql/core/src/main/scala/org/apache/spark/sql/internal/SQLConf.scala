@@ -499,16 +499,15 @@ object SQLConf {
       .intConf
       .createWithDefault(40)
 
-  val FAST_AGG_MAP_IMPL =
-    SQLConfigBuilder("spark.sql.codegen.aggregate.map.enforce.impl")
+  val ENABLE_TWOLEVEL_AGG_MAP =
+    SQLConfigBuilder("spark.sql.codegen.aggregate.map.twolevel.enable")
       .internal()
-      .doc("Sets the implementation for fast hash map during aggregation. Could be one of the " +
-        "following: rowbased, vectorized, skip, auto. Defaults to auto, and should only be other " +
-        "values for testing purposes.")
-      .stringConf
-      .transform(_.toLowerCase())
-      .checkValues(Set("rowbased", "vectorized", "skip", "auto"))
-      .createWithDefault("auto")
+      .doc("Enable two-level aggregate hash map. When enabled, records will first be " +
+        "inserted/looked-up at a 1st-level, small, fast map, and then fallback to a " +
+        "2nd-level, larger, slower map when 1st level is full or keys cannot be found. " +
+        "When disabled, records go directly to the 2nd level. Defaults to true.")
+      .booleanConf
+      .createWithDefault(true)
 
   val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -675,7 +674,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   override def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
-  def enforceFastAggHashMapImpl: String = getConf(FAST_AGG_MAP_IMPL)
+  def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
 
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
 

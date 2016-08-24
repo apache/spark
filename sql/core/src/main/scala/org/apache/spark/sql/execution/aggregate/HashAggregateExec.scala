@@ -282,13 +282,12 @@ case class HashAggregateExec(
 
   // The name for Fast HashMap
   private var fastHashMapTerm: String = _
-  // whether vectorized hashmap or row based hashmap is enabled
-  // we make sure that at most one of the two flags is true
-  // i.e., assertFalse(isVectorizedHashMapEnabled && isRowBasedHashMapEnabled)
+  private var isFastHashMapEnabled: Boolean = false
+
+  // whether a vectorized hashmap is used instead
+  // we have decided to always use the row-based hashmap,
+  // but the vectorized hashmap can still be switched on for testing and benchmarking purposes.
   private var isVectorizedHashMapEnabled: Boolean = false
-  private var isRowBasedHashMapEnabled: Boolean = false
-  // auxiliary flag, true if any of two above is true
-  private var isFastHashMapEnabled: Boolean = isVectorizedHashMapEnabled || isRowBasedHashMapEnabled
 
   // The name for UnsafeRow HashMap
   private var hashMapTerm: String = _
@@ -499,63 +498,35 @@ case class HashAggregateExec(
     isSupported  && isNotByteArrayDecimalType
   }
 
-  /**
-   * Requirement check for vectorized hash map.
-   */
-  private def enableVectorizedHashMap(ctx: CodegenContext): Boolean = {
-    checkIfFastHashMapSupported(ctx)
-  }
+  private def enableTwoLevelHashMap(ctx: CodegenContext) = {
+    if (!checkIfFastHashMapSupported(ctx)) {
+      if (modes.forall(mode => mode == Partial || mode == PartialMerge) && !Utils.isTesting) {
+        logInfo("spark.sql.codegen.aggregate.map.twolevel.enable is set to true, but"
+          + " current version of codegened fast hashmap does not support this aggregate.")
+      }
+    } else {
+      isFastHashMapEnabled = true
 
-  /**
-   * Requirement check for row-based hash map.
-   */
-  private def enableRowBasedHashMap(ctx: CodegenContext): Boolean = {
-    checkIfFastHashMapSupported(ctx)
-  }
-
-  private def setFastHashMapImpl(ctx: CodegenContext) = {
-    sqlContext.conf.enforceFastAggHashMapImpl match {
-      case "rowbased" =>
-        if (!enableRowBasedHashMap(ctx)) {
-          if (modes.forall(mode => mode == Partial || mode == PartialMerge) && !Utils.isTesting) {
-            logWarning("spark.sql.codegen.aggregate.map.enforce.impl is set to rowbased, but"
-              + " current version of codegened row-based hashmap does not support this aggregate.")
-          }
-        } else {
-          isRowBasedHashMapEnabled = true
-        }
-      case "vectorized" =>
-        if (!enableVectorizedHashMap(ctx)) {
-          if (modes.forall(mode => mode == Partial || mode == PartialMerge) && !Utils.isTesting) {
-            logWarning("spark.sql.codegen.aggregate.map.enforce.impl is set to vectorized, but"
-              + " current version of codegened vectorized hashmap does not support this aggregate.")
-          }
-        } else {
-          isVectorizedHashMapEnabled = true
-        }
-      case "skip" =>
-      // no need to do anything, default sets all flags to be false
-      case _ =>
-        if (sqlContext.conf.enforceFastAggHashMapImpl != "auto") {
-          logWarning("spark.sql.codegen.aggregate.map.enforce.impl should be set to one of the "
-            + "following: rowbased, vectorized, skip, auto(default).")
-        }
-        if (enableRowBasedHashMap(ctx)) {
-          isRowBasedHashMapEnabled = true
-        } else if (enableVectorizedHashMap(ctx)) {
-          // Because enableVectorizedHashMap() and enableRowBasedHashMap() are identical currently,
-          // this should never be reached. We vision this codepath to be useful as our support for
-          // the two fast hash map extends.
-          isVectorizedHashMapEnabled = true
-        }
+      // This is for testing/benchmarking only.
+      // We enforce to first level to be a vectorized hashmap, instead of the default row-based one.
+      sqlContext.getConf("spark.sql.codegen.aggregate.map.vectorized.enable", null) match {
+        case "true" => isVectorizedHashMapEnabled = true
+        case null | "" | "false" => None      }
     }
-    isFastHashMapEnabled = isVectorizedHashMapEnabled || isRowBasedHashMapEnabled
   }
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
-    setFastHashMapImpl(ctx)
+    if (sqlContext.conf.enableTwoLevelAggMap) {
+      enableTwoLevelHashMap(ctx)
+    } else {
+      sqlContext.getConf("spark.sql.codegen.aggregate.map.vectorized.enable", null) match {
+        case "true" => logWarning("Two level hashmap is disabled but vectorized hashmap is " +
+          "enabled.")
+        case null | "" | "false" => None
+      }
+    }
     fastHashMapTerm = ctx.freshName("fastHashMap")
     val fastHashMapClassName = ctx.freshName("FastHashMap")
     val fastHashMapGenerator =
