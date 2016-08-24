@@ -634,7 +634,7 @@ methods for creating DStreams from files as input sources.
      + A simple directory can be supplied, such as `hdfs://namenode:8040/logs/`.
        All files directly such a path will be processed as they are discovered.
      + A regular expression can be supplied instead, such as
-       `hdfs://namenode:8040/logs/(2015,2016)-*-friday`.
+       `hdfs://namenode:8040/logs/2016-*-31`.
        Here, the DStream will consist of all files directly under those directories
        matching the regular expression.
        That is: it is a pattern of directories, not of files in directories.
