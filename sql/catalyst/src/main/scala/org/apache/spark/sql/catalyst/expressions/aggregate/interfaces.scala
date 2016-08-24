@@ -522,7 +522,8 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
 
   /**
    * In-place replaces the aggregation buffer object stored at buffer's index
-   * `mutableAggBufferOffset`, with SparkSQL internally supported underlying storage format.
+   * `mutableAggBufferOffset`, with SparkSQL internally supported underlying storage format
+   * (BinaryType).
    */
   final def serializeAggregateBufferInPlace(buffer: MutableRow): Unit = {
     val bufferObject = getField[T](buffer, mutableAggBufferOffset)
