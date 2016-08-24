@@ -203,6 +203,18 @@ setMethod("rangeBetween",
 #' @aliases over,Column,WindowSpec-method
 #' @family colum_func
 #' @export
+#' @examples \dontrun{
+#'   df <- createDataFrame(iris)
+#'
+#'   # Partition by Species and order by Sepal_Length
+#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
+#'
+#'   # Rank on Sepal_Length within each partition
+#'   out <- select(df, over(rank(), ws), df$Sepal_Length, df$Species)
+#'
+#'   # Lead Sepal_Width values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lead(df$Sepal_Width), ws), df$Sepal_Width, df$Sepal_Length, df$Species)
+#' }
 #' @note over since 2.0.0
 setMethod("over",
           signature(x = "Column", window = "WindowSpec"),

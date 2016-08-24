@@ -3148,7 +3148,11 @@ setMethod("cume_dist",
 #' @family window_funcs
 #' @aliases dense_rank,missing-method
 #' @export
-#' @examples \dontrun{dense_rank()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(iris)
+#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
+#'   out <- select(df, over(dense_rank(), ws), df$Sepal_Length, df$Species)
+#' }
 #' @note dense_rank since 1.6.0
 setMethod("dense_rank",
           signature("missing"),
@@ -3175,11 +3179,19 @@ setMethod("dense_rank",
 #' @aliases lag,characterOrColumn-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{lag(df$c)}
+#' @examples \dontrun{
+#'   df <- createDataFrame(iris)
+#'
+#'   # Partition by Species and order by Sepal_Length
+#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
+#'
+#'   # Lag Sepal_Width values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lag(df$Sepal_Width), ws), df$Sepal_Width, df$Sepal_Length, df$Species)
+#' }
 #' @note lag since 1.6.0
 setMethod("lag",
           signature(x = "characterOrColumn"),
-          function(x, offset, defaultValue = NULL) {
+          function(x, offset = 1, defaultValue = NULL) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
@@ -3200,7 +3212,7 @@ setMethod("lag",
 #' This is equivalent to the \code{LEAD} function in SQL.
 #'
 #' @param x Column to compute on
-#' @param offset Number of rows to offset
+#' @param offset Number of rows to offset. If not specified, the default is 1.
 #' @param defaultValue (Optional) default value to use
 #'
 #' @rdname lead
@@ -3208,11 +3220,19 @@ setMethod("lag",
 #' @family window_funcs
 #' @aliases lead,characterOrColumn,numeric-method
 #' @export
-#' @examples \dontrun{lead(df$c)}
+#' @examples \dontrun{
+#'   df <- createDataFrame(iris)
+#'
+#'   # Partition by Species and order by Sepal_Length
+#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
+#'
+#'   # Lead Sepal_Width values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lead(df$Sepal_Width), ws), df$Sepal_Width, df$Sepal_Length, df$Species)
+#' }
 #' @note lead since 1.6.0
 setMethod("lead",
           signature(x = "characterOrColumn", offset = "numeric", defaultValue = "ANY"),
-          function(x, offset, defaultValue = NULL) {
+          function(x, offset = 1, defaultValue = NULL) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
@@ -3239,7 +3259,15 @@ setMethod("lead",
 #' @aliases ntile,numeric-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{ntile(1)}
+#' @examples \dontrun{
+#'   df <- createDataFrame(iris)
+#'
+#'   # Partition by Species and order by Sepal_Length
+#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
+#'
+#'   # Get ntil group id (1-4) for Sepal_Length
+#'   out <- select(df, over(ntile(4), ws), df$Sepal_Length, df$Species)
+#' }
 #' @note ntile since 1.6.0
 setMethod("ntile",
           signature(x = "numeric"),
@@ -3263,7 +3291,11 @@ setMethod("ntile",
 #' @family window_funcs
 #' @aliases percent_rank,missing-method
 #' @export
-#' @examples \dontrun{percent_rank()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(iris)
+#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
+#'   out <- select(df, over(percent_rank(), ws), df$Sepal_Length, df$Species)
+#' }
 #' @note percent_rank since 1.6.0
 setMethod("percent_rank",
           signature("missing"),
@@ -3288,7 +3320,11 @@ setMethod("percent_rank",
 #' @family window_funcs
 #' @aliases rank,missing-method
 #' @export
-#' @examples \dontrun{rank()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(iris)
+#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
+#'   out <- select(df, over(rank(), ws), df$Sepal_Length, df$Species)
+#' }
 #' @note rank since 1.6.0
 setMethod("rank",
           signature(x = "missing"),
@@ -3321,7 +3357,11 @@ setMethod("rank",
 #' @aliases row_number,missing-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{row_number()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(iris)
+#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
+#'   out <- select(df, over(row_number(), ws), df$Sepal_Length, df$Species)
+#' }
 #' @note row_number since 1.6.0
 setMethod("row_number",
           signature("missing"),
