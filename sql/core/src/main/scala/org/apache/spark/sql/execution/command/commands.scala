@@ -37,7 +37,7 @@ import org.apache.spark.sql.types._
  */
 trait RunnableCommand extends LogicalPlan with logical.Command {
   override def output: Seq[Attribute] = Seq.empty
-  override def children: Seq[LogicalPlan] = Seq.empty
+  final override def children: Seq[LogicalPlan] = Seq.empty
   def run(sparkSession: SparkSession): Seq[Row]
 }
 

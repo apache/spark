@@ -43,7 +43,7 @@ case class CreateHiveTableAsSelectCommand(
 
   private val tableIdentifier = tableDesc.identifier
 
-  override def children: Seq[LogicalPlan] = Seq(query)
+  override def innerChildren: Seq[LogicalPlan] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     lazy val metastoreRelation: MetastoreRelation = {

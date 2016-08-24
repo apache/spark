@@ -449,6 +449,14 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
+  test("SPARK-17230: write out results of decimal calculation") {
+    val df = spark.range(99, 101)
+      .selectExpr("id", "cast(id as long) * cast('1.0' as decimal(38, 18)) as num")
+    df.write.mode(SaveMode.Overwrite).parquet(dir)
+    val df2 = spark.read.parquet(dir)
+    checkAnswer(df2, df)
+  }
+
   private def testRead(
       df: => DataFrame,
       expectedResult: Seq[String],
