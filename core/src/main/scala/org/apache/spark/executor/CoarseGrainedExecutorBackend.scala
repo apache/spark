@@ -123,6 +123,9 @@ private[spark] class CoarseGrainedExecutorBackend(
           executor.stop()
         }
       }.start()
+
+    case UpdateCredentials =>
+      SparkHadoopUtil.get.triggerCredentialUpdater()
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {

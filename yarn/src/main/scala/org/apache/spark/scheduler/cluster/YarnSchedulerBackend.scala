@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.SparkContext
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
@@ -175,6 +176,39 @@ private[spark] abstract class YarnSchedulerBackend(
   override protected def reset(): Unit = {
     super.reset()
     sc.executorAllocationManager.foreach(_.reset())
+  }
+
+  /**
+   * Renew and update the credentials. This method will trigger credentials renewal in the AM
+   * side, once successfully renewed, it will trigger credentials updating in executor and
+   * driver side.
+   */
+  def updateCredentials(): Unit = {
+    yarnSchedulerEndpoint.amEndpoint match {
+      case Some(am) =>
+        val future = am.ask[Boolean](UpdateCredentials)
+
+        future.onSuccess {
+          case true =>
+            // Update credentials in the executor side only when AM is successfully renewed the
+            // Credentials.
+            synchronized {
+              executorDataMap.values.foreach(_.executorEndpoint.send(UpdateCredentials))
+            }
+            // This will trigger credential updating in the driver side.
+            SparkHadoopUtil.get.triggerCredentialUpdater()
+          case false =>
+            logWarning(s"Failed to renew credentials in the AM")
+        }(ThreadUtils.sameThread)
+
+        future.onFailure {
+          case NonFatal(e) =>
+            logWarning(s"Sending $UpdateCredentials to AM was unsuccessful", e)
+        }(ThreadUtils.sameThread)
+
+      case None =>
+        logWarning("Attempted to update credentials before AM has registered")
+    }
   }
 
   /**

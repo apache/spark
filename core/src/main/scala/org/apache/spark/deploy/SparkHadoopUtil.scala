@@ -35,7 +35,7 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
@@ -136,6 +136,14 @@ class SparkHadoopUtil extends Logging {
   def loginUserFromKeytab(principalName: String, keytabFilename: String) {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
   }
+
+  /**
+   * Update credentials manually. When this method is invoked AM will renew the credentials,
+   * executors and driver (in client mode) will update the credentials accordingly.
+   *
+   * Note this will only be worked in YARN cluster manager.
+   */
+  def updateCredentials(sc: SparkContext): Unit = { }
 
   /**
    * Returns a function that can be called to find Hadoop FileSystem bytes read. If
@@ -320,6 +328,11 @@ class SparkHadoopUtil extends Logging {
    * Stop the thread that does the credential updates.
    */
   private[spark] def stopCredentialUpdater() {}
+
+  /**
+   * Manually trigger the credential updater to update the credentials immediately.
+   */
+  private[spark] def triggerCredentialUpdater() {}
 
   /**
    * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.
