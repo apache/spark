@@ -698,10 +698,17 @@ is_sparkR_shell <- function() {
   grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
 }
 
-.onAttach <- function(libname, pkgname) {
-  ast <- "************************************************************"
-  hiclark <- "Clark's dev version!!"
-  date <- "Fri Aug 19 16:25:47 KST 2016"
-  msg <- "This is the PATCHED version"
-  packageStartupMessage(paste(ast, hiclark, date, msg, ast, sep="\n"))
+# rbind a list of rows with raw (binary) columns
+#
+# @param inputData a list of rows, with each row a list
+# @return data.frame with raw columns as lists
+rbind_with_raws <- function(inputData){
+  row1 <- inputData[[1]]
+  rawcolumns <- ("raw" == sapply(row1, class))
+
+  listmatrix <- do.call(rbind, inputData)
+  # A dataframe with all list columns
+  out <- as.data.frame(listmatrix)
+  out[!rawcolumns] <- lapply(out[!rawcolumns], unlist)
+  out
 }

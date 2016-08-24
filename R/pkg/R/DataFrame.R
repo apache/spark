@@ -1381,9 +1381,6 @@ setMethod("dapplyCollect",
             # which is a serialized data.frame corresponds to one partition of the
             # SparkDataFrame.
             ldfs <- lapply(content, function(x) { unserialize(x[[1]]) })
-#return(ldfs)
-# TODO Clark: a little experiment- return early to show that
-# initial trouble comes from the collect method
             ldf <- do.call(rbind, ldfs)
             row.names(ldf) <- NULL
             ldf
