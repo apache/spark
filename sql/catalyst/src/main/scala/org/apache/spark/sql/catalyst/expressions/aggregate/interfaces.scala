@@ -432,6 +432,12 @@ abstract class DeclarativeAggregate
  *  4. After processing all input aggregation objects of current group (group by key), the framework
  *     calls method `eval(buffer: T)` to generate the final output for this group.
  *  5. The framework moves on to next group, until all groups have been processed.
+ *
+ * NOTE: SQL with TypedImperativeAggregate functions is planned in sort based aggregation,
+ * instead of hash based aggregation, as TypedImperativeAggregate use BinaryType as aggregation
+ * buffer's storage format, which is not supported by hash based aggregation. Hash based
+ * aggregation only support aggregation buffer of mutable types (like LongType, IntType that have
+ * fixed length and can be mutated in place in UnsafeRow)
  */
 abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
 
@@ -507,8 +513,9 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
     }
   }
 
+  private[this] val anyObjectType = ObjectType(classOf[AnyRef])
   private def getField[U](input: InternalRow, fieldIndex: Int): U = {
-    input.get(fieldIndex, null).asInstanceOf[U]
+    input.get(fieldIndex, anyObjectType).asInstanceOf[U]
   }
 
   final override lazy val aggBufferAttributes: Seq[AttributeReference] = {

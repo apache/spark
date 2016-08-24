@@ -54,16 +54,9 @@ object AggUtils {
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
-
-    val hasTypedImperativeAggregate: Boolean = aggregateExpressions.exists {
-      case AggregateExpression(agg: TypedImperativeAggregate[_], _, _, _) => true
-      case _ => false
-    }
-
-    val aggBufferAttributesSupportedByHashAggregate = HashAggregateExec.supportsAggregate(
+    val useHash = HashAggregateExec.supportsAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
-
-    if (aggBufferAttributesSupportedByHashAggregate && !hasTypedImperativeAggregate) {
+    if (useHash) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         groupingExpressions = groupingExpressions,

@@ -55,14 +55,7 @@ class SortBasedAggregationIterator(
 
     val genericMutableBuffer = new GenericMutableRow(bufferRowSize)
 
-    val allFieldsMutable = bufferSchema.map(_.dataType).forall(UnsafeRow.isMutable)
-
-    val hasTypedImperativeAggregate = aggregateFunctions.exists {
-      case agg: TypedImperativeAggregate[_] => true
-      case _ => false
-    }
-
-    val useUnsafeBuffer = allFieldsMutable && !hasTypedImperativeAggregate
+    val useUnsafeBuffer = bufferSchema.map(_.dataType).forall(UnsafeRow.isMutable)
 
     val buffer = if (useUnsafeBuffer) {
       val unsafeProjection =
