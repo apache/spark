@@ -590,6 +590,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.enabled</code></td>
+  <td>true</td>
+  <td>
+    Whether to run the web UI for the Spark application.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.killEnabled</code></td>
   <td>true</td>
   <td>
@@ -616,6 +623,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>1000</td>
   <td>
     How many stages the Spark UI and status APIs remember before garbage
+    collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.retainedTasks</code></td>
+  <td>100000</td>
+  <td>
+    How many tasks the Spark UI and status APIs remember before garbage
     collecting.
   </td>
 </tr>
@@ -1464,6 +1479,9 @@ Apart from these, the following properties are also available, and may be useful
         <td>false</td>
         <td>
             <p>Whether to enable SSL connections on all supported protocols.</p>
+
+            <p>When <code>spark.ssl.enabled</code> is configured, <code>spark.ssl.protocol</code>
+            is required.</p>
 
             <p>All the SSL settings like <code>spark.ssl.xxx</code> where <code>xxx</code> is a
             particular configuration property, denote the global configuration for all the supported

@@ -26,7 +26,10 @@ import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types._
 
-private[sql] class JacksonGenerator(schema: StructType, writer: Writer) {
+private[sql] class JacksonGenerator(
+    schema: StructType,
+    writer: Writer,
+    options: JSONOptions = new JSONOptions(Map.empty[String, String])) {
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to appropriate
   // JSON data. Here we are using `SpecializedGetters` rather than `InternalRow` so that
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
@@ -76,11 +79,15 @@ private[sql] class JacksonGenerator(schema: StructType, writer: Writer) {
 
     case TimestampType =>
       (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeString(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)).toString)
+        val timestampString =
+          options.timestampFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
+        gen.writeString(timestampString)
 
     case DateType =>
       (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeString(DateTimeUtils.toJavaDate(row.getInt(ordinal)).toString)
+        val dateString =
+          options.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
+        gen.writeString(dateString)
 
     case BinaryType =>
       (row: SpecializedGetters, ordinal: Int) =>

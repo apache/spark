@@ -498,7 +498,8 @@ private[spark] class BlockManager(
         diskStore.getBytes(blockId)
       } else if (level.useMemory && memoryStore.contains(blockId)) {
         // The block was not found on disk, so serialize an in-memory copy:
-        serializerManager.dataSerialize(blockId, memoryStore.getValues(blockId).get)
+        serializerManager.dataSerializeWithExplicitClassTag(
+          blockId, memoryStore.getValues(blockId).get, info.classTag)
       } else {
         handleLocalReadFailure(blockId)
       }
@@ -973,8 +974,16 @@ private[spark] class BlockManager(
         if (level.replication > 1) {
           val remoteStartTime = System.currentTimeMillis
           val bytesToReplicate = doGetLocalBytes(blockId, info)
+          // [SPARK-16550] Erase the typed classTag when using default serialization, since
+          // NettyBlockRpcServer crashes when deserializing repl-defined classes.
+          // TODO(ekl) remove this once the classloader issue on the remote end is fixed.
+          val remoteClassTag = if (!serializerManager.canUseKryo(classTag)) {
+            scala.reflect.classTag[Any]
+          } else {
+            classTag
+          }
           try {
-            replicate(blockId, bytesToReplicate, level, classTag)
+            replicate(blockId, bytesToReplicate, level, remoteClassTag)
           } finally {
             bytesToReplicate.dispose()
           }

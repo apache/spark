@@ -163,8 +163,7 @@ object DecimalLiteral {
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal protected (value: Any, dataType: DataType)
-  extends LeafExpression with CodegenFallback {
+case class Literal (value: Any, dataType: DataType) extends LeafExpression with CodegenFallback {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
@@ -246,8 +245,8 @@ case class Literal protected (value: Any, dataType: DataType)
     case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null => "NULL"
     case _ if value == null => s"CAST(NULL AS ${dataType.sql})"
     case (v: UTF8String, StringType) =>
-      // Escapes all backslashes and double quotes.
-      "\"" + v.toString.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+      // Escapes all backslashes and single quotes.
+      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
     case (v: Byte, ByteType) => v + "Y"
     case (v: Short, ShortType) => v + "S"
     case (v: Long, LongType) => v + "L"

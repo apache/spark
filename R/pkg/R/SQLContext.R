@@ -115,7 +115,7 @@ infer_type <- function(x) {
 #' Get Runtime Config from the current active SparkSession
 #'
 #' Get Runtime Config from the current active SparkSession.
-#' To change SparkSession Runtime Config, please see `sparkR.session()`.
+#' To change SparkSession Runtime Config, please see \code{sparkR.session()}.
 #'
 #' @param key (optional) The key of the config to get, if omitted, all config is returned
 #' @param defaultValue (optional) The default value of the config to return if they config is not
@@ -165,9 +165,9 @@ getDefaultSqlSource <- function() {
 #'
 #' Converts R data.frame or list into SparkDataFrame.
 #'
-#' @param data An RDD or list or data.frame
-#' @param schema a list of column names or named list (StructType), optional
-#' @return a SparkDataFrame
+#' @param data an RDD or list or data.frame.
+#' @param schema a list of column names or named list (StructType), optional.
+#' @return A SparkDataFrame.
 #' @rdname createDataFrame
 #' @export
 #' @examples
@@ -218,7 +218,7 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   }
 
   if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
-    row <- first(rdd)
+    row <- firstRDD(rdd)
     names <- if (is.null(schema)) {
       names(row)
     } else {
@@ -257,23 +257,25 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
 }
 
 createDataFrame <- function(x, ...) {
-  dispatchFunc("createDataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
+  dispatchFunc("createDataFrame(data, schema = NULL)", x, ...)
 }
 
+#' @param samplingRatio Currently not used.
 #' @rdname createDataFrame
 #' @aliases createDataFrame
 #' @export
 #' @method as.DataFrame default
 #' @note as.DataFrame since 1.6.0
 as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
-  createDataFrame(data, schema, samplingRatio)
+  createDataFrame(data, schema)
 }
 
+#' @param ... additional argument(s).
 #' @rdname createDataFrame
 #' @aliases as.DataFrame
 #' @export
-as.DataFrame <- function(x, ...) {
-  dispatchFunc("as.DataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
+as.DataFrame <- function(data, ...) {
+  dispatchFunc("as.DataFrame(data, schema = NULL)", data, ...)
 }
 
 #' toDF
@@ -398,7 +400,7 @@ read.orc <- function(path) {
 #'
 #' Loads a Parquet file, returning the result as a SparkDataFrame.
 #'
-#' @param path Path of file to read. A vector of multiple paths is allowed.
+#' @param path path of file to read. A vector of multiple paths is allowed.
 #' @return SparkDataFrame
 #' @rdname read.parquet
 #' @export
@@ -418,6 +420,7 @@ read.parquet <- function(x, ...) {
   dispatchFunc("read.parquet(...)", x, ...)
 }
 
+#' @param ... argument(s) passed to the method.
 #' @rdname read.parquet
 #' @name parquetFile
 #' @export
@@ -717,16 +720,17 @@ dropTempView <- function(viewName) {
 #'
 #' Returns the dataset in a data source as a SparkDataFrame
 #'
-#' The data source is specified by the `source` and a set of options(...).
-#' If `source` is not specified, the default data source configured by
+#' The data source is specified by the \code{source} and a set of options(...).
+#' If \code{source} is not specified, the default data source configured by
 #' "spark.sql.sources.default" will be used. \cr
-#' Similar to R read.csv, when `source` is "csv", by default, a value of "NA" will be interpreted
-#' as NA.
+#' Similar to R read.csv, when \code{source} is "csv", by default, a value of "NA" will be
+#' interpreted as NA.
 #'
 #' @param path The path of files to load
 #' @param source The name of external data source
 #' @param schema The data schema defined in structType
 #' @param na.strings Default string value for NA when source is "csv"
+#' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.df
 #' @name read.df
@@ -787,14 +791,15 @@ loadDF <- function(x, ...) {
 #' Creates an external table based on the dataset in a data source,
 #' Returns a SparkDataFrame associated with the external table.
 #'
-#' The data source is specified by the `source` and a set of options(...).
-#' If `source` is not specified, the default data source configured by
+#' The data source is specified by the \code{source} and a set of options(...).
+#' If \code{source} is not specified, the default data source configured by
 #' "spark.sql.sources.default" will be used.
 #'
-#' @param tableName A name of the table
-#' @param path The path of files to load
-#' @param source the name of external data source
-#' @return SparkDataFrame
+#' @param tableName a name of the table.
+#' @param path the path of files to load.
+#' @param source the name of external data source.
+#' @param ... additional argument(s) passed to the method.
+#' @return A SparkDataFrame.
 #' @rdname createExternalTable
 #' @export
 #' @examples
@@ -825,21 +830,22 @@ createExternalTable <- function(x, ...) {
 #' Additional JDBC database connection properties can be set (...)
 #'
 #' Only one of partitionColumn or predicates should be set. Partitions of the table will be
-#' retrieved in parallel based on the `numPartitions` or by the predicates.
+#' retrieved in parallel based on the \code{numPartitions} or by the predicates.
 #'
 #' Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
 #' your external database systems.
 #'
-#' @param url JDBC database url of the form `jdbc:subprotocol:subname`
+#' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}
 #' @param tableName the name of the table in the external database
 #' @param partitionColumn the name of a column of integral type that will be used for partitioning
-#' @param lowerBound the minimum value of `partitionColumn` used to decide partition stride
-#' @param upperBound the maximum value of `partitionColumn` used to decide partition stride
-#' @param numPartitions the number of partitions, This, along with `lowerBound` (inclusive),
-#'                      `upperBound` (exclusive), form partition strides for generated WHERE
-#'                      clause expressions used to split the column `partitionColumn` evenly.
+#' @param lowerBound the minimum value of \code{partitionColumn} used to decide partition stride
+#' @param upperBound the maximum value of \code{partitionColumn} used to decide partition stride
+#' @param numPartitions the number of partitions, This, along with \code{lowerBound} (inclusive),
+#'                      \code{upperBound} (exclusive), form partition strides for generated WHERE
+#'                      clause expressions used to split the column \code{partitionColumn} evenly.
 #'                      This defaults to SparkContext.defaultParallelism when unset.
 #' @param predicates a list of conditions in the where clause; each one defines one partition
+#' @param ... additional JDBC database connection named properties.
 #' @return SparkDataFrame
 #' @rdname read.jdbc
 #' @name read.jdbc

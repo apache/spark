@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.ServiceLoader
+import java.util.{ServiceConfigurationError, ServiceLoader}
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
@@ -124,50 +124,63 @@ case class DataSource(
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
 
-    serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider)).toList match {
-      // the provider format did not match any given registered aliases
-      case Nil =>
-        try {
-          Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {
-            case Success(dataSource) =>
-              // Found the data source using fully qualified path
-              dataSource
-            case Failure(error) =>
-              if (provider.toLowerCase == "orc" ||
+    try {
+      serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider)).toList match {
+        // the provider format did not match any given registered aliases
+        case Nil =>
+          try {
+            Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {
+              case Success(dataSource) =>
+                // Found the data source using fully qualified path
+                dataSource
+              case Failure(error) =>
+                if (provider.toLowerCase == "orc" ||
                   provider.startsWith("org.apache.spark.sql.hive.orc")) {
-                throw new AnalysisException(
-                  "The ORC data source must be used with Hive support enabled")
-              } else if (provider.toLowerCase == "avro" ||
+                  throw new AnalysisException(
+                    "The ORC data source must be used with Hive support enabled")
+                } else if (provider.toLowerCase == "avro" ||
                   provider == "com.databricks.spark.avro") {
-                throw new AnalysisException(
-                  s"Failed to find data source: ${provider.toLowerCase}. Please use Spark " +
-                    "package http://spark-packages.org/package/databricks/spark-avro")
+                  throw new AnalysisException(
+                    s"Failed to find data source: ${provider.toLowerCase}. Please use Spark " +
+                      "package http://spark-packages.org/package/databricks/spark-avro")
+                } else {
+                  throw new ClassNotFoundException(
+                    s"Failed to find data source: $provider. Please find packages at " +
+                      "http://spark-packages.org",
+                    error)
+                }
+            }
+          } catch {
+            case e: NoClassDefFoundError => // This one won't be caught by Scala NonFatal
+              // NoClassDefFoundError's class name uses "/" rather than "." for packages
+              val className = e.getMessage.replaceAll("/", ".")
+              if (spark2RemovedClasses.contains(className)) {
+                throw new ClassNotFoundException(s"$className was removed in Spark 2.0. " +
+                  "Please check if your library is compatible with Spark 2.0", e)
               } else {
-                throw new ClassNotFoundException(
-                  s"Failed to find data source: $provider. Please find packages at " +
-                    "http://spark-packages.org",
-                  error)
+                throw e
               }
           }
-        } catch {
-          case e: NoClassDefFoundError => // This one won't be caught by Scala NonFatal
-            // NoClassDefFoundError's class name uses "/" rather than "." for packages
-            val className = e.getMessage.replaceAll("/", ".")
-            if (spark2RemovedClasses.contains(className)) {
-              throw new ClassNotFoundException(s"$className was removed in Spark 2.0. " +
-                "Please check if your library is compatible with Spark 2.0", e)
-            } else {
-              throw e
-            }
+        case head :: Nil =>
+          // there is exactly one registered alias
+          head.getClass
+        case sources =>
+          // There are multiple registered aliases for the input
+          sys.error(s"Multiple sources found for $provider " +
+            s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
+            "please specify the fully qualified class name.")
+      }
+    } catch {
+      case e: ServiceConfigurationError if e.getCause.isInstanceOf[NoClassDefFoundError] =>
+        // NoClassDefFoundError's class name uses "/" rather than "." for packages
+        val className = e.getCause.getMessage.replaceAll("/", ".")
+        if (spark2RemovedClasses.contains(className)) {
+          throw new ClassNotFoundException(s"Detected an incompatible DataSourceRegister. " +
+            "Please remove the incompatible library from classpath or upgrade it. " +
+            s"Error: ${e.getMessage}", e)
+        } else {
+          throw e
         }
-      case head :: Nil =>
-        // there is exactly one registered alias
-        head.getClass
-      case sources =>
-        // There are multiple registered aliases for the input
-        sys.error(s"Multiple sources found for $provider " +
-          s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
-          "please specify the fully qualified class name.")
     }
   }
 
@@ -381,13 +394,7 @@ case class DataSource(
             sparkSession, globbedPaths, options, partitionSchema, !checkPathExist)
 
         val dataSchema = userSpecifiedSchema.map { schema =>
-          val equality =
-            if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-              org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
-            } else {
-              org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
-            }
-
+          val equality = sparkSession.sessionState.conf.resolver
           StructType(schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
         }.orElse {
           format.inferSchema(
@@ -417,7 +424,7 @@ case class DataSource(
     relation
   }
 
-  /** Writes the give [[DataFrame]] out to this [[DataSource]]. */
+  /** Writes the given [[DataFrame]] out to this [[DataSource]]. */
   def write(
       mode: SaveMode,
       data: DataFrame): BaseRelation = {
