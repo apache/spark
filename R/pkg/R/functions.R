@@ -3206,8 +3206,9 @@ setMethod("lag",
 #' lead
 #'
 #' Window function: returns the value that is \code{offset} rows after the current row, and
-#' NULL if there is less than \code{offset} rows after the current row. For example,
-#' an \code{offset} of one will return the next row at any given point in the window partition.
+#' \code{defaultValue} if there is less than \code{offset} rows after the current row.
+#' For example, an \code{offset} of one will return the next row at any given point
+#' in the window partition.
 #'
 #' This is equivalent to the \code{LEAD} function in SQL.
 #'
