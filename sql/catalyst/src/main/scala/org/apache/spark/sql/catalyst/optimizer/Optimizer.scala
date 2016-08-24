@@ -632,9 +632,7 @@ object CombineScanners extends Rule[LogicalPlan] with PredicateHelper {
         case a: Alias => (a.toAttribute, a)
       })
 
-      child.copy(projectList = fields.map { field =>
-        aliasMap.getOrElse(field.toAttribute, field)
-      })
+      child.copy(projectList = buildCleanedProjectList(fields, child.projectList))
     case Filter(condition, child: Scanner) if child.projectList.forall(_.deterministic) =>
       val aliasMap = AttributeMap(child.projectList.collect {
         case a: Alias => (a.toAttribute, a.child)
@@ -645,7 +643,30 @@ object CombineScanners extends Rule[LogicalPlan] with PredicateHelper {
       child.copy(filters = newFilters)
     case Scanner(fields, filters, child: Scanner) =>
       val newFilters = filters ++ child.filters
-      child.copy(projectList = fields, filters = newFilters)
+      child.copy(projectList = buildCleanedProjectList(fields, child.projectList),
+        filters = newFilters)
+  }
+
+  private def buildCleanedProjectList(
+      upper: Seq[NamedExpression],
+      lower: Seq[NamedExpression]): Seq[NamedExpression] = {
+    // Create a map of Aliases to their values from the lower projection.
+    // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
+    val aliases = AttributeMap(lower.collect {
+      case a: Alias => (a.toAttribute, a)
+    })
+
+    // Substitute any attributes that are produced by the lower projection, so that we safely
+    // eliminate it.
+    // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
+    // Use transformUp to prevent infinite recursion.
+    val rewrittenUpper = upper.map(_.transformUp {
+      case a: Attribute => aliases.getOrElse(a, a)
+    })
+    // collapse upper and lower Projects may introduce unnecessary Aliases, trim them here.
+    rewrittenUpper.map { p =>
+      CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
+    }
   }
 }
 

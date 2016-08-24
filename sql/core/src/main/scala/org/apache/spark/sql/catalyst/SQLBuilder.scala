@@ -126,6 +126,9 @@ class SQLBuilder private (
     case p: Project =>
       projectToSQL(p, isDistinct = false)
 
+    case s: Scanner =>
+      scannerToSQL(s)
+
     case a @ Aggregate(_, _, e @ Expand(_, _, p: Project)) if isGroupingSet(a, e, p) =>
       groupingSetToSQL(a, e, p)
 
@@ -234,6 +237,26 @@ class SQLBuilder private (
       if (plan.child == OneRowRelation) "" else "FROM",
       toSQL(plan.child)
     )
+  }
+
+  private def scannerToSQL(scanner: Scanner): String = {
+    if (scanner.filters.nonEmpty) {
+      build(
+        "SELECT",
+        scanner.projectList.map(_.sql).mkString(", "),
+        if (scanner.child == OneRowRelation) "" else "FROM",
+        toSQL(scanner.child),
+        "WHERE",
+        scanner.filters.reduce(And).sql
+      )
+    } else {
+      build(
+        "SELECT",
+        scanner.projectList.map(_.sql).mkString(","),
+        if (scanner.child == OneRowRelation) "" else "FROM",
+        toSQL(scanner.child)
+      )
+    }
   }
 
   private def scriptTransformationToSQL(plan: ScriptTransformation): String = {
@@ -452,10 +475,10 @@ class SQLBuilder private (
 
     object ResolveSQLTable extends Rule[LogicalPlan] {
       override def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
-        case Sample(lowerBound, upperBound, _, _, ExtractSQLTable(table)) =>
-          aliasColumns(table.withSample(lowerBound, upperBound))
-        case ExtractSQLTable(table) =>
-          aliasColumns(table)
+        case Sample(lowerBound, upperBound, _, _, s @ Scanner(_, _, ExtractSQLTable(table))) =>
+          addSubquery(s.copy(child = aliasColumns(table.withSample(lowerBound, upperBound))))
+        case s @ Scanner(_, _, ExtractSQLTable(table)) =>
+          addSubquery(s.copy(child = aliasColumns(table)))
       }
 
       /**
