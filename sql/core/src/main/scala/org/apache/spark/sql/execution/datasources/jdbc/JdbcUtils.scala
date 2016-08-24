@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
+import org.apache.spark.TaskContext
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
@@ -134,6 +135,7 @@ object JdbcUtils extends Logging {
 
   /**
    * Retrieve standard jdbc types.
+   *
    * @param dt The datatype (e.g. [[org.apache.spark.sql.types.StringType]])
    * @return The default JdbcType for this DataType
    */
@@ -257,10 +259,9 @@ object JdbcUtils extends Logging {
   /**
    * Convert a [[ResultSet]] into an iterator of Catalyst Rows.
    */
-  def resultSetToRows(
-      resultSet: ResultSet,
-      schema: StructType,
-      inputMetrics: InputMetrics): Iterator[Row] = {
+  def resultSetToRows(resultSet: ResultSet, schema: StructType): Iterator[Row] = {
+    val inputMetrics =
+      Option(TaskContext.get()).map(_.taskMetrics().inputMetrics).getOrElse(new InputMetrics)
     val encoder = RowEncoder(schema).resolveAndBind()
     val internalRows = resultSetToSparkInternalRows(resultSet, schema, inputMetrics)
     internalRows.map(encoder.fromRow)
