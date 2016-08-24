@@ -261,6 +261,13 @@ class TypeCoercionSuite extends PlanTest {
         :: Cast(Literal(1), DecimalType(22, 0))
         :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
         :: Nil))
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      Coalesce(Literal.create(null, TimestampType)
+        :: Literal.create(null, DateType)
+        :: Nil),
+      Coalesce(Literal.create(null, TimestampType).cast(TimestampType)
+        :: Literal.create(null, DateType).cast(TimestampType)
+        :: Nil))
   }
 
   test("CreateArray casts") {
@@ -301,6 +308,14 @@ class TypeCoercionSuite extends PlanTest {
         :: Literal.create(null, DecimalType(22, 10)).cast(DecimalType(38, 38))
         :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 38))
         :: Nil))
+
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      CreateArray(Literal.create(null, TimestampType)
+        :: Literal.create(null, DateType)
+        :: Nil),
+      CreateArray(Literal.create(null, TimestampType).cast(TimestampType)
+        :: Literal.create(null, DateType).cast(TimestampType)
+        :: Nil))
   }
 
   test("CreateMap casts") {
@@ -327,6 +342,18 @@ class TypeCoercionSuite extends PlanTest {
         :: Literal.create(2.0, FloatType).cast(DoubleType)
         :: Literal("b")
         :: Nil))
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      CreateMap(Literal.create(null, TimestampType)
+        :: Literal("a")
+        :: Literal.create(null, DateType)
+        :: Literal("b")
+        :: Nil),
+      CreateMap(Literal.create(null, TimestampType).cast(TimestampType)
+        :: Literal("a")
+        :: Literal.create(null, DateType).cast(TimestampType)
+        :: Literal("b")
+        :: Nil))
+
     // type coercion for map values
     ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateMap(Literal(1)
@@ -350,6 +377,17 @@ class TypeCoercionSuite extends PlanTest {
         :: Literal(2)
         :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 38))
         :: Nil))
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      CreateMap(Literal(1)
+        :: Literal.create(null, TimestampType)
+        :: Literal(2)
+        :: Literal.create(null, DateType)
+        :: Nil),
+      CreateMap(Literal(1)
+        :: Literal.create(null, TimestampType).cast(TimestampType)
+        :: Literal(2)
+        :: Literal.create(null, DateType).cast(TimestampType)
+        :: Nil))
     // type coercion for both map keys and values
     ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateMap(Literal(1)
@@ -361,6 +399,17 @@ class TypeCoercionSuite extends PlanTest {
         :: Cast(Literal("a"), StringType)
         :: Cast(Literal(2.0), DoubleType)
         :: Cast(Literal(3.0), StringType)
+        :: Nil))
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      CreateMap(Literal.create(null, DateType)
+        :: Literal.create(null, TimestampType)
+        :: Literal.create(null, TimestampType)
+        :: Literal.create(null, DateType)
+        :: Nil),
+      CreateMap(Literal.create(null, DateType).cast(TimestampType)
+        :: Literal.create(null, TimestampType).cast(TimestampType)
+        :: Literal.create(null, TimestampType).cast(TimestampType)
+        :: Literal.create(null, DateType).cast(TimestampType)
         :: Nil))
   }
 
@@ -411,6 +460,13 @@ class TypeCoercionSuite extends PlanTest {
           :: Literal(1).cast(DecimalType(25, 5))
           :: Literal.create(null, DecimalType(10, 5)).cast(DecimalType(25, 5))
           :: Nil))
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
+        operator(Literal.create(null, TimestampType)
+          :: Literal.create(null, DateType)
+          :: Nil),
+        operator(Literal.create(null, TimestampType).cast(TimestampType)
+          :: Literal.create(null, DateType).cast(TimestampType)
+          :: Nil))
     }
   }
 
@@ -444,6 +500,14 @@ class TypeCoercionSuite extends PlanTest {
     ruleTest(rule,
       If(AssertTrue(Literal.create(false, BooleanType)), Literal(1), Literal(2)),
       If(Cast(AssertTrue(Literal.create(false, BooleanType)), BooleanType), Literal(1), Literal(2)))
+
+    ruleTest(rule,
+      If(Literal(true),
+        Literal.create(null, DateType),
+        Literal.create(null, TimestampType)),
+      If(Literal(true),
+        Literal.create(null, DateType).cast(TimestampType),
+        Literal.create(null, TimestampType)))
   }
 
   test("type coercion for CaseKeyWhen") {
@@ -464,6 +528,15 @@ class TypeCoercionSuite extends PlanTest {
       CaseWhen(Seq((Literal(true), Literal(100L))), Literal.create(1, DecimalType(7, 2))),
       CaseWhen(Seq((Literal(true), Cast(Literal(100L), DecimalType(22, 2)))),
         Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2)))
+    )
+
+    ruleTest(TypeCoercion.CaseWhenCoercion,
+      CaseWhen(
+        Seq((Literal(true), Literal.create(null, DateType))),
+        Literal.create(null, TimestampType)),
+      CaseWhen(
+        Seq((Literal(true), Literal.create(null, DateType).cast(TimestampType))),
+        Literal.create(null, TimestampType))
     )
   }
 
@@ -546,15 +619,18 @@ class TypeCoercionSuite extends PlanTest {
       AttributeReference("i", IntegerType)(),
       AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
       AttributeReference("b", ByteType)(),
-      AttributeReference("d", DoubleType)())
+      AttributeReference("d", DoubleType)(),
+      AttributeReference("e", DateType)())
     val secondTable = LocalRelation(
       AttributeReference("s", StringType)(),
       AttributeReference("d", DecimalType(2, 1))(),
       AttributeReference("f", FloatType)(),
-      AttributeReference("l", LongType)())
+      AttributeReference("l", LongType)(),
+      AttributeReference("q", TimestampType)())
 
     val wt = TypeCoercion.WidenSetOperationTypes
-    val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
+    val expectedTypes =
+      Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType, TimestampType)
 
     val r1 = wt(Except(firstTable, secondTable)).asInstanceOf[Except]
     val r2 = wt(Intersect(firstTable, secondTable)).asInstanceOf[Intersect]
@@ -575,25 +651,30 @@ class TypeCoercionSuite extends PlanTest {
       AttributeReference("i", IntegerType)(),
       AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
       AttributeReference("b", ByteType)(),
-      AttributeReference("d", DoubleType)())
+      AttributeReference("d", DoubleType)(),
+      AttributeReference("e", DateType)())
     val secondTable = LocalRelation(
       AttributeReference("s", StringType)(),
       AttributeReference("d", DecimalType(2, 1))(),
       AttributeReference("f", FloatType)(),
-      AttributeReference("l", LongType)())
+      AttributeReference("l", LongType)(),
+      AttributeReference("e", DateType)())
     val thirdTable = LocalRelation(
       AttributeReference("m", StringType)(),
       AttributeReference("n", DecimalType.SYSTEM_DEFAULT)(),
       AttributeReference("p", FloatType)(),
-      AttributeReference("q", DoubleType)())
+      AttributeReference("q", DoubleType)(),
+      AttributeReference("e", TimestampType)())
     val forthTable = LocalRelation(
       AttributeReference("m", StringType)(),
       AttributeReference("n", DecimalType.SYSTEM_DEFAULT)(),
       AttributeReference("p", ByteType)(),
-      AttributeReference("q", DoubleType)())
+      AttributeReference("q", DoubleType)(),
+      AttributeReference("e", TimestampType)())
 
     val wt = TypeCoercion.WidenSetOperationTypes
-    val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
+    val expectedTypes =
+      Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType, TimestampType)
 
     val unionRelation = wt(
       Union(firstTable :: secondTable :: thirdTable :: forthTable :: Nil)).asInstanceOf[Union]
