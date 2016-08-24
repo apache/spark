@@ -29,11 +29,17 @@ elapsedSecs <- function() {
 
 # Raws (binary data) require a list column in a data.frame
 # argument inputData should be a list of rows, with each row a list
+# Clark: Just for Testing
+#r = serialize(1, NULL)
+#inputData <- list(list(1, r), list(2, r), list(3, r))
+#rawcolumns <- c(FALSE, TRUE)
+
 rbind_with_raws <- function(inputData, rawcolumns){
-  args <- c(inputData, stringsAsFactors = FALSE)
-  inputData <- as.data.frame(do.call(rbind, args))
-  inputData[!rawcolumns] <- lapply(inputData[!rawcolumns], unlist)
-  inputData
+  listmatrix <- do.call(rbind, inputData)
+  # A dataframe with all list columns
+  out <- as.data.frame(listmatrix)
+  out[!rawcolumns] <- lapply(out[!rawcolumns], unlist)
+  out
 }
 
 compute <- function(mode, partition, serializer, deserializer, key,
@@ -48,14 +54,15 @@ compute <- function(mode, partition, serializer, deserializer, key,
 
 # TODO Clark: This didn't change error message
 # Handle binary data types
-#rawcolumns <- ("raw" == sapply(row1, class))
-#if(any(rawcolumns)){
-#  inputData <- rbind_with_raws(inputData, rawcolumns)
-#} else {
-#  inputData <- do.call(rbind.data.frame, inputData)
-#}
+row1 = inputData[[1]]
+rawcolumns <- ("raw" == sapply(row1, class))
+if(any(rawcolumns)){
+  inputData <- rbind_with_raws(inputData, rawcolumns)
+} else {
+  inputData <- do.call(rbind.data.frame, inputData)
+}
 
-      inputData <- do.call(rbind.data.frame, inputData)
+      #inputData <- do.call(rbind.data.frame, inputData)
       options(stringsAsFactors = oldOpt)
 
       names(inputData) <- colNames

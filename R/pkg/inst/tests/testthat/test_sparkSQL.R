@@ -2193,6 +2193,7 @@ test_that("Histogram", {
 })
 
 test_that("dapply() and dapplyCollect() on a DataFrame", {
+
   df <- createDataFrame(
           list(list(1L, 1, "1"), list(2L, 2, "2"), list(3L, 3, "3")),
           c("a", "b", "c"))

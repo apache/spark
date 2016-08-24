@@ -697,3 +697,11 @@ is_master_local <- function(master) {
 is_sparkR_shell <- function() {
   grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
 }
+
+.onAttach <- function(libname, pkgname) {
+  ast <- "************************************************************"
+  hiclark <- "Clark's dev version!!"
+  date <- "Fri Aug 19 16:25:47 KST 2016"
+  msg <- "This is the PATCHED version"
+  packageStartupMessage(paste(ast, hiclark, date, msg, ast, sep="\n"))
+}
