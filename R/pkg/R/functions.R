@@ -3172,7 +3172,7 @@ setMethod("dense_rank",
 #' @param x the column as a character string or a Column to compute on.
 #' @param offset the number of rows back from the current row from which to obtain a value.
 #'               If not specified, the default is 1.
-#' @param defaultValue default to use when the offset row does not exist.
+#' @param defaultValue (optional) default to use when the offset row does not exist.
 #' @param ... further arguments to be passed to or from other methods.
 #' @rdname lag
 #' @name lag
@@ -3212,9 +3212,10 @@ setMethod("lag",
 #'
 #' This is equivalent to the \code{LEAD} function in SQL.
 #'
-#' @param x Column to compute on
-#' @param offset Number of rows to offset. If not specified, the default is 1.
-#' @param defaultValue (Optional) default value to use
+#' @param x the column as a character string or a Column to compute on.
+#' @param offset the number of rows after the current row from which to obtain a value.
+#'               If not specified, the default is 1.
+#' @param defaultValue (optional) default to use when the offset row does not exist.
 #'
 #' @rdname lead
 #' @name lead
@@ -3227,7 +3228,7 @@ setMethod("lag",
 #'   # Partition by am (transmission) and order by hp (horsepower)
 #'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'
-#'   # Lag mpg values by 1 row on the partition-and-ordered table
+#'   # Lead mpg values by 1 row on the partition-and-ordered table
 #'   out <- select(df, over(lead(df$mpg), ws), df$mpg, df$hp, df$am)
 #' }
 #' @note lead since 1.6.0
