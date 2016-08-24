@@ -138,10 +138,10 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Update credentials manually. When this method is invoked AM will renew the credentials,
-   * executors and driver (in client mode) will update the credentials accordingly.
+   * Update credentials manually. This will trigger AM will renew the credentials immediately,
+   * also executors and driver (in client mode) will update the credentials accordingly.
    *
-   * Note this will only be worked in YARN cluster manager.
+   * Note this will only be worked under YARN cluster manager.
    */
   def updateCredentials(sc: SparkContext): Unit = { }
 
