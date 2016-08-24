@@ -22,7 +22,7 @@ import java.util.Properties
 
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType}
+import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, ShortType}
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
@@ -109,5 +109,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     df.select(df.queryExecution.analyzed.output.map { a =>
       Column(Literal.create(null, a.dataType)).as(a.name)
     }: _*).write.jdbc(jdbcUrl, "public.barcopy2", new Properties)
+  }
+
+  test("Creating a table with shorts and floats") {
+    sqlContext.createDataFrame(Seq((1.0f, 1.toShort)))
+      .write.jdbc(jdbcUrl, "shortfloat", new Properties)
+    val schema = sqlContext.read.jdbc(jdbcUrl, "shorfloat", new Properties).schema
+    assert(schema(0).dataType == FloatType)
+    assert(schema(1).dataType == ShortType)
   }
 }
