@@ -445,27 +445,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Nil)
   }
 
-  test("left semi greater than predicate") {
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2"),
-        Seq(Row(3, 1), Row(3, 2))
-      )
-    }
-  }
-
-  test("left semi greater than predicate and equal operator") {
-    checkAnswer(
-      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.b and x.a >= y.a + 2"),
-      Seq(Row(3, 1), Row(3, 2))
-    )
-
-    checkAnswer(
-      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.a and x.a >= y.b + 1"),
-      Seq(Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2))
-    )
-  }
-
   test("agg") {
     checkAnswer(
       sql("SELECT a, SUM(b) FROM testData2 GROUP BY a"),
