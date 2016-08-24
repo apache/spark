@@ -766,6 +766,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
       val constraints = join.constraints.filter { c =>
         c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)
       }
+      println("const: " + constraints)
       // Remove those constraints that are already enforced by either the left or the right child
       val additionalConstraints = constraints -- (left.constraints ++ right.constraints)
       val newConditionOpt = conditionOpt match {
@@ -775,6 +776,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
         case None =>
           additionalConstraints.reduceOption(And)
       }
+      println(newConditionOpt)
       if (newConditionOpt.isDefined) Join(left, right, joinType, newConditionOpt) else join
   }
 }
