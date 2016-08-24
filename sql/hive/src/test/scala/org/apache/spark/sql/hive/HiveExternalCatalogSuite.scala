@@ -28,14 +28,14 @@ import org.apache.spark.sql.catalyst.catalog._
 class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
   private val externalCatalog: HiveExternalCatalog = {
-    new HiveExternalCatalog(new SparkConf, new Configuration)
+    val catalog = new HiveExternalCatalog(new SparkConf, new Configuration)
+    catalog.client.reset()
+    catalog
   }
 
   protected override val utils: CatalogTestUtils = new CatalogTestUtils {
     override val tableInputFormat: String = "org.apache.hadoop.mapred.SequenceFileInputFormat"
     override val tableOutputFormat: String = "org.apache.hadoop.mapred.SequenceFileOutputFormat"
-    // We create a metastore at a temp location to avoid any potential
-    // conflict of having multiple connections to a single derby instance.
     override def newEmptyCatalog(): ExternalCatalog = externalCatalog
   }
 
