@@ -1,3 +1,41 @@
+-- A data set containing uppercase column names and column values
+CREATE OR REPLACE TEMPORARY VIEW lowerCaseData AS SELECT * FROM VALUES
+(1, "a"),
+(2, "b"),
+(3, "c"),
+(4, "d")
+as lowerCaseData(n, l);
+
+-- A data set containing uppercase column names and column values
+CREATE OR REPLACE TEMPORARY VIEW upperCaseData AS SELECT * FROM VALUES
+(1, "A"),
+(2, "B"),
+(3, "C"),
+(4, "D"),
+(5, "E"),
+(6, "F")
+as upperCaseData(N, L);
+
+-- A data set containing null
+CREATE OR REPLACE TEMPORARY VIEW nullData AS SELECT * FROM VALUES
+(201, null),
+(86, "val_86"),
+(null, "val_null"),
+(165, "val_165"),
+(null, null),
+(330, "val_330"),
+(165, null)
+as nullData(key, value);
+
+-- A data set containing duplicate rows
+CREATE OR REPLACE TEMPORARY VIEW duplicateRowData AS SELECT * FROM VALUES
+(251, "val_251"),
+(86, "val_86"),
+(165, "val_165"),
+(330, "val_330"),
+(165, "val_165")
+as duplicateRowData(key, value);
+
 -- basic full outer join
 SELECT * FROM
   (SELECT * FROM upperCaseData WHERE N <= 4) leftTable FULL OUTER JOIN
@@ -228,7 +266,7 @@ SELECT * FROM duplicateRowData src1
 FROM
 (SELECT duplicateRowData.* FROM duplicateRowData sort by key) x
 LEFT OUTER JOIN
-(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Y
+(SELECT nullData.* FROM nullData sort by value) Y
 ON (x.key = Y.key)
 select Y.key,Y.value;
 
@@ -236,7 +274,7 @@ select Y.key,Y.value;
 FROM
 (SELECT duplicateRowData.* FROM duplicateRowData sort by key) x
 RIGHT OUTER JOIN
-(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Y
+(SELECT nullData.* FROM nullData sort by value) Y
 ON (x.key = Y.key)
 select Y.key,Y.value;
 
@@ -253,20 +291,20 @@ select Y.key,Y.value;
 
 -- left + left outer with sorted by nested table expression
 FROM
-(SELECT duplicateRowData.* FROM duplicateRowData sort by key) x
+(SELECT nullData.* FROM nullData sort by key) x
 LEFT OUTER JOIN
 (SELECT duplicateRowData.* FROM duplicateRowData sort by value) Y
 ON (x.key = Y.key)
 LEFT OUTER JOIN
-(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Z
+(SELECT nullData.* FROM nullData sort by value) Z
 ON (x.key = Z.key)
 select Y.key,Y.value;
 
 -- left + right outer with sorted by nested table expression
 FROM
-(SELECT duplicateRowData.* FROM duplicateRowData sort by key) x
+(SELECT nullData.* FROM nullData sort by key) x
 LEFT OUTER JOIN
-(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Y
+(SELECT nullData.* FROM nullData sort by value) Y
 ON (x.key = Y.key)
 RIGHT OUTER JOIN
 (SELECT duplicateRowData.* FROM duplicateRowData sort by value) Z
@@ -277,7 +315,7 @@ select Y.key,Y.value;
 FROM
 (SELECT duplicateRowData.* FROM duplicateRowData sort by key) x
 RIGHT OUTER JOIN
-(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Y
+(SELECT nullData.* FROM nullData sort by value) Y
 ON (x.key = Y.key)
 RIGHT OUTER JOIN
 (SELECT duplicateRowData.* FROM duplicateRowData sort by value) Z
@@ -288,7 +326,7 @@ select Y.key,Y.value;
 FROM
 (SELECT duplicateRowData.* FROM duplicateRowData sort by key) x
 RIGHT OUTER JOIN
-(SELECT duplicateRowData.* FROM duplicateRowData sort by value) Y
+(SELECT nullData.* FROM nullData sort by value) Y
 ON (x.key = Y.key)
 JOIN
 (SELECT duplicateRowData.* FROM duplicateRowData sort by value) Z

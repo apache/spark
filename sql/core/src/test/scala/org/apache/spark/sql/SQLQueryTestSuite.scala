@@ -247,11 +247,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
       .createOrReplaceTempView("uniqueRowData")
 
-    // A data set containing duplicate values for each column (but all the rows are unique)
-    Seq((1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2))
-      .toDF("a", "b")
-      .createOrReplaceTempView("duplicateColumnValueData")
-
     // A data set containing a complex data type: ARRAY
     ((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
       .toDF("arraycol", "nestedarraycol")
@@ -265,59 +260,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       Tuple1(Map(1 -> "a5")) :: Nil)
       .toDF("mapcol")
       .createOrReplaceTempView("mapdata")
-
-    // A data set containing uppercase column names and column values
-    Seq((1, "a"), (2, "b"), (3, "c"), (4, "d"))
-      .toDF("n", "l")
-      .createOrReplaceTempView("lowerCaseData")
-
-    // A data set containing uppercase column names and column values
-    Seq((1, "A"), (2, "B"), (3, "C"), (4, "D"), (5, "E"), (6, "F"))
-      .toDF("N", "L")
-      .createOrReplaceTempView("upperCaseData")
-
-    // A data set containing duplicate rows
-    Seq((251, "val_251"), (86, "val_86"), (165, "val_165"), (330, "val_330"), (165, "val_165"))
-      .toDF("key", "value")
-      .createOrReplaceTempView("duplicateRowData")
-
-    // A data set containing null
-    session.sql(
-      """
-        |CREATE OR REPLACE TEMPORARY VIEW nullData AS SELECT * FROM VALUES
-        |(201, null),
-        |(86, "val_86"),
-        |(null, "val_null"),
-        |(165, "val_165"),
-        |(null, null),
-        |(330, "val_330"),
-        |(165, null)
-        |as nullData(key, value)
-      """.stripMargin)
-
-    // A data set with logical partition columns ("ds" and "hr")
-    Seq((251, "val_251", "2008-04-08", "11"),
-      (251, "val_251", "2008-04-09", "11"),
-      (251, "val_251", "2008-04-08", "12"),
-      (251, "val_251", "2008-04-09", "12"),
-      (86, "val_86", "2008-04-08", "11"),
-      (86, "val_86", "2008-04-09", "11"),
-      (86, "val_86", "2008-04-08", "12"),
-      (86, "val_86", "2008-04-09", "12"),
-      (165, "val_165", "2008-04-08", "11"),
-      (165, "val_165", "2008-04-09", "11"),
-      (165, "val_165", "2008-04-08", "12"),
-      (165, "val_165", "2008-04-09", "12"),
-      (330, "val_330", "2008-04-08", "11"),
-      (330, "val_330", "2008-04-09", "11"),
-      (330, "val_330", "2008-04-08", "12"),
-      (330, "val_330", "2008-04-09", "12"),
-      (165, "val_165", "2008-04-08", "11"),
-      (165, "val_165", "2008-04-09", "11"),
-      (165, "val_165", "2008-04-08", "12"),
-      (165, "val_165", "2008-04-09", "12"))
-      .toDF("key", "value", "ds", "hr")
-      .createOrReplaceTempView("partitionedData")
   }
 
   private val originalTimeZone = TimeZone.getDefault
