@@ -496,7 +496,7 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   final override def merge(buffer: MutableRow, inputBuffer: InternalRow): Unit = {
     val bufferObject = getField[T](buffer, mutableAggBufferOffset)
     // The inputBuffer stores serialized aggregation buffer object produced by partial aggregate
-    val inputObject = deserialize(getField[Array[Byte]](inputBuffer, inputAggBufferOffset))
+    val inputObject = deserialize(inputBuffer.getBinary(inputAggBufferOffset))
     merge(bufferObject, inputObject)
   }
 
