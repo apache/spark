@@ -204,16 +204,16 @@ setMethod("rangeBetween",
 #' @family colum_func
 #' @export
 #' @examples \dontrun{
-#'   df <- createDataFrame(iris)
+#'   df <- createDataFrame(mtcars)
 #'
-#'   # Partition by Species and order by Sepal_Length
-#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'
-#'   # Rank on Sepal_Length within each partition
-#'   out <- select(df, over(rank(), ws), df$Sepal_Length, df$Species)
+#'   # Rank on hp within each partition
+#'   out <- select(df, over(rank(), ws), df$hp, df$am)
 #'
-#'   # Lead Sepal_Width values by 1 row on the partition-and-ordered table
-#'   out <- select(df, over(lead(df$Sepal_Width), ws), df$Sepal_Width, df$Sepal_Length, df$Species)
+#'   # Lag mpg values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lead(df$mpg), ws), df$mpg, df$hp, df$am)
 #' }
 #' @note over since 2.0.0
 setMethod("over",

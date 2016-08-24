@@ -3121,9 +3121,9 @@ setMethod("ifelse",
 #' @aliases cume_dist,missing-method
 #' @export
 #' @examples \dontrun{
-#'   df <- createDataFrame(iris)
-#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
-#'   out <- select(df, over(cume_dist(), ws), df$Sepal_Length, df$Species)
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(cume_dist(), ws), df$hp, df$am)
 #' }
 #' @note cume_dist since 1.6.0
 setMethod("cume_dist",
@@ -3149,9 +3149,9 @@ setMethod("cume_dist",
 #' @aliases dense_rank,missing-method
 #' @export
 #' @examples \dontrun{
-#'   df <- createDataFrame(iris)
-#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
-#'   out <- select(df, over(dense_rank(), ws), df$Sepal_Length, df$Species)
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(dense_rank(), ws), df$hp, df$am)
 #' }
 #' @note dense_rank since 1.6.0
 setMethod("dense_rank",
@@ -3180,13 +3180,13 @@ setMethod("dense_rank",
 #' @family window_funcs
 #' @export
 #' @examples \dontrun{
-#'   df <- createDataFrame(iris)
+#'   df <- createDataFrame(mtcars)
 #'
-#'   # Partition by Species and order by Sepal_Length
-#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'
-#'   # Lag Sepal_Width values by 1 row on the partition-and-ordered table
-#'   out <- select(df, over(lag(df$Sepal_Width), ws), df$Sepal_Width, df$Sepal_Length, df$Species)
+#'   # Lag mpg values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lag(df$mpg), ws), df$mpg, df$hp, df$am)
 #' }
 #' @note lag since 1.6.0
 setMethod("lag",
@@ -3221,13 +3221,13 @@ setMethod("lag",
 #' @aliases lead,characterOrColumn,numeric-method
 #' @export
 #' @examples \dontrun{
-#'   df <- createDataFrame(iris)
+#'   df <- createDataFrame(mtcars)
 #'
-#'   # Partition by Species and order by Sepal_Length
-#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'
-#'   # Lead Sepal_Width values by 1 row on the partition-and-ordered table
-#'   out <- select(df, over(lead(df$Sepal_Width), ws), df$Sepal_Width, df$Sepal_Length, df$Species)
+#'   # Lag mpg values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lead(df$mpg), ws), df$mpg, df$hp, df$am)
 #' }
 #' @note lead since 1.6.0
 setMethod("lead",
@@ -3260,13 +3260,13 @@ setMethod("lead",
 #' @family window_funcs
 #' @export
 #' @examples \dontrun{
-#'   df <- createDataFrame(iris)
+#'   df <- createDataFrame(mtcars)
 #'
-#'   # Partition by Species and order by Sepal_Length
-#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'
-#'   # Get ntil group id (1-4) for Sepal_Length
-#'   out <- select(df, over(ntile(4), ws), df$Sepal_Length, df$Species)
+#'   # Get ntile group id (1-4) for hp
+#'   out <- select(df, over(ntile(4), ws), df$hp, df$am)
 #' }
 #' @note ntile since 1.6.0
 setMethod("ntile",
@@ -3292,9 +3292,9 @@ setMethod("ntile",
 #' @aliases percent_rank,missing-method
 #' @export
 #' @examples \dontrun{
-#'   df <- createDataFrame(iris)
-#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
-#'   out <- select(df, over(percent_rank(), ws), df$Sepal_Length, df$Species)
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(percent_rank(), ws), df$hp, df$am)
 #' }
 #' @note percent_rank since 1.6.0
 setMethod("percent_rank",
@@ -3321,9 +3321,9 @@ setMethod("percent_rank",
 #' @aliases rank,missing-method
 #' @export
 #' @examples \dontrun{
-#'   df <- createDataFrame(iris)
-#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
-#'   out <- select(df, over(rank(), ws), df$Sepal_Length, df$Species)
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(rank(), ws), df$hp, df$am)
 #' }
 #' @note rank since 1.6.0
 setMethod("rank",
@@ -3358,9 +3358,9 @@ setMethod("rank",
 #' @family window_funcs
 #' @export
 #' @examples \dontrun{
-#'   df <- createDataFrame(iris)
-#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
-#'   out <- select(df, over(row_number(), ws), df$Sepal_Length, df$Species)
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(row_number(), ws), df$hp, df$am)
 #' }
 #' @note row_number since 1.6.0
 setMethod("row_number",
