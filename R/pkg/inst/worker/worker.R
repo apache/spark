@@ -38,7 +38,7 @@ compute <- function(mode, partition, serializer, deserializer, key,
       options(stringsAsFactors = FALSE)
 
       # Handle binary data types
-      if("raw" %in% sapply(inputData[[1]], class){
+      if("raw" %in% sapply(inputData[[1]], class)){
         inputData <- SparkR:::rbindRaws(inputData)
       } else {
         inputData <- do.call(rbind.data.frame, inputData)
