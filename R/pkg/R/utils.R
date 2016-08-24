@@ -691,9 +691,39 @@ getSparkContext <- function() {
 }
 
 is_master_local <- function(master) {
-  grepl("^local(\\[([0-9]+|\\*)\\])?$", master, perl = TRUE)
+  !nzchar(master) || grepl("^local(\\[([0-9]+|\\*)\\])?$", master, perl = TRUE)
+}
+
+is_yarn_client <- function(master) {
+  master %in% c("yarn-client")
 }
 
 is_sparkR_shell <- function() {
   grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
+}
+
+getRemoteMasterInfo <- function(master) {
+  hostPort <- sub("spark://", "", master)
+  host <- sub(":.*", "", hostPort)
+  port <- sub(".*:", "", hostPort)
+
+  if (nzchar(port)) {
+    if (is.na(as.numeric(port))) {
+      msg <- sprintf("Invalid backend port number %s parsed from master. Ignored.",
+                    port)
+      message(msg)
+      port <- NULL
+    } else {
+      numPort <- as.numeric(port)
+      if (numPort < 0 || numPort > 65535) {
+        msg <- sprintf("Backend port number %s out of range. Ignored.",
+                       port)
+        message(msg)
+        port <- NULL
+      }
+    }
+  } else {
+    port <- NULL
+  }
+  list(host = host, port = port)
 }
