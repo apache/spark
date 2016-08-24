@@ -635,6 +635,17 @@ convertNamedListToEnv <- function(namedList) {
   env
 }
 
+createSparkConfFromEnv <- function() {
+  env <- new.env()
+  names <- names(Sys.getenv())
+  for (name in names) {
+    if (startsWith(name, "spark_")) {
+       env[[gsub("_", ".", name)]] <- Sys.getenv(name)
+    }
+  }
+  env
+}
+
 # Assign a new environment for attach() and with() methods
 assignNewEnv <- function(data) {
   stopifnot(class(data) == "SparkDataFrame")

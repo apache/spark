@@ -345,13 +345,23 @@ sparkRHive.init <- function(jsc = NULL) {
 #' @note sparkR.session since 2.0.0
 sparkR.session <- function(
   master = "",
-  appName = "SparkR",
+  appName = "",
   sparkHome = Sys.getenv("SPARK_HOME"),
   sparkConfig = list(),
   sparkJars = "",
   sparkPackages = "",
   enableHiveSupport = TRUE,
+  deployMode = "",
   ...) {
+
+  # initialize these paramtere from enviroment varialbe passed from JVM
+  sparkConf <- createSparkConfFromEnv()
+  if (!nzchar(master) && exists("spark.master", envir = sparkConf)) {
+    master <- sparkConf[["spark.master"]]
+  }
+  if (!nzchar(deployMode) && exists("spark.submit.deployMode", envir = sparkConf)) {
+    deployMode <- sparkConf[["spark.submit.deployMode"]]
+  }
 
   sparkConfigMap <- convertNamedListToEnv(sparkConfig)
   namedParams <- list(...)
@@ -361,14 +371,18 @@ sparkR.session <- function(
     if (exists("spark.master", envir = paramMap)) {
       master <- paramMap[["spark.master"]]
     }
+    if (exists("spark.submit.deployMode", envir = paramMap)) {
+      deployMode <- paramMap[["spark.submit.deployMode"]]
+    }
     if (exists("spark.app.name", envir = paramMap)) {
       appName <- paramMap[["spark.app.name"]]
     }
     overrideEnvs(sparkConfigMap, paramMap)
   }
+
   # do not download if it is run in the sparkR shell
   if (!nzchar(master) || is_master_local(master)) {
-    if (!is_sparkR_shell()) {
+    if (!is_sparkR_shell() && deployMode != "cluster") {
       if (is.na(file.info(sparkHome)$isdir)) {
         msg <- paste0("Spark not found in SPARK_HOME: ",
                       sparkHome,
@@ -546,4 +560,12 @@ processSparkPackages <- function(packages) {
     warning("sparkPackages as a comma-separated string is deprecated, use character vector instead")
   }
   splittedPackages
+}
+
+  # Utility function for print enviroment
+printEnvs <- function(env) {
+  envNames <- names(env)
+  for (envName in envNames) {
+    cat(paste0(envName, "=", env[[envName]], "\n"))
+  }
 }

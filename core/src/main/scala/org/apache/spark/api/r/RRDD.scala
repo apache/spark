@@ -107,9 +107,10 @@ private[r] object RRDD {
       jars: Array[String],
       sparkEnvirMap: JMap[Object, Object],
       sparkExecutorEnvMap: JMap[Object, Object]): JavaSparkContext = {
-    val sparkConf = new SparkConf().setAppName(appName)
-                                   .setSparkHome(sparkHome)
-
+    val sparkConf = new SparkConf().setSparkHome(sparkHome)
+    if (appName != "") {
+      sparkConf.setAppName(appName)
+    }
     // Override `master` if we have a user-specified value
     if (master != "") {
       sparkConf.setMaster(master)
