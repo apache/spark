@@ -114,7 +114,12 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
     splits(0) = Double.NegativeInfinity
     splits(splits.length - 1) = Double.PositiveInfinity
 
-    val bucketizer = new Bucketizer(uid).setSplits(splits)
+    val distinctSplits = splits.distinct
+    if (splits.length != distinctSplits.length) {
+      log.warn(s"Some quantiles were identical. Bucketing to ${distinctSplits.length - 1}" +
+        s" buckets as a result.")
+    }
+    val bucketizer = new Bucketizer(uid).setSplits(distinctSplits.sorted)
     copyValues(bucketizer.setParent(this))
   }
 
