@@ -461,31 +461,6 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  def getHiveFile(path: String): File = {
-     new File(Thread.currentThread().getContextClassLoader.getResource(path).getFile)
-   }
-
-  test("Verify ORC conversion parameter: CONVERT_METASTORE_ORC with Hive-1.x files") {
-    val singleRowDF = Seq((2415022, "AAAAAAAAOKJNECAA")).toDF("key", "value")
-    Seq("true", "false").foreach { orcConversion =>
-      withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> orcConversion) {
-        withTable("dummy_orc") {
-          // Hive 1.x can have virtual columns as follows in ORC files
-          // Type: struct<_col0:int,_col1:string> in hive_1.x_orc
-          spark.sql(
-            s"""
-               |CREATE EXTERNAL TABLE dummy_orc(key INT, value STRING)
-               |STORED AS ORC
-               |LOCATION '${getHiveFile("data/files/hive_1.x_orc/")}'
-             """.stripMargin)
-
-          val df = spark.sql("SELECT key, value FROM dummy_orc LIMIT 1")
-          checkAnswer(df, singleRowDF)
-        }
-      }
-    }
-  }
-
   test("Verify the ORC conversion parameter: CONVERT_METASTORE_ORC") {
     withTempView("single") {
       val singleRowDF = Seq((0, "foo")).toDF("key", "value")
