@@ -27,8 +27,8 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, PreprocessTableInsertion}
 import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.hive.execution.script.{HiveScriptIOSchema, HiveScriptTransformationExec}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-
 
 /**
  * Determine the serde/format of the Hive serde table, according to the storage properties.
