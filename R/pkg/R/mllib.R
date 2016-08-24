@@ -444,6 +444,7 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #' @param featureIndex The index of the feature if \code{featuresCol} is a vector column
 #'                     (default: 0), no effect otherwise
 #' @param weightCol The weight column name.
+#' @param ... additional arguments passed to the method.
 #' @return \code{spark.isoreg} returns a fitted Isotonic Regression model
 #' @rdname spark.isoreg
 #' @aliases spark.isoreg,SparkDataFrame,formula-method
@@ -504,7 +505,6 @@ setMethod("predict", signature(object = "IsotonicRegressionModel"),
 
 #  Get the summary of an IsotonicRegressionModel model
 
-#' @param ... Other optional arguments to summary of an IsotonicRegressionModel
 #' @return \code{summary} returns the model's boundaries and prediction as lists
 #' @rdname spark.isoreg
 #' @aliases summary,IsotonicRegressionModel-method
@@ -1074,6 +1074,7 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' @param k number of independent Gaussians in the mixture model.
 #' @param maxIter maximum iteration number.
 #' @param tol the convergence tolerance.
+#' @param ... additional arguments passed to the method.
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @return \code{spark.gaussianMixture} returns a fitted multivariate gaussian mixture model.
 #' @rdname spark.gaussianMixture
@@ -1117,7 +1118,6 @@ setMethod("spark.gaussianMixture", signature(data = "SparkDataFrame", formula = 
 #  Get the summary of a multivariate gaussian mixture model
 
 #' @param object a fitted gaussian mixture model.
-#' @param ... currently not used argument(s) passed to the method.
 #' @return \code{summary} returns the model's lambda, mu, sigma and posterior.
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @rdname spark.gaussianMixture
