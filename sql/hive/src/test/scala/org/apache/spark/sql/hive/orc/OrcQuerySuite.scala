@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.io.File
 import java.nio.charset.StandardCharsets
 
 import org.scalatest.BeforeAndAfterAll
@@ -372,24 +373,37 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  test("SPARK-16948. Check empty orc partitioned tables in ORC") {
+  test("SPARK-16948. Check empty orc tables in ORC") {
     withSQLConf((HiveUtils.CONVERT_METASTORE_ORC.key, "true")) {
       withTempPath { dir =>
         withTable("empty_orc_partitioned") {
           spark.sql(
-            s"""CREATE TABLE empty_orc_partitioned(key INT, value STRING)
-                | PARTITIONED BY (p INT) STORED AS ORC
+            s"""
+                |CREATE TABLE empty_orc_partitioned(key INT, value STRING)
+                |PARTITIONED BY (p INT) STORED AS ORC
               """.stripMargin)
 
           val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
-          emptyDF.createOrReplaceTempView("empty")
 
           // Query empty table
-          val df = spark.sql(
-            s"""SELECT key, value FROM empty_orc_partitioned
-                | WHERE key > 10
-                      """.stripMargin)
-          checkAnswer(df, emptyDF)
+          checkAnswer(
+            sql("SELECT key, value FROM empty_orc_partitioned WHERE key > 10"),
+            emptyDF)
+        }
+
+        withTable("empty_orc") {
+          spark.sql(
+            s"""
+               |CREATE TABLE empty_orc(key INT, value STRING)
+               |STORED AS ORC
+              """.stripMargin)
+
+          val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
+
+          // Query empty table
+          checkAnswer(
+            sql("SELECT key, value FROM empty_orc WHERE key > 10"),
+            emptyDF)
         }
       }
     }
@@ -443,6 +457,31 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         checkPredicate('a < 1 || 'a > 8, List(9).map(Row(_, null)))
         checkPredicate(!('a > 3), List(1, 3).map(Row(_, null)))
         checkPredicate(!('a > 0 && 'a < 3), List(3, 5, 7, 9).map(Row(_, null)))
+      }
+    }
+  }
+
+  def getHiveFile(path: String): File = {
+     new File(Thread.currentThread().getContextClassLoader.getResource(path).getFile)
+   }
+
+  test("Verify ORC conversion parameter: CONVERT_METASTORE_ORC with Hive-1.x files") {
+    val singleRowDF = Seq((2415022, "AAAAAAAAOKJNECAA")).toDF("key", "value")
+    Seq("true", "false").foreach { orcConversion =>
+      withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> orcConversion) {
+        withTable("dummy_orc") {
+          // Hive 1.x can have virtual columns as follows in ORC files
+          // Type: struct<_col0:int,_col1:string> in hive_1.x_orc
+          spark.sql(
+            s"""
+               |CREATE EXTERNAL TABLE dummy_orc(key INT, value STRING)
+               |STORED AS ORC
+               |LOCATION '${getHiveFile("data/files/hive_1.x_orc/")}'
+             """.stripMargin)
+
+          val df = spark.sql("SELECT key, value FROM dummy_orc LIMIT 1")
+          checkAnswer(df, singleRowDF)
+        }
       }
     }
   }

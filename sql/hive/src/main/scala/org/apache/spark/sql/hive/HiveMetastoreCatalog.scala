@@ -191,7 +191,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       defaultSource: FileFormat,
       fileFormatClass: Class[_ <: FileFormat],
       fileType: String): LogicalRelation = {
-    val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
+    val metastoreSchema = metastoreRelation.schema
     val tableIdentifier =
       QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
     val bucketSpec = None  // We don't support hive bucketed tables, only ones we write out.
@@ -237,17 +237,18 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           new Path(metastoreRelation.catalogTable.storage.locationUri.get),
           partitionSpec)
 
-        val inferredSchema =
-          defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles())
         val schema = fileType match {
           case "parquet" =>
+            val inferredSchema =
+              defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles())
+
             // For Parquet, get correct schema by merging Metastore schema data types
             // and Parquet schema field names.
             inferredSchema.map { schema =>
               ParquetFileFormat.mergeMetastoreParquetSchema(metastoreSchema, schema)
             }.getOrElse(metastoreSchema)
           case "orc" =>
-            inferredSchema.getOrElse(metastoreSchema)
+            metastoreSchema
           case _ =>
             throw new RuntimeException(s"Cannot convert a $fileType to a HadoopFsRelation")
         }
@@ -286,7 +287,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             DataSource(
               sparkSession = sparkSession,
               paths = paths,
-              userSpecifiedSchema = Some(metastoreRelation.schema),
+              userSpecifiedSchema = Some(metastoreSchema),
               bucketSpec = bucketSpec,
               options = options,
               className = fileType).resolveRelation(),
