@@ -192,30 +192,26 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
 
-      val directories = if (SparkHadoopUtil.get.isGlobPath(directoryPath)) {
-        fs.globStatus(directoryPath)
-            .filter(_.isDirectory)
-            .map(_.getPath)
-      } else {
-        List(directoryPath).toArray
-      }
+      val directories = SparkHadoopUtil.get.globToFileStatus(directoryPath)
+          .filter(_.isDirectory)
+          .map(_.getPath)
       val newFiles = directories.flatMap(dir =>
         fs.listStatus(dir)
             .filter(isNewFile(_, currentTime, modTimeIgnoreThreshold))
             .map(_.getPath.toString))
       val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
-      logInfo("Finding new files took " + timeTaken + " ms")
+      logInfo(s"Finding new files took $timeTaken ms")
       if (timeTaken > slideDuration.milliseconds) {
         logWarning(
           s"Time taken to find new files $timeTaken exceeds the batch size. " +
             "Consider increasing the batch size or reducing the number of " +
-            "files in the monitored directory."
+            "files in the monitored directories."
         )
       }
       newFiles
     } catch {
       case e: FileNotFoundException =>
-        logWarning(s"No directory to scan: $directoryPath")
+        logWarning(s"No directory to scan: $directoryPath: $e")
         Array.empty
       case e: Exception =>
         logWarning(s"Error finding new files under $directoryPath", e)

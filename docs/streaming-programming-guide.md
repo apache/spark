@@ -631,33 +631,38 @@ methods for creating DStreams from files as input sources.
 
 	Spark Streaming will monitor the directory `dataDirectory` and process any files created in that directory.
 
-     + A simple directory can be supplied (`hdfs://namenode:8040/logs/`). All files directly
-       underneath this path will be processed as they are discovered.
+     + A simple directory can be supplied, such as `hdfs://namenode:8040/logs/`.
+       All files directly such a path will be processed as they are discovered.
      + A regular expression can be supplied instead, such as
-       `s3a://bucket/logs/[2015,2016]-??-??-friday`.
+       `hdfs://namenode:8040/logs/(2015,2016)-*-friday`.
        Here, the DStream will consist of all files directly under those directories
        matching the regular expression.
        That is: it is a pattern of directories, not of files in directories.
      + All files must be in the same data format.
-     + All files must be created in/moved under the `dataDirectory` directory/directories by
+     * A file is considered part of a time period based on its modification time
+       —not its creation time.
+     + Files must be created in/moved under the `dataDirectory` directory/directories by
        an atomic operation. In HDFS and similar filesystems, this can be done *renaming* them
        into the data directory from another part of the same filesystem.
      * If a wildcard is used to identify directories, such as `hdfs://namenode:8040/logs/2016*`,
-       renaming an entire directory to match the path will add the directory to the list of matching
-       directories. However, unless the modification time of the individual files are within
-       that of the current window, they will not be recognized as new files.
-     + Once read, changes to the files will not be picked up.
-       So if the files are being continuously appended, the new data will not be read.
+       renaming an entire directory to match the path will add the directory to the list of
+       monitored directories. However, unless the modification time of the directory's files
+       are within that of the current window, they will not be recognized as new files.
+     + Once processed, changes to a file will not cause the file to be reread.
+       That is: Updates are ignored.
+     + The more files under a directory/wildcard pattern, the longer it will take to
+       scan for changes —even if no files have actually changed.
 
     Special points for object stores
 
-     + Wildcard lookup may be very slow with some object stores.
+     + Wildcard directory enumeration may be very slow with some object stores.
+     + The slow-down from having many files to scan for changes is very significant. 
      + File renaming is slow; it is `O(data)`.
      + Directory rename is even slower and not atomic.
      + Objects created directly though a single PUT operation are atomic, irrespective of
-       the language or library used.
-     + Writing a file to an object store using the Hadoop APIs is atomic; the object is only
-       created via a PUT operation in the final  `OutputStream.close()` call.
+       the programming language or library used to upload the file.
+     + Writing a file to an object store using Hadoop's APIs is an atomic operation;
+       the object is only created via a PUT operation in the final `OutputStream.close()` call.
 
     For this reason, applications using an object store as the direct destination of data
     can consider using PUT operations to directly publish data for a DStream to pick up.
