@@ -550,7 +550,7 @@ class ListTests(MLlibTestCase):
             [-6, -7],
         ])
         clusters = GaussianMixture.train(data, 2, convergenceTol=0.001,
-                                         maxIterations=10, seed=56)
+                                         maxIterations=10, seed=1)
         labels = clusters.predict(data).collect()
         self.assertEqual(labels[0], labels[1])
         self.assertEqual(labels[2], labels[3])

@@ -55,7 +55,7 @@ public final class Platform {
       // We at least know x86 and x64 support unaligned access.
       String arch = System.getProperty("os.arch", "");
       //noinspection DynamicRegexReplaceableByCompiledPattern
-      _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64)$");
+      _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64|aarch64)$");
     }
     unaligned = _unaligned;
   }

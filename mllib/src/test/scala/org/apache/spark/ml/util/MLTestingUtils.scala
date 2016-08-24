@@ -19,12 +19,14 @@ package org.apache.spark.ml.util
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -178,5 +180,48 @@ object MLTestingUtils extends SparkFunSuite {
     types
       .map(t => t -> df.select(col(labelColName).cast(t), col(predictionColName)))
       .toMap
+  }
+
+  def genClassificationInstancesWithWeightedOutliers(
+      spark: SparkSession,
+      numClasses: Int,
+      numInstances: Int): DataFrame = {
+    val data = Array.tabulate[Instance](numInstances) { i =>
+      val feature = i % numClasses
+      if (i < numInstances / 3) {
+        // give large weights to minority of data with 1 to 1 mapping feature to label
+        Instance(feature, 1.0, Vectors.dense(feature))
+      } else {
+        // give small weights to majority of data points with reverse mapping
+        Instance(numClasses - feature - 1, 0.01, Vectors.dense(feature))
+      }
+    }
+    val labelMeta =
+      NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses).toMetadata()
+    spark.createDataFrame(data).select(col("label").as("label", labelMeta), col("weight"),
+      col("features"))
+  }
+
+  def genEquivalentOversampledAndWeightedInstances(
+      data: DataFrame,
+      labelCol: String,
+      featuresCol: String,
+      seed: Long): (DataFrame, DataFrame) = {
+    import data.sparkSession.implicits._
+    val rng = scala.util.Random
+    rng.setSeed(seed)
+    val sample: () => Int = () => rng.nextInt(10) + 1
+    val sampleUDF = udf(sample)
+    val rawData = data.select(labelCol, featuresCol).withColumn("samples", sampleUDF())
+    val overSampledData = rawData.rdd.flatMap {
+      case Row(label: Double, features: Vector, n: Int) =>
+        Iterator.fill(n)(Instance(label, 1.0, features))
+    }.toDF()
+    rng.setSeed(seed)
+    val weightedData = rawData.rdd.map {
+      case Row(label: Double, features: Vector, n: Int) =>
+        Instance(label, n.toDouble, features)
+    }.toDF()
+    (overSampledData, weightedData)
   }
 }
