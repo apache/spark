@@ -114,7 +114,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   test("Creating a table with shorts and floats") {
     sqlContext.createDataFrame(Seq((1.0f, 1.toShort)))
       .write.jdbc(jdbcUrl, "shortfloat", new Properties)
-    val schema = sqlContext.read.jdbc(jdbcUrl, "shorfloat", new Properties).schema
+    val schema = sqlContext.read.jdbc(jdbcUrl, "shortfloat", new Properties).schema
     assert(schema(0).dataType == FloatType)
     assert(schema(1).dataType == ShortType)
   }
