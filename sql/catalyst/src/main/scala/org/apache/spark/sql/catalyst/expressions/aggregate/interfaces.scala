@@ -492,7 +492,7 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   }
 
   final override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    val bufferObject = getField(buffer, mutableAggBufferOffset).asInstanceOf[T]
+    val bufferObject = getField[T](buffer, mutableAggBufferOffset)
     update(bufferObject, input)
   }
 
@@ -535,7 +535,7 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
    * The framework calls this method every time after updating/merging one group (group by key).
    */
   final def serializeAggregateBufferInPlace(buffer: MutableRow): Unit = {
-    val bufferObject = getField(buffer, mutableAggBufferOffset).asInstanceOf[T]
+    val bufferObject = getField[T](buffer, mutableAggBufferOffset)
     buffer(mutableAggBufferOffset) = serialize(bufferObject)
   }
 }

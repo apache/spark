@@ -105,7 +105,7 @@ class SortBasedAggregationIterator(
   private def serializeTypedAggregateBuffer(aggregationBuffer: MutableRow): Unit = {
     typedImperativeAggregates.foreach { agg =>
       // In-place serialization
-      agg.serializeAggregateBufferInPlace(sortBasedAggregationBuffer)
+      agg.serializeAggregateBufferInPlace(aggregationBuffer)
     }
   }
 
