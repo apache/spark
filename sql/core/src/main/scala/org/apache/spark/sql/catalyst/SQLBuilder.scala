@@ -80,7 +80,7 @@ class SQLBuilder private (
     try {
       val replaced = finalPlan.transformAllExpressions {
         case s: SubqueryExpression =>
-          val query = new SQLBuilder(s.query, nextSubqueryId, nextGenAttrId, exprIdMap).toSQL
+          val query = new SQLBuilder(s.plan, nextSubqueryId, nextGenAttrId, exprIdMap).toSQL
           val sql = s match {
             case _: ListQuery => query
             case _: Exists => s"EXISTS($query)"
@@ -204,6 +204,12 @@ class SQLBuilder private (
 
     case p: ScriptTransformation =>
       scriptTransformationToSQL(p)
+
+    case p: LocalRelation =>
+      p.toSQL(newSubqueryName())
+
+    case p: Range =>
+      p.toSQL()
 
     case OneRowRelation =>
       ""

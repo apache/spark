@@ -111,6 +111,12 @@ class FilterPushdownSuite extends PlanTest {
     assert(optimized == correctAnswer)
   }
 
+  test("SPARK-16994: filter should not be pushed through limit") {
+    val originalQuery = testRelation.limit(10).where('a === 1).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, originalQuery)
+  }
+
   test("can't push without rewrite") {
     val originalQuery =
       testRelation
