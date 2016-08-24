@@ -183,4 +183,13 @@ test_that("overrideEnvs", {
   expect_equal(config[["config_only"]], "ok")
 })
 
+test_that("rbindRaws", {
+  r <- serialize(1, connection=NULL)
+  inputData <- list(list(1L, r), list(2L, r), list(3L, r))
+  expected <- data.frame(V1 = 1:3)
+  expected$V2 <- list(r, r, r)
+  result <- SparkR:::rbindRaws(inputData)
+  expect_equal(expected, result)
+})
+
 sparkR.session.stop()

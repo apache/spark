@@ -2248,8 +2248,10 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
                x[, c("a", "b", "c")]
               })
   expect_identical(expected, result)
+})
 
-  # Ensure UDF's operate on list columns containing arrays and bytes
+test_that("dapplyCollect() on dataframe with list columns", {
+
   df_listcols <- data.frame(key = 1:3)
   df_listcols$bytes <- lapply(df_listcols$key, serialize, connection = NULL)
   # TODO Clark: Related issue- The dataframe can't be collected if this

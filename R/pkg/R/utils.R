@@ -702,7 +702,7 @@ is_sparkR_shell <- function() {
 #
 # @param inputData a list of rows, with each row a list
 # @return data.frame with raw columns as lists
-rbind_with_raws <- function(inputData){
+rbindRaws <- function(inputData){
   row1 <- inputData[[1]]
   rawcolumns <- ("raw" == sapply(row1, class))
 
