@@ -38,6 +38,12 @@ class FileStreamOptions(@transient private val parameters: Map[String, String])
 
   /**
    * Maximum age of a file that can be found in this directory, before it is deleted.
+   *
+   * The max age is specified with respect to the timestamp of the latest file, and not the
+   * timestamp of the current system. That this means if the last file has timestamp 1000, and the
+   * current system time is 2000, and max age is 200, the system will purge files older than
+   * 800 (rather than 1800) from the internal state.
+   *
    * Default to a week.
    */
   val maxFileAgeMs: Long =
@@ -46,14 +52,4 @@ class FileStreamOptions(@transient private val parameters: Map[String, String])
   /** Options as specified by the user, in a case-insensitive map, without "path" set. */
   val optionMapWithoutPath: Map[String, String] =
     new CaseInsensitiveMap(parameters).filterKeys(_ != "path")
-}
-
-
-object FileStreamOptions {
-
-  def apply(): FileStreamOptions = new FileStreamOptions(Map.empty)
-
-  def apply(paramName: String, paramValue: String): FileStreamOptions = {
-    new FileStreamOptions(Map(paramName -> paramValue))
-  }
 }

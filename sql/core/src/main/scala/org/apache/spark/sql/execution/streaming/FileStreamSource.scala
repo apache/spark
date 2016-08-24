@@ -44,8 +44,10 @@ class FileStreamSource(
 
   private val sourceOptions = new FileStreamOptions(options)
 
-  private val fs = new Path(path).getFileSystem(sparkSession.sessionState.newHadoopConf())
-  private val qualifiedBasePath = fs.makeQualified(new Path(path)) // can contains glob patterns
+  private val qualifiedBasePath: Path = {
+    val fs = new Path(path).getFileSystem(sparkSession.sessionState.newHadoopConf())
+    fs.makeQualified(new Path(path))  // can contains glob patterns
+  }
 
   private val metadataLog = new HDFSMetadataLog[Seq[FileEntry]](sparkSession, metadataPath)
 
@@ -55,11 +57,12 @@ class FileStreamSource(
   private val maxFilesPerBatch = sourceOptions.maxFilesPerTrigger
 
   /** A mapping from a file that we have processed to some timestamp it was last modified. */
-  // Visible for testing.
+  // Visible for testing and debugging in production.
   val seenFiles = new SeenFilesMap(sourceOptions.maxFileAgeMs)
 
   metadataLog.get(None, Some(maxBatchId)).foreach { case (batchId, entry) =>
     entry.foreach(seenFiles.add)
+    // TODO: move purge call out of the loop once we truncate logs.
     seenFiles.purge()
   }
 
