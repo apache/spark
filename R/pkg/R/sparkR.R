@@ -599,7 +599,6 @@ sparkCheckInstall <- function(sparkHome, master) {
 printEnvs <- function(env) {
   envNames <- names(env)
   for (envName in envNames) {
-    cat(paste0(envName, "=",env[[envName]], "\n"))
+    cat(paste0(envName, "=", env[[envName]], "\n"))
   }
 }
-
