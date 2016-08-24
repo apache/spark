@@ -73,11 +73,9 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
   test("supports SpecificMutableRow as mutable row") {
     val aggregationBufferSchema = Seq(IntegerType, LongType, BinaryType, IntegerType)
     val aggBufferOffset = 2
-    val inputBufferObject = 1
     val buffer = new SpecificMutableRow(aggregationBufferSchema)
-    val agg = new TypedMax(BoundReference(inputBufferObject, IntegerType, nullable = false))
+    val agg = new TypedMax(BoundReference(ordinal = 1, dataType = IntegerType, nullable = false))
       .withNewMutableAggBufferOffset(aggBufferOffset)
-      .withNewInputAggBufferOffset(inputBufferObject)
 
     agg.initialize(buffer)
     data.foreach { kv =>
@@ -222,7 +220,7 @@ object TypedImperativeAggregateSuite {
           if (inputValue > buffer.value) {
             buffer.value = inputValue
           }
-        case null => buffer
+        case null => // skip
       }
     }
 
