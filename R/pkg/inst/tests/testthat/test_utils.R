@@ -184,7 +184,7 @@ test_that("overrideEnvs", {
 })
 
 test_that("rbindRaws", {
-  r <- serialize(1, connection=NULL)
+  r <- serialize(1, connection = NULL)
   inputData <- list(list(1L, r), list(2L, r), list(3L, r))
   expected <- data.frame(V1 = 1:3)
   expected$V2 <- list(r, r, r)
