@@ -477,7 +477,7 @@ object SizeBasedWindowFunction {
      the window partition.""")
 case class RowNumber() extends RowNumberLike {
   override val evaluateExpression = rowNumber
-  override def sql: String = "ROW_NUMBER()"
+  override def prettyName: String = "row_number"
 }
 
 /**
@@ -497,7 +497,7 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   // return the same value for equal values in the partition.
   override val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
   override val evaluateExpression = Divide(Cast(rowNumber, DoubleType), Cast(n, DoubleType))
-  override def sql: String = "CUME_DIST()"
+  override def prettyName: String = "cume_dist"
 }
 
 /**
@@ -628,6 +628,8 @@ abstract class RankLike extends AggregateWindowFunction {
   override val updateExpressions = increaseRank +: increaseRowNumber +: children
   override val evaluateExpression: Expression = rank
 
+  override def sql: String = s"${prettyName.toUpperCase}()"
+
   def withOrder(order: Seq[Expression]): RankLike
 }
 
@@ -649,7 +651,6 @@ abstract class RankLike extends AggregateWindowFunction {
 case class Rank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): Rank = Rank(order)
-  override def sql: String = "RANK()"
 }
 
 /**
@@ -674,7 +675,7 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
   override val updateExpressions = increaseRank +: children
   override val aggBufferAttributes = rank +: orderAttrs
   override val initialValues = zero +: orderInit
-  override def sql: String = "DENSE_RANK()"
+  override def prettyName: String = "dense_rank"
 }
 
 /**
@@ -701,5 +702,5 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
   override val evaluateExpression = If(GreaterThan(n, one),
       Divide(Cast(Subtract(rank, one), DoubleType), Cast(Subtract(n, one), DoubleType)),
       Literal(0.0d))
-  override def sql: String = "PERCENT_RANK()"
+  override def prettyName: String = "percent_rank"
 }

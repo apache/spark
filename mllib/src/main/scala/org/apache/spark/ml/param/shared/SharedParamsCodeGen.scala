@@ -80,7 +80,7 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("solver", "the solver algorithm for optimization. If this is not set or " +
         "empty, default value is 'auto'", Some("\"auto\"")),
       ParamDesc[Int]("aggregationDepth", "suggested depth for treeAggregate (>= 2)", Some("2"),
-        isValid = "ParamValidators.gtEq(2)"))
+        isValid = "ParamValidators.gtEq(2)", isExpertParam = true))
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
@@ -95,7 +95,8 @@ private[shared] object SharedParamsCodeGen {
       doc: String,
       defaultValueStr: Option[String] = None,
       isValid: String = "",
-      finalMethods: Boolean = true) {
+      finalMethods: Boolean = true,
+      isExpertParam: Boolean = false) {
 
     require(name.matches("[a-z][a-zA-Z0-9]*"), s"Param name $name is invalid.")
     require(doc.nonEmpty) // TODO: more rigorous on doc
@@ -153,6 +154,11 @@ private[shared] object SharedParamsCodeGen {
     } else {
       ""
     }
+    val groupStr = if (param.isExpertParam) {
+      Array("expertParam", "expertGetParam")
+    } else {
+      Array("param", "getParam")
+    }
     val methodStr = if (param.finalMethods) {
       "final def"
     } else {
@@ -167,11 +173,11 @@ private[shared] object SharedParamsCodeGen {
       |
       |  /**
       |   * Param for $doc.
-      |   * @group param
+      |   * @group ${groupStr(0)}
       |   */
       |  final val $name: $Param = new $Param(this, "$name", "$doc"$isValid)
       |$setDefault
-      |  /** @group getParam */
+      |  /** @group ${groupStr(1)} */
       |  $methodStr get$Name: $T = $$($name)
       |}
       |""".stripMargin

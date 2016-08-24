@@ -114,4 +114,9 @@ package object config {
   private[spark] val PYSPARK_PYTHON = ConfigBuilder("spark.pyspark.python")
     .stringConf
     .createOptional
+
+  // To limit memory usage, we only track information for a fixed number of tasks
+  private[spark] val UI_RETAINED_TASKS = ConfigBuilder("spark.ui.retainedTasks")
+    .intConf
+    .createWithDefault(100000)
 }
