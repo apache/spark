@@ -477,9 +477,6 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
    */
   def eval(buffer: T): Any
 
-  /** Returns the class of aggregation buffer object */
-  def aggregationBufferClass: Class[T]
-
   /** Serializes the aggregation buffer object T to Array[Byte] */
   def serialize(buffer: T): Array[Byte]
 
@@ -498,19 +495,14 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
 
   final override def merge(buffer: MutableRow, inputBuffer: InternalRow): Unit = {
     val bufferObject = getField[T](buffer, mutableAggBufferOffset)
+    // The inputBuffer stores serialized aggregation buffer object produced by partial aggregate
     val inputObject = deserialize(getField[Array[Byte]](inputBuffer, inputAggBufferOffset))
     merge(bufferObject, inputObject)
   }
 
   final override def eval(buffer: InternalRow): Any = {
-    val bufferObject = getField[AnyRef](buffer, mutableAggBufferOffset)
-    if (bufferObject.getClass == aggregationBufferClass) {
-      // When used in Window frame aggregation, eval(buffer: InternalRow) is called directly
-      // on the object aggregation buffer without intermediate serializing/de-serializing.
-      eval(bufferObject.asInstanceOf[T])
-    } else {
-      eval(deserialize(bufferObject.asInstanceOf[Array[Byte]]))
-    }
+    val bufferObject = getField[T](buffer, mutableAggBufferOffset)
+    eval(bufferObject)
   }
 
   private[this] val anyObjectType = ObjectType(classOf[AnyRef])

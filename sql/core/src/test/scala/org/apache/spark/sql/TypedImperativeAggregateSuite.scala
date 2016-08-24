@@ -38,6 +38,7 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
   private val data = (0 until 1000).map { _ =>
     (random.nextInt(10), random.nextInt(100))
   }
+
   test("aggregate with object aggregate buffer") {
     val agg = new TypedMax(BoundReference(0, IntegerType, nullable = false))
 
@@ -66,10 +67,6 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     val row = new GenericMutableRow(Array(mergeBuffer): Array[Any])
 
     // Evaluates directly on row consist of aggregation buffer object.
-    assert(agg.eval(row) == data.map(_._1).max)
-
-    // Serializes the aggregation buffer object and then evals.
-    agg.serializeAggregateBufferInPlace(row)
     assert(agg.eval(row) == data.map(_._1).max)
   }
 
@@ -106,6 +103,36 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     val countKey = data.size
     val maxValue = data.map(_._2).max
     val countValue = data.size
+    val expected = Seq(Row(maxKey, countKey, maxValue, countValue))
+    checkAnswer(query, expected)
+  }
+
+  test("dataframe aggregate with object aggregate buffer, null expression, no group by") {
+    val df = data.toDF("key", "value").coalesce(2)
+    val query = df.select(typedMax(lit(null)), count($"key"), typedMax(lit(null)),
+      count($"value"))
+    val maxNull = Int.MinValue
+    val countKey = data.size
+    val countValue = data.size
+    val expected = Seq(Row(maxNull, countKey, maxNull, countValue))
+    checkAnswer(query, expected)
+  }
+
+  test("dataframe aggregation with object aggregate buffer, input row contains null") {
+
+    val nullableData = (0 until 1000).map {id =>
+      val nullableKey: Integer = if (random.nextBoolean()) null else random.nextInt(100)
+      val nullableValue: Integer = if (random.nextBoolean()) null else random.nextInt(100)
+      (nullableKey, nullableValue)
+    }
+
+    val df = nullableData.toDF("key", "value").coalesce(2)
+    val query = df.select(typedMax($"key"), count($"key"), typedMax($"value"),
+      count($"value"))
+    val maxKey = nullableData.map(_._1).filter(_ != null).max
+    val countKey = nullableData.map(_._1).filter(_ != null).size
+    val maxValue = nullableData.map(_._2).filter(_ != null).max
+    val countValue = nullableData.map(_._2).filter(_ != null).size
     val expected = Seq(Row(maxKey, countKey, maxValue, countValue))
     checkAnswer(query, expected)
   }
@@ -185,13 +212,17 @@ object TypedImperativeAggregateSuite {
 
 
     override def createAggregationBuffer(): MaxValue = {
+      // Returns Int.MinValue if all inputs are null
       new MaxValue(Int.MinValue)
     }
 
     override def update(buffer: MaxValue, input: InternalRow): Unit = {
-      val inputValue = child.eval(input).asInstanceOf[Int]
-      if (inputValue > buffer.value) {
-        buffer.value = inputValue
+      child.eval(input) match {
+        case inputValue: Int =>
+          if (inputValue > buffer.value) {
+            buffer.value = inputValue
+          }
+        case null => buffer
       }
     }
 
@@ -207,7 +238,7 @@ object TypedImperativeAggregateSuite {
 
     override def nullable: Boolean = true
 
-    override def deterministic: Boolean = false
+    override def deterministic: Boolean = true
 
     override def children: Seq[Expression] = Seq(child)
 
@@ -220,8 +251,6 @@ object TypedImperativeAggregateSuite {
 
     override def withNewInputAggBufferOffset(newOffset: Int): TypedImperativeAggregate[MaxValue] =
       copy(inputAggBufferOffset = newOffset)
-
-    override def aggregationBufferClass: Class[MaxValue] = classOf[MaxValue]
 
     override def serialize(buffer: MaxValue): Array[Byte] = Ints.toByteArray(buffer.value)
 

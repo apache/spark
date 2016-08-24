@@ -234,7 +234,20 @@ abstract class AggregationIterator(
       val resultProjection = UnsafeProjection.create(
         groupingAttributes ++ bufferAttributes,
         groupingAttributes ++ bufferAttributes)
+
+      // TypedImperativeAggregate stores generic object in aggregation buffer, and requires
+      // calling serialization before shuffling. See [[TypedImperativeAggregate]] for more info.
+      val typedImperativeAggregates: Array[TypedImperativeAggregate[_]] = {
+        aggregateFunctions.collect {
+          case (ag: TypedImperativeAggregate[_]) => ag
+        }
+      }
+
       (currentGroupingKey: UnsafeRow, currentBuffer: MutableRow) => {
+        // Serializes the generic object stored in aggregation buffer
+        typedImperativeAggregates.foreach { agg =>
+          agg.serializeAggregateBufferInPlace(currentBuffer)
+        }
         resultProjection(joinedRow(currentGroupingKey, currentBuffer))
       }
     } else {
