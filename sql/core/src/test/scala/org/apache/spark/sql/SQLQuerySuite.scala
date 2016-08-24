@@ -2586,63 +2586,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(s"$expected") :: Nil)
   }
 
-  test("SPARK-16991: Full outer join followed by inner join produces wrong results") {
-    val a = Seq((1, 2), (2, 3)).toDF("a", "b")
-    val b = Seq((2, 5), (3, 4)).toDF("a", "c")
-    val c = Seq((3, 1)).toDF("a", "d")
-    val ab = a.join(b, Seq("a"), "fullouter")
-    checkAnswer(ab.join(c, "a"), Row(3, null, 4, 1) :: Nil)
-  }
-
-  test("SPARK-17099: Incorrect result when HAVING clause is added to group by query") {
-    sparkContext.parallelize(
-      Seq(-234, 145, 367, 975, 298)).toDF("int_col_5").createOrReplaceTempView("t1")
-    sparkContext.parallelize(
-      Seq(
-        (-769, -244),
-        (-800, -409),
-        (940, 86),
-        (-507, 304),
-        (-367, 158))
-    ).toDF("int_col_2", "int_col_5").createOrReplaceTempView("t2")
-
-    checkAnswer(
-      sql(
-        """
-          |SELECT
-          |  (SUM(COALESCE(t1.int_col_5, t2.int_col_2))),
-          |     ((COALESCE(t1.int_col_5, t2.int_col_2)) * 2)
-          |FROM t1
-          |RIGHT JOIN t2
-          |  ON (t2.int_col_2) = (t1.int_col_5)
-          |GROUP BY GREATEST(COALESCE(t2.int_col_5, 109), COALESCE(t1.int_col_5, -449)),
-          |         COALESCE(t1.int_col_5, t2.int_col_2)
-          |HAVING (SUM(COALESCE(t1.int_col_5, t2.int_col_2)))
-          |            > ((COALESCE(t1.int_col_5, t2.int_col_2)) * 2)
-        """.stripMargin),
-      Row(-367, -734) :: Row(-800, -1600) :: Row(-769, -1538) :: Row(-507, -1014) :: Nil)
-  }
-
-  test("SPARK-17120: Analyzer incorrectly optimizes plan to empty LocalRelation") {
-    sparkContext.parallelize(Seq(97)).toDF("int_col_6").createOrReplaceTempView("t1")
-    sparkContext.parallelize(Seq(0)).toDF("int_col_1").createOrReplaceTempView("t2")
-
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      checkAnswer(
-        sql(
-          """
-            |SELECT *
-            |FROM (
-            |SELECT
-            |    COALESCE(t2.int_col_1, t1.int_col_6) AS int_col
-            |    FROM t1
-            |    LEFT JOIN t2 ON false
-            |) t where (t.int_col) is not null
-          """.stripMargin),
-        Row(97) :: Nil)
-    }
-  }
-
   test("SPARK-15752 optimize metadata only query for datasource table") {
     withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
       withTable("srcpart_15752") {
