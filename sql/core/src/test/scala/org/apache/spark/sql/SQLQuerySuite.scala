@@ -734,49 +734,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("left outer join") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM uppercasedata LEFT OUTER JOIN lowercasedata ON n = N"),
-        Row(1, "A", 1, "a") ::
-          Row(2, "B", 2, "b") ::
-          Row(3, "C", 3, "c") ::
-          Row(4, "D", 4, "d") ::
-          Row(5, "E", null, null) ::
-          Row(6, "F", null, null) :: Nil)
-    }
-  }
-
-  test("right outer join") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM lowercasedata RIGHT OUTER JOIN uppercasedata ON n = N"),
-        Row(1, "a", 1, "A") ::
-          Row(2, "b", 2, "B") ::
-          Row(3, "c", 3, "C") ::
-          Row(4, "d", 4, "D") ::
-          Row(null, null, 5, "E") ::
-          Row(null, null, 6, "F") :: Nil)
-    }
-  }
-
-  test("full outer join") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT * FROM
-          |  (SELECT * FROM upperCaseData WHERE N <= 4) leftTable FULL OUTER JOIN
-          |  (SELECT * FROM upperCaseData WHERE N >= 3) rightTable
-          |    ON leftTable.N = rightTable.N
-        """.stripMargin),
-      Row(1, "A", null, null) ::
-      Row(2, "B", null, null) ::
-      Row(3, "C", 3, "C") ::
-      Row (4, "D", 4, "D") ::
-      Row(null, null, 5, "E") ::
-      Row(null, null, 6, "F") :: Nil)
-  }
-
   test("SPARK-11111 null-safe join should not use cartesian product") {
     val df = sql("select count(*) from testData a join testData b on (a.key <=> b.key)")
     val cp = df.queryExecution.sparkPlan.collect {
@@ -806,23 +763,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT * FROM lowerCaseData INNER JOIN subset2 ON subset2.n = lowerCaseData.n"),
       Row(1, "a", 1) ::
       Row(2, "b", 2) :: Nil)
-  }
-
-  test("mixed-case keywords") {
-    checkAnswer(
-      sql(
-        """
-          |SeleCT * from
-          |  (select * from upperCaseData WherE N <= 4) leftTable fuLL OUtER joiN
-          |  (sElEcT * FROM upperCaseData whERe N >= 3) rightTable
-          |    oN leftTable.N = rightTable.N
-        """.stripMargin),
-      Row(1, "A", null, null) ::
-      Row(2, "B", null, null) ::
-      Row(3, "C", 3, "C") ::
-      Row(4, "D", 4, "D") ::
-      Row(null, null, 5, "E") ::
-      Row(null, null, 6, "F") :: Nil)
   }
 
   test("select with table name as qualifier") {
