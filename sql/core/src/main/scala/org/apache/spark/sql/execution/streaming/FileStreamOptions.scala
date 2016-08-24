@@ -36,9 +36,12 @@ class FileStreamOptions(@transient private val parameters: Map[String, String])
     }
   }
 
-  /** Maximum age of a file that can be found in this directory, before it is deleted. */
+  /**
+   * Maximum age of a file that can be found in this directory, before it is deleted.
+   * Default to a week.
+   */
   val maxFileAgeMs: Long =
-    Utils.timeStringAsMs(parameters.getOrElse("maxFileAge", "24h"))
+    Utils.timeStringAsMs(parameters.getOrElse("maxFileAge", "7d"))
 
   /** Options as specified by the user, in a case-insensitive map, without "path" set. */
   val optionMapWithoutPath: Map[String, String] =
