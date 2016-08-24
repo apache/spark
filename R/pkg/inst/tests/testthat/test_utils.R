@@ -188,7 +188,7 @@ test_that("rbindRaws", {
   inputData <- list(list(1L, r), list(2L, r), list(3L, r))
   expected <- data.frame(V1 = 1:3)
   expected$V2 <- list(r, r, r)
-  result <- SparkR:::rbindRaws(inputData)
+  result <- rbindRaws(inputData)
   expect_equal(expected, result)
 })
 

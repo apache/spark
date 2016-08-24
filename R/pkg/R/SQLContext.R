@@ -184,8 +184,9 @@ getDefaultSqlSource <- function() {
 createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   sparkSession <- getSparkSession()
 
-  # Convert dataframes into a list of rows. Each row is a list
   if (is.data.frame(data)) {
+      # Convert data into a list of rows. Each row is a list.
+
       # get the names of columns, they will be put into RDD
       if (is.null(schema)) {
         schema <- names(data)
