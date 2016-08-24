@@ -589,7 +589,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.getCanonicalPath
-    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).rdd.saveAsTextFile(path)
     val jsonDF = spark.read.json(path)
 
     val expectedSchema = StructType(
@@ -621,7 +621,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.getCanonicalPath
-    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).rdd.saveAsTextFile(path)
     val jsonDF = spark.read.option("primitivesAsString", "true").json(path)
 
     val expectedSchema = StructType(
@@ -827,7 +827,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     val mergedJsonDF = spark.read
       .option("prefersDecimal", "true")
-      .json(floatingValueRecords ++ bigIntegerRecords)
+      .json(floatingValueRecords.rdd ++ bigIntegerRecords.rdd)
 
     val expectedMergedSchema = StructType(
       StructField("a", DoubleType, true) ::
@@ -845,7 +845,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.getCanonicalPath
-    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).rdd.saveAsTextFile(path)
 
     sql(
       s"""
@@ -872,7 +872,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.getCanonicalPath
-    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).rdd.saveAsTextFile(path)
 
     val schema = StructType(
       StructField("bigInteger", DecimalType.SYSTEM_DEFAULT, true) ::
@@ -1338,7 +1338,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val emptySchema = InferSchema.infer(empty, "", new JSONOptions(Map()))
+    val emptySchema = InferSchema.infer(empty.rdd, "", new JSONOptions(Map()))
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1362,7 +1362,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-8093 Erase empty structs") {
-    val emptySchema = InferSchema.infer(emptyRecords, "", new JSONOptions(Map()))
+    val emptySchema = InferSchema.infer(emptyRecords.rdd, "", new JSONOptions(Map()))
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1558,7 +1558,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val dir = Utils.createTempDir()
       dir.delete()
       val path = dir.getCanonicalPath
-      arrayAndStructRecords.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+      arrayAndStructRecords.map(record => record.replaceAll("\n", " ")).rdd.saveAsTextFile(path)
 
       val schema =
         StructType(
@@ -1575,7 +1575,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val dir = Utils.createTempDir()
       dir.delete()
       val path = dir.getCanonicalPath
-      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).rdd.saveAsTextFile(path)
 
       val jsonDF = spark.read.json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
@@ -1611,7 +1611,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       dir.delete()
 
       val path = dir.getCanonicalPath
-      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).rdd.saveAsTextFile(path)
 
       val jsonDF = spark.read.json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
