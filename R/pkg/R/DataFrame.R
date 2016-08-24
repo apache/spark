@@ -212,9 +212,9 @@ setMethod("showDF",
 
 #' show
 #'
-#' Print class and type information of a SparkR object.
+#' Print class and type information of a Spark object.
 #'
-#' @param object a SparkR object. Can be a SparkDataFrame, Column, GroupedData, WindowSpec.
+#' @param object a Spark object. Can be a SparkDataFrame, Column, GroupedData, WindowSpec.
 #'
 #' @family SparkDataFrame functions
 #' @rdname show
