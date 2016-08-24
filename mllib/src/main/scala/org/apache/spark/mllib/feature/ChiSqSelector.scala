@@ -35,7 +35,7 @@ import org.apache.spark.sql.{Row, SparkSession}
 @Since("2.1.0")
 private[spark] object ChiSqSelectorType extends Enumeration {
   type SelectorType = Value
-  val KBest, Percentile, Fpr = Value
+  val KBest, Percentile, FPR = Value
 }
 
 /**
@@ -199,7 +199,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
   def setAlpha(value: Double): this.type = {
     require(0.0 <= value && value <= 1.0, "Alpha must be in [0,1]")
     alpha = value
-    selectorType = ChiSqSelectorType.Fpr
+    selectorType = ChiSqSelectorType.FPR
     this
   }
 
@@ -219,15 +219,14 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
   @Since("1.3.0")
   def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
     val chiSqTestResult = Statistics.chiSqTest(data)
+      .zipWithIndex.sortBy { case (res, _) => -res.statistic }
     val features = selectorType match {
       case ChiSqSelectorType.KBest => chiSqTestResult
-        .zipWithIndex.sortBy { case (res, _) => -res.statistic }
         .take(numTopFeatures)
       case ChiSqSelectorType.Percentile => chiSqTestResult
-        .zipWithIndex.sortBy { case (res, _) => -res.statistic }
         .take((chiSqTestResult.length * percentile).toInt)
-      case ChiSqSelectorType.Fpr => chiSqTestResult
-        .zipWithIndex.filter{ case (res, _) => res.pValue < alpha }
+      case ChiSqSelectorType.FPR => chiSqTestResult
+        .filter{ case (res, _) => res.pValue < alpha }
       case errorType =>
         throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
     }

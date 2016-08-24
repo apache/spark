@@ -73,14 +73,14 @@ private[feature] trait ChiSqSelectorParams extends Params
   def getAlpha: Double = $(alpha)
 
   /**
-   * The ChiSqSelector supports KBest, Percentile, Fpr selection,
+   * The ChiSqSelector supports KBest, Percentile, FPR selection,
    * which is the same as ChiSqSelectorType defined in MLLIB.
    * when call setNumTopFeatures, the selectorType is set to KBest
    * when call setPercentile, the selectorType is set to Percentile
-   * when call setFpr, the selectorType is set to Fpr
+   * when call setAlpha, the selectorType is set to FPR
    */
   final val selectorType = new Param[String](this, "selectorType",
-    "ChiSqSelector Type: KBest, Percentile, Fpr")
+    "ChiSqSelector Type: KBest, Percentile, FPR")
   setDefault(selectorType -> ChiSqSelectorType.KBest.toString)
 
   /** @group getParam */
@@ -113,7 +113,7 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
 
   @Since("2.1.0")
   def setAlpha(value: Double): this.type = {
-    set(selectorType, ChiSqSelectorType.Fpr.toString)
+    set(selectorType, ChiSqSelectorType.FPR.toString)
     set(alpha, value)
   }
 
@@ -143,7 +143,7 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
         selector.setNumTopFeatures($(numTopFeatures))
       case ChiSqSelectorType.Percentile =>
         selector.setPercentile($(percentile))
-      case ChiSqSelectorType.Fpr =>
+      case ChiSqSelectorType.FPR =>
         selector.setAlpha($(alpha))
       case errorType =>
         throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
