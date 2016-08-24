@@ -381,7 +381,6 @@ test_that("create DataFrame with complex types", {
   expect_equal(s$b, 3L)
 })
 
-# TODO Clark: Make sure this one passes
 test_that("create DataFrame from a data.frame with complex types", {
   ldf <- data.frame(row.names = 1:2)
   ldf$a_list <- list(list(1, 2), list(3, 4))
@@ -2193,7 +2192,6 @@ test_that("Histogram", {
 })
 
 test_that("dapply() and dapplyCollect() on a DataFrame", {
-
   df <- createDataFrame(
           list(list(1L, 1, "1"), list(2L, 2, "2"), list(3L, 3, "3")),
           c("a", "b", "c"))
@@ -2254,10 +2252,12 @@ test_that("dapplyCollect() on dataframe with list columns", {
 
   df_listcols <- data.frame(key = 1:3)
   df_listcols$bytes <- lapply(df_listcols$key, serialize, connection = NULL)
-  # TODO Clark: Related issue- The dataframe can't be collected if this
+
+  # TODO clarkfitzg: Related issue- The dataframe can't be collected if this
   # column is added:
   #df_listcols$arr <- lapply(df_listcols$key,
   #                          function(x) seq(0, 1, length.out=15))
+
   df_listcols_spark <- createDataFrame(df_listcols)
 
   result1 <- collect(df_listcols_spark)
