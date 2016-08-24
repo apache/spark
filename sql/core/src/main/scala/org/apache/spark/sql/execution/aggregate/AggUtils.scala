@@ -29,8 +29,7 @@ import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateSto
 object PartialAggregate {
 
   def unapply(plan: SparkPlan): Option[Distribution] = plan match {
-    case agg: AggregateExec
-        if agg.aggregateExpressions.map(_.aggregateFunction).forall(_.supportsPartial) =>
+    case agg: AggregateExec if AggUtils.supportPartialAggregate(agg.aggregateExpressions) =>
       Some(agg.requiredChildDistribution.head)
     case _ =>
       None
@@ -41,6 +40,10 @@ object PartialAggregate {
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
 object AggUtils {
+
+  def supportPartialAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
+    aggregateExpressions.map(_.aggregateFunction).forall(_.supportsPartial)
+  }
 
   private def createPartialAggregateExec(
       groupingExpressions: Seq[NamedExpression],
@@ -116,7 +119,7 @@ object AggUtils {
       child: SparkPlan): SparkPlan = {
     val useHash = HashAggregateExec.supportsAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)) &&
-      aggregateExpressions.map(_.aggregateFunction).forall(_.supportsPartial)
+      supportPartialAggregate(aggregateExpressions)
     if (useHash) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
@@ -146,7 +149,7 @@ object AggUtils {
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
     val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
     val completeAggregateAttributes = completeAggregateExpressions.map(_.resultAttribute)
-    val supportPartial = aggregateExpressions.map(_.aggregateFunction).forall(_.supportsPartial)
+    val supportPartial = supportPartialAggregate(aggregateExpressions)
 
     createAggregateExec(
       requiredChildDistributionExpressions =
