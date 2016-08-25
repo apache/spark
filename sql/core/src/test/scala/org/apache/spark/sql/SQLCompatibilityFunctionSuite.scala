@@ -39,6 +39,9 @@ class SQLCompatibilityFunctionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT ifnull(1, 2.1d), ifnull(null, 2.1d)"),
       Row(1.0, 2.1))
+    checkAnswer(
+      sql("SELECT ifnull(CAST('1990-02-25' AS DATE), CAST('1990-02-24 12:00:00' AS TIMESTAMP))"),
+      Row(Timestamp.valueOf("1990-02-25 00:00:00")))
   }
 
   test("nullif") {
@@ -50,6 +53,9 @@ class SQLCompatibilityFunctionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT nullif(1, 2.1d), nullif(1, 1.0d)"),
       Row(1.0, null))
+    checkAnswer(
+      sql("SELECT nullif(CAST('1990-02-25' AS DATE), CAST('1990-02-24 12:00:00' AS TIMESTAMP))"),
+      Row(Timestamp.valueOf("1990-02-25 00:00:00")))
   }
 
   test("nvl") {
@@ -61,6 +67,9 @@ class SQLCompatibilityFunctionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT nvl(1, 2.1d), nvl(null, 2.1d)"),
       Row(1.0, 2.1))
+    checkAnswer(
+      sql("SELECT nvl(CAST('1990-02-25' AS DATE), CAST('1990-02-24 12:00:00' AS TIMESTAMP))"),
+      Row(Timestamp.valueOf("1990-02-25 00:00:00")))
   }
 
   test("nvl2") {
@@ -72,6 +81,9 @@ class SQLCompatibilityFunctionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT nvl2(null, 1, 2.1d), nvl2('n', 1, 2.1d)"),
       Row(2.1, 1.0))
+    checkAnswer(
+      sql("SELECT nvl2('n', CAST('1990-02-25' AS DATE), CAST('1990-02-24 12:00:00' AS TIMESTAMP))"),
+      Row(Timestamp.valueOf("1990-02-25 00:00:00")))
   }
 
   test("SPARK-16730 cast alias functions for Hive compatibility") {

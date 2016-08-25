@@ -96,6 +96,9 @@ object TypeCoercion {
       val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
       Some(numericPrecedence(index))
 
+    case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
+      Some(TimestampType)
+
     case _ => None
   }
 
@@ -134,8 +137,6 @@ object TypeCoercion {
       Some(DecimalPrecision.widerDecimalType(DecimalType.forType(t), d))
     case (_: FractionalType, _: DecimalType) | (_: DecimalType, _: FractionalType) =>
       Some(DoubleType)
-    case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-      Some(TimestampType)
     case _ =>
       findTightestCommonTypeToString(t1, t2)
   }
@@ -163,8 +164,6 @@ object TypeCoercion {
           Some(DecimalPrecision.widerDecimalType(DecimalType.forType(t), d))
         case (_: FractionalType, _: DecimalType) | (_: DecimalType, _: FractionalType) =>
           Some(DoubleType)
-        case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-          Some(TimestampType)
         case _ => None
       })
       case None => None
