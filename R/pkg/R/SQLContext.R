@@ -48,12 +48,15 @@ getInternalType <- function(x) {
 #' @return whatever the target returns
 #' @noRd
 dispatchFunc <- function(newFuncSig, x, ...) {
-  funcName <- as.character(sys.call(sys.parent())[[1]])
+  # When called with SparkR::createDataFrame, sys.call()[[1]] returns c(::, SparkR, createDataFrame)
+  callsite <- as.character(sys.call(sys.parent())[[1]])
+  funcName <- callsite[[length(callsite)]]
   f <- get(paste0(funcName, ".default"))
   # Strip sqlContext from list of parameters and then pass the rest along.
   contextNames <- c("org.apache.spark.sql.SQLContext",
                     "org.apache.spark.sql.hive.HiveContext",
-                    "org.apache.spark.sql.hive.test.TestHiveContext")
+                    "org.apache.spark.sql.hive.test.TestHiveContext",
+                    "org.apache.spark.sql.SparkSession")
   if (missing(x) && length(list(...)) == 0) {
     f()
   } else if (class(x) == "jobj" &&
@@ -65,18 +68,18 @@ dispatchFunc <- function(newFuncSig, x, ...) {
   }
 }
 
-#' return the SQL Context
-getSqlContext <- function() {
-  if (exists(".sparkRHivesc", envir = .sparkREnv)) {
-    get(".sparkRHivesc", envir = .sparkREnv)
-  } else if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
-    get(".sparkRSQLsc", envir = .sparkREnv)
+#' return the SparkSession
+#' @noRd
+getSparkSession <- function() {
+  if (exists(".sparkRsession", envir = .sparkREnv)) {
+    get(".sparkRsession", envir = .sparkREnv)
   } else {
-    stop("SQL context not initialized")
+    stop("SparkSession not initialized")
   }
 }
 
 #' infer the SQL type
+#' @noRd
 infer_type <- function(x) {
   if (is.null(x)) {
     stop("can not infer type from NULL")
@@ -109,29 +112,77 @@ infer_type <- function(x) {
   }
 }
 
+#' Get Runtime Config from the current active SparkSession
+#'
+#' Get Runtime Config from the current active SparkSession.
+#' To change SparkSession Runtime Config, please see \code{sparkR.session()}.
+#'
+#' @param key (optional) The key of the config to get, if omitted, all config is returned
+#' @param defaultValue (optional) The default value of the config to return if they config is not
+#' set, if omitted, the call fails if the config key is not set
+#' @return a list of config values with keys as their names
+#' @rdname sparkR.conf
+#' @name sparkR.conf
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' allConfigs <- sparkR.conf()
+#' masterValue <- unlist(sparkR.conf("spark.master"))
+#' namedConfig <- sparkR.conf("spark.executor.memory", "0g")
+#' }
+#' @note sparkR.conf since 2.0.0
+sparkR.conf <- function(key, defaultValue) {
+  sparkSession <- getSparkSession()
+  if (missing(key)) {
+    m <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getSessionConf", sparkSession)
+    as.list(m, all.names = TRUE, sorted = TRUE)
+  } else {
+    conf <- callJMethod(sparkSession, "conf")
+    value <- if (missing(defaultValue)) {
+      tryCatch(callJMethod(conf, "get", key),
+              error = function(e) {
+                if (any(grep("java.util.NoSuchElementException", as.character(e)))) {
+                  stop(paste0("Config '", key, "' is not set"))
+                } else {
+                  stop(paste0("Unknown error: ", as.character(e)))
+                }
+              })
+    } else {
+      callJMethod(conf, "get", key, defaultValue)
+    }
+    l <- setNames(list(value), key)
+    l
+  }
+}
+
+getDefaultSqlSource <- function() {
+  l <- sparkR.conf("spark.sql.sources.default", "org.apache.spark.sql.parquet")
+  l[["spark.sql.sources.default"]]
+}
+
 #' Create a SparkDataFrame
 #'
 #' Converts R data.frame or list into SparkDataFrame.
 #'
-#' @param data An RDD or list or data.frame
-#' @param schema a list of column names or named list (StructType), optional
-#' @return a SparkDataFrame
+#' @param data an RDD or list or data.frame.
+#' @param schema a list of column names or named list (StructType), optional.
+#' @return A SparkDataFrame.
 #' @rdname createDataFrame
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df1 <- as.DataFrame(iris)
 #' df2 <- as.DataFrame(list(3,4,5,6))
 #' df3 <- createDataFrame(iris)
 #' }
 #' @name createDataFrame
 #' @method createDataFrame default
-
+#' @note createDataFrame since 1.4.0
 # TODO(davies): support sampling and infer type from NA
 createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
-  sqlContext <- getSqlContext()
+  sparkSession <- getSparkSession()
   if (is.data.frame(data)) {
       # get the names of columns, they will be put into RDD
       if (is.null(schema)) {
@@ -158,7 +209,7 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
       data <- do.call(mapply, append(args, data))
   }
   if (is.list(data)) {
-    sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sqlContext)
+    sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
     rdd <- parallelize(sc, data)
   } else if (inherits(data, "RDD")) {
     rdd <- data
@@ -167,7 +218,7 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   }
 
   if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
-    row <- first(rdd)
+    row <- firstRDD(rdd)
     names <- if (is.null(schema)) {
       names(row)
     } else {
@@ -201,25 +252,30 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
   srdd <- callJMethod(jrdd, "rdd")
   sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
-                     srdd, schema$jobj, sqlContext)
+                     srdd, schema$jobj, sparkSession)
   dataFrame(sdf)
 }
 
 createDataFrame <- function(x, ...) {
-  dispatchFunc("createDataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
+  dispatchFunc("createDataFrame(data, schema = NULL)", x, ...)
 }
 
+#' @param samplingRatio Currently not used.
 #' @rdname createDataFrame
 #' @aliases createDataFrame
 #' @export
 #' @method as.DataFrame default
-
+#' @note as.DataFrame since 1.6.0
 as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
-  createDataFrame(data, schema, samplingRatio)
+  createDataFrame(data, schema)
 }
 
-as.DataFrame <- function(x, ...) {
-  dispatchFunc("as.DataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
+#' @param ... additional argument(s).
+#' @rdname createDataFrame
+#' @aliases as.DataFrame
+#' @export
+as.DataFrame <- function(data, ...) {
+  dispatchFunc("as.DataFrame(data, schema = NULL)", data, ...)
 }
 
 #' toDF
@@ -232,8 +288,7 @@ as.DataFrame <- function(x, ...) {
 #' @noRd
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
 #' df <- toDF(rdd)
 #'}
@@ -255,20 +310,19 @@ setMethod("toDF", signature(x = "RDD"),
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' df <- jsonFile(path)
 #' }
 #' @name read.json
 #' @method read.json default
-
+#' @note read.json since 1.6.0
 read.json.default <- function(path) {
-  sqlContext <- getSqlContext()
+  sparkSession <- getSparkSession()
   # Allow the user to have a more flexible definiton of the text file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
-  read <- callJMethod(sqlContext, "read")
+  read <- callJMethod(sparkSession, "read")
   sdf <- callJMethod(read, "json", paths)
   dataFrame(sdf)
 }
@@ -281,7 +335,7 @@ read.json <- function(x, ...) {
 #' @name jsonFile
 #' @export
 #' @method jsonFile default
-
+#' @note jsonFile since 1.4.0
 jsonFile.default <- function(path) {
   .Deprecated("read.json")
   read.json(path)
@@ -303,8 +357,7 @@ jsonFile <- function(x, ...) {
 #' @noRd
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' rdd <- texFile(sc, "path/to/json")
 #' df <- jsonRDD(sqlContext, rdd)
 #'}
@@ -324,22 +377,41 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
   }
 }
 
+#' Create a SparkDataFrame from an ORC file.
+#'
+#' Loads an ORC file, returning the result as a SparkDataFrame.
+#'
+#' @param path Path of file to read.
+#' @return SparkDataFrame
+#' @rdname read.orc
+#' @export
+#' @name read.orc
+#' @note read.orc since 2.0.0
+read.orc <- function(path) {
+  sparkSession <- getSparkSession()
+  # Allow the user to have a more flexible definiton of the ORC file path
+  path <- suppressWarnings(normalizePath(path))
+  read <- callJMethod(sparkSession, "read")
+  sdf <- callJMethod(read, "orc", path)
+  dataFrame(sdf)
+}
+
 #' Create a SparkDataFrame from a Parquet file.
 #'
 #' Loads a Parquet file, returning the result as a SparkDataFrame.
 #'
-#' @param path Path of file to read. A vector of multiple paths is allowed.
+#' @param path path of file to read. A vector of multiple paths is allowed.
 #' @return SparkDataFrame
 #' @rdname read.parquet
 #' @export
 #' @name read.parquet
 #' @method read.parquet default
-
+#' @note read.parquet since 1.6.0
 read.parquet.default <- function(path) {
-  sqlContext <- getSqlContext()
-  # Allow the user to have a more flexible definiton of the text file path
+  sparkSession <- getSparkSession()
+  # Allow the user to have a more flexible definiton of the Parquet file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
-  read <- callJMethod(sqlContext, "read")
+  read <- callJMethod(sparkSession, "read")
   sdf <- callJMethod(read, "parquet", paths)
   dataFrame(sdf)
 }
@@ -348,11 +420,12 @@ read.parquet <- function(x, ...) {
   dispatchFunc("read.parquet(...)", x, ...)
 }
 
+#' @param ... argument(s) passed to the method.
 #' @rdname read.parquet
 #' @name parquetFile
 #' @export
 #' @method parquetFile default
-
+#' @note parquetFile since 1.4.0
 parquetFile.default <- function(...) {
   .Deprecated("read.parquet")
   read.parquet(unlist(list(...)))
@@ -364,9 +437,10 @@ parquetFile <- function(x, ...) {
 
 #' Create a SparkDataFrame from a text file.
 #'
-#' Loads a text file and returns a SparkDataFrame with a single string column named "value".
-#' If the directory structure of the text files contains partitioning information, those are
-#' ignored in the resulting DataFrame.
+#' Loads text files and returns a SparkDataFrame whose schema starts with
+#' a string column named "value", and followed by partitioned columns if
+#' there are any.
+#'
 #' Each line in the text file is a new row in the resulting SparkDataFrame.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
@@ -375,19 +449,18 @@ parquetFile <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.txt"
 #' df <- read.text(path)
 #' }
 #' @name read.text
 #' @method read.text default
-
+#' @note read.text since 1.6.1
 read.text.default <- function(path) {
-  sqlContext <- getSqlContext()
+  sparkSession <- getSparkSession()
   # Allow the user to have a more flexible definiton of the text file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
-  read <- callJMethod(sqlContext, "read")
+  read <- callJMethod(sparkSession, "read")
   sdf <- callJMethod(read, "text", paths)
   dataFrame(sdf)
 }
@@ -406,19 +479,18 @@ read.text <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' new_df <- sql("SELECT * FROM table")
 #' }
 #' @name sql
 #' @method sql default
-
+#' @note sql since 1.4.0
 sql.default <- function(sqlQuery) {
-  sqlContext <- getSqlContext()
-  sdf <- callJMethod(sqlContext, "sql", sqlQuery)
+  sparkSession <- getSparkSession()
+  sdf <- callJMethod(sparkSession, "sql", sqlQuery)
   dataFrame(sdf)
 }
 
@@ -429,7 +501,7 @@ sql <- function(x, ...) {
 #' Create a SparkDataFrame from a SparkSQL Table
 #'
 #' Returns the specified Table as a SparkDataFrame.  The Table must have already been registered
-#' in the SQLContext.
+#' in the SparkSession.
 #'
 #' @param tableName The SparkSQL Table to convert to a SparkDataFrame.
 #' @return SparkDataFrame
@@ -438,18 +510,16 @@ sql <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' new_df <- tableToDF("table")
 #' }
-#' @note since 2.0.0
-
+#' @note tableToDF since 2.0.0
 tableToDF <- function(tableName) {
-  sqlContext <- getSqlContext()
-  sdf <- callJMethod(sqlContext, "table", tableName)
+  sparkSession <- getSparkSession()
+  sdf <- callJMethod(sparkSession, "table", tableName)
   dataFrame(sdf)
 }
 
@@ -463,20 +533,15 @@ tableToDF <- function(tableName) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' tables("hive")
 #' }
 #' @name tables
 #' @method tables default
-
+#' @note tables since 1.4.0
 tables.default <- function(databaseName = NULL) {
-  sqlContext <- getSqlContext()
-  jdf <- if (is.null(databaseName)) {
-    callJMethod(sqlContext, "tables")
-  } else {
-    callJMethod(sqlContext, "tables", databaseName)
-  }
+  sparkSession <- getSparkSession()
+  jdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getTables", sparkSession, databaseName)
   dataFrame(jdf)
 }
 
@@ -494,20 +559,18 @@ tables <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' tableNames("hive")
 #' }
 #' @name tableNames
 #' @method tableNames default
-
+#' @note tableNames since 1.4.0
 tableNames.default <- function(databaseName = NULL) {
-  sqlContext <- getSqlContext()
-  if (is.null(databaseName)) {
-    callJMethod(sqlContext, "tableNames")
-  } else {
-    callJMethod(sqlContext, "tableNames", databaseName)
-  }
+  sparkSession <- getSparkSession()
+  callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+              "getTableNames",
+              sparkSession,
+              databaseName)
 }
 
 tableNames <- function(x, ...) {
@@ -524,19 +587,19 @@ tableNames <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' cacheTable("table")
 #' }
 #' @name cacheTable
 #' @method cacheTable default
-
+#' @note cacheTable since 1.4.0
 cacheTable.default <- function(tableName) {
-  sqlContext <- getSqlContext()
-  callJMethod(sqlContext, "cacheTable", tableName)
+  sparkSession <- getSparkSession()
+  catalog <- callJMethod(sparkSession, "catalog")
+  callJMethod(catalog, "cacheTable", tableName)
 }
 
 cacheTable <- function(x, ...) {
@@ -553,19 +616,19 @@ cacheTable <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' uncacheTable("table")
 #' }
 #' @name uncacheTable
 #' @method uncacheTable default
-
+#' @note uncacheTable since 1.4.0
 uncacheTable.default <- function(tableName) {
-  sqlContext <- getSqlContext()
-  callJMethod(sqlContext, "uncacheTable", tableName)
+  sparkSession <- getSparkSession()
+  catalog <- callJMethod(sparkSession, "catalog")
+  callJMethod(catalog, "uncacheTable", tableName)
 }
 
 uncacheTable <- function(x, ...) {
@@ -584,66 +647,97 @@ uncacheTable <- function(x, ...) {
 #' }
 #' @name clearCache
 #' @method clearCache default
-
+#' @note clearCache since 1.4.0
 clearCache.default <- function() {
-  sqlContext <- getSqlContext()
-  callJMethod(sqlContext, "clearCache")
+  sparkSession <- getSparkSession()
+  catalog <- callJMethod(sparkSession, "catalog")
+  callJMethod(catalog, "clearCache")
 }
 
 clearCache <- function() {
   dispatchFunc("clearCache()")
 }
 
-#' Drop Temporary Table
+#' (Deprecated) Drop Temporary Table
 #'
 #' Drops the temporary table with the given table name in the catalog.
 #' If the table has been cached/persisted before, it's also unpersisted.
 #'
 #' @param tableName The name of the SparkSQL table to be dropped.
-#' @rdname dropTempTable
+#' @seealso \link{dropTempView}
+#' @rdname dropTempTable-deprecated
 #' @export
 #' @examples
 #' \dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df <- read.df(path, "parquet")
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' dropTempTable("table")
 #' }
 #' @name dropTempTable
 #' @method dropTempTable default
-
+#' @note dropTempTable since 1.4.0
 dropTempTable.default <- function(tableName) {
-  sqlContext <- getSqlContext()
   if (class(tableName) != "character") {
     stop("tableName must be a string.")
   }
-  callJMethod(sqlContext, "dropTempTable", tableName)
+  dropTempView(tableName)
 }
 
 dropTempTable <- function(x, ...) {
-  dispatchFunc("dropTempTable(tableName)", x, ...)
+  .Deprecated("dropTempView")
+  dispatchFunc("dropTempView(viewName)", x, ...)
+}
+
+#' Drops the temporary view with the given view name in the catalog.
+#'
+#' Drops the temporary view with the given view name in the catalog.
+#' If the view has been cached before, then it will also be uncached.
+#'
+#' @param viewName the name of the view to be dropped.
+#' @rdname dropTempView
+#' @name dropTempView
+#' @export
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' df <- read.df(path, "parquet")
+#' createOrReplaceTempView(df, "table")
+#' dropTempView("table")
+#' }
+#' @note since 2.0.0
+
+dropTempView <- function(viewName) {
+  sparkSession <- getSparkSession()
+  if (class(viewName) != "character") {
+    stop("viewName must be a string.")
+  }
+  catalog <- callJMethod(sparkSession, "catalog")
+  callJMethod(catalog, "dropTempView", viewName)
 }
 
 #' Load a SparkDataFrame
 #'
 #' Returns the dataset in a data source as a SparkDataFrame
 #'
-#' The data source is specified by the `source` and a set of options(...).
-#' If `source` is not specified, the default data source configured by
-#' "spark.sql.sources.default" will be used.
+#' The data source is specified by the \code{source} and a set of options(...).
+#' If \code{source} is not specified, the default data source configured by
+#' "spark.sql.sources.default" will be used. \cr
+#' Similar to R read.csv, when \code{source} is "csv", by default, a value of "NA" will be
+#' interpreted as NA.
 #'
 #' @param path The path of files to load
 #' @param source The name of external data source
 #' @param schema The data schema defined in structType
+#' @param na.strings Default string value for NA when source is "csv"
+#' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.df
 #' @name read.df
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df1 <- read.df("path/to/file.json", source = "json")
 #' schema <- structType(structField("name", "string"),
 #'                      structField("info", "map<string,double>"))
@@ -652,23 +746,26 @@ dropTempTable <- function(x, ...) {
 #' }
 #' @name read.df
 #' @method read.df default
-
-read.df.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
-  sqlContext <- getSqlContext()
+#' @note read.df since 1.4.0
+read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.strings = "NA", ...) {
+  sparkSession <- getSparkSession()
   options <- varargsToEnv(...)
   if (!is.null(path)) {
     options[["path"]] <- path
   }
   if (is.null(source)) {
-    source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
-                          "org.apache.spark.sql.parquet")
+    source <- getDefaultSqlSource()
+  }
+  if (source == "csv" && is.null(options[["nullValue"]])) {
+    options[["nullValue"]] <- na.strings
   }
   if (!is.null(schema)) {
     stopifnot(class(schema) == "structType")
-    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sqlContext, source,
+    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession, source,
                        schema$jobj, options)
   } else {
-    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sqlContext, source, options)
+    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                       "loadDF", sparkSession, source, options)
   }
   dataFrame(sdf)
 }
@@ -680,7 +777,7 @@ read.df <- function(x, ...) {
 #' @rdname read.df
 #' @name loadDF
 #' @method loadDF default
-
+#' @note loadDF since 1.6.0
 loadDF.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
   read.df(path, source, schema, ...)
 }
@@ -694,32 +791,33 @@ loadDF <- function(x, ...) {
 #' Creates an external table based on the dataset in a data source,
 #' Returns a SparkDataFrame associated with the external table.
 #'
-#' The data source is specified by the `source` and a set of options(...).
-#' If `source` is not specified, the default data source configured by
+#' The data source is specified by the \code{source} and a set of options(...).
+#' If \code{source} is not specified, the default data source configured by
 #' "spark.sql.sources.default" will be used.
 #'
-#' @param tableName A name of the table
-#' @param path The path of files to load
-#' @param source the name of external data source
-#' @return SparkDataFrame
+#' @param tableName a name of the table.
+#' @param path the path of files to load.
+#' @param source the name of external data source.
+#' @param ... additional argument(s) passed to the method.
+#' @return A SparkDataFrame.
 #' @rdname createExternalTable
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
-#' df <- sparkRSQL.createExternalTable("myjson", path="path/to/json", source="json")
+#' sparkR.session()
+#' df <- createExternalTable("myjson", path="path/to/json", source="json")
 #' }
 #' @name createExternalTable
 #' @method createExternalTable default
-
+#' @note createExternalTable since 1.4.0
 createExternalTable.default <- function(tableName, path = NULL, source = NULL, ...) {
-  sqlContext <- getSqlContext()
+  sparkSession <- getSparkSession()
   options <- varargsToEnv(...)
   if (!is.null(path)) {
     options[["path"]] <- path
   }
-  sdf <- callJMethod(sqlContext, "createExternalTable", tableName, source, options)
+  catalog <- callJMethod(sparkSession, "catalog")
+  sdf <- callJMethod(catalog, "createExternalTable", tableName, source, options)
   dataFrame(sdf)
 }
 
@@ -732,46 +830,44 @@ createExternalTable <- function(x, ...) {
 #' Additional JDBC database connection properties can be set (...)
 #'
 #' Only one of partitionColumn or predicates should be set. Partitions of the table will be
-#' retrieved in parallel based on the `numPartitions` or by the predicates.
+#' retrieved in parallel based on the \code{numPartitions} or by the predicates.
 #'
 #' Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
 #' your external database systems.
 #'
-#' @param url JDBC database url of the form `jdbc:subprotocol:subname`
+#' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}
 #' @param tableName the name of the table in the external database
 #' @param partitionColumn the name of a column of integral type that will be used for partitioning
-#' @param lowerBound the minimum value of `partitionColumn` used to decide partition stride
-#' @param upperBound the maximum value of `partitionColumn` used to decide partition stride
-#' @param numPartitions the number of partitions, This, along with `lowerBound` (inclusive),
-#'                      `upperBound` (exclusive), form partition strides for generated WHERE
-#'                      clause expressions used to split the column `partitionColumn` evenly.
+#' @param lowerBound the minimum value of \code{partitionColumn} used to decide partition stride
+#' @param upperBound the maximum value of \code{partitionColumn} used to decide partition stride
+#' @param numPartitions the number of partitions, This, along with \code{lowerBound} (inclusive),
+#'                      \code{upperBound} (exclusive), form partition strides for generated WHERE
+#'                      clause expressions used to split the column \code{partitionColumn} evenly.
 #'                      This defaults to SparkContext.defaultParallelism when unset.
 #' @param predicates a list of conditions in the where clause; each one defines one partition
+#' @param ... additional JDBC database connection named properties.
 #' @return SparkDataFrame
 #' @rdname read.jdbc
 #' @name read.jdbc
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' jdbcUrl <- "jdbc:mysql://localhost:3306/databasename"
 #' df <- read.jdbc(jdbcUrl, "table", predicates = list("field<=123"), user = "username")
 #' df2 <- read.jdbc(jdbcUrl, "table2", partitionColumn = "index", lowerBound = 0,
 #'                  upperBound = 10000, user = "username", password = "password")
 #' }
-#' @note since 2.0.0
-
+#' @note read.jdbc since 2.0.0
 read.jdbc <- function(url, tableName,
                       partitionColumn = NULL, lowerBound = NULL, upperBound = NULL,
                       numPartitions = 0L, predicates = list(), ...) {
   jprops <- varargsToJProperties(...)
-
-  read <- callJMethod(sqlContext, "read")
+  sparkSession <- getSparkSession()
+  read <- callJMethod(sparkSession, "read")
   if (!is.null(partitionColumn)) {
     if (is.null(numPartitions) || numPartitions == 0) {
-      sqlContext <- getSqlContext()
-      sc <- callJMethod(sqlContext, "sparkContext")
+      sc <- callJMethod(sparkSession, "sparkContext")
       numPartitions <- callJMethod(sc, "defaultParallelism")
     } else {
       numPartitions <- numToInt(numPartitions)

@@ -18,12 +18,13 @@
 context("functions in utils.R")
 
 # JavaSparkContext handle
-sc <- sparkR.init()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 test_that("convertJListToRList() gives back (deserializes) the original JLists
           of strings and integers", {
   # It's hard to manually create a Java List using rJava, since it does not
-  # support generics well. Instead, we rely on collect() returning a
+  # support generics well. Instead, we rely on collectRDD() returning a
   # JList.
   nums <- as.list(1:10)
   rdd <- parallelize(sc, nums, 1L)
@@ -47,7 +48,7 @@ test_that("serializeToBytes on RDD", {
   text.rdd <- textFile(sc, fileName)
   expect_equal(getSerializedMode(text.rdd), "string")
   ser.rdd <- serializeToBytes(text.rdd)
-  expect_equal(collect(ser.rdd), as.list(mockFile))
+  expect_equal(collectRDD(ser.rdd), as.list(mockFile))
   expect_equal(getSerializedMode(ser.rdd), "byte")
 
   unlink(fileName)
@@ -127,7 +128,7 @@ test_that("cleanClosure on R functions", {
   env <- environment(newF)
   expect_equal(ls(env), "t")
   expect_equal(get("t", envir = env, inherits = FALSE), t)
-  actual <- collect(lapply(rdd, f))
+  actual <- collectRDD(lapply(rdd, f))
   expected <- as.list(c(rep(FALSE, 4), rep(TRUE, 6)))
   expect_equal(actual, expected)
 
@@ -168,3 +169,18 @@ test_that("convertToJSaveMode", {
 test_that("hashCode", {
   expect_error(hashCode("bc53d3605e8a5b7de1e8e271c2317645"), NA)
 })
+
+test_that("overrideEnvs", {
+  config <- new.env()
+  config[["spark.master"]] <- "foo"
+  config[["config_only"]] <- "ok"
+  param <- new.env()
+  param[["spark.master"]] <- "local"
+  param[["param_only"]] <- "blah"
+  overrideEnvs(config, param)
+  expect_equal(config[["spark.master"]], "local")
+  expect_equal(config[["param_only"]], "blah")
+  expect_equal(config[["config_only"]], "ok")
+})
+
+sparkR.session.stop()

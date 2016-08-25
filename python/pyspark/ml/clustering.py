@@ -19,7 +19,7 @@ from pyspark import since, keyword_only
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.common import inherit_doc
 
 __all__ = ['BisectingKMeans', 'BisectingKMeansModel',
            'KMeans', 'KMeansModel',
@@ -99,9 +99,9 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     +--------------------+--------------------+
     |                mean|                 cov|
     +--------------------+--------------------+
-    |[-0.0550000000000...|0.002025000000000...|
-    |[0.82499999999999...|0.005625000000000...|
-    |[-0.87,-0.7200000...|0.001600000000000...|
+    |[0.82500000140229...|0.005625000000006...|
+    |[-0.4777098016092...|0.167969502720916...|
+    |[-0.4472625243352...|0.167304119758233...|
     +--------------------+--------------------+
     ...
     >>> transformed = model.transform(df).select("features", "prediction")
@@ -124,9 +124,9 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     +--------------------+--------------------+
     |                mean|                 cov|
     +--------------------+--------------------+
-    |[-0.0550000000000...|0.002025000000000...|
-    |[0.82499999999999...|0.005625000000000...|
-    |[-0.87,-0.7200000...|0.001600000000000...|
+    |[0.82500000140229...|0.005625000000006...|
+    |[-0.4777098016092...|0.167969502720916...|
+    |[-0.4472625243352...|0.167304119758233...|
     +--------------------+--------------------+
     ...
 

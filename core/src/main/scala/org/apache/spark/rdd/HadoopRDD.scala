@@ -22,7 +22,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 
 import scala.collection.immutable.Map
-import scala.collection.mutable.ListBuffer
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
@@ -155,7 +154,7 @@ class HadoopRDD[K, V](
         logDebug("Cloning Hadoop Configuration")
         val newJobConf = new JobConf(conf)
         if (!conf.isInstanceOf[JobConf]) {
-          initLocalJobConfFuncOpt.map(f => f(newJobConf))
+          initLocalJobConfFuncOpt.foreach(f => f(newJobConf))
         }
         newJobConf
       }
@@ -174,7 +173,7 @@ class HadoopRDD[K, V](
         HadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
           logDebug("Creating new JobConf and caching it for later re-use")
           val newJobConf = new JobConf(conf)
-          initLocalJobConfFuncOpt.map(f => f(newJobConf))
+          initLocalJobConfFuncOpt.foreach(f => f(newJobConf))
           HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
           newJobConf
         }
@@ -241,7 +240,7 @@ class HadoopRDD[K, V](
 
       var reader: RecordReader[K, V] = null
       val inputFormat = getInputFormat(jobConf)
-      HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(createTime),
+      HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmmss").format(createTime),
         context.stageId, theSplit.index, context.attemptNumber, jobConf)
       reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 
@@ -317,7 +316,7 @@ class HadoopRDD[K, V](
         try {
           val lsplit = c.inputSplitWithLocationInfo.cast(hsplit)
           val infos = c.getLocationInfo.invoke(lsplit).asInstanceOf[Array[AnyRef]]
-          Some(HadoopRDD.convertSplitLocationInfo(infos))
+          HadoopRDD.convertSplitLocationInfo(infos)
         } catch {
           case e: Exception =>
             logDebug("Failed to use InputSplitWithLocations.", e)
@@ -419,21 +418,20 @@ private[spark] object HadoopRDD extends Logging {
       None
   }
 
-  private[spark] def convertSplitLocationInfo(infos: Array[AnyRef]): Seq[String] = {
-    val out = ListBuffer[String]()
-    infos.foreach { loc =>
-      val locationStr = HadoopRDD.SPLIT_INFO_REFLECTIONS.get.
-        getLocation.invoke(loc).asInstanceOf[String]
+  private[spark] def convertSplitLocationInfo(infos: Array[AnyRef]): Option[Seq[String]] = {
+    Option(infos).map(_.flatMap { loc =>
+      val reflections = HadoopRDD.SPLIT_INFO_REFLECTIONS.get
+      val locationStr = reflections.getLocation.invoke(loc).asInstanceOf[String]
       if (locationStr != "localhost") {
-        if (HadoopRDD.SPLIT_INFO_REFLECTIONS.get.isInMemory.
-                invoke(loc).asInstanceOf[Boolean]) {
-          logDebug("Partition " + locationStr + " is cached by Hadoop.")
-          out += new HDFSCacheTaskLocation(locationStr).toString
+        if (reflections.isInMemory.invoke(loc).asInstanceOf[Boolean]) {
+          logDebug(s"Partition $locationStr is cached by Hadoop.")
+          Some(HDFSCacheTaskLocation(locationStr).toString)
         } else {
-          out += new HostTaskLocation(locationStr).toString
+          Some(HostTaskLocation(locationStr).toString)
         }
+      } else {
+        None
       }
-    }
-    out.seq
+    })
   }
 }

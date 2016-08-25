@@ -87,6 +87,16 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-17124 agg should be ordering preserving") {
+    val df = spark.range(2)
+    val ret = df.groupBy("id").agg("id" -> "sum", "id" -> "count", "id" -> "min")
+    assert(ret.schema.map(_.name) == Seq("id", "sum(id)", "count(id)", "min(id)"))
+    checkAnswer(
+      ret,
+      Row(0, 0, 1, 0) :: Row(1, 1, 1, 1) :: Nil
+    )
+  }
+
   test("rollup") {
     checkAnswer(
       courseSales.rollup("course", "year").sum("earnings"),
@@ -455,6 +465,16 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       df.select(collect_set($"a"), sort_array(collect_set($"b"))),
       Seq(Row(Seq(1, 2, 3), Seq(Row(2, 2), Row(4, 1))))
     )
+  }
+
+  test("collect_set functions cannot have maps") {
+    val df = Seq((1, 3, 0), (2, 3, 0), (3, 4, 1))
+      .toDF("a", "x", "y")
+      .select($"a", map($"x", $"y").as("b"))
+    val error = intercept[AnalysisException] {
+      df.select(collect_set($"a"), collect_set($"b"))
+    }
+    assert(error.message.contains("collect_set() cannot have map type data"))
   }
 
   test("SPARK-14664: Decimal sum/avg over window should work.") {

@@ -225,6 +225,15 @@ class TaskMetrics private[spark] () extends Serializable {
   }
 
   private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
+
+  /**
+   * Looks for a registered accumulator by accumulator name.
+   */
+  private[spark] def lookForAccumulatorByName(name: String): Option[AccumulatorV2[_, _]] = {
+    accumulators.find { acc =>
+      acc.name.isDefined && acc.name.get == name
+    }
+  }
 }
 
 

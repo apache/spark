@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark._
@@ -33,13 +32,13 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
-import org.apache.spark.scheduler.local.LocalSchedulerBackendEndpoint
+import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
- * It can also work with a local setup by using a [[LocalSchedulerBackendEndpoint]] and setting
+ * It can also work with a local setup by using a [[LocalSchedulerBackend]] and setting
  * isLocal to true. It handles common logic, like determining a scheduling order across jobs, waking
  * up to launch speculative tasks, etc.
  *
@@ -266,7 +265,6 @@ private[spark] class TaskSchedulerImpl(
             taskIdToTaskSetManager(tid) = taskSet
             taskIdToExecutorId(tid) = execId
             executorIdToTaskCount(execId) += 1
-            executorsByHost(host) += execId
             availableCpus(i) -= CPUS_PER_TASK
             assert(availableCpus(i) >= 0)
             launchedTask = true
@@ -279,6 +277,9 @@ private[spark] class TaskSchedulerImpl(
             return launchedTask
         }
       }
+    }
+    if (!launchedTask) {
+      taskSet.abortIfCompletelyBlacklisted(executorIdToHost.keys)
     }
     return launchedTask
   }
@@ -293,11 +294,14 @@ private[spark] class TaskSchedulerImpl(
     // Also track if new executor is added
     var newExecAvail = false
     for (o <- offers) {
-      executorIdToHost(o.executorId) = o.host
-      executorIdToTaskCount.getOrElseUpdate(o.executorId, 0)
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
+      }
+      if (!executorIdToTaskCount.contains(o.executorId)) {
+        executorsByHost(o.host) += o.executorId
         executorAdded(o.executorId, o.host)
+        executorIdToHost(o.executorId) = o.host
+        executorIdToTaskCount(o.executorId) = 0
         newExecAvail = true
       }
       for (rack <- getRackForHost(o.host)) {
@@ -352,11 +356,9 @@ private[spark] class TaskSchedulerImpl(
         }
         taskIdToTaskSetManager.get(tid) match {
           case Some(taskSet) =>
-            var executorId: String = null
             if (TaskState.isFinished(state)) {
               taskIdToTaskSetManager.remove(tid)
               taskIdToExecutorId.remove(tid).foreach { execId =>
-                executorId = execId
                 if (executorIdToTaskCount.contains(execId)) {
                   executorIdToTaskCount(execId) -= 1
                 }
@@ -364,17 +366,7 @@ private[spark] class TaskSchedulerImpl(
             }
             if (state == TaskState.FINISHED) {
               taskSet.removeRunningTask(tid)
-              // In some case, executor has already been removed by driver for heartbeats timeout,
-              // but at sometime, before executor killed by cluster, the task of running on this
-              // executor is finished and return task success state to driver. However, this kinds
-              // of task should be ignored, because the task on this executor is already re-queued
-              // by driver. For more details, can check in SPARK-14485.
-              if (executorId != null && !executorIdToTaskCount.contains(executorId)) {
-                logInfo(s"Ignoring update with state $state for TID $tid because its executor " +
-                  s"has already been removed by driver")
-              } else {
-                taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
-              }
+              taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
             } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
               taskSet.removeRunningTask(tid)
               taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)

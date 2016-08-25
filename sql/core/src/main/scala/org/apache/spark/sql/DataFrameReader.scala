@@ -22,7 +22,6 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 import org.apache.spark.Partition
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -30,12 +29,11 @@ import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.{InferSchema, JacksonParser, JSONOptions}
-import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
 
 /**
  * Interface used to load a [[Dataset]] from external storage systems (e.g. file systems,
- * key-value stores, etc) or data streams. Use [[SparkSession.read]] to access this.
+ * key-value stores, etc). Use [[SparkSession.read]] to access this.
  *
  * @since 1.4.0
  */
@@ -121,13 +119,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def load(): DataFrame = {
-    val dataSource =
-      DataSource(
-        sparkSession,
-        userSpecifiedSchema = userSpecifiedSchema,
-        className = source,
-        options = extraOptions.toMap)
-    Dataset.ofRows(sparkSession, LogicalRelation(dataSource.resolveRelation()))
+    load(Seq.empty: _*) // force invocation of `load(...varargs...)`
   }
 
   /**
@@ -137,7 +129,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def load(path: String): DataFrame = {
-    option("path", path).load()
+    option("path", path).load(Seq.empty: _*) // force invocation of `load(...varargs...)`
   }
 
   /**
@@ -148,46 +140,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
-    if (paths.isEmpty) {
-      sparkSession.emptyDataFrame
-    } else {
-      sparkSession.baseRelationToDataFrame(
-        DataSource.apply(
-          sparkSession,
-          paths = paths,
-          userSpecifiedSchema = userSpecifiedSchema,
-          className = source,
-          options = extraOptions.toMap).resolveRelation())
-    }
-  }
-
-  /**
-   * :: Experimental ::
-   * Loads input data stream in as a [[DataFrame]], for data streams that don't require a path
-   * (e.g. external key-value stores).
-   *
-   * @since 2.0.0
-   */
-  @Experimental
-  def stream(): DataFrame = {
-    val dataSource =
-      DataSource(
+    sparkSession.baseRelationToDataFrame(
+      DataSource.apply(
         sparkSession,
+        paths = paths,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
-        options = extraOptions.toMap)
-    Dataset.ofRows(sparkSession, StreamingRelation(dataSource))
-  }
-
-  /**
-   * :: Experimental ::
-   * Loads input in as a [[DataFrame]], for data streams that read from some path.
-   *
-   * @since 2.0.0
-   */
-  @Experimental
-  def stream(path: String): DataFrame = {
-    option("path", path).stream()
+        options = extraOptions.toMap).resolveRelation())
   }
 
   /**
@@ -218,7 +177,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *                      clause expressions used to split the column `columnName` evenly.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
-   *                             should be included.
+   *                             should be included. "fetchsize" can be used to control the
+   *                             number of rows per fetch.
    * @since 1.4.0
    */
   def jdbc(
@@ -248,7 +208,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @param predicates Condition in the where clause for each partition.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
-   *                             should be included.
+   *                             should be included. "fetchsize" can be used to control the
+   *                             number of rows per fetch.
    * @since 1.4.0
    */
   def jdbc(
@@ -279,11 +240,23 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Loads a JSON file (one object per line) and returns the result as a [[DataFrame]].
+   * See the documentation on the overloaded `json()` method with varargs for more details.
+   *
+   * @since 1.4.0
+   */
+  def json(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    json(Seq(path): _*)
+  }
+
+  /**
+   * Loads a JSON file (one object per line) and returns the result as a [[DataFrame]].
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
    *
    * You can set the following JSON-specific options to deal with non-standard JSON files:
+   * <ul>
    * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
    * <li>`prefersDecimal` (default `false`): infers all floating-point values as a decimal
    * type. If the values do not fit in decimal, then it infers them as doubles.</li>
@@ -298,17 +271,24 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    * during parsing.</li>
    * <ul>
-   *  <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts the
-   *  malformed string into a new field configured by `columnNameOfCorruptRecord`. When
+   *  <li> - `PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
+   *  the malformed string into a new field configured by `columnNameOfCorruptRecord`. When
    *  a schema is set by user, it sets `null` for extra fields.</li>
-   *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   *  <li> - `DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *  <li> - `FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
-   * <li>`columnNameOfCorruptRecord` (default `_corrupt_record`): allows renaming the new field
-   * having malformed string created by `PERMISSIVE` mode. This overrides
-   * `spark.sql.columnNameOfCorruptRecord`.</li>
+   * <li>`columnNameOfCorruptRecord` (default is the value specified in
+   * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
+   * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
+   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
+   * date type.</li>
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * indicates a timestamp format. Custom date formats follow the formats at
+   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * </ul>
    *
-   * @since 1.6.0
+   * @since 2.0.0
    */
   @scala.annotation.varargs
   def json(paths: String*): DataFrame = format("json").load(paths : _*)
@@ -346,36 +326,51 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         columnNameOfCorruptRecord,
         parsedOptions)
     }
+    val parsed = jsonRDD.mapPartitions { iter =>
+      val parser = new JacksonParser(schema, columnNameOfCorruptRecord, parsedOptions)
+      iter.flatMap(parser.parse)
+    }
 
     Dataset.ofRows(
       sparkSession,
-      LogicalRDD(
-        schema.toAttributes,
-        JacksonParser.parse(
-          jsonRDD,
-          schema,
-          columnNameOfCorruptRecord,
-          parsedOptions))(sparkSession))
+      LogicalRDD(schema.toAttributes, parsed)(sparkSession))
+  }
+
+  /**
+   * Loads a CSV file and returns the result as a [[DataFrame]]. See the documentation on the
+   * other overloaded `csv()` method for more details.
+   *
+   * @since 2.0.0
+   */
+  def csv(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    csv(Seq(path): _*)
   }
 
   /**
    * Loads a CSV file and returns the result as a [[DataFrame]].
    *
-   * This function goes through the input once to determine the input schema. To avoid going
-   * through the entire data once, specify the schema explicitly using [[schema]].
+   * This function will go through the input once to determine the input schema if `inferSchema`
+   * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
+   * specify the schema explicitly using [[schema]].
    *
    * You can set the following CSV-specific options to deal with CSV files:
+   * <ul>
    * <li>`sep` (default `,`): sets the single character as a separator for each
    * field and value.</li>
    * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
    * type.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
-   * the separator can be part of the value.</li>
+   * the separator can be part of the value. If you would like to turn off quotations, you need to
+   * set not `null` but an empty string. This behaviour is different form
+   * `com.databricks.spark.csv`.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
    * <li>`comment` (default empty string): sets the single character used for skipping lines
    * beginning with this character. By default, it is disabled.</li>
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
+   * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
+   * requires one extra pass over the data.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `false`): defines whether or not leading whitespaces
    * from values being read should be skipped.</li>
    * <li>`ignoreTrailingWhiteSpace` (default `false`): defines whether or not trailing
@@ -386,32 +381,53 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * value.</li>
    * <li>`negativeInf` (default `-Inf`): sets the string representation of a negative infinity
    * value.</li>
-   * <li>`dateFormat` (default `null`): sets the string that indicates a date format. Custom date
-   * formats follow the formats at `java.text.SimpleDateFormat`. This applies to both date type
-   * and timestamp type. By default, it is `null` which means trying to parse times and date by
-   * `java.sql.Timestamp.valueOf()` and `java.sql.Date.valueOf()`.</li>
+   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
+   * date type.</li>
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * indicates a timestamp format. Custom date formats follow the formats at
+   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * `java.sql.Timestamp.valueOf()` and `java.sql.Date.valueOf()` or ISO 8601 format.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `1000000`): defines the maximum number of characters allowed
    * for any given value being read.</li>
+   * <li>`maxMalformedLogPerPartition` (default `10`): sets the maximum number of malformed rows
+   * Spark will log for each partition. Malformed records beyond this number will be ignored.</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    *    during parsing.</li>
    * <ul>
-   *   <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
+   *   <li> - `PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
    *     a schema is set by user, it sets `null` for extra fields.</li>
-   *   <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *   <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   *   <li> - `DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *   <li> - `FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
-   *
+   * </ul>
    * @since 2.0.0
    */
   @scala.annotation.varargs
   def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
 
   /**
-   * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
-   * [[DataFrame]] if no paths are passed in.
+   * Loads a Parquet file, returning the result as a [[DataFrame]]. See the documentation
+   * on the other overloaded `parquet()` method for more details.
    *
+   * @since 2.0.0
+   */
+  def parquet(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    parquet(Seq(path): _*)
+  }
+
+  /**
+   * Loads a Parquet file, returning the result as a [[DataFrame]].
+   *
+   * You can set the following Parquet-specific option(s) for reading Parquet files:
+   * <ul>
+   * <li>`mergeSchema` (default is the value specified in `spark.sql.parquet.mergeSchema`): sets
+   * whether we should merge schemas collected from all Parquet part-files. This will override
+   * `spark.sql.parquet.mergeSchema`.</li>
+   * </ul>
    * @since 1.4.0
    */
   @scala.annotation.varargs
@@ -426,7 +442,20 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.5.0
    * @note Currently, this method can only be used after enabling Hive support.
    */
-  def orc(path: String): DataFrame = format("orc").load(path)
+  def orc(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    orc(Seq(path): _*)
+  }
+
+  /**
+   * Loads an ORC file and returns the result as a [[DataFrame]].
+   *
+   * @param paths input paths
+   * @since 2.0.0
+   * @note Currently, this method can only be used after enabling Hive support.
+   */
+  @scala.annotation.varargs
+  def orc(paths: String*): DataFrame = format("orc").load(paths: _*)
 
   /**
    * Returns the specified table as a [[DataFrame]].
@@ -440,14 +469,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
-   * contains a single string column named "value".
+   * Loads text files and returns a [[DataFrame]] whose schema starts with a string column named
+   * "value", and followed by partitioned columns if there are any. See the documentation on
+   * the other overloaded `text()` method for more details.
    *
-   * If the directory structure of the text files contains partitioning information, those are
-   * ignored in the resulting Dataset. To include partitioning information as columns, use
-   * `read.format("text").load("...")`.
+   * @since 2.0.0
+   */
+  def text(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    text(Seq(path): _*)
+  }
+
+  /**
+   * Loads text files and returns a [[DataFrame]] whose schema starts with a string column named
+   * "value", and followed by partitioned columns if there are any.
    *
-   * Each line in the text files is a new element in the resulting Dataset. For example:
+   * Each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:
    *   spark.read.text("/path/to/spark/README.md")
@@ -456,13 +493,47 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *   spark.read().text("/path/to/spark/README.md")
    * }}}
    *
+   * @param paths input paths
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+
+  /**
+   * Loads text files and returns a [[Dataset]] of String. See the documentation on the
+   * other overloaded `textFile()` method for more details.
+   * @since 2.0.0
+   */
+  def textFile(path: String): Dataset[String] = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    textFile(Seq(path): _*)
+  }
+
+  /**
+   * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
+   * contains a single string column named "value".
+   *
+   * If the directory structure of the text files contains partitioning information, those are
+   * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
+   *
+   * Each line in the text files is a new element in the resulting Dataset. For example:
+   * {{{
+   *   // Scala:
+   *   spark.read.textFile("/path/to/spark/README.md")
+   *
+   *   // Java:
+   *   spark.read().textFile("/path/to/spark/README.md")
+   * }}}
+   *
    * @param paths input path
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): Dataset[String] = {
-    format("text").load(paths : _*).select("value")
-      .as[String](sparkSession.implicits.newStringEncoder)
+  def textFile(paths: String*): Dataset[String] = {
+    if (userSpecifiedSchema.nonEmpty) {
+      throw new AnalysisException("User specified schema not supported with `textFile`")
+    }
+    text(paths : _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

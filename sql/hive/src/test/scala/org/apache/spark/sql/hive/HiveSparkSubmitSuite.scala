@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
+import java.io.{BufferedWriter, File, FileWriter}
 import java.sql.Timestamp
 import java.util.Date
 
@@ -205,10 +205,90 @@ class HiveSparkSubmitSuite
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SetWarehouseLocationTest.getClass.getName.stripSuffix("$"),
-      "--name", "SetWarehouseLocationTest",
+      "--name", "SetSparkWarehouseLocationTest",
       "--master", "local-cluster[2,1,1024]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
+
+  test("set hive.metastore.warehouse.dir") {
+    // In this test, we set hive.metastore.warehouse.dir in hive-site.xml but
+    // not set spark.sql.warehouse.dir. So, the warehouse dir should be
+    // the value of hive.metastore.warehouse.dir. Also, the value of
+    // spark.sql.warehouse.dir should be set to the value of hive.metastore.warehouse.dir.
+
+    val hiveWarehouseLocation = Utils.createTempDir()
+    hiveWarehouseLocation.delete()
+    val hiveSiteXmlContent =
+      s"""
+         |<configuration>
+         |  <property>
+         |    <name>hive.metastore.warehouse.dir</name>
+         |    <value>$hiveWarehouseLocation</value>
+         |  </property>
+         |</configuration>
+     """.stripMargin
+
+    // Write a hive-site.xml containing a setting of hive.metastore.warehouse.dir.
+    val hiveSiteDir = Utils.createTempDir()
+    val file = new File(hiveSiteDir.getCanonicalPath, "hive-site.xml")
+    val bw = new BufferedWriter(new FileWriter(file))
+    bw.write(hiveSiteXmlContent)
+    bw.close()
+
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SetWarehouseLocationTest.getClass.getName.stripSuffix("$"),
+      "--name", "SetHiveWarehouseLocationTest",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--conf", s"spark.sql.test.expectedWarehouseDir=$hiveWarehouseLocation",
+      "--conf", s"spark.driver.extraClassPath=${hiveSiteDir.getCanonicalPath}",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
+
+  test("SPARK-16901: set javax.jdo.option.ConnectionURL") {
+    // In this test, we set javax.jdo.option.ConnectionURL and set metastore version to
+    // 0.13. This test will make sure that javax.jdo.option.ConnectionURL will not be
+    // overridden by hive's default settings when we create a HiveConf object inside
+    // HiveClientImpl. Please see SPARK-16901 for more details.
+
+    val metastoreLocation = Utils.createTempDir()
+    metastoreLocation.delete()
+    val metastoreURL =
+      s"jdbc:derby:memory:;databaseName=${metastoreLocation.getAbsolutePath};create=true"
+    val hiveSiteXmlContent =
+      s"""
+         |<configuration>
+         |  <property>
+         |    <name>javax.jdo.option.ConnectionURL</name>
+         |    <value>$metastoreURL</value>
+         |  </property>
+         |</configuration>
+     """.stripMargin
+
+    // Write a hive-site.xml containing a setting of hive.metastore.warehouse.dir.
+    val hiveSiteDir = Utils.createTempDir()
+    val file = new File(hiveSiteDir.getCanonicalPath, "hive-site.xml")
+    val bw = new BufferedWriter(new FileWriter(file))
+    bw.write(hiveSiteXmlContent)
+    bw.close()
+
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SetMetastoreURLTest.getClass.getName.stripSuffix("$"),
+      "--name", "SetMetastoreURLTest",
+      "--master", "local[1]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--conf", s"spark.sql.test.expectedMetastoreURL=$metastoreURL",
+      "--conf", s"spark.driver.extraClassPath=${hiveSiteDir.getCanonicalPath}",
       "--driver-java-options", "-Dderby.system.durability=test",
       unusedJar.toString)
     runSparkSubmit(args)
@@ -274,22 +354,84 @@ class HiveSparkSubmitSuite
   }
 }
 
+object SetMetastoreURLTest extends Logging {
+  def main(args: Array[String]): Unit = {
+    Utils.configTestLog4j("INFO")
+
+    val sparkConf = new SparkConf(loadDefaults = true)
+    val builder = SparkSession.builder()
+      .config(sparkConf)
+      .config("spark.ui.enabled", "false")
+      .config("spark.sql.hive.metastore.version", "0.13.1")
+      // The issue described in SPARK-16901 only appear when
+      // spark.sql.hive.metastore.jars is not set to builtin.
+      .config("spark.sql.hive.metastore.jars", "maven")
+      .enableHiveSupport()
+
+    val spark = builder.getOrCreate()
+    val expectedMetastoreURL =
+      spark.conf.get("spark.sql.test.expectedMetastoreURL")
+    logInfo(s"spark.sql.test.expectedMetastoreURL is $expectedMetastoreURL")
+
+    if (expectedMetastoreURL == null) {
+      throw new Exception(
+        s"spark.sql.test.expectedMetastoreURL should be set.")
+    }
+
+    // HiveExternalCatalog is used when Hive support is enabled.
+    val actualMetastoreURL =
+      spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+        .getConf("javax.jdo.option.ConnectionURL", "this_is_a_wrong_URL")
+    logInfo(s"javax.jdo.option.ConnectionURL is $actualMetastoreURL")
+
+    if (actualMetastoreURL != expectedMetastoreURL) {
+      throw new Exception(
+        s"Expected value of javax.jdo.option.ConnectionURL is $expectedMetastoreURL. But, " +
+          s"the actual value is $actualMetastoreURL")
+    }
+  }
+}
+
 object SetWarehouseLocationTest extends Logging {
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
-    val warehouseLocation = Utils.createTempDir()
-    warehouseLocation.delete()
-    val hiveWarehouseLocation = Utils.createTempDir()
-    hiveWarehouseLocation.delete()
 
-    // We will use the value of spark.sql.warehouse.dir override the
-    // value of hive.metastore.warehouse.dir.
-    val sparkSession = SparkSession.builder()
+    val sparkConf = new SparkConf(loadDefaults = true)
+    val builder = SparkSession.builder()
+      .config(sparkConf)
       .config("spark.ui.enabled", "false")
-      .config("spark.sql.warehouse.dir", warehouseLocation.toString)
-      .config("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)
       .enableHiveSupport()
-      .getOrCreate()
+    val providedExpectedWarehouseLocation =
+      sparkConf.getOption("spark.sql.test.expectedWarehouseDir")
+
+    val (sparkSession, expectedWarehouseLocation) = providedExpectedWarehouseLocation match {
+      case Some(warehouseDir) =>
+        // If spark.sql.test.expectedWarehouseDir is set, the warehouse dir is set
+        // through spark-summit. So, neither spark.sql.warehouse.dir nor
+        // hive.metastore.warehouse.dir is set at here.
+        (builder.getOrCreate(), warehouseDir)
+      case None =>
+        val warehouseLocation = Utils.createTempDir()
+        warehouseLocation.delete()
+        val hiveWarehouseLocation = Utils.createTempDir()
+        hiveWarehouseLocation.delete()
+        // If spark.sql.test.expectedWarehouseDir is not set, we will set
+        // spark.sql.warehouse.dir and hive.metastore.warehouse.dir.
+        // We are expecting that the value of spark.sql.warehouse.dir will override the
+        // value of hive.metastore.warehouse.dir.
+        val session = builder
+          .config("spark.sql.warehouse.dir", warehouseLocation.toString)
+          .config("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)
+          .getOrCreate()
+        (session, warehouseLocation.toString)
+
+    }
+
+    if (sparkSession.conf.get("spark.sql.warehouse.dir") != expectedWarehouseLocation) {
+      throw new Exception(
+        "spark.sql.warehouse.dir is not set to the expected warehouse location " +
+        s"$expectedWarehouseLocation.")
+    }
 
     val catalog = sparkSession.sessionState.catalog
 
@@ -301,7 +443,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("default")))
       val expectedLocation =
-        "file:" + warehouseLocation.toString + "/testlocation"
+        "file:" + expectedWarehouseLocation.toString + "/testlocation"
       val actualLocation = tableMetadata.storage.locationUri.get
       if (actualLocation != expectedLocation) {
         throw new Exception(
@@ -317,7 +459,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("testLocationDB")))
       val expectedLocation =
-        "file:" + warehouseLocation.toString + "/testlocationdb.db/testlocation"
+        "file:" + expectedWarehouseLocation.toString + "/testlocationdb.db/testlocation"
       val actualLocation = tableMetadata.storage.locationUri.get
       if (actualLocation != expectedLocation) {
         throw new Exception(

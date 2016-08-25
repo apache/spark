@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
 
-import org.apache.commons.lang.NotImplementedException;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
@@ -60,7 +59,7 @@ public class VectorizedColumnReader {
   /**
    * If true, the current page is dictionary encoded.
    */
-  private boolean useDictionary;
+  private boolean isCurrentPageDictionaryEncoded;
 
   /**
    * Maximum definition level for this column.
@@ -101,13 +100,13 @@ public class VectorizedColumnReader {
     if (dictionaryPage != null) {
       try {
         this.dictionary = dictionaryPage.getEncoding().initDictionary(descriptor, dictionaryPage);
-        this.useDictionary = true;
+        this.isCurrentPageDictionaryEncoded = true;
       } catch (IOException e) {
         throw new IOException("could not decode the dictionary for " + descriptor, e);
       }
     } else {
       this.dictionary = null;
-      this.useDictionary = false;
+      this.isCurrentPageDictionaryEncoded = false;
     }
     this.totalValueCount = pageReader.getTotalValueCount();
     if (totalValueCount == 0) {
@@ -137,6 +136,13 @@ public class VectorizedColumnReader {
    */
   void readBatch(int total, ColumnVector column) throws IOException {
     int rowId = 0;
+    ColumnVector dictionaryIds = null;
+    if (dictionary != null) {
+      // SPARK-16334: We only maintain a single dictionary per row batch, so that it can be used to
+      // decode all previous dictionary encoded pages if we ever encounter a non-dictionary encoded
+      // page.
+      dictionaryIds = column.reserveDictionaryIds(total);
+    }
     while (total > 0) {
       // Compute the number of values we want to read in this page.
       int leftInPage = (int) (endOfPageValueCount - valuesRead);
@@ -145,12 +151,10 @@ public class VectorizedColumnReader {
         leftInPage = (int) (endOfPageValueCount - valuesRead);
       }
       int num = Math.min(total, leftInPage);
-      if (useDictionary) {
+      if (isCurrentPageDictionaryEncoded) {
         // Read and decode dictionary ids.
-        ColumnVector dictionaryIds = column.reserveDictionaryIds(total);
         defColumn.readIntegers(
             num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
-
         if (column.hasDictionary() || (rowId == 0 &&
             (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT32 ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64 ||
@@ -217,18 +221,18 @@ public class VectorizedColumnReader {
         if (column.dataType() == DataTypes.IntegerType ||
             DecimalType.is32BitDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
-            column.putInt(i, dictionary.decodeToInt(dictionaryIds.getInt(i)));
+            column.putInt(i, dictionary.decodeToInt(dictionaryIds.getDictId(i)));
           }
         } else if (column.dataType() == DataTypes.ByteType) {
           for (int i = rowId; i < rowId + num; ++i) {
-            column.putByte(i, (byte) dictionary.decodeToInt(dictionaryIds.getInt(i)));
+            column.putByte(i, (byte) dictionary.decodeToInt(dictionaryIds.getDictId(i)));
           }
         } else if (column.dataType() == DataTypes.ShortType) {
           for (int i = rowId; i < rowId + num; ++i) {
-            column.putShort(i, (short) dictionary.decodeToInt(dictionaryIds.getInt(i)));
+            column.putShort(i, (short) dictionary.decodeToInt(dictionaryIds.getDictId(i)));
           }
         } else {
-          throw new NotImplementedException("Unimplemented type: " + column.dataType());
+          throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
         }
         break;
 
@@ -236,33 +240,33 @@ public class VectorizedColumnReader {
         if (column.dataType() == DataTypes.LongType ||
             DecimalType.is64BitDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
-            column.putLong(i, dictionary.decodeToLong(dictionaryIds.getInt(i)));
+            column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));
           }
         } else {
-          throw new NotImplementedException("Unimplemented type: " + column.dataType());
+          throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
         }
         break;
 
       case FLOAT:
         for (int i = rowId; i < rowId + num; ++i) {
-          column.putFloat(i, dictionary.decodeToFloat(dictionaryIds.getInt(i)));
+          column.putFloat(i, dictionary.decodeToFloat(dictionaryIds.getDictId(i)));
         }
         break;
 
       case DOUBLE:
         for (int i = rowId; i < rowId + num; ++i) {
-          column.putDouble(i, dictionary.decodeToDouble(dictionaryIds.getInt(i)));
+          column.putDouble(i, dictionary.decodeToDouble(dictionaryIds.getDictId(i)));
         }
         break;
       case INT96:
         if (column.dataType() == DataTypes.TimestampType) {
           for (int i = rowId; i < rowId + num; ++i) {
             // TODO: Convert dictionary of Binaries to dictionary of Longs
-            Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
-            column.putLong(i, CatalystRowConverter.binaryToSQLTimestamp(v));
+            Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
+            column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
           }
         } else {
-          throw new NotImplementedException();
+          throw new UnsupportedOperationException();
         }
         break;
       case BINARY:
@@ -271,7 +275,7 @@ public class VectorizedColumnReader {
         // and reuse it across batches. This should mean adding a ByteArray would just update
         // the length and offset.
         for (int i = rowId; i < rowId + num; ++i) {
-          Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
+          Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
           column.putByteArray(i, v.getBytes());
         }
         break;
@@ -279,26 +283,26 @@ public class VectorizedColumnReader {
         // DecimalType written in the legacy mode
         if (DecimalType.is32BitDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
-            Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
-            column.putInt(i, (int) CatalystRowConverter.binaryToUnscaledLong(v));
+            Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
+            column.putInt(i, (int) ParquetRowConverter.binaryToUnscaledLong(v));
           }
         } else if (DecimalType.is64BitDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
-            Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
-            column.putLong(i, CatalystRowConverter.binaryToUnscaledLong(v));
+            Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
+            column.putLong(i, ParquetRowConverter.binaryToUnscaledLong(v));
           }
         } else if (DecimalType.isByteArrayDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
-            Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
+            Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
             column.putByteArray(i, v.getBytes());
           }
         } else {
-          throw new NotImplementedException();
+          throw new UnsupportedOperationException();
         }
         break;
 
       default:
-        throw new NotImplementedException("Unsupported type: " + descriptor.getType());
+        throw new UnsupportedOperationException("Unsupported type: " + descriptor.getType());
     }
   }
 
@@ -327,7 +331,7 @@ public class VectorizedColumnReader {
       defColumn.readShorts(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else {
-      throw new NotImplementedException("Unimplemented type: " + column.dataType());
+      throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
     }
   }
 
@@ -360,7 +364,7 @@ public class VectorizedColumnReader {
       defColumn.readDoubles(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else {
-      throw new NotImplementedException("Unimplemented type: " + column.dataType());
+      throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
     }
   }
 
@@ -375,13 +379,13 @@ public class VectorizedColumnReader {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putLong(rowId + i,
               // Read 12 bytes for INT96
-              CatalystRowConverter.binaryToSQLTimestamp(data.readBinary(12)));
+              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12)));
         } else {
           column.putNull(rowId + i);
         }
       }
     } else {
-      throw new NotImplementedException("Unimplemented type: " + column.dataType());
+      throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
     }
   }
 
@@ -394,7 +398,7 @@ public class VectorizedColumnReader {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putInt(rowId + i,
-              (int) CatalystRowConverter.binaryToUnscaledLong(data.readBinary(arrayLen)));
+              (int) ParquetRowConverter.binaryToUnscaledLong(data.readBinary(arrayLen)));
         } else {
           column.putNull(rowId + i);
         }
@@ -403,7 +407,7 @@ public class VectorizedColumnReader {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putLong(rowId + i,
-              CatalystRowConverter.binaryToUnscaledLong(data.readBinary(arrayLen)));
+              ParquetRowConverter.binaryToUnscaledLong(data.readBinary(arrayLen)));
         } else {
           column.putNull(rowId + i);
         }
@@ -417,7 +421,7 @@ public class VectorizedColumnReader {
         }
       }
     } else {
-      throw new NotImplementedException("Unimplemented type: " + column.dataType());
+      throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
     }
   }
 
@@ -459,16 +463,16 @@ public class VectorizedColumnReader {
       @SuppressWarnings("deprecation")
       Encoding plainDict = Encoding.PLAIN_DICTIONARY; // var to allow warning suppression
       if (dataEncoding != plainDict && dataEncoding != Encoding.RLE_DICTIONARY) {
-        throw new NotImplementedException("Unsupported encoding: " + dataEncoding);
+        throw new UnsupportedOperationException("Unsupported encoding: " + dataEncoding);
       }
       this.dataColumn = new VectorizedRleValuesReader();
-      this.useDictionary = true;
+      this.isCurrentPageDictionaryEncoded = true;
     } else {
       if (dataEncoding != Encoding.PLAIN) {
-        throw new NotImplementedException("Unsupported encoding: " + dataEncoding);
+        throw new UnsupportedOperationException("Unsupported encoding: " + dataEncoding);
       }
       this.dataColumn = new VectorizedPlainValuesReader();
-      this.useDictionary = false;
+      this.isCurrentPageDictionaryEncoded = false;
     }
 
     try {
@@ -485,7 +489,7 @@ public class VectorizedColumnReader {
 
     // Initialize the decoders.
     if (page.getDlEncoding() != Encoding.RLE && descriptor.getMaxDefinitionLevel() != 0) {
-      throw new NotImplementedException("Unsupported encoding: " + page.getDlEncoding());
+      throw new UnsupportedOperationException("Unsupported encoding: " + page.getDlEncoding());
     }
     int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
     this.defColumn = new VectorizedRleValuesReader(bitWidth);

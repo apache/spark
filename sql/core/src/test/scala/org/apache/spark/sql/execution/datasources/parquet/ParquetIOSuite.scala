@@ -325,8 +325,20 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           |}
         """.stripMargin)
 
-      val writeSupport = new TestGroupWriteSupport(schema)
-      val writer = new ParquetWriter[Group](path, writeSupport)
+      val testWriteSupport = new TestGroupWriteSupport(schema)
+      /**
+       * Provide a builder for constructing a parquet writer - after PARQUET-248 directly
+       * constructing the writer is deprecated and should be done through a builder. The default
+       * builders include Avro - but for raw Parquet writing we must create our own builder.
+       */
+      class ParquetWriterBuilder() extends
+          ParquetWriter.Builder[Group, ParquetWriterBuilder](path) {
+        override def getWriteSupport(conf: Configuration) = testWriteSupport
+
+        override def self() = this
+      }
+
+      val writer = new ParquetWriterBuilder().build()
 
       (0 until 10).foreach { i =>
         val record = new SimpleGroup(schema)
@@ -362,7 +374,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)))
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
 
-      val expectedSchema = new CatalystSchemaConverter().convert(schema)
+      val expectedSchema = new ParquetSchemaConverter().convert(schema)
       val actualSchema = readFooter(path, hadoopConf).getFileMetaData.getSchema
 
       actualSchema.checkContains(expectedSchema)
@@ -432,7 +444,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       """.stripMargin)
 
     withTempPath { location =>
-      val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
+      val extraMetadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
       val path = new Path(location.getCanonicalPath)
       val conf = spark.sessionState.newHadoopConf()
       writeMetadata(parquetSchema, path, conf, extraMetadata)
@@ -556,7 +568,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
         checkAnswer(
           // Decimal column in this file is encoded using plain dictionary
-          readResourceParquetFile("dec-in-i32.parquet"),
+          readResourceParquetFile("test-data/dec-in-i32.parquet"),
           spark.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
       }
     }
@@ -567,7 +579,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
         checkAnswer(
           // Decimal column in this file is encoded using plain dictionary
-          readResourceParquetFile("dec-in-i64.parquet"),
+          readResourceParquetFile("test-data/dec-in-i64.parquet"),
           spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
       }
     }
@@ -578,7 +590,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
         checkAnswer(
           // Decimal column in this file is encoded using plain dictionary
-          readResourceParquetFile("dec-in-fixed-len.parquet"),
+          readResourceParquetFile("test-data/dec-in-fixed-len.parquet"),
           spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
       }
     }

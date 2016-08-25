@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedGenerator, UnresolvedInlineTable, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -68,6 +67,9 @@ class PlanParserSuite extends PlanTest {
     assertEqual("select * from a except select * from b", a.except(b))
     intercept("select * from a except all select * from b", "EXCEPT ALL is not supported.")
     assertEqual("select * from a except distinct select * from b", a.except(b))
+    assertEqual("select * from a minus select * from b", a.except(b))
+    intercept("select * from a minus all select * from b", "MINUS ALL is not supported.")
+    assertEqual("select * from a minus distinct select * from b", a.except(b))
     assertEqual("select * from a intersect select * from b", a.intersect(b))
     intercept("select * from a intersect all select * from b", "INTERSECT ALL is not supported.")
     assertEqual("select * from a intersect distinct select * from b", a.intersect(b))
@@ -77,8 +79,8 @@ class PlanParserSuite extends PlanTest {
     def cte(plan: LogicalPlan, namedPlans: (String, LogicalPlan)*): With = {
       val ctes = namedPlans.map {
         case (name, cte) =>
-          name -> SubqueryAlias(name, cte)
-      }.toMap
+          name -> SubqueryAlias(name, cte, None)
+      }
       With(plan, ctes)
     }
     assertEqual(
@@ -151,9 +153,9 @@ class PlanParserSuite extends PlanTest {
       ("", basePlan),
       (" order by a, b desc", basePlan.orderBy('a.asc, 'b.desc)),
       (" sort by a, b desc", basePlan.sortBy('a.asc, 'b.desc)),
-      (" distribute by a, b", basePlan.distribute('a, 'b)),
-      (" distribute by a sort by b", basePlan.distribute('a).sortBy('b.asc)),
-      (" cluster by a, b", basePlan.distribute('a, 'b).sortBy('a.asc, 'b.asc))
+      (" distribute by a, b", basePlan.distribute('a, 'b)()),
+      (" distribute by a sort by b", basePlan.distribute('a)().sortBy('b.asc)),
+      (" cluster by a, b", basePlan.distribute('a, 'b)().sortBy('a.asc, 'b.asc))
     )
 
     orderSortDistrClusterClauses.foreach {
@@ -183,14 +185,12 @@ class PlanParserSuite extends PlanTest {
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
       insert(Map.empty, overwrite = true))
-    assertEqual(s"insert overwrite table s if not exists $sql",
-      insert(Map.empty, overwrite = true, ifNotExists = true))
+    assertEqual(s"insert overwrite table s partition (e = 1) if not exists $sql",
+      insert(Map("e" -> Option("1")), overwrite = true, ifNotExists = true))
     assertEqual(s"insert into s $sql",
       insert(Map.empty))
     assertEqual(s"insert into table s partition (c = 'd', e = 1) $sql",
       insert(Map("c" -> Option("d"), "e" -> Option("1"))))
-    assertEqual(s"insert overwrite table s partition (c = 'd', x) if not exists $sql",
-      insert(Map("c" -> Option("d"), "x" -> None), overwrite = true, ifNotExists = true))
 
     // Multi insert
     val plan2 = table("t").where('x > 5).select(star())
@@ -199,6 +199,13 @@ class PlanParserSuite extends PlanTest {
         table("s"), Map.empty, plan.limit(1), overwrite = false, ifNotExists = false).union(
         InsertIntoTable(
           table("u"), Map.empty, plan2, overwrite = false, ifNotExists = false)))
+  }
+
+  test ("insert with if not exists") {
+    val sql = "select * from t"
+    intercept(s"insert overwrite table s partition (e = 1, x) if not exists $sql",
+      "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [x]")
+    intercept[ParseException](parsePlan(s"insert overwrite table s if not exists $sql"))
   }
 
   test("aggregation") {
@@ -418,20 +425,21 @@ class PlanParserSuite extends PlanTest {
     assertEqual("table d.t", table("d", "t"))
   }
 
-  test("inline table") {
-    assertEqual("values 1, 2, 3, 4", LocalRelation.fromExternalRows(
-      Seq('col1.int),
-      Seq(1, 2, 3, 4).map(x => Row(x))))
+  test("table valued function") {
     assertEqual(
-      "values (1, 'a'), (2, 'b'), (3, 'c') as tbl(a, b)",
-      LocalRelation.fromExternalRows(
-        Seq('a.int, 'b.string),
-        Seq((1, "a"), (2, "b"), (3, "c")).map(x => Row(x._1, x._2))).as("tbl"))
-    intercept("values (a, 'a'), (b, 'b')",
-      "All expressions in an inline table must be constants.")
-    intercept("values (1, 'a'), (2, 'b') as tbl(a, b, c)",
-      "Number of aliases must match the number of fields in an inline table.")
-    intercept[ArrayIndexOutOfBoundsException](parsePlan("values (1, 'a'), (2, 'b', 5Y)"))
+      "select * from range(2)",
+      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
+  }
+
+  test("inline table") {
+    assertEqual("values 1, 2, 3, 4",
+      UnresolvedInlineTable(Seq("col1"), Seq(1, 2, 3, 4).map(x => Seq(Literal(x)))))
+
+    assertEqual(
+      "values (1, 'a'), (2, 'b') as tbl(a, b)",
+      UnresolvedInlineTable(
+        Seq("a", "b"),
+        Seq(Literal(1), Literal("a")) :: Seq(Literal(2), Literal("b")) :: Nil).as("tbl"))
   }
 
   test("simple select query with !> and !<") {

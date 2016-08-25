@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Benchmark
 
 /**
@@ -64,8 +63,6 @@ object TPCDSQueryBenchmark {
     require(dataLocation.nonEmpty,
       "please modify the value of dataLocation to point to your local TPCDS data")
     val tableSizes = setupTables(dataLocation)
-    spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
-    spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
     queries.foreach { name =>
       val queryString = fileToString(new File(Thread.currentThread().getContextClassLoader
         .getResource(s"tpcds/$name.sql").getFile))

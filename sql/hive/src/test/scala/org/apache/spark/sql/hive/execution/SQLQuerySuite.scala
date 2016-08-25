@@ -19,6 +19,9 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
+import scala.sys.process.Process
+import scala.util.Try
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
@@ -26,7 +29,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
@@ -62,6 +64,20 @@ case class Order(
 class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
+
+  test("script") {
+    if (testCommandAvailable("bash") && testCommandAvailable("echo | sed")) {
+      val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
+      df.createOrReplaceTempView("script_table")
+      val query1 = sql(
+        """
+          |SELECT col1 FROM (from(SELECT c1, c2, c3 FROM script_table) tempt_table
+          |REDUCE c1, c2, c3 USING 'bash src/test/resources/test_script.sh' AS
+          |(col1 STRING, col2 STRING)) script_test_table""".stripMargin)
+      checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
+    }
+    // else skip this test
+  }
 
   test("UDTF") {
     withUserDefinedFunction("udtf_count2" -> true) {
@@ -111,7 +127,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-13651: generator outputs shouldn't be resolved from its child's output") {
-    withTempTable("src") {
+    withTempView("src") {
       Seq(("id1", "value1")).toDF("key", "value").createOrReplaceTempView("src")
       val query =
         sql("SELECT genoutput.* FROM src " +
@@ -188,27 +204,46 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("show functions") {
     val allBuiltinFunctions = FunctionRegistry.builtin.listFunction().toSet[String].toList.sorted
-    // The TestContext is shared by all the test cases, some functions may be registered before
-    // this, so we check that all the builtin functions are returned.
     val allFunctions = sql("SHOW functions").collect().map(r => r(0))
     allBuiltinFunctions.foreach { f =>
       assert(allFunctions.contains(f))
     }
     withTempDatabase { db =>
-      checkAnswer(sql("SHOW functions abs"), Row("abs"))
-      checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))
-      checkAnswer(sql(s"SHOW functions $db.abs"), Row("abs"))
-      checkAnswer(sql(s"SHOW functions `$db`.`abs`"), Row("abs"))
-      checkAnswer(sql(s"SHOW functions `$db`.`abs`"), Row("abs"))
-      checkAnswer(sql("SHOW functions `~`"), Row("~"))
+      def createFunction(names: Seq[String]): Unit = {
+        names.foreach { name =>
+          sql(
+            s"""
+              |CREATE TEMPORARY FUNCTION $name
+              |AS '${classOf[PairUDF].getName}'
+            """.stripMargin)
+        }
+      }
+      def dropFunction(names: Seq[String]): Unit = {
+        names.foreach { name =>
+          sql(s"DROP TEMPORARY FUNCTION $name")
+        }
+      }
+      createFunction(Seq("temp_abs", "temp_weekofyear", "temp_sha", "temp_sha1", "temp_sha2"))
+
+      checkAnswer(sql("SHOW functions temp_abs"), Row("temp_abs"))
+      checkAnswer(sql("SHOW functions 'temp_abs'"), Row("temp_abs"))
+      checkAnswer(sql(s"SHOW functions $db.temp_abs"), Row("temp_abs"))
+      checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
+      checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
       checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
-      checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
+      checkAnswer(sql("SHOW functions `temp_weekofyea*`"), Row("temp_weekofyear"))
+
       // this probably will failed if we add more function with `sha` prefixing.
-      checkAnswer(sql("SHOW functions `sha*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
+      checkAnswer(
+        sql("SHOW functions `temp_sha*`"),
+        List(Row("temp_sha"), Row("temp_sha1"), Row("temp_sha2")))
+
       // Test '|' for alternation.
       checkAnswer(
-        sql("SHOW functions 'sha*|weekofyea*'"),
-        Row("sha") :: Row("sha1") :: Row("sha2") :: Row("weekofyear") :: Nil)
+        sql("SHOW functions 'temp_sha*|temp_weekofyea*'"),
+        List(Row("temp_sha"), Row("temp_sha1"), Row("temp_sha2"), Row("temp_weekofyear")))
+
+      dropFunction(Seq("temp_abs", "temp_weekofyear", "temp_sha", "temp_sha1", "temp_sha2"))
     }
   }
 
@@ -400,8 +435,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             assert(r.options("path") === location)
           case None => // OK.
         }
-        assert(
-          catalogTable.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER) === format)
+        assert(catalogTable.provider.get === format)
 
       case r: MetastoreRelation =>
         if (isDataSourceParquet) {
@@ -606,19 +640,35 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("specifying the column list for CTAS") {
-    Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
+    withTempView("mytable1") {
+      Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
+      withTable("gen__tmp") {
+        sql("create table gen__tmp as select key as a, value as b from mytable1")
+        checkAnswer(
+          sql("SELECT a, b from gen__tmp"),
+          sql("select key, value from mytable1").collect())
+      }
 
-    sql("create table gen__tmp as select key as a, value as b from mytable1")
-    checkAnswer(
-      sql("SELECT a, b from gen__tmp"),
-      sql("select key, value from mytable1").collect())
-    sql("DROP TABLE gen__tmp")
+      withTable("gen__tmp") {
+        val e = intercept[AnalysisException] {
+          sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+        }.getMessage
+        assert(e.contains("Schema may not be specified in a Create Table As Select (CTAS)"))
+      }
 
-    intercept[AnalysisException] {
-      sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+      withTable("gen__tmp") {
+        val e = intercept[AnalysisException] {
+          sql(
+            """
+              |CREATE TABLE gen__tmp
+              |PARTITIONED BY (key string)
+              |AS SELECT key, value FROM mytable1
+            """.stripMargin)
+        }.getMessage
+        assert(e.contains("A Create Table As Select (CTAS) statement is not allowed to " +
+          "create a partitioned table using Hive's file formats"))
+      }
     }
-
-    sql("drop table mytable1")
   }
 
   test("command substitution") {
@@ -922,7 +972,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("Sorting columns are not in Generate") {
-    withTempTable("data") {
+    withTempView("data") {
       spark.range(1, 5)
         .select(array($"id", $"id" + 1).as("a"), $"id".as("b"), (lit(10) - $"id").as("c"))
         .createOrReplaceTempView("data")
@@ -975,29 +1025,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("Cast STRING to BIGINT") {
     checkAnswer(sql("SELECT CAST('775983671874188101' as BIGINT)"), Row(775983671874188101L))
-  }
-
-  // `Math.exp(1.0)` has different result for different jdk version, so not use createQueryTest
-  test("udf_java_method") {
-    checkAnswer(sql(
-      """
-        |SELECT java_method("java.lang.String", "valueOf", 1),
-        |       java_method("java.lang.String", "isEmpty"),
-        |       java_method("java.lang.Math", "max", 2, 3),
-        |       java_method("java.lang.Math", "min", 2, 3),
-        |       java_method("java.lang.Math", "round", 2.5D),
-        |       java_method("java.lang.Math", "exp", 1.0D),
-        |       java_method("java.lang.Math", "floor", 1.9D)
-        |FROM src tablesample (1 rows)
-      """.stripMargin),
-      Row(
-        "1",
-        "true",
-        java.lang.Math.max(2, 3).toString,
-        java.lang.Math.min(2, 3).toString,
-        java.lang.Math.round(2.5).toString,
-        java.lang.Math.exp(1.0).toString,
-        java.lang.Math.floor(1.9).toString))
   }
 
   test("dynamic partition value test") {
@@ -1222,7 +1249,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-10741: Sort on Aggregate using parquet") {
     withTable("test10741") {
-      withTempTable("src") {
+      withTempView("src") {
         Seq("a" -> 5, "a" -> 9, "b" -> 6).toDF("c1", "c2").createOrReplaceTempView("src")
         sql("CREATE TABLE test10741 STORED AS PARQUET AS SELECT * FROM src")
       }
@@ -1476,7 +1503,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("multi-insert with lateral view") {
-    withTempTable("t1") {
+    withTempView("t1") {
       spark.range(10)
         .select(array($"id", $"id" + 1).as("arr"), $"id")
         .createOrReplaceTempView("source")
@@ -1596,6 +1623,38 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     assert(fs.exists(path), "This is an external table, so the data should not have been dropped")
   }
 
+  test("select partitioned table") {
+    val table = "table_with_partition"
+    withTable(table) {
+      sql(
+        s"""
+           |CREATE TABLE $table(c1 string)
+           |PARTITIONED BY (p1 string,p2 string,p3 string,p4 string,p5 string)
+         """.stripMargin)
+      sql(
+        s"""
+           |INSERT OVERWRITE TABLE $table
+           |PARTITION (p1='a',p2='b',p3='c',p4='d',p5='e')
+           |SELECT 'blarr'
+         """.stripMargin)
+
+      // project list is the same order of paritioning columns in table definition
+      checkAnswer(
+        sql(s"SELECT p1, p2, p3, p4, p5, c1 FROM $table"),
+        Row("a", "b", "c", "d", "e", "blarr") :: Nil)
+
+      // project list does not have the same order of paritioning columns in table definition
+      checkAnswer(
+        sql(s"SELECT p2, p3, p4, p1, p5, c1 FROM $table"),
+        Row("b", "c", "d", "a", "e", "blarr") :: Nil)
+
+      // project list contains partial partition columns in table definition
+      checkAnswer(
+        sql(s"SELECT p2, p1, p5, c1 FROM $table"),
+        Row("b", "a", "e", "blarr") :: Nil)
+    }
+  }
+
   test("SPARK-14981: DESC not supported for sorting columns") {
     withTable("t") {
       val cause = intercept[ParseException] {
@@ -1637,5 +1696,99 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Row(234.6)
       )
     }
+  }
+
+  test("SPARK-15752 optimize metadata only query for hive table") {
+    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
+      withTable("data_15752", "srcpart_15752", "srctext_15752") {
+        val df = Seq((1, "2"), (3, "4")).toDF("key", "value")
+        df.createOrReplaceTempView("data_15752")
+        sql(
+          """
+            |CREATE TABLE srcpart_15752 (col1 INT, col2 STRING)
+            |PARTITIONED BY (partcol1 INT, partcol2 STRING) STORED AS parquet
+          """.stripMargin)
+        for (partcol1 <- Seq(0, 1); partcol2 <- Seq("a", "b")) {
+          sql(
+            s"""
+              |INSERT OVERWRITE TABLE srcpart_15752
+              |PARTITION (partcol1='$partcol1', partcol2='$partcol2')
+              |select key, value from data_15752
+            """.stripMargin)
+        }
+        checkAnswer(
+          sql("select partcol1 from srcpart_15752 group by partcol1"),
+          Row(0) :: Row(1) :: Nil)
+        checkAnswer(
+          sql("select partcol1 from srcpart_15752 where partcol1 = 1 group by partcol1"),
+          Row(1))
+        checkAnswer(
+          sql("select partcol1, count(distinct partcol2) from srcpart_15752 group by partcol1"),
+          Row(0, 2) :: Row(1, 2) :: Nil)
+        checkAnswer(
+          sql("select partcol1, count(distinct partcol2) from srcpart_15752 where partcol1 = 1 " +
+            "group by partcol1"),
+          Row(1, 2) :: Nil)
+        checkAnswer(sql("select distinct partcol1 from srcpart_15752"), Row(0) :: Row(1) :: Nil)
+        checkAnswer(sql("select distinct partcol1 from srcpart_15752 where partcol1 = 1"), Row(1))
+        checkAnswer(
+          sql("select distinct col from (select partcol1 + 1 as col from srcpart_15752 " +
+            "where partcol1 = 1) t"),
+          Row(2))
+        checkAnswer(sql("select distinct partcol1 from srcpart_15752 where partcol1 = 1"), Row(1))
+        checkAnswer(sql("select max(partcol1) from srcpart_15752"), Row(1))
+        checkAnswer(sql("select max(partcol1) from srcpart_15752 where partcol1 = 1"), Row(1))
+        checkAnswer(sql("select max(partcol1) from (select partcol1 from srcpart_15752) t"), Row(1))
+        checkAnswer(
+          sql("select max(col) from (select partcol1 + 1 as col from srcpart_15752 " +
+            "where partcol1 = 1) t"),
+          Row(2))
+
+        sql(
+          """
+            |CREATE TABLE srctext_15752 (col1 INT, col2 STRING)
+            |PARTITIONED BY (partcol1 INT, partcol2 STRING) STORED AS textfile
+          """.stripMargin)
+        for (partcol1 <- Seq(0, 1); partcol2 <- Seq("a", "b")) {
+          sql(
+            s"""
+              |INSERT OVERWRITE TABLE srctext_15752
+              |PARTITION (partcol1='$partcol1', partcol2='$partcol2')
+              |select key, value from data_15752
+            """.stripMargin)
+        }
+        checkAnswer(
+          sql("select partcol1 from srctext_15752 group by partcol1"),
+          Row(0) :: Row(1) :: Nil)
+        checkAnswer(
+          sql("select partcol1 from srctext_15752 where partcol1 = 1 group by partcol1"),
+          Row(1))
+        checkAnswer(
+          sql("select partcol1, count(distinct partcol2) from srctext_15752 group by partcol1"),
+          Row(0, 2) :: Row(1, 2) :: Nil)
+        checkAnswer(
+          sql("select partcol1, count(distinct partcol2) from srctext_15752  where partcol1 = 1 " +
+            "group by partcol1"),
+          Row(1, 2) :: Nil)
+        checkAnswer(sql("select distinct partcol1 from srctext_15752"), Row(0) :: Row(1) :: Nil)
+        checkAnswer(sql("select distinct partcol1 from srctext_15752 where partcol1 = 1"), Row(1))
+        checkAnswer(
+          sql("select distinct col from (select partcol1 + 1 as col from srctext_15752 " +
+            "where partcol1 = 1) t"),
+          Row(2))
+        checkAnswer(sql("select max(partcol1) from srctext_15752"), Row(1))
+        checkAnswer(sql("select max(partcol1) from srctext_15752 where partcol1 = 1"), Row(1))
+        checkAnswer(sql("select max(partcol1) from (select partcol1 from srctext_15752) t"), Row(1))
+        checkAnswer(
+          sql("select max(col) from (select partcol1 + 1 as col from srctext_15752 " +
+            "where partcol1 = 1) t"),
+          Row(2))
+      }
+    }
+  }
+
+  def testCommandAvailable(command: String): Boolean = {
+    val attempt = Try(Process(command).run().exitValue())
+    attempt.isSuccess && attempt.get == 0
   }
 }
