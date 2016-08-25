@@ -22,7 +22,7 @@ import java.io.IOException
 import scala.collection.JavaConverters._
 
 import com.google.common.base.Objects
-import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.FieldSchema
@@ -128,9 +128,7 @@ private[hive] case class MetastoreRelation(
           rawDataSize.toLong
         } else if (sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled) {
           try {
-            val hadoopConf = sparkSession.sessionState.newHadoopConf()
-            val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
-            fs.getContentSummary(hiveQlTable.getPath).getLength
+            getSize(hiveQlTable.getPath)
           } catch {
             case e: IOException =>
               logWarning("Failed to get table size from hdfs.", e)
@@ -141,6 +139,27 @@ private[hive] case class MetastoreRelation(
         })
     }
   )
+
+  private def getSize(f: Path): Long = {
+    val hadoopConf = sparkSession.sessionState.newHadoopConf()
+    val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
+    val status: FileStatus = fs.getFileStatus(f)
+    val broadcastThreshold = sparkSession.sessionState.conf.autoBroadcastJoinThreshold
+    if (status.isFile) {
+      status.getLen
+    } else {
+      var totalSize = 0L
+      for (s <- fs.listStatus(f) if (totalSize < broadcastThreshold)) {
+        val size: Long = if (s.isDirectory) {
+          getSize(s.getPath)
+        } else {
+          s.getLen
+        }
+        totalSize += size
+      }
+      totalSize
+    }
+  }
 
   // When metastore partition pruning is turned off, we cache the list of all partitions to
   // mimic the behavior of Spark < 1.5
