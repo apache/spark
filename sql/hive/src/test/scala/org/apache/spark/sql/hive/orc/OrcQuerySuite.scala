@@ -373,7 +373,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  test("SPARK-16948. Check empty orc tables in ORC") {
+  test("support empty orc table when converting hive serde table to data source table") {
     withSQLConf((HiveUtils.CONVERT_METASTORE_ORC.key, "true")) {
       withTable("empty_orc_partitioned") {
         sql(
