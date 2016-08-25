@@ -250,7 +250,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           case "orc" =>
             metastoreSchema
           case _ =>
-            throw new RuntimeException(s"Cannot convert a $fileType to a HadoopFsRelation")
+            throw new RuntimeException(s"Cannot convert a $fileType to a data source table")
         }
 
         val relation = HadoopFsRelation(

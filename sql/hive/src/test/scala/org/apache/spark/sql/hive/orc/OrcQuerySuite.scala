@@ -375,36 +375,34 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("SPARK-16948. Check empty orc tables in ORC") {
     withSQLConf((HiveUtils.CONVERT_METASTORE_ORC.key, "true")) {
-      withTempPath { dir =>
-        withTable("empty_orc_partitioned") {
-          spark.sql(
-            s"""
-                |CREATE TABLE empty_orc_partitioned(key INT, value STRING)
-                |PARTITIONED BY (p INT) STORED AS ORC
-              """.stripMargin)
+      withTable("empty_orc_partitioned") {
+        spark.sql(
+          """
+            |CREATE TABLE empty_orc_partitioned(key INT, value STRING)
+            |PARTITIONED BY (p INT) STORED AS ORC
+          """.stripMargin)
 
-          val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
+        val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
 
-          // Query empty table
-          checkAnswer(
-            sql("SELECT key, value FROM empty_orc_partitioned WHERE key > 10"),
-            emptyDF)
-        }
+        // Query empty table
+        checkAnswer(
+          sql("SELECT key, value FROM empty_orc_partitioned"),
+          emptyDF)
+      }
 
-        withTable("empty_orc") {
-          spark.sql(
-            s"""
-               |CREATE TABLE empty_orc(key INT, value STRING)
-               |STORED AS ORC
-              """.stripMargin)
+      withTable("empty_orc") {
+        spark.sql(
+          """
+            |CREATE TABLE empty_orc(key INT, value STRING)
+            |STORED AS ORC
+          """.stripMargin)
 
-          val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
+        val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
 
-          // Query empty table
-          checkAnswer(
-            sql("SELECT key, value FROM empty_orc WHERE key > 10"),
-            emptyDF)
-        }
+        // Query empty table
+        checkAnswer(
+          sql("SELECT key, value FROM empty_orc"),
+          emptyDF)
       }
     }
   }
