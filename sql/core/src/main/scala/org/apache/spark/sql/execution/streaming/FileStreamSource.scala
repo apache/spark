@@ -104,14 +104,20 @@ class FileStreamSource(
     val files = metadataLog.get(Some(startId + 1), Some(endId)).flatMap(_._2)
     logInfo(s"Processing ${files.length} files from ${startId + 1}:$endId")
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
-    val newOptions = new CaseInsensitiveMap(options).filterKeys(_ != "path")
+    val newOptions = if (!SparkHadoopUtil.get.isGlobPath(new Path(path))) {
+      options.get("path").map { path =>
+        options + (("basePath", path))
+      }.getOrElse(options)
+    } else {
+      options
+    }
     val newDataSource =
       DataSource(
         sparkSession,
         paths = files,
         userSpecifiedSchema = Some(schema),
         className = fileFormatClassName,
-        options = newOptions)
+        options = newOptions.filterKeys(_ != "path"))
     Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation()))
   }
 

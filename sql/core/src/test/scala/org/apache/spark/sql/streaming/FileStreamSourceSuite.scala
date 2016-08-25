@@ -567,6 +567,34 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   // =============== other tests ================
 
+  test("read new files in partitioned table without globbing, should read partition data") {
+    withTempDirs { case (dir, tmp) =>
+      val partitionFooSubDir = new File(dir, "partition=foo")
+      val partitionBarSubDir = new File(dir, "partition=bar")
+
+      val schema = new StructType().add("value", StringType).add("partition", StringType)
+      val fileStream = createFileStream("json", s"${dir.getCanonicalPath}", Some(schema))
+      val filtered = fileStream.filter($"value" contains "keep")
+      testStream(filtered)(
+        // Create new partition=foo sub dir and write to it
+        AddTextFileData("{'value': 'drop1'}\n{'value': 'keep2'}", partitionFooSubDir, tmp),
+        CheckAnswer(("keep2", "foo")),
+
+        // Append to same partition=1 sub dir
+        AddTextFileData("{'value': 'keep3'}", partitionFooSubDir, tmp),
+        CheckAnswer(("keep2", "foo"), ("keep3", "foo")),
+
+        // Create new partition sub dir and write to it
+        AddTextFileData("{'value': 'keep4'}", partitionBarSubDir, tmp),
+        CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar")),
+
+        // Append to same partition=2 sub dir
+        AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
+        CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"))
+      )
+    }
+  }
+
   test("fault tolerance") {
     withTempDirs { case (src, tmp) =>
       val fileStream = createFileStream("text", src.getCanonicalPath)
