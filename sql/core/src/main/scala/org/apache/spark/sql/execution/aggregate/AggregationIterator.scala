@@ -201,7 +201,7 @@ abstract class AggregationIterator(
   protected val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
   // Initializing the function used to generate the output row.
-  protected def generateResultProjection(): (UnsafeRow, MutableRow) => UnsafeRow = {
+  protected def generateResultProjection(): (InternalRow, MutableRow) => UnsafeRow = {
     val joinedRow = new JoinedRow
     val modes = aggregateExpressions.map(_.mode).distinct
     val bufferAttributes = aggregateFunctions.flatMap(_.aggBufferAttributes)
@@ -217,7 +217,7 @@ abstract class AggregationIterator(
       val resultProjection =
         UnsafeProjection.create(resultExpressions, groupingAttributes ++ aggregateAttributes)
 
-      (currentGroupingKey: UnsafeRow, currentBuffer: MutableRow) => {
+      (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
         // Generate results for all expression-based aggregate functions.
         expressionAggEvalProjection(currentBuffer)
         // Generate results for all imperative aggregate functions.
@@ -234,19 +234,19 @@ abstract class AggregationIterator(
       val resultProjection = UnsafeProjection.create(
         groupingAttributes ++ bufferAttributes,
         groupingAttributes ++ bufferAttributes)
-      (currentGroupingKey: UnsafeRow, currentBuffer: MutableRow) => {
+      (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
         resultProjection(joinedRow(currentGroupingKey, currentBuffer))
       }
     } else {
       // Grouping-only: we only output values based on grouping expressions.
       val resultProjection = UnsafeProjection.create(resultExpressions, groupingAttributes)
-      (currentGroupingKey: UnsafeRow, currentBuffer: MutableRow) => {
+      (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
         resultProjection(currentGroupingKey)
       }
     }
   }
 
-  protected val generateOutput: (UnsafeRow, MutableRow) => UnsafeRow =
+  protected val generateOutput: (InternalRow, MutableRow) => UnsafeRow =
     generateResultProjection()
 
   /** Initializes buffer values for all aggregate functions. */
