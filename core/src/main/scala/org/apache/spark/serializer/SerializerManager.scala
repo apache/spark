@@ -124,28 +124,28 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
   /**
    * Wrap an input stream for encryption if shuffle encryption is enabled
    */
-  def wrapForEncryption(s: InputStream): InputStream = {
+  private[this] def wrapForEncryption(s: InputStream): InputStream = {
     if (enableIOEncryption) CryptoStreamUtils.createCryptoInputStream(s, conf) else s
   }
 
   /**
    * Wrap an output stream for encryption if shuffle encryption is enabled
    */
-  def wrapForEncryption(s: OutputStream): OutputStream = {
+  private[this] def wrapForEncryption(s: OutputStream): OutputStream = {
     if (enableIOEncryption) CryptoStreamUtils.createCryptoOutputStream(s, conf) else s
   }
 
   /**
    * Wrap an output stream for compression if block compression is enabled for its block type
    */
-  def wrapForCompression(blockId: BlockId, s: OutputStream): OutputStream = {
+  private[this] def wrapForCompression(blockId: BlockId, s: OutputStream): OutputStream = {
     if (shouldCompress(blockId)) compressionCodec.compressedOutputStream(s) else s
   }
 
   /**
    * Wrap an input stream for compression if block compression is enabled for its block type
    */
-  def wrapForCompression(blockId: BlockId, s: InputStream): InputStream = {
+  private[this] def wrapForCompression(blockId: BlockId, s: InputStream): InputStream = {
     if (shouldCompress(blockId)) compressionCodec.compressedInputStream(s) else s
   }
 
@@ -172,7 +172,7 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
     val bbos = new ChunkedByteBufferOutputStream(1024 * 1024 * 4, ByteBuffer.allocate)
     val byteStream = new BufferedOutputStream(bbos)
     val ser = getSerializer(classTag).newInstance()
-    ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
+    ser.serializeStream(wrapStream(blockId, byteStream)).writeAll(values).close()
     bbos.toChunkedByteBuffer
   }
 
