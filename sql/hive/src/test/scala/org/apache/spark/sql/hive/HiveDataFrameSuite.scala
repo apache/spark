@@ -31,7 +31,7 @@ class HiveDataFrameSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("SPARK-15887: hive-site.xml should be loaded") {
-    val hiveClient = spark.sharedState.asInstanceOf[HiveSharedState].metadataHive
+    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
     assert(hiveClient.getConf("hive.in.test", "") == "true")
   }
 }
