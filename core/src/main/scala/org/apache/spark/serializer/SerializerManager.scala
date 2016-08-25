@@ -118,7 +118,7 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
    * Wrap an output stream for encryption and compression
    */
   def wrapStream(blockId: BlockId, s: OutputStream): OutputStream = {
-    wrapForEncryption(wrapForCompression(blockId, s))
+    wrapForCompression(blockId, wrapForEncryption(s))
   }
 
   /**

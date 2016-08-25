@@ -38,8 +38,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
     val conf = new SparkConf()
     conf.set(sparkKey1, sparkVal1)
     conf.set(sparkKey2, sparkVal2)
-    val props = CryptoStreamUtils.toCryptoConf(conf, SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX,
-      COMMONS_CRYPTO_CONF_PREFIX)
+    val props = CryptoStreamUtils.toCryptoConf(conf)
     assert(props.getProperty(cryptoKey1) === sparkVal1)
     assert(!props.containsKey(cryptoKey2))
   }

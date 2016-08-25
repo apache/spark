@@ -26,12 +26,13 @@ import org.apache.hadoop.io.Text
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
 /**
  * A util class for manipulating IO encryption and decryption streams.
  */
-private[spark] object CryptoStreamUtils {
+private[spark] object CryptoStreamUtils extends Logging {
   /**
    * Constants and variables for spark IO encryption
    */
@@ -50,8 +51,7 @@ private[spark] object CryptoStreamUtils {
   def createCryptoOutputStream(
       os: OutputStream,
       sparkConf: SparkConf): OutputStream = {
-    val properties = toCryptoConf(sparkConf, SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX,
-      COMMONS_CRYPTO_CONF_PREFIX)
+    val properties = toCryptoConf(sparkConf)
     val iv = createInitializationVector(properties)
     os.write(iv)
     val credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
@@ -67,8 +67,7 @@ private[spark] object CryptoStreamUtils {
   def createCryptoInputStream(
       is: InputStream,
       sparkConf: SparkConf): InputStream = {
-    val properties = toCryptoConf(sparkConf, SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX,
-      COMMONS_CRYPTO_CONF_PREFIX)
+    val properties = toCryptoConf(sparkConf)
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
     is.read(iv, 0, iv.length)
     val credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
@@ -81,13 +80,10 @@ private[spark] object CryptoStreamUtils {
   /**
    * Get Commons-crypto configurations from Spark configurations identified by prefix.
    */
-  def toCryptoConf(
-      conf: SparkConf,
-      sparkPrefix: String,
-      cryptoPrefix: String): Properties = {
+  def toCryptoConf(conf: SparkConf): Properties = {
     val props = new Properties()
     conf.getAll.foreach { case (k, v) =>
-      if (k.startsWith(sparkPrefix)) {
+      if (k.startsWith(SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX)) {
         props.put(COMMONS_CRYPTO_CONF_PREFIX + k.substring(
           SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX.length()), v)
       }
@@ -100,7 +96,14 @@ private[spark] object CryptoStreamUtils {
    */
   private[this] def createInitializationVector(properties: Properties): Array[Byte] = {
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
+    val initialIVStart = System.currentTimeMillis()
     CryptoRandomFactory.getCryptoRandom(properties).nextBytes(iv)
+    val initialIVFinish = System.currentTimeMillis()
+    val initialIVTime = initialIVFinish - initialIVStart
+    if (initialIVTime > 2000) {
+      logWarning(s"It costs ${initialIVTime} milliseconds to create the Initialization Vector " +
+        s"used by CryptoStream")
+    }
     iv
   }
 }

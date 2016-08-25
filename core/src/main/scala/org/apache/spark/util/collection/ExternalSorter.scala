@@ -522,7 +522,7 @@ private[spark] class ExternalSorter[K, V, C](
 
         val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
 
-        val wrappedStream = SparkEnv.get.serializerManager.wrapStream(spill.blockId, bufferedStream)
+        val wrappedStream = serializerManager.wrapStream(spill.blockId, bufferedStream)
         serInstance.deserializeStream(wrappedStream)
       } else {
         // No more batches left

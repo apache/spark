@@ -563,7 +563,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.io.encryption.enabled</code></td>
   <td>false</td>
   <td>
-    Enable IO encryption.
+    Enable IO encryption. It only supports YARN mode.
   </td>
 </tr>
 <tr>

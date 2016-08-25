@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.security
+package org.apache.spark.deploy.yarn
 
 import java.io._
 import java.nio.ByteBuffer
@@ -42,6 +42,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.network.buffer.NioManagedBuffer
 import org.apache.spark.network.util.LimitedInputStream
+import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer._
 import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.sort.{SerializedShuffleHandle, UnsafeShuffleWriter}
