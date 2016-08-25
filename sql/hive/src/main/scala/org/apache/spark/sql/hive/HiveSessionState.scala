@@ -33,21 +33,18 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
 
   self =>
 
-  private lazy val sharedState: HiveSharedState = {
-    sparkSession.sharedState.asInstanceOf[HiveSharedState]
-  }
-
   /**
    * A Hive client used for interacting with the metastore.
    */
-  lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
+  lazy val metadataHive: HiveClient =
+    sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client.newSession()
 
   /**
    * Internal catalog for managing table and database states.
    */
   override lazy val catalog = {
     new HiveSessionCatalog(
-      sharedState.externalCatalog,
+      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
       metadataHive,
       sparkSession,
       functionResourceLoader,
