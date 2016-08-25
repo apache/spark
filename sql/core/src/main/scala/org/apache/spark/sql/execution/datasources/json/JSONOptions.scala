@@ -82,4 +82,3 @@ private[sql] class JSONOptions(
       allowBackslashEscapingAnyCharacter)
   }
 }
-

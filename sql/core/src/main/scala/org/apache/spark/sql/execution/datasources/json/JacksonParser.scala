@@ -110,10 +110,10 @@ object JacksonParser extends Logging {
             // compatibility.
             Try(DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(parser.getText).getTime))
               .getOrElse {
-              // In Spark 1.5.0, we store the data as number of days since epoch in string.
-              // So, we just convert it to Int.
-              stringValue.toInt
-            }
+                // In Spark 1.5.0, we store the data as number of days since epoch in string.
+                // So, we just convert it to Int.
+                stringValue.toInt
+              }
           }
 
       case (VALUE_STRING, TimestampType) =>
