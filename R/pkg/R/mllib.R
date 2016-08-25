@@ -34,7 +34,7 @@ setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a MultinomialLogisticRegressionModel
 #'
-#' @param jobj a Java object reference to the backing Scala MultinomialLogisticRegressionModelWrapper
+#' @param jobj a Java object reference to the backing Scala MultinomialLogisticRegressionModel
 #' @export
 #' @note GeneralizedLinearRegressionModel since 2.1.0
 setClass("MultinomialLogisticRegressionModel", representation(jobj = "jobj"))
@@ -336,7 +336,7 @@ setMethod("spark.glmnet", signature(data = "SparkDataFrame", formula = "formula"
               weightCol <- ""
             }
 
-            jobj <- callJStatic("org.apache.spark.ml.r.MultinomialLogisticRegressionModelWrapper",
+            jobj <- callJStatic("org.apache.spark.ml.r.MultinomialLogisticRegressionWrapper",
                                 "fit", formula, data@sdf, as.numeric(regParam), as.numeric(elasticNetParam),
                                 tol, as.integer(maxIter), as.logical(fitIntercept),
                                 as.logical(standardization), as.array(thresholds), as.character(weightCol))
@@ -991,7 +991,7 @@ read.ml <- function(path) {
     new("GaussianMixtureModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.ALSWrapper")) {
     new("ALSModel", jobj = jobj)
-  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.MultinomialLogisticRegressionModelWrapper")) {
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.MultinomialLogisticRegressionWrapper")) {
     new("MultinomialLogisticRegressionModel", jobj = jobj)
   } else {
     stop("Unsupported model: ", jobj)
