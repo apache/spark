@@ -115,6 +115,8 @@ class HadoopTableReader(
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
     val skipHeaderLineCount = Integer.parseInt(
       tableDesc.getProperties.getProperty("skip.header.line.count", "0"))
+    val isTextInputFormatTable =
+      hiveTable.getInputFormatClass().getName().equals("org.apache.hadoop.mapred.TextInputFormat")
 
     // logDebug("Table input: %s".format(tablePath))
     val ifc = hiveTable.getInputFormatClass
@@ -128,7 +130,7 @@ class HadoopTableReader(
       val hconf = broadcastedHadoopConf.value.value
       val deserializer = deserializerClass.newInstance()
       deserializer.initialize(hconf, tableDesc.getProperties)
-      if (skipHeaderLineCount > 0) {
+      if (skipHeaderLineCount > 0 && isTextInputFormatTable) {
         val partition = hadoopRDD.partitions(index).asInstanceOf[HadoopPartition]
         if (partition.inputSplit.t.asInstanceOf[FileSplit].getStart() == 0) {
           for (i <- 0 until skipHeaderLineCount) {
