@@ -633,6 +633,7 @@ number
     | MINUS? SMALLINT_LITERAL         #smallIntLiteral
     | MINUS? TINYINT_LITERAL          #tinyIntLiteral
     | MINUS? DOUBLE_LITERAL           #doubleLiteral
+    | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
 nonReserved
@@ -926,6 +927,11 @@ SCIENTIFIC_DECIMAL_VALUE
 DOUBLE_LITERAL
     :
     (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'D'
+    ;
+
+BIGDECIMAL_LITERAL
+    :
+    (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'BD'
     ;
 
 IDENTIFIER

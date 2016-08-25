@@ -27,6 +27,12 @@ select 9223372036854775807L, -9223372036854775808L;
 -- out of range long
 select 9223372036854775808L;
 
+-- big decimal parsing
+select 90912830918230182310293801923652346786BD, 123.0E-28BD, 123.08BD;
+
+-- out of range big decimal
+select 1.20E-38BD;
+
 -- integral parsing
 
 -- parse int
