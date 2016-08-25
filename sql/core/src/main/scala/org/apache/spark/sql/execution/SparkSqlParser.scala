@@ -388,11 +388,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
-    val str = ctx.path.getText
-    val pathStr = str.substring(1, str.length - 1)
     LoadDataCommand(
       table = visitTableIdentifier(ctx.tableIdentifier),
-      path = pathStr,
+      path = string(ctx.path),
       isLocal = ctx.LOCAL != null,
       isOverwrite = ctx.OVERWRITE != null,
       partition = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
