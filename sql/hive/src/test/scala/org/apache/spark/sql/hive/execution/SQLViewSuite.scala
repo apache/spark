@@ -207,18 +207,18 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("ALTER VIEW: alter a temporary view when a permanent VIEW with same name exists") {
-    verifyAlterViewWithIdenticalName(isTempAlteredView = true)
+    alterTempView(isTempAlteredView = true)
   }
 
   test("ALTER VIEW: alter a persistent view when a temp VIEW with same name exists") {
-    verifyAlterViewWithIdenticalName(isTempAlteredView = false)
+    alterTempView(isTempAlteredView = false)
   }
 
-  private def verifyAlterViewWithIdenticalName (isTempAlteredView: Boolean) = {
+  private def alterTempView (isTempAlteredView: Boolean) = {
     withView("testView", "default.testView") {
       val catalog = spark.sessionState.catalog
       val oldViewQuery = "SELECT id FROM jt"
-      val newViewQuery = "SELECT  id, id1 FROM jt"
+      val newViewQuery = "SELECT id, id1 FROM jt"
       sql(s"CREATE VIEW default.testView AS $oldViewQuery")
       sql(s"CREATE TEMPORARY VIEW testView AS $oldViewQuery")
       if (isTempAlteredView) {
@@ -238,7 +238,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       assert(tempView.viewOriginalText.isEmpty)
 
       if (isTempAlteredView) {
-        // View Text of the persistent view default.testView is changed
+        // View Text of the persistent view default.testView is not changed
         assert(persistentView.viewOriginalText == Option(oldViewQuery))
         // temp view testView is changed
         checkAnswer(
