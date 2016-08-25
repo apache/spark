@@ -89,7 +89,7 @@ class NettyBlockRpcServer(
           BlockCache.addAll(blockIds)
         }
 
-        responseContext.onSuccess(new Array[Byte](0))
+        responseContext.onSuccess(ByteBuffer.allocate(0))
     }
   }
 
