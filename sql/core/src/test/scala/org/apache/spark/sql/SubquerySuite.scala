@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
-import org.apache.spark.sql.execution.{FilterExec, ProjectExec}
+import org.apache.spark.sql.execution.{FilterExec, LocalTableScanExec}
 import org.apache.spark.sql.execution.subquery.CommonSubqueryExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -695,13 +695,15 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       }.distinct
       assert(commonSubqueries.length == 1)
 
-      val pushdownProject = commonSubqueries(0).collect {
-        case f: ProjectExec => f
+      val localTableScan = commonSubqueries(0).collect {
+        case l: LocalTableScanExec => l
       }
-      assert(pushdownProject.length == 1)
+
       // As we project `a` and `b` which both are located at only one side at the inner join,
-      // optimizer will add an empty projection node to filter out all rows from other side.
-      assert(pushdownProject(0).asInstanceOf[ProjectExec].projectList.isEmpty)
+      // one [[LocalTableScanExec]] will have empty output after column pruning.
+      assert(localTableScan.length == 2)
+      assert(localTableScan(0).asInstanceOf[LocalTableScanExec].output.isEmpty ||
+        localTableScan(1).asInstanceOf[LocalTableScanExec].output.isEmpty)
     }
   }
 

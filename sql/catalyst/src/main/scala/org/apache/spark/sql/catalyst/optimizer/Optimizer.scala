@@ -2225,7 +2225,8 @@ object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
 
     noRecursiveSubqueryPlan.foreach {
       // Collects the subqueries that are used more than once in the query.
-      case SubqueryAlias(_, child, _, _) =>
+      // Skip the SubqueryAlias on table scan.
+      case SubqueryAlias(_, child, _, _) if !child.isInstanceOf[MultiInstanceRelation] =>
         if (subqueries.indexWhere(s => s.sameResult(child)) >= 0) {
           // If the plan with same results can be found.
           duplicateSubqueries += child
