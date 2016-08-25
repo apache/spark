@@ -49,5 +49,5 @@ class AnalysisException protected[sql] (
   }
 }
 
-class SQLFeatureNotSupportedException(feature: String)
+class SQLFeatureNotSupportedException(val feature: String)
   extends AnalysisException(s"$feature is not supported.")

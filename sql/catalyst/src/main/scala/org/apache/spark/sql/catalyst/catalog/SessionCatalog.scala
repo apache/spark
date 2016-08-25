@@ -455,7 +455,7 @@ class SessionCatalog(
       try {
         externalCatalog.tableExists(db, table)
       } catch {
-        case _: SQLFeatureNotSupportedException => true
+        case e: SQLFeatureNotSupportedException if e.feature == "Hive index table" => true
       }
     }
   }
