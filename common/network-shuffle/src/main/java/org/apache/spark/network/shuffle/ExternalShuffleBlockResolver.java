@@ -244,7 +244,7 @@ public class ExternalShuffleBlockResolver {
     for (String localDir : dirs) {
       try {
         JavaUtils.deleteRecursively(new File(localDir));
-        logger.debug("Successfully cleaned up directory: " + localDir);
+        logger.debug("Successfully cleaned up directory: {}", localDir);
       } catch (Exception e) {
         logger.error("Failed to delete directory: " + localDir, e);
       }
