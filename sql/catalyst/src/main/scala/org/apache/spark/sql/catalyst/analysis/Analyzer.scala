@@ -1899,7 +1899,7 @@ class Analyzer(
         joinedCols ++
           lUniqueOutput.map(_.withNullability(true)) ++
           rUniqueOutput.map(_.withNullability(true))
-      case Inner =>
+      case _ : Inner =>
         leftKeys ++ lUniqueOutput ++ rUniqueOutput
       case _ =>
         sys.error("Unsupported natural join type " + joinType)

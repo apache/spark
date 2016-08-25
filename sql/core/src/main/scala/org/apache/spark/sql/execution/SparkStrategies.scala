@@ -140,13 +140,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     private def canBuildRight(joinType: JoinType): Boolean = joinType match {
-      case Inner | LeftOuter | LeftSemi | LeftAnti => true
+      case _: Inner | LeftOuter | LeftSemi | LeftAnti => true
       case j: ExistenceJoin => true
       case _ => false
     }
 
     private def canBuildLeft(joinType: JoinType): Boolean = joinType match {
-      case Inner | RightOuter => true
+      case _: Inner | RightOuter => true
       case _ => false
     }
 
@@ -200,7 +200,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           planLater(left), planLater(right), BuildLeft, joinType, condition) :: Nil
 
       // Pick CartesianProduct for InnerJoin
-      case logical.Join(left, right, Inner, condition) =>
+      case logical.Join(left, right, _: Inner, condition) =>
         joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
 
       case logical.Join(left, right, joinType, condition) =>

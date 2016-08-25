@@ -50,7 +50,7 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
       empty(p)
 
     case p @ Join(_, _, joinType, _) if p.children.exists(isEmptyLocalRelation) => joinType match {
-      case Inner => empty(p)
+      case _: Inner => empty(p)
       // Intersect is handled as LeftSemi by `ReplaceIntersectWithSemiJoin` rule.
       // Except is handled as LeftAnti by `ReplaceExceptWithAntiJoin` rule.
       case LeftOuter | LeftSemi | LeftAnti if isEmptyLocalRelation(p.left) => empty(p)

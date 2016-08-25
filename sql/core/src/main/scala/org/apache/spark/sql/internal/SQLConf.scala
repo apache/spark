@@ -709,6 +709,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
   override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
+
+  override def allowCartesianProduct: Boolean = getConf(CROSS_JOINS_ENABLED)
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

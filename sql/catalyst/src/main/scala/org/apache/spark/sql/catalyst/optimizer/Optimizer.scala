@@ -22,6 +22,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.api.java.function.FilterFunction
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
@@ -107,6 +108,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       RewriteCorrelatedScalarSubquery,
       EliminateSerialization,
       RemoveAliasOnlyProject) ::
+    Batch("Check Cartesian Products", Once,
+      CheckCartesianProducts(conf)) ::
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) ::
     Batch("Typed Filter Optimization", fixedPoint,
@@ -838,7 +841,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
       val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
         split(splitConjunctivePredicates(filterCondition), left, right)
       joinType match {
-        case Inner =>
+        case _: Inner =>
           // push down the single side `where` condition into respective sides
           val newLeft = leftFilterConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -848,7 +851,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             commonFilterCondition.partition(e => !SubqueryExpression.hasCorrelatedSubquery(e))
           val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)
 
-          val join = Join(newLeft, newRight, Inner, newJoinCond)
+          val join = Join(newLeft, newRight, joinType, newJoinCond)
           if (others.nonEmpty) {
             Filter(others.reduceLeft(And), join)
           } else {
@@ -885,7 +888,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), left, right)
 
       joinType match {
-        case Inner | LeftExistence(_) =>
+        case _: Inner | LeftExistence(_) =>
           // push down the single side only join filter for both sides sub queries
           val newLeft = leftJoinConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -930,6 +933,45 @@ object CombineLimits extends Rule[LogicalPlan] {
     case Limit(le, Limit(ne, grandChild)) =>
       Limit(Least(Seq(ne, le)), grandChild)
   }
+}
+
+/**
+ * Check if there any cartesian products between joins of any type in the optimized plan tree.
+ * Throw an error if a cartesian product is found without an explicit cross join specified.
+ * This rule is effectively disabled if the CROSS_JOINS_ENABLED flag is true.
+ *
+ * This rule must be run AFTER the ReorderJoin rule since the join conditions for each join must be
+ * collected before checking if it is a cartesian product. If you have
+ * SELECT * from R, S where R.r = S.s,
+ * the join between R and S is not a cartesian product and therefore should be allowed.
+ * The predicate R.r = S.s is not recognized as a join condition until the ReorderJoin rule.
+ */
+case class CheckCartesianProducts(conf: CatalystConf)
+    extends Rule[LogicalPlan] with PredicateHelper {
+  /**
+   * Check if a join specified by left, right and condition is a cartesian product. Returns true if
+   * there are no join conditions involving references from both left and right.
+   */
+  def isCartesianProduct(left: LogicalPlan, right: LogicalPlan, condition: Option[Expression])
+      : Boolean = {
+    val conditions = condition.map(splitConjunctivePredicates).getOrElse(Nil)
+    !conditions.map(_.references).exists(refs => refs.exists(left.outputSet.contains)
+        && refs.exists(right.outputSet.contains))
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan =
+    if (conf.allowCartesianProduct) {
+      plan
+    } else plan transform {
+      case j @ Join(left, right, Inner(false) | LeftOuter | RightOuter | FullOuter, condition)
+        if isCartesianProduct(left, right, condition) =>
+          throw new AnalysisException(
+            s"""Detected cartesian product for ${j.joinType.sql} join between logical plans
+               |${left.treeString(false).trim}
+               |and
+               |${right.treeString(false).trim}
+               |Use a CROSS JOIN to allow cartesian products between these relations""".stripMargin)
+    }
 }
 
 /**

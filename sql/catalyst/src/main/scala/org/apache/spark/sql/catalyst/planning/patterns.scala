@@ -159,23 +159,30 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
  */
 object ExtractFiltersAndInnerJoins extends PredicateHelper {
 
-  // flatten all inner joins, which are next to each other
-  def flattenJoin(plan: LogicalPlan): (Seq[LogicalPlan], Seq[Expression]) = plan match {
-    case Join(left, right, Inner, cond) =>
-      val (plans, conditions) = flattenJoin(left)
-      (plans ++ Seq(right), conditions ++ cond.toSeq)
+  /**
+   * Flatten all inner joins, which are next to each other.
+   * Return a list of logical plans to be joined with a boolean for each plan indicating if it
+   * was involved in an explicit cross join. Also returns the entire list of join conditions for
+   * the left-deep tree.
+   */
+  def flattenJoin(plan: LogicalPlan, isParentExplicitCartesian: Boolean = false)
+      : (Seq[(LogicalPlan, Boolean)], Seq[Expression]) = plan match {
+    case Join(left, right, Inner(explicitCartesian), cond) =>
+      val (plans, conditions) = flattenJoin(left, explicitCartesian)
+      (plans ++ Seq((right, explicitCartesian)), conditions ++ cond.toSeq)
 
-    case Filter(filterCondition, j @ Join(left, right, Inner, joinCondition)) =>
+    case Filter(filterCondition, j @ Join(left, right, Inner(_), joinCondition)) =>
       val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
-    case _ => (Seq(plan), Seq())
+    case _ => (Seq((plan, isParentExplicitCartesian)), Seq())
   }
 
-  def unapply(plan: LogicalPlan): Option[(Seq[LogicalPlan], Seq[Expression])] = plan match {
-    case f @ Filter(filterCondition, j @ Join(_, _, Inner, _)) =>
+  def unapply(plan: LogicalPlan): Option[(Seq[(LogicalPlan, Boolean)], Seq[Expression])]
+      = plan match {
+    case f @ Filter(filterCondition, j @ Join(_, _, joinType @ Inner(_), _)) =>
       Some(flattenJoin(f))
-    case j @ Join(_, _, Inner, _) =>
+    case j @ Join(_, _, joinType, _) =>
       Some(flattenJoin(j))
     case _ => None
   }

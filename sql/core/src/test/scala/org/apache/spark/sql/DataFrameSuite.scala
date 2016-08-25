@@ -626,9 +626,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("drop(name: String) search and drop all top level columns that matchs the name") {
     val df1 = Seq((1, 2)).toDF("a", "b")
     val df2 = Seq((3, 4)).toDF("a", "b")
-    checkAnswer(df1.join(df2), Row(1, 2, 3, 4))
+    checkAnswer(df1.crossJoin(df2), Row(1, 2, 3, 4))
     // Finds and drops all columns that match the name (case insensitive).
-    checkAnswer(df1.join(df2).drop("A"), Row(2, 4))
+    checkAnswer(df1.crossJoin(df2).drop("A"), Row(2, 4))
   }
 
   test("withColumnRenamed") {

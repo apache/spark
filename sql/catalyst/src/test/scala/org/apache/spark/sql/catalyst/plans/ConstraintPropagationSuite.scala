@@ -196,7 +196,7 @@ class ConstraintPropagationSuite extends SparkFunSuite {
     val tr2 = LocalRelation('a.int, 'd.int, 'e.int).subquery('tr2)
     verifyConstraints(tr1
       .where('a.attr > 10)
-      .join(tr2.where('d.attr < 100), Inner, Some("tr1.a".attr === "tr2.a".attr))
+      .join(tr2.where('d.attr < 100), Inner(false), Some("tr1.a".attr === "tr2.a".attr))
       .analyze.constraints,
       ExpressionSet(Seq(tr1.resolveQuoted("a", caseInsensitiveResolution).get > 10,
         tr2.resolveQuoted("d", caseInsensitiveResolution).get < 100,

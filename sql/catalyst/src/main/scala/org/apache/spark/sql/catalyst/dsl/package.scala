@@ -306,7 +306,7 @@ package object dsl {
 
       def join(
         otherPlan: LogicalPlan,
-        joinType: JoinType = Inner,
+        joinType: JoinType = Inner(false),
         condition: Option[Expression] = None): LogicalPlan =
         Join(logicalPlan, otherPlan, joinType, condition)
 

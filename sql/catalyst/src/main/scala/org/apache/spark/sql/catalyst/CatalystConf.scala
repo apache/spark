@@ -36,6 +36,12 @@ trait CatalystConf {
 
   def warehousePath: String
 
+  /** If true, cartesian products between relations will be allowed for all
+   * join types(inner, (left|right|full) outer). If false, cartesian products will
+   * require explicit CROSS JOIN syntax.
+   */
+  def allowCartesianProduct: Boolean
+
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
    * identifiers are equal.
@@ -55,5 +61,6 @@ case class SimpleCatalystConf(
     optimizerInSetConversionThreshold: Int = 10,
     maxCaseBranchesForCodegen: Int = 20,
     runSQLonFile: Boolean = true,
+    allowCartesianProduct: Boolean = false,
     warehousePath: String = "/user/hive/warehouse")
   extends CatalystConf

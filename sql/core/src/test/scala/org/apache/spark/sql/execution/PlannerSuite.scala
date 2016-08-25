@@ -526,7 +526,7 @@ class PlannerSuite extends SharedSQLContext {
     val inputPlan = SortMergeJoinExec(
         Literal(1) :: Nil,
         Literal(1) :: Nil,
-        Inner,
+        Inner(false),
         None,
         shuffle,
         shuffle)
@@ -543,7 +543,7 @@ class PlannerSuite extends SharedSQLContext {
     val inputPlan2 = SortMergeJoinExec(
       Literal(1) :: Nil,
       Literal(1) :: Nil,
-      Inner,
+      Inner(false),
       None,
       ShuffleExchange(finalPartitioning, inputPlan),
       ShuffleExchange(finalPartitioning, inputPlan))

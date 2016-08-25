@@ -396,7 +396,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("error test for self-join") {
-    val join = Join(testRelation, testRelation, Inner, None)
+    val join = Join(testRelation, testRelation, Inner(true), None)
     val error = intercept[AnalysisException] {
       SimpleAnalyzer.checkAnalysis(join)
     }
@@ -475,7 +475,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         LocalRelation(
           AttributeReference("c", BinaryType)(exprId = ExprId(4)),
           AttributeReference("d", IntegerType)(exprId = ExprId(3))),
-        Inner,
+        Inner(false),
         Some(EqualTo(AttributeReference("a", BinaryType)(exprId = ExprId(2)),
           AttributeReference("c", BinaryType)(exprId = ExprId(4)))))
 
@@ -489,7 +489,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         LocalRelation(
           AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)),
           AttributeReference("d", IntegerType)(exprId = ExprId(3))),
-        Inner,
+        Inner(false),
         Some(EqualTo(AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
           AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)))))
 

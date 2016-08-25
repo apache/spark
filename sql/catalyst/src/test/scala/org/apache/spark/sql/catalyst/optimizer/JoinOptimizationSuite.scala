@@ -54,6 +54,18 @@ class JoinOptimizationSuite extends PlanTest {
     val z = testRelation.subquery('z)
 
     def testExtract(plan: LogicalPlan, expected: Option[(Seq[LogicalPlan], Seq[Expression])]) {
+      val expectedNoCross = expected map {
+        seq_pair => {
+          val plans = seq_pair._1
+          val noCartesian = plans map { plan => (plan, false) }
+          (noCartesian, seq_pair._2)
+        }
+      }
+      testExtractCheckCross(plan, expectedNoCross)
+    }
+
+    def testExtractCheckCross
+        (plan: LogicalPlan, expected: Option[(Seq[(LogicalPlan, Boolean)], Seq[Expression])]) {
       assert(ExtractFiltersAndInnerJoins.unapply(plan) === expected)
     }
 
@@ -70,25 +82,49 @@ class JoinOptimizationSuite extends PlanTest {
     testExtract(x.join(y).join(x.join(z)), Some(Seq(x, y, x.join(z)), Seq()))
     testExtract(x.join(y).join(x.join(z)).where("x.b".attr === "y.d".attr),
       Some(Seq(x, y, x.join(z)), Seq("x.b".attr === "y.d".attr)))
+
+    val crossJoin = Inner(true)
+    val innerJoin = Inner(false)
+    testExtractCheckCross(x.join(y, crossJoin), Some(Seq((x, true), (y, true)), Seq()))
+    testExtractCheckCross(x.join(y, crossJoin).join(z, crossJoin),
+      Some(Seq((x, true), (y, true), (z, true)), Seq()))
+    testExtractCheckCross(x.join(y, crossJoin, Some("x.b".attr === "y.d".attr)).join(z, crossJoin),
+      Some(Seq((x, true), (y, true), (z, true)), Seq("x.b".attr === "y.d".attr)))
+    testExtractCheckCross(x.join(y, innerJoin, Some("x.b".attr === "y.d".attr)).join(z, crossJoin),
+      Some(Seq((x, false), (y, false), (z, true)), Seq("x.b".attr === "y.d".attr)))
+    testExtractCheckCross(x.join(y, crossJoin, Some("x.b".attr === "y.d".attr)).join(z, innerJoin),
+      Some(Seq((x, true), (y, true), (z, false)), Seq("x.b".attr === "y.d".attr)))
   }
 
   test("reorder inner joins") {
     val x = testRelation.subquery('x)
     val y = testRelation1.subquery('y)
     val z = testRelation.subquery('z)
+    val crossJoin = Inner(true)
+    val innerJoin = Inner(false)
 
-    val originalQuery = {
-      x.join(y).join(z)
-        .where(("x.b".attr === "z.b".attr) && ("y.d".attr === "z.a".attr))
+    val queryAnswers = Seq(
+      (
+        x.join(y).join(z).where(("x.b".attr === "z.b".attr) && ("y.d".attr === "z.a".attr)),
+        x.join(z, condition = Some("x.b".attr === "z.b".attr))
+          .join(y, condition = Some("y.d".attr === "z.a".attr))
+      ),
+      (
+        x.join(y, crossJoin).join(z, crossJoin)
+          .where(("x.b".attr === "z.b".attr) && ("y.d".attr === "z.a".attr)),
+        x.join(z, crossJoin, Some("x.b".attr === "z.b".attr))
+          .join(y, crossJoin, Some("y.d".attr === "z.a".attr))
+      ),
+      (
+        x.join(y, innerJoin).join(z, crossJoin).where("x.b".attr === "z.a".attr),
+        x.join(z, crossJoin, Some("x.b".attr === "z.a".attr)).join(y, innerJoin)
+      )
+    )
+
+    queryAnswers foreach { queryAnswerPair =>
+      val optimized = Optimize.execute(queryAnswerPair._1.analyze)
+      comparePlans(optimized, analysis.EliminateSubqueryAliases(queryAnswerPair._2.analyze))
     }
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer =
-      x.join(z, condition = Some("x.b".attr === "z.b".attr))
-        .join(y, condition = Some("y.d".attr === "z.a".attr))
-        .analyze
-
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
   }
 
   test("broadcasthint sets relation statistics to smallest value") {
@@ -98,7 +134,7 @@ class JoinOptimizationSuite extends PlanTest {
       Project(Seq($"x.key", $"y.key"),
         Join(
           SubqueryAlias("x", input, None),
-          BroadcastHint(SubqueryAlias("y", input, None)), Inner, None)).analyze
+          BroadcastHint(SubqueryAlias("y", input, None)), Inner(true), None)).analyze
 
     val optimized = Optimize.execute(query)
 
@@ -106,7 +142,7 @@ class JoinOptimizationSuite extends PlanTest {
       Join(
         Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
         BroadcastHint(Project(Seq($"y.key"), SubqueryAlias("y", input, None))),
-        Inner, None).analyze
+        Inner(true), None).analyze
 
     comparePlans(optimized, expected)
 

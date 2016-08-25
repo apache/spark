@@ -66,28 +66,32 @@ class PropagateEmptyRelationSuite extends PlanTest {
     // Testcases are tuples of (left predicate, right predicate, joinType, correct answer)
     // Note that `None` is used to compare with OptimizeWithoutPropagateEmptyRelation.
     val testcases = Seq(
-      (true, true, Inner, None),
+      (true, true, Inner(false), None),
+      (true, true, Inner(true), None),
       (true, true, LeftOuter, None),
       (true, true, RightOuter, None),
       (true, true, FullOuter, None),
       (true, true, LeftAnti, None),
       (true, true, LeftSemi, None),
 
-      (true, false, Inner, Some(LocalRelation('a.int, 'b.int))),
+      (true, false, Inner(false), Some(LocalRelation('a.int, 'b.int))),
+      (true, false, Inner(true), Some(LocalRelation('a.int, 'b.int))),
       (true, false, LeftOuter, None),
       (true, false, RightOuter, Some(LocalRelation('a.int, 'b.int))),
       (true, false, FullOuter, None),
       (true, false, LeftAnti, None),
       (true, false, LeftSemi, None),
 
-      (false, true, Inner, Some(LocalRelation('a.int, 'b.int))),
+      (false, true, Inner(false), Some(LocalRelation('a.int, 'b.int))),
+      (false, true, Inner(true), Some(LocalRelation('a.int, 'b.int))),
       (false, true, LeftOuter, Some(LocalRelation('a.int, 'b.int))),
       (false, true, RightOuter, None),
       (false, true, FullOuter, None),
       (false, true, LeftAnti, Some(LocalRelation('a.int))),
       (false, true, LeftSemi, Some(LocalRelation('a.int))),
 
-      (false, false, Inner, Some(LocalRelation('a.int, 'b.int))),
+      (false, false, Inner(false), Some(LocalRelation('a.int, 'b.int))),
+      (false, false, Inner(true), Some(LocalRelation('a.int, 'b.int))),
       (false, false, LeftOuter, Some(LocalRelation('a.int, 'b.int))),
       (false, false, RightOuter, Some(LocalRelation('a.int, 'b.int))),
       (false, false, FullOuter, Some(LocalRelation('a.int, 'b.int))),

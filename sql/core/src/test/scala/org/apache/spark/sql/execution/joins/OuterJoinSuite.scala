@@ -72,7 +72,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
       expectedAnswer: Seq[Product]): Unit = {
 
     def extractJoinParts(): Option[ExtractEquiJoinKeys.ReturnType] = {
-      val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
+      val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner(false), Some(condition))
       ExtractEquiJoinKeys.unapply(join)
     }
 

@@ -341,7 +341,7 @@ class AnalysisSuite extends AnalysisTest {
         Join(
           Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
           Project(Seq($"y.key"), SubqueryAlias("y", input, None)),
-          Inner, None))
+          Inner(true), None))
 
     assertAnalysisSuccess(query)
   }

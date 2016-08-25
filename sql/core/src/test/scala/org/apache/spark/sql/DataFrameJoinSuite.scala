@@ -104,6 +104,21 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
         .collect().toSeq)
   }
 
+  test("join - cross join") {
+    val df1 = Seq((1, "1"), (3, "3")).toDF("int", "str")
+    val df2 = Seq((2, "2"), (4, "4")).toDF("int", "str")
+
+    checkAnswer(
+      df1.crossJoin(df2),
+      Row(1, "1", 2, "2") :: Row(1, "1", 4, "4") ::
+        Row(3, "3", 2, "2") :: Row(3, "3", 4, "4") :: Nil)
+
+    checkAnswer(
+      df2.crossJoin(df1),
+      Row(2, "2", 1, "1") :: Row(2, "2", 3, "3") ::
+        Row(4, "4", 1, "1") :: Row(4, "4", 3, "3") :: Nil)
+  }
+
   test("join - using aliases after self join") {
     val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
     checkAnswer(
@@ -145,7 +160,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size === 1)
 
     // no join key -- should not be a broadcast join
-    val plan2 = df1.join(broadcast(df2)).queryExecution.sparkPlan
+    val plan2 = df1.crossJoin(broadcast(df2)).queryExecution.sparkPlan
     assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size === 0)
 
     // planner should not crash without a join
@@ -155,7 +170,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     withTempPath { path =>
       df1.write.parquet(path.getCanonicalPath)
       val pf1 = spark.read.parquet(path.getCanonicalPath)
-      assert(df1.join(broadcast(pf1)).count() === 4)
+      assert(df1.crossJoin(broadcast(pf1)).count() === 4)
     }
   }
 
@@ -183,7 +198,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     val outerJoin2Inner = df.join(df2, $"a.int" === $"b.int", "outer").
       where($"a.int" === 1 && $"b.int2" === 3)
     assert(outerJoin2Inner.queryExecution.optimizedPlan.collect {
-      case j @ Join(_, _, Inner, _) => j }.size === 1)
+      case j @ Join(_, _, Inner(false), _) => j }.size === 1)
     checkAnswer(
       outerJoin2Inner,
       Row(1, 2, "1", 1, 3, "1") :: Nil)
@@ -191,7 +206,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     // right -> inner
     val rightJoin2Inner = df.join(df2, $"a.int" === $"b.int", "right").where($"a.int" === 1)
     assert(rightJoin2Inner.queryExecution.optimizedPlan.collect {
-      case j @ Join(_, _, Inner, _) => j }.size === 1)
+      case j @ Join(_, _, Inner(false), _) => j }.size === 1)
     checkAnswer(
       rightJoin2Inner,
       Row(1, 2, "1", 1, 3, "1") :: Nil)
@@ -199,7 +214,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     // left -> inner
     val leftJoin2Inner = df.join(df2, $"a.int" === $"b.int", "left").where($"b.int2" === 3)
     assert(leftJoin2Inner.queryExecution.optimizedPlan.collect {
-      case j @ Join(_, _, Inner, _) => j }.size === 1)
+      case j @ Join(_, _, Inner(false), _) => j }.size === 1)
     checkAnswer(
       leftJoin2Inner,
       Row(1, 2, "1", 1, 3, "1") :: Nil)

@@ -65,7 +65,7 @@ case class BroadcastNestedLoopJoinExec(
 
   override def output: Seq[Attribute] = {
     joinType match {
-      case Inner =>
+      case _: Inner =>
         left.output ++ right.output
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -353,7 +353,7 @@ case class BroadcastNestedLoopJoinExec(
     val broadcastedRelation = broadcast.executeBroadcast[Array[InternalRow]]()
 
     val resultRdd = (joinType, buildSide) match {
-      case (Inner, _) =>
+      case (_: Inner, _) =>
         innerJoin(broadcastedRelation)
       case (LeftOuter, BuildRight) | (RightOuter, BuildLeft) =>
         outerJoin(broadcastedRelation)
