@@ -88,7 +88,7 @@ private[hive] class HiveClientImpl(
   private val outputBuffer = new CircularBuffer()
 
   // An object lock to ensure URL factory is registered exactly once.
-  object URLFactoryRegistrationLock{}
+  object URLFactoryRegistrationLock
 
   private val shim = version match {
     case hive.v12 => new Shim_v0_12()
