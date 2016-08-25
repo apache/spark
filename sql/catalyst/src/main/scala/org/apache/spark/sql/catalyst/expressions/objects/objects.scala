@@ -475,16 +475,12 @@ case class MapObjects private(
     }
 
     // Make a copy of the data if it's unsafe-backed
+    def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
+      s"$value instanceof ${clazz.getSimpleName}? ${value}.copy() : $value"
     val genFunctionValue = lambdaFunction.dataType match {
-      case StructType(_) =>
-        s"(${genFunction.value} instanceof ${classOf[MutableRow].getName}? " +
-          s"${genFunction.value}.copy() : ${genFunction.value})"
-      case ArrayType(_, _) =>
-        s"(${genFunction.value} instanceof ${classOf[UnsafeArrayData].getName}? " +
-          s"${genFunction.value}.copy() : ${genFunction.value})"
-      case MapType(_, _, _) =>
-        s"(${genFunction.value} instanceof ${classOf[UnsafeMapData].getName}? " +
-          s"${genFunction.value}.copy() : ${genFunction.value})"
+      case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
+      case ArrayType(_, _) => makeCopyIfInstanceOf(classOf[UnsafeArrayData], genFunction.value)
+      case MapType(_, _, _) => makeCopyIfInstanceOf(classOf[UnsafeMapData], genFunction.value)
       case _ => genFunction.value
     }
 
