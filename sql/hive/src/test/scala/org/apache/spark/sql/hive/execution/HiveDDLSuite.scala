@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.config._
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode, SQLFeatureNotSupportedException}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -644,11 +644,11 @@ class HiveDDLSuite
     val indexName = tabName + "_index"
     val indexTabName = "default__tab1_tab1_index__"
     withTable(tabName) {
+      // Spark SQL does not support creating index. Thus, we have to use Hive client.
       val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
       sql(s"CREATE TABLE $tabName(a int)")
 
       try {
-        // Spark SQL does not support creating index. Thus, we have to use Hive client.
         client.runSqlHive(
           s"CREATE INDEX $indexName ON TABLE $tabName (a) AS 'COMPACT' WITH DEFERRED REBUILD")
         intercept[TableAlreadyExistsException] {
@@ -657,6 +657,12 @@ class HiveDDLSuite
         intercept[TableAlreadyExistsException] {
           sql(s"ALTER TABLE $tabName RENAME TO $indexTabName")
         }
+
+        // When tableExists is not invoked, we still can get a SQLFeatureNotSupportedException
+        val e = intercept[SQLFeatureNotSupportedException] {
+          sql(s"DESCRIBE $indexTabName")
+        }.getMessage
+        assert(e.contains("Hive index table is not supported."))
       } finally {
         client.runSqlHive(s"DROP INDEX IF EXISTS $indexName ON $tabName")
       }
