@@ -2132,23 +2132,11 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer)
       keyPlan: LogicalPlan,
       subqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
     val firstCondExprs = splitConjunctivePredicates(subqueries(0).asInstanceOf[Filter].condition)
-    val firstPushdownCondition: Expression = (Seq(subqueries(0).asInstanceOf[Filter].condition) ++
-      subqueries.tail.flatMap {
+    val firstPushdownCondition: Expression = (subqueries(0).asInstanceOf[Filter].condition +:
+      subqueries.tail.map {
         case Filter(otherCond, child) =>
           val rewrites = buildRewrites(child, subqueries(0).asInstanceOf[Filter].child)
-          val newCond = pushToOtherPlan(otherCond, rewrites)
-          val condExprs = splitConjunctivePredicates(newCond)
-          val common = firstCondExprs.filter(e => condExprs.exists(e.semanticEquals))
-          if (common.isEmpty) {
-            Seq(newCond)
-          } else {
-            val diff = condExprs.filterNot(e => common.exists(e.semanticEquals))
-            if (!diff.isEmpty) {
-              Seq(diff.reduce(And))
-            } else {
-              Seq()
-            }
-          }
+          pushToOtherPlan(otherCond, rewrites)
       }).reduce(Or)
 
     plan transform {
@@ -2203,7 +2191,7 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer)
     // 1. All subqueries have a Project on them.
     // 2. All subqueries have a Filter on them.
     var currentPlan = plan
-    subqueryMap.map { case (key, subqueries) =>
+    subqueryMap.foreach { case (key, subqueries) =>
       if (subqueries.length > 1) {
         val allProject = subqueries.forall(_.isInstanceOf[Project])
         if (allProject) {

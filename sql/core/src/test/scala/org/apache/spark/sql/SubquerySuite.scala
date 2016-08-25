@@ -647,6 +647,10 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       assert(doubleConditions.length == 1 &&
         doubleConditions(0)._1 == "b" && doubleConditions(0)._2 == 1.0)
 
+      // There are two Filters:
+      // 1. x.a = 1 && x.b = 2.0
+      // 2. x.b = 2.0
+      // The pushdown Filter is ((x.a = 1 && x.b = 2.0) || (x.b = 2.0)) => (x.b = 2.0).
       val df2 = sql("WITH cte AS (SELECT a.a AS a, a.b AS b, b.a AS c, b.b AS d FROM l a, l b) " +
         "SELECT * FROM cte x, cte y WHERE x.b = y.b AND x.a = 1 AND x.b = 1 + 1")
 
@@ -661,7 +665,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       val intConditions2 = pushdownFilter2(0).asInstanceOf[FilterExec].condition.collect {
         case EqualTo(a: AttributeReference, Literal(i, IntegerType)) => (a.name, i)
       }
-      assert(intConditions2.length == 1 && intConditions2(0)._1 == "a" && intConditions2(0)._2 == 1)
+      assert(intConditions2.length == 0)
       val doubleConditions2 = pushdownFilter2(0).asInstanceOf[FilterExec].condition.collect {
         case EqualTo(a: AttributeReference, Literal(d, DoubleType)) => (a.name, d)
       }
