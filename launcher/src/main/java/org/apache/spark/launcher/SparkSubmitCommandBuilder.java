@@ -336,8 +336,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
             join(File.separator, sparkHome, "R", "lib", "SparkR", "profile", "shell.R"));
 
     List<String> args = new ArrayList<>();
-    args.add(firstNonEmpty(firstNonEmpty(conf.get(SparkLauncher.SPARKR_R_SHELL),
-      System.getenv("SPARKR_DRIVER_R"), "R")));
+    args.add(firstNonEmpty(conf.get(SparkLauncher.SPARKR_R_SHELL),
+      System.getenv("SPARKR_DRIVER_R"), "R"));
     return args;
   }
 
