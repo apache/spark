@@ -1394,9 +1394,9 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
     val (leftEvaluateCondition, rest) =
-        condition.partition(expr => expr.references.subsetOf(left.outputSet))
+        condition.partition(expr => expr.references.subsetOf(left.outputSet) && expr.deterministic)
     val (rightEvaluateCondition, commonCondition) =
-        rest.partition(expr => expr.references.subsetOf(right.outputSet))
+        rest.partition(expr => expr.references.subsetOf(right.outputSet) && expr.deterministic)
 
     (leftEvaluateCondition, rightEvaluateCondition, commonCondition)
   }
