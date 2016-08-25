@@ -455,6 +455,7 @@ private[hive] class HiveClientImpl(
   // Construct Spark's statistics from information in Hive metastore.
   private def constructStatsFromHive(properties: Map[String, String]): Option[Statistics] = {
     val statsTrue = properties.getOrElse(StatsSetupConst.COLUMN_STATS_ACCURATE, "false").toBoolean
+    // If the stats are not accurate, we do not load them.
     if (statsTrue && properties.contains(StatsSetupConst.TOTAL_SIZE)) {
       val totalSize = BigInt(properties.get(StatsSetupConst.TOTAL_SIZE).get)
       // TODO: we will compute "estimatedSize" when we have column stats:
