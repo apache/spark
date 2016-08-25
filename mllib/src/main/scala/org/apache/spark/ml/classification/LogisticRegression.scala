@@ -354,10 +354,10 @@ class LogisticRegression @Since("1.2.0") (
       case None => histogram.length
     }
     val isBinaryClassification = numClasses == 1 || numClasses == 2
+    // TODO: use enumeration or similar
     val isMultinomial = !((!isSet(family) && isBinaryClassification) || $(family) == "binomial")
     val numCoefficientSets = if (isMultinomial) numClasses else 1
 
-    // TODO: use enumeration or similar
     if (!isMultinomial) {
       require(isBinaryClassification, s"Binomial family only supports 1 or 2" +
           s"outcome classes but found $numClasses")
@@ -461,25 +461,33 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         // TODO: need to add this for multinomial case
-        if (optInitialModel.isDefined && optInitialModel.get.coefficients.size != numFeatures) {
-          val vecSize = optInitialModel.get.coefficients.size
-          logWarning(
-            s"Initial coefficients will be ignored!! As its size $vecSize did not match the " +
-            s"expected size $numFeatures")
+        val initialModelIsValid = optInitialModel.exists { model =>
+          val providedCoefs = model.coefficientMatrix
+          val modelValid = (providedCoefs.numRows == numCoefficientSets) &&
+            (providedCoefs.numCols == numFeatures) &&
+            (model.interceptVector.size == numCoefficientSets)
+          if (!modelValid) {
+            logWarning(s"Initial coefficients will be ignored! Its dimensions " +
+              s"(${providedCoefs.numRows}, ${providedCoefs.numCols}) did not match the expected " +
+              s"size ($numCoefficientSets, $numFeatures)")
+          }
+          modelValid
         }
 
-        // TODO: removing initial model for now
-//        if (optInitialModel.isDefined && optInitialModel.get.coefficients.size == numFeatures) {
-//          val initialCoefficientsWithInterceptArray = initialCoefficientsWithIntercept.toArray
-//          optInitialModel.get.coefficients.foreachActive { case (index, value) =>
-//            initialCoefficientsWithInterceptArray(index) = value
-//          }
-//          if ($(fitIntercept)) {
-//            initialCoefficientsWithInterceptArray(numFeatures) == optInitialModel.get.intercept
-//          }
-//        }
-        if ($(fitIntercept) && isMultinomial) {
-          // TODO: can we merge the logic or something here?
+        if (initialModelIsValid) {
+          val initialCoefArray = initialCoefficientsWithIntercept.toArray
+          val providedCoefArray = optInitialModel.get.coefficientMatrix.toArray
+          providedCoefArray.indices.foreach { i =>
+            val flatIndex = if ($(fitIntercept)) i + i / numFeatures else i
+            initialCoefArray(flatIndex) = providedCoefArray(i)
+          }
+          if ($(fitIntercept)) {
+            optInitialModel.get.interceptVector.foreachActive { (index, value) =>
+              val coefIndex = (index + 1) * numFeaturesPlusIntercept - 1
+              initialCoefArray(coefIndex) = value
+            }
+          }
+        } else if ($(fitIntercept) && isMultinomial) {
           /*
              For multinomial logistic regression, when we initialize the coefficients as zeros,
              it will converge faster if we initialize the intercepts such that
@@ -556,7 +564,6 @@ class LogisticRegression @Since("1.2.0") (
            as a result, no scaling is needed.
          */
         val rawCoefficients = state.x.toArray.clone()
-        // TODO: I think this will work for both binomial and multinomial
         val coefficientArray = Array.tabulate(numCoefficientSets * numFeatures) { i =>
           // flatIndex will loop though rawCoefficients, and skip the intercept terms.
           val flatIndex = if ($(fitIntercept)) i + i / numFeatures else i
@@ -612,6 +619,7 @@ class LogisticRegression @Since("1.2.0") (
 
     val model = copyValues(new LogisticRegressionModel(uid, coefficients, intercept, numClasses,
       isMultinomial))
+    // TODO: need to implement model summary for MLOR... probably best to do it in another JIRA
     val (summaryModel, probabilityColName) = model.findSummaryModelAndProbabilityCol()
     val logRegSummary = new BinaryLogisticRegressionTrainingSummary(
       summaryModel.transform(dataset),

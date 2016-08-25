@@ -25,7 +25,7 @@ import scala.util.control.Breaks._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{DenseMatrix, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -37,7 +37,8 @@ class LogisticRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   @transient var dataset: Dataset[_] = _
-  @transient var binaryDataset: DataFrame = _
+  @transient var binaryDataset: Dataset[_] = _
+  @transient var multinomialDataset: Dataset[_] = _
   private val eps: Double = 1e-5
 
   override def beforeAll(): Unit = {
@@ -56,6 +57,23 @@ class LogisticRegressionSuite
           addIntercept = true, nPoints, 42)
 
       spark.createDataFrame(sc.parallelize(testData, 4))
+    }
+
+    multinomialDataset = {
+      val nPoints = 10000
+      val coefficients = Array(
+        -0.57997, 0.912083, -0.371077, -0.819866, 2.688191,
+        -0.16624, -0.84355, -0.048509, -0.301789, 4.170682)
+
+      val xMean = Array(5.843, 3.057, 3.758, 1.199)
+      val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
+
+      val testData = generateMultinomialLogisticInput(
+        coefficients, xMean, xVariance, addIntercept = true, nPoints, 42)
+
+      val df = spark.createDataFrame(sc.parallelize(testData, 4))
+      df.cache()
+      df
     }
   }
 
@@ -884,6 +902,20 @@ class LogisticRegressionSuite
     assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
     assert(model1a0.coefficients ~== model1b.coefficients absTol 1E-3)
     assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
+  }
+
+  test("set initial model") {
+    // TODO: the binary one doesn't converge any faster
+    // TODO: should they converge after one or two iterations?
+    val lr = new LogisticRegression()
+    val model1 = lr.fit(binaryDataset)
+    val lr2 = new LogisticRegression().setInitialModel(model1)
+    val model2 = lr2.fit(binaryDataset)
+
+    val lr3 = new LogisticRegression()
+    val model3 = lr3.fit(multinomialDataset)
+    val lr4 = new LogisticRegression().setInitialModel(model3)
+    val model4 = lr4.fit(multinomialDataset)
   }
 
   test("logistic regression with all labels the same") {
