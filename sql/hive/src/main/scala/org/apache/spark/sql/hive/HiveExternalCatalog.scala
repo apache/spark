@@ -249,10 +249,21 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       }
 
       // converts the table metadata to Hive compatible format, i.e. set the serde information.
-      def newHiveCompatibleMetastoreTable(serde: HiveSerDe, path: String): CatalogTable = {
+      def newHiveCompatibleMetastoreTable(serde: HiveSerDe): CatalogTable = {
+        val location = if (tableDefinition.tableType == EXTERNAL) {
+          // When we hit this branch, we are saving an external data source table with hive
+          // compatible format, which means the data source is file-based and must have a `path`.
+          val map = new CaseInsensitiveMap(tableDefinition.storage.properties)
+          assert(map.contains("path"),
+            "External file-based data source table must have a `path` entry in storage properties.")
+          Some(new Path(map("path")).toUri.toString)
+        } else {
+          None
+        }
+
         tableDefinition.copy(
           storage = tableDefinition.storage.copy(
-            locationUri = Some(new Path(path).toUri.toString),
+            locationUri = location,
             inputFormat = serde.inputFormat,
             outputFormat = serde.outputFormat,
             serde = serde.serde
@@ -262,11 +273,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
       val qualifiedTableName = tableDefinition.identifier.quotedString
       val maybeSerde = HiveSerDe.sourceToSerDe(tableDefinition.provider.get)
-      val maybePath = new CaseInsensitiveMap(tableDefinition.storage.properties).get("path")
       val skipHiveMetadata = tableDefinition.storage.properties
         .getOrElse("skipHiveMetadata", "false").toBoolean
 
-      val (hiveCompatibleTable, logMessage) = (maybeSerde, maybePath) match {
+      val (hiveCompatibleTable, logMessage) = maybeSerde match {
         case _ if skipHiveMetadata =>
           val message =
             s"Persisting data source table $qualifiedTableName into Hive metastore in" +
@@ -280,17 +290,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
               "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. "
           (None, message)
 
-        case (Some(serde), Some(path)) =>
+        case Some(serde) =>
           val message =
-            s"Persisting file based data source table $qualifiedTableName with an input path " +
-              s"into Hive metastore in Hive compatible format."
-          (Some(newHiveCompatibleMetastoreTable(serde, path)), message)
-
-        case (Some(_), None) =>
-          val message =
-            s"Data source table $qualifiedTableName is not file based. Persisting it into " +
-              s"Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
-          (None, message)
+            s"Persisting file based data source table $qualifiedTableName into " +
+              s"Hive metastore in Hive compatible format."
+          (Some(newHiveCompatibleMetastoreTable(serde)), message)
 
         case _ =>
           val provider = tableDefinition.provider.get
