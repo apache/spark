@@ -15,15 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.stat
+package org.apache.spark.sql.catalyst.util
 
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.stat.StatFunctions.QuantileSummaries
 
-
-class ApproxQuantileSuite extends SparkFunSuite {
+class QuantileSummariesSuite extends SparkFunSuite {
 
   private val r = new Random(1)
   private val n = 100
@@ -125,5 +123,4 @@ class ApproxQuantileSuite extends SparkFunSuite {
       checkQuantile(0.001, data, s)
     }
   }
-
 }

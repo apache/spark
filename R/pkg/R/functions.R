@@ -23,6 +23,7 @@ NULL
 #' A new \linkS4class{Column} is created to represent the literal value.
 #' If the parameter is a \linkS4class{Column}, it is returned unchanged.
 #'
+#' @param x a literal value or a Column.
 #' @family normal_funcs
 #' @rdname lit
 #' @name lit
@@ -88,8 +89,6 @@ setMethod("acos",
 #'
 #' Returns the approximate number of distinct items in a group. This is a column
 #' aggregate function.
-#'
-#' @param x Column to compute on.
 #'
 #' @rdname approxCountDistinct
 #' @name approxCountDistinct
@@ -170,8 +169,6 @@ setMethod("atan",
 #' avg
 #'
 #' Aggregate function: returns the average of the values in a group.
-#'
-#' @param x Column to compute on.
 #'
 #' @rdname avg
 #' @name avg
@@ -319,7 +316,7 @@ setMethod("column",
 #'
 #' Computes the Pearson Correlation Coefficient for two Columns.
 #'
-#' @param x Column to compute on.
+#' @param col2 a (second) Column.
 #'
 #' @rdname corr
 #' @name corr
@@ -338,8 +335,6 @@ setMethod("corr", signature(x = "Column"),
 #' cov
 #'
 #' Compute the sample covariance between two expressions.
-#'
-#' @param x Column to compute on.
 #'
 #' @rdname cov
 #' @name cov
@@ -362,8 +357,8 @@ setMethod("cov", signature(x = "characterOrColumn"),
 
 #' @rdname cov
 #'
-#' @param col1 First column to compute cov_samp.
-#' @param col2 Second column to compute cov_samp.
+#' @param col1 the first Column.
+#' @param col2 the second Column.
 #' @name covar_samp
 #' @aliases covar_samp,characterOrColumn,characterOrColumn-method
 #' @note covar_samp since 2.0.0
@@ -451,9 +446,7 @@ setMethod("cosh",
 #'
 #' Returns the number of items in a group. This is a column aggregate function.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname nrow
+#' @rdname count
 #' @name count
 #' @family agg_funcs
 #' @aliases count,Column-method
@@ -493,6 +486,7 @@ setMethod("crc32",
 #' Calculates the hash code of given columns, and returns the result as a int column.
 #'
 #' @param x Column to compute on.
+#' @param ... additional Column(s) to be included.
 #'
 #' @rdname hash
 #' @name hash
@@ -663,7 +657,8 @@ setMethod("factorial",
 #' The function by default returns the first values it sees. It will return the first non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
 #'
-#' @param x Column to compute on.
+#' @param na.rm a logical value indicating whether NA values should be stripped
+#'        before the computation proceeds.
 #'
 #' @rdname first
 #' @name first
@@ -832,7 +827,10 @@ setMethod("kurtosis",
 #' The function by default returns the last values it sees. It will return the last non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
 #'
-#' @param x Column to compute on.
+#' @param x column to compute on.
+#' @param na.rm a logical value indicating whether NA values should be stripped
+#'        before the computation proceeds.
+#' @param ... further arguments to be passed to or from other methods.
 #'
 #' @rdname last
 #' @name last
@@ -1143,7 +1141,7 @@ setMethod("minute",
 #' @export
 #' @examples \dontrun{select(df, monotonically_increasing_id())}
 setMethod("monotonically_increasing_id",
-          signature(x = "missing"),
+          signature("missing"),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "monotonically_increasing_id")
             column(jc)
@@ -1252,7 +1250,7 @@ setMethod("rint",
 
 #' round
 #'
-#' Returns the value of the column `e` rounded to 0 decimal places using HALF_UP rounding mode.
+#' Returns the value of the column \code{e} rounded to 0 decimal places using HALF_UP rounding mode.
 #'
 #' @param x Column to compute on.
 #'
@@ -1272,13 +1270,16 @@ setMethod("round",
 
 #' bround
 #'
-#' Returns the value of the column `e` rounded to `scale` decimal places using HALF_EVEN rounding
-#' mode if `scale` >= 0 or at integral part when `scale` < 0.
+#' Returns the value of the column \code{e} rounded to \code{scale} decimal places using HALF_EVEN rounding
+#' mode if \code{scale} >= 0 or at integer part when \code{scale} < 0.
 #' Also known as Gaussian rounding or bankers' rounding that rounds to the nearest even number.
 #' bround(2.5, 0) = 2, bround(3.5, 0) = 4.
 #'
 #' @param x Column to compute on.
-#'
+#' @param scale round to \code{scale} digits to the right of the decimal point when \code{scale} > 0,
+#'        the nearest even number when \code{scale} = 0, and \code{scale} digits to the left
+#'        of the decimal point when \code{scale} < 0.
+#' @param ... further arguments to be passed to or from other methods.
 #' @rdname bround
 #' @name bround
 #' @family math_funcs
@@ -1319,7 +1320,7 @@ setMethod("rtrim",
 #' Aggregate function: alias for \link{stddev_samp}
 #'
 #' @param x Column to compute on.
-#'
+#' @param na.rm currently not used.
 #' @rdname sd
 #' @name sd
 #' @family agg_funcs
@@ -1497,7 +1498,7 @@ setMethod("soundex",
 #' \dontrun{select(df, spark_partition_id())}
 #' @note spark_partition_id since 2.0.0
 setMethod("spark_partition_id",
-          signature(x = "missing"),
+          signature("missing"),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "spark_partition_id")
             column(jc)
@@ -1560,7 +1561,8 @@ setMethod("stddev_samp",
 #'
 #' Creates a new struct column that composes multiple input columns.
 #'
-#' @param x Column to compute on.
+#' @param x a column to compute on.
+#' @param ... optional column(s) to be included.
 #'
 #' @rdname struct
 #' @name struct
@@ -1831,8 +1833,8 @@ setMethod("upper",
 #'
 #' Aggregate function: alias for \link{var_samp}.
 #'
-#' @param x Column to compute on.
-#'
+#' @param x a Column to compute on.
+#' @param y,na.rm,use currently not used.
 #' @rdname var
 #' @name var
 #' @family agg_funcs
@@ -1972,7 +1974,7 @@ setMethod("atan2", signature(y = "Column"),
 
 #' datediff
 #'
-#' Returns the number of days from `start` to `end`.
+#' Returns the number of days from \code{start} to \code{end}.
 #'
 #' @param x start Column to use.
 #' @param y end Column to use.
@@ -2041,7 +2043,7 @@ setMethod("levenshtein", signature(y = "Column"),
 
 #' months_between
 #'
-#' Returns number of months between dates `date1` and `date2`.
+#' Returns number of months between dates \code{date1} and \code{date2}.
 #'
 #' @param x start Column to use.
 #' @param y end Column to use.
@@ -2114,7 +2116,9 @@ setMethod("pmod", signature(y = "Column"),
 #' @rdname approxCountDistinct
 #' @name approxCountDistinct
 #'
+#' @param x Column to compute on.
 #' @param rsd maximum estimation error allowed (default = 0.05)
+#' @param ... further arguments to be passed to or from other methods.
 #'
 #' @aliases approxCountDistinct,Column-method
 #' @export
@@ -2127,7 +2131,7 @@ setMethod("approxCountDistinct",
             column(jc)
           })
 
-#' Count Distinct
+#' Count Distinct Values
 #'
 #' @param x Column to compute on
 #' @param ... other columns
@@ -2156,7 +2160,7 @@ setMethod("countDistinct",
 #' concat
 #'
 #' Concatenates multiple input string columns together into a single string column.
-#' 
+#'
 #' @param x Column to compute on
 #' @param ... other columns
 #'
@@ -2246,7 +2250,6 @@ setMethod("ceiling",
           })
 
 #' @rdname sign
-#' @param x Column to compute on
 #'
 #' @name sign
 #' @aliases sign,Column-method
@@ -2262,9 +2265,6 @@ setMethod("sign", signature(x = "Column"),
 #'
 #' Aggregate function: returns the number of distinct items in a group.
 #'
-#' @param x Column to compute on
-#' @param ... other columns
-#'
 #' @rdname countDistinct
 #' @name n_distinct
 #' @aliases n_distinct,Column-method
@@ -2276,9 +2276,7 @@ setMethod("n_distinct", signature(x = "Column"),
             countDistinct(x, ...)
           })
 
-#' @rdname nrow
-#' @param x Column to compute on
-#'
+#' @rdname count
 #' @name n
 #' @aliases n,Column-method
 #' @export
@@ -2300,8 +2298,8 @@ setMethod("n", signature(x = "Column"),
 #' NOTE: Use when ever possible specialized functions like \code{year}. These benefit from a
 #' specialized implementation.
 #'
-#' @param y Column to compute on
-#' @param x date format specification 
+#' @param y Column to compute on.
+#' @param x date format specification.
 #'
 #' @family datetime_funcs
 #' @rdname date_format
@@ -2320,8 +2318,8 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #'
 #' Assumes given timestamp is UTC and converts to given timezone.
 #'
-#' @param y Column to compute on
-#' @param x time zone to use 
+#' @param y Column to compute on.
+#' @param x time zone to use.
 #'
 #' @family datetime_funcs
 #' @rdname from_utc_timestamp
@@ -2370,8 +2368,8 @@ setMethod("instr", signature(y = "Column", x = "character"),
 #' Day of the week parameter is case insensitive, and accepts first three or two characters:
 #' "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
 #'
-#' @param y Column to compute on
-#' @param x Day of the week string 
+#' @param y Column to compute on.
+#' @param x Day of the week string.
 #'
 #' @family datetime_funcs
 #' @rdname next_day
@@ -2432,7 +2430,7 @@ setMethod("add_months", signature(y = "Column", x = "numeric"),
 
 #' date_add
 #'
-#' Returns the date that is `days` days after `start`
+#' Returns the date that is \code{x} days after
 #'
 #' @param y Column to compute on
 #' @param x Number of days to add
@@ -2452,7 +2450,7 @@ setMethod("date_add", signature(y = "Column", x = "numeric"),
 
 #' date_sub
 #'
-#' Returns the date that is `days` days before `start`
+#' Returns the date that is \code{x} days before
 #'
 #' @param y Column to compute on
 #' @param x Number of days to substract
@@ -2637,6 +2635,7 @@ setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeri
 #' Parses the expression string into the column that it represents, similar to
 #' SparkDataFrame.selectExpr
 #'
+#' @param x an expression character object to be parsed.
 #' @family normal_funcs
 #' @rdname expr
 #' @aliases expr,character-method
@@ -2654,6 +2653,9 @@ setMethod("expr", signature(x = "character"),
 #'
 #' Formats the arguments in printf-style and returns the result as a string column.
 #'
+#' @param format a character object of format strings.
+#' @param x a Column.
+#' @param ... additional Column(s).
 #' @family string_funcs
 #' @rdname format_string
 #' @name format_string
@@ -2676,6 +2678,11 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #' representing the timestamp of that moment in the current system time zone in the given
 #' format.
 #'
+#' @param x a Column of unix timestamp.
+#' @param format the target format. See
+#'               \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
+#'               Customizing Formats} for available options.
+#' @param ... further arguments to be passed to or from other methods.
 #' @family datetime_funcs
 #' @rdname from_unixtime
 #' @name from_unixtime
@@ -2702,19 +2709,21 @@ setMethod("from_unixtime", signature(x = "Column"),
 #' [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
 #' the order of months are not supported.
 #'
-#' The time column must be of TimestampType.
-#'
-#' Durations are provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
-#' interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
-#' If the `slideDuration` is not provided, the windows will be tumbling windows.
-#'
-#' The startTime is the offset with respect to 1970-01-01 00:00:00 UTC with which to start
-#' window intervals. For example, in order to have hourly tumbling windows that start 15 minutes
-#' past the hour, e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
-#'
-#' The output column will be a struct called 'window' by default with the nested columns 'start'
-#' and 'end'.
-#'
+#' @param x a time Column. Must be of TimestampType.
+#' @param windowDuration a string specifying the width of the window, e.g. '1 second',
+#'                       '1 day 12 hours', '2 minutes'. Valid interval strings are 'week',
+#'                       'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
+#' @param slideDuration a string specifying the sliding interval of the window. Same format as
+#'                      \code{windowDuration}. A new window will be generated every
+#'                      \code{slideDuration}. Must be less than or equal to
+#'                      the \code{windowDuration}.
+#' @param startTime the offset with respect to 1970-01-01 00:00:00 UTC with which to start
+#'                  window intervals. For example, in order to have hourly tumbling windows
+#'                  that start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
+#'                  \code{startTime} as \code{"15 minutes"}.
+#' @param ... further arguments to be passed to or from other methods.
+#' @return An output column of struct called 'window' by default with the nested columns 'start'
+#'         and 'end'.
 #' @family datetime_funcs
 #' @rdname window
 #' @name window
@@ -2766,6 +2775,10 @@ setMethod("window", signature(x = "Column"),
 #' NOTE: The position is not zero based, but 1 based index, returns 0 if substr
 #' could not be found in str.
 #'
+#' @param substr a character string to be matched.
+#' @param str a Column where matches are sought for each entry.
+#' @param pos start position of search.
+#' @param ... further arguments to be passed to or from other methods.
 #' @family string_funcs
 #' @rdname locate
 #' @aliases locate,character,Column-method
@@ -2785,6 +2798,9 @@ setMethod("locate", signature(substr = "character", str = "Column"),
 #'
 #' Left-pad the string column with
 #'
+#' @param x the string Column to be left-padded.
+#' @param len maximum length of each output result.
+#' @param pad a character string to be padded with.
 #' @family string_funcs
 #' @rdname lpad
 #' @aliases lpad,Column,numeric,character-method
@@ -2804,6 +2820,7 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 #'
 #' Generate a random column with i.i.d. samples from U[0.0, 1.0].
 #'
+#' @param seed a random seed. Can be missing.
 #' @family normal_funcs
 #' @rdname rand
 #' @name rand
@@ -2832,6 +2849,7 @@ setMethod("rand", signature(seed = "numeric"),
 #'
 #' Generate a column with i.i.d. samples from the standard normal distribution.
 #'
+#' @param seed a random seed. Can be missing.
 #' @family normal_funcs
 #' @rdname randn
 #' @name randn
@@ -2860,6 +2878,9 @@ setMethod("randn", signature(seed = "numeric"),
 #'
 #' Extract a specific(idx) group identified by a java regex, from the specified string column.
 #'
+#' @param x a string Column.
+#' @param pattern a regular expression.
+#' @param idx a group index.
 #' @family string_funcs
 #' @rdname regexp_extract
 #' @name regexp_extract
@@ -2880,6 +2901,9 @@ setMethod("regexp_extract",
 #'
 #' Replace all substrings of the specified string value that match regexp with rep.
 #'
+#' @param x a string Column.
+#' @param pattern a regular expression.
+#' @param replacement a character string that a matched \code{pattern} is replaced with.
 #' @family string_funcs
 #' @rdname regexp_replace
 #' @name regexp_replace
@@ -2900,6 +2924,9 @@ setMethod("regexp_replace",
 #'
 #' Right-padded with pad to a length of len.
 #'
+#' @param x the string Column to be right-padded.
+#' @param len maximum length of each output result.
+#' @param pad a character string to be padded with.
 #' @family string_funcs
 #' @rdname rpad
 #' @name rpad
@@ -2922,6 +2949,11 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
 #' returned. If count is negative, every to the right of the final delimiter (counting from the
 #' right) is returned. substring_index performs a case-sensitive match when searching for delim.
 #'
+#' @param x a Column.
+#' @param delim a delimiter string.
+#' @param count number of occurrences of \code{delim} before the substring is returned.
+#'              A positive number means counting from the left, while negative means
+#'              counting from the right.
 #' @family string_funcs
 #' @rdname substring_index
 #' @aliases substring_index,Column,character,numeric-method
@@ -2949,6 +2981,11 @@ setMethod("substring_index",
 #' The translate will happen when any character in the string matching with the character
 #' in the matchingString.
 #'
+#' @param x a string Column.
+#' @param matchingString a source string where each character will be translated.
+#' @param replaceString a target string where each \code{matchingString} character will
+#'                      be replaced by the character in \code{replaceString}
+#'                      at the same location, if any.
 #' @family string_funcs
 #' @rdname translate
 #' @name translate
@@ -2997,6 +3034,10 @@ setMethod("unix_timestamp", signature(x = "Column", format = "missing"),
             column(jc)
           })
 
+#' @param x a Column of date, in string, date or timestamp type.
+#' @param format the target format. See
+#'               \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
+#'               Customizing Formats} for available options.
 #' @rdname unix_timestamp
 #' @name unix_timestamp
 #' @aliases unix_timestamp,Column,character-method
@@ -3012,6 +3053,8 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
 #' Evaluates a list of conditions and returns one of multiple possible result expressions.
 #' For unmatched expressions null is returned.
 #'
+#' @param condition the condition to test on. Must be a Column expression.
+#' @param value result expression.
 #' @family normal_funcs
 #' @rdname when
 #' @name when
@@ -3033,6 +3076,9 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
 #' Evaluates a list of conditions and returns \code{yes} if the conditions are satisfied.
 #' Otherwise \code{no} is returned for unmatched conditions.
 #'
+#' @param test a Column expression that describes the condition.
+#' @param yes return values for \code{TRUE} elements of test.
+#' @param no return values for \code{FALSE} elements of test.
 #' @family normal_funcs
 #' @rdname ifelse
 #' @name ifelse
@@ -3067,17 +3113,21 @@ setMethod("ifelse",
 #'   N = total number of rows in the partition
 #'   cume_dist(x) = number of values before (and including) x / N
 #'
-#' This is equivalent to the CUME_DIST function in SQL.
+#' This is equivalent to the \code{CUME_DIST} function in SQL.
 #'
 #' @rdname cume_dist
 #' @name cume_dist
 #' @family window_funcs
 #' @aliases cume_dist,missing-method
 #' @export
-#' @examples \dontrun{cume_dist()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(cume_dist(), ws), df$hp, df$am)
+#' }
 #' @note cume_dist since 1.6.0
 setMethod("cume_dist",
-          signature(x = "missing"),
+          signature("missing"),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "cume_dist")
             column(jc)
@@ -3091,17 +3141,21 @@ setMethod("cume_dist",
 #' and had three people tie for second place, you would say that all three were in second
 #' place and that the next person came in third.
 #'
-#' This is equivalent to the DENSE_RANK function in SQL.
+#' This is equivalent to the \code{DENSE_RANK} function in SQL.
 #'
 #' @rdname dense_rank
 #' @name dense_rank
 #' @family window_funcs
 #' @aliases dense_rank,missing-method
 #' @export
-#' @examples \dontrun{dense_rank()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(dense_rank(), ws), df$hp, df$am)
+#' }
 #' @note dense_rank since 1.6.0
 setMethod("dense_rank",
-          signature(x = "missing"),
+          signature("missing"),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "dense_rank")
             column(jc)
@@ -3109,22 +3163,35 @@ setMethod("dense_rank",
 
 #' lag
 #'
-#' Window function: returns the value that is `offset` rows before the current row, and
-#' `defaultValue` if there is less than `offset` rows before the current row. For example,
-#' an `offset` of one will return the previous row at any given point in the window partition.
+#' Window function: returns the value that is \code{offset} rows before the current row, and
+#' \code{defaultValue} if there is less than \code{offset} rows before the current row. For example,
+#' an \code{offset} of one will return the previous row at any given point in the window partition.
 #'
-#' This is equivalent to the LAG function in SQL.
+#' This is equivalent to the \code{LAG} function in SQL.
 #'
+#' @param x the column as a character string or a Column to compute on.
+#' @param offset the number of rows back from the current row from which to obtain a value.
+#'               If not specified, the default is 1.
+#' @param defaultValue (optional) default to use when the offset row does not exist.
+#' @param ... further arguments to be passed to or from other methods.
 #' @rdname lag
 #' @name lag
 #' @aliases lag,characterOrColumn-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{lag(df$c)}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'
+#'   # Lag mpg values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lag(df$mpg), ws), df$mpg, df$hp, df$am)
+#' }
 #' @note lag since 1.6.0
 setMethod("lag",
           signature(x = "characterOrColumn"),
-          function(x, offset, defaultValue = NULL) {
+          function(x, offset = 1, defaultValue = NULL) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
@@ -3138,26 +3205,36 @@ setMethod("lag",
 
 #' lead
 #'
-#' Window function: returns the value that is `offset` rows after the current row, and
-#' `null` if there is less than `offset` rows after the current row. For example,
-#' an `offset` of one will return the next row at any given point in the window partition.
+#' Window function: returns the value that is \code{offset} rows after the current row, and
+#' \code{defaultValue} if there is less than \code{offset} rows after the current row.
+#' For example, an \code{offset} of one will return the next row at any given point
+#' in the window partition.
 #'
-#' This is equivalent to the LEAD function in SQL.
-#' 
-#' @param x Column to compute on
-#' @param offset Number of rows to offset
-#' @param defaultValue (Optional) default value to use
+#' This is equivalent to the \code{LEAD} function in SQL.
+#'
+#' @param x the column as a character string or a Column to compute on.
+#' @param offset the number of rows after the current row from which to obtain a value.
+#'               If not specified, the default is 1.
+#' @param defaultValue (optional) default to use when the offset row does not exist.
 #'
 #' @rdname lead
 #' @name lead
 #' @family window_funcs
 #' @aliases lead,characterOrColumn,numeric-method
 #' @export
-#' @examples \dontrun{lead(df$c)}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'
+#'   # Lead mpg values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lead(df$mpg), ws), df$mpg, df$hp, df$am)
+#' }
 #' @note lead since 1.6.0
 setMethod("lead",
           signature(x = "characterOrColumn", offset = "numeric", defaultValue = "ANY"),
-          function(x, offset, defaultValue = NULL) {
+          function(x, offset = 1, defaultValue = NULL) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
@@ -3171,11 +3248,11 @@ setMethod("lead",
 
 #' ntile
 #'
-#' Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
-#' partition. For example, if `n` is 4, the first quarter of the rows will get value 1, the second
+#' Window function: returns the ntile group id (from 1 to n inclusive) in an ordered window
+#' partition. For example, if n is 4, the first quarter of the rows will get value 1, the second
 #' quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
 #'
-#' This is equivalent to the NTILE function in SQL.
+#' This is equivalent to the \code{NTILE} function in SQL.
 #'
 #' @param x Number of ntile groups
 #'
@@ -3184,7 +3261,15 @@ setMethod("lead",
 #' @aliases ntile,numeric-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{ntile(1)}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'
+#'   # Get ntile group id (1-4) for hp
+#'   out <- select(df, over(ntile(4), ws), df$hp, df$am)
+#' }
 #' @note ntile since 1.6.0
 setMethod("ntile",
           signature(x = "numeric"),
@@ -3208,10 +3293,14 @@ setMethod("ntile",
 #' @family window_funcs
 #' @aliases percent_rank,missing-method
 #' @export
-#' @examples \dontrun{percent_rank()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(percent_rank(), ws), df$hp, df$am)
+#' }
 #' @note percent_rank since 1.6.0
 setMethod("percent_rank",
-          signature(x = "missing"),
+          signature("missing"),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "percent_rank")
             column(jc)
@@ -3233,7 +3322,11 @@ setMethod("percent_rank",
 #' @family window_funcs
 #' @aliases rank,missing-method
 #' @export
-#' @examples \dontrun{rank()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(rank(), ws), df$hp, df$am)
+#' }
 #' @note rank since 1.6.0
 setMethod("rank",
           signature(x = "missing"),
@@ -3243,6 +3336,8 @@ setMethod("rank",
           })
 
 # Expose rank() in the R base package
+#' @param x a numeric, complex, character or logical vector.
+#' @param ... additional argument(s) passed to the method.
 #' @name rank
 #' @rdname rank
 #' @aliases rank,ANY-method
@@ -3264,10 +3359,14 @@ setMethod("rank",
 #' @aliases row_number,missing-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{row_number()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(row_number(), ws), df$hp, df$am)
+#' }
 #' @note row_number since 1.6.0
 setMethod("row_number",
-          signature(x = "missing"),
+          signature("missing"),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "row_number")
             column(jc)
@@ -3318,7 +3417,7 @@ setMethod("explode",
 #' size
 #'
 #' Returns length of array or map.
-#' 
+#'
 #' @param x Column to compute on
 #'
 #' @rdname size

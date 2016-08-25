@@ -179,8 +179,7 @@ case class CreateViewCommand(
       sparkSession.sql(viewSQL).queryExecution.assertAnalyzed()
     } catch {
       case NonFatal(e) =>
-        throw new RuntimeException(
-          "Failed to analyze the canonicalized SQL. It is possible there is a bug in Spark.", e)
+        throw new RuntimeException(s"Failed to analyze the canonicalized SQL: ${viewSQL}", e)
     }
 
     val viewSchema = if (userSpecifiedColumns.isEmpty) {

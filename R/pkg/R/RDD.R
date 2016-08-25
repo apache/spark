@@ -887,17 +887,17 @@ setMethod("sampleRDD",
 
               # Discards some random values to ensure each partition has a
               # different random seed.
-              runif(partIndex)
+              stats::runif(partIndex)
 
               for (elem in part) {
                 if (withReplacement) {
-                  count <- rpois(1, fraction)
+                  count <- stats::rpois(1, fraction)
                   if (count > 0) {
                     res[ (len + 1) : (len + count) ] <- rep(list(elem), count)
                     len <- len + count
                   }
                 } else {
-                  if (runif(1) < fraction) {
+                  if (stats::runif(1) < fraction) {
                     len <- len + 1
                     res[[len]] <- elem
                   }
@@ -965,7 +965,7 @@ setMethod("takeSample", signature(x = "RDD", withReplacement = "logical",
 
             set.seed(seed)
             samples <- collectRDD(sampleRDD(x, withReplacement, fraction,
-                                         as.integer(ceiling(runif(1,
+                                         as.integer(ceiling(stats::runif(1,
                                                                   -MAXINT,
                                                                   MAXINT)))))
             # If the first sample didn't turn out large enough, keep trying to
@@ -973,7 +973,7 @@ setMethod("takeSample", signature(x = "RDD", withReplacement = "logical",
             # multiplier for thei initial size
             while (length(samples) < total)
               samples <- collectRDD(sampleRDD(x, withReplacement, fraction,
-                                           as.integer(ceiling(runif(1,
+                                           as.integer(ceiling(stats::runif(1,
                                                                     -MAXINT,
                                                                     MAXINT)))))
 

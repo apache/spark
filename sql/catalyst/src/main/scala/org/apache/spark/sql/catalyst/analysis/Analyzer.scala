@@ -64,13 +64,7 @@ class Analyzer(
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
-  def resolver: Resolver = {
-    if (conf.caseSensitiveAnalysis) {
-      caseSensitiveResolution
-    } else {
-      caseInsensitiveResolution
-    }
-  }
+  def resolver: Resolver = conf.resolver
 
   protected val fixedPoint = FixedPoint(maxIterations)
 
@@ -84,8 +78,9 @@ class Analyzer(
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      new UnresolvedOrdinalSubstitution(conf)),
+      new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
+      ResolveTableValuedFunctions ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveDeserializer ::
@@ -107,6 +102,7 @@ class Analyzer(
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
+      ResolveInlineTables ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -138,7 +134,7 @@ class Analyzer(
         case u : UnresolvedRelation =>
           val substituted = cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
             .map(_._2).map { relation =>
-              val withAlias = u.alias.map(SubqueryAlias(_, relation))
+              val withAlias = u.alias.map(SubqueryAlias(_, relation, None))
               withAlias.getOrElse(relation)
             }
           substituted.getOrElse(u)
@@ -146,7 +142,7 @@ class Analyzer(
           // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
           other transformExpressions {
             case e: SubqueryExpression =>
-              e.withNewPlan(substituteCTE(e.query, cteRelations))
+              e.withNewPlan(substituteCTE(e.plan, cteRelations))
           }
       }
     }
@@ -1091,7 +1087,7 @@ class Analyzer(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
       // Step 1: Resolve the outer expressions.
       var previous: LogicalPlan = null
-      var current = e.query
+      var current = e.plan
       do {
         // Try to resolve the subquery plan using the regular analyzer.
         previous = current
@@ -2057,7 +2053,7 @@ class Analyzer(
  */
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case SubqueryAlias(_, child) => child
+    case SubqueryAlias(_, child, _) => child
   }
 }
 
