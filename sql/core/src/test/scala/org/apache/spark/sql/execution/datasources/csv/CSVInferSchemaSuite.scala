@@ -60,9 +60,9 @@ class CSVInferSchemaSuite extends SparkFunSuite {
   }
 
   test("Timestamp field types are inferred correctly via custom data format") {
-    var options = new CSVOptions(Map("dateFormat" -> "yyyy-mm"))
+    var options = new CSVOptions(Map("timestampFormat" -> "yyyy-mm"))
     assert(CSVInferSchema.inferField(TimestampType, "2015-08", options) == TimestampType)
-    options = new CSVOptions(Map("dateFormat" -> "yyyy"))
+    options = new CSVOptions(Map("timestampFormat" -> "yyyy"))
     assert(CSVInferSchema.inferField(TimestampType, "2015", options) == TimestampType)
   }
 
