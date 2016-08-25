@@ -247,10 +247,8 @@ abstract class AggregationIterator(
         // Serializes the generic object stored in aggregation buffer
         var i = 0
         while (i < typedImperativeAggregates.length) {
+          typedImperativeAggregates(i).serializeAggregateBufferInPlace(currentBuffer)
           i += 1
-        }
-        typedImperativeAggregates.foreach { agg =>
-          agg.serializeAggregateBufferInPlace(currentBuffer)
         }
         resultProjection(joinedRow(currentGroupingKey, currentBuffer))
       }
