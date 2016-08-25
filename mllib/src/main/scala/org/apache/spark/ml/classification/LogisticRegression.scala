@@ -75,16 +75,22 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
 
   /**
-   * Param for the name of family which is a description of the error distribution
+   * Param for the name of family which is a description of the label distribution
    * to be used in the model.
-   * Supported options: "multinomial", "binomial".
-   * Default is "multinomial".
+   * Supported options: "auto", "multinomial", "binomial".
+   * Supported options:
+   *  - "auto": Automatically select the family based on the number of classes:
+   *            If numClasses == 1 || numClasses == 2, set to "binomial".
+   *            Else, set to "multinomial"
+   *  - "binomial": Binary logistic regression with pivoting.
+   *  - "multinomial": Multinomial (softmax) regression without pivoting.
+   * Default is "auto".
    *
    * @group param
    */
   @Since("2.0.0")
   final val family: Param[String] = new Param(this, "family",
-    "The name of family which is a description of the error distribution to be used in the " +
+    "The name of family which is a description of the label distribution to be used in the " +
       s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
     ParamValidators.inArray[String](supportedFamilyNames))
 
@@ -243,14 +249,13 @@ class LogisticRegression @Since("1.2.0") (
 
   /**
    * Sets the value of param [[family]].
-   * Default is "multinomial".
+   * Default is "auto".
    *
    * @group setParam
    */
-  // TODO: don't use strings?
   @Since("2.0.0")
   def setFamily(value: String): this.type = set(family, value)
-  setDefault(family -> "multinomial")
+  setDefault(family -> "auto")
 
   /**
    * Whether to standardize the training features before fitting the model.
@@ -267,6 +272,7 @@ class LogisticRegression @Since("1.2.0") (
   setDefault(standardization -> true)
 
   @Since("1.5.0")
+  // TODO: Check this behavior
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
 
   @Since("1.5.0")
@@ -354,12 +360,12 @@ class LogisticRegression @Since("1.2.0") (
       case None => histogram.length
     }
     val isBinaryClassification = numClasses == 1 || numClasses == 2
-    // TODO: use enumeration or similar
-    val isMultinomial = !((!isSet(family) && isBinaryClassification) || $(family) == "binomial")
+    val isMultinomial = ($(family) == LogisticRegression.auto && !isBinaryClassification) ||
+      ($(family) == LogisticRegression.multinomial)
     val numCoefficientSets = if (isMultinomial) numClasses else 1
 
     if (!isMultinomial) {
-      require(isBinaryClassification, s"Binomial family only supports 1 or 2" +
+      require(isBinaryClassification, s"Binomial family only supports 1 or 2 " +
           s"outcome classes but found $numClasses")
     }
 
@@ -422,7 +428,6 @@ class LogisticRegression @Since("1.2.0") (
           new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
         } else {
           val standardizationParam = $(standardization)
-          // TODO: check this works in both cases
           def regParamL1Fun = (index: Int) => {
             // Remove the L1 penalization on the intercept
             val isIntercept = $(fitIntercept) && ((index + 1) % numFeaturesPlusIntercept == 0)
@@ -453,14 +458,8 @@ class LogisticRegression @Since("1.2.0") (
           new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
         }
 
-        // TODO: double check this
-        val initialCoefficientsWithIntercept = if (isMultinomial) {
-          Vectors.zeros(numClasses * numFeaturesPlusIntercept)
-        } else {
-          Vectors.zeros(numFeaturesPlusIntercept)
-        }
+        val initialCoefficientsWithIntercept = Vectors.zeros(numCoefficientSets * numFeatures)
 
-        // TODO: need to add this for multinomial case
         val initialModelIsValid = optInitialModel.exists { model =>
           val providedCoefs = model.coefficientMatrix
           val modelValid = (providedCoefs.numRows == numCoefficientSets) &&
@@ -619,15 +618,19 @@ class LogisticRegression @Since("1.2.0") (
 
     val model = copyValues(new LogisticRegressionModel(uid, coefficients, intercept, numClasses,
       isMultinomial))
-    // TODO: need to implement model summary for MLOR... probably best to do it in another JIRA
-    val (summaryModel, probabilityColName) = model.findSummaryModelAndProbabilityCol()
-    val logRegSummary = new BinaryLogisticRegressionTrainingSummary(
-      summaryModel.transform(dataset),
-      probabilityColName,
-      $(labelCol),
-      $(featuresCol),
-      objectiveHistory)
-    val m = model.setSummary(logRegSummary)
+    // TODO: implement summary model for multinomial case
+    val m = if (!isMultinomial) {
+      val (summaryModel, probabilityColName) = model.findSummaryModelAndProbabilityCol()
+      val logRegSummary = new BinaryLogisticRegressionTrainingSummary(
+        summaryModel.transform(dataset),
+        probabilityColName,
+        $(labelCol),
+        $(featuresCol),
+        objectiveHistory)
+      model.setSummary(logRegSummary)
+    } else {
+      model
+    }
     instr.logSuccess(m)
     m
   }
@@ -642,7 +645,11 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
   @Since("1.6.0")
   override def load(path: String): LogisticRegression = super.load(path)
 
-  private[classification] lazy val supportedFamilyNames = Array("binomial", "multinomial")
+  private val multinomial = "multinomial"
+  private val binomial = "binomial"
+  private val auto = "auto"
+
+  private[classification] lazy val supportedFamilyNames = Array(auto, binomial, multinomial)
 }
 
 /**
@@ -891,7 +898,7 @@ class LogisticRegressionModel private[spark] (
     if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
     newModel.setParent(parent)
   }
-  // TODO: basically check all these methods
+
   override protected def raw2prediction(rawPrediction: Vector): Double = {
     if (isMultinomial) {
       super.raw2prediction(rawPrediction)

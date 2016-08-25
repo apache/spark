@@ -85,6 +85,9 @@ class LogisticRegressionSuite
     binaryDataset.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDataset")
+    multinomialDataset.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDataset")
   }
 
   test("params") {
@@ -100,6 +103,7 @@ class LogisticRegressionSuite
     assert(lr.getPredictionCol === "prediction")
     assert(lr.getRawPredictionCol === "rawPrediction")
     assert(lr.getProbabilityCol === "probability")
+    assert(lr.getFamily === "multinomial")
     assert(!lr.isDefined(lr.weightCol))
     assert(lr.getFitIntercept)
     assert(lr.getStandardization)
@@ -221,7 +225,6 @@ class LogisticRegressionSuite
   }
 
   test("logistic regression: Predictor, Classifier methods") {
-    val spark = this.spark
     val lr = new LogisticRegression
 
     val model = lr.fit(dataset)
@@ -811,6 +814,7 @@ class LogisticRegressionSuite
   }
 
   test("evaluate on test set") {
+    // TODO: add for multiclass
     // Evaluate on test set should be same as that of the transformed training data.
     val lr = new LogisticRegression()
       .setMaxIter(10)
@@ -845,63 +849,89 @@ class LogisticRegressionSuite
 
   }
 
-  test("binary logistic regression with weighted samples") {
-    val (dataset, weightedDataset) = {
-      val nPoints = 1000
-      val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
-      val xMean = Array(5.843, 3.057, 3.758, 1.199)
-      val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
-      val testData =
-        generateMultinomialLogisticInput(coefficients, xMean, xVariance, true, nPoints, 42)
+  test("binary logistic regression with weighted data") {
+    val numClasses = 2
+    val numPoints = 40
+    val outlierData = MLTestingUtils.genClassificationInstancesWithWeightedOutliers(spark,
+      numClasses, numPoints)
+    val testData = spark.createDataFrame(Array.tabulate[LabeledPoint](numClasses) { i =>
+      LabeledPoint(i.toDouble, Vectors.dense(i.toDouble))
+    })
+    val lr = new LogisticRegression().setWeightCol("weight")
+    val model = lr.fit(outlierData)
+    val results = model.transform(testData).select("label", "prediction").collect()
 
-      // Let's over-sample the positive samples twice.
-      val data1 = testData.flatMap { case labeledPoint: LabeledPoint =>
-        if (labeledPoint.label == 1.0) {
-          Iterator(labeledPoint, labeledPoint)
-        } else {
-          Iterator(labeledPoint)
-        }
-      }
-
-      val rnd = new Random(8392)
-      val data2 = testData.flatMap { case LabeledPoint(label: Double, features: Vector) =>
-        if (rnd.nextGaussian() > 0.0) {
-          if (label == 1.0) {
-            Iterator(
-              Instance(label, 1.2, features),
-              Instance(label, 0.8, features),
-              Instance(0.0, 0.0, features))
-          } else {
-            Iterator(
-              Instance(label, 0.3, features),
-              Instance(1.0, 0.0, features),
-              Instance(label, 0.1, features),
-              Instance(label, 0.6, features))
-          }
-        } else {
-          if (label == 1.0) {
-            Iterator(Instance(label, 2.0, features))
-          } else {
-            Iterator(Instance(label, 1.0, features))
-          }
-        }
-      }
-
-      (spark.createDataFrame(sc.parallelize(data1, 4)),
-        spark.createDataFrame(sc.parallelize(data2, 4)))
+    // check that the predictions are the one to one mapping
+    results.foreach { case Row(label: Double, pred: Double) =>
+      assert(label === pred)
     }
+    val (overSampledData, weightedData) =
+      MLTestingUtils.genEquivalentOversampledAndWeightedInstances(outlierData, "label", "features",
+        42L)
+    val weightedModel = lr.fit(weightedData)
+    val overSampledModel = lr.setWeightCol("").fit(overSampledData)
+    assert(weightedModel.coefficientMatrix ~== overSampledModel.coefficientMatrix relTol 0.01)
+  }
 
-    val trainer1a = (new LogisticRegression).setFitIntercept(true)
-      .setRegParam(0.0).setStandardization(true)
-    val trainer1b = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
-      .setRegParam(0.0).setStandardization(true)
-    val model1a0 = trainer1a.fit(dataset)
-    val model1a1 = trainer1a.fit(weightedDataset)
-    val model1b = trainer1b.fit(weightedDataset)
-    assert(model1a0.coefficients !~= model1a1.coefficients absTol 1E-3)
-    assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
-    assert(model1a0.coefficients ~== model1b.coefficients absTol 1E-3)
-    assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
+  test("multinomial logistic regression with weighted data") {
+    val numClasses = 5
+    val numPoints = 40
+    val outlierData = MLTestingUtils.genClassificationInstancesWithWeightedOutliers(spark,
+      numClasses, numPoints)
+    val testData = spark.createDataFrame(Array.tabulate[LabeledPoint](numClasses) { i =>
+      LabeledPoint(i.toDouble, Vectors.dense(i.toDouble))
+    })
+    val mlr = new LogisticRegression().setWeightCol("weight")
+    val model = mlr.fit(outlierData)
+    val results = model.transform(testData).select("label", "prediction").collect()
+
+    // check that the predictions are the one to one mapping
+    results.foreach { case Row(label: Double, pred: Double) =>
+      assert(label === pred)
+    }
+    val (overSampledData, weightedData) =
+      MLTestingUtils.genEquivalentOversampledAndWeightedInstances(outlierData, "label", "features",
+        42L)
+    val weightedModel = mlr.fit(weightedData)
+    val overSampledModel = mlr.setWeightCol("").fit(overSampledData)
+    assert(weightedModel.coefficientMatrix ~== overSampledModel.coefficientMatrix relTol 0.01)
+  }
+
+  test("set family") {
+    val lr = new LogisticRegression().setMaxIter(1)
+    // don't set anything for binary classification
+    val model1 = lr.fit(binaryDataset)
+    assert(model1.coefficientMatrix.numRows === 1 && model1.coefficientMatrix.numCols === 4)
+    assert(model1.interceptVector.size === 1)
+
+    // set to multinomial for binary classification
+    val model2 = lr.setFamily("multinomial").fit(binaryDataset)
+    assert(model2.coefficientMatrix.numRows === 2 && model2.coefficientMatrix.numCols === 4)
+    assert(model2.interceptVector.size === 2)
+
+    // set to binary for binary classification
+    val model3 = lr.setFamily("binomial").fit(binaryDataset)
+    assert(model3.coefficientMatrix.numRows === 1 && model3.coefficientMatrix.numCols === 4)
+    assert(model3.interceptVector.size === 1)
+
+    // don't set anything for multiclass classification
+    val mlr = new LogisticRegression().setMaxIter(1)
+    val model4 = mlr.fit(multinomialDataset)
+    assert(model4.coefficientMatrix.numRows === 3 && model4.coefficientMatrix.numCols === 4)
+    assert(model4.interceptVector.size === 3)
+
+    // set to binary for multiclass classification
+    mlr.setFamily("binomial")
+    val thrown = intercept[IllegalArgumentException] {
+      mlr.fit(multinomialDataset)
+    }
+    assert(thrown.getMessage.contains("Binomial family only supports 1 or 2 outcome classes"))
+
+    // set to multinomial for multiclass
+    mlr.setFamily("multinomial")
+    val model5 = mlr.fit(multinomialDataset)
+    assert(model5.coefficientMatrix.numRows === 3 && model5.coefficientMatrix.numCols === 4)
+    assert(model5.interceptVector.size === 3)
   }
 
   test("set initial model") {
