@@ -243,12 +243,16 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private def loadTestData(session: SparkSession): Unit = {
     import session.implicits._
 
-    (1 to 100).map(i => (i, i.toString)).toDF("key", "value").createOrReplaceTempView("testdata")
+    // A data set containing non-duplicate column values
+    (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+      .createOrReplaceTempView("uniqueRowData")
 
+    // A data set containing a complex data type: ARRAY
     ((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
       .toDF("arraycol", "nestedarraycol")
       .createOrReplaceTempView("arraydata")
 
+    // A data set containing a complex data type: MAP
     (Tuple1(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
       Tuple1(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
       Tuple1(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::

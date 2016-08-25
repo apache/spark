@@ -35,7 +35,7 @@ struct<6.8:double>
 
 
 -- !query 4
-select -key, +key from testdata where key = 2
+select -key, +key from uniqueRowData where key = 2
 -- !query 4 schema
 struct<(- key):int,key:int>
 -- !query 4 output
@@ -43,7 +43,7 @@ struct<(- key):int,key:int>
 
 
 -- !query 5
-select -(key + 1), - key + 1, +(key + 5) from testdata where key = 1
+select -(key + 1), - key + 1, +(key + 5) from uniqueRowData where key = 1
 -- !query 5 schema
 struct<(- (key + 1)):int,((- key) + 1):int,(key + 5):int>
 -- !query 5 output
@@ -51,7 +51,7 @@ struct<(- (key + 1)):int,((- key) + 1):int,(key + 5):int>
 
 
 -- !query 6
-select -max(key), +max(key) from testdata
+select -max(key), +max(key) from uniqueRowData
 -- !query 6 schema
 struct<(- max(key)):int,max(key):int>
 -- !query 6 output
@@ -67,7 +67,7 @@ struct<(- -10):int>
 
 
 -- !query 8
-select + (-key) from testdata where key = 32
+select + (-key) from uniqueRowData where key = 32
 -- !query 8 schema
 struct<(- key):int>
 -- !query 8 output
@@ -75,7 +75,7 @@ struct<(- key):int>
 
 
 -- !query 9
-select - (+max(key)) from testdata
+select - (+max(key)) from uniqueRowData
 -- !query 9 schema
 struct<(- max(key)):int>
 -- !query 9 output
@@ -107,7 +107,7 @@ struct<100:int>
 
 
 -- !query 13
-select - - max(key) from testdata
+select - - max(key) from uniqueRowData
 -- !query 13 schema
 struct<(- (- max(key))):int>
 -- !query 13 output
@@ -115,7 +115,7 @@ struct<(- (- max(key))):int>
 
 
 -- !query 14
-select + - key from testdata where key = 33
+select + - key from uniqueRowData where key = 33
 -- !query 14 schema
 struct<(- key):int>
 -- !query 14 output
