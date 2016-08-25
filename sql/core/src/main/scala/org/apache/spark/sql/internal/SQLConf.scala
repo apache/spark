@@ -116,7 +116,8 @@ object SQLConf {
     .longConf
     .createWithDefault(10L * 1024 * 1024)
 
-  val TAKE_RAMP_UP_RATE = SQLConfigBuilder("spark.sql.take.rampUpRate")
+  val LIMIT_SCALE_UP_FACTOR = SQLConfigBuilder("spark.sql.limit.scaleUpFactor")
+    .internal()
     .doc("Minimal increase rate in number of partitions between attempts when executing a take " +
       "on a query. Higher values lead to more partitions read. Lower values might lead to " +
       "longer execution times as more jobs will be run")
@@ -634,7 +635,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
-  def takeRampUpRate: Int = getConf(TAKE_RAMP_UP_RATE)
+  def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 
