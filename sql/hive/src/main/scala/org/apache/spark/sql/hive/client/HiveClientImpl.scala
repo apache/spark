@@ -25,6 +25,7 @@ import scala.language.reflectiveCalls
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
@@ -44,6 +45,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -401,6 +403,7 @@ private[hive] class HiveClientImpl(
             .map(_.asScala.toMap).orNull
         ),
         properties = properties.filter(kv => kv._1 != "comment"),
+        catalogStats = constructStatsFromHive(properties),
         comment = properties.get("comment"),
         viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
@@ -425,6 +428,43 @@ private[hive] class HiveClientImpl(
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"${table.database}.$tableName"
     client.alterTable(qualifiedTableName, hiveTable)
+  }
+
+  override def alterTableStats(table: CatalogTable): Unit = withHiveState {
+    // convert Spark's statistics to Hive table's properties
+    var statsProperties: Map[String, String] = Map()
+    if (table.catalogStats.isDefined) {
+      val stats = table.catalogStats.get
+      statsProperties += (StatsSetupConst.TOTAL_SIZE -> stats.sizeInBytes.toString())
+      if (stats.rowCount.isDefined) {
+        // We need to set STATS_GENERATED_VIA_STATS_TASK here so that we can persist
+        // ROW_COUNT in metastore. This constraint comes from Hive metastore (HIVE-8648).
+        statsProperties += (StatsSetupConst.ROW_COUNT -> stats.rowCount.get.toString(),
+          StatsSetupConst.STATS_GENERATED_VIA_STATS_TASK -> StatsSetupConst.TRUE)
+      }
+    }
+
+    val hiveTable = if (statsProperties.nonEmpty) {
+      toHiveTable(table.copy(properties = table.properties ++ statsProperties))
+    } else {
+      toHiveTable(table)
+    }
+    client.alterTable(table.qualifiedName, hiveTable)
+  }
+
+  // Construct Spark's statistics from information in Hive metastore.
+  private def constructStatsFromHive(properties: Map[String, String]): Option[Statistics] = {
+    val statsTrue = properties.getOrElse(StatsSetupConst.COLUMN_STATS_ACCURATE, "false").toBoolean
+    if (statsTrue && properties.contains(StatsSetupConst.TOTAL_SIZE)) {
+      val totalSize = BigInt(properties.get(StatsSetupConst.TOTAL_SIZE).get)
+      // TODO: we will compute "estimatedSize" when we have column stats:
+      // average size of row * number of rows
+      Some(Statistics(
+        sizeInBytes = totalSize,
+        rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_))))
+    } else {
+      None
+    }
   }
 
   override def createPartitions(

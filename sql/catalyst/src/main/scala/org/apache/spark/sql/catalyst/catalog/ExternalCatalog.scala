@@ -85,6 +85,8 @@ abstract class ExternalCatalog {
    */
   def alterTable(tableDefinition: CatalogTable): Unit
 
+  def alterTableStats(tableDefinition: CatalogTable): Unit
+
   def getTable(db: String, table: String): CatalogTable
 
   def getTableOption(db: String, table: String): Option[CatalogTable]

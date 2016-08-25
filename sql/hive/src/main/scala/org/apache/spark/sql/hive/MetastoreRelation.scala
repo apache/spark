@@ -108,8 +108,8 @@ private[hive] case class MetastoreRelation(
     new HiveTable(tTable)
   }
 
-  @transient override lazy val statistics: Statistics = Statistics(
-    sizeInBytes = {
+  @transient override lazy val statistics: Statistics = {
+    val sizeInBytes = {
       val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
       val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)
       // TODO: check if this estimate is valid for tables after partition pruning.
@@ -140,7 +140,12 @@ private[hive] case class MetastoreRelation(
           sparkSession.sessionState.conf.defaultSizeInBytes
         })
     }
-  )
+    if (catalogTable.catalogStats.isDefined) {
+      catalogTable.catalogStats.get.copy(sizeInBytes = sizeInBytes)
+    } else {
+      Statistics(sizeInBytes)
+    }
+  }
 
   // When metastore partition pruning is turned off, we cache the list of all partitions to
   // mimic the behavior of Spark < 1.5

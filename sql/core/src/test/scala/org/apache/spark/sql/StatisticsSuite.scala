@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, Join, LocalLimit}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -75,4 +76,31 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("test table-level statistics for data source table created in InMemoryCatalog") {
+    def checkTableStats(tableName: String, totalSize: BigInt, rowCount: Option[BigInt]): Unit = {
+      val df = sql(s"SELECT * FROM $tableName")
+      val statsSeq = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
+        rel.statistics
+      }
+      assert(statsSeq.size === 1)
+      assert(statsSeq.head.sizeInBytes === totalSize)
+      assert(statsSeq.head.rowCount === rowCount)
+    }
+
+    val tableName = "tbl"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(i INT, j STRING) USING parquet")
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
+
+      // noscan won't count the number of rows
+      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
+      // sizeInBytes will be updated by analyze command for tables in InMemoryCatalog
+      checkTableStats(tableName, 984, None)
+
+      // without noscan, we count the number of rows
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("append").insertInto("tbl")
+      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
+      checkTableStats(tableName, 1968, Some(4))
+    }
+  }
 }

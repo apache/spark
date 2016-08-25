@@ -401,6 +401,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
+  override def alterTableStats(tableDefinition: CatalogTable): Unit = withClient {
+    assert(tableDefinition.identifier.database.isDefined)
+    val db = tableDefinition.identifier.database.get
+    requireTableExists(db, tableDefinition.identifier.table)
+    client.alterTableStats(tableDefinition)
+  }
+
   override def getTable(db: String, table: String): CatalogTable = withClient {
     restoreTableMetadata(client.getTable(db, table))
   }

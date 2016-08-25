@@ -235,14 +235,18 @@ class SessionCatalog(
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
    */
-  def alterTable(tableDefinition: CatalogTable): Unit = {
+  def alterTable(tableDefinition: CatalogTable, fromAnalyze: Boolean = false): Unit = {
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
     val tableIdentifier = TableIdentifier(table, Some(db))
     val newTableDefinition = tableDefinition.copy(identifier = tableIdentifier)
     requireDbExists(db)
     requireTableExists(tableIdentifier)
-    externalCatalog.alterTable(newTableDefinition)
+    if (fromAnalyze) {
+      externalCatalog.alterTableStats(newTableDefinition)
+    } else {
+      externalCatalog.alterTable(newTableDefinition)
+    }
   }
 
   /**

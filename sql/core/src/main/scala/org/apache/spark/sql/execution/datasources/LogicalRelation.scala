@@ -72,9 +72,12 @@ case class LogicalRelation(
   // expId can be different but the relation is still the same.
   override lazy val cleanArgs: Seq[Any] = Seq(relation)
 
-  @transient override lazy val statistics: Statistics = Statistics(
-    sizeInBytes = BigInt(relation.sizeInBytes)
-  )
+  // statistics inherited from a CatalogRelation
+  @transient var inheritedStats: Option[Statistics] = None
+
+  @transient override lazy val statistics: Statistics = {
+    inheritedStats.getOrElse(Statistics(sizeInBytes = BigInt(relation.sizeInBytes)))
+  }
 
   /** Used to lookup original attribute capitalization */
   val attributeMap: AttributeMap[AttributeReference] = AttributeMap(output.map(o => (o, o)))

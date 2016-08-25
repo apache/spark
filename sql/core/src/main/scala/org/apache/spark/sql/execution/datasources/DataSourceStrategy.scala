@@ -207,9 +207,11 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         className = table.provider.get,
         options = table.storage.properties)
 
-    LogicalRelation(
+    val logicalRel = LogicalRelation(
       dataSource.resolveRelation(),
       metastoreTableIdentifier = Some(table.identifier))
+    logicalRel.inheritedStats = table.catalogStats
+    logicalRel
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {

@@ -80,9 +80,11 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             className = table.provider.get,
             options = table.storage.properties)
 
-        LogicalRelation(
+        val logicalRel = LogicalRelation(
           dataSource.resolveRelation(checkPathExist = true),
           metastoreTableIdentifier = Some(TableIdentifier(in.name, Some(in.database))))
+        logicalRel.inheritedStats = table.catalogStats
+        logicalRel
       }
     }
 
@@ -296,7 +298,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
       logicalRelation
     }
-    result.copy(expectedOutputAttributes = Some(metastoreRelation.output))
+    val logicalRel = result.copy(expectedOutputAttributes = Some(metastoreRelation.output))
+    logicalRel.inheritedStats = Some(metastoreRelation.statistics)
+    logicalRel
   }
 
   /**

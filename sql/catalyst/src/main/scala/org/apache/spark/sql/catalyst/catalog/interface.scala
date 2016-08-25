@@ -22,7 +22,7 @@ import java.util.Date
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.StructType
 
@@ -130,6 +130,7 @@ case class CatalogTable(
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
     properties: Map[String, String] = Map.empty,
+    catalogStats: Option[Statistics] = None,
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None,
     comment: Option[String] = None,

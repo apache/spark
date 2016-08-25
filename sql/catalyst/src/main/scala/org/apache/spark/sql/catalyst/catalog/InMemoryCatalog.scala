@@ -278,6 +278,8 @@ class InMemoryCatalog(
     catalog(db).tables(tableDefinition.identifier.table).table = tableDefinition
   }
 
+  override def alterTableStats(tableDefinition: CatalogTable): Unit = alterTable(tableDefinition)
+
   override def getTable(db: String, table: String): CatalogTable = synchronized {
     requireTableExists(db, table)
     catalog(db).tables(table).table

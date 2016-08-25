@@ -99,9 +99,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       ctx.identifier.getText.toLowerCase == "noscan") {
       AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString)
     } else {
-      // Always just run the no scan analyze. We should fix this and implement full analyze
-      // command in the future.
-      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString)
+      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString, noscan = false)
     }
   }
 

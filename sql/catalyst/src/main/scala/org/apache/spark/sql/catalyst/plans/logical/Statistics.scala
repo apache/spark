@@ -31,6 +31,10 @@ package org.apache.spark.sql.catalyst.plans.logical
  *
  * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
  *                    defaults to the product of children's `sizeInBytes`.
+ * @param rowCount Estimated number of rows.
  * @param isBroadcastable If true, output is small enough to be used in a broadcast join.
  */
-case class Statistics(sizeInBytes: BigInt, isBroadcastable: Boolean = false)
+case class Statistics(
+    sizeInBytes: BigInt,
+    rowCount: Option[BigInt] = None,
+    isBroadcastable: Boolean = false)
