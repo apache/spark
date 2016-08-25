@@ -138,7 +138,7 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Update credentials manually. This will trigger AM will renew the credentials immediately,
+   * Update credentials manually. This will trigger AM to renew the credentials immediately,
    * also executors and driver (in client mode) will update the credentials accordingly.
    *
    * Note this will only be worked under YARN cluster manager.
