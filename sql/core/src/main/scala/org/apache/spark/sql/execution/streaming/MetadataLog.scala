@@ -48,4 +48,10 @@ trait MetadataLog[T] {
    * Return the latest batch Id and its metadata if exist.
    */
   def getLatest(): Option[(Long, T)]
+
+  /**
+   * Removes all the log entry earlier than thresholdBatchId (exclusive).
+   * This operation should be idempotent.
+   */
+  def purge(thresholdBatchId: Long): Unit
 }
