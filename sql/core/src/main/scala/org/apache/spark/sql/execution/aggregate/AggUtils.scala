@@ -103,7 +103,7 @@ object AggUtils {
         aggregateAttributes = agg.aggregateAttributes,
         initialInputBufferOffset = agg.groupingExpressions.length,
         resultExpressions = agg.resultExpressions,
-        child = agg.child
+        child = mapSideAgg
       )
 
       (mergeAgg, mapSideAgg)
