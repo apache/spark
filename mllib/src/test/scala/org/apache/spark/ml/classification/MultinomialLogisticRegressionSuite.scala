@@ -806,14 +806,6 @@ class MultinomialLogisticRegressionSuite
     assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
   }
 
-  /*
-  test("multinomial logistic regression with intercept with strong L1 regularization") {
-    // TODO: implement this test to check that the priors on the intercepts are correct
-    // TODO: when initial model becomes available
-  }
-   */
-
-
 //  test("read/write") {
 //    def checkModelData(
 //        model: LogisticRegressionModel,

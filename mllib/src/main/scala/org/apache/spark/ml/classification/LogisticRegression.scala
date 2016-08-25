@@ -602,12 +602,14 @@ class LogisticRegression @Since("1.2.0") (
         /*
           The intercepts are never regularized, so we always center the mean.
          */
+        // TODO: store model coefficients as multinomial representation?
+        // If so, zero out one set of coefs or use the +/- representation
         val interceptVector = if (interceptsArray.nonEmpty && isMultinomial) {
           val interceptMean = interceptsArray.sum / numClasses
           interceptsArray.indices.foreach { i => interceptsArray(i) -= interceptMean }
           Vectors.dense(interceptsArray)
-        } else if (interceptsArray.nonEmpty) {
-          Vectors.dense(interceptsArray)
+        } else if (interceptsArray.length == 2) {
+          Vectors.dense(interceptsArray.head)
         } else {
           Vectors.sparse(numClasses, Seq())
         }
@@ -980,19 +982,33 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
 
     override def load(path: String): LogisticRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val versionRegex = "([0-9]+)\\.([0-9]+)\\.(.+)".r
+      val versionRegex(major, minor, _) = metadata.sparkVersion
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 
-      val convertedCoefs = MLUtils.convertMatrixColumnsToML(data, "coefficientMatrix")
-      val converted = MLUtils.convertVectorColumnsToML(convertedCoefs, "interceptVector")
-        .select("numClasses", "numFeatures", "interceptVector", "coefficientMatrix",
-          "isMultinomial")
-      // TODO: numFeatures not needed?
-      val Row(numClasses: Int, numFeatures: Int, interceptVector: Vector,
-        coefficientMatrix: Matrix, isMultinomial: Boolean) = converted.head()
-      val model = new LogisticRegressionModel(metadata.uid, coefficientMatrix, interceptVector,
-        numClasses, isMultinomial)
+      val model = if (major.toInt < 2 || (major.toInt == 2 && minor.toInt == 0)) {
+        // 2.0 and before
+        val Row(numClasses: Int, numFeatures: Int, intercept: Double, coefficients: Vector) =
+          MLUtils.convertVectorColumnsToML(data, "coefficients")
+            .select("numClasses", "numFeatures", "intercept", "coefficients")
+            .head()
+        val coefficientMatrix =
+          new DenseMatrix(1, coefficients.size, coefficients.toArray, isTransposed = true)
+        val interceptVector = Vectors.dense(intercept)
+        new LogisticRegressionModel(metadata.uid, coefficientMatrix,
+          interceptVector, numClasses, isMultinomial = false)
+      } else {
+        // 2.1+
+        val Row(numClasses: Int, numFeatures: Int, interceptVector: Vector,
+        coefficientMatrix: Matrix, isMultinomial: Boolean) = data
+          .select("numClasses", "numFeatures", "interceptVector", "coefficientMatrix",
+            "isMultinomial").head()
+        new LogisticRegressionModel(metadata.uid, coefficientMatrix, interceptVector,
+          numClasses, isMultinomial)
+      }
+
 
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
