@@ -376,7 +376,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   test("SPARK-16948. Check empty orc tables in ORC") {
     withSQLConf((HiveUtils.CONVERT_METASTORE_ORC.key, "true")) {
       withTable("empty_orc_partitioned") {
-        spark.sql(
+        sql(
           """
             |CREATE TABLE empty_orc_partitioned(key INT, value STRING)
             |PARTITIONED BY (p INT) STORED AS ORC
@@ -391,7 +391,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       }
 
       withTable("empty_orc") {
-        spark.sql(
+        sql(
           """
             |CREATE TABLE empty_orc(key INT, value STRING)
             |STORED AS ORC
