@@ -766,7 +766,6 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
       val constraints = join.constraints.filter { c =>
         c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)
       }
-      println("const: " + constraints)
       // Remove those constraints that are already enforced by either the left or the right child
       val additionalConstraints = constraints -- (left.constraints ++ right.constraints)
       val newConditionOpt = conditionOpt match {
@@ -776,7 +775,6 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
         case None =>
           additionalConstraints.reduceOption(And)
       }
-      println(newConditionOpt)
       if (newConditionOpt.isDefined) Join(left, right, joinType, newConditionOpt) else join
   }
 }
@@ -1388,15 +1386,17 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Splits join condition expressions into three categories based on the attributes required
-   * to evaluate them.
+   * to evaluate them. Note that we explicitly exclude non-deterministic (i.e., stateful) condition
+   * expressions in canEvaluateInLeft or canEvaluateInRight to prevent pushing these predicates on
+   * either side of the join.
    *
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
     val (leftEvaluateCondition, rest) =
-        condition.partition(_.references subsetOf left.outputSet)
+        condition.partition(expr => expr.references.subsetOf(left.outputSet))
     val (rightEvaluateCondition, commonCondition) =
-        rest.partition(_.references subsetOf right.outputSet)
+        rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
     (leftEvaluateCondition, rightEvaluateCondition, commonCondition)
   }

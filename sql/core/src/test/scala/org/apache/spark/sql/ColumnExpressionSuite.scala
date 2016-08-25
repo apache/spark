@@ -20,7 +20,8 @@ package org.apache.spark.sql
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
-import org.apache.spark.sql.catalyst.expressions.{Literal, NamedExpression}
+
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -541,35 +542,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       assert(answer.contains(dir.getCanonicalPath))
 
       checkAnswer(data.select(input_file_name()).limit(1), Row(""))
-    }
-  }
-
-  test("pushdown") {
-    withTempPath { dir =>
-      withTempPath { dir2 =>
-        val data = sparkContext.parallelize(0 to 10).toDF("id")
-        data.write.parquet(dir.getCanonicalPath)
-        val df1 = spark.read.parquet(dir.getCanonicalPath)
-          .withColumn("inputFile", input_file_name())
-        //df1.collect().foreach(println)
-        df1.show()
-        df1.write.mode("overwrite").parquet(dir2.getCanonicalPath)
-        val df2 = spark.read.parquet(dir2.getCanonicalPath).toDF("id", "inputFile")
-        /*
-      val df2 = sparkContext.parallelize(0 to 0)
-        .map(_ => s"file://${dir.getCanonicalFile}").toDF("inputFile")
-*/
-        println("----")
-        // df2.collect().foreach(println)
-        df2.show()
-        df1.join(df2, Seq("inputFile")).show()
-
-        /*
-      assert(answer.contains(dir.getCanonicalPath))
-
-      checkAnswer(data.select(input_file_name()).limit(1), Row(""))
-*/
-      }
     }
   }
 

@@ -987,4 +987,20 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
   }
+
+  test("join condition pushdown: deterministic and non-deterministic") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val joinWithNonDeterministicCondition = x.join(y, condition = Some("x.a".attr === Rand(10)))
+    val joinWithDeterministicCondition = x.join(y, condition = Some("x.a".attr === 10))
+
+    // Verify that non-deterministic condition aren't pushed down by the optimizer
+    comparePlans(Optimize.execute(joinWithNonDeterministicCondition.analyze),
+      joinWithNonDeterministicCondition.analyze)
+
+    // Verify that deterministic conditions are pushed down by the optimizer
+    comparePlans(Optimize.execute(joinWithDeterministicCondition.analyze),
+      x.where("x.a".attr === 10).join(y).analyze)
+  }
 }
