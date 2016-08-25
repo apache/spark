@@ -245,6 +245,10 @@ abstract class AggregationIterator(
 
       (currentGroupingKey: UnsafeRow, currentBuffer: MutableRow) => {
         // Serializes the generic object stored in aggregation buffer
+        var i = 0
+        while (i < typedImperativeAggregates.length) {
+          i += 1
+        }
         typedImperativeAggregates.foreach { agg =>
           agg.serializeAggregateBufferInPlace(currentBuffer)
         }

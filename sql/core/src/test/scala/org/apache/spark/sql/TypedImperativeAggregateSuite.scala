@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql
 
-import com.google.common.primitives.Ints
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import org.apache.spark.sql.TypedImperativeAggregateSuite.TypedMax
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericMutableRow, SpecificMutableRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericMutableRow, SpecificMutableRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.execution.aggregate.SortAggregateExec
 import org.apache.spark.sql.expressions.Window
@@ -105,11 +105,30 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(query, expected)
   }
 
-  test("dataframe aggregate with object aggregate buffer, null expression, no group by") {
+  test("dataframe aggregate with object aggregate buffer, non-nullable aggregator") {
     val df = data.toDF("key", "value").coalesce(2)
+
+    // Test non-nullable typedMax
     val query = df.select(typedMax(lit(null)), count($"key"), typedMax(lit(null)),
       count($"value"))
+
+    // typedMax is not nullable
     val maxNull = Int.MinValue
+    val countKey = data.size
+    val countValue = data.size
+    val expected = Seq(Row(maxNull, countKey, maxNull, countValue))
+    checkAnswer(query, expected)
+  }
+
+  test("dataframe aggregate with object aggregate buffer, nullable aggregator") {
+    val df = data.toDF("key", "value").coalesce(2)
+
+    // Test nullable nullableTypedMax
+    val query = df.select(nullableTypedMax(lit(null)), count($"key"), nullableTypedMax(lit(null)),
+      count($"value"))
+
+    // nullableTypedMax is nullable
+    val maxNull = null
     val countKey = data.size
     val countValue = data.size
     val expected = Seq(Row(maxNull, countKey, maxNull, countValue))
@@ -192,7 +211,12 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   private def typedMax(column: Column): Column = {
-    val max = TypedMax(column.expr)
+    val max = TypedMax(column.expr, nullable = false)
+    Column(max.toAggregateExpression())
+  }
+
+  private def nullableTypedMax(column: Column): Column = {
+    val max = TypedMax(column.expr, nullable = true)
     Column(max.toAggregateExpression())
   }
 }
@@ -205,6 +229,7 @@ object TypedImperativeAggregateSuite {
    */
   private case class TypedMax(
       child: Expression,
+      nullable: Boolean = false,
       mutableAggBufferOffset: Int = 0,
       inputAggBufferOffset: Int = 0) extends TypedImperativeAggregate[MaxValue] {
 
@@ -219,6 +244,7 @@ object TypedImperativeAggregateSuite {
         case inputValue: Int =>
           if (inputValue > buffer.value) {
             buffer.value = inputValue
+            buffer.isValueSet = true
           }
         case null => // skip
       }
@@ -227,14 +253,17 @@ object TypedImperativeAggregateSuite {
     override def merge(bufferMax: MaxValue, inputMax: MaxValue): Unit = {
       if (inputMax.value > bufferMax.value) {
         bufferMax.value = inputMax.value
+        bufferMax.isValueSet = bufferMax.isValueSet || inputMax.isValueSet
       }
     }
 
     override def eval(bufferMax: MaxValue): Any = {
-      bufferMax.value
+      if (nullable && bufferMax.isValueSet == false) {
+        null
+      } else {
+        bufferMax.value
+      }
     }
-
-    override def nullable: Boolean = true
 
     override def deterministic: Boolean = true
 
@@ -250,12 +279,22 @@ object TypedImperativeAggregateSuite {
     override def withNewInputAggBufferOffset(newOffset: Int): TypedImperativeAggregate[MaxValue] =
       copy(inputAggBufferOffset = newOffset)
 
-    override def serialize(buffer: MaxValue): Array[Byte] = Ints.toByteArray(buffer.value)
+    override def serialize(buffer: MaxValue): Array[Byte] = {
+      val out = new ByteArrayOutputStream()
+      val stream = new DataOutputStream(out)
+      stream.writeBoolean(buffer.isValueSet)
+      stream.writeInt(buffer.value)
+      out.toByteArray
+    }
 
     override def deserialize(storageFormat: Array[Byte]): MaxValue = {
-      new MaxValue(Ints.fromByteArray(storageFormat))
+      val in = new ByteArrayInputStream(storageFormat)
+      val stream = new DataInputStream(in)
+      val isValueSet = stream.readBoolean()
+      val value = stream.readInt()
+      new MaxValue(value, isValueSet)
     }
   }
 
-  private class MaxValue(var value: Int)
+  private class MaxValue(var value: Int, var isValueSet: Boolean = false)
 }
