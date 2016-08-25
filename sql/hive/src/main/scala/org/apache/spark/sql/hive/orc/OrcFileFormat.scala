@@ -312,8 +312,8 @@ private[orc] object OrcRelation extends HiveInspectors {
 
   def setRequiredColumns(
       conf: Configuration, physicalSchema: StructType, requestedSchema: StructType): Unit = {
-      val ids = requestedSchema.map(a => physicalSchema.fieldIndex(a.name): Integer)
-      val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
-      HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
-   }
+    val ids = requestedSchema.map(a => physicalSchema.fieldIndex(a.name): Integer)
+    val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
+    HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+  }
 }
