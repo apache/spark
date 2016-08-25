@@ -458,7 +458,8 @@ class LogisticRegression @Since("1.2.0") (
           new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
         }
 
-        val initialCoefficientsWithIntercept = Vectors.zeros(numCoefficientSets * numFeatures)
+        val initialCoefficientsWithIntercept =
+          Vectors.zeros(numCoefficientSets * numFeaturesPlusIntercept)
 
         val initialModelIsValid = optInitialModel.exists { model =>
           val providedCoefs = model.coefficientMatrix
@@ -678,7 +679,7 @@ class LogisticRegressionModel private[spark] (
   @Since("1.3.0")
   def intercept: Double = {
     if (isMultinomial) {
-      logWarning("Multiclass model contains an vector of intercepts, use interceptVector instead." +
+      logWarning("Multiclass model contains a vector of intercepts, use interceptVector instead." +
         "Returning 0.0 as placeholder.")
     }
     _intercept
@@ -940,6 +941,7 @@ class LogisticRegressionModel private[spark] (
 
 @Since("1.6.0")
 object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
+  // TODO: we need to be able to load old models as well
 
   @Since("1.6.0")
   override def read: MLReader[LogisticRegressionModel] = new LogisticRegressionModelReader

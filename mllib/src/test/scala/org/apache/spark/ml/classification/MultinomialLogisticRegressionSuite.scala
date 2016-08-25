@@ -86,35 +86,35 @@ class MultinomialLogisticRegressionSuite
     rdd.saveAsTextFile("target/tmp/MultinomialLogisticRegressionSuite/multinomialDataset")
   }
 
-  test("params") {
-    ParamsSuite.checkParams(new LogisticRegression)
-    val model = new LogisticRegressionModel("mLogReg",
-      Matrices.dense(2, 1, Array(0.0, 0.0)), Vectors.dense(0.0, 0.0), 2, true)
-    ParamsSuite.checkParams(model)
-  }
-
-  test("multinomial logistic regression: default params") {
-    val mlr = new LogisticRegression
-    assert(mlr.getLabelCol === "label")
-    assert(mlr.getFeaturesCol === "features")
-    assert(mlr.getPredictionCol === "prediction")
-    assert(mlr.getRawPredictionCol === "rawPrediction")
-    assert(mlr.getProbabilityCol === "probability")
-    assert(!mlr.isDefined(mlr.weightCol))
-    assert(!mlr.isDefined(mlr.thresholds))
-    assert(mlr.getFitIntercept)
-    assert(mlr.getStandardization)
-    val model = mlr.fit(dataset)
-    model.transform(dataset)
-      .select("label", "probability", "prediction", "rawPrediction")
-      .collect()
-    assert(model.getFeaturesCol === "features")
-    assert(model.getPredictionCol === "prediction")
-    assert(model.getRawPredictionCol === "rawPrediction")
-    assert(model.getProbabilityCol === "probability")
-    assert(model.interceptVector !== Vectors.dense(0.0, 0.0))
-    assert(model.hasParent)
-  }
+//  test("params") {
+//    ParamsSuite.checkParams(new LogisticRegression)
+//    val model = new LogisticRegressionModel("mLogReg",
+//      Matrices.dense(2, 1, Array(0.0, 0.0)), Vectors.dense(0.0, 0.0), 2, true)
+//    ParamsSuite.checkParams(model)
+//  }
+//
+//  test("multinomial logistic regression: default params") {
+//    val mlr = new LogisticRegression
+//    assert(mlr.getLabelCol === "label")
+//    assert(mlr.getFeaturesCol === "features")
+//    assert(mlr.getPredictionCol === "prediction")
+//    assert(mlr.getRawPredictionCol === "rawPrediction")
+//    assert(mlr.getProbabilityCol === "probability")
+//    assert(!mlr.isDefined(mlr.weightCol))
+//    assert(!mlr.isDefined(mlr.thresholds))
+//    assert(mlr.getFitIntercept)
+//    assert(mlr.getStandardization)
+//    val model = mlr.fit(dataset)
+//    model.transform(dataset)
+//      .select("label", "probability", "prediction", "rawPrediction")
+//      .collect()
+//    assert(model.getFeaturesCol === "features")
+//    assert(model.getPredictionCol === "prediction")
+//    assert(model.getRawPredictionCol === "rawPrediction")
+//    assert(model.getProbabilityCol === "probability")
+//    assert(model.interceptVector !== Vectors.dense(0.0, 0.0))
+//    assert(model.hasParent)
+//  }
 
   test("multinomial logistic regression with intercept without regularization") {
 
@@ -813,202 +813,6 @@ class MultinomialLogisticRegressionSuite
   }
    */
 
-  test("prediction") {
-    val model = new LogisticRegressionModel("mLogReg",
-      Matrices.dense(3, 2, Array(0.0, 0.0, 0.0, 1.0, 2.0, 3.0)),
-      Vectors.dense(0.0, 0.0, 0.0), 3, true)
-    val overFlowData = spark.createDataFrame(Seq(
-      LabeledPoint(1.0, Vectors.dense(0.0, 1000.0)),
-      LabeledPoint(1.0, Vectors.dense(0.0, -1.0))
-    ))
-    val results = model.transform(overFlowData).select("rawPrediction", "probability").collect()
-
-    // probabilities are correct when margins have to be adjusted
-    val raw1 = results(0).getAs[Vector](0)
-    val prob1 = results(0).getAs[Vector](1)
-    assert(raw1 === Vectors.dense(1000.0, 2000.0, 3000.0))
-    assert(prob1 ~== Vectors.dense(0.0, 0.0, 1.0) absTol eps)
-
-    // probabilities are correct when margins don't have to be adjusted
-    val raw2 = results(1).getAs[Vector](0)
-    val prob2 = results(1).getAs[Vector](1)
-    assert(raw2 === Vectors.dense(-1.0, -2.0, -3.0))
-    assert(prob2 ~== Vectors.dense(0.66524096, 0.24472847, 0.09003057) relTol eps)
-  }
-
-  test("multinomial logistic regression: Predictor, Classifier methods") {
-    val mlr = new LogisticRegression
-
-    val model = mlr.fit(dataset)
-    assert(model.numClasses === 3)
-    val numFeatures = dataset.select("features").first().getAs[Vector](0).size
-    assert(model.numFeatures === numFeatures)
-
-    val results = model.transform(dataset)
-    // check that raw prediction is coefficients dot features + intercept
-    results.select("rawPrediction", "features").collect().foreach {
-      case Row(raw: Vector, features: Vector) =>
-        assert(raw.size === 3)
-        val margins = Array.tabulate(3) { k =>
-          var margin = 0.0
-          features.foreachActive { (index, value) =>
-            margin += value * model.coefficientMatrix(k, index)
-          }
-          margin += model.interceptVector(k)
-          margin
-        }
-        assert(raw ~== Vectors.dense(margins) relTol eps)
-    }
-
-    // Compare rawPrediction with probability
-    results.select("rawPrediction", "probability").collect().foreach {
-      case Row(raw: Vector, prob: Vector) =>
-        assert(raw.size === 3)
-        assert(prob.size === 3)
-        val max = raw.toArray.max
-        val subtract = if (max > 0) max else 0.0
-        val sum = raw.toArray.map(x => math.exp(x - subtract)).sum
-        val probFromRaw0 = math.exp(raw(0) - subtract) / sum
-        val probFromRaw1 = math.exp(raw(1) - subtract) / sum
-        assert(prob(0) ~== probFromRaw0 relTol eps)
-        assert(prob(1) ~== probFromRaw1 relTol eps)
-        assert(prob(2) ~== 1.0 - probFromRaw1 - probFromRaw0 relTol eps)
-    }
-
-    // Compare prediction with probability
-    results.select("prediction", "probability").collect().foreach {
-      case Row(pred: Double, prob: Vector) =>
-        val predFromProb = prob.toArray.zipWithIndex.maxBy(_._1)._2
-        assert(pred == predFromProb)
-    }
-  }
-
-  test("multinomial logistic regression coefficients should be centered") {
-    val mlr = new LogisticRegression().setMaxIter(1)
-    val model = mlr.fit(dataset)
-    assert(model.interceptVector.toArray.sum ~== 0.0 absTol 1e-6)
-    assert(model.coefficientMatrix.toArray.sum ~== 0.0 absTol 1e-6)
-  }
-
-  test("numClasses specified in metadata/inferred") {
-    val mlr = new LogisticRegression().setMaxIter(1)
-
-    // specify more classes than unique label values
-    val labelMeta = NominalAttribute.defaultAttr.withName("label").withNumValues(4).toMetadata()
-    val df = dataset.select(dataset("label").as("label", labelMeta), dataset("features"))
-    val model1 = mlr.fit(df)
-    assert(model1.numClasses === 4)
-    assert(model1.interceptVector.size === 4)
-
-    // specify two classes when there are really three
-    val labelMeta1 = NominalAttribute.defaultAttr.withName("label").withNumValues(2).toMetadata()
-    val df1 = dataset.select(dataset("label").as("label", labelMeta1), dataset("features"))
-    val thrown = intercept[IllegalArgumentException] {
-      mlr.fit(df1)
-    }
-    assert(thrown.getMessage.contains("less than the number of unique labels"))
-
-    // mlr should infer the number of classes if not specified
-    val model3 = mlr.fit(dataset)
-    assert(model3.numClasses === 3)
-  }
-
-  test("all labels the same") {
-    val constantData = spark.createDataFrame(Seq(
-      LabeledPoint(4.0, Vectors.dense(0.0)),
-      LabeledPoint(4.0, Vectors.dense(1.0)),
-      LabeledPoint(4.0, Vectors.dense(2.0)))
-    )
-    val mlr = new LogisticRegression().setFamily("multinomial")
-    val model = mlr.fit(constantData)
-    val results = model.transform(constantData)
-    results.select("rawPrediction", "probability", "prediction").collect().foreach {
-      case Row(raw: Vector, prob: Vector, pred: Double) =>
-        assert(raw === Vectors.dense(Array(0.0, 0.0, 0.0, 0.0, Double.PositiveInfinity)))
-        assert(prob === Vectors.dense(Array(0.0, 0.0, 0.0, 0.0, 1.0)))
-        assert(pred === 4.0)
-    }
-
-    // force the model to be trained with only one class
-    val constantZeroData = spark.createDataFrame(Seq(
-      LabeledPoint(0.0, Vectors.dense(0.0)),
-      LabeledPoint(0.0, Vectors.dense(1.0)),
-      LabeledPoint(0.0, Vectors.dense(2.0)))
-    )
-    val modelZeroLabel = mlr.setFitIntercept(false).fit(constantZeroData)
-    val resultsZero = modelZeroLabel.transform(constantZeroData)
-    resultsZero.select("rawPrediction", "probability", "prediction").collect().foreach {
-      case Row(raw: Vector, prob: Vector, pred: Double) =>
-        assert(prob === Vectors.dense(Array(1.0)))
-        assert(pred === 0.0)
-    }
-
-    // ensure that the correct value is predicted when numClasses passed through metadata
-    val labelMeta = NominalAttribute.defaultAttr.withName("label").withNumValues(6).toMetadata()
-    val constantDataWithMetadata = constantData
-      .select(constantData("label").as("label", labelMeta), constantData("features"))
-    val modelWithMetadata = mlr.setFitIntercept(true).fit(constantDataWithMetadata)
-    val resultsWithMetadata = modelWithMetadata.transform(constantDataWithMetadata)
-    resultsWithMetadata.select("rawPrediction", "probability", "prediction").collect().foreach {
-      case Row(raw: Vector, prob: Vector, pred: Double) =>
-        assert(raw === Vectors.dense(Array(0.0, 0.0, 0.0, 0.0, Double.PositiveInfinity, 0.0)))
-        assert(prob === Vectors.dense(Array(0.0, 0.0, 0.0, 0.0, 1.0, 0.0)))
-        assert(pred === 4.0)
-    }
-    // TODO: check num iters is zero when it become available in the model
-  }
-
-  test("weighted data") {
-    val numClasses = 5
-    val numPoints = 40
-    val outlierData = MLTestingUtils.genClassificationInstancesWithWeightedOutliers(spark,
-      numClasses, numPoints)
-    val testData = spark.createDataFrame(Array.tabulate[LabeledPoint](numClasses) { i =>
-      LabeledPoint(i.toDouble, Vectors.dense(i.toDouble))
-    })
-    val mlr = new LogisticRegression().setWeightCol("weight")
-    val model = mlr.fit(outlierData)
-    val results = model.transform(testData).select("label", "prediction").collect()
-
-    // check that the predictions are the one to one mapping
-    results.foreach { case Row(label: Double, pred: Double) =>
-      assert(label === pred)
-    }
-    val (overSampledData, weightedData) =
-      MLTestingUtils.genEquivalentOversampledAndWeightedInstances(outlierData, "label", "features",
-        42L)
-    val weightedModel = mlr.fit(weightedData)
-    val overSampledModel = mlr.setWeightCol("").fit(overSampledData)
-    assert(weightedModel.coefficientMatrix ~== overSampledModel.coefficientMatrix relTol 0.01)
-  }
-
-  test("thresholds prediction") {
-    val mlr = new LogisticRegression
-    val model = mlr.fit(dataset)
-    val basePredictions = model.transform(dataset).select("prediction").collect()
-
-    // should predict all zeros
-    model.setThresholds(Array(1, 1000, 1000))
-    val zeroPredictions = model.transform(dataset).select("prediction").collect()
-    assert(zeroPredictions.forall(_.getDouble(0) === 0.0))
-
-    // should predict all ones
-    model.setThresholds(Array(1000, 1, 1000))
-    val onePredictions = model.transform(dataset).select("prediction").collect()
-    assert(onePredictions.forall(_.getDouble(0) === 1.0))
-
-    // should predict all twos
-    model.setThresholds(Array(1000, 1000, 1))
-    val twoPredictions = model.transform(dataset).select("prediction").collect()
-    assert(twoPredictions.forall(_.getDouble(0) === 2.0))
-
-    // constant threshold scaling is the same as no thresholds
-    model.setThresholds(Array(1000, 1000, 1000))
-    val scaledPredictions = model.transform(dataset).select("prediction").collect()
-    assert(scaledPredictions.zip(basePredictions).forall { case (scaled, base) =>
-      scaled.getDouble(0) === base.getDouble(0)
-    })
-  }
 
 //  test("read/write") {
 //    def checkModelData(
@@ -1024,16 +828,6 @@ class MultinomialLogisticRegressionSuite
 //      MultinomialLogisticRegressionSuite.allParamSettings,
 //      checkModelData)
 //  }
-
-  test("should support all NumericType labels and not support other types") {
-    val mlr = new LogisticRegression().setMaxIter(1)
-    MLTestingUtils
-      .checkNumericTypes[LogisticRegressionModel, LogisticRegression](
-        mlr, spark) { (expected, actual) =>
-        assert(expected.interceptVector === actual.interceptVector)
-        assert(expected.coefficientMatrix.toArray === actual.coefficients.toArray)
-      }
-  }
 }
 
 object MultinomialLogisticRegressionSuite {
