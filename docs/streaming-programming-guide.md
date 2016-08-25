@@ -1830,8 +1830,8 @@ This behavior is made simple by using `StreamingContext.getOrCreate`. This is us
 # Function to create and setup a new StreamingContext
 def functionToCreateContext():
     sc = SparkContext(...)   # new context
-    ssc = new StreamingContext(...)
-    lines = ssc.socketTextStream(...) # create DStreams
+    ssc = StreamingContext(...)
+    lines = ssc.socketTextStream(...)  # create DStreams
     ...
     ssc.checkpoint(checkpointDirectory)   # set checkpoint directory
     return ssc
