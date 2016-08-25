@@ -1757,7 +1757,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
   <td>R</td>
   <td>
     Executable for executing sparkR shell in client modes for driver. Ignored in cluster modes. It is the same as environment variable <code>SPARKR_DRIVER_R</code>, but take precedence over it.
-    <code>spark.r.shell.command</code> is used for interactive mode of sparkR (sparkR shell) while <code>spark.r.driver.command</code> is used for the batch mode (running sparkR script).
+    <code>spark.r.shell.command</code> is used for sparkR shell while <code>spark.r.driver.command</code> is used for running R script.
   </td>
 </tr>
 </table>
