@@ -50,6 +50,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
   with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth {
 
+  import LogisticRegression._
+
   /**
    * Set threshold in binary classification, in range [0, 1].
    *
@@ -70,6 +72,25 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
     if (isSet(thresholds)) clear(thresholds)
     set(threshold, value)
   }
+
+
+  /**
+   * Param for the name of family which is a description of the error distribution
+   * to be used in the model.
+   * Supported options: "multinomial", "binomial".
+   * Default is "multinomial".
+   *
+   * @group param
+   */
+  @Since("2.0.0")
+  final val family: Param[String] = new Param(this, "family",
+    "The name of family which is a description of the error distribution to be used in the " +
+      s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
+    ParamValidators.inArray[String](supportedFamilyNames))
+
+  /** @group getParam */
+  @Since("2.0.0")
+  def getFamily: String = $(family)
 
   /**
    * Get threshold for binary classification.
@@ -221,6 +242,17 @@ class LogisticRegression @Since("1.2.0") (
   setDefault(fitIntercept -> true)
 
   /**
+   * Sets the value of param [[family]].
+   * Default is "multinomial".
+   *
+   * @group setParam
+   */
+  // TODO: don't use strings?
+  @Since("2.0.0")
+  def setFamily(value: String): this.type = set(family, value)
+  setDefault(family -> "multinomial")
+
+  /**
    * Whether to standardize the training features before fitting the model.
    * The coefficients of models will be always returned on the original scale,
    * so it will be transparent for users. Note that with/without standardization,
@@ -311,8 +343,25 @@ class LogisticRegression @Since("1.2.0") (
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
-    val numClasses = histogram.length
     val numFeatures = summarizer.mean.size
+    val numFeaturesPlusIntercept = if (getFitIntercept) numFeatures + 1 else numFeatures
+
+    val numClasses = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
+      case Some(n: Int) =>
+        require(n >= histogram.length, s"Specified number of classes $n was " +
+          s"less than the number of unique labels ${histogram.length}")
+        n
+      case None => histogram.length
+    }
+    val isBinaryClassification = numClasses == 1 || numClasses == 2
+    val isMultinomial = !((!isSet(family) && isBinaryClassification) || $(family) == "binomial")
+    val numCoefficientSets = if (isMultinomial) numClasses else 1
+
+    // TODO: use enumeration or similar
+    if (!isMultinomial) {
+      require(isBinaryClassification, s"Binomial family only supports 1 or 2" +
+          s"outcome classes but found $numClasses")
+    }
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
@@ -333,22 +382,18 @@ class LogisticRegression @Since("1.2.0") (
 
       val isConstantLabel = histogram.count(_ != 0) == 1
 
-      if (numClasses > 2) {
-        val msg = s"LogisticRegression with ElasticNet in ML package only supports " +
-          s"binary classification. Found $numClasses in the input dataset. Consider using " +
-          s"MultinomialLogisticRegression instead."
-        logError(msg)
-        throw new SparkException(msg)
-      } else if ($(fitIntercept) && numClasses == 2 && isConstantLabel) {
-        logWarning(s"All labels are one and fitIntercept=true, so the coefficients will be " +
-          s"zeros and the intercept will be positive infinity; as a result, " +
-          s"training is not needed.")
-        (Vectors.sparse(numFeatures, Seq()), Double.PositiveInfinity, Array.empty[Double])
-      } else if ($(fitIntercept) && numClasses == 1) {
-        logWarning(s"All labels are zero and fitIntercept=true, so the coefficients will be " +
-          s"zeros and the intercept will be negative infinity; as a result, " +
-          s"training is not needed.")
-        (Vectors.sparse(numFeatures, Seq()), Double.NegativeInfinity, Array.empty[Double])
+      if ($(fitIntercept) && isConstantLabel) {
+        logWarning(s"All labels are the same value and fitIntercept=true, so the coefficients " +
+          s"will be zeros. Training is not needed.")
+        val constantLabelIndex = Vectors.dense(histogram).argmax
+        val coefficientMatrix = Matrices.sparse(numCoefficientSets, numFeatures,
+          Array.fill(numFeatures + 1)(0), Array.empty[Int], Array.empty[Double])
+        val interceptVector = if (isMultinomial) {
+          Vectors.sparse(numClasses, Seq((constantLabelIndex, Double.PositiveInfinity)))
+        } else {
+          Vectors.dense(if (numClasses == 2) Double.PositiveInfinity else Double.NegativeInfinity)
+        }
+        (coefficientMatrix, interceptVector, Array.empty[Double])
       } else {
         if (!$(fitIntercept) && isConstantLabel) {
           logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
@@ -370,35 +415,52 @@ class LogisticRegression @Since("1.2.0") (
 
         val bcFeaturesStd = instances.context.broadcast(featuresStd)
         val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept),
-          $(standardization), bcFeaturesStd, regParamL2, multinomial = false, $(aggregationDepth))
+          $(standardization), bcFeaturesStd, regParamL2, multinomial = isMultinomial,
+          $(aggregationDepth))
 
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
           new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
         } else {
           val standardizationParam = $(standardization)
+          // TODO: check this works in both cases
           def regParamL1Fun = (index: Int) => {
             // Remove the L1 penalization on the intercept
-            if (index == numFeatures) {
+            val isIntercept = $(fitIntercept) && ((index + 1) % numFeaturesPlusIntercept == 0)
+            if (isIntercept) {
               0.0
             } else {
               if (standardizationParam) {
                 regParamL1
               } else {
+                val featureIndex = if ($(fitIntercept)) {
+                  index % numFeaturesPlusIntercept
+                } else {
+                  index % numFeatures
+                }
                 // If `standardization` is false, we still standardize the data
                 // to improve the rate of convergence; as a result, we have to
                 // perform this reverse standardization by penalizing each component
                 // differently to get effectively the same objective function when
                 // the training dataset is not standardized.
-                if (featuresStd(index) != 0.0) regParamL1 / featuresStd(index) else 0.0
+                if (featuresStd(featureIndex) != 0.0) {
+                  regParamL1 / featuresStd(featureIndex)
+                } else {
+                  0.0
+                }
               }
             }
           }
           new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
         }
 
-        val initialCoefficientsWithIntercept =
-          Vectors.zeros(if ($(fitIntercept)) numFeatures + 1 else numFeatures)
+        // TODO: double check this
+        val initialCoefficientsWithIntercept = if (isMultinomial) {
+          Vectors.zeros(numClasses * numFeaturesPlusIntercept)
+        } else {
+          Vectors.zeros(numFeaturesPlusIntercept)
+        }
 
+        // TODO: need to add this for multinomial case
         if (optInitialModel.isDefined && optInitialModel.get.coefficients.size != numFeatures) {
           val vecSize = optInitialModel.get.coefficients.size
           logWarning(
@@ -406,13 +468,46 @@ class LogisticRegression @Since("1.2.0") (
             s"expected size $numFeatures")
         }
 
-        if (optInitialModel.isDefined && optInitialModel.get.coefficients.size == numFeatures) {
-          val initialCoefficientsWithInterceptArray = initialCoefficientsWithIntercept.toArray
-          optInitialModel.get.coefficients.foreachActive { case (index, value) =>
-            initialCoefficientsWithInterceptArray(index) = value
-          }
-          if ($(fitIntercept)) {
-            initialCoefficientsWithInterceptArray(numFeatures) == optInitialModel.get.intercept
+        // TODO: removing initial model for now
+//        if (optInitialModel.isDefined && optInitialModel.get.coefficients.size == numFeatures) {
+//          val initialCoefficientsWithInterceptArray = initialCoefficientsWithIntercept.toArray
+//          optInitialModel.get.coefficients.foreachActive { case (index, value) =>
+//            initialCoefficientsWithInterceptArray(index) = value
+//          }
+//          if ($(fitIntercept)) {
+//            initialCoefficientsWithInterceptArray(numFeatures) == optInitialModel.get.intercept
+//          }
+//        }
+        if ($(fitIntercept) && isMultinomial) {
+          // TODO: can we merge the logic or something here?
+          /*
+             For multinomial logistic regression, when we initialize the coefficients as zeros,
+             it will converge faster if we initialize the intercepts such that
+             it follows the distribution of the labels.
+             {{{
+               P(1) = \exp(b_1) / Z
+               ...
+               P(K) = \exp(b_K) / Z
+               where Z = \sum_{k=1}^{K} \exp(b_k)
+             }}}
+             Since this doesn't have a unique solution, one of the solutions that satisfies the
+             above equations is
+             {{{
+               \exp(b_k) = count_k * \exp(\lambda)
+               b_k = \log(count_k) * \lambda
+             }}}
+             \lambda is a free parameter, so choose the phase \lambda such that the
+             mean is centered. This yields
+             {{{
+               b_k = \log(count_k)
+               b_k' = b_k - \mean(b_k)
+             }}}
+           */
+          val rawIntercepts = histogram.map(c => math.log(c + 1)) // add 1 for smoothing
+          val rawMean = rawIntercepts.sum / rawIntercepts.length
+          rawIntercepts.indices.foreach { i =>
+            initialCoefficientsWithIntercept.toArray(i * numFeaturesPlusIntercept + numFeatures) =
+              rawIntercepts(i) - rawMean
           }
         } else if ($(fitIntercept)) {
           /*
@@ -452,6 +547,7 @@ class LogisticRegression @Since("1.2.0") (
           logError(msg)
           throw new SparkException(msg)
         }
+        bcFeaturesStd.destroy(blocking = false)
 
         /*
            The coefficients are trained in the scaled space; we're converting them back to
@@ -460,25 +556,62 @@ class LogisticRegression @Since("1.2.0") (
            as a result, no scaling is needed.
          */
         val rawCoefficients = state.x.toArray.clone()
-        var i = 0
-        while (i < numFeatures) {
-          rawCoefficients(i) *= { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0 }
-          i += 1
+        // TODO: I think this will work for both binomial and multinomial
+        val coefficientArray = Array.tabulate(numCoefficientSets * numFeatures) { i =>
+          // flatIndex will loop though rawCoefficients, and skip the intercept terms.
+          val flatIndex = if ($(fitIntercept)) i + i / numFeatures else i
+          val featureIndex = i % numFeatures
+          if (featuresStd(featureIndex) != 0.0) {
+            rawCoefficients(flatIndex) / featuresStd(featureIndex)
+          } else {
+            0.0
+          }
         }
-        bcFeaturesStd.destroy(blocking = false)
+        val coefficientMatrix =
+          new DenseMatrix(numCoefficientSets, numFeatures, coefficientArray, isTransposed = true)
 
-        if ($(fitIntercept)) {
-          (Vectors.dense(rawCoefficients.dropRight(1)).compressed, rawCoefficients.last,
-            arrayBuilder.result())
-        } else {
-          (Vectors.dense(rawCoefficients).compressed, 0.0, arrayBuilder.result())
+        if ($(regParam) == 0.0 && isMultinomial) {
+          /*
+            When no regularization is applied, the coefficients lack identifiability because
+            we do not use a pivot class. We can add any constant value to the coefficients and
+            get the same likelihood. So here, we choose the mean centered coefficients for
+            reproducibility. This method follows the approach in glmnet, described here:
+
+            Friedman, et al. "Regularization Paths for Generalized Linear Models via
+              Coordinate Descent," https://core.ac.uk/download/files/153/6287975.pdf
+           */
+          val coefficientMean = coefficientMatrix.values.sum / coefficientMatrix.values.length
+          coefficientMatrix.update(_ - coefficientMean)
         }
+
+        val interceptsArray: Array[Double] = if ($(fitIntercept)) {
+          Array.tabulate(numCoefficientSets) { i =>
+            val coefIndex = (i + 1) * numFeaturesPlusIntercept - 1
+            rawCoefficients(coefIndex)
+          }
+        } else {
+          Array[Double]()
+        }
+        /*
+          The intercepts are never regularized, so we always center the mean.
+         */
+        val interceptVector = if (interceptsArray.nonEmpty && isMultinomial) {
+          val interceptMean = interceptsArray.sum / numClasses
+          interceptsArray.indices.foreach { i => interceptsArray(i) -= interceptMean }
+          Vectors.dense(interceptsArray)
+        } else if (interceptsArray.nonEmpty) {
+          Vectors.dense(interceptsArray)
+        } else {
+          Vectors.sparse(numClasses, Seq())
+        }
+        (coefficientMatrix, interceptVector, arrayBuilder.result())
       }
     }
 
     if (handlePersistence) instances.unpersist()
 
-    val model = copyValues(new LogisticRegressionModel(uid, coefficients, intercept))
+    val model = copyValues(new LogisticRegressionModel(uid, coefficients, intercept, numClasses,
+      isMultinomial))
     val (summaryModel, probabilityColName) = model.findSummaryModelAndProbabilityCol()
     val logRegSummary = new BinaryLogisticRegressionTrainingSummary(
       summaryModel.transform(dataset),
@@ -500,6 +633,8 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
 
   @Since("1.6.0")
   override def load(path: String): LogisticRegression = super.load(path)
+
+  private[classification] lazy val supportedFamilyNames = Array("binomial", "multinomial")
 }
 
 /**
@@ -508,10 +643,33 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
 @Since("1.4.0")
 class LogisticRegressionModel private[spark] (
     @Since("1.4.0") override val uid: String,
-    @Since("2.0.0") val coefficients: Vector,
-    @Since("1.3.0") val intercept: Double)
+    @Since("2.1.0") val coefficientMatrix: Matrix,
+    @Since("2.1.0") val interceptVector: Vector,
+    @Since("1.3.0") override val numClasses: Int,
+    private val isMultinomial: Boolean)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams with MLWritable {
+
+  def this(uid: String, coefficients: Vector, intercept: Double) {
+    this(uid,
+      new DenseMatrix(1, coefficients.size, coefficients.toArray, isTransposed = true),
+      Vectors.dense(intercept), 2, false)
+  }
+
+  @Since("2.0.0")
+  // TODO: this should convert sparse to sparse and dense to dense
+  val coefficients: Vector = Vectors.dense(coefficientMatrix.toArray)
+
+  @Since("1.3.0")
+  def intercept: Double = {
+    if (isMultinomial) {
+      logWarning("Multiclass model contains an vector of intercepts, use interceptVector instead." +
+        "Returning 0.0 as placeholder.")
+    }
+    _intercept
+  }
+
+  private val _intercept = if (!isMultinomial) interceptVector.toArray.head else 0.0
 
   @Since("1.5.0")
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
@@ -527,7 +685,14 @@ class LogisticRegressionModel private[spark] (
 
   /** Margin (rawPrediction) for class label 1.  For binary classification only. */
   private val margin: Vector => Double = (features) => {
-    BLAS.dot(features, coefficients) + intercept
+    BLAS.dot(features, coefficients) + _intercept
+  }
+
+  /** Margin (rawPrediction) for each class label. */
+  private val margins: Vector => Vector = (features) => {
+    val m = interceptVector.toDense.copy
+    BLAS.gemv(1.0, coefficientMatrix, features, 1.0, m)
+    m
   }
 
   /** Score (probability) for class label 1.  For binary classification only. */
@@ -536,11 +701,36 @@ class LogisticRegressionModel private[spark] (
     1.0 / (1.0 + math.exp(-m))
   }
 
-  @Since("1.6.0")
-  override val numFeatures: Int = coefficients.size
+  /** Score (probability) for each class label. */
+  private val scores: Vector => Vector = (features) => {
+    val m = margins(features)
+    val maxMarginIndex = m.argmax
+    val marginArray = m.toArray
+    val maxMargin = marginArray(maxMarginIndex)
 
-  @Since("1.3.0")
-  override val numClasses: Int = 2
+    // adjust margins for overflow
+    val sum = {
+      var temp = 0.0
+      var k = 0
+      while (k < numClasses) {
+        marginArray(k) = if (maxMargin > 0) {
+          math.exp(marginArray(k) - maxMargin)
+        } else {
+          math.exp(marginArray(k))
+        }
+        temp += marginArray(k)
+        k += 1
+      }
+      temp
+    }
+
+    val scores = Vectors.dense(marginArray)
+    BLAS.scal(1 / sum, scores)
+    scores
+  }
+
+  @Since("1.6.0")
+  override val numFeatures: Int = coefficientMatrix.numCols
 
   private var trainingSummary: Option[LogisticRegressionTrainingSummary] = None
 
@@ -597,19 +787,80 @@ class LogisticRegressionModel private[spark] (
    */
   override protected def predict(features: Vector): Double = {
     // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
-    if (score(features) > getThreshold) 1 else 0
+    if (isMultinomial) {
+      if (isDefined(thresholds)) {
+        val thresholds: Array[Double] = getThresholds
+        val probabilities = scores(features).toArray
+        var argMax = 0
+        var max = Double.NegativeInfinity
+        var i = 0
+        while (i < numClasses) {
+          if (thresholds(i) == 0.0) {
+            max = Double.PositiveInfinity
+            argMax = i
+          } else {
+            val scaled = probabilities(i) / thresholds(i)
+            if (scaled > max) {
+              max = scaled
+              argMax = i
+            }
+          }
+          i += 1
+        }
+        argMax
+      } else {
+        scores(features).argmax
+      }
+    }
+    else {
+      if (score(features) > getThreshold) 1 else 0
+    }
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {
       case dv: DenseVector =>
-        var i = 0
-        val size = dv.size
-        while (i < size) {
-          dv.values(i) = 1.0 / (1.0 + math.exp(-dv.values(i)))
-          i += 1
+        if (isMultinomial) {
+          val size = dv.size
+          val values = dv.values
+
+          // get the maximum margin
+          val maxMarginIndex = rawPrediction.argmax
+          val maxMargin = rawPrediction(maxMarginIndex)
+
+          if (maxMargin == Double.PositiveInfinity) {
+            var k = 0
+            while (k < size) {
+              values(k) = if (k == maxMarginIndex) 1.0 else 0.0
+              k += 1
+            }
+          } else {
+            val sum = {
+              var temp = 0.0
+              var k = 0
+              while (k < numClasses) {
+                values(k) = if (maxMargin > 0) {
+                  math.exp(values(k) - maxMargin)
+                } else {
+                  math.exp(values(k))
+                }
+                temp += values(k)
+                k += 1
+              }
+              temp
+            }
+            BLAS.scal(1 / sum, dv)
+          }
+          dv
+        } else {
+          var i = 0
+          val size = dv.size
+          while (i < size) {
+            dv.values(i) = 1.0 / (1.0 + math.exp(-dv.values(i)))
+            i += 1
+          }
+          dv
         }
-        dv
       case sv: SparseVector =>
         throw new RuntimeException("Unexpected error in LogisticRegressionModel:" +
           " raw2probabilitiesInPlace encountered SparseVector")
@@ -617,33 +868,46 @@ class LogisticRegressionModel private[spark] (
   }
 
   override protected def predictRaw(features: Vector): Vector = {
-    val m = margin(features)
-    Vectors.dense(-m, m)
+    if (isMultinomial) {
+      margins(features)
+    } else {
+      val m = margin(features)
+      Vectors.dense(-m, m)
+    }
   }
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): LogisticRegressionModel = {
-    val newModel = copyValues(new LogisticRegressionModel(uid, coefficients, intercept), extra)
+    val newModel = copyValues(new LogisticRegressionModel(uid, coefficientMatrix, interceptVector,
+      numClasses, isMultinomial), extra)
     if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
     newModel.setParent(parent)
   }
-
+  // TODO: basically check all these methods
   override protected def raw2prediction(rawPrediction: Vector): Double = {
-    // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
-    val t = getThreshold
-    val rawThreshold = if (t == 0.0) {
-      Double.NegativeInfinity
-    } else if (t == 1.0) {
-      Double.PositiveInfinity
+    if (isMultinomial) {
+      super.raw2prediction(rawPrediction)
     } else {
-      math.log(t / (1.0 - t))
+      // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
+      val t = getThreshold
+      val rawThreshold = if (t == 0.0) {
+        Double.NegativeInfinity
+      } else if (t == 1.0) {
+        Double.PositiveInfinity
+      } else {
+        math.log(t / (1.0 - t))
+      }
+      if (rawPrediction(1) > rawThreshold) 1 else 0
     }
-    if (rawPrediction(1) > rawThreshold) 1 else 0
   }
 
   override protected def probability2prediction(probability: Vector): Double = {
     // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
-    if (probability(1) > getThreshold) 1 else 0
+    if (isMultinomial) {
+      super.probability2prediction(probability)
+    } else {
+      if (probability(1) > getThreshold) 1 else 0
+    }
   }
 
   /**
@@ -676,15 +940,16 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
     private case class Data(
         numClasses: Int,
         numFeatures: Int,
-        intercept: Double,
-        coefficients: Vector)
+        interceptVector: Vector,
+        coefficientMatrix: Matrix,
+        isMultinomial: Boolean)
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       // Save model data: numClasses, numFeatures, intercept, coefficients
-      val data = Data(instance.numClasses, instance.numFeatures, instance.intercept,
-        instance.coefficients)
+      val data = Data(instance.numClasses, instance.numFeatures, instance.interceptVector,
+        instance.coefficientMatrix, instance.isMultinomial)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -702,13 +967,15 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 
-      // We will need numClasses, numFeatures in the future for multinomial logreg support.
-      // TODO: remove numClasses and numFeatures fields?
-      val Row(numClasses: Int, numFeatures: Int, intercept: Double, coefficients: Vector) =
-        MLUtils.convertVectorColumnsToML(data, "coefficients")
-          .select("numClasses", "numFeatures", "intercept", "coefficients")
-          .head()
-      val model = new LogisticRegressionModel(metadata.uid, coefficients, intercept)
+      val convertedCoefs = MLUtils.convertMatrixColumnsToML(data, "coefficientMatrix")
+      val converted = MLUtils.convertVectorColumnsToML(convertedCoefs, "interceptVector")
+        .select("numClasses", "numFeatures", "interceptVector", "coefficientMatrix",
+          "isMultinomial")
+      // TODO: numFeatures not needed?
+      val Row(numClasses: Int, numFeatures: Int, interceptVector: Vector,
+        coefficientMatrix: Matrix, isMultinomial: Boolean) = converted.head()
+      val model = new LogisticRegressionModel(metadata.uid, coefficientMatrix, interceptVector,
+        numClasses, isMultinomial)
 
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
@@ -1102,6 +1369,7 @@ class BinaryLogisticRegressionSummary private[classification] (
  *       e^{\vec{x}_i \cdot \vec{\beta}_{k'} - maxMargin}} - I_{y=k}\right)
  *    $$
  * </blockquote></p>
+ *
  *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
