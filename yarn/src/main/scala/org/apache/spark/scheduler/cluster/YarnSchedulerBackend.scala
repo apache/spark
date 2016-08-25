@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Success, Failure}
+import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
@@ -261,7 +261,8 @@ private[spark] abstract class YarnSchedulerBackend(
       case r @ RemoveExecutor(executorId, reason) =>
         logWarning(reason.toString)
         driverEndpoint.ask[Boolean](r).onFailure {
-          case e => logError(s"Error requesting driver to remove executor $executorId for reason $reason")
+          case e =>
+            logError(s"Error requesting driver to remove executor $executorId for reason $reason")
         }
     }
 

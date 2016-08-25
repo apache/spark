@@ -22,7 +22,7 @@ import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFut
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Success, Failure}
+import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf

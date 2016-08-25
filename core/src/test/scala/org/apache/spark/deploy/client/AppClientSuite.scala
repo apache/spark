@@ -37,10 +37,10 @@ import org.apache.spark.util.Utils
  * End-to-end tests for application client in standalone mode.
  */
 class AppClientSuite
-    extends SparkFunSuite 
-    with LocalSparkContext 
-    with BeforeAndAfterAll 
-    with Eventually 
+    extends SparkFunSuite
+    with LocalSparkContext
+    with BeforeAndAfterAll
+    with Eventually
     with ScalaFutures {
   private val numWorkers = 2
   private val conf = new SparkConf()

@@ -519,7 +519,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    *
    * @return a future whose evaluation indicates whether the request is acknowledged.
    */
-  protected def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = Future.successful(false)
+  protected def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] =
+    Future.successful(false)
 
   /**
    * Request that the cluster manager kill the specified executors.
@@ -591,7 +592,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Kill the given list of executors through the cluster manager.
    * @return whether the kill request is acknowledged.
    */
-  protected def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = Future.successful(false)
+  protected def doKillExecutors(executorIds: Seq[String]): Future[Boolean] =
+    Future.successful(false)
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {
