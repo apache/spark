@@ -168,7 +168,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
+    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions").map {
+      Utils.substituteExecIdWildCard(_, taskId)
+    }.getOrElse("")
 
     // Set the environment variable through a command prefix
     // to append to the existing value of the variable
