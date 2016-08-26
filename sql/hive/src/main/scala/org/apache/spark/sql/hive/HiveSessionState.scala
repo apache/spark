@@ -45,7 +45,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   override lazy val catalog = {
     new HiveSessionCatalog(
       sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
-      metadataHive,
       sparkSession,
       functionResourceLoader,
       functionRegistry,
