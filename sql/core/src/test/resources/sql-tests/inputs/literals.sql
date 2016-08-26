@@ -90,3 +90,9 @@ select interval 10 nanoseconds;
 
 -- unsupported data type
 select GEO '(10,-6)';
+
+-- hexadecimal binary literal
+select x'2379ACFe';
+
+-- invalid hexadecimal binary literal
+select X'XuZ';
