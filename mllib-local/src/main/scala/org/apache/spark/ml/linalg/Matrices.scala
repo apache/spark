@@ -456,10 +456,10 @@ class SparseMatrix @Since("2.0.0") (
     s"values.length: ${values.length}, rowIndices.length: ${rowIndices.length}")
   if (isTransposed) {
     require(colPtrs.length == numRows + 1,
-      "Expecting ${numRows + 1} colPtrs when numRows = $numRows but got ${colPtrs.length}")
+      s"Expecting ${numRows + 1} colPtrs when numRows = $numRows but got ${colPtrs.length}")
   } else {
     require(colPtrs.length == numCols + 1,
-      "Expecting ${numCols + 1} colPtrs when numCols = $numCols but got ${colPtrs.length}")
+      s"Expecting ${numCols + 1} colPtrs when numCols = $numCols but got ${colPtrs.length}")
   }
   require(values.length == colPtrs.last, "The last value of colPtrs must equal the number of " +
     s"elements. values.length: ${values.length}, colPtrs.last: ${colPtrs.last}")
