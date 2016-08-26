@@ -359,8 +359,8 @@ class LogisticRegression @Since("1.2.0") (
       case None => histogram.length
     }
     val isBinaryClassification = numClasses == 1 || numClasses == 2
-    val isMultinomial = ($(family) == LogisticRegression.Auto && !isBinaryClassification) ||
-      ($(family) == LogisticRegression.Multinomial)
+    val isMultinomial = ($(family) == "auto" && !isBinaryClassification) ||
+      ($(family) == "multinomial")
     val numCoefficientSets = if (isMultinomial) numClasses else 1
 
     if (!isMultinomial) {
@@ -646,11 +646,8 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
   @Since("1.6.0")
   override def load(path: String): LogisticRegression = super.load(path)
 
-  private val Multinomial = "multinomial"
-  private val Binomial = "binomial"
-  private val Auto = "auto"
-
-  private[classification] val supportedFamilyNames = Array(Auto, Binomial, Multinomial)
+  private[classification] val supportedFamilyNames =
+    Array("auto", "binomial", "multinomial").map(_.toLowerCase)
 }
 
 /**
