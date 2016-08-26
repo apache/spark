@@ -180,7 +180,7 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
   private def isFileAlreadyExistsException(e: IOException): Boolean = {
     e.isInstanceOf[FileAlreadyExistsException] ||
       // Old Hadoop versions don't throw FileAlreadyExistsException. Although it's fixed in
-      // HADOOP-9361, we still need to support old Hadoop versions.
+      // HADOOP-9361 in Hadoop 2.5, we still need to support old Hadoop versions.
       (e.getMessage != null && e.getMessage.startsWith("File already exists: "))
   }
 
