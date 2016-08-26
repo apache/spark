@@ -241,6 +241,8 @@ private[csv] class CsvOutputWriter(
       (row: InternalRow, ordinal: Int) =>
         params.timestampFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
 
+    case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
+
     case _ =>
       throw new UnsupportedOperationException(
         s"CSV data source does not support ${dataType.simpleString} data type.")
