@@ -227,12 +227,6 @@ private[csv] class CsvOutputWriter(
   }
 
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
-    case ByteType | ShortType | IntegerType | LongType =>
-      (row: InternalRow, ordinal: Int) => row.get(ordinal, dataType).toString
-
-    case FloatType | DoubleType | _: DecimalType | BooleanType | StringType =>
-      (row: InternalRow, ordinal: Int) => row.get(ordinal, dataType).toString
-
     case DateType =>
       (row: InternalRow, ordinal: Int) =>
         params.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
@@ -243,9 +237,9 @@ private[csv] class CsvOutputWriter(
 
     case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
 
-    case _ =>
-      throw new UnsupportedOperationException(
-        s"CSV data source does not support ${dataType.simpleString} data type.")
+    case dt: DataType =>
+      (row: InternalRow, ordinal: Int) =>
+        row.get(ordinal, dt).toString
   }
 
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")

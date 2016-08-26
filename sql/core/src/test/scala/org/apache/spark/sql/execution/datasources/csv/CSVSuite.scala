@@ -665,24 +665,21 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("error handling for unsupported data types.") {
-    withTempPath { path =>
-      val msg = intercept[SparkException] {
-        Seq((1, "Tesla")).toDF("a", "b").selectExpr("struct(a, b)").write.csv(path.getAbsolutePath)
-      }.getCause.getMessage
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      var msg = intercept[UnsupportedOperationException] {
+        Seq((1, "Tesla")).toDF("a", "b").selectExpr("struct(a, b)").write.csv(csvDir)
+      }.getMessage
       assert(msg.contains("CSV data source does not support struct<a:int,b:string> data type"))
-    }
 
-    withTempPath { path =>
-      val msg = intercept[SparkException] {
-        Seq((1, Map("Tesla" -> 3))).toDF().write.csv(path.getAbsolutePath)
-      }.getCause.getMessage
+      msg = intercept[UnsupportedOperationException] {
+        Seq((1, Map("Tesla" -> 3))).toDF("id", "cars").write.csv(csvDir)
+      }.getMessage
       assert(msg.contains("CSV data source does not support map<string,int> data type"))
-    }
 
-    withTempPath { path =>
-      val msg = intercept[SparkException] {
-        Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF().write.csv(path.getAbsolutePath)
-      }.getCause.getMessage
+      msg = intercept[UnsupportedOperationException] {
+        Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF("id", "brands").write.csv(csvDir)
+      }.getMessage
       assert(msg.contains("CSV data source does not support array<string> data type"))
     }
   }
