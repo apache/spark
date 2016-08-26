@@ -27,8 +27,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.{DataFrame, QueryTest, Row, UDT}
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
@@ -681,6 +680,19 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF("id", "brands").write.csv(csvDir)
       }.getMessage
       assert(msg.contains("CSV data source does not support array<string> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
+        Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
+          .write.csv(csvDir)
+      }.getMessage
+      assert(msg.contains("CSV data source does not support array<double> data type"))
+
+      msg = intercept[SparkException] {
+        val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
+        spark.range(1).write.csv(csvDir)
+        spark.read.schema(schema).csv(csvDir).collect()
+      }.getCause.getMessage
+      assert(msg.contains("Unsupported type: array"))
     }
   }
 
