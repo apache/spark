@@ -109,104 +109,82 @@ select 9223372036854775808L
 
 
 -- !query 11
-select 90912830918230182310293801923652346786BD, 123.0E-28BD, 123.08BD
--- !query 11 schema
-struct<90912830918230182310293801923652346786:decimal(38,0),1.230E-26:decimal(29,29),123.08:decimal(5,2)>
--- !query 11 output
-90912830918230182310293801923652346786	0.0000000000000000000000000123	123.08
-
-
--- !query 12
-select 1.20E-38BD
--- !query 12 schema
-struct<>
--- !query 12 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-DecimalType can only support precision up to 38(line 1, pos 7)
-
-== SQL ==
-select 1.20E-38BD
--------^^^
-
-
--- !query 13
 select 1, -1
--- !query 13 schema
+-- !query 11 schema
 struct<1:int,-1:int>
--- !query 13 output
+-- !query 11 output
 1	-1
 
 
--- !query 14
+-- !query 12
 select 2147483647, -2147483648
--- !query 14 schema
+-- !query 12 schema
 struct<2147483647:int,-2147483648:int>
--- !query 14 output
+-- !query 12 output
 2147483647	-2147483648
 
 
--- !query 15
+-- !query 13
 select 9223372036854775807, -9223372036854775808
--- !query 15 schema
+-- !query 13 schema
 struct<9223372036854775807:bigint,-9223372036854775808:bigint>
--- !query 15 output
+-- !query 13 output
 9223372036854775807	-9223372036854775808
 
 
--- !query 16
+-- !query 14
 select 9223372036854775808, -9223372036854775809
--- !query 16 schema
+-- !query 14 schema
 struct<9223372036854775808:decimal(19,0),-9223372036854775809:decimal(19,0)>
--- !query 16 output
+-- !query 14 output
 9223372036854775808	-9223372036854775809
 
 
+-- !query 15
+select 1234567890123456789012345678901234567890
+-- !query 15 schema
+struct<>
+-- !query 15 output
+org.apache.spark.sql.catalyst.parser.ParseException
+
+DecimalType can only support precision up to 38
+== SQL ==
+select 1234567890123456789012345678901234567890
+
+
+-- !query 16
+select 1234567890123456789012345678901234567890.0
+-- !query 16 schema
+struct<>
+-- !query 16 output
+org.apache.spark.sql.catalyst.parser.ParseException
+
+DecimalType can only support precision up to 38
+== SQL ==
+select 1234567890123456789012345678901234567890.0
+
+
 -- !query 17
-select 1234567890123456789012345678901234567890
--- !query 17 schema
-struct<>
--- !query 17 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-DecimalType can only support precision up to 38
-== SQL ==
-select 1234567890123456789012345678901234567890
-
-
--- !query 18
-select 1234567890123456789012345678901234567890.0
--- !query 18 schema
-struct<>
--- !query 18 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-DecimalType can only support precision up to 38
-== SQL ==
-select 1234567890123456789012345678901234567890.0
-
-
--- !query 19
 select 1D, 1.2D, 1e10, 1.5e5, .10D, 0.10D, .1e5, .9e+2, 0.9e+2, 900e-1, 9.e+1
--- !query 19 schema
+-- !query 17 schema
 struct<1.0:double,1.2:double,1.0E10:double,150000.0:double,0.1:double,0.1:double,10000.0:double,90.0:double,90.0:double,90.0:double,90.0:double>
--- !query 19 output
+-- !query 17 output
 1.0	1.2	1.0E10	150000.0	0.1	0.1	10000.0	90.0	90.0	90.0	90.0
 
 
--- !query 20
+-- !query 18
 select -1D, -1.2D, -1e10, -1.5e5, -.10D, -0.10D, -.1e5
--- !query 20 schema
+-- !query 18 schema
 struct<-1.0:double,-1.2:double,-1.0E10:double,-150000.0:double,-0.1:double,-0.1:double,-10000.0:double>
--- !query 20 output
+-- !query 18 output
 -1.0	-1.2	-1.0E10	-150000.0	-0.1	-0.1	-10000.0
 
 
--- !query 21
+-- !query 19
 select .e3
--- !query 21 schema
+-- !query 19 schema
 struct<>
--- !query 21 output
+-- !query 19 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 no viable alternative at input 'select .'(line 1, pos 7)
@@ -216,145 +194,145 @@ select .e3
 -------^^^
 
 
--- !query 22
+-- !query 20
 select 1E309, -1E309
--- !query 22 schema
+-- !query 20 schema
 struct<Infinity:double,-Infinity:double>
--- !query 22 output
+-- !query 20 output
 Infinity	-Infinity
 
 
--- !query 23
+-- !query 21
 select 0.3, -0.8, .5, -.18, 0.1111, .1111
--- !query 23 schema
+-- !query 21 schema
 struct<0.3:decimal(1,1),-0.8:decimal(1,1),0.5:decimal(1,1),-0.18:decimal(2,2),0.1111:decimal(4,4),0.1111:decimal(4,4)>
--- !query 23 output
+-- !query 21 output
 0.3	-0.8	0.5	-0.18	0.1111	0.1111
 
 
--- !query 24
+-- !query 22
 select 123456789012345678901234567890123456789e10, 123456789012345678901234567890123456789.1e10
--- !query 24 schema
+-- !query 22 schema
 struct<1.2345678901234568E48:double,1.2345678901234568E48:double>
--- !query 24 output
+-- !query 22 output
 1.2345678901234568E48	1.2345678901234568E48
 
 
--- !query 25
+-- !query 23
 select "Hello Peter!", 'hello lee!'
--- !query 25 schema
+-- !query 23 schema
 struct<Hello Peter!:string,hello lee!:string>
--- !query 25 output
+-- !query 23 output
 Hello Peter!	hello lee!
 
 
--- !query 26
+-- !query 24
 select 'hello' 'world', 'hello' " " 'lee'
--- !query 26 schema
+-- !query 24 schema
 struct<helloworld:string,hello lee:string>
--- !query 26 output
+-- !query 24 output
 helloworld	hello lee
 
 
--- !query 27
+-- !query 25
 select "hello 'peter'"
--- !query 27 schema
+-- !query 25 schema
 struct<hello 'peter':string>
--- !query 27 output
+-- !query 25 output
 hello 'peter'
 
 
--- !query 28
+-- !query 26
 select 'pattern%', 'no-pattern\%', 'pattern\\%', 'pattern\\\%'
--- !query 28 schema
+-- !query 26 schema
 struct<pattern%:string,no-pattern\%:string,pattern\%:string,pattern\\%:string>
--- !query 28 output
+-- !query 26 output
 pattern%	no-pattern\%	pattern\%	pattern\\%
 
 
--- !query 29
+-- !query 27
 select '\'', '"', '\n', '\r', '\t', 'Z'
--- !query 29 schema
+-- !query 27 schema
 struct<':string,":string,
 :string,:string,	:string,Z:string>
--- !query 29 output
+-- !query 27 output
 '	"	
 				Z
 
 
--- !query 30
+-- !query 28
 select '\110\145\154\154\157\041'
--- !query 30 schema
+-- !query 28 schema
 struct<Hello!:string>
--- !query 30 output
+-- !query 28 output
 Hello!
 
 
--- !query 31
+-- !query 29
 select '\u0057\u006F\u0072\u006C\u0064\u0020\u003A\u0029'
--- !query 31 schema
+-- !query 29 schema
 struct<World :):string>
--- !query 31 output
+-- !query 29 output
 World :)
 
 
--- !query 32
+-- !query 30
 select dAte '2016-03-12'
--- !query 32 schema
+-- !query 30 schema
 struct<DATE '2016-03-12':date>
--- !query 32 output
+-- !query 30 output
 2016-03-12
 
 
--- !query 33
+-- !query 31
 select date 'mar 11 2016'
--- !query 33 schema
+-- !query 31 schema
 struct<>
--- !query 33 output
+-- !query 31 output
 java.lang.IllegalArgumentException
 null
 
 
--- !query 34
+-- !query 32
 select tImEstAmp '2016-03-11 20:54:00.000'
--- !query 34 schema
+-- !query 32 schema
 struct<TIMESTAMP('2016-03-11 20:54:00.0'):timestamp>
--- !query 34 output
+-- !query 32 output
 2016-03-11 20:54:00
 
 
--- !query 35
+-- !query 33
 select timestamp '2016-33-11 20:54:00.000'
--- !query 35 schema
+-- !query 33 schema
 struct<>
--- !query 35 output
+-- !query 33 output
 java.lang.IllegalArgumentException
 Timestamp format must be yyyy-mm-dd hh:mm:ss[.fffffffff]
 
 
--- !query 36
+-- !query 34
 select interval 13.123456789 seconds, interval -13.123456789 second
--- !query 36 schema
+-- !query 34 schema
 struct<>
--- !query 36 output
+-- !query 34 output
 scala.MatchError
 (interval 13 seconds 123 milliseconds 456 microseconds,CalendarIntervalType) (of class scala.Tuple2)
 
 
--- !query 37
+-- !query 35
 select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond, 9 microsecond
--- !query 37 schema
+-- !query 35 schema
 struct<>
--- !query 37 output
+-- !query 35 output
 scala.MatchError
 (interval 1 years 2 months 3 weeks 4 days 5 hours 6 minutes 7 seconds 8 milliseconds,CalendarIntervalType) (of class scala.Tuple2)
 
 
--- !query 38
+-- !query 36
 select interval 10 nanoseconds
--- !query 38 schema
+-- !query 36 schema
 struct<>
--- !query 38 output
+-- !query 36 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 No interval can be constructed(line 1, pos 16)
@@ -364,15 +342,37 @@ select interval 10 nanoseconds
 ----------------^^^
 
 
--- !query 39
+-- !query 37
 select GEO '(10,-6)'
--- !query 39 schema
+-- !query 37 schema
 struct<>
--- !query 39 output
+-- !query 37 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 Literals of type 'GEO' are currently not supported.(line 1, pos 7)
 
 == SQL ==
 select GEO '(10,-6)'
+-------^^^
+
+
+-- !query 38
+select 90912830918230182310293801923652346786BD, 123.0E-28BD, 123.08BD
+-- !query 38 schema
+struct<90912830918230182310293801923652346786:decimal(38,0),1.230E-26:decimal(29,29),123.08:decimal(5,2)>
+-- !query 38 output
+90912830918230182310293801923652346786	0.0000000000000000000000000123	123.08
+
+
+-- !query 39
+select 1.20E-38BD
+-- !query 39 schema
+struct<>
+-- !query 39 output
+org.apache.spark.sql.catalyst.parser.ParseException
+
+DecimalType can only support precision up to 38(line 1, pos 7)
+
+== SQL ==
+select 1.20E-38BD
 -------^^^
