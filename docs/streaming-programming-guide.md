@@ -656,7 +656,7 @@ methods for creating DStreams from files as input sources.
 	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
 
 - **Streams based on Custom Receivers:** DStreams can be created with data streams received through custom receivers. See the [Custom Receiver
-  Guide](streaming-custom-receivers.html) and [DStream Akka](https://github.com/spark-packages/dstream-akka) for more details.
+  Guide](streaming-custom-receivers.html) for more details.
 
 - **Queue of RDDs as a Stream:** For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
 
@@ -2383,11 +2383,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     - [Kafka Integration Guide](streaming-kafka-integration.html)
     - [Kinesis Integration Guide](streaming-kinesis-integration.html)
     - [Custom Receiver Guide](streaming-custom-receivers.html)
-* External DStream data sources:
-    - [DStream MQTT](https://github.com/spark-packages/dstream-mqtt)
-    - [DStream Twitter](https://github.com/spark-packages/dstream-twitter)
-    - [DStream Akka](https://github.com/spark-packages/dstream-akka)
-    - [DStream ZeroMQ](https://github.com/spark-packages/dstream-zeromq)
+* Third-party DStream data sources can be found in [Spark Packages](https://spark-packages.org/)
 * API documentation
   - Scala docs
     * [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) and
