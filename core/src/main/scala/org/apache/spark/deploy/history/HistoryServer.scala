@@ -55,6 +55,9 @@ class HistoryServer(
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
 
+  // How many applications are available
+  private val maxApplications = conf.getInt("spark.history.maxApplications", Integer.MAX_VALUE)
+
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
 
@@ -171,7 +174,7 @@ class HistoryServer(
    * @return List of all known applications.
    */
   def getApplicationList(): Iterable[ApplicationHistoryInfo] = {
-    provider.getListing()
+    provider.getListing().take(maxApplications)
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
