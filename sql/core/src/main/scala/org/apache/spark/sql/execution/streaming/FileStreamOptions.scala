@@ -26,8 +26,7 @@ import org.apache.spark.util.Utils
 /**
  * User specified options for file streams.
  */
-class FileStreamOptions(@transient private val parameters: Map[String, String])
-  extends Logging with Serializable {
+class FileStreamOptions(parameters: Map[String, String]) extends Logging {
 
   val maxFilesPerTrigger: Option[Int] = parameters.get("maxFilesPerTrigger").map { str =>
     Try(str.toInt).toOption.filter(_ > 0).getOrElse {
