@@ -1238,7 +1238,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // Methods for creating shared variables
 
   /**
-   * Create an [[org.apache.spark.Accumulator]] variable of a given type, to which tasks can "add"
+   * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
    * values to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
   @deprecated("use AccumulatorV2", "2.0.0")
