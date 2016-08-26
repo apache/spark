@@ -573,13 +573,11 @@ class SparseMatrix @Since("1.3.0") (
   require(values.length == rowIndices.length, "The number of row indices and values don't match! " +
     s"values.length: ${values.length}, rowIndices.length: ${rowIndices.length}")
   if (isTransposed) {
-    require(colPtrs.length == numRows + 1, "The length of the column indices should be " +
-    "the number of rows + 1. " +
-    s"Currently, colPointers.length: ${colPtrs.length}, numRows: $numRows.")
+    require(colPtrs.length == numRows + 1,
+      "Expecting ${numRows + 1} colPtrs when numRows = $numRows but got ${colPtrs.length}")
   } else {
-    require(colPtrs.length == numCols + 1, "The length of the column indices should be " +
-    "the number of columns + 1. " +
-    s"Currently, colPointers.length: ${colPtrs.length}, numCols: $numCols.")
+    require(colPtrs.length == numCols + 1,
+      "Expecting ${numCols + 1} colPtrs when numCols = $numCols but got ${colPtrs.length}")
   }
   require(values.length == colPtrs.last, "The last value of colPtrs must equal the number of " +
     s"elements. values.length: ${values.length}, colPtrs.last: ${colPtrs.last}")
