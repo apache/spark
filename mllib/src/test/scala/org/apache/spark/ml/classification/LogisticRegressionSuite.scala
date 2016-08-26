@@ -113,7 +113,8 @@ class LogisticRegressionSuite
 
   test("params") {
     ParamsSuite.checkParams(new LogisticRegression)
-    val model = new LogisticRegressionModel("logReg", Vectors.dense(0.0), 0.0)
+    val model = new LogisticRegressionModel("logReg",
+      new DenseMatrix(1, 1, Array(0.0), isTransposed = false), Vectors.dense(0.0), 2, false)
     ParamsSuite.checkParams(model)
   }
 

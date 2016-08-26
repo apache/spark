@@ -22,7 +22,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{DenseMatrix, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
@@ -133,7 +133,8 @@ class TrainValidationSplitSuite
   test("read/write: TrainValidationSplitModel") {
     val lr = new LogisticRegression()
       .setThreshold(0.6)
-    val lrModel = new LogisticRegressionModel(lr.uid, Vectors.dense(1.0, 2.0), 1.2)
+    val lrModel = new LogisticRegressionModel(lr.uid,
+      new DenseMatrix(1, 1, Array(0.0), isTransposed = false), Vectors.dense(0.0), 2, false)
       .setThreshold(0.6)
     val evaluator = new BinaryClassificationEvaluator()
     val paramMaps = new ParamGridBuilder()

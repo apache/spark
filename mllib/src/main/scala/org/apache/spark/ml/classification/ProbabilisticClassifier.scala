@@ -201,11 +201,30 @@ abstract class ProbabilisticClassificationModel[
       probability.argmax
     } else {
       val thresholds: Array[Double] = getThresholds
-      val scaledProbability: Array[Double] =
-        probability.toArray.zip(thresholds).map { case (p, t) =>
-          if (t == 0.0) Double.PositiveInfinity else p / t
+      val probabilities = probability.toArray
+      var argMax = 0
+      var max = Double.NegativeInfinity
+      var i = 0
+      while (i < probability.size) {
+        if (thresholds(i) == 0.0) {
+          max = Double.PositiveInfinity
+          argMax = i
+        } else {
+          val scaled = probabilities(i) / thresholds(i)
+          if (scaled > max) {
+            max = scaled
+            argMax = i
+          }
         }
-      Vectors.dense(scaledProbability).argmax
+        i += 1
+      }
+      argMax
+//      val thresholds: Array[Double] = getThresholds
+//      val scaledProbability: Array[Double] =
+//        probability.toArray.zip(thresholds).map { case (p, t) =>
+//          if (t == 0.0) Double.PositiveInfinity else p / t
+//        }
+//      Vectors.dense(scaledProbability).argmax
     }
   }
 }

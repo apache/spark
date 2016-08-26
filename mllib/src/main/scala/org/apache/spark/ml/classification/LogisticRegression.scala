@@ -365,7 +365,7 @@ class LogisticRegression @Since("1.2.0") (
 
     if (!isMultinomial) {
       require(isBinaryClassification, s"Binomial family only supports 1 or 2 " +
-          s"outcome classes but found $numClasses")
+        s"outcome classes but found $numClasses")
     }
 
     if (isDefined(thresholds)) {
@@ -602,8 +602,6 @@ class LogisticRegression @Since("1.2.0") (
         /*
           The intercepts are never regularized, so we always center the mean.
          */
-        // TODO: store model coefficients as multinomial representation?
-        // If so, zero out one set of coefs or use the +/- representation
         val interceptVector = if (interceptsArray.nonEmpty && isMultinomial) {
           val interceptMean = interceptsArray.sum / numClasses
           interceptsArray.indices.foreach { i => interceptsArray(i) -= interceptMean }
@@ -668,13 +666,6 @@ class LogisticRegressionModel private[spark] (
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams with MLWritable {
 
-  // TODO: remove this
-  def this(uid: String, coefficients: Vector, intercept: Double) {
-    this(uid,
-      new DenseMatrix(1, coefficients.size, coefficients.toArray, isTransposed = true),
-      Vectors.dense(intercept), 2, false)
-  }
-
   @Since("2.0.0")
   def coefficients: Vector = if (isMultinomial) {
     throw new SparkException("Multinomial models contain a matrix of coefficients, use" +
@@ -686,13 +677,14 @@ class LogisticRegressionModel private[spark] (
   // convert to appropriate vector representation without replicating data
   private lazy val _coefficients: Vector = coefficientMatrix match {
     case dm: DenseMatrix => Vectors.dense(dm.values)
+    // TODO: better way to flatten sparse matrix?
     case sm: SparseMatrix => Vectors.fromBreeze(sm.asBreeze.flatten(View.Require))
   }
 
   @Since("1.3.0")
   def intercept: Double = if (isMultinomial) {
-    throw new SparkException("Multiclass model contains a vector of intercepts, use " +
-      "interceptVector instead. Returning 0.0 as placeholder.")
+    throw new SparkException("Multinomial models contain a vector of intercepts, use " +
+      "interceptVector instead.")
   } else {
     _intercept
   }
@@ -730,6 +722,7 @@ class LogisticRegressionModel private[spark] (
   }
 
   /** Score (probability) for each class label. */
+  // TODO: do we need this anymore?
   private val scores: Vector => Vector = (features) => {
     val m = margins(features)
     val maxMarginIndex = m.argmax
@@ -813,36 +806,11 @@ class LogisticRegressionModel private[spark] (
    * Predict label for the given feature vector.
    * The behavior of this can be adjusted using [[thresholds]].
    */
-  override protected def predict(features: Vector): Double = {
+  override protected def predict(features: Vector): Double = if (isMultinomial) {
+    super.predict(features)
+  } else {
     // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
-    if (isMultinomial) {
-      if (isDefined(thresholds)) {
-        val thresholds: Array[Double] = getThresholds
-        val probabilities = scores(features).toArray
-        var argMax = 0
-        var max = Double.NegativeInfinity
-        var i = 0
-        while (i < numClasses) {
-          if (thresholds(i) == 0.0) {
-            max = Double.PositiveInfinity
-            argMax = i
-          } else {
-            val scaled = probabilities(i) / thresholds(i)
-            if (scaled > max) {
-              max = scaled
-              argMax = i
-            }
-          }
-          i += 1
-        }
-        argMax
-      } else {
-        scores(features).argmax
-      }
-    }
-    else {
-      if (score(features) > getThreshold) 1 else 0
-    }
+    if (score(features) > getThreshold) 1 else 0
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
@@ -930,10 +898,10 @@ class LogisticRegressionModel private[spark] (
   }
 
   override protected def probability2prediction(probability: Vector): Double = {
-    // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
     if (isMultinomial) {
       super.probability2prediction(probability)
     } else {
+      // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
       if (probability(1) > getThreshold) 1 else 0
     }
   }
@@ -983,8 +951,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
     }
   }
 
-  private class LogisticRegressionModelReader
-    extends MLReader[LogisticRegressionModel] {
+  private class LogisticRegressionModelReader extends MLReader[LogisticRegressionModel] {
 
     /** Checked against metadata when loading model */
     private val className = classOf[LogisticRegressionModel].getName
