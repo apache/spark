@@ -128,7 +128,7 @@ private[hive] case class MetastoreRelation(
           rawDataSize.toLong
         } else if (sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled) {
           try {
-            getSize(hiveQlTable.getPath)
+            getSizeIfLessThanBroadcastThreshold(hiveQlTable.getPath)
           } catch {
             case e: IOException =>
               logWarning("Failed to get table size from hdfs.", e)
@@ -140,24 +140,30 @@ private[hive] case class MetastoreRelation(
     }
   )
 
-  private def getSize(f: Path): Long = {
+  // Returns the size of this path as long as the size is < broadcastThreshold.
+  // Stops calculating size once totalSize is > broadcastThreshold and returns default size.
+  private def getSizeIfLessThanBroadcastThreshold(path: Path): Long = {
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
-    val status: FileStatus = fs.getFileStatus(f)
+    val status: FileStatus = fs.getFileStatus(path)
     val broadcastThreshold = sparkSession.sessionState.conf.autoBroadcastJoinThreshold
+    val defaultSize = sparkSession.sessionState.conf.defaultSizeInBytes
     if (status.isFile) {
       status.getLen
     } else {
       var totalSize = 0L
-      for (s <- fs.listStatus(f) if (totalSize < broadcastThreshold)) {
-        val size: Long = if (s.isDirectory) {
-          getSize(s.getPath)
+      for (file <- fs.listStatus(path) if (totalSize < broadcastThreshold)) {
+
+        val fileSize: Long = if (file.isDirectory) {
+          getSizeIfLessThanBroadcastThreshold(file.getPath)
         } else {
-          s.getLen
+          file.getLen
         }
-        totalSize += size
+
+        if (fileSize == defaultSize) totalSize = defaultSize else totalSize += fileSize
       }
-      totalSize
+
+      if (totalSize >= broadcastThreshold) defaultSize else totalSize
     }
   }
 

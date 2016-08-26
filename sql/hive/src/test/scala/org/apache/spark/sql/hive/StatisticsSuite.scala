@@ -73,6 +73,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
   test("MetastoreRelations fallback to HDFS for size estimation") {
     val enableFallBackToHdfsForStats = spark.sessionState.conf.fallBackToHdfsForStatsEnabled
     val autoBroadCastThreshold = spark.sessionState.conf.autoBroadcastJoinThreshold
+    val defaultSize = spark.sessionState.conf.defaultSizeInBytes
     try {
       withTempDir { tempDir =>
 
@@ -114,7 +115,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
         spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, file1.length() - 1)
         relation = spark.sessionState.catalog.lookupRelation(TableIdentifier("csv_table"))
           .asInstanceOf[MetastoreRelation]
-        assert(relation.statistics.sizeInBytes === BigInt(file1.length()))
+        assert(relation.statistics.sizeInBytes === BigInt(defaultSize))
       }
     } finally {
       spark.conf.set(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key, enableFallBackToHdfsForStats)
