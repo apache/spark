@@ -21,6 +21,7 @@ import scala.language.existentials
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -60,6 +61,51 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       fail(s"$sqlString expected operator: $c, but got ${operators.head}\n physical: \n$physical")
     }
   }
+
+  test("SPARK-15453 : Sort Merge join on bucketed + sorted tables should not add `sort` step " +
+    "if the join predicates are subset of the sorted columns of the tables") {
+    withTable("SPARK_15453_table_a", "SPARK_15453_table_b") {
+      withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
+        val df =
+          (0 until 8)
+            .map(i => (i, i * 2, i.toString))
+            .toDF("i", "j", "k")
+            .coalesce(1)
+        df.write.bucketBy(4, "j", "k").sortBy("j", "k").saveAsTable("SPARK_15453_table_a")
+        df.write.bucketBy(4, "j", "k").sortBy("j", "k").saveAsTable("SPARK_15453_table_b")
+
+        val query = """
+                      |SELECT *
+                      |FROM
+                      |  SPARK_15453_table_a a
+                      |JOIN
+                      |  SPARK_15453_table_b b
+                      |ON a.j=b.j AND
+                      |   a.k=b.k
+                    """.stripMargin
+        val joinDF = sql(query)
+
+        val executedPlan = joinDF.queryExecution.executedPlan
+        val operators = executedPlan.collect {
+          case j: SortMergeJoinExec => j
+          case j: SortExec => j
+        }
+        assert(operators.size === 1)
+        assert(operators.head.getClass == classOf[SortMergeJoinExec])
+
+        checkAnswer(joinDF,
+          Row(0, 0, "0", 0, 0, "0") ::
+            Row(1, 2, "1", 1, 2, "1") ::
+            Row(2, 4, "2", 2, 4, "2") ::
+            Row(3, 6, "3", 3, 6, "3") ::
+            Row(4, 8, "4", 4, 8, "4") ::
+            Row(5, 10, "5", 5, 10, "5") ::
+            Row(6, 12, "6", 6, 12, "6") ::
+            Row(7, 14, "7", 7, 14, "7") :: Nil)
+      }
+    }
+  }
+
 
   test("join operator selection") {
     spark.sharedState.cacheManager.clearCache()

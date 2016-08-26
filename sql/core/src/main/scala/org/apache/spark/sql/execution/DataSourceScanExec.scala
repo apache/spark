@@ -23,7 +23,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
@@ -156,24 +156,56 @@ case class FileSourceScanExec(
     false
   }
 
-  override val outputPartitioning: Partitioning = {
+  override val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
       relation.bucketSpec
     } else {
       None
     }
-    bucketSpec.map { spec =>
-      val numBuckets = spec.numBuckets
-      val bucketColumns = spec.bucketColumnNames.flatMap { n =>
-        output.find(_.name == n)
-      }
-      if (bucketColumns.size == spec.bucketColumnNames.size) {
-        HashPartitioning(bucketColumns, numBuckets)
-      } else {
-        UnknownPartitioning(0)
-      }
-    }.getOrElse {
-      UnknownPartitioning(0)
+    bucketSpec match {
+      case Some(spec) =>
+        val numBuckets = spec.numBuckets
+        val bucketColumns = spec.bucketColumnNames.flatMap { n =>
+          output.find(_.name == n)
+        }
+        if (bucketColumns.size == spec.bucketColumnNames.size) {
+          val partitioning = HashPartitioning(bucketColumns, numBuckets)
+
+          val sortOrder = if (spec.sortColumnNames.nonEmpty) {
+            // In case of bucketing, its possible to have multiple files belonging to the
+            // same bucket in a given relation. Each of these files are locally sorted
+            // but those files combined together are not globally sorted. Given that,
+            // the RDD partition will not be sorted even if the relation has sort columns set
+            // Current solution is to check if all the buckets have a single file in it
+
+            val files =
+              relation.location.listFiles(partitionFilters).flatMap(partition => partition.files)
+            val bucketToFilesGrouping =
+              files.map(_.getPath.getName).groupBy(file => BucketingUtils.getBucketId(file))
+            val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
+
+            if (singleFilePartitions) {
+              def toAttribute(colName: String): Attribute =
+                output.find(_.name == colName).getOrElse {
+                  throw new AnalysisException(s"Could not find sort column $colName for " +
+                    s"relation ${metastoreTableIdentifier.get.toString} in its existing " +
+                    s"columns : (${output.map(_.name).mkString(", ")})")
+              }
+              // TODO Currently Spark does not support writing columns sorting in descending order
+              // so using Ascending order. This can be fixed in future
+              spec.sortColumnNames.map(c => SortOrder(toAttribute(c), Ascending))
+            } else {
+              Nil
+            }
+          } else {
+            Nil
+          }
+          (partitioning, sortOrder)
+        } else {
+          (UnknownPartitioning(0), Nil)
+        }
+      case _ =>
+        (UnknownPartitioning(0), Nil)
     }
   }
 
