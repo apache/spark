@@ -73,7 +73,8 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
           size
         }
 
-        val oldTotalSize = catalogTable.catalogStats.map(_.sizeInBytes.toLong).getOrElse(0L)
+        val catalogStats = catalogTable.catalogStats
+        val oldTotalSize = catalogStats.map(_.sizeInBytes.toLong).getOrElse(0L)
         val newTotalSize =
           catalogTable.storage.locationUri.map { p =>
             val path = new Path(p)
@@ -98,11 +99,7 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
         }
         var numRows: Option[BigInt] = None
         if (!noscan) {
-          val oldRowCount: Long = if (catalogTable.catalogStats.isDefined) {
-            catalogTable.catalogStats.get.rowCount.map(_.toLong).getOrElse(-1L)
-          } else {
-            -1L
-          }
+          val oldRowCount = catalogStats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
           val newRowCount = sparkSession.table(tableName).count()
           if (newRowCount >= 0 && newRowCount != oldRowCount) {
             numRows = Some(BigInt(newRowCount))
