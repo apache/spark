@@ -200,7 +200,6 @@ case class CatalogTableType private(name: String)
 object CatalogTableType {
   val EXTERNAL = new CatalogTableType("EXTERNAL")
   val MANAGED = new CatalogTableType("MANAGED")
-  val INDEX = new CatalogTableType("INDEX")
   val VIEW = new CatalogTableType("VIEW")
 }
 

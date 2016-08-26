@@ -102,11 +102,7 @@ class FileStreamSinkWriter(
   // Get the actual partition columns as attributes after matching them by name with
   // the given columns names.
   private val partitionColumns = partitionColumnNames.map { col =>
-    val nameEquality = if (data.sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
-    } else {
-      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
-    }
+    val nameEquality = data.sparkSession.sessionState.conf.resolver
     data.logicalPlan.output.find(f => nameEquality(f.name, col)).getOrElse {
       throw new RuntimeException(s"Partition column $col not found in schema $dataSchema")
     }

@@ -29,9 +29,9 @@ setOldClass("jobj")
 #' @param col1 name of the first column. Distinct items will make the first item of each row.
 #' @param col2 name of the second column. Distinct items will make the column names of the output.
 #' @return a local R data.frame representing the contingency table. The first column of each row
-#'         will be the distinct values of `col1` and the column names will be the distinct values
-#'         of `col2`. The name of the first column will be `$col1_$col2`. Pairs that have no
-#'         occurrences will have zero as their counts.
+#'         will be the distinct values of \code{col1} and the column names will be the distinct values
+#'         of \code{col2}. The name of the first column will be "\code{col1}_\code{col2}". Pairs
+#'         that have no occurrences will have zero as their counts.
 #'
 #' @rdname crosstab
 #' @name crosstab
@@ -116,7 +116,7 @@ setMethod("corr",
 #'
 #' @param x A SparkDataFrame.
 #' @param cols A vector column names to search frequent items in.
-#' @param support (Optional) The minimum frequency for an item to be considered `frequent`.
+#' @param support (Optional) The minimum frequency for an item to be considered \code{frequent}.
 #'                Should be greater than 1e-4. Default support = 0.01.
 #' @return a local R data.frame with the frequent items in each column
 #'
@@ -142,9 +142,9 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #'
 #' Calculates the approximate quantiles of a numerical column of a SparkDataFrame.
 #' The result of this algorithm has the following deterministic bound:
-#' If the SparkDataFrame has N elements and if we request the quantile at probability `p` up to
-#' error `err`, then the algorithm will return a sample `x` from the SparkDataFrame so that the
-#' *exact* rank of `x` is close to (p * N). More precisely,
+#' If the SparkDataFrame has N elements and if we request the quantile at probability p up to
+#' error err, then the algorithm will return a sample x from the SparkDataFrame so that the
+#' *exact* rank of x is close to (p * N). More precisely,
 #'   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
 #' This method implements a variation of the Greenwald-Khanna algorithm (with some speed
 #' optimizations). The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670

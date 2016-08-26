@@ -24,8 +24,9 @@ import org.apache.spark.sql.catalyst.expressions.{If, Literal, SpecifiedWindowFr
 
 class ExpressionSQLBuilderSuite extends SQLBuilderTest {
   test("literal") {
-    checkSQL(Literal("foo"), "\"foo\"")
-    checkSQL(Literal("\"foo\""), "\"\\\"foo\\\"\"")
+    checkSQL(Literal("foo"), "'foo'")
+    checkSQL(Literal("\"foo\""), "'\"foo\"'")
+    checkSQL(Literal("'foo'"), "'\\'foo\\''")
     checkSQL(Literal(1: Byte), "1Y")
     checkSQL(Literal(2: Short), "2S")
     checkSQL(Literal(4: Int), "4")

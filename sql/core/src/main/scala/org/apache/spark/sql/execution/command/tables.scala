@@ -33,27 +33,10 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogT
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.execution.datasources.{PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-
-case class CreateHiveTableAsSelectLogicalPlan(
-    tableDesc: CatalogTable,
-    child: LogicalPlan,
-    allowExisting: Boolean) extends UnaryNode with Command {
-
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
-
-  override lazy val resolved: Boolean =
-    tableDesc.identifier.database.isDefined &&
-      tableDesc.schema.nonEmpty &&
-      tableDesc.storage.serde.isDefined &&
-      tableDesc.storage.inputFormat.isDefined &&
-      tableDesc.storage.outputFormat.isDefined &&
-      childrenResolved
-}
 
 /**
  * A command to create a table with the same definition of the given existing table.
@@ -637,12 +620,11 @@ case class ShowPartitionsCommand(
      * Validate and throws an [[AnalysisException]] exception under the following conditions:
      * 1. If the table is not partitioned.
      * 2. If it is a datasource table.
-     * 3. If it is a view or index table.
+     * 3. If it is a view.
      */
-    if (tab.tableType == VIEW ||
-      tab.tableType == INDEX) {
+    if (tab.tableType == VIEW) {
       throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a view or index table: ${tab.qualifiedName}")
+        s"SHOW PARTITIONS is not allowed on a view: ${tab.qualifiedName}")
     }
 
     if (tab.partitionColumnNames.isEmpty) {
@@ -725,7 +707,6 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       case EXTERNAL => " EXTERNAL TABLE"
       case VIEW => " VIEW"
       case MANAGED => " TABLE"
-      case INDEX => reportUnsupportedError(Seq("index table"))
     }
 
     builder ++= s"CREATE$tableTypeString ${table.quotedString}"
