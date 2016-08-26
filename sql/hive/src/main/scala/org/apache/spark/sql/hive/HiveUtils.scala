@@ -246,7 +246,7 @@ private[spark] object HiveUtils extends Logging {
       hadoopConf = hadoopConf,
       config = newTemporaryConfiguration(useInMemoryDerby = true),
       isolationOn = false,
-      baseClassLoader = Utils.getContextOrSparkClassLoader)
+      baseClassLoader = Utils.getSparkClassLoader)
     loader.createClient().asInstanceOf[HiveClientImpl]
   }
 
@@ -293,7 +293,7 @@ private[spark] object HiveUtils extends Logging {
         case other => allJars(other.getParent)
       }
 
-      val classLoader = Utils.getContextOrSparkClassLoader
+      val classLoader = Utils.getSparkClassLoader
       val jars = allJars(classLoader)
       if (jars.length == 0) {
         throw new IllegalArgumentException(

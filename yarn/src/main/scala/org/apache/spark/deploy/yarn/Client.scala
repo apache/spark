@@ -683,7 +683,7 @@ private[spark] class Client(
     // If user specify this file using --files then executors will use the one
     // from --files instead.
     for { prop <- Seq("log4j.properties", "metrics.properties")
-          url <- Option(Utils.getContextOrSparkClassLoader.getResource(prop))
+          url <- Option(Utils.getSparkClassLoader.getResource(prop))
           if url.getProtocol == "file" } {
       hadoopConfFiles(prop) = new File(url.getPath)
     }

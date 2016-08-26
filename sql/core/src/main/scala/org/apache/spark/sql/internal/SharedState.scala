@@ -48,7 +48,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   val listener: SQLListener = createListenerAndUI(sparkContext)
 
   {
-    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    val configFile = Utils.getSparkClassLoader.getResource("hive-site.xml")
     if (configFile != null) {
       sparkContext.hadoopConfiguration.addResource(configFile)
     }
@@ -67,7 +67,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    * A classloader used to load all user-added jar.
    */
   val jarClassLoader = new NonClosableMutableURLClassLoader(
-    org.apache.spark.util.Utils.getContextOrSparkClassLoader)
+    org.apache.spark.util.Utils.getSparkClassLoader)
 
   {
     // Set the Hive metastore warehouse path to the one we use

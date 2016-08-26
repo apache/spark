@@ -313,7 +313,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
       case (name, exec) =>
         test(s"SPARK-13640: thread safety of ${name}") {
           (0 until 100).foreach { _ =>
-            val loader = new URLClassLoader(Array.empty, Utils.getContextOrSparkClassLoader)
+            val loader = new URLClassLoader(Array.empty, Utils.getSparkClassLoader)
             (0 until 10).par.foreach { _ =>
               val cl = Thread.currentThread.getContextClassLoader
               try {

@@ -47,7 +47,7 @@ private[yarn] final class ConfigurableCredentialManager(
   // Maintain all the registered credential providers
   private val credentialProviders = {
     val providers = ServiceLoader.load(classOf[ServiceCredentialProvider],
-      Utils.getContextOrSparkClassLoader).asScala
+      Utils.getSparkClassLoader).asScala
 
     // Filter out credentials in which spark.yarn.security.credentials.{service}.enabled is false.
     providers.filter { p =>

@@ -185,7 +185,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val original = Thread.currentThread().getContextClassLoader
     val className = "FileSuiteObjectFileTest"
     val jar = TestUtils.createJarWithClasses(Seq(className))
-    val loader = new java.net.URLClassLoader(Array(jar), Utils.getContextOrSparkClassLoader)
+    val loader = new java.net.URLClassLoader(Array(jar), Utils.getSparkClassLoader)
     Thread.currentThread().setContextClassLoader(loader)
     try {
       sc = new SparkContext("local", "test")

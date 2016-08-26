@@ -429,7 +429,7 @@ private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM
           output += Class.forName(
               owner.replace('/', '.'),
               false,
-              Thread.currentThread.getContextClassLoader)
+              getClass.getClassLoader)
           // scalastyle:on classforname
         }
       }

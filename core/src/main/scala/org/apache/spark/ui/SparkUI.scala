@@ -169,7 +169,7 @@ private[spark] object SparkUI {
       None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
 
     val listenerFactories = ServiceLoader.load(classOf[SparkHistoryListenerFactory],
-      Utils.getContextOrSparkClassLoader).asScala
+      Utils.getSparkClassLoader).asScala
     listenerFactories.foreach { listenerFactory =>
       val listeners = listenerFactory.createListeners(conf, sparkUI)
       listeners.foreach(listenerBus.addListener)
