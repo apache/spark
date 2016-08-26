@@ -45,7 +45,7 @@ case class InMemoryTableScanExec(
   override def outputPartitioning: Partitioning = relation.child.outputPartitioning
 
   // The cached version does not change the outputOrdering of the original SparkPlan.
-  override def outputOrdering: Seq[SortOrder] = relation.child.outputOrdering
+  override val outputOrdering: Seq[SortOrder] = relation.child.outputOrdering
 
   private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute(a)
 

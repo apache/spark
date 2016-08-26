@@ -98,6 +98,81 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   // all the variables at the beginning to take advantage of short circuiting.
   override def usedInputs: AttributeSet = AttributeSet.empty
 
+  /**
+   * If the child output is sorted, we can determine to stop filtering as early as possible.
+   * E.g, when we do filtering with "WHERE ticket_id < 10" on a child sorted by ticket_id in
+   * ascending. Once the condition is false, it guarantees that no more data will satisfy the
+   * condition and we can stop this filtering early.
+   */
+  private def shouldStopEarly(): Boolean = {
+    // Take the prefix of attributes that the child output is ordered by.
+    // E.g., if the child.outputOrdering is [a, b, c + 1, d], the prefix is [a, b].
+    val orderByPrefixAttrs = child.outputOrdering.map(_.child).takeWhile { e =>
+      if (e.isInstanceOf[Attribute]) true else false
+    }
+    val orderByPrefixAttrsIds = orderByPrefixAttrs.map(_.asInstanceOf[Attribute].exprId)
+
+    // If all prefix order by attributes are not nullable.
+    val prefixAttrsNotNull = orderByPrefixAttrs.forall(!_.nullable)
+
+    // If the condition's attributes are subset of order by attributes.
+    val includAllAttrs = condition.references.baseSet.map(_.a).forall { attr =>
+      orderByPrefixAttrsIds.contains(attr.exprId)
+    }
+
+    // If all condition expressions are [[BinaryComparison]].
+    val (binary, notBinary) =
+      splitConjunctivePredicates(condition).partition(_.isInstanceOf[BinaryComparison])
+
+    if (!orderByPrefixAttrs.isEmpty && prefixAttrsNotNull && includAllAttrs &&
+        !binary.isEmpty && notBinary.isEmpty) {
+
+      val reordered = binary.map { expr =>
+        expr match {
+          case EqualNullSafe(v @ NonNullLiteral(_, _), r) => EqualNullSafe(r, v)
+          case EqualTo(v @ NonNullLiteral(_, _), r) => EqualTo(r, v)
+          case GreaterThan(v @ NonNullLiteral(_, _), r) => LessThan(r, v)
+          case LessThan(v @ NonNullLiteral(_, _), r) => GreaterThan(r, v)
+          case GreaterThanOrEqual(v @ NonNullLiteral(_, _), r) => LessThanOrEqual(v, r)
+          case LessThanOrEqual(v @ NonNullLiteral(_, _), r) => GreaterThanOrEqual(v, r)
+          case o => o
+        }
+      }
+
+      // The binary comparison must be the same type.
+      val sameType = if (reordered.length > 1) {
+        reordered.tail.forall(_.getClass == reordered.head.getClass)
+      } else {
+        true
+      }
+      if (!sameType) return false
+
+      val sortOrders = child.outputOrdering.take(orderByPrefixAttrs.length)
+      val (ascOrders, descOrders) = sortOrders.partition(_.isAscending)
+
+      // The sorting direction for all prefix sort by attributes must be the same
+      if (!ascOrders.isEmpty && !descOrders.isEmpty) return false
+
+      if (!ascOrders.isEmpty) {
+        // If the child output is sorted in ascending order.
+        reordered.head match {
+          case _: LessThan => true
+          case _: LessThanOrEqual => true
+          case _ => false
+        }
+      } else {
+        // If the child output is sorted in descending order.
+        reordered.head match {
+          case _: GreaterThan => true
+          case _: GreaterThanOrEqual => true
+          case _ => false
+        }
+      }
+    } else {
+      false
+    }
+  }
+
   override def output: Seq[Attribute] = {
     child.output.map { a =>
       if (a.nullable && notNullAttributes.contains(a.exprId)) {
@@ -193,10 +268,26 @@ case class FilterExec(condition: Expression, child: SparkPlan)
       ev
     }
 
+    // Stop if false: when the child output is sorted by, the filtering can be stopped early.
+    val stopIfFalse = shouldStopEarly()
+    val condPassed = ctx.freshName("condPassed")
+    ctx.addMutableState(s"boolean", condPassed, s"$condPassed = true;")
+    val (stopEarly, recordCondPass) = if (stopIfFalse) {
+      val condition = s"""
+         |if (!$condPassed) continue;
+         |$condPassed = false;
+       """.stripMargin
+      (condition, s"$condPassed = true;")
+    } else {
+      ("", "")
+    }
+
     s"""
+       |$stopEarly
        |$generated
        |$nullChecks
        |$numOutput.add(1);
+       |$recordCondPass
        |${consume(ctx, resultVars)}
      """.stripMargin
   }
@@ -205,10 +296,18 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitionsInternal { iter =>
       val predicate = newPredicate(condition, child.output)
-      iter.filter { row =>
-        val r = predicate(row)
-        if (r) numOutputRows += 1
-        r
+      if (shouldStopEarly) {
+        iter.takeWhile { row =>
+          val r = predicate(row)
+          if (r) numOutputRows += 1
+          r
+        }
+      } else {
+        iter.filter { row =>
+          val r = predicate(row)
+          if (r) numOutputRows += 1
+          r
+        }
       }
     }
   }
