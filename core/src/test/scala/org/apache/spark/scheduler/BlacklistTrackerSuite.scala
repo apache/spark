@@ -289,14 +289,13 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // We have one sporadic failure on exec 2 -- it doesn't lead to an exec blacklist.
     failOneTaskInTaskSet("2")
     assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set())
-    assert(tracker.nextTimeoutCheck === tracker.BLACKLIST_TIMEOUT_MILLIS)
+    assert(tracker.nextExpiryTime === Long.MaxValue)
 
     // We advance the clock past the expiry time.
     clock.advance(tracker.BLACKLIST_TIMEOUT_MILLIS + 1)
     val t0 = clock.getTimeMillis()
     tracker.applyBlacklistTimeout()
-    assert(tracker.executorIdToFailureList.isEmpty) // make sure we're not leaking memory
-    assert(tracker.nextTimeoutCheck === Long.MaxValue)
+    assert(tracker.nextExpiryTime === Long.MaxValue)
     failOneTaskInTaskSet("1")
 
     // Because we went past the expiry time, nothing should have been blacklisted.
@@ -308,8 +307,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     failOneTaskInTaskSet("1")
     tracker.applyBlacklistTimeout()
     assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set("1"))
-    // The 2x is because of a heuristic to avoid too many checks from task failures.
-    assert(tracker.nextTimeoutCheck === t0 + 2 * tracker.BLACKLIST_TIMEOUT_MILLIS)
+    assert(tracker.nextExpiryTime === t1 + tracker.BLACKLIST_TIMEOUT_MILLIS)
 
     // Fail a second executor, and go over its expiry as well.
     clock.setTime(t1 + tracker.BLACKLIST_TIMEOUT_MILLIS)
@@ -318,14 +316,13 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     failOneTaskInTaskSet("3")
     tracker.applyBlacklistTimeout()
     assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set("1", "3"))
-    assert(tracker.nextTimeoutCheck === t1 + tracker.BLACKLIST_TIMEOUT_MILLIS)
+    assert(tracker.nextExpiryTime === t1 + tracker.BLACKLIST_TIMEOUT_MILLIS)
 
 
     clock.setTime(t1 + tracker.BLACKLIST_TIMEOUT_MILLIS + 1)
     tracker.applyBlacklistTimeout()
-    assert(tracker.executorIdToFailureList.isEmpty)
     assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set("3"))
-    assert(tracker.nextTimeoutCheck === t2 + tracker.BLACKLIST_TIMEOUT_MILLIS)
+    assert(tracker.nextExpiryTime === t2 + tracker.BLACKLIST_TIMEOUT_MILLIS)
 
 
     // Make sure that we update correctly when we go from having blacklisted executors to
@@ -335,20 +332,15 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     failOneTaskInTaskSet("4")
     tracker.applyBlacklistTimeout()
     assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set("3"))
-    assert(tracker.nextTimeoutCheck === t2 + tracker.BLACKLIST_TIMEOUT_MILLIS)
+    assert(tracker.nextExpiryTime === t2 + tracker.BLACKLIST_TIMEOUT_MILLIS)
 
-    clock.setTime(t2 + tracker.BLACKLIST_TIMEOUT_MILLIS + 500)
+    clock.setTime(t2 + tracker.BLACKLIST_TIMEOUT_MILLIS + 1)
     val t4 = clock.getTimeMillis()
     tracker.applyBlacklistTimeout()
     assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set())
-    // The extra time here is b/c we pad the time around task failure timeouts to avoid too many
-    // checks (otherwise this would be t3 + timeout).
-    assert(tracker.nextTimeoutCheck === t4 + tracker.BLACKLIST_TIMEOUT_MILLIS)
-
-    clock.setTime(t4 + tracker.BLACKLIST_TIMEOUT_MILLIS + 1)
-    tracker.applyBlacklistTimeout()
-    assert(tracker.executorIdToFailureList.isEmpty)
-    assert(tracker.nextTimeoutCheck === Long.MaxValue)
+    // we've got one task failure still, but we don't bother setting nextExpiryTime to it, to
+    // avoid wasting time checking for expiry of individual task failures.
+    assert(tracker.nextExpiryTime === Long.MaxValue)
   }
 
   test("multiple attempts for the same task count once") {
