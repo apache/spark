@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.thrift.TException
 
@@ -402,10 +403,25 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   override def alterTableStats(tableDefinition: CatalogTable): Unit = withClient {
-    assert(tableDefinition.identifier.database.isDefined)
-    val db = tableDefinition.identifier.database.get
-    requireTableExists(db, tableDefinition.identifier.table)
-    client.alterTableStats(tableDefinition)
+    // convert Spark's statistics to Hive table's properties
+    var statsProperties: Map[String, String] = Map()
+    if (tableDefinition.catalogStats.isDefined) {
+      val stats = tableDefinition.catalogStats.get
+      statsProperties += (StatsSetupConst.TOTAL_SIZE -> stats.sizeInBytes.toString())
+      if (stats.rowCount.isDefined) {
+        // We need to set STATS_GENERATED_VIA_STATS_TASK here so that we can persist
+        // ROW_COUNT in metastore. This constraint comes from Hive metastore (HIVE-8648).
+        statsProperties += (StatsSetupConst.ROW_COUNT -> stats.rowCount.get.toString(),
+          StatsSetupConst.STATS_GENERATED_VIA_STATS_TASK -> StatsSetupConst.TRUE)
+      }
+    }
+
+    val table = if (statsProperties.nonEmpty) {
+      tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties)
+    } else {
+      tableDefinition
+    }
+    alterTable(table)
   }
 
   override def getTable(db: String, table: String): CatalogTable = withClient {

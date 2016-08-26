@@ -430,28 +430,6 @@ private[hive] class HiveClientImpl(
     client.alterTable(qualifiedTableName, hiveTable)
   }
 
-  override def alterTableStats(table: CatalogTable): Unit = withHiveState {
-    // convert Spark's statistics to Hive table's properties
-    var statsProperties: Map[String, String] = Map()
-    if (table.catalogStats.isDefined) {
-      val stats = table.catalogStats.get
-      statsProperties += (StatsSetupConst.TOTAL_SIZE -> stats.sizeInBytes.toString())
-      if (stats.rowCount.isDefined) {
-        // We need to set STATS_GENERATED_VIA_STATS_TASK here so that we can persist
-        // ROW_COUNT in metastore. This constraint comes from Hive metastore (HIVE-8648).
-        statsProperties += (StatsSetupConst.ROW_COUNT -> stats.rowCount.get.toString(),
-          StatsSetupConst.STATS_GENERATED_VIA_STATS_TASK -> StatsSetupConst.TRUE)
-      }
-    }
-
-    val hiveTable = if (statsProperties.nonEmpty) {
-      toHiveTable(table.copy(properties = table.properties ++ statsProperties))
-    } else {
-      toHiveTable(table)
-    }
-    client.alterTable(table.qualifiedName, hiveTable)
-  }
-
   // Construct Spark's statistics from information in Hive metastore.
   private def constructStatsFromHive(properties: Map[String, String]): Option[Statistics] = {
     val statsTrue = properties.getOrElse(StatsSetupConst.COLUMN_STATS_ACCURATE, "false").toBoolean
