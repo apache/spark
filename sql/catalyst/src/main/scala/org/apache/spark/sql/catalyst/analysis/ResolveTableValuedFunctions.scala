@@ -28,9 +28,6 @@ import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
  * Rule that resolves table-valued function references.
  */
 object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
-  private lazy val defaultParallelism =
-    SparkContext.getOrCreate(new SparkConf(false)).defaultParallelism
-
   /**
    * List of argument names and their types, used to declare a function.
    */
@@ -84,25 +81,25 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
     "range" -> Map(
       /* range(end) */
       tvf("end" -> LongType) { case Seq(end: Long) =>
-        Range(0, end, 1, defaultParallelism)
+        Range(0, end, 1, None)
       },
 
       /* range(start, end) */
       tvf("start" -> LongType, "end" -> LongType) { case Seq(start: Long, end: Long) =>
-        Range(start, end, 1, defaultParallelism)
+        Range(start, end, 1, None)
       },
 
       /* range(start, end, step) */
       tvf("start" -> LongType, "end" -> LongType, "step" -> LongType) {
         case Seq(start: Long, end: Long, step: Long) =>
-          Range(start, end, step, defaultParallelism)
+          Range(start, end, step, None)
       },
 
       /* range(start, end, step, numPartitions) */
       tvf("start" -> LongType, "end" -> LongType, "step" -> LongType,
           "numPartitions" -> IntegerType) {
         case Seq(start: Long, end: Long, step: Long, numPartitions: Int) =>
-          Range(start, end, step, numPartitions)
+          Range(start, end, step, Some(numPartitions))
       })
   )
 

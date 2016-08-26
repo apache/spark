@@ -29,7 +29,11 @@ private object PostgresDialect extends JdbcDialect {
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    if (sqlType == Types.BIT && typeName.equals("bit") && size != 1) {
+    if (sqlType == Types.REAL) {
+      Some(FloatType)
+    } else if (sqlType == Types.SMALLINT) {
+      Some(ShortType)
+    } else if (sqlType == Types.BIT && typeName.equals("bit") && size != 1) {
       Some(BinaryType)
     } else if (sqlType == Types.OTHER) {
       Some(StringType)
@@ -66,6 +70,7 @@ private object PostgresDialect extends JdbcDialect {
     case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
     case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))
     case DoubleType => Some(JdbcType("FLOAT8", Types.DOUBLE))
+    case ShortType => Some(JdbcType("SMALLINT", Types.SMALLINT))
     case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] =>

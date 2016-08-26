@@ -619,6 +619,8 @@ object NullPropagation extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
+      case e @ WindowExpression(Cast(Literal(0L, _), _), _) =>
+        Cast(Literal(0L), e.dataType)
       case e @ AggregateExpression(Count(exprs), _, _, _) if !exprs.exists(nonNullLiteral) =>
         Cast(Literal(0L), e.dataType)
       case e @ IsNull(c) if !c.nullable => Literal.create(false, BooleanType)
@@ -1341,18 +1343,12 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def buildNewJoinType(filter: Filter, join: Join): JoinType = {
-    val splitConjunctiveConditions: Seq[Expression] = splitConjunctivePredicates(filter.condition)
-    val leftConditions = splitConjunctiveConditions
-      .filter(_.references.subsetOf(join.left.outputSet))
-    val rightConditions = splitConjunctiveConditions
-      .filter(_.references.subsetOf(join.right.outputSet))
+    val conditions = splitConjunctivePredicates(filter.condition) ++ filter.constraints
+    val leftConditions = conditions.filter(_.references.subsetOf(join.left.outputSet))
+    val rightConditions = conditions.filter(_.references.subsetOf(join.right.outputSet))
 
-    val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull) ||
-      filter.constraints.filter(_.isInstanceOf[IsNotNull])
-        .exists(expr => join.left.outputSet.intersect(expr.references).nonEmpty)
-    val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull) ||
-      filter.constraints.filter(_.isInstanceOf[IsNotNull])
-        .exists(expr => join.right.outputSet.intersect(expr.references).nonEmpty)
+    val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull)
+    val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull)
 
     join.joinType match {
       case RightOuter if leftHasNonNullPredicate => Inner

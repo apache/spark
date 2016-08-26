@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import scala.collection.mutable
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap, LinkedHashMap}
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ShuffleReadMetrics, ShuffleWriteMetrics, TaskMetrics}
@@ -97,7 +97,7 @@ private[spark] object UIData {
     var description: Option[String] = None
 
     var accumulables = new HashMap[Long, AccumulableInfo]
-    var taskData = new HashMap[Long, TaskUIData]
+    var taskData = new LinkedHashMap[Long, TaskUIData]
     var executorSummary = new HashMap[String, ExecutorSummary]
 
     def hasInput: Boolean = inputBytes > 0

@@ -318,7 +318,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
   def start: Long = range.start
   def step: Long = range.step
-  def numSlices: Int = range.numSlices
+  def numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
   def numElements: BigInt = range.numElements
 
   override val output: Seq[Attribute] = range.output

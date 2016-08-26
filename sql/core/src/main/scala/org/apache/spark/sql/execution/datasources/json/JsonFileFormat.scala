@@ -31,7 +31,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -84,7 +83,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
           bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new JsonOutputWriter(path, bucketId, dataSchema, context)
+        new JsonOutputWriter(path, parsedOptions, bucketId, dataSchema, context)
       }
     }
   }
@@ -150,6 +149,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
 private[json] class JsonOutputWriter(
     path: String,
+    options: JSONOptions,
     bucketId: Option[Int],
     dataSchema: StructType,
     context: TaskAttemptContext)
@@ -157,14 +157,14 @@ private[json] class JsonOutputWriter(
 
   private[this] val writer = new CharArrayWriter()
   // create the Generator without separator inserted between 2 records
-  private[this] val gen = new JacksonGenerator(dataSchema, writer)
+  private[this] val gen = new JacksonGenerator(dataSchema, writer, options)
   private[this] val result = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
+        val uniqueWriteJobId = configuration.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
         val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
         val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
