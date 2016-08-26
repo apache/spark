@@ -227,6 +227,20 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
     None
   }
 
+  /**
+   * Removes all the log entry earlier than thresholdBatchId (exclusive).
+   */
+  override def purge(thresholdBatchId: Long): Unit = {
+    val batchIds = fileManager.list(metadataPath, batchFilesFilter)
+      .map(f => pathToBatchId(f.getPath))
+
+    for (batchId <- batchIds if batchId < thresholdBatchId) {
+      val path = batchIdToPath(batchId)
+      fileManager.delete(path)
+      logTrace(s"Removed metadata log file: $path")
+    }
+  }
+
   private def createFileManager(): FileManager = {
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     try {
