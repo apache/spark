@@ -279,7 +279,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         fs.mkdirs(streamDir)
         fs.mkdirs(generatedSubDir)
 
-        def write(path: Path, text: String) = {
+        def write(path: Path, text: String): Unit = {
           val out = fs.create(path, true)
           IOUtils.write(text, out)
           out.close()
