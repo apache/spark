@@ -21,7 +21,7 @@ import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
-import org.apache.spark.deploy.{SparkShellType, SparkSubmit}
+import org.apache.spark.deploy.SparkSubmit
 import org.apache.spark.util.Utils
 
 /**
@@ -134,14 +134,13 @@ private[spark] trait Logging {
         val rootLogger = LogManager.getRootLogger()
         val replLogger = LogManager.getLogger(logName)
         val replLevel = Option(replLogger.getLevel()).getOrElse(Level.WARN)
-        val shellType = SparkSubmit.getShellType()
         if (replLevel != rootLogger.getEffectiveLevel()) {
           System.err.printf("Setting default log level to \"%s\".\n", replLevel)
-          shellType match {
-            case SparkShellType.SPARKR_SHELL =>
-              System.err.println("To adjust logging level use setLogLevel(newLevel).")
-            case _ =>
-              System.err.println("To adjust logging level use sc.setLogLevel(newLevel).")
+          if (SparkSubmit.isRShell) {
+            System.err.println("To adjust logging level use setLogLevel(newLevel).")
+          }
+          else {
+            System.err.println("To adjust logging level use sc.setLogLevel(newLevel).")
           }
           rootLogger.setLevel(replLevel)
         }

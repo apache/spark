@@ -24,7 +24,6 @@ import java.security.PrivilegedExceptionAction
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.security.UserGroupInformation
@@ -39,7 +38,6 @@ import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
-
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION, SparkException, SparkUserAppException}
 import org.apache.spark.{SPARK_BRANCH, SPARK_BUILD_DATE, SPARK_BUILD_USER, SPARK_REPO_URL}
 import org.apache.spark.api.r.RUtils
@@ -55,18 +53,6 @@ import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, U
 private[deploy] object SparkSubmitAction extends Enumeration {
   type SparkSubmitAction = Value
   val SUBMIT, KILL, REQUEST_STATUS = Value
-}
-
-/**
- * Whether the application is launched from:
- * SPARK_SHELL: ./bin/spark-shell
- * SPARKR_SHELL: ./bin/sparkR
- * PYSPARK_SHELL: ./bin/pyspark
- * NON_SHELL: It is not launched through the above three shells
- */
-private[spark] object SparkShellType extends Enumeration {
-  type SparkShellTYpe = Value
-  val SPARK_SHELL, SPARKR_SHELL, PYSPARK_SHELL, NON_SHELL = Value
 }
 
 /**
@@ -123,7 +109,7 @@ object SparkSubmit {
     printStream.println("Type --help for more information.")
     exitFn(0)
   }
-  private[spark] var shellType = SparkShellType.NON_SHELL
+  private[deploy] var rShell: Boolean = false
   // scalastyle:on println
 
   def main(args: Array[String]): Unit = {
@@ -240,7 +226,7 @@ object SparkSubmit {
     val childClasspath = new ArrayBuffer[String]()
     val sysProps = new HashMap[String, String]()
     var childMainClass = ""
-    initShellType(args.primaryResource)
+    initRShell(args.primaryResource)
 
     // Set the cluster manager
     val clusterManager: Int = args.master match {
@@ -815,22 +801,15 @@ object SparkSubmit {
   }
 
   /**
-   * Initialize the shellType when launching the application
-   * Default: NON_SHELL
+   * Initialize whether it is a R shell when launching the application
+   * Default: false
    */
-  private[deploy] def initShellType(res: String): Unit = {
+  private[deploy] def initRShell(res: String): Unit = {
     require(res != null)
-    res match {
-      case SPARK_SHELL => shellType = SparkShellType.SPARK_SHELL
-      case SPARKR_SHELL => shellType = SparkShellType.SPARKR_SHELL
-      case PYSPARK_SHELL => shellType = SparkShellType.PYSPARK_SHELL
-      case _ =>
-    }
+    if (res == SPARKR_SHELL) rShell = true
   }
 
-  private[spark] def getShellType(): SparkShellType.Value = {
-    shellType
-  }
+  private[spark] def isRShell: Boolean = rShell
 
   /**
    * Merge a sequence of comma-separated file lists, some of which may be null to indicate
