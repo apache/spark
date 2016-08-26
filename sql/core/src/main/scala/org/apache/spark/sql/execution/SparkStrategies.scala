@@ -417,15 +417,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case CreateTable(tableDesc, mode, None) =>
         val cmd =
-          CreateDataSourceTableCommand(
-            tableDesc.identifier,
-            if (tableDesc.schema.nonEmpty) Some(tableDesc.schema) else None,
-            tableDesc.provider.get,
-            tableDesc.storage.properties,
-            tableDesc.partitionColumnNames.toArray,
-            tableDesc.bucketSpec,
-            ignoreIfExists = mode == SaveMode.Ignore,
-            managedIfNoPath = tableDesc.tableType == CatalogTableType.MANAGED)
+          CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
         ExecutedCommandExec(cmd) :: Nil
 
       // CREATE TABLE ... AS SELECT ... for hive serde table is handled in hive module, by rule
@@ -434,10 +426,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case CreateTable(tableDesc, mode, Some(query)) if tableDesc.provider.get != "hive" =>
         val cmd =
           CreateDataSourceTableAsSelectCommand(
-            tableDesc.identifier,
-            tableDesc.provider.get,
-            tableDesc.partitionColumnNames.toArray,
-            tableDesc.bucketSpec,
+            tableDesc,
             mode,
             tableDesc.storage.properties,
             query)
