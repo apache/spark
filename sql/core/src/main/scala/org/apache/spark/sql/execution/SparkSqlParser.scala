@@ -1263,7 +1263,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty),
         allowExisting = ctx.EXISTS != null,
         replace = ctx.REPLACE != null,
-        isTemporary = ctx.TEMPORARY != null
+        isTemporary = ctx.TEMPORARY != null,
+        isAlterViewAsSelect = false
       )
     }
   }
@@ -1281,7 +1282,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       properties = Map.empty,
       allowExisting = false,
       replace = true,
-      isTemporary = false)
+      isTemporary = false,
+      isAlterViewAsSelect = true)
   }
 
   /**
@@ -1296,7 +1298,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       properties: Map[String, String],
       allowExisting: Boolean,
       replace: Boolean,
-      isTemporary: Boolean): LogicalPlan = {
+      isTemporary: Boolean,
+      isAlterViewAsSelect: Boolean): LogicalPlan = {
     val originalText = source(query)
     CreateViewCommand(
       visitTableIdentifier(name),
@@ -1307,7 +1310,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       plan(query),
       allowExisting = allowExisting,
       replace = replace,
-      isTemporary = isTemporary)
+      isTemporary = isTemporary,
+      isAlterViewAsSelect = isAlterViewAsSelect)
   }
 
   /**

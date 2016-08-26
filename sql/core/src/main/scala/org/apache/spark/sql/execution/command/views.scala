@@ -49,6 +49,7 @@ import org.apache.spark.sql.types.StructType
  *                 at the end of current Spark session. Existing permanent relations with the same
  *                 name are not visible to the current session while the temporary view exists,
  *                 unless they are specified with full qualified table name with database prefix.
+  * @param isAlterViewAsSelect if true, this original DDL command is ALTER VIEW AS SELECT
  */
 case class CreateViewCommand(
     name: TableIdentifier,
@@ -59,7 +60,8 @@ case class CreateViewCommand(
     child: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    isTemporary: Boolean)
+    isTemporary: Boolean,
+    isAlterViewAsSelect: Boolean = false)
   extends RunnableCommand {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
@@ -111,7 +113,7 @@ case class CreateViewCommand(
     // 2) ALTER VIEW: alter the temporary view if the temp view exists; otherwise, try to alter
     //                the permanent view. Here, it follows the same resolution like DROP VIEW,
     //                since users are unable to specify the keyword TEMPORARY.
-    if (isTemporary || (replace && sessionState.catalog.isTemporaryTable(name))) {
+    if (isTemporary || (isAlterViewAsSelect && sessionState.catalog.isTemporaryTable(name))) {
       createTemporaryView(sparkSession, analyzedPlan)
     } else {
       // Adds default database for permanent table if it doesn't exist, so that tableExists()

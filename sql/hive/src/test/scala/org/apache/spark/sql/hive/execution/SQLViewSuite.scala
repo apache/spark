@@ -203,6 +203,25 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withView("testView", "default.testView") {
       sql("CREATE VIEW testView AS SELECT id FROM jt")
       sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
+      checkAnswer(
+        sql("SHOW TABLES 'testView*'"),
+        Row("testview", true) :: Row("testview", false) :: Nil)
+    }
+
+    withView("testView", "default.testView") {
+      sql("CREATE VIEW testView AS SELECT id FROM jt")
+      sql("CREATE OR REPLACE TEMPORARY VIEW testView AS SELECT id FROM jt")
+      checkAnswer(
+        sql("SHOW TABLES 'testView*'"),
+        Row("testview", true) :: Row("testview", false) :: Nil)
+    }
+
+    withView("testView", "default.testView") {
+      sql("CREATE VIEW testView AS SELECT id FROM jt")
+      sql("CREATE OR REPLACE VIEW testView AS SELECT id FROM jt")
+      checkAnswer(
+        sql("SHOW TABLES 'testView*'"),
+        Row("testview", false) :: Nil)
     }
   }
 

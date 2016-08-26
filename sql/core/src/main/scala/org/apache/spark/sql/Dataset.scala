@@ -2429,7 +2429,7 @@ class Dataset[T] private[sql](
    */
   @throws[AnalysisException]
   def createTempView(viewName: String): Unit = withPlan {
-    createViewCommand(viewName, replace = false)
+    createTempViewCommand(viewName, replace = false)
   }
 
   /**
@@ -2440,10 +2440,10 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def createOrReplaceTempView(viewName: String): Unit = withPlan {
-    createViewCommand(viewName, replace = true)
+    createTempViewCommand(viewName, replace = true)
   }
 
-  private def createViewCommand(viewName: String, replace: Boolean): CreateViewCommand = {
+  private def createTempViewCommand(viewName: String, replace: Boolean): CreateViewCommand = {
     CreateViewCommand(
       name = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
       userSpecifiedColumns = Nil,
