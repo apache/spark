@@ -28,6 +28,7 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
@@ -56,7 +57,7 @@ class HistoryServer(
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
 
   // How many applications are available
-  private val maxApplications = conf.getInt("spark.history.maxApplications", Integer.MAX_VALUE)
+  private val maxApplications = conf.get(HISTORY_MAX_APPS);
 
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
