@@ -84,7 +84,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    verifySchema(dataSchema)
     val conf = job.getConfiguration
     val csvOptions = new CSVOptions(options)
     csvOptions.compressionCodec.foreach { codec =>
@@ -182,17 +181,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession.sparkContext
         .hadoopFile[LongWritable, Text, TextInputFormat](location)
         .mapPartitions(_.map(pair => new String(pair._2.getBytes, 0, pair._2.getLength, charset)))
-    }
-  }
-
-  private def verifySchema(schema: StructType): Unit = {
-    schema.foreach { field =>
-      field.dataType match {
-        case _: ArrayType | _: MapType | _: StructType =>
-          throw new UnsupportedOperationException(
-            s"CSV data source does not support ${field.dataType.simpleString} data type.")
-        case _ =>
-      }
     }
   }
 }
