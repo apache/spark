@@ -658,7 +658,7 @@ class HiveDDLSuite
           sql(s"ALTER TABLE $tabName RENAME TO $indexTabName")
         }
 
-        // When tableExists is not invoked, we still can get a SQLFeatureNotSupportedException
+        // When tableExists is not invoked, we still can get an AnalysisException
         val e = intercept[AnalysisException] {
           sql(s"DESCRIBE $indexTabName")
         }.getMessage
