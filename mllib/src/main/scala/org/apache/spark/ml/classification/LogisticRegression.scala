@@ -668,7 +668,7 @@ class LogisticRegressionModel private[spark] (
 
   @Since("2.0.0")
   def coefficients: Vector = if (isMultinomial) {
-    throw new SparkException("Multinomial models contain a matrix of coefficients, use" +
+    throw new SparkException("Multinomial models contain a matrix of coefficients, use " +
       "coefficientMatrix instead.")
   } else {
     _coefficients
@@ -1377,7 +1377,6 @@ class BinaryLogisticRegressionSummary private[classification] (
  *       e^{\vec{x}_i \cdot \vec{\beta}_{k'} - maxMargin}} - I_{y=k}\right)
  *    $$
  * </blockquote></p>
- *
  *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
