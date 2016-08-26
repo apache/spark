@@ -100,6 +100,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     python.ExtractPythonUDFs,
     PlanSubqueries(sparkSession),
     EnsureRequirements(sparkSession.sessionState.conf),
+    ApplyStopAfter,
     CollapseCodegenStages(sparkSession.sessionState.conf),
     ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf))
