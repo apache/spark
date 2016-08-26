@@ -433,10 +433,11 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- createDataFrame(infert)
+#' data <- as.data.frame(UCBAdmissions)
+#' df <- createDataFrame(data)
 #'
 #' # fit a Bernoulli naive Bayes model
-#' model <- spark.naiveBayes(df, education ~ ., smoothing = 0)
+#' model <- spark.naiveBayes(df, Admit ~ Gender + Dept, smoothing = 0)
 #'
 #' # get the summary of the model
 #' summary(model)
