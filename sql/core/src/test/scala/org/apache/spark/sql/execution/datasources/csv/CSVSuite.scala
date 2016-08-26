@@ -687,7 +687,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }.getMessage
       assert(msg.contains("CSV data source does not support array<double> data type"))
 
-      // Read should fail for UDT.
       msg = intercept[SparkException] {
         val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
         spark.range(1).write.csv(csvDir)
