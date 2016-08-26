@@ -75,7 +75,6 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
     val comparisons = ordering.map { order =>
       val eval = order.child.genCode(ctx)
       val asc = order.direction == Ascending
-
       val isNullA = ctx.freshName("isNullA")
       val primitiveA = ctx.freshName("primitiveA")
       val isNullB = ctx.freshName("isNullB")
@@ -105,7 +104,6 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
                      } else {
                         if (order.nullOrder == NullFirst) "-1" else "1"
                      }};
-
           } else if ($isNullB) {
             return ${ if (order.nullOrder == null) {
                         if (order.direction == Ascending) "1" else "-1"

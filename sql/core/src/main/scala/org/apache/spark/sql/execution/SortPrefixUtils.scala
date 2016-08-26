@@ -45,14 +45,32 @@ object SortPrefixUtils {
       case BinaryType =>
         if (sortOrder.isAscending) PrefixComparators.BINARY else PrefixComparators.BINARY_DESC
       case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
-        if (sortOrder.isAscending) PrefixComparators.LONG else PrefixComparators.LONG_DESC
+        getPrefixComparatorWithNullOrder(sortOrder)
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-        if (sortOrder.isAscending) PrefixComparators.LONG else PrefixComparators.LONG_DESC
+        getPrefixComparatorWithNullOrder(sortOrder)
       case FloatType | DoubleType =>
         if (sortOrder.isAscending) PrefixComparators.DOUBLE else PrefixComparators.DOUBLE_DESC
       case dt: DecimalType =>
         if (sortOrder.isAscending) PrefixComparators.DOUBLE else PrefixComparators.DOUBLE_DESC
       case _ => NoOpPrefixComparator
+    }
+  }
+
+  private def getPrefixComparatorWithNullOrder(sortOrder: SortOrder): PrefixComparator = {
+    if (sortOrder.isAscending) {
+      if (sortOrder.nullOrder != null) {
+        if (sortOrder.nullOrder == NullFirst) PrefixComparators.LONG_NULLFIRST
+        else PrefixComparators.LONG_NULLLAST
+      } else {
+        PrefixComparators.LONG
+      }
+    } else {
+      if (sortOrder.nullOrder != null) {
+        if (sortOrder.nullOrder == NullFirst) PrefixComparators.LONG_DESC_NULLFIRST
+        else PrefixComparators.LONG_DESC_NULLLAST
+      } else {
+        PrefixComparators.LONG_DESC
+      }
     }
   }
 
