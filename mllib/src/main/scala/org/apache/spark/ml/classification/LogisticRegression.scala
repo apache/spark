@@ -705,7 +705,7 @@ class LogisticRegressionModel private[spark] (
 
   /** Margin (rawPrediction) for class label 1.  For binary classification only. */
   private val margin: Vector => Double = (features) => {
-    BLAS.dot(features, coefficients) + _intercept
+    BLAS.dot(features, _coefficients) + _intercept
   }
 
   /** Margin (rawPrediction) for each class label. */
