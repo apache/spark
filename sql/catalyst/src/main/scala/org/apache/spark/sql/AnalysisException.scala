@@ -48,6 +48,3 @@ class AnalysisException protected[sql] (
     s"$message;$lineAnnotation$positionAnnotation"
   }
 }
-
-class SQLFeatureNotSupportedException(val feature: String)
-  extends AnalysisException(s"$feature is not supported.")

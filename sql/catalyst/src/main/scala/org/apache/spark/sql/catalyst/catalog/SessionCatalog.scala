@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SQLFeatureNotSupportedException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
@@ -223,7 +223,6 @@ class SessionCatalog(
     val table = formatTableName(tableDefinition.identifier.table)
     val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
     requireDbExists(db)
-    requireTableNotExists(TableIdentifier(table, Some(db)))
     externalCatalog.createTable(newTableDefinition, ignoreIfExists)
   }
 
@@ -452,11 +451,7 @@ class SessionCatalog(
     if (isTemporaryTable(name)) {
       true
     } else {
-      try {
-        externalCatalog.tableExists(db, table)
-      } catch {
-        case e: SQLFeatureNotSupportedException if e.feature == "Hive index table" => true
-      }
+      externalCatalog.tableExists(db, table)
     }
   }
 

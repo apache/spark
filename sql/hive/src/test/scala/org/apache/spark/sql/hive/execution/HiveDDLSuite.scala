@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.config._
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode, SQLFeatureNotSupportedException}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -659,7 +659,7 @@ class HiveDDLSuite
         }
 
         // When tableExists is not invoked, we still can get a SQLFeatureNotSupportedException
-        val e = intercept[SQLFeatureNotSupportedException] {
+        val e = intercept[AnalysisException] {
           sql(s"DESCRIBE $indexTabName")
         }.getMessage
         assert(e.contains("Hive index table is not supported."))
