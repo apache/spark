@@ -455,11 +455,15 @@ class SparseMatrix @Since("2.0.0") (
   require(values.length == rowIndices.length, "The number of row indices and values don't match! " +
     s"values.length: ${values.length}, rowIndices.length: ${rowIndices.length}")
   // The Or statement is for the case when the matrix is transposed
-  require(!isTransposed && colPtrs.length == numCols + 1 ||
-    isTransposed && colPtrs.length == numRows + 1, "The length of the column indices should be " +
-    "the number of columns + 1 if transposed is false, or rows + 1 if transposed is true. " +
-    "Currently, colPointers.length: " + s"${colPtrs.length}, numCols: $numCols, numRows: " +
-    s"$numRows, isTransposed: $isTransposed")
+  if (isTransposed) {
+    require(colPtrs.length == numRows + 1, "The length of the column indices should be " +
+    "the number of rows + 1. " +
+    s"Currently, colPointers.length: ${colPtrs.length}, numRows: $numRows.")
+  } else {
+    require(colPtrs.length == numCols + 1, "The length of the column indices should be " +
+    "the number of columns + 1. " +
+    s"Currently, colPointers.length: ${colPtrs.length}, numCols: $numCols.")
+  }
   require(values.length == colPtrs.last, "The last value of colPtrs must equal the number of " +
     s"elements. values.length: ${values.length}, colPtrs.last: ${colPtrs.last}")
 
