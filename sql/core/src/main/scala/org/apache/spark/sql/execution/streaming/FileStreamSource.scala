@@ -104,7 +104,7 @@ class FileStreamSource(
     val files = metadataLog.get(Some(startId + 1), Some(endId)).flatMap(_._2)
     logInfo(s"Processing ${files.length} files from ${startId + 1}:$endId")
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
-    val newOptions = new CaseInsensitiveMap(options).filterKeys(_ != "path")
+    val newOptions = options.filterKeys(_ != "path")
     val newDataSource =
       DataSource(
         sparkSession,
@@ -133,8 +133,7 @@ class FileStreamSource(
   }
 
   private def getMaxFilesPerBatch(): Option[Int] = {
-    new CaseInsensitiveMap(options)
-      .get("maxFilesPerTrigger")
+    options.get("maxFilesPerTrigger")
       .map { str =>
         Try(str.toInt).toOption.filter(_ > 0).getOrElse {
           throw new IllegalArgumentException(

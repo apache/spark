@@ -186,8 +186,7 @@ case class DataSource(
 
   private def inferFileFormatSchema(format: FileFormat): StructType = {
     userSpecifiedSchema.orElse {
-      val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-      val allPaths = caseInsensitiveOptions.get("path")
+      val allPaths = options.get("path")
       val globbedPaths = allPaths.toSeq.flatMap { path =>
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
@@ -197,7 +196,7 @@ case class DataSource(
       val fileCatalog = new ListingFileCatalog(sparkSession, globbedPaths, options, None)
       format.inferSchema(
         sparkSession,
-        caseInsensitiveOptions,
+        options,
         fileCatalog.allFiles())
     }.getOrElse {
       throw new AnalysisException("Unable to infer schema. It must be specified manually.")
@@ -213,8 +212,7 @@ case class DataSource(
         SourceInfo(name, schema)
 
       case format: FileFormat =>
-        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-        val path = caseInsensitiveOptions.getOrElse("path", {
+        val path = options.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
 
@@ -255,7 +253,7 @@ case class DataSource(
           sparkSession.sqlContext, metadataPath, userSpecifiedSchema, className, options)
 
       case format: FileFormat =>
-        val path = new CaseInsensitiveMap(options).getOrElse("path", {
+        val path = options.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
         new FileStreamSource(
@@ -273,8 +271,7 @@ case class DataSource(
         s.createSink(sparkSession.sqlContext, options, partitionColumns, outputMode)
 
       case parquet: parquet.ParquetFileFormat =>
-        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-        val path = caseInsensitiveOptions.getOrElse("path", {
+        val path = options.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
         if (outputMode != OutputMode.Append) {
@@ -320,13 +317,12 @@ case class DataSource(
    *                       path of the table does not exist).
    */
   def resolveRelation(checkPathExist: Boolean = true): BaseRelation = {
-    val caseInsensitiveOptions = new CaseInsensitiveMap(options)
     val relation = (providingClass.newInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
-        dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions, schema)
+        dataSource.createRelation(sparkSession.sqlContext, options, schema)
       case (dataSource: RelationProvider, None) =>
-        dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
+        dataSource.createRelation(sparkSession.sqlContext, options)
       case (_: SchemaRelationProvider, None) =>
         throw new AnalysisException(s"A schema needs to be specified when using $className.")
       case (_: RelationProvider, Some(_)) =>
@@ -335,13 +331,13 @@ case class DataSource(
       // We are reading from the results of a streaming query. Load files from the metadata log
       // instead of listing them using HDFS APIs.
       case (format: FileFormat, _)
-          if hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths) =>
-        val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
+          if hasMetadata(options.get("path").toSeq ++ paths) =>
+        val basePath = new Path((options.get("path").toSeq ++ paths).head)
         val fileCatalog = new MetadataLogFileCatalog(sparkSession, basePath)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,
-            caseInsensitiveOptions,
+            options,
             fileCatalog.allFiles())
         }.getOrElse {
           throw new AnalysisException(
@@ -360,7 +356,7 @@ case class DataSource(
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
-        val allPaths = caseInsensitiveOptions.get("path") ++ paths
+        val allPaths = options.get("path") ++ paths
         val globbedPaths = allPaths.flatMap { path =>
           val hdfsPath = new Path(path)
           val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
@@ -399,7 +395,7 @@ case class DataSource(
         }.orElse {
           format.inferSchema(
             sparkSession,
-            caseInsensitiveOptions,
+            options,
             fileCatalog.allFiles())
         }.getOrElse {
           throw new AnalysisException(
@@ -414,7 +410,7 @@ case class DataSource(
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
-          caseInsensitiveOptions)
+          options)
 
       case _ =>
         throw new AnalysisException(
@@ -440,9 +436,8 @@ case class DataSource(
         //  1. Only one output path can be specified on the write path;
         //  2. Output path must be a legal HDFS style file system path;
         //  3. It's OK that the output path doesn't exist yet;
-        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val outputPath = {
-          val path = new Path(caseInsensitiveOptions.getOrElse("path", {
+          val path = new Path(options.getOrElse("path", {
             throw new IllegalArgumentException("'path' is not specified")
           }))
           val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())

@@ -90,17 +90,31 @@ case class RefreshResource(path: String)
 /**
  * Builds a map in which keys are case insensitive
  */
-class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
+class CaseInsensitiveMap[T] private(baseMap: Map[String, T]) extends Map[String, T]
   with Serializable {
 
-  val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))
+  override def get(k: String): Option[T] = baseMap.get(k.toLowerCase)
 
-  override def get(k: String): Option[String] = baseMap.get(k.toLowerCase)
+  override def + [B1 >: T](kv: (String, B1)): Map[String, B1] =
+    new CaseInsensitiveMap(baseMap + kv.copy(_1 = kv._1.toLowerCase))
 
-  override def + [B1 >: String](kv: (String, B1)): Map[String, B1] =
-    baseMap + kv.copy(_1 = kv._1.toLowerCase)
+  override def iterator: Iterator[(String, T)] = baseMap.iterator
 
-  override def iterator: Iterator[(String, String)] = baseMap.iterator
+  override def -(key: String): Map[String, T] =
+    new CaseInsensitiveMap(baseMap - key.toLowerCase)
+}
 
-  override def -(key: String): Map[String, String] = baseMap - key.toLowerCase
+object CaseInsensitiveMap {
+  def apply[T](map: Map[String, T]): CaseInsensitiveMap[T] = {
+    val lowercaseKeys = map.keys.map(_.toLowerCase)
+    if (lowercaseKeys.toSet.size != map.size) {
+      val duplicatedKeys = lowercaseKeys.groupBy(identity).collect {
+        case (x, ys) if ys.size > 1 => x
+      }
+      throw new AnalysisException(
+        s"duplicated keys found in case insensitive map: ${duplicatedKeys.mkString(", ")}")
+    }
+    val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))
+    new CaseInsensitiveMap(baseMap)
+  }
 }

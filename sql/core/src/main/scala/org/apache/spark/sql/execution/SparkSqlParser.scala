@@ -316,7 +316,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (external) {
       operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
     }
-    val options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val options = CaseInsensitiveMap(
+      Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
     val provider = ctx.tableProvider.qualifiedName.getText
     val schema = Option(ctx.colTypeList()).map(createStructType)
     val partitionColumnNames =
@@ -377,7 +378,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       userSpecifiedSchema = Option(ctx.colTypeList()).map(createStructType),
       replace = ctx.REPLACE != null,
       provider = ctx.tableProvider.qualifiedName.getText,
-      options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
+      options = CaseInsensitiveMap(
+        Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)))
   }
 
   /**
