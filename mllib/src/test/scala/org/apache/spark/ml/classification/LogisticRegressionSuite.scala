@@ -17,22 +17,21 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.ml.attribute.NominalAttribute
-
 import scala.collection.JavaConverters._
 import scala.language.existentials
 import scala.util.Random
 import scala.util.control.Breaks._
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
-import org.apache.spark.ml.linalg.{Matrices, DenseMatrix, Vector, Vectors}
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.lit
 
 class LogisticRegressionSuite
@@ -99,7 +98,7 @@ class LogisticRegressionSuite
   }
 
   /**
-   * Enable the ignored test to export the smallBinaryDataset into CSV format,
+   * Enable the ignored test to export the dataset into CSV format,
    * so we can validate the training accuracy compared with R's glmnet package.
    */
   ignore("export test data into CSV format") {
@@ -114,7 +113,7 @@ class LogisticRegressionSuite
   test("params") {
     ParamsSuite.checkParams(new LogisticRegression)
     val model = new LogisticRegressionModel("logReg",
-      new DenseMatrix(1, 1, Array(0.0), isTransposed = false), Vectors.dense(0.0), 2, false)
+      new DenseMatrix(1, 1, Array(0.0)), Vectors.dense(0.0), 2, isMultinomial = false)
     ParamsSuite.checkParams(model)
   }
 
@@ -1839,6 +1838,7 @@ class LogisticRegressionSuite
     predictions1.zip(predictions2).foreach { case (Row(p1: Double), Row(p2: Double)) =>
       assert(p1 === p2)
     }
+    assert(model2.summary.totalIterations === 1)
 
     val lr3 = new LogisticRegression()
     val model3 = lr3.fit(smallMultinomialDataset)
@@ -1849,6 +1849,7 @@ class LogisticRegressionSuite
     predictions3.zip(predictions4).foreach { case (Row(p1: Double), Row(p2: Double)) =>
       assert(p1 === p2)
     }
+    // TODO: check that it converges in a single iteration when initial model is available
   }
 
   test("logistic regression with all labels the same") {

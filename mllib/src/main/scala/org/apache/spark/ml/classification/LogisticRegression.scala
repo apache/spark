@@ -68,6 +68,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    *
    * @group setParam
    */
+  // TODO: Implement SPARK-11543?
   def setThreshold(value: Double): this.type = {
     if (isSet(thresholds)) clear(thresholds)
     set(threshold, value)
@@ -88,14 +89,14 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    *
    * @group param
    */
-  @Since("2.0.0")
+  @Since("2.1.0")
   final val family: Param[String] = new Param(this, "family",
     "The name of family which is a description of the label distribution to be used in the " +
       s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
     ParamValidators.inArray[String](supportedFamilyNames))
 
   /** @group getParam */
-  @Since("2.0.0")
+  @Since("2.1.0")
   def getFamily: String = $(family)
 
   /**
@@ -252,7 +253,7 @@ class LogisticRegression @Since("1.2.0") (
    *
    * @group setParam
    */
-  @Since("2.0.0")
+  @Since("2.1.0")
   def setFamily(value: String): this.type = set(family, value)
   setDefault(family -> "auto")
 
@@ -271,7 +272,6 @@ class LogisticRegression @Since("1.2.0") (
   setDefault(standardization -> true)
 
   @Since("1.5.0")
-  // TODO: Check this behavior
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
 
   @Since("1.5.0")
@@ -354,18 +354,18 @@ class LogisticRegression @Since("1.2.0") (
     val numClasses = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
       case Some(n: Int) =>
         require(n >= histogram.length, s"Specified number of classes $n was " +
-          s"less than the number of unique labels ${histogram.length}")
+          s"less than the number of unique labels ${histogram.length}.")
         n
       case None => histogram.length
     }
     val isBinaryClassification = numClasses == 1 || numClasses == 2
-    val isMultinomial = ($(family) == LogisticRegression.auto && !isBinaryClassification) ||
-      ($(family) == LogisticRegression.multinomial)
+    val isMultinomial = ($(family) == LogisticRegression.Auto && !isBinaryClassification) ||
+      ($(family) == LogisticRegression.Multinomial)
     val numCoefficientSets = if (isMultinomial) numClasses else 1
 
     if (!isMultinomial) {
       require(isBinaryClassification, s"Binomial family only supports 1 or 2 " +
-        s"outcome classes but found $numClasses")
+        s"outcome classes but found $numClasses.")
     }
 
     if (isDefined(thresholds)) {
@@ -646,11 +646,11 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
   @Since("1.6.0")
   override def load(path: String): LogisticRegression = super.load(path)
 
-  private val multinomial = "multinomial"
-  private val binomial = "binomial"
-  private val auto = "auto"
+  private val Multinomial = "multinomial"
+  private val Binomial = "binomial"
+  private val Auto = "auto"
 
-  private[classification] lazy val supportedFamilyNames = Array(auto, binomial, multinomial)
+  private[classification] val supportedFamilyNames = Array(Auto, Binomial, Multinomial)
 }
 
 /**

@@ -432,8 +432,8 @@ class LogisticRegressionWithLBFGS
         if (userSuppliedWeights) {
           val uid = Identifiable.randomUID("logreg-static")
           lr.setInitialModel(new org.apache.spark.ml.classification.LogisticRegressionModel(uid,
-            new DenseMatrix(1, initialWeights.size, initialWeights.toArray, isTransposed = true),
-            Vectors.dense(0.0).asML, 2, false))
+            new DenseMatrix(1, initialWeights.size, initialWeights.toArray),
+            Vectors.dense(1.0).asML, 2, false))
         }
         lr.setFitIntercept(addIntercept)
         lr.setMaxIter(optimizer.getNumIterations())

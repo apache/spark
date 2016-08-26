@@ -23,7 +23,7 @@ import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressio
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
 import org.apache.spark.ml.feature.HashingTF
-import org.apache.spark.ml.linalg.{DenseMatrix, Vectors}
+import org.apache.spark.ml.linalg.{Matrices, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
@@ -245,7 +245,7 @@ class CrossValidatorSuite
     val lr = new LogisticRegression()
       .setThreshold(0.6)
     val lrModel = new LogisticRegressionModel(lr.uid,
-      new DenseMatrix(1, 1, Array(0.0), isTransposed = false), Vectors.dense(0.0), 2, false)
+      Matrices.dense(1, 1, Array(0.0)), Vectors.dense(0.0), 2, false)
       .setThreshold(0.6)
     val evaluator = new BinaryClassificationEvaluator()
       .setMetricName("areaUnderPR")  // not default metric

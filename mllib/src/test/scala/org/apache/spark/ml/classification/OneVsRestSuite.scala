@@ -22,7 +22,7 @@ import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.feature.StringIndexer
-import org.apache.spark.ml.linalg.{DenseMatrix, Vectors}
+import org.apache.spark.ml.linalg.{Matrices, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MetadataUtils, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -61,7 +61,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   test("params") {
     ParamsSuite.checkParams(new OneVsRest)
     val lrModel = new LogisticRegressionModel("logReg",
-      new DenseMatrix(1, 1, Array(0.0), isTransposed = false), Vectors.dense(0.0), 2, false)
+      Matrices.dense(1, 1, Array(0.0)), Vectors.dense(0.0), 2, false)
     val model = new OneVsRestModel("ovr", Metadata.empty, Array(lrModel))
     ParamsSuite.checkParams(model)
   }
