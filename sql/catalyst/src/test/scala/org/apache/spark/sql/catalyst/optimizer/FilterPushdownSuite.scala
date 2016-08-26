@@ -992,15 +992,13 @@ class FilterPushdownSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
-    val joinWithNonDeterministicCondition = x.join(y, condition = Some("x.a".attr === Rand(10)))
-    val joinWithDeterministicCondition = x.join(y, condition = Some("x.a".attr === 10))
+    // Verify that all conditions preceding the first non-deterministic condition are pushed down
+    // by the optimizer and others are not.
+    val originalQuery = x.join(y, condition = Some("x.a".attr === 5 && "y.a".attr === 5 &&
+      "x.a".attr === Rand(10) && "y.b".attr === 5))
+    val correctAnswer = x.where("x.a".attr === 5).join(y.where("y.a".attr === 5),
+        condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
 
-    // Verify that non-deterministic condition aren't pushed down by the optimizer
-    comparePlans(Optimize.execute(joinWithNonDeterministicCondition.analyze),
-      joinWithNonDeterministicCondition.analyze)
-
-    // Verify that deterministic conditions are pushed down by the optimizer
-    comparePlans(Optimize.execute(joinWithDeterministicCondition.analyze),
-      x.where("x.a".attr === 10).join(y).analyze)
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 }
