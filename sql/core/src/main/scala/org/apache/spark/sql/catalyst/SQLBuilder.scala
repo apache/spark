@@ -126,9 +126,6 @@ class SQLBuilder private (
     case p: Project =>
       projectToSQL(p, isDistinct = false)
 
-    case s: Scanner =>
-      scannerToSQL(s)
-
     case a @ Aggregate(_, _, e @ Expand(_, _, p: Project)) if isGroupingSet(a, e, p) =>
       groupingSetToSQL(a, e, p)
 
@@ -175,12 +172,8 @@ class SQLBuilder private (
         toSQL(p.right),
         p.condition.map(" ON " + _.sql).getOrElse(""))
 
-    case SQLTable(database, table, _, sample) =>
-      val qualifiedName = s"${quoteIdentifier(database)}.${quoteIdentifier(table)}"
-      sample.map { case (lowerBound, upperBound) =>
-        val fraction = math.min(100, math.max(0, (upperBound - lowerBound) * 100))
-        qualifiedName + " TABLESAMPLE(" + fraction + " PERCENT)"
-      }.getOrElse(qualifiedName)
+    case t: SQLTable =>
+      tableToSQL(t)
 
     case relation: CatalogRelation =>
       val m = relation.catalogTable
@@ -239,22 +232,28 @@ class SQLBuilder private (
     )
   }
 
-  private def scannerToSQL(scanner: Scanner): String = {
-    if (scanner.filters.nonEmpty) {
+  private def tableToSQL(table: SQLTable): String = {
+    val qualifiedName = s"${quoteIdentifier(table.database)}.${quoteIdentifier(table.table)}"
+    val withSample = table.sample.map { case (lowerBound, upperBound) =>
+      val fraction = math.min(100, math.max(0, (upperBound - lowerBound) * 100))
+      qualifiedName + " TABLESAMPLE(" + fraction + " PERCENT)"
+    }.getOrElse(qualifiedName)
+
+    if (table.filters.nonEmpty) {
       build(
         "SELECT",
-        scanner.projectList.map(_.sql).mkString(", "),
-        if (scanner.child == OneRowRelation) "" else "FROM",
-        toSQL(scanner.child),
+        table.projectList.map(_.sql).mkString(", "),
+        "FROM",
+        withSample,
         "WHERE",
-        scanner.filters.reduce(And).sql
+        table.filters.reduce(And).sql
       )
     } else {
       build(
         "SELECT",
-        scanner.projectList.map(_.sql).mkString(","),
-        if (scanner.child == OneRowRelation) "" else "FROM",
-        toSQL(scanner.child)
+        table.projectList.map(_.sql).mkString(", "),
+        "FROM",
+        withSample
       )
     }
   }
@@ -469,28 +468,17 @@ class SQLBuilder private (
 
     object RemoveSubqueriesAboveSQLTable extends Rule[LogicalPlan] {
       override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-        case SubqueryAlias(_, t @ ExtractSQLTable(_), _) => t
+        case SubqueryAlias(_, t: Scanner) => t
+        case SubqueryAlias(_, r: LogicalRelation) => r
       }
     }
 
     object ResolveSQLTable extends Rule[LogicalPlan] {
       override def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
-        case Sample(lowerBound, upperBound, _, _, s @ Scanner(_, _, ExtractSQLTable(table))) =>
-          addSubquery(s.copy(child = aliasColumns(table.withSample(lowerBound, upperBound))))
-        case s @ Scanner(_, _, ExtractSQLTable(table)) =>
-          addSubquery(s.copy(child = aliasColumns(table)))
-      }
-
-      /**
-       * Aliases the table columns to the generated attribute names, as we use exprId to generate
-       * unique name for each attribute when normalize attributes, and we can't reference table
-       * columns with their real names.
-       */
-      private def aliasColumns(table: SQLTable): LogicalPlan = {
-        val aliasedOutput = table.output.map { attr =>
-          Alias(attr, normalizedName(attr))(exprId = attr.exprId)
-        }
-        addSubquery(Project(aliasedOutput, table))
+        case Sample(lowerBound, upperBound, _, _, ExtractSQLTable(table)) =>
+          addSubquery(table.withSample(lowerBound, upperBound))
+        case s @ ExtractSQLTable(table) =>
+          addSubquery(table)
       }
     }
 
@@ -605,26 +593,47 @@ class SQLBuilder private (
   case class SQLTable(
       database: String,
       table: String,
-      output: Seq[Attribute],
+      projectList: Seq[NamedExpression],
+      filters: Seq[Expression],
       sample: Option[(Double, Double)] = None) extends LeafNode {
+    override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+
     def withSample(lowerBound: Double, upperBound: Double): SQLTable =
       this.copy(sample = Some(lowerBound -> upperBound))
   }
 
   object ExtractSQLTable {
     def unapply(plan: LogicalPlan): Option[SQLTable] = plan match {
-      case l @ LogicalRelation(_, _, Some(catalogTable))
-          if catalogTable.identifier.database.isDefined =>
+      case s @ Scanner(projectList, filters, l @ LogicalRelation(_, _, Some(catalogTable)))
+        if catalogTable.identifier.database.isDefined =>
         Some(SQLTable(
           catalogTable.identifier.database.get,
           catalogTable.identifier.table,
-          l.output.map(_.withQualifier(None))))
+          l.output.map(_.withQualifier(None)),
+          filters))
 
-      case relation: CatalogRelation =>
+      case s @ Scanner(projectList, filters, relation: CatalogRelation) =>
         val m = relation.catalogTable
-        Some(SQLTable(m.database, m.identifier.table, relation.output.map(_.withQualifier(None))))
+        val aliasedOutput = aliasColumns(projectList, relation.output.map(_.withQualifier(None)))
+        Some(SQLTable(m.database, m.identifier.table, aliasedOutput, filters))
 
       case _ => None
+    }
+
+    private def aliasColumns(
+        projectList: Seq[NamedExpression],
+        output: Seq[Attribute]): Seq[NamedExpression] = {
+      val aliasedOutput = output.map { attr =>
+        Alias(attr, normalizedName(attr))(exprId = attr.exprId)
+      }
+
+      val aliasMap = AttributeMap(aliasedOutput.collect {
+        case a: Alias => (a.toAttribute, a)
+      })
+
+      projectList.map(_.transformUp {
+        case a: Attribute => aliasMap.getOrElse(a, a)
+      }.asInstanceOf[NamedExpression])
     }
   }
 
