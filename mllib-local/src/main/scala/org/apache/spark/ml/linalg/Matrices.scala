@@ -459,7 +459,7 @@ class SparseMatrix @Since("2.0.0") (
     isTransposed && colPtrs.length == numRows + 1, "The length of the column indices should be " +
     "the number of columns + 1 if transposed is false, or rows + 1 if transposed is true. " +
     "Currently, colPointers.length: " + s"${colPtrs.length}, numCols: $numCols, numRows: " +
-    "$numRows, isTransposed: $isTransposed")
+    s"$numRows, isTransposed: $isTransposed")
   require(values.length == colPtrs.last, "The last value of colPtrs must equal the number of " +
     s"elements. values.length: ${values.length}, colPtrs.last: ${colPtrs.last}")
 
