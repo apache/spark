@@ -553,7 +553,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "union31",
     "union_date",
     "varchar_2",
-    "varchar_join1"
+    "varchar_join1",
+
+    // This test assumes we parse scientific decimals as doubles (we parse them as decimals)
+    "literal_double"
   )
 
   /**
@@ -830,7 +833,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "leftsemijoin_mr",
     "limit_pushdown_negative",
     "lineage1",
-    "literal_double",
     "literal_ints",
     "literal_string",
     "load_dyn_part1",

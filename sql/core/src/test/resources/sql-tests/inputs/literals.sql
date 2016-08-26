@@ -50,14 +50,14 @@ select 1D, 1.2D, 1e10, 1.5e5, .10D, 0.10D, .1e5, .9e+2, 0.9e+2, 900e-1, 9.e+1;
 select -1D, -1.2D, -1e10, -1.5e5, -.10D, -0.10D, -.1e5;
 -- negative double
 select .e3;
--- inf and -inf
+-- very large decimals (overflowing double).
 select 1E309, -1E309;
 
 -- decimal parsing
 select 0.3, -0.8, .5, -.18, 0.1111, .1111;
 
 -- super large scientific notation numbers should still be valid doubles
-select 123456789012345678901234567890123456789e10, 123456789012345678901234567890123456789.1e10;
+select 123456789012345678901234567890123456789e10d, 123456789012345678901234567890123456789.1e10d;
 
 -- string
 select "Hello Peter!", 'hello lee!';
@@ -90,3 +90,6 @@ select interval 10 nanoseconds;
 
 -- unsupported data type
 select GEO '(10,-6)';
+
+-- Hive literal_double test.
+SELECT 3.14, -3.14, 3.14e8, 3.14e-8, -3.14e8, -3.14e-8, 3.14e+8, 3.14E8, 3.14E-8;
