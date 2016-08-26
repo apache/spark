@@ -1120,25 +1120,26 @@ class LogisticRegressionSuite
     assert(model5.interceptVector.size === 3)
   }
 
-  test("intercept priors") {
-    // TODO
-    // Get coefficients from normal model with strong L1
-    // Set initial model with computed priors...
-  }
-
   test("set initial model") {
-    // TODO: the binary one doesn't converge any faster
-    // TODO: should they converge after one or two iterations?
-    // We can just run the other ones for a few iterations then check the predictions
     val lr = new LogisticRegression()
-    val model1 = lr.fit(binaryDataset)
-    val lr2 = new LogisticRegression().setInitialModel(model1)
-    val model2 = lr2.fit(binaryDataset)
+    val model1 = lr.fit(smallBinaryDataset)
+    val lr2 = new LogisticRegression().setInitialModel(model1).setMaxIter(5)
+    val model2 = lr2.fit(smallBinaryDataset)
+    val predictions1 = model1.transform(smallBinaryDataset).select("prediction").collect()
+    val predictions2 = model2.transform(smallBinaryDataset).select("prediction").collect()
+    predictions1.zip(predictions2).foreach { case (Row(p1: Double), Row(p2: Double)) =>
+      assert(p1 === p2)
+    }
 
     val lr3 = new LogisticRegression()
-    val model3 = lr3.fit(multinomialDataset)
-    val lr4 = new LogisticRegression().setInitialModel(model3)
-    val model4 = lr4.fit(multinomialDataset)
+    val model3 = lr3.fit(smallMultinomialDataset)
+    val lr4 = new LogisticRegression().setInitialModel(model3).setMaxIter(5)
+    val model4 = lr4.fit(smallMultinomialDataset)
+    val predictions3 = model3.transform(smallMultinomialDataset).select("prediction").collect()
+    val predictions4 = model4.transform(smallMultinomialDataset).select("prediction").collect()
+    predictions3.zip(predictions4).foreach { case (Row(p1: Double), Row(p2: Double)) =>
+      assert(p1 === p2)
+    }
   }
 
   test("logistic regression with all labels the same") {
@@ -1241,8 +1242,9 @@ class LogisticRegressionSuite
 
     // specify two classes when there are really three
     val labelMeta1 = NominalAttribute.defaultAttr.withName("label").withNumValues(2).toMetadata()
-    val df1 = smallMultinomialDataset.select(smallMultinomialDataset("label").as("label", labelMeta1),
-      smallMultinomialDataset("features"))
+    val df1 = smallMultinomialDataset
+      .select(smallMultinomialDataset("label").as("label", labelMeta1),
+        smallMultinomialDataset("features"))
     val thrown = intercept[IllegalArgumentException] {
       lr.fit(df1)
     }

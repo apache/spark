@@ -19,7 +19,7 @@ package org.apache.spark.ml.classification
 
 import scala.collection.mutable
 
-import breeze.linalg.{DenseVector => BDV}
+import breeze.linalg.{DenseVector => BDV, View}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
@@ -83,7 +83,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    *            If numClasses == 1 || numClasses == 2, set to "binomial".
    *            Else, set to "multinomial"
    *  - "binomial": Binary logistic regression with pivoting.
-   *  - "multinomial": Multinomial (softmax) regression without pivoting.
+   *  - "multinomial": Multinomial logistic (softmax) regression without pivoting.
    * Default is "auto".
    *
    * @group param
@@ -181,9 +181,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 }
 
 /**
- * Logistic regression.
- * Currently, this class only supports binary classification.  For multiclass classification,
- * use [[MultinomialLogisticRegression]]
+ * Logistic regression. Supports multinomial logistic (softmax) regression and binomial logistic
+ * regression.
  */
 @Since("1.2.0")
 class LogisticRegression @Since("1.2.0") (
@@ -476,10 +475,11 @@ class LogisticRegression @Since("1.2.0") (
 
         if (initialModelIsValid) {
           val initialCoefArray = initialCoefficientsWithIntercept.toArray
-          val providedCoefArray = optInitialModel.get.coefficientMatrix.toArray
-          providedCoefArray.indices.foreach { i =>
-            val flatIndex = if ($(fitIntercept)) i + i / numFeatures else i
-            initialCoefArray(flatIndex) = providedCoefArray(i)
+          val providedCoef = optInitialModel.get.coefficientMatrix
+          providedCoef.foreachActive { (row, col, value) =>
+            val flatIndex = row * numFeaturesPlusIntercept + col
+            // We need to scale the coefficients since they will be trained in the scaled space
+            initialCoefArray(flatIndex) = value * featuresStd(col)
           }
           if ($(fitIntercept)) {
             optInitialModel.get.interceptVector.foreachActive { (index, value) =>
@@ -608,10 +608,10 @@ class LogisticRegression @Since("1.2.0") (
           val interceptMean = interceptsArray.sum / numClasses
           interceptsArray.indices.foreach { i => interceptsArray(i) -= interceptMean }
           Vectors.dense(interceptsArray)
-        } else if (interceptsArray.length == 2) {
-          Vectors.dense(interceptsArray.head)
+        } else if (interceptsArray.length == 1) {
+          Vectors.dense(interceptsArray)
         } else {
-          Vectors.sparse(numClasses, Seq())
+          Vectors.sparse(numCoefficientSets, Seq())
         }
         (coefficientMatrix, interceptVector, arrayBuilder.result())
       }
@@ -668,6 +668,7 @@ class LogisticRegressionModel private[spark] (
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams with MLWritable {
 
+  // TODO: remove this
   def this(uid: String, coefficients: Vector, intercept: Double) {
     this(uid,
       new DenseMatrix(1, coefficients.size, coefficients.toArray, isTransposed = true),
@@ -675,19 +676,28 @@ class LogisticRegressionModel private[spark] (
   }
 
   @Since("2.0.0")
-  // TODO: this should convert sparse to sparse and dense to dense
-  val coefficients: Vector = Vectors.dense(coefficientMatrix.toArray)
+  def coefficients: Vector = if (isMultinomial) {
+    throw new SparkException("Multinomial models contain a matrix of coefficients, use" +
+      "coefficientMatrix instead.")
+  } else {
+    _coefficients
+  }
+
+  // convert to appropriate vector representation without replicating data
+  private lazy val _coefficients: Vector = coefficientMatrix match {
+    case dm: DenseMatrix => Vectors.dense(dm.values)
+    case sm: SparseMatrix => Vectors.fromBreeze(sm.asBreeze.flatten(View.Require))
+  }
 
   @Since("1.3.0")
-  def intercept: Double = {
-    if (isMultinomial) {
-      logWarning("Multiclass model contains a vector of intercepts, use interceptVector instead." +
-        "Returning 0.0 as placeholder.")
-    }
+  def intercept: Double = if (isMultinomial) {
+    throw new SparkException("Multiclass model contains a vector of intercepts, use " +
+      "interceptVector instead. Returning 0.0 as placeholder.")
+  } else {
     _intercept
   }
 
-  private val _intercept = if (!isMultinomial) interceptVector.toArray.head else 0.0
+  private lazy val _intercept = interceptVector.toArray.head
 
   @Since("1.5.0")
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
@@ -943,7 +953,6 @@ class LogisticRegressionModel private[spark] (
 
 @Since("1.6.0")
 object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
-  // TODO: we need to be able to load old models as well
 
   @Since("1.6.0")
   override def read: MLReader[LogisticRegressionModel] = new LogisticRegressionModelReader
@@ -1008,7 +1017,6 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
         new LogisticRegressionModel(metadata.uid, coefficientMatrix, interceptVector,
           numClasses, isMultinomial)
       }
-
 
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
