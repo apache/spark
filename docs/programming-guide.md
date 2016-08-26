@@ -445,7 +445,7 @@ Similarly to text files, SequenceFiles can be saved and loaded by specifying the
 classes can be specified, but for standard Writables this is not required.
 
 {% highlight python %}
->>> rdd = sc.parallelize(range(1, 4)).map(lambda x: (x, "a" * x ))
+>>> rdd = sc.parallelize(range(1, 4)).map(lambda x: (x, "a" * x))
 >>> rdd.saveAsSequenceFile("path/to/file")
 >>> sorted(sc.sequenceFile("path/to/file").collect())
 [(1, u'a'), (2, u'aa'), (3, u'aaa')]
@@ -459,10 +459,12 @@ Elasticsearch ESInputFormat:
 
 {% highlight python %}
 $ SPARK_CLASSPATH=/path/to/elasticsearch-hadoop.jar ./bin/pyspark
->>> conf = {"es.resource" : "index/type"}   # assume Elasticsearch is running on localhost defaults
->>> rdd = sc.newAPIHadoopRDD("org.elasticsearch.hadoop.mr.EsInputFormat",\
-    "org.apache.hadoop.io.NullWritable", "org.elasticsearch.hadoop.mr.LinkedMapWritable", conf=conf)
->>> rdd.first()         # the result is a MapWritable that is converted to a Python dict
+>>> conf = {"es.resource" : "index/type"}  # assume Elasticsearch is running on localhost defaults
+>>> rdd = sc.newAPIHadoopRDD("org.elasticsearch.hadoop.mr.EsInputFormat",
+                             "org.apache.hadoop.io.NullWritable",
+                             "org.elasticsearch.hadoop.mr.LinkedMapWritable",
+                             conf=conf)
+>>> rdd.first()  # the result is a MapWritable that is converted to a Python dict
 (u'Elasticsearch ID',
  {u'field1': True,
   u'field2': u'Some Text',
@@ -797,7 +799,6 @@ def increment_counter(x):
 rdd.foreach(increment_counter)
 
 print("Counter value: ", counter)
-
 {% endhighlight %}
 </div>
 
@@ -1455,13 +1456,14 @@ The code below shows an accumulator being used to add up the elements of an arra
 
 {% highlight python %}
 >>> accum = sc.accumulator(0)
+>>> accum
 Accumulator<id=0, value=0>
 
 >>> sc.parallelize([1, 2, 3, 4]).foreach(lambda x: accum.add(x))
 ...
 10/09/29 18:41:08 INFO SparkContext: Tasks finished in 0.317106 s
 
-scala> accum.value
+>>> accum.value
 10
 {% endhighlight %}
 
