@@ -393,6 +393,13 @@ class ExpressionParserSuite extends PlanTest {
     intercept("1.8E308D", s"does not fit in range")
     // TODO we need to figure out if we should throw an exception here!
     assertEqual("1E309", Literal(Double.PositiveInfinity))
+
+    // BigDecimal Literal
+    assertEqual("90912830918230182310293801923652346786BD",
+      Literal(BigDecimal("90912830918230182310293801923652346786").underlying()))
+    assertEqual("123.0E-28BD", Literal(BigDecimal("123.0E-28").underlying()))
+    assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
+    intercept("1.20E-38BD", "DecimalType can only support precision up to 38")
   }
 
   test("strings") {

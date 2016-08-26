@@ -39,6 +39,7 @@ class ExpressionSQLBuilderSuite extends SQLBuilderTest {
     checkSQL(Literal(Double.PositiveInfinity), "CAST('Infinity' AS DOUBLE)")
     checkSQL(Literal(Double.NegativeInfinity), "CAST('-Infinity' AS DOUBLE)")
     checkSQL(Literal(Double.NaN), "CAST('NaN' AS DOUBLE)")
+    checkSQL(Literal(BigDecimal("10.0000000").underlying), "10.0000000BD")
     checkSQL(Literal(Array(0x01, 0xA3).map(_.toByte)), "X'01A3'")
     checkSQL(
       Literal(Timestamp.valueOf("2016-01-01 00:00:00")), "TIMESTAMP('2016-01-01 00:00:00.0')")

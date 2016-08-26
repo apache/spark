@@ -283,7 +283,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression with 
         case Double.NegativeInfinity => s"CAST('-Infinity' AS ${DoubleType.sql})"
         case _ => v + "D"
       }
-    case (v: Decimal, t: DecimalType) => s"CAST($v AS ${t.sql})"
+    case (v: Decimal, t: DecimalType) => v + "BD"
     case (v: Int, DateType) => s"DATE '${DateTimeUtils.toJavaDate(v)}'"
     case (v: Long, TimestampType) => s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
