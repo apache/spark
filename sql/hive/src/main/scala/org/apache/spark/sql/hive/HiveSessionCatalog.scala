@@ -21,6 +21,7 @@ import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
@@ -29,10 +30,11 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, FunctionResourceLoader, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.LogicalRelationCache
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
@@ -63,9 +65,27 @@ private[sql] class HiveSessionCatalog(
   override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
     val table = formatTableName(name.table)
     if (name.database.isDefined || !tempTables.contains(table)) {
-      val database = name.database.map(formatDatabaseName)
-      val newName = name.copy(database = database, table = table)
-      metastoreCatalog.lookupRelation(newName, alias)
+      val database = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+      val newName = name.copy(database = Option(database), table = table)
+      val metadata = getTableMetadata(newName)
+      if (DDLUtils.isDatasourceTable(metadata)) {
+        val dataSourceTable = metadataCache.getTable(newName)
+        val qualifiedTable = SubqueryAlias(table, dataSourceTable, None)
+        // Then, if alias is specified, wrap the table with a Subquery using the alias.
+        // Otherwise, wrap the table with a Subquery using the table name.
+        alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
+      } else if (metadata.tableType == CatalogTableType.VIEW) {
+        val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
+        SubqueryAlias(
+          alias.getOrElse(metadata.identifier.table),
+          sparkSession.sessionState.sqlParser.parsePlan(viewText),
+          Option(metadata.identifier))
+      } else {
+        val qualifiedTable =
+          MetastoreRelation(
+            databaseName = database, tableName = table)(metadata, client, sparkSession)
+        alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
+      }
     } else {
       val relation = tempTables(table)
       val tableWithQualifiers = SubqueryAlias(table, relation, None)
@@ -83,29 +103,30 @@ private[sql] class HiveSessionCatalog(
   // essentially a cache for metastore tables. However, it relies on a lot of session-specific
   // things so it would be a lot of work to split its functionality between HiveSessionCatalog
   // and HiveCatalog. We should still do it at some point...
-  private val metastoreCatalog = new HiveMetastoreCatalog(sparkSession)
-
-  val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
-  val OrcConversions: Rule[LogicalPlan] = metastoreCatalog.OrcConversions
-  val CreateTables: Rule[LogicalPlan] = metastoreCatalog.CreateTables
+  private val metadataCache = new LogicalRelationCache(sparkSession)
 
   override def refreshTable(name: TableIdentifier): Unit = {
     super.refreshTable(name)
-    metastoreCatalog.refreshTable(name)
+    metadataCache.refreshTable(name)
   }
 
-  def invalidateCache(): Unit = {
-    metastoreCatalog.cachedDataSourceTables.invalidateAll()
+  override def invalidateCache(): Unit = {
+    metadataCache.invalidateAll()
+  }
+
+  override def cacheDataSourceTable(name: TableIdentifier, plan: LogicalPlan): Unit = {
+    metadataCache.cacheTable(name, plan)
+  }
+
+  override def getCachedDataSourceTableIfPresent(name: TableIdentifier): Option[LogicalPlan] = {
+    metadataCache.getTableIfPresent(name)
   }
 
   def hiveDefaultTableFilePath(name: TableIdentifier): String = {
-    metastoreCatalog.hiveDefaultTableFilePath(name)
-  }
-
-  // For testing only
-  private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
-    val key = metastoreCatalog.getQualifiedTableName(table)
-    metastoreCatalog.cachedDataSourceTables.getIfPresent(key)
+    // Code based on: hiveWarehouse.getTablePath(currentDatabase, tableName)
+    val dbName = name.database.getOrElse(getCurrentDatabase).toLowerCase
+    val tableName = name.table.toLowerCase
+    new Path(new Path(getDatabaseMetadata(dbName).locationUri), tableName).toString
   }
 
   override def makeFunctionBuilder(funcName: String, className: String): FunctionBuilder = {
