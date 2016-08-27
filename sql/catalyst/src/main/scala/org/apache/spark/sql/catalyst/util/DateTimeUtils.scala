@@ -835,7 +835,7 @@ object DateTimeUtils {
    * dayOfWeek is an integer ranges in [0, 6], and 0 is Thu, 1 is Fri, etc,.
    */
   def getNextDateForDayOfWeek(startTimestamp: SQLTimestamp, dayOfWeek: Int): SQLTimestamp = {
-    dateFuncToTimestampFunc(startTimestamp, getNextDateForDayOfWeek(_, dayOfWeek))
+    dateFuncToTimestampFunc(startTimestamp, getNextDateForDayOfWeek(_: SQLDate, dayOfWeek))
   }
 
   /**
