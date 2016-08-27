@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
-import scala.sys.process.Process
+import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
 
 import org.apache.hadoop.fs.Path
@@ -1788,7 +1788,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   def testCommandAvailable(command: String): Boolean = {
-    val attempt = Try(Process(command).run().exitValue())
+    val attempt = Try(Process(command).run(
+      new ProcessLogger {
+        override def out(s: => String): Unit = ()
+        override def buffer[T](f: => T): T = f
+        override def err(s: => String): Unit = ()
+      }
+    ).exitValue())
     attempt.isSuccess && attempt.get == 0
   }
 }
