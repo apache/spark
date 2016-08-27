@@ -221,14 +221,14 @@ class SparkHadoopUtil extends Logging {
 
   /**
    * List directories/files matching the path and return the `FileStatus` results.
-   * If the pattern is not a regexp then a simple `getFileStatus(pattern)`
+   * If the pattern is not a glob regular expression then a simple `getFileStatus(pattern)`
    * is called to get the status of that path.
    * If the path/pattern does not match anything in the filesystem,
    * an empty sequence is returned.
    * @param pattern pattern
    * @return a possibly empty array of FileStatus entries
    */
-  def globToFileStatus(pattern: Path): Array[FileStatus] = {
+  def globToFileStatusIfNecessary(pattern: Path): Array[FileStatus] = {
     val fs = pattern.getFileSystem(conf)
     if (isGlobPath(pattern)) {
       Option(fs.globStatus(pattern)).getOrElse(Array.empty[FileStatus])

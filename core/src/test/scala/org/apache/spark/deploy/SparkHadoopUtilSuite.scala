@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
- * Tests for `SparkHadoopUtil`
+ * Tests for `SparkHadoopUtil` methods.
  */
 class SparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 with BeforeAndAfter {
@@ -56,7 +56,7 @@ with BeforeAndAfter {
   }
 
   /**
-   * Glob a simple file and expect to get the path back
+   * Glob a simple file and expect to get the path back.
    */
   test("GlobSimpleFile") {
     val name = "simplefile"
@@ -67,7 +67,7 @@ with BeforeAndAfter {
   }
 
   /**
-   * Glob a simple file + wildcard and expect nothing back
+   * Glob a simple file + wildcard and expect nothing back.
    */
   test("GlobSimpleFileWildcard") {
     val file = tempFile("simplefile")
@@ -76,7 +76,7 @@ with BeforeAndAfter {
   }
 
   /**
-   * Glob an empty dir and expect to get the directory back
+   * Glob an empty dir and expect to get the directory back.
    */
   test("GlobEmptyDir") {
     val file = tempFile("emptydir")
@@ -86,7 +86,7 @@ with BeforeAndAfter {
   }
 
   /**
-   * Glob an empty dir + wildcard and expect nothing back
+   * Glob an empty dir + wildcard and expect nothing back.
    */
   test("GlobEmptyDirWildcard") {
     val file = tempFile("emptydir")
@@ -95,7 +95,7 @@ with BeforeAndAfter {
   }
 
   /**
-   * Glob a directory with children and expect to only get the directory back
+   * Glob a directory with children and expect to only get the directory back.
    */
   test("GlobNonEmptyDir") {
     val file = tempFile("dir")
@@ -107,7 +107,7 @@ with BeforeAndAfter {
   }
 
   /**
-   * Glob a non empty dir + wildcard and expect to get the child back
+   * Glob a non empty dir + wildcard and expect to get the child back.
    */
   test("GlobNonEmptyDirWildcard") {
     val file = tempFile("dir")
@@ -120,29 +120,29 @@ with BeforeAndAfter {
   }
 
   /**
-   * Assert that the glob returned an empty list
+   * Assert that the glob returned an empty list.
    * @param pattern pattern to glob
    */
   def assertEmptyGlob(pattern: Path): Unit = {
-    assert(Array.empty[FileStatus] === hadoopUtils.globToFileStatus(pattern), "" +
-        s"globToFileStatus($pattern)")
+    assert(Array.empty[FileStatus] === hadoopUtils.globToFileStatusIfNecessary(pattern),
+      s"globToFileStatus($pattern)")
   }
 
   /**
-   * glob to an expected size of returned array
+   * glob to an expected size of returned array.
    * @param pattern pattern to glob
    * @param size size to expect
    * @return a list of results
    */
   def globToSize(pattern: Path, size: Int): Array[FileStatus] = {
-    val result = hadoopUtils.globToFileStatus(pattern)
+    val result = hadoopUtils.globToFileStatusIfNecessary(pattern)
     assert(size === result.length,
       s"globToFileStatus($pattern) = $result")
     result
   }
 
   /**
-   * Create a 0-byte file at the given path
+   * Create a 0-byte file at the given path.
    * @param file file to create
    */
   def touch(file: File): Unit = {
@@ -151,7 +151,7 @@ with BeforeAndAfter {
   }
 
   /**
-   * Convert a file to a path
+   * Convert a file to a path.
    * @param file file
    * @return the path equivalent.
    */
@@ -160,7 +160,7 @@ with BeforeAndAfter {
   }
 
   /**
-   * Create a wildcard matching all children of the given path
+   * Create a wildcard matching all children of the given path.
    * @param file file
    * @return a path
    */
@@ -169,8 +169,8 @@ with BeforeAndAfter {
   }
 
   /**
-   * Get a File instance for a filename in the temp directory. The
-   * path returned is not created.
+   * Get a File instance for a filename in the temp directory.
+   * No file is created.
    * @param name filename
    * @return an absolute file under the temporary directory
    */

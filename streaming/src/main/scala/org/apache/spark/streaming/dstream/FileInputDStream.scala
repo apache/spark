@@ -192,7 +192,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
 
-      val directories = SparkHadoopUtil.get.globToFileStatus(directoryPath)
+      val directories = SparkHadoopUtil.get.globToFileStatusIfNecessary(directoryPath)
           .filter(_.isDirectory)
           .map(_.getPath)
       val newFiles = directories.flatMap(dir =>
