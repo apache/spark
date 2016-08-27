@@ -607,7 +607,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           Row(id, name, age, salary)
       }.toSeq)
     assert(df.schema.map(_.name) === Seq("id", "name", "age", "salary"))
-    assert(df("id") == person("id"))
+    val dfAnalyzer = df.sparkSession.sessionState.analyzer
+    val personAnalyzer = person.sparkSession.sessionState.analyzer
+    assert(dfAnalyzer.resolveExpression(df("id").expr, df.queryExecution.analyzed) ==
+      personAnalyzer.resolveExpression(person("id").expr, person.queryExecution.analyzed))
   }
 
   test("drop top level columns that contains dot") {
@@ -1469,6 +1472,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         join2.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 4)
     }
   }
+
   test("sameResult() on aggregate") {
     val df = spark.range(100)
     val agg1 = df.groupBy().count()

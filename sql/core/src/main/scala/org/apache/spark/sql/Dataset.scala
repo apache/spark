@@ -899,7 +899,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def sort(sortCol: String, sortCols: String*): Dataset[T] = {
-    sort((sortCol +: sortCols).map(colInternal) : _*)
+    sort((sortCol +: sortCols).map(apply) : _*)
   }
 
   /**
@@ -953,8 +953,9 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def col(colName: String): Column = withStarResolved(colName) {
-    val candidateExpr = resolve(colName)
-    val expr = LazilyDeterminedAttribute(candidateExpr)(logicalPlan)
+    val expr = UnresolvedAttribute(
+      UnresolvedAttribute.parseAttributeName(colName),
+      Some(queryExecution.analyzed.planId))
     Column(expr)
   }
 
@@ -1703,8 +1704,7 @@ class Dataset[T] private[sql](
       val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
       f(row(0).asInstanceOf[A]).map(o => InternalRow(convert(o)))
     }
-    val generator =
-      UserDefinedGenerator(elementSchema, rowFunction, colInternal(inputColumn).expr :: Nil)
+    val generator = UserDefinedGenerator(elementSchema, rowFunction, apply(inputColumn).expr :: Nil)
 
     withPlan {
       Generate(generator, join = true, outer = false,
@@ -1832,15 +1832,17 @@ class Dataset[T] private[sql](
    */
   def drop(col: Column): DataFrame = {
     val expression = col match {
-      case Column(u: UnresolvedAttribute) =>
-        queryExecution.analyzed.resolveQuoted(
-          u.name, sparkSession.sessionState.analyzer.resolver).getOrElse(u)
-      case Column(l: LazilyDeterminedAttribute) =>
-        val foundExpression =
-          logicalPlan.findByBreadthFirst(_.planId == l.plan.planId)
-            .flatMap(_.resolveQuoted(l.name, sparkSession.sessionState.analyzer.resolver))
-            .getOrElse(l.namedExpr)
-        foundExpression
+      case Column(u @ UnresolvedAttribute(nameParts, targetPlanIdOpt)) =>
+        val plan = queryExecution.analyzed
+        val analyzer = sparkSession.sessionState.analyzer
+        val resolver = analyzer.resolver
+
+        targetPlanIdOpt match {
+          case Some(targetPlanId) =>
+            analyzer.resolveExpressionFromSpecificLogicalPlan(nameParts, plan, targetPlanId)
+          case None =>
+            plan.resolveQuoted(u.name, resolver).getOrElse(u)
+        }
       case Column(expr: Expression) => expr
     }
     val attrs = this.logicalPlan.output
@@ -2633,6 +2635,9 @@ class Dataset[T] private[sql](
     }
   }
 
+  /** Another version of `col` which resolve an expression immediately.
+   *  Mainly intended to use for test for example in case of passing columns to a SparkPlan.
+   */
   private[sql] def colInternal(colName: String): Column = withStarResolved(colName) {
     val expr = resolve(colName)
     Column(expr)

@@ -1168,8 +1168,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   override def visitDereference(ctx: DereferenceContext): Expression = withOrigin(ctx) {
     val attr = ctx.fieldName.getText
     expression(ctx.base) match {
-      case UnresolvedAttribute(nameParts) =>
-        UnresolvedAttribute(nameParts :+ attr)
+      case UnresolvedAttribute(nameParts, targetPlanId) =>
+        UnresolvedAttribute(nameParts :+ attr, targetPlanId)
       case e =>
         UnresolvedExtractValue(e, Literal(attr))
     }

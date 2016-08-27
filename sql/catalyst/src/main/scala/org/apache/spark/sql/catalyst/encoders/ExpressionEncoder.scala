@@ -149,7 +149,7 @@ object ExpressionEncoder {
       } else {
         val input = GetColumnByOrdinal(index, enc.schema)
         val deserialized = enc.deserializer.transformUp {
-          case UnresolvedAttribute(nameParts) =>
+          case UnresolvedAttribute(nameParts, _) =>
             assert(nameParts.length == 1)
             UnresolvedExtractValue(input, Literal(nameParts.head))
           case GetColumnByOrdinal(ordinal, _) => GetStructField(input, ordinal)

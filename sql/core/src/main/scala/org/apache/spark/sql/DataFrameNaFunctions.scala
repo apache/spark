@@ -161,7 +161,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       if (f.dataType.isInstanceOf[NumericType] && cols.exists(col => columnEquals(f.name, col))) {
         fillCol[Double](f, value)
       } else {
-        df.colInternal(f.name)
+        df.col(f.name)
       }
     }
     df.select(projections : _*)
@@ -188,7 +188,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       if (f.dataType.isInstanceOf[StringType] && cols.exists(col => columnEquals(f.name, col))) {
         fillCol[String](f, value)
       } else {
-        df.colInternal(f.name)
+        df.col(f.name)
       }
     }
     df.select(projections : _*)
@@ -363,7 +363,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       } else if (f.dataType == targetColumnType && shouldReplace) {
         replaceCol(f, replacementMap)
       } else {
-        df.colInternal(f.name)
+        df.col(f.name)
       }
     }
     df.select(projections : _*)
@@ -395,7 +395,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
           case v: jl.Boolean => fillCol[Boolean](f, v.booleanValue())
           case v: String => fillCol[String](f, v)
         }
-      }.getOrElse(df.colInternal(f.name))
+      }.getOrElse(df.col(f.name))
     }
     df.select(projections : _*)
   }
@@ -407,8 +407,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     val quotedColName = "`" + col.name + "`"
     val colValue = col.dataType match {
       case DoubleType | FloatType =>
-        nanvl(df.colInternal(quotedColName), lit(null)) // nanvl only supports these types
-      case _ => df.colInternal(quotedColName)
+        nanvl(df.col(quotedColName), lit(null)) // nanvl only supports these types
+      case _ => df.col(quotedColName)
     }
     coalesce(colValue, lit(replacement)).cast(col.dataType).as(col.name)
   }
@@ -420,8 +420,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * TODO: This can be optimized to use broadcast join when replacementMap is large.
    */
   private def replaceCol(col: StructField, replacementMap: Map[_, _]): Column = {
-    val keyExpr = df.colInternal(col.name).expr
-    def buildExpr(v: Any) = Cast(Literal(v), keyExpr.dataType)
+    val keyExpr = df.col(col.name).expr
+    def buildExpr(v: Any) = Cast(Literal(v), col.dataType)
     val branches = replacementMap.flatMap { case (source, target) =>
       Seq(buildExpr(source), buildExpr(target))
     }.toSeq

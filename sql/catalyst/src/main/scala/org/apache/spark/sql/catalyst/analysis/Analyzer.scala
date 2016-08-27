@@ -603,15 +603,21 @@ class Analyzer(
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressionsUp {
-          case u @ UnresolvedAttribute(nameParts) =>
+          case u @ UnresolvedAttribute(nameParts, targetPlanIdOpt) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =
-              withPosition(u) { q.resolveChildren(nameParts, resolver).getOrElse(u) }
+              withPosition(u) {
+                targetPlanIdOpt match {
+                  case Some(targetPlanId) =>
+                    resolveExpressionFromSpecificLogicalPlan(nameParts, q, targetPlanId)
+                  case None =>
+                    q.resolveChildren(nameParts, resolver).getOrElse(u)
+                }
+              }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
             ExtractValue(child, fieldExpr, resolver)
-          case l: LazilyDeterminedAttribute => resolveLazilyDeterminedAttribute(l, q)
         }
     }
 
@@ -684,22 +690,18 @@ class Analyzer(
     exprs.exists(_.find(_.isInstanceOf[UnresolvedDeserializer]).isDefined)
   }
 
-  private def resolveLazilyDeterminedAttribute(
-      expr: LazilyDeterminedAttribute,
-      plan: LogicalPlan): Expression = {
-
-    val foundPlanOpt = plan.findByBreadthFirst(_.planId == expr.plan.planId)
-    val foundPlan = foundPlanOpt.getOrElse {
-      failAnalysis(s"""Cannot resolve column name "${expr.name}" """)
-    }
-
-    if (foundPlan == expr.plan) {
-      expr.namedExpr
-    } else {
-      foundPlan.resolveQuoted(expr.name, resolver).getOrElse {
-        failAnalysis(s"""Cannot resolve column name "${expr.name}" """ +
-          s"""among (${foundPlan.schema.fieldNames.mkString(", ")})""")
-      }
+  private[sql] def resolveExpressionFromSpecificLogicalPlan(
+      nameParts: Seq[String],
+      planToSearchFrom: LogicalPlan,
+      targetPlanId: Long): Expression = {
+    lazy val name = UnresolvedAttribute(nameParts).name
+    planToSearchFrom.findByBreadthFirst(_.planId == targetPlanId) match {
+      case Some(foundPlan) =>
+        foundPlan.resolve(nameParts, resolver).getOrElse {
+          failAnalysis(s"Could not find $name in ${planToSearchFrom.output.mkString(", ")}")
+        }
+      case None =>
+        failAnalysis(s"Could not find $name in ${planToSearchFrom.output.mkString(", ")}")
     }
   }
 
@@ -714,11 +716,16 @@ class Analyzer(
     try {
       expr transformUp {
         case GetColumnByOrdinal(ordinal, _) => plan.output(ordinal)
-        case u @ UnresolvedAttribute(nameParts) =>
-          withPosition(u) { plan.resolve(nameParts, resolver).getOrElse(u) }
+        case u @ UnresolvedAttribute(nameParts, targetPlanIdOpt) =>
+          withPosition(u) {
+            targetPlanIdOpt match {
+              case Some(targetPlanId) =>
+                resolveExpressionFromSpecificLogicalPlan(nameParts, plan, targetPlanId)
+              case None => plan.resolve(nameParts, resolver).getOrElse(u)
+            }
+          }
         case UnresolvedExtractValue(child, fieldName) if child.resolved =>
           ExtractValue(child, fieldName, resolver)
-        case l: LazilyDeterminedAttribute => resolveLazilyDeterminedAttribute(l, plan)
       }
     } catch {
       case a: AnalysisException if !throws => expr
@@ -942,12 +949,17 @@ class Analyzer(
       plan transformDown {
         case q: LogicalPlan if q.childrenResolved && !q.resolved =>
           q transformExpressions {
-            case u @ UnresolvedAttribute(nameParts) =>
+            case u @ UnresolvedAttribute(nameParts, targetPlanIdOpt) =>
               withPosition(u) {
                 try {
-                  outer.resolve(nameParts, resolver) match {
-                    case Some(outerAttr) => OuterReference(outerAttr)
-                    case None => u
+                  targetPlanIdOpt match {
+                    case Some(targetPlanId) =>
+                      resolveExpressionFromSpecificLogicalPlan(nameParts, outer, targetPlanId)
+                    case None =>
+                      outer.resolve(nameParts, resolver) match {
+                        case Some(outerAttr) => OuterReference(outerAttr)
+                        case None => u
+                      }
                   }
                 } catch {
                   case _: AnalysisException => u
