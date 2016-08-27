@@ -1676,44 +1676,6 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
 }
 
 /**
- * Finds all [[RuntimeReplaceable]] expressions and replace them with the expressions that can
- * be evaluated. This is mainly used to provide compatibility with other databases.
- * For example, we use this to support "nvl" by replacing it with "coalesce".
- */
-object ReplaceExpressions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case e: RuntimeReplaceable => e.replaced
-  }
-}
-
-/**
- * Computes the current date and time to make sure we return the same result in a single query.
- */
-object ComputeCurrentTime extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val dateExpr = CurrentDate()
-    val timeExpr = CurrentTimestamp()
-    val currentDate = Literal.create(dateExpr.eval(EmptyRow), dateExpr.dataType)
-    val currentTime = Literal.create(timeExpr.eval(EmptyRow), timeExpr.dataType)
-
-    plan transformAllExpressions {
-      case CurrentDate() => currentDate
-      case CurrentTimestamp() => currentTime
-    }
-  }
-}
-
-/** Replaces the expression of CurrentDatabase with the current database name. */
-case class GetCurrentDatabase(sessionCatalog: SessionCatalog) extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    plan transformAllExpressions {
-      case CurrentDatabase() =>
-        Literal.create(sessionCatalog.getCurrentDatabase, StringType)
-    }
-  }
-}
-
-/**
  * Combines two adjacent [[TypedFilter]]s, which operate on same type object in condition, into one,
  * mering the filter functions into one conjunctive function.
  */
