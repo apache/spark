@@ -299,9 +299,17 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Runs this query returning the first `n` rows as an array.
    *
-   * This is modeled after RDD.take but never runs any job locally on the driver.
+   * This is modeled after RDD.take.
    */
   def executeTake(n: Int): Array[InternalRow] = {
+    if (sqlContext.conf.onlineTakeEnabled) {
+      val childRDD = getByteArrayRdd(n)
+      def unpackPartition(arr: Array[Array[Byte]]): Iterator[InternalRow] = {
+        assert(arr.length == 1)
+        decodeUnsafeRows(arr(0))
+      }
+      return childRDD.takeOnline[InternalRow](n, unpackPartition)
+    }
     if (n == 0) {
       return new Array[InternalRow](0)
     }

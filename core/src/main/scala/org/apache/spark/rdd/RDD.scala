@@ -1296,7 +1296,9 @@ abstract class RDD[T: ClassTag](
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
   def take(num: Int): Array[T] = withScope {
-    if (num == 0) {
+    if (conf.getBoolean("spark.driver.useOldTakeImplementation", false)) {
+      takeOnline[T](num, (x: Array[T]) => x.iterator)
+    } else if (num == 0) {
       new Array[T](0)
     } else {
       val buf = new ArrayBuffer[T]
@@ -1328,6 +1330,126 @@ abstract class RDD[T: ClassTag](
       }
 
       buf.toArray
+    }
+  }
+
+  private[spark] def takeOnline[R: ClassTag](
+      num: Int,
+      unpackPartition: Array[T] => Iterator[R]): Array[R] = withScope {
+    require(num >= 0)
+    val totalPartitions = partitions.length
+    var partitionsScanned = 0
+    var gotEnoughRows: Boolean = num == 0
+    val lock = new Object()
+    // This buffer accumulates the rows to be returned.
+    val resultToReturn = new ArrayBuffer[R]
+    // In order to preserve the behavior of the old `take()` implementation, it's important that
+    // we process partitions in order of their partition ids. Partitions may be computed out of
+    // order. Once we have received all partitions up to partition N then we can perform driver-side
+    // processing on partitions 1 through N to determine whether we've received enough items.
+
+    // This bitset tracks which partitions have been computed. We don't have to worry about
+    // recomputations or speculative tasks because the DAGScheduler ensures that our result handler
+    // will only be called once per partition. The +1 here
+    val partitionStatuses = new java.util.BitSet(totalPartitions)
+    // We'll use the convention that a set bit denotes the _absence_ of a partition's result.
+    // This is done deliberately in order to let us call `nextSetBit()` to find the "high watermark"
+    // boundary between the prefix of partitions that have been computed and the first outstanding
+    // partition.
+    partitionStatuses.set(0, totalPartitions - 1, true)
+
+    // The "frontier" is the the largest partitionId such that all earlier partitions have
+    // been computed. If all partitions have been computed, the frontier is -1.
+    var frontier: Int = 0
+
+    // Because partitions may arrive out-of-order, we need to partitions' output until we have
+    // received all preceding partitions.
+    val bufferedPartitions = new mutable.HashMap[Int, Array[T]]() // key is partition id
+
+    // This callback is invoked as individual partitions complete.
+    def handleResult(partitionId: Int, result: Array[T]): Unit = lock.synchronized {
+      if (gotEnoughRows) {
+        logDebug(s"Ignoring result for partition $partitionId of $this because we have enough rows")
+      } else {
+        logDebug(s"Handling result for partition $partitionId of $this")
+        // Mark the partition as completed and buffer the result in case we can't process it now.
+        partitionStatuses.clear(partitionId)
+        bufferedPartitions(partitionId) = result
+        // Determine whether we can process buffered results, which we can only do if the frontier
+        // partition was received (since frontier is always the first outstanding partition)
+        assert(frontier != -1)
+        if (partitionId == frontier) {
+          frontier = partitionStatuses.nextSetBit(0)
+          val partitionsIter = bufferedPartitions
+            .keySet.filter { pid => pid < frontier || frontier == -1 }.toSeq.sorted.iterator
+          while (!gotEnoughRows && partitionsIter.hasNext) {
+            val partitionToUnpack = partitionsIter.next()
+            logDebug(s"Unpacking partition $partitionToUnpack of $this")
+            val rawPartitionData = bufferedPartitions.remove(partitionToUnpack).get
+            resultToReturn ++= unpackPartition(rawPartitionData)
+            if (resultToReturn.size >= num) {
+              // We have unpacked enough results to reach the desired number of results, so discard
+              // any remaining partitions' data:
+              bufferedPartitions.clear()
+              // Set a flag so that future task completion events are ignored:
+              gotEnoughRows = true
+              // Notify the main thread so that it can interrupt the job:
+              lock.notifyAll()
+            }
+          }
+        }
+      }
+    }
+
+    while (!gotEnoughRows && partitionsScanned < totalPartitions) {
+      // The number of partitions to try in this iteration. It is ok for this number to be
+      // greater than totalParts because we actually cap it at totalParts in runJob.
+      var numPartsToTry = 1L
+      if (partitionsScanned > 0) {
+        // If we didn't find any rows after the first iteration, just try all partitions next.
+        // Otherwise, interpolate the number of partitions we need to try, but overestimate it
+        // by 50%.
+        if (resultToReturn.isEmpty) {
+          numPartsToTry = totalPartitions - 1
+        } else {
+          numPartsToTry = (1.5 * num * partitionsScanned / resultToReturn.size).toInt
+        }
+      }
+      numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
+
+      val partitionsToCompute =
+        partitionsScanned.until(math.min(partitionsScanned + numPartsToTry, totalPartitions).toInt)
+
+      val jobFuture: SimpleFutureAction[Unit] = sc.submitJob(
+        this,
+        (it: Iterator[T]) => it.toArray,
+        partitionsToCompute,
+        handleResult,
+        {
+          // Wake the job submitting thread
+          lock.synchronized {
+            lock.notifyAll()
+          }
+        })
+      // This call is necessary in order for the submitJob() call's resultHandler to be invoked
+      // so that this thread can be notified once the asynchronous job completes.
+      jobFuture.onComplete(_ => ())(scala.concurrent.ExecutionContext.Implicits.global)
+      lock.synchronized {
+        while (!jobFuture.isCompleted && !gotEnoughRows) {
+          lock.wait()
+        }
+      }
+      if (!jobFuture.isCompleted) {
+        jobFuture.cancel()
+      }
+
+      partitionsScanned += partitionsToCompute.length
+    }
+
+    if (resultToReturn.size > num) {
+      resultToReturn.take(num).toArray
+    } else {
+      resultToReturn.toArray
     }
   }
 

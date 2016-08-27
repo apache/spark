@@ -148,6 +148,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ONLINE_TAKE_ENABLED = SQLConfigBuilder("spark.sql.onlineTake.enabled")
+    .internal()
+    .doc("When true, enable an early-stopping optimization in take().")
+    .booleanConf
+    .createWithDefault(true)
+
   val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
     SQLConfigBuilder("spark.sql.adaptive.minNumPostShufflePartitions")
       .internal()
@@ -596,6 +602,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def onlineTakeEnabled: Boolean = getConf(ONLINE_TAKE_ENABLED)
 
   def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
