@@ -418,12 +418,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
       testTrunc(date, fmt, Date.valueOf("2015-07-01"))
     }
-    Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
-      testTrunc(date, fmt, Date.valueOf("2015-01-01"))
-    }
-    Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
-      testTrunc(date, fmt, Date.valueOf("2015-07-01"))
-    }
 
     testTrunc(date, null, null)
     testTrunc(null, "MON", null)
