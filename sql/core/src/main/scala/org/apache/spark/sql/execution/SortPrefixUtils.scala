@@ -40,36 +40,69 @@ object SortPrefixUtils {
 
   def getPrefixComparator(sortOrder: SortOrder): PrefixComparator = {
     sortOrder.dataType match {
-      case StringType =>
-        if (sortOrder.isAscending) PrefixComparators.STRING else PrefixComparators.STRING_DESC
-      case BinaryType =>
-        if (sortOrder.isAscending) PrefixComparators.BINARY else PrefixComparators.BINARY_DESC
+      case StringType => getPrefixComparatorWithNullOrder(sortOrder, "STRING")
+      case BinaryType => getPrefixComparatorWithNullOrder(sortOrder, "BINARY")
       case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
-        getPrefixComparatorWithNullOrder(sortOrder)
+        getPrefixComparatorWithNullOrder(sortOrder, "LONG")
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-        getPrefixComparatorWithNullOrder(sortOrder)
-      case FloatType | DoubleType =>
-        if (sortOrder.isAscending) PrefixComparators.DOUBLE else PrefixComparators.DOUBLE_DESC
-      case dt: DecimalType =>
-        if (sortOrder.isAscending) PrefixComparators.DOUBLE else PrefixComparators.DOUBLE_DESC
+        getPrefixComparatorWithNullOrder(sortOrder, "LONG")
+      case FloatType | DoubleType => getPrefixComparatorWithNullOrder(sortOrder, "DOUBLE")
+      case dt: DecimalType => getPrefixComparatorWithNullOrder(sortOrder, "DOUBLE")
       case _ => NoOpPrefixComparator
     }
   }
 
-  private def getPrefixComparatorWithNullOrder(sortOrder: SortOrder): PrefixComparator = {
+  private def getPrefixComparatorWithNullOrder(
+     sortOrder: SortOrder, signedType: String): PrefixComparator = {
     if (sortOrder.isAscending) {
       if (sortOrder.nullOrder != null) {
-        if (sortOrder.nullOrder == NullFirst) PrefixComparators.LONG_NULLFIRST
-        else PrefixComparators.LONG_NULLLAST
+        if (sortOrder.nullOrder == NullFirst) {
+          signedType match {
+            case "LONG" => PrefixComparators.LONG_NULLFIRST
+            case "STRING" => PrefixComparators.STRING_NULLFIRST
+            case "BINARY" => PrefixComparators.BINARY_NULLFIRST
+            case "DOUBLE" => PrefixComparators.DOUBLE_NULLFIRST
+          }
+        } else {
+          signedType match {
+            case "LONG" => PrefixComparators.LONG_NULLLAST
+            case "STRING" => PrefixComparators.STRING_NULLLAST
+            case "BINARY" => PrefixComparators.BINARY_NULLLAST
+            case "DOUBLE" => PrefixComparators.DOUBLE_NULLLAST
+          }
+        }
       } else {
-        PrefixComparators.LONG
+        signedType match {
+          case "LONG" => PrefixComparators.LONG
+          case "STRING" => PrefixComparators.STRING
+          case "BINARY" => PrefixComparators.BINARY
+          case "DOUBLE" => PrefixComparators.DOUBLE
+        }
       }
     } else {
       if (sortOrder.nullOrder != null) {
-        if (sortOrder.nullOrder == NullFirst) PrefixComparators.LONG_DESC_NULLFIRST
-        else PrefixComparators.LONG_DESC_NULLLAST
+        if (sortOrder.nullOrder == NullFirst) {
+          signedType match {
+            case "LONG" => PrefixComparators.LONG_DESC_NULLFIRST
+            case "STRING" => PrefixComparators.STRING_DESC_NULLFIRST
+            case "BINARY" => PrefixComparators.BINARY_DESC_NULLFIRST
+            case "DOUBLE" => PrefixComparators.DOUBLE_DESC_NULLFIRST
+          }
+        } else {
+          signedType match {
+            case "LONG" => PrefixComparators.LONG_DESC_NULLLAST
+            case "STRING" => PrefixComparators.STRING_DESC_NULLLAST
+            case "BINARY" => PrefixComparators.BINARY_DESC_NULLLAST
+            case "DOUBLE" => PrefixComparators.DOUBLE_DESC_NULLLAST
+          }
+        }
       } else {
-        PrefixComparators.LONG_DESC
+        signedType match {
+          case "LONG" => PrefixComparators.LONG_DESC
+          case "STRING" => PrefixComparators.STRING_DESC
+          case "BINARY" => PrefixComparators.BINARY_DESC
+          case "DOUBLE" => PrefixComparators.DOUBLE_DESC
+        }
       }
     }
   }

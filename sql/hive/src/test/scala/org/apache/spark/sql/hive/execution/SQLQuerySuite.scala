@@ -1921,7 +1921,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
         sql(
           """
-            |INSERT INTO spark_10747 VALUES (6, 13, null), (6, 10, null)
+            |INSERT INTO spark_10747 VALUES (6, 10, null), (6, 13, null)
           """.
             stripMargin
         )
@@ -1929,12 +1929,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         checkAnswer(
           sql(
             """
-              |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 ASC NULLS FIRST
+              |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 ASC NULLS FIRST, COL2
             """.stripMargin
           ),
           sql(
             """
-              |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 ASC
+              |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 ASC, COL2
             """.stripMargin
           )
         )
@@ -1942,48 +1942,48 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         checkAnswer(
           sql(
             """
-              |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 ASC NULLS LAST
+              |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 NULLS LAST, COL2
             """.stripMargin
           ),
 
-          Row(6, 11, 4) ::
-            Row(6, 7, 4) ::
-            Row(6, 15, 8) ::
-            Row(6, 15, 8) ::
-            Row(6, 7, 8) ::
-            Row(6, 12, 10) ::
-            Row(6, 9, 10) ::
-            Row(6, 13, null) ::
-            Row(6, 10, null) :: Nil
-        )
-
-        checkAnswer(
-          sql(
-            """
-              |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 DESC NULLS FIRST
-            """.stripMargin
-          ),
-
-          Row(6, 13, null) ::
-            Row(6, 10, null) ::
-            Row(6, 12, 10) ::
-            Row(6, 9, 10) ::
-            Row(6, 15, 8) ::
-            Row(6, 15, 8) ::
-            Row(6, 7, 8) ::
+          Row(6, 7, 4) ::
             Row(6, 11, 4) ::
-            Row(6, 7, 4) :: Nil
+            Row(6, 7, 8) ::
+            Row(6, 15, 8) ::
+            Row(6, 15, 8) ::
+            Row(6, 9, 10) ::
+            Row(6, 12, 10) ::
+            Row(6, 10, null) ::
+            Row(6, 13, null) :: Nil
         )
 
         checkAnswer(
           sql(
             """
-              |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 DESC NULLS LAST
+              |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 DESC NULLS FIRST, COL2
+            """.stripMargin
+          ),
+
+          Row(6, 10, null) ::
+            Row(6, 13, null) ::
+            Row(6, 9, 10) ::
+            Row(6, 12, 10) ::
+            Row(6, 7, 8) ::
+            Row(6, 15, 8) ::
+            Row(6, 15, 8) ::
+            Row(6, 7, 4) ::
+            Row(6, 11, 4) :: Nil
+        )
+
+        checkAnswer(
+          sql(
+            """
+              |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 DESC NULLS LAST, COL2
             """.stripMargin
           ),
           sql(
             """
-              |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 DESC
+              |SELECT COL1, COL2, COL3 FROM spark_10747 ORDER BY COL3 DESC, COL2
             """.
               stripMargin
           )
