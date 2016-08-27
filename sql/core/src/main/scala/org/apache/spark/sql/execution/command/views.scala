@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLBuilder, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
@@ -41,10 +41,11 @@ import org.apache.spark.sql.types.StructType
  *                     Dataset API.
  * @param child the logical plan that represents the view; this is used to generate a canonicalized
  *              version of the SQL that can be saved in the catalog.
- * @param allowExisting if true, and if the view already exists, noop; if false, and if the view
- *                already exists, throws analysis exception.
- * @param replace if true, and if the view already exists, updates it; if false, and if the view
- *                already exists, throws analysis exception.
+ * @param mode only three modes are applicable here: Ignore, Overwrite and ErrorIfExists. If the
+ *             view already exists, CreateViewCommand behaves based on the mode:
+ *             1) Overwrite: update the view;
+ *             2) Ignore: noop;
+ *             3) ErrorIfExists throws analysis exception.
  * @param isTemporary if true, the view is created as a temporary view. Temporary views are dropped
  *                 at the end of current Spark session. Existing permanent relations with the same
  *                 name are not visible to the current session while the temporary view exists,
@@ -58,8 +59,7 @@ case class CreateViewCommand(
     properties: Map[String, String],
     originalText: Option[String],
     child: LogicalPlan,
-    allowExisting: Boolean,
-    replace: Boolean,
+    mode: SaveMode,
     isTemporary: Boolean,
     isAlterViewAsSelect: Boolean = false)
   extends RunnableCommand {
@@ -71,17 +71,16 @@ case class CreateViewCommand(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
+  assert(mode != SaveMode.Append,
+    "CREATE or ALTER VIEW can only use ErrorIfExists, Ignore or Overwrite.")
+
   if (!isTemporary) {
     require(originalText.isDefined,
       "The table to created with CREATE VIEW must have 'originalText'.")
   }
 
-  if (allowExisting && replace) {
-    throw new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
-  }
-
   // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with 'CREATE TEMPORARY TABLE'
-  if (allowExisting && isTemporary) {
+  if (mode == SaveMode.Ignore && isTemporary) {
     throw new AnalysisException(
       "It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
   }
@@ -123,14 +122,14 @@ case class CreateViewCommand(
 
       if (sessionState.catalog.tableExists(qualifiedName)) {
         val tableMetadata = sessionState.catalog.getTableMetadata(qualifiedName)
-        if (allowExisting) {
+        if (mode == SaveMode.Ignore) {
           // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
           // already exists.
         } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
           throw new AnalysisException(
             "Existing table is not a view. The following is an existing table, " +
               s"not a view: $qualifiedName")
-        } else if (replace) {
+        } else if (mode == SaveMode.Overwrite) {
           // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
           sessionState.catalog.alterTable(prepareTable(sparkSession, analyzedPlan))
         } else {
@@ -162,7 +161,7 @@ case class CreateViewCommand(
       sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
     }
 
-    catalog.createTempView(name.table, logicalPlan, replace)
+    catalog.createTempView(name.table, logicalPlan, mode == SaveMode.Overwrite)
   }
 
   /**

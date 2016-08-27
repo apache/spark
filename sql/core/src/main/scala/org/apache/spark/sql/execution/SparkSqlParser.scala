@@ -1261,7 +1261,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         userSpecifiedColumns,
         ctx.query,
         Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty),
-        allowExisting = ctx.EXISTS != null,
+        ignoreIfExists = ctx.EXISTS != null,
         replace = ctx.REPLACE != null,
         isTemporary = ctx.TEMPORARY != null,
         isAlterViewAsSelect = false
@@ -1280,7 +1280,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       userSpecifiedColumns = Seq.empty,
       query = ctx.query,
       properties = Map.empty,
-      allowExisting = false,
+      ignoreIfExists = false,
       replace = true,
       isTemporary = false,
       isAlterViewAsSelect = true)
@@ -1296,11 +1296,19 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       userSpecifiedColumns: Seq[(String, Option[String])],
       query: QueryContext,
       properties: Map[String, String],
-      allowExisting: Boolean,
+      ignoreIfExists: Boolean,
       replace: Boolean,
       isTemporary: Boolean,
       isAlterViewAsSelect: Boolean): LogicalPlan = {
+    val mode = (replace, ignoreIfExists) match {
+      case (true, false) => SaveMode.Overwrite
+      case (false, true) => SaveMode.Ignore
+      case (false, false) => SaveMode.ErrorIfExists
+      case _ => throw new ParseException(
+        "CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.", ctx)
+    }
     val originalText = source(query)
+
     CreateViewCommand(
       visitTableIdentifier(name),
       userSpecifiedColumns,
@@ -1308,8 +1316,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       properties,
       Some(originalText),
       plan(query),
-      allowExisting = allowExisting,
-      replace = replace,
+      mode,
       isTemporary = isTemporary,
       isAlterViewAsSelect = isAlterViewAsSelect)
   }

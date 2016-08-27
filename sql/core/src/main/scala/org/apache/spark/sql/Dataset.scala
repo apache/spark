@@ -2451,8 +2451,7 @@ class Dataset[T] private[sql](
       properties = Map.empty,
       originalText = None,
       child = logicalPlan,
-      allowExisting = false,
-      replace = replace,
+      if (replace) SaveMode.Overwrite else SaveMode.ErrorIfExists,
       isTemporary = true)
   }
 

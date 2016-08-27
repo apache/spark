@@ -468,11 +468,23 @@ class HiveDDLCommandSuite extends PlanTest {
   test("create view -- basic") {
     val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
     val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
-    assert(!command.allowExisting)
+    assert(command.mode == SaveMode.ErrorIfExists)
     assert(command.name.database.isEmpty)
     assert(command.name.table == "view1")
     assert(command.originalText == Some("SELECT * FROM tab1"))
     assert(command.userSpecifiedColumns.isEmpty)
+  }
+
+  test("create view -- IF NOT EXISTS") {
+    val v1 = "CREATE VIEW IF NOT EXISTS view1 AS SELECT * FROM tab1"
+    val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
+    assert(command.mode == SaveMode.Ignore)
+
+    val v2 = "CREATE OR REPLACE VIEW IF NOT EXISTS view1 AS SELECT * FROM tab1"
+    val e = intercept[ParseException] {
+      parser.parsePlan(v2).asInstanceOf[CreateViewCommand]
+    }.getMessage
+    assert(e.contains("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed"))
   }
 
   test("create view - full") {
@@ -485,6 +497,7 @@ class HiveDDLCommandSuite extends PlanTest {
         |AS SELECT * FROM tab1
       """.stripMargin
     val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
+    assert(command.mode == SaveMode.Overwrite)
     assert(command.name.database.isEmpty)
     assert(command.name.table == "view1")
     assert(command.userSpecifiedColumns == Seq("col1" -> None, "col3" -> Some("hello")))
