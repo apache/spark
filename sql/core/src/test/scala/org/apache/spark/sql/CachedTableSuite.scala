@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.logical.Scanner
-
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -26,6 +24,7 @@ import scala.language.postfixOps
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.CleanerListener
+import org.apache.spark.sql.catalyst.plans.logical.Scanner
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange

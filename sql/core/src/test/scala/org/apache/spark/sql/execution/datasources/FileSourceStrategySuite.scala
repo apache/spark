@@ -23,13 +23,13 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.Job
-import org.apache.spark.sql.catalyst.plans.logical.Scanner
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
+import org.apache.spark.sql.catalyst.plans.logical.Scanner
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.functions._
