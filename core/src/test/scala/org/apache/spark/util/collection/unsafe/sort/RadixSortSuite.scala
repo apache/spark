@@ -52,6 +52,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
       new PrefixComparators.RadixSortSupport {
         override def sortDescending = false
         override def sortSigned = false
+        override def nullOrder = null
         override def compare(a: Long, b: Long): Int = {
           return PrefixComparators.BINARY.compare(a & 0xffffff0000L, b & 0xffffff0000L)
         }

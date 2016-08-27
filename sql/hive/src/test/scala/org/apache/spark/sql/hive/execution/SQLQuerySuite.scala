@@ -1989,9 +1989,82 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           )
         )
       }
-
   }
 
+  test("SPARK-10747: ORDER BY clause with NULLS FIRST|LAST with mixed datatypes") {
+    withTable("spark_10747") {
+      sql(
+        """
+          |create table spark_10747(
+          |col1 string,
+          |col2 int,
+          |col3 double,
+          |col4 decimal(10,2),
+          |col5 decimal(20,1))
+          |stored as parquet
+        """.stripMargin)
+      sql(
+        """
+          |INSERT INTO spark_10747 VALUES
+          |('b', 2, 1.0, 1.00, 10.0),
+          |('d', 3, 2.0, 3.00, 0.0),
+          |('c', 3, 2.0, 2.00, 15.1),
+          |('d', 3, 0.0, 3.00, 1.0),
+          |(null, 3, 0.0, 3.00, 1.0),
+          |('d', 3, null, 4.00, 1.0),
+          |('a', 1, 1.0, 1.00, null),
+          |('c', 3, 2.0, 2.00, null)
+        """.stripMargin)
+
+      checkAnswer(
+        sql(
+          """
+            |select * from spark_10747 order by col1 nulls last, col5 nulls last
+          """.stripMargin
+        ),
+        Row("a", 1, 1.0, 1.00, null) ::
+          Row("b", 2, 1.0, 1.00, 10.0) ::
+          Row("c", 3, 2.0, 2.00, 15.1) ::
+          Row("c", 3, 2.0, 2.00, null) ::
+          Row("d", 3, 2.0, 3.00, 0.0) ::
+          Row("d", 3, 0.0, 3.00, 1.0) ::
+          Row("d", 3, null, 4.00, 1.0) ::
+          Row(null, 3, 0.0, 3.00, 1.0) :: Nil
+      )
+
+      checkAnswer(
+        sql(
+          """
+            |select * from spark_10747 order by col1 desc nulls first, col5 desc nulls first
+          """.stripMargin
+        ),
+        Row(null, 3, 0.0, 3.00, 1.0)::
+          Row("d", 3, 0.0, 3.00, 1.0)::
+          Row("d", 3, null, 4.00, 1.0)::
+          Row("d", 3, 2.0, 3.00, 0.0)::
+          Row("c", 3, 2.0, 2.00, null)::
+          Row("c", 3, 2.0, 2.00, 15.1)::
+          Row("b", 2, 1.0, 1.00, 10.0)::
+          Row("a", 1, 1.0, 1.00, null)::Nil
+      )
+
+      checkAnswer(
+        sql(
+          """
+            |select * from spark_10747 order by col5 desc nulls first, col3 desc nulls last
+          """.stripMargin
+        ),
+        Row("c", 3, 2.0, 2.00, null)::
+          Row("a", 1, 1.0, 1.00, null)::
+          Row("c", 3, 2.0, 2.00, 15.1)::
+          Row("b", 2, 1.0, 1.00, 10.0)::
+          Row("d", 3, 0.0, 3.00, 1.0)::
+          Row(null, 3, 0.0, 3.00, 1.0)::
+          Row("d", 3, null, 4.00, 1.0)::
+          Row("d", 3, 2.0, 3.00, 0.0)::Nil
+      )
+    }
+  }
 
   def testCommandAvailable(command: String): Boolean = {
     val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
