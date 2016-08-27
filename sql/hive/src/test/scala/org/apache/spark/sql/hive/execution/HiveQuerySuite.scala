@@ -216,15 +216,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(new Timestamp(1000) == r1.getTimestamp(0))
   }
 
-  createQueryTest("constant array",
-  """
-    |SELECT sort_array(
-    |  sort_array(
-    |    array("hadoop distributed file system",
-    |          "enterprise databases", "hadoop map-reduce")))
-    |FROM src LIMIT 1;
-  """.stripMargin)
-
   createQueryTest("null case",
     "SELECT case when(true) then 1 else null end FROM src LIMIT 1")
 

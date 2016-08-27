@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, Catal
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -93,7 +92,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         .add("col2", "string")
         .add("a", "int")
         .add("b", "int"),
-      provider = Some("parquet"),
+      provider = Some("hive"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L)
   }
@@ -266,7 +265,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         userSpecifiedPartitionCols.map(p => s"PARTITIONED BY ($p)").getOrElse("")
       val schemaClause = userSpecifiedSchema.map(s => s"($s)").getOrElse("")
       val uri = path.toURI
-      sql(
+      val sqlCreateTable =
         s"""
            |CREATE TABLE $tabName $schemaClause
            |USING parquet
@@ -274,13 +273,18 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
            |  path '$uri'
            |)
            |$partitionClause
-         """.stripMargin)
-      val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName))
+         """.stripMargin
+      if (userSpecifiedSchema.isEmpty && userSpecifiedPartitionCols.nonEmpty) {
+        val e = intercept[AnalysisException](sql(sqlCreateTable)).getMessage
+        assert(e.contains(
+          "not allowed to specify partition columns when the table schema is not defined"))
+      } else {
+        sql(sqlCreateTable)
+        val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName))
 
-      assert(expectedSchema ==
-        DDLUtils.getSchemaFromTableProperties(tableMetadata))
-      assert(expectedPartitionCols ==
-        DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata))
+        assert(expectedSchema == tableMetadata.schema)
+        assert(expectedPartitionCols == tableMetadata.partitionColumnNames)
+      }
     }
   }
 
@@ -399,41 +403,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(e.message == "Found duplicate column(s) in bucket: a")
   }
 
-  test("Describe Table with Corrupted Schema") {
-    import testImplicits._
-
-    val tabName = "tab1"
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("col1", "col2")
-      df.write.format("json").save(path)
-      val uri = dir.toURI
-
-      withTable(tabName) {
-        sql(
-          s"""
-             |CREATE TABLE $tabName
-             |USING json
-             |OPTIONS (
-             |  path '$uri'
-             |)
-           """.stripMargin)
-
-        val catalog = spark.sessionState.catalog
-        val table = catalog.getTableMetadata(TableIdentifier(tabName))
-        val newProperties = table.properties.filterKeys(key =>
-          key != CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTS)
-        val newTable = table.copy(properties = newProperties)
-        catalog.alterTable(newTable)
-
-        val e = intercept[AnalysisException] {
-          sql(s"DESC $tabName")
-        }.getMessage
-        assert(e.contains(s"Could not read schema from the metastore because it is corrupted"))
-      }
-    }
-  }
-
   test("Refresh table after changing the data source table partitioning") {
     import testImplicits._
 
@@ -460,10 +429,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |)
            """.stripMargin)
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName))
-        val tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
-        assert(tableSchema == schema)
-        val partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
-        assert(partCols == partitionCols)
+        assert(tableMetadata.schema == schema)
+        assert(tableMetadata.partitionColumnNames == partitionCols)
 
         // Change the schema
         val newDF = sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
@@ -472,23 +439,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
         // No change on the schema
         val tableMetadataBeforeRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
-        val tableSchemaBeforeRefresh =
-          DDLUtils.getSchemaFromTableProperties(tableMetadataBeforeRefresh)
-        assert(tableSchemaBeforeRefresh == schema)
-        val partColsBeforeRefresh =
-          DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataBeforeRefresh)
-        assert(partColsBeforeRefresh == partitionCols)
+        assert(tableMetadataBeforeRefresh.schema == schema)
+        assert(tableMetadataBeforeRefresh.partitionColumnNames == partitionCols)
 
         // Refresh does not affect the schema
         spark.catalog.refreshTable(tabName)
 
         val tableMetadataAfterRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
-        val tableSchemaAfterRefresh =
-          DDLUtils.getSchemaFromTableProperties(tableMetadataAfterRefresh)
-        assert(tableSchemaAfterRefresh == schema)
-        val partColsAfterRefresh =
-          DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataAfterRefresh)
-        assert(partColsAfterRefresh == partitionCols)
+        assert(tableMetadataAfterRefresh.schema == schema)
+        assert(tableMetadataAfterRefresh.partitionColumnNames == partitionCols)
       }
     }
   }
@@ -641,7 +600,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
       assert(table.schema == new StructType().add("a", "int").add("b", "int"))
-      assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
+      assert(table.provider == Some("parquet"))
     }
   }
 
@@ -651,12 +610,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("CREATE TABLE tbl(a INT, b INT) USING parquet PARTITIONED BY (a)")
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
-      assert(table.schema.isEmpty) // partitioned datasource table is not hive-compatible
-      assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
-      assert(DDLUtils.getSchemaFromTableProperties(table) ==
-        new StructType().add("a", IntegerType).add("b", IntegerType))
-      assert(DDLUtils.getPartitionColumnsFromTableProperties(table) ==
-        Seq("a"))
+      assert(table.provider == Some("parquet"))
+      assert(table.schema == new StructType().add("a", IntegerType).add("b", IntegerType))
+      assert(table.partitionColumnNames == Seq("a"))
     }
   }
 
@@ -667,12 +623,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS")
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
-      assert(table.schema.isEmpty) // partitioned datasource table is not hive-compatible
-      assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
-      assert(DDLUtils.getSchemaFromTableProperties(table) ==
-        new StructType().add("a", IntegerType).add("b", IntegerType))
-      assert(DDLUtils.getBucketSpecFromTableProperties(table) ==
-        Some(BucketSpec(5, Seq("a"), Seq("b"))))
+      assert(table.provider == Some("parquet"))
+      assert(table.schema == new StructType().add("a", IntegerType).add("b", IntegerType))
+      assert(table.bucketSpec == Some(BucketSpec(5, Seq("a"), Seq("b"))))
     }
   }
 
@@ -1096,7 +1049,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       catalog: SessionCatalog,
       tableIdent: TableIdentifier): Unit = {
     catalog.alterTable(catalog.getTableMetadata(tableIdent).copy(
-      properties = Map(DATASOURCE_PROVIDER -> "csv")))
+      provider = Some("csv")))
   }
 
   private def testSetProperties(isDatasourceTable: Boolean): Unit = {
@@ -1108,9 +1061,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       convertToDatasourceTable(catalog, tableIdent)
     }
     def getProps: Map[String, String] = {
-      catalog.getTableMetadata(tableIdent).properties.filterKeys { k =>
-        !isDatasourceTable || !k.startsWith(DATASOURCE_PREFIX)
-      }
+      catalog.getTableMetadata(tableIdent).properties
     }
     assert(getProps.isEmpty)
     // set table properties
@@ -1124,11 +1075,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
     }
-    // datasource table property keys are not allowed
-    val e = intercept[AnalysisException] {
-      sql(s"ALTER TABLE tab1 SET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo' = 'loser')")
-    }
-    assert(e.getMessage.contains(DATASOURCE_PREFIX + "foo"))
   }
 
   private def testUnsetProperties(isDatasourceTable: Boolean): Unit = {
@@ -1140,9 +1086,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       convertToDatasourceTable(catalog, tableIdent)
     }
     def getProps: Map[String, String] = {
-      catalog.getTableMetadata(tableIdent).properties.filterKeys { k =>
-        !isDatasourceTable || !k.startsWith(DATASOURCE_PREFIX)
-      }
+      catalog.getTableMetadata(tableIdent).properties
     }
     // unset table properties
     sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")
@@ -1164,11 +1108,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     // property to unset does not exist, but "IF EXISTS" is specified
     sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
     assert(getProps == Map("x" -> "y"))
-    // datasource table property keys are not allowed
-    val e2 = intercept[AnalysisException] {
-      sql(s"ALTER TABLE tab1 UNSET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo')")
-    }
-    assert(e2.getMessage.contains(DATASOURCE_PREFIX + "foo"))
   }
 
   private def testSetLocation(isDatasourceTable: Boolean): Unit = {
@@ -1571,10 +1510,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           "specified when creating and will be inferred at runtime")
       }
     }
-  }
-
-  test("create table with datasource properties (not allowed)") {
-    assertUnsupported("CREATE TABLE my_tab TBLPROPERTIES ('spark.sql.sources.me'='anything')")
   }
 
   test("Create Hive Table As Select") {

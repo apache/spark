@@ -971,7 +971,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     // Storage format
     val defaultStorage: CatalogStorageFormat = {
       val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
-      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, conf)
+      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType)
       CatalogStorageFormat(
         locationUri = None,
         inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
@@ -1115,7 +1115,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   override def visitGenericFileFormat(
       ctx: GenericFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
     val source = ctx.identifier.getText
-    HiveSerDe.sourceToSerDe(source, conf) match {
+    HiveSerDe.sourceToSerDe(source) match {
       case Some(s) =>
         CatalogStorageFormat.empty.copy(
           inputFormat = s.inputFormat,

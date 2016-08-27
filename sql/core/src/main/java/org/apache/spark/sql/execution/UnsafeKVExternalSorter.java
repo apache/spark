@@ -99,7 +99,7 @@ public final class UnsafeKVExternalSorter {
       // The array will be used to do in-place sort, which require half of the space to be empty.
       assert(map.numKeys() <= map.getArray().size() / 2);
       // During spilling, the array in map will not be used, so we can borrow that and use it
-      // as the underline array for in-memory sorter (it's always large enough).
+      // as the underlying array for in-memory sorter (it's always large enough).
       // Since we will not grow the array, it's fine to pass `null` as consumer.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
         null, taskMemoryManager, recordComparator, prefixComparator, map.getArray(),

@@ -27,10 +27,9 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTablePartition, CatalogTableType, SessionCatalog}
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes._
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTablePartition, CatalogTableType, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
 
@@ -234,10 +233,8 @@ case class AlterTableSetPropertiesCommand(
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val ident = if (isView) "VIEW" else "TABLE"
     val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, tableName, isView)
-    DDLUtils.verifyTableProperties(properties.keys.toSeq, s"ALTER $ident")
     val table = catalog.getTableMetadata(tableName)
     // This overrides old properties
     val newTable = table.copy(properties = table.properties ++ properties)
@@ -264,10 +261,8 @@ case class AlterTableUnsetPropertiesCommand(
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val ident = if (isView) "VIEW" else "TABLE"
     val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, tableName, isView)
-    DDLUtils.verifyTableProperties(propKeys, s"ALTER $ident")
     val table = catalog.getTableMetadata(tableName)
     if (!ifExists) {
       propKeys.foreach { k =>
@@ -445,11 +440,11 @@ case class AlterTableRecoverPartitionsCommand(
     if (!catalog.tableExists(tableName)) {
       throw new AnalysisException(s"Table $tableName in $cmd does not exist.")
     }
-    val table = catalog.getTableMetadata(tableName)
     if (catalog.isTemporaryTable(tableName)) {
       throw new AnalysisException(
         s"Operation not allowed: $cmd on temporary tables: $tableName")
     }
+    val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         s"Operation not allowed: $cmd on datasource tables: $tableName")
@@ -458,7 +453,7 @@ case class AlterTableRecoverPartitionsCommand(
       throw new AnalysisException(
         s"Operation not allowed: $cmd only works on external tables: $tableName")
     }
-    if (!DDLUtils.isTablePartitioned(table)) {
+    if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
         s"Operation not allowed: $cmd only works on partitioned tables: $tableName")
     }
@@ -584,13 +579,8 @@ case class AlterTableSetLocationCommand(
 
 
 object DDLUtils {
-
-  def isDatasourceTable(props: Map[String, String]): Boolean = {
-    props.contains(DATASOURCE_PROVIDER)
-  }
-
   def isDatasourceTable(table: CatalogTable): Boolean = {
-    isDatasourceTable(table.properties)
+    table.provider.isDefined && table.provider.get != "hive"
   }
 
   /**
@@ -610,79 +600,5 @@ object DDLUtils {
           s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
       case _ =>
     })
-  }
-
-  /**
-   * If the given table properties (or SerDe properties) contains datasource properties,
-   * throw an exception.
-   */
-  def verifyTableProperties(propKeys: Seq[String], operation: String): Unit = {
-    val datasourceKeys = propKeys.filter(_.startsWith(DATASOURCE_PREFIX))
-    if (datasourceKeys.nonEmpty) {
-      throw new AnalysisException(s"Operation not allowed: $operation property keys may not " +
-        s"start with '$DATASOURCE_PREFIX': ${datasourceKeys.mkString("[", ", ", "]")}")
-    }
-  }
-
-  def isTablePartitioned(table: CatalogTable): Boolean = {
-    table.partitionColumnNames.nonEmpty || table.properties.contains(DATASOURCE_SCHEMA_NUMPARTCOLS)
-  }
-
-  // A persisted data source table always store its schema in the catalog.
-  def getSchemaFromTableProperties(metadata: CatalogTable): StructType = {
-    require(isDatasourceTable(metadata))
-    val msgSchemaCorrupted = "Could not read schema from the metastore because it is corrupted."
-    val props = metadata.properties
-    props.get(DATASOURCE_SCHEMA).map { schema =>
-      // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
-      // After SPARK-6024, we removed this flag.
-      // Although we are not using spark.sql.sources.schema any more, we need to still support.
-      DataType.fromJson(schema).asInstanceOf[StructType]
-    } getOrElse {
-      props.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
-        val parts = (0 until numParts.toInt).map { index =>
-          val part = metadata.properties.get(s"$DATASOURCE_SCHEMA_PART_PREFIX$index").orNull
-          if (part == null) {
-            throw new AnalysisException(msgSchemaCorrupted +
-              s" (missing part $index of the schema, $numParts parts are expected).")
-          }
-          part
-        }
-        // Stick all parts back to a single schema string.
-        DataType.fromJson(parts.mkString).asInstanceOf[StructType]
-      } getOrElse(throw new AnalysisException(msgSchemaCorrupted))
-    }
-  }
-
-  private def getColumnNamesByType(
-      props: Map[String, String], colType: String, typeName: String): Seq[String] = {
-    require(isDatasourceTable(props))
-
-    for {
-      numCols <- props.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").toSeq
-      index <- 0 until numCols.toInt
-    } yield props.getOrElse(
-      s"$DATASOURCE_SCHEMA_PREFIX${colType}Col.$index",
-      throw new AnalysisException(
-        s"Corrupted $typeName in catalog: $numCols parts expected, but part $index is missing."
-      )
-    )
-  }
-
-  def getPartitionColumnsFromTableProperties(metadata: CatalogTable): Seq[String] = {
-    getColumnNamesByType(metadata.properties, "part", "partitioning columns")
-  }
-
-  def getBucketSpecFromTableProperties(metadata: CatalogTable): Option[BucketSpec] = {
-    if (isDatasourceTable(metadata)) {
-      metadata.properties.get(DATASOURCE_SCHEMA_NUMBUCKETS).map { numBuckets =>
-        BucketSpec(
-          numBuckets.toInt,
-          getColumnNamesByType(metadata.properties, "bucket", "bucketing columns"),
-          getColumnNamesByType(metadata.properties, "sort", "sorting columns"))
-      }
-    } else {
-      None
-    }
   }
 }

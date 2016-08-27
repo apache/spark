@@ -1251,17 +1251,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   /**
-   * Verifies that there is no Exchange between the Aggregations for `df`
+   * Verifies that there is a single Aggregation for `df`
    */
-  private def verifyNonExchangingAgg(df: DataFrame) = {
+  private def verifyNonExchangingSingleAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
       case agg: HashAggregateExec =>
-        atFirstAgg = !atFirstAgg
-      case _ =>
         if (atFirstAgg) {
-          fail("Should not have operators between the two aggregations")
+          fail("Should not have back to back Aggregates")
         }
+        atFirstAgg = true
+      case _ =>
     }
   }
 
@@ -1295,9 +1295,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     // Group by the column we are distributed by. This should generate a plan with no exchange
     // between the aggregates
     val df3 = testData.repartition($"key").groupBy("key").count()
-    verifyNonExchangingAgg(df3)
-    verifyNonExchangingAgg(testData.repartition($"key", $"value")
+    verifyNonExchangingSingleAgg(df3)
+    verifyNonExchangingSingleAgg(testData.repartition($"key", $"value")
       .groupBy("key", "value").count())
+    verifyNonExchangingSingleAgg(testData.repartition($"key").groupBy("key", "value").count())
 
     // Grouping by just the first distributeBy expr, need to exchange.
     verifyExchangingAgg(testData.repartition($"key", $"value")
@@ -1598,9 +1599,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val rightOuterJoined = filtered.join(df, filtered("col1") === df("col1"), "right")
     val selected2 = rightOuterJoined.select(df("col1"))
 
-    checkAnswer(selected2, Row(1) :: Row(2) :: Row(3) :: Row(4) :: Row(5) ::Nil)
+    checkAnswer(selected2, Row(1) :: Row(2) :: Row(3) :: Row(4) :: Row(5) :: Nil)
 
     val selected3 = rightOuterJoined.select(filtered("col1"))
     checkAnswer(selected3, Row(1) :: Row(2) :: Row(null) :: Row(4) :: Row(5) :: Nil)
+  }
+
+  test("copy results for sampling with replacement") {
+    val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
+    val sampleDf = df.sample(true, 2.00)
+    val d = sampleDf.withColumn("c", monotonically_increasing_id).select($"c").collect
+    assert(d.size == d.distinct.size)
   }
 }

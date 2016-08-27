@@ -26,7 +26,8 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -1278,10 +1279,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /** Create a numeric literal expression. */
-  private def numericLiteral(ctx: NumberContext)(f: String => Any): Literal = withOrigin(ctx) {
-    val raw = ctx.getText
+  private def numericLiteral
+      (ctx: NumberContext, minValue: BigDecimal, maxValue: BigDecimal, typeName: String)
+      (converter: String => Any): Literal = withOrigin(ctx) {
+    val rawStrippedQualifier = ctx.getText.substring(0, ctx.getText.length - 1)
     try {
-      Literal(f(raw.substring(0, raw.length - 1)))
+      val rawBigDecimal = BigDecimal(rawStrippedQualifier)
+      if (rawBigDecimal < minValue || rawBigDecimal > maxValue) {
+        throw new ParseException(s"Numeric literal ${rawStrippedQualifier} does not " +
+          s"fit in range [${minValue}, ${maxValue}] for type ${typeName}", ctx)
+      }
+      Literal(converter(rawStrippedQualifier))
     } catch {
       case e: NumberFormatException =>
         throw new ParseException(e.getMessage, ctx)
@@ -1291,29 +1299,42 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   /**
    * Create a Byte Literal expression.
    */
-  override def visitTinyIntLiteral(ctx: TinyIntLiteralContext): Literal = numericLiteral(ctx) {
-    _.toByte
+  override def visitTinyIntLiteral(ctx: TinyIntLiteralContext): Literal = {
+    numericLiteral(ctx, Byte.MinValue, Byte.MaxValue, ByteType.simpleString)(_.toByte)
   }
 
   /**
    * Create a Short Literal expression.
    */
-  override def visitSmallIntLiteral(ctx: SmallIntLiteralContext): Literal = numericLiteral(ctx) {
-    _.toShort
+  override def visitSmallIntLiteral(ctx: SmallIntLiteralContext): Literal = {
+    numericLiteral(ctx, Short.MinValue, Short.MaxValue, ShortType.simpleString)(_.toShort)
   }
 
   /**
    * Create a Long Literal expression.
    */
-  override def visitBigIntLiteral(ctx: BigIntLiteralContext): Literal = numericLiteral(ctx) {
-    _.toLong
+  override def visitBigIntLiteral(ctx: BigIntLiteralContext): Literal = {
+    numericLiteral(ctx, Long.MinValue, Long.MaxValue, LongType.simpleString)(_.toLong)
   }
 
   /**
    * Create a Double Literal expression.
    */
-  override def visitDoubleLiteral(ctx: DoubleLiteralContext): Literal = numericLiteral(ctx) {
-    _.toDouble
+  override def visitDoubleLiteral(ctx: DoubleLiteralContext): Literal = {
+    numericLiteral(ctx, Double.MinValue, Double.MaxValue, DoubleType.simpleString)(_.toDouble)
+  }
+
+  /**
+   * Create a BigDecimal Literal expression.
+   */
+  override def visitBigDecimalLiteral(ctx: BigDecimalLiteralContext): Literal = {
+    val raw = ctx.getText.substring(0, ctx.getText.length - 2)
+    try {
+      Literal(BigDecimal(raw).underlying())
+    } catch {
+      case e: AnalysisException =>
+        throw new ParseException(e.message, ctx)
+    }
   }
 
   /**
