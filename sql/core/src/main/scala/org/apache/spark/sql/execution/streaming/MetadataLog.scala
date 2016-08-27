@@ -51,10 +51,8 @@ trait MetadataLog[T] {
   def getLatest(): Option[(Long, T)]
 
   /**
-   * Inform the log that it may discard metadata about all batches up to and including the
-   * batch with the indicate ID.
-   *
-   * @param batchId ID of the highest batch to discard
+   * Removes all the log entry earlier than thresholdBatchId (exclusive).
+   * This operation should be idempotent.
    */
-  def trim(batchId: Long)
+  def purge(thresholdBatchId: Long): Unit
 }

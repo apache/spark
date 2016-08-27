@@ -227,15 +227,19 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
     None
   }
 
-  override def trim(batchId: Long) : Unit = {
-    val idsToDelete =
-    fileManager
-      .list(metadataPath, batchFilesFilter)
-      .map(f => pathToBatchId(f.getPath))
-      .filter( _ <= batchId )
 
-    // TODO: Log failed deletions (fileManager.delete currently fails silently)
-    idsToDelete.foreach(id => fileManager.delete(batchIdToPath(id)))
+  /**
+   * Removes all the log entry earlier than thresholdBatchId (exclusive).
+   */
+  override def purge(thresholdBatchId: Long): Unit = {
+    val batchIds = fileManager.list(metadataPath, batchFilesFilter)
+      .map(f => pathToBatchId(f.getPath))
+
+    for (batchId <- batchIds if batchId < thresholdBatchId) {
+      val path = batchIdToPath(batchId)
+      fileManager.delete(path)
+      logTrace(s"Removed metadata log file: $path")
+    }
   }
 
   private def createFileManager(): FileManager = {
