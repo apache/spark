@@ -76,7 +76,8 @@ case class LogicalRelation(
   @transient var inheritedStats: Option[Statistics] = None
 
   @transient override lazy val statistics: Statistics = {
-    inheritedStats.getOrElse(Statistics(sizeInBytes = BigInt(relation.sizeInBytes)))
+    inheritedStats.map(_.copy(sizeInBytes = relation.sizeInBytes)).getOrElse(
+      Statistics(sizeInBytes = relation.sizeInBytes))
   }
 
   /** Used to lookup original attribute capitalization */
