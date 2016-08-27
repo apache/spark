@@ -1296,7 +1296,7 @@ abstract class RDD[T: ClassTag](
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
   def take(num: Int): Array[T] = withScope {
-    if (conf.getBoolean("spark.driver.useOldTakeImplementation", false)) {
+    if (!conf.getBoolean("spark.driver.useOldTakeImplementation", false)) {
       takeOnline[T](num, (x: Array[T]) => x.iterator)
     } else if (num == 0) {
       new Array[T](0)
