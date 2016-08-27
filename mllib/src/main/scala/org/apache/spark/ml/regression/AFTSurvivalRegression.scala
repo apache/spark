@@ -184,12 +184,12 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
   setDefault(tol -> 1E-6)
 
   /**
-    * Suggested depth for treeAggregate (>= 2).
-    * If the dimensions of features or the number of partitions are large,
-    * this param could be adjusted to a larger size.
-    * Default is 2.
-    * @group expertSetParam
-    */
+   * Suggested depth for treeAggregate (>= 2).
+   * If the dimensions of features or the number of partitions are large,
+   * this param could be adjusted to a larger size.
+   * Default is 2.
+   * @group expertSetParam
+   */
   @Since("2.1.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
