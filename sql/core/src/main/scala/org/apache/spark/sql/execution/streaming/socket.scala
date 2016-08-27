@@ -40,8 +40,6 @@ object TextSocketSource {
   val DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
 }
 
-
-
 /**
  * A source that reads text lines through a TCP socket, designed only for tutorials and debugging.
  * This source will *not* work in production applications due to multiple reasons, including no
@@ -67,7 +65,7 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
   @GuardedBy("this")
-  protected var lastCommittedOffset : LongOffset = new LongOffset(-1)
+  protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
 
   initialize()
 
@@ -107,15 +105,15 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
   override def schema: StructType = if (includeTimestamp) TextSocketSource.SCHEMA_TIMESTAMP
   else TextSocketSource.SCHEMA_REGULAR
 
-  override def getMinOffset: Option[Offset] = synchronized {
-    if (lastCommittedOffset.offset == -1) {
+  override def lastCommittedOffset: Option[Offset] = synchronized {
+    if (lastOffsetCommitted.offset == -1) {
       None
     } else {
-      Some(lastCommittedOffset)
+      Some(lastOffsetCommitted)
     }
   }
 
-  override def getMaxOffset: Option[Offset] = synchronized {
+  override def getOffset: Option[Offset] = synchronized {
     if (currentOffset.offset == -1) {
       None
     } else {
@@ -131,8 +129,8 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
 
     // Internal buffer only holds the batches after lastCommittedOffset
     val rawList = synchronized {
-      val sliceStart = startOrdinal - lastCommittedOffset.offset.toInt
-      val sliceEnd = endOrdinal - lastCommittedOffset.offset.toInt
+      val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt
+      val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt
       batches.slice(sliceStart, sliceEnd)
     }
 
@@ -152,14 +150,14 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
   override def commit(end: Offset): Unit = synchronized {
     if (end.isInstanceOf[LongOffset]) {
       val newOffset = end.asInstanceOf[LongOffset]
-      val offsetDiff = (newOffset.offset - lastCommittedOffset.offset).toInt
+      val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 
       if (offsetDiff < 0) {
-        sys.error(s"Offsets committed out of order: $lastCommittedOffset followed by $end")
+        sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
       }
 
       batches.trimStart(offsetDiff)
-      lastCommittedOffset = newOffset
+      lastOffsetCommitted = newOffset
     } else {
       sys.error(s"TextSocketStream.commit() received an offset ($end) that did not " +
         s"originate with an instance of this class")

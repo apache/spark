@@ -66,7 +66,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
    * -1 is used in calculations below and isn't just an arbitrary constant.
    */
   @GuardedBy("this")
-  protected var lastCommittedOffset : LongOffset = new LongOffset(-1)
+  protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
 
   def schema: StructType = encoder.schema
 
@@ -95,15 +95,15 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   override def toString: String = s"MemoryStream[${Utils.truncatedString(output, ",")}]"
 
-  override def getMinOffset: Option[Offset] = synchronized {
-    if (lastCommittedOffset.offset == -1) {
+  override def lastCommittedOffset: Option[Offset] = synchronized {
+    if (lastOffsetCommitted.offset == -1) {
       None
     } else {
-      Some(lastCommittedOffset)
+      Some(lastOffsetCommitted)
     }
   }
 
-  override def getMaxOffset: Option[Offset] = synchronized {
+  override def getOffset: Option[Offset] = synchronized {
     if (currentOffset.offset == -1) {
       None
     } else {
@@ -119,8 +119,8 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
     // Internal buffer only holds the batches after lastCommittedOffset.
     val newBlocks = synchronized {
-      val sliceStart = startOrdinal - lastCommittedOffset.offset.toInt - 1
-      val sliceEnd = endOrdinal - lastCommittedOffset.offset.toInt - 1
+      val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt - 1
+      val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
       batches.slice(sliceStart, sliceEnd)
     }
 
@@ -137,14 +137,14 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   override def commit(end: Offset): Unit = synchronized {
     if (end.isInstanceOf[LongOffset]) {
       val newOffset = end.asInstanceOf[LongOffset]
-      val offsetDiff = (newOffset.offset - lastCommittedOffset.offset).toInt
+      val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 
       if (offsetDiff < 0) {
-        sys.error(s"Offsets committed out of order: $lastCommittedOffset followed by $end")
+        sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
       }
 
       batches.trimStart(offsetDiff)
-      lastCommittedOffset = newOffset
+      lastOffsetCommitted = newOffset
     } else {
       sys.error(s"MemoryStream.commit() received an offset ($end) that did not originate with " +
         s"an instance of this class")

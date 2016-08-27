@@ -50,7 +50,6 @@ trait MetadataLog[T] {
    */
   def getLatest(): Option[(Long, T)]
 
-
   /**
    * Inform the log that it may discard metadata about all batches up to and including the
    * batch with the indicate ID.

@@ -1250,7 +1250,7 @@ setMethod("rint",
 
 #' round
 #'
-#' Returns the value of the column `e` rounded to 0 decimal places using HALF_UP rounding mode.
+#' Returns the value of the column \code{e} rounded to 0 decimal places using HALF_UP rounding mode.
 #'
 #' @param x Column to compute on.
 #'
@@ -1974,7 +1974,7 @@ setMethod("atan2", signature(y = "Column"),
 
 #' datediff
 #'
-#' Returns the number of days from `start` to `end`.
+#' Returns the number of days from \code{start} to \code{end}.
 #'
 #' @param x start Column to use.
 #' @param y end Column to use.
@@ -2043,7 +2043,7 @@ setMethod("levenshtein", signature(y = "Column"),
 
 #' months_between
 #'
-#' Returns number of months between dates `date1` and `date2`.
+#' Returns number of months between dates \code{date1} and \code{date2}.
 #'
 #' @param x start Column to use.
 #' @param y end Column to use.
@@ -2430,7 +2430,7 @@ setMethod("add_months", signature(y = "Column", x = "numeric"),
 
 #' date_add
 #'
-#' Returns the date that is `days` days after `start`
+#' Returns the date that is \code{x} days after
 #'
 #' @param y Column to compute on
 #' @param x Number of days to add
@@ -2450,7 +2450,7 @@ setMethod("date_add", signature(y = "Column", x = "numeric"),
 
 #' date_sub
 #'
-#' Returns the date that is `days` days before `start`
+#' Returns the date that is \code{x} days before
 #'
 #' @param y Column to compute on
 #' @param x Number of days to substract
@@ -3113,7 +3113,7 @@ setMethod("ifelse",
 #'   N = total number of rows in the partition
 #'   cume_dist(x) = number of values before (and including) x / N
 #'
-#' This is equivalent to the CUME_DIST function in SQL.
+#' This is equivalent to the \code{CUME_DIST} function in SQL.
 #'
 #' @rdname cume_dist
 #' @name cume_dist
@@ -3121,9 +3121,9 @@ setMethod("ifelse",
 #' @aliases cume_dist,missing-method
 #' @export
 #' @examples \dontrun{
-#'   df <- createDataFrame(iris)
-#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
-#'   out <- select(df, over(cume_dist(), ws), df$Sepal_Length, df$Species)
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(cume_dist(), ws), df$hp, df$am)
 #' }
 #' @note cume_dist since 1.6.0
 setMethod("cume_dist",
@@ -3141,14 +3141,18 @@ setMethod("cume_dist",
 #' and had three people tie for second place, you would say that all three were in second
 #' place and that the next person came in third.
 #'
-#' This is equivalent to the DENSE_RANK function in SQL.
+#' This is equivalent to the \code{DENSE_RANK} function in SQL.
 #'
 #' @rdname dense_rank
 #' @name dense_rank
 #' @family window_funcs
 #' @aliases dense_rank,missing-method
 #' @export
-#' @examples \dontrun{dense_rank()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(dense_rank(), ws), df$hp, df$am)
+#' }
 #' @note dense_rank since 1.6.0
 setMethod("dense_rank",
           signature("missing"),
@@ -3159,27 +3163,35 @@ setMethod("dense_rank",
 
 #' lag
 #'
-#' Window function: returns the value that is `offset` rows before the current row, and
-#' `defaultValue` if there is less than `offset` rows before the current row. For example,
-#' an `offset` of one will return the previous row at any given point in the window partition.
+#' Window function: returns the value that is \code{offset} rows before the current row, and
+#' \code{defaultValue} if there is less than \code{offset} rows before the current row. For example,
+#' an \code{offset} of one will return the previous row at any given point in the window partition.
 #'
-#' This is equivalent to the LAG function in SQL.
+#' This is equivalent to the \code{LAG} function in SQL.
 #'
 #' @param x the column as a character string or a Column to compute on.
 #' @param offset the number of rows back from the current row from which to obtain a value.
 #'               If not specified, the default is 1.
-#' @param defaultValue default to use when the offset row does not exist.
+#' @param defaultValue (optional) default to use when the offset row does not exist.
 #' @param ... further arguments to be passed to or from other methods.
 #' @rdname lag
 #' @name lag
 #' @aliases lag,characterOrColumn-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{lag(df$c)}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'
+#'   # Lag mpg values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lag(df$mpg), ws), df$mpg, df$hp, df$am)
+#' }
 #' @note lag since 1.6.0
 setMethod("lag",
           signature(x = "characterOrColumn"),
-          function(x, offset, defaultValue = NULL) {
+          function(x, offset = 1, defaultValue = NULL) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
@@ -3193,26 +3205,36 @@ setMethod("lag",
 
 #' lead
 #'
-#' Window function: returns the value that is `offset` rows after the current row, and
-#' `null` if there is less than `offset` rows after the current row. For example,
-#' an `offset` of one will return the next row at any given point in the window partition.
+#' Window function: returns the value that is \code{offset} rows after the current row, and
+#' \code{defaultValue} if there is less than \code{offset} rows after the current row.
+#' For example, an \code{offset} of one will return the next row at any given point
+#' in the window partition.
 #'
-#' This is equivalent to the LEAD function in SQL.
+#' This is equivalent to the \code{LEAD} function in SQL.
 #'
-#' @param x Column to compute on
-#' @param offset Number of rows to offset
-#' @param defaultValue (Optional) default value to use
+#' @param x the column as a character string or a Column to compute on.
+#' @param offset the number of rows after the current row from which to obtain a value.
+#'               If not specified, the default is 1.
+#' @param defaultValue (optional) default to use when the offset row does not exist.
 #'
 #' @rdname lead
 #' @name lead
 #' @family window_funcs
 #' @aliases lead,characterOrColumn,numeric-method
 #' @export
-#' @examples \dontrun{lead(df$c)}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'
+#'   # Lead mpg values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lead(df$mpg), ws), df$mpg, df$hp, df$am)
+#' }
 #' @note lead since 1.6.0
 setMethod("lead",
           signature(x = "characterOrColumn", offset = "numeric", defaultValue = "ANY"),
-          function(x, offset, defaultValue = NULL) {
+          function(x, offset = 1, defaultValue = NULL) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
@@ -3226,11 +3248,11 @@ setMethod("lead",
 
 #' ntile
 #'
-#' Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
-#' partition. For example, if `n` is 4, the first quarter of the rows will get value 1, the second
+#' Window function: returns the ntile group id (from 1 to n inclusive) in an ordered window
+#' partition. For example, if n is 4, the first quarter of the rows will get value 1, the second
 #' quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
 #'
-#' This is equivalent to the NTILE function in SQL.
+#' This is equivalent to the \code{NTILE} function in SQL.
 #'
 #' @param x Number of ntile groups
 #'
@@ -3239,7 +3261,15 @@ setMethod("lead",
 #' @aliases ntile,numeric-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{ntile(1)}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'
+#'   # Get ntile group id (1-4) for hp
+#'   out <- select(df, over(ntile(4), ws), df$hp, df$am)
+#' }
 #' @note ntile since 1.6.0
 setMethod("ntile",
           signature(x = "numeric"),
@@ -3263,7 +3293,11 @@ setMethod("ntile",
 #' @family window_funcs
 #' @aliases percent_rank,missing-method
 #' @export
-#' @examples \dontrun{percent_rank()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(percent_rank(), ws), df$hp, df$am)
+#' }
 #' @note percent_rank since 1.6.0
 setMethod("percent_rank",
           signature("missing"),
@@ -3288,7 +3322,11 @@ setMethod("percent_rank",
 #' @family window_funcs
 #' @aliases rank,missing-method
 #' @export
-#' @examples \dontrun{rank()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(rank(), ws), df$hp, df$am)
+#' }
 #' @note rank since 1.6.0
 setMethod("rank",
           signature(x = "missing"),
@@ -3321,7 +3359,11 @@ setMethod("rank",
 #' @aliases row_number,missing-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{row_number()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(row_number(), ws), df$hp, df$am)
+#' }
 #' @note row_number since 1.6.0
 setMethod("row_number",
           signature("missing"),

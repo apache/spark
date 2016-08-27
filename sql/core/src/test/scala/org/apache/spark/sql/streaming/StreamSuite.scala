@@ -298,9 +298,9 @@ class FakeDefaultSource extends StreamSourceProvider {
 
       override def schema: StructType = StructType(StructField("a", IntegerType) :: Nil)
 
-      override def getMinOffset: Option[Offset] = None
+      override def lastCommittedOffset: Option[Offset] = None
 
-      override def getMaxOffset: Option[Offset] = {
+      override def getOffset: Option[Offset] = {
         if (offset >= 10) {
           None
         } else {

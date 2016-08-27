@@ -1248,17 +1248,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   /**
-   * Verifies that there is no Exchange between the Aggregations for `df`
+   * Verifies that there is a single Aggregation for `df`
    */
-  private def verifyNonExchangingAgg(df: DataFrame) = {
+  private def verifyNonExchangingSingleAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
       case agg: HashAggregateExec =>
-        atFirstAgg = !atFirstAgg
-      case _ =>
         if (atFirstAgg) {
-          fail("Should not have operators between the two aggregations")
+          fail("Should not have back to back Aggregates")
         }
+        atFirstAgg = true
+      case _ =>
     }
   }
 
@@ -1292,9 +1292,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     // Group by the column we are distributed by. This should generate a plan with no exchange
     // between the aggregates
     val df3 = testData.repartition($"key").groupBy("key").count()
-    verifyNonExchangingAgg(df3)
-    verifyNonExchangingAgg(testData.repartition($"key", $"value")
+    verifyNonExchangingSingleAgg(df3)
+    verifyNonExchangingSingleAgg(testData.repartition($"key", $"value")
       .groupBy("key", "value").count())
+    verifyNonExchangingSingleAgg(testData.repartition($"key").groupBy("key", "value").count())
 
     // Grouping by just the first distributeBy expr, need to exchange.
     verifyExchangingAgg(testData.repartition($"key", $"value")

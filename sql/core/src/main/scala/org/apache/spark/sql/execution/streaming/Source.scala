@@ -35,13 +35,13 @@ trait Source {
    * in response to a call to `commit`.
    * Returns `None` if this source has not removed any data.
    */
-  def getMinOffset: Option[Offset]
+  def lastCommittedOffset: Option[Offset] = (None)
 
   /**
    * Returns the maximum available offset for this source.
    * Returns `None` if this source has never received any data.
    */
-  def getMaxOffset: Option[Offset]
+  def getOffset: Option[Offset]
 
   /**
    * Returns the data that is between the offsets (`start`, `end`]. When `start` is `None`,

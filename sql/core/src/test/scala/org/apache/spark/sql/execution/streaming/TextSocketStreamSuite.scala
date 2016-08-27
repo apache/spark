@@ -62,18 +62,18 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
 
     failAfter(streamingTimeout) {
       serverThread.enqueue("hello")
-      while (source.getMaxOffset.isEmpty) {
+      while (source.getOffset.isEmpty) {
         Thread.sleep(10)
       }
-      val offset1 = source.getMaxOffset.get
+      val offset1 = source.getOffset.get
       val batch1 = source.getBatch(None, offset1)
       assert(batch1.as[String].collect().toSeq === Seq("hello"))
 
       serverThread.enqueue("world")
-      while (source.getMaxOffset.get === offset1) {
+      while (source.getOffset.get === offset1) {
         Thread.sleep(10)
       }
-      val offset2 = source.getMaxOffset.get
+      val offset2 = source.getOffset.get
       val batch2 = source.getBatch(Some(offset1), offset2)
       assert(batch2.as[String].collect().toSeq === Seq("world"))
 
@@ -101,20 +101,20 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
 
     failAfter(streamingTimeout) {
       serverThread.enqueue("hello")
-      while (source.getMaxOffset.isEmpty) {
+      while (source.getOffset.isEmpty) {
         Thread.sleep(10)
       }
-      val offset1 = source.getMaxOffset.get
+      val offset1 = source.getOffset.get
       val batch1 = source.getBatch(None, offset1)
       val batch1Seq = batch1.as[(String, Timestamp)].collect().toSeq
       assert(batch1Seq.map(_._1) === Seq("hello"))
       val batch1Stamp = batch1Seq(0)._2
 
       serverThread.enqueue("world")
-      while (source.getMaxOffset.get === offset1) {
+      while (source.getOffset.get === offset1) {
         Thread.sleep(10)
       }
-      val offset2 = source.getMaxOffset.get
+      val offset2 = source.getOffset.get
       val batch2 = source.getBatch(Some(offset1), offset2)
       val batch2Seq = batch2.as[(String, Timestamp)].collect().toSeq
       assert(batch2Seq.map(_._1) === Seq("world"))

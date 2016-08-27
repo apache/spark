@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.thrift.TException
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -41,12 +42,19 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * A persistent implementation of the system catalog using Hive.
  * All public methods must be synchronized for thread-safety.
  */
-private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configuration)
+private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configuration)
   extends ExternalCatalog with Logging {
 
   import CatalogTypes.TablePartitionSpec
   import HiveExternalCatalog._
   import CatalogTableType._
+
+  /**
+   * A Hive client used to interact with the metastore.
+   */
+  val client: HiveClient = {
+    HiveUtils.newClientForMetadata(conf, hadoopConf)
+  }
 
   // Exceptions thrown by the hive client that we would like to wrap
   private val clientExceptions = Set(
@@ -614,24 +622,26 @@ object HiveExternalCatalog {
   def getSchemaFromTableProperties(metadata: CatalogTable): StructType = {
     val errorMessage = "Could not read schema from the hive metastore because it is corrupted."
     val props = metadata.properties
-    props.get(DATASOURCE_SCHEMA).map { schema =>
+    val schema = props.get(DATASOURCE_SCHEMA)
+    if (schema.isDefined) {
       // Originally, we used `spark.sql.sources.schema` to store the schema of a data source table.
       // After SPARK-6024, we removed this flag.
       // Although we are not using `spark.sql.sources.schema` any more, we need to still support.
-      DataType.fromJson(schema).asInstanceOf[StructType]
-    } getOrElse {
-      props.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
-        val parts = (0 until numParts.toInt).map { index =>
+      DataType.fromJson(schema.get).asInstanceOf[StructType]
+    } else {
+      val numSchemaParts = props.get(DATASOURCE_SCHEMA_NUMPARTS)
+      if (numSchemaParts.isDefined) {
+        val parts = (0 until numSchemaParts.get.toInt).map { index =>
           val part = metadata.properties.get(s"$DATASOURCE_SCHEMA_PART_PREFIX$index").orNull
           if (part == null) {
             throw new AnalysisException(errorMessage +
-              s" (missing part $index of the schema, $numParts parts are expected).")
+              s" (missing part $index of the schema, ${numSchemaParts.get} parts are expected).")
           }
           part
         }
         // Stick all parts back to a single schema string.
         DataType.fromJson(parts.mkString).asInstanceOf[StructType]
-      } getOrElse {
+      } else {
         throw new AnalysisException(errorMessage)
       }
     }

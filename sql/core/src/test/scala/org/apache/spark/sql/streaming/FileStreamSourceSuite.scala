@@ -104,12 +104,13 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
   def createFileStream(
       format: String,
       path: String,
-      schema: Option[StructType] = None): DataFrame = {
+      schema: Option[StructType] = None,
+      options: Map[String, String] = Map.empty): DataFrame = {
     val reader =
       if (schema.isDefined) {
-        spark.readStream.format(format).schema(schema.get)
+        spark.readStream.format(format).schema(schema.get).options(options)
       } else {
-        spark.readStream.format(format)
+        spark.readStream.format(format).options(options)
       }
     reader.load(path)
   }
@@ -327,6 +328,39 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
+      )
+    }
+  }
+
+  test("SPARK-17165 should not track the list of seen files indefinitely") {
+    // This test works by:
+    // 1. Create a file
+    // 2. Get it processed
+    // 3. Sleeps for a very short amount of time (larger than maxFileAge
+    // 4. Add another file (at this point the original file should have been purged
+    // 5. Test the size of the seenFiles internal data structure
+
+    // Note that if we change maxFileAge to a very large number, the last step should fail.
+    withTempDirs { case (src, tmp) =>
+      val textStream: DataFrame =
+        createFileStream("text", src.getCanonicalPath, options = Map("maxFileAge" -> "5ms"))
+
+      testStream(textStream)(
+        AddTextFileData("a\nb", src, tmp),
+        CheckAnswer("a", "b"),
+
+        // SLeeps longer than 5ms (maxFileAge)
+        AssertOnQuery { _ => Thread.sleep(10); true },
+
+        AddTextFileData("c\nd", src, tmp),
+        CheckAnswer("a", "b", "c", "d"),
+
+        AssertOnQuery("seen files should contain only one entry") { streamExecution =>
+          val source = streamExecution.logicalPlan.collect { case e: StreamingExecutionRelation =>
+            e.source.asInstanceOf[FileStreamSource]
+          }.head
+          source.seenFiles.size == 1
+        }
       )
     }
   }
@@ -730,47 +764,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       } finally {
         q.stop()
       }
-    }
-  }
-
-
-  test("deleteCommittedFiles option") {
-    withTempDirs { case (src, tmp) =>
-      val textStream = spark.readStream.format("text")
-        .option("deleteCommittedFiles", "false")
-        .load(src.getCanonicalPath)
-
-      testStream(textStream)(
-        AddTextFileData("kneel", src, tmp),
-        CheckAnswer("kneel"),
-        StopStream,
-        AddTextFileData("before", src, tmp),
-        StartStream(),
-        CheckAnswer("kneel", "before"),
-        AddTextFileData("zod", src, tmp),
-        CheckAnswer("kneel", "before", "zod")
-      )
-
-      assert(src.listFiles().size === 3)
-    }
-
-    withTempDirs { case (src, tmp) =>
-      val textStream = spark.readStream.format("text")
-        .option("deleteCommittedFiles", "true")
-        .load(src.getCanonicalPath)
-
-      testStream(textStream)(
-        AddTextFileData("it's only", src, tmp),
-        CheckAnswer("it's only"),
-        StopStream,
-        AddTextFileData("a", src, tmp),
-        StartStream(),
-        CheckAnswer("it's only", "a"),
-        AddTextFileData("model", src, tmp),
-        CheckAnswer("it's only", "a", "model")
-      )
-
-      assert(src.listFiles().size === 1)
     }
   }
 

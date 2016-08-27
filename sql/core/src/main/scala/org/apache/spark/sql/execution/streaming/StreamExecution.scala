@@ -255,7 +255,7 @@ class StreamExecution(
         val offsetChanges = mutable.Map[Source, Offset]()
         committedOffsets.foreach {
           case (src, checkptOffset) =>
-            val srcOffset = src.getMinOffset
+            val srcOffset = src.lastCommittedOffset
             if (srcOffset.isDefined && srcOffset.get > checkptOffset) {
               logWarning(s"Source $src lost offsets between $checkptOffset " +
                 s"and ${srcOffset.get} when resuming. Skipping ahead to ${srcOffset.get}.")
@@ -263,7 +263,6 @@ class StreamExecution(
             }
         }
         committedOffsets ++= offsetChanges
-
 
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
@@ -294,7 +293,7 @@ class StreamExecution(
     val hasNewData = {
       awaitBatchLock.lock()
       try {
-        val newData = uniqueSources.flatMap(s => s.getMaxOffset.map(o => s -> o))
+        val newData = uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
         availableOffsets ++= newData
 
         if (dataAvailable) {

@@ -352,4 +352,21 @@ class ConstraintPropagationSuite extends SparkFunSuite {
     verifyConstraints(tr.analyze.constraints,
       ExpressionSet(Seq(IsNotNull(resolveColumn(tr, "b")), IsNotNull(resolveColumn(tr, "c")))))
   }
+
+  test("not infer non-deterministic constraints") {
+    val tr = LocalRelation('a.int, 'b.string, 'c.int)
+
+    verifyConstraints(tr
+      .where('a.attr === Rand(0))
+      .analyze.constraints,
+      ExpressionSet(Seq(IsNotNull(resolveColumn(tr, "a")))))
+
+    verifyConstraints(tr
+      .where('a.attr === InputFileName())
+      .where('a.attr =!= 'c.attr)
+      .analyze.constraints,
+      ExpressionSet(Seq(resolveColumn(tr, "a") =!= resolveColumn(tr, "c"),
+        IsNotNull(resolveColumn(tr, "a")),
+        IsNotNull(resolveColumn(tr, "c")))))
+  }
 }

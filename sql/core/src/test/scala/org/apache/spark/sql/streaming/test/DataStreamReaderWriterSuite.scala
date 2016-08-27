@@ -77,9 +77,9 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
     new Source {
       override def schema: StructType = fakeSchema
 
-      override def getMinOffset: Option[Offset] = None
+      override def lastCommittedOffset: Option[Offset] = None
 
-      override def getMaxOffset: Option[Offset] = Some(new LongOffset(0))
+      override def getOffset: Option[Offset] = Some(new LongOffset(0))
 
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
         import spark.implicits._

@@ -225,4 +225,12 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       Row(1, null) :: Row(null, 2) :: Nil
     )
   }
+
+  test("SPARK-16991: Full outer join followed by inner join produces wrong results") {
+    val a = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val b = Seq((2, 5), (3, 4)).toDF("a", "c")
+    val c = Seq((3, 1)).toDF("a", "d")
+    val ab = a.join(b, Seq("a"), "fullouter")
+    checkAnswer(ab.join(c, "a"), Row(3, null, 4, 1) :: Nil)
+  }
 }
