@@ -39,3 +39,5 @@ test_that("Manually garbage collect objects", {
   # Using a jobj after GC should throw an error
   expect_error(print(jarr), "Error in invokeJava.*")
 })
+
+sparkR.session.stop()

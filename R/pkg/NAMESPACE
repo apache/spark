@@ -363,9 +363,8 @@ S3method(structField, jobj)
 S3method(structType, jobj)
 S3method(structType, structField)
 
-export("newJObject")
-export("callJMethod")
-export("callJStatic")
-export("cleanup.jobj")
+export("sparkR.newJObject")
+export("sparkR.callJMethod")
+export("sparkR.callJStatic")
 
 export("install.spark")

@@ -11,7 +11,7 @@ Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
                     email = "felixcheung@apache.org"),
              person(family = "The Apache Software Foundation", role = c("aut", "cph")))
 URL: http://www.apache.org/ http://spark.apache.org/
-BugReports: https://issues.apache.org/jira/secure/CreateIssueDetails!init.jspa?pid=12315420&components=12325400&issuetype=4
+BugReports: https://issues.apache.org/jira/browse/SPARK
 Depends:
     R (>= 3.0),
     methods
@@ -39,6 +39,7 @@ Collate:
     'deserialize.R'
     'functions.R'
     'install.R'
+    'jvm.R'
     'mllib.R'
     'serialize.R'
     'sparkR.R'

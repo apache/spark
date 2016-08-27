@@ -82,20 +82,7 @@ getClassName.jobj <- function(x) {
   callJMethod(cls, "getName")
 }
 
-#' Garbage collect Java Objects
-#'
-#' Garbage collect an object allocated on Spark driver JVM heap.
-#'
-#' cleanup.jobj is a low level method that lets developers manually garbage collect objects
-#' allocated using newJObject. This is only to be used for advanced use cases as objects allocated
-#' on the JVM heap are automatically garbage collected when the corresponding R reference goes out
-#' of scope.
-#'
-#' @param x the Java object that should be garbage collected.
-#' @note cleanup.jobj since 2.0.1
-#' @export
-cleanup.jobj <- function(x) {
-  jobj <- x
+cleanup.jobj <- function(jobj) {
   if (isValidJobj(jobj)) {
     objId <- jobj$id
     # If we don't know anything about this jobj, ignore it
