@@ -390,9 +390,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
+    val str = ctx.path.getText
+    val pathStr = str.substring(1, str.length - 1)
     LoadDataCommand(
       table = visitTableIdentifier(ctx.tableIdentifier),
-      path = string(ctx.path),
+      path = pathStr,
       isLocal = ctx.LOCAL != null,
       isOverwrite = ctx.OVERWRITE != null,
       partition = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
@@ -829,7 +831,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * Create location string.
    */
   override def visitLocationSpec(ctx: LocationSpecContext): String = withOrigin(ctx) {
-    string(ctx.STRING)
+//    string(ctx.STRING)
+    val str = ctx.STRING().getText
+    str.substring(1, str.length - 1)
   }
 
   /**
