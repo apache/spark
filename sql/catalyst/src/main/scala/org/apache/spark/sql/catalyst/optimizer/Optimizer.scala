@@ -202,43 +202,6 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes cases where we are unnecessarily going between the object and serialized (InternalRow)
- * representation of data item.  For example back to back map operations.
- */
-object EliminateSerialization extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case d @ DeserializeToObject(_, _, s: SerializeFromObject)
-        if d.outputObjAttr.dataType == s.inputObjAttr.dataType =>
-      // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
-      // We will remove it later in RemoveAliasOnlyProject rule.
-      val objAttr = Alias(s.inputObjAttr, s.inputObjAttr.name)(exprId = d.outputObjAttr.exprId)
-      Project(objAttr :: Nil, s.child)
-
-    case a @ AppendColumns(_, _, _, _, _, s: SerializeFromObject)
-        if a.deserializer.dataType == s.inputObjAttr.dataType =>
-      AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)
-
-    // If there is a `SerializeFromObject` under typed filter and its input object type is same with
-    // the typed filter's deserializer, we can convert typed filter to normal filter without
-    // deserialization in condition, and push it down through `SerializeFromObject`.
-    // e.g. `ds.map(...).filter(...)` can be optimized by this rule to save extra deserialization,
-    // but `ds.map(...).as[AnotherType].filter(...)` can not be optimized.
-    case f @ TypedFilter(_, _, _, _, s: SerializeFromObject)
-        if f.deserializer.dataType == s.inputObjAttr.dataType =>
-      s.copy(child = f.withObjectProducerChild(s.child))
-
-    // If there is a `DeserializeToObject` upon typed filter and its output object type is same with
-    // the typed filter's deserializer, we can convert typed filter to normal filter without
-    // deserialization in condition, and pull it up through `DeserializeToObject`.
-    // e.g. `ds.filter(...).map(...)` can be optimized by this rule to save extra deserialization,
-    // but `ds.filter(...).as[AnotherType].map(...)` can not be optimized.
-    case d @ DeserializeToObject(_, _, f: TypedFilter)
-        if d.outputObjAttr.dataType == f.deserializer.dataType =>
-      f.withObjectProducerChild(d.copy(child = f.child))
-  }
-}
-
-/**
  * Pushes down [[LocalLimit]] beneath UNION ALL and beneath the streamed inputs of outer joins.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
@@ -1379,18 +1342,25 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
  */
 object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   /**
-   * Splits join condition expressions into three categories based on the attributes required
-   * to evaluate them.
+   * Splits join condition expressions or filter predicates (on a given join's output) into three
+   * categories based on the attributes required to evaluate them. Note that we explicitly exclude
+   * on-deterministic (i.e., stateful) condition expressions in canEvaluateInLeft or
+   * canEvaluateInRight to prevent pushing these predicates on either side of the join.
    *
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
+    // Note: In order to ensure correctness, it's important to not change the relative ordering of
+    // any deterministic expression that follows a non-deterministic expression. To achieve this,
+    // we only consider pushing down those expressions that precede the first non-deterministic
+    // expression in the condition.
+    val (pushDownCandidates, containingNonDeterministic) = condition.span(_.deterministic)
     val (leftEvaluateCondition, rest) =
-        condition.partition(_.references subsetOf left.outputSet)
+      pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
     val (rightEvaluateCondition, commonCondition) =
-        rest.partition(_.references subsetOf right.outputSet)
+        rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
-    (leftEvaluateCondition, rightEvaluateCondition, commonCondition)
+    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ containingNonDeterministic)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -1441,7 +1411,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
       }
 
     // push down the join filter into sub query scanning if applicable
-    case f @ Join(left, right, joinType, joinCondition) =>
+    case j @ Join(left, right, joinType, joinCondition) =>
       val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
         split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), left, right)
 
@@ -1471,7 +1441,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newJoinCond = (leftJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
 
           Join(newLeft, newRight, LeftOuter, newJoinCond)
-        case FullOuter => f
+        case FullOuter => j
         case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
         case UsingJoin(_, _) => sys.error("Untransformed Using join node")
       }
@@ -1665,78 +1635,6 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
     case a @ Aggregate(grouping, _, _) =>
       val newGrouping = ExpressionSet(grouping).toSeq
       a.copy(groupingExpressions = newGrouping)
-  }
-}
-
-/**
- * Finds all [[RuntimeReplaceable]] expressions and replace them with the expressions that can
- * be evaluated. This is mainly used to provide compatibility with other databases.
- * For example, we use this to support "nvl" by replacing it with "coalesce".
- */
-object ReplaceExpressions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case e: RuntimeReplaceable => e.replaced
-  }
-}
-
-/**
- * Computes the current date and time to make sure we return the same result in a single query.
- */
-object ComputeCurrentTime extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val dateExpr = CurrentDate()
-    val timeExpr = CurrentTimestamp()
-    val currentDate = Literal.create(dateExpr.eval(EmptyRow), dateExpr.dataType)
-    val currentTime = Literal.create(timeExpr.eval(EmptyRow), timeExpr.dataType)
-
-    plan transformAllExpressions {
-      case CurrentDate() => currentDate
-      case CurrentTimestamp() => currentTime
-    }
-  }
-}
-
-/** Replaces the expression of CurrentDatabase with the current database name. */
-case class GetCurrentDatabase(sessionCatalog: SessionCatalog) extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    plan transformAllExpressions {
-      case CurrentDatabase() =>
-        Literal.create(sessionCatalog.getCurrentDatabase, StringType)
-    }
-  }
-}
-
-/**
- * Combines two adjacent [[TypedFilter]]s, which operate on same type object in condition, into one,
- * mering the filter functions into one conjunctive function.
- */
-object CombineTypedFilters extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case t1 @ TypedFilter(_, _, _, _, t2 @ TypedFilter(_, _, _, _, child))
-        if t1.deserializer.dataType == t2.deserializer.dataType =>
-      TypedFilter(
-        combineFilterFunction(t2.func, t1.func),
-        t1.argumentClass,
-        t1.argumentSchema,
-        t1.deserializer,
-        child)
-  }
-
-  private def combineFilterFunction(func1: AnyRef, func2: AnyRef): Any => Boolean = {
-    (func1, func2) match {
-      case (f1: FilterFunction[_], f2: FilterFunction[_]) =>
-        input => f1.asInstanceOf[FilterFunction[Any]].call(input) &&
-          f2.asInstanceOf[FilterFunction[Any]].call(input)
-      case (f1: FilterFunction[_], f2) =>
-        input => f1.asInstanceOf[FilterFunction[Any]].call(input) &&
-          f2.asInstanceOf[Any => Boolean](input)
-      case (f1, f2: FilterFunction[_]) =>
-        input => f1.asInstanceOf[Any => Boolean].apply(input) &&
-          f2.asInstanceOf[FilterFunction[Any]].call(input)
-      case (f1, f2) =>
-        input => f1.asInstanceOf[Any => Boolean].apply(input) &&
-          f2.asInstanceOf[Any => Boolean].apply(input)
-    }
   }
 }
 
