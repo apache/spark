@@ -22,17 +22,16 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogRelation, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
-import org.apache.spark.sql.catalyst.planning.IntegerIndex
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.trees.{TreeNodeRef}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types._
 
@@ -65,13 +64,7 @@ class Analyzer(
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
-  def resolver: Resolver = {
-    if (conf.caseSensitiveAnalysis) {
-      caseSensitiveResolution
-    } else {
-      caseInsensitiveResolution
-    }
-  }
+  def resolver: Resolver = conf.resolver
 
   protected val fixedPoint = FixedPoint(maxIterations)
 
@@ -84,8 +77,10 @@ class Analyzer(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
-      EliminateUnions),
+      EliminateUnions,
+      new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
+      ResolveTableValuedFunctions ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveDeserializer ::
@@ -107,6 +102,7 @@ class Analyzer(
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
+      ResolveInlineTables ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -125,28 +121,28 @@ class Analyzer(
   object CTESubstitution extends Rule[LogicalPlan] {
     // TODO allow subquery to define CTE
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators  {
-      case With(child, relations) => substituteCTE(child, relations)
+      case With(child, relations) =>
+        substituteCTE(child, relations.foldLeft(Seq.empty[(String, LogicalPlan)]) {
+          case (resolved, (name, relation)) =>
+            resolved :+ name -> ResolveRelations(substituteCTE(relation, resolved))
+        })
       case other => other
     }
 
-    def substituteCTE(plan: LogicalPlan, cteRelations: Map[String, LogicalPlan]): LogicalPlan = {
-      plan transform {
-        // In hive, if there is same table name in database and CTE definition,
-        // hive will use the table in database, not the CTE one.
-        // Taking into account the reasonableness and the implementation complexity,
-        // here use the CTE definition first, check table name only and ignore database name
-        // see https://github.com/apache/spark/pull/4929#discussion_r27186638 for more info
+    def substituteCTE(plan: LogicalPlan, cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan = {
+      plan transformDown {
         case u : UnresolvedRelation =>
-          val substituted = cteRelations.get(u.tableIdentifier.table).map { relation =>
-            val withAlias = u.alias.map(SubqueryAlias(_, relation))
-            withAlias.getOrElse(relation)
-          }
+          val substituted = cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
+            .map(_._2).map { relation =>
+              val withAlias = u.alias.map(SubqueryAlias(_, relation, None))
+              withAlias.getOrElse(relation)
+            }
           substituted.getOrElse(u)
         case other =>
           // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
           other transformExpressions {
             case e: SubqueryExpression =>
-              e.withNewPlan(substituteCTE(e.query, cteRelations))
+              e.withNewPlan(substituteCTE(e.plan, cteRelations))
           }
       }
     }
@@ -545,10 +541,9 @@ class Analyzer(
         p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
       // If the aggregate function argument contains Stars, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        if (conf.groupByOrdinal && a.groupingExpressions.exists(IntegerIndex.unapply(_).nonEmpty)) {
+        if (a.groupingExpressions.exists(_.isInstanceOf[UnresolvedOrdinal])) {
           failAnalysis(
-            "Group by position: star is not allowed to use in the select list " +
-              "when using ordinals in group by")
+            "Star (*) is not allowed in select list when GROUP BY ordinal position is used")
         } else {
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
@@ -717,15 +712,15 @@ class Analyzer(
       // Replace the index with the related attribute for ORDER BY,
       // which is a 1-base position of the projection list.
       case s @ Sort(orders, global, child)
-          if conf.orderByOrdinal && orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
+        if orders.exists(_.child.isInstanceOf[UnresolvedOrdinal]) =>
         val newOrders = orders map {
-          case s @ SortOrder(IntegerIndex(index), direction) =>
+          case s @ SortOrder(UnresolvedOrdinal(index), direction) =>
             if (index > 0 && index <= child.output.size) {
               SortOrder(child.output(index - 1), direction)
             } else {
-              throw new UnresolvedException(s,
-                s"Order/sort By position: $index does not exist " +
-                s"The Select List is indexed from 1 to ${child.output.size}")
+              s.failAnalysis(
+                s"ORDER BY position $index is not in select list " +
+                  s"(valid range is [1, ${child.output.size}])")
             }
           case o => o
         }
@@ -733,21 +728,21 @@ class Analyzer(
 
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
-      case a @ Aggregate(groups, aggs, child)
-          if conf.groupByOrdinal && aggs.forall(_.resolved) &&
-            groups.exists(IntegerIndex.unapply(_).nonEmpty) =>
+      case a @ Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
+        groups.exists(_.isInstanceOf[UnresolvedOrdinal]) =>
         val newGroups = groups.map {
-          case IntegerIndex(index) if index > 0 && index <= aggs.size =>
+          case ordinal @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
             aggs(index - 1) match {
               case e if ResolveAggregateFunctions.containsAggregate(e) =>
-                throw new UnresolvedException(a,
-                  s"Group by position: the '$index'th column in the select contains an " +
-                  s"aggregate function: ${e.sql}. Aggregate functions are not allowed in GROUP BY")
+                ordinal.failAnalysis(
+                  s"GROUP BY position $index is an aggregate function, and " +
+                    "aggregate functions are not allowed in GROUP BY")
               case o => o
             }
-          case IntegerIndex(index) =>
-            throw new UnresolvedException(a,
-              s"Group by position: '$index' exceeds the size of the select list '${aggs.size}'.")
+          case ordinal @ UnresolvedOrdinal(index) =>
+            ordinal.failAnalysis(
+              s"GROUP BY position $index is not in select list " +
+                s"(valid range is [1, ${aggs.size}])")
           case o => o
         }
         Aggregate(newGroups, aggs, child)
@@ -1092,7 +1087,7 @@ class Analyzer(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
       // Step 1: Resolve the outer expressions.
       var previous: LogicalPlan = null
-      var current = e.query
+      var current = e.plan
       do {
         // Try to resolve the subquery plan using the regular analyzer.
         previous = current
@@ -2058,7 +2053,7 @@ class Analyzer(
  */
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case SubqueryAlias(_, child) => child
+    case SubqueryAlias(_, child, _) => child
   }
 }
 

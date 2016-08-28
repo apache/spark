@@ -313,7 +313,7 @@ multiInsertQueryBody
 
 queryTerm
     : queryPrimary                                                                         #queryTermDefault
-    | left=queryTerm operator=(INTERSECT | UNION | EXCEPT) setQuantifier? right=queryTerm  #setOperation
+    | left=queryTerm operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
     ;
 
 queryPrimary
@@ -433,6 +433,7 @@ relationPrimary
     | '(' queryNoWith ')' sample? (AS? strictIdentifier)?           #aliasedQuery
     | '(' relation ')' sample? (AS? strictIdentifier)?              #aliasedRelation
     | inlineTable                                                   #inlineTableDefault2
+    | identifier '(' (expression (',' expression)*)? ')'            #tableValuedFunction
     ;
 
 inlineTable
@@ -611,7 +612,7 @@ qualifiedName
 identifier
     : strictIdentifier
     | ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | JOIN | CROSS | ON
-    | UNION | INTERSECT | EXCEPT
+    | UNION | INTERSECT | EXCEPT | SETMINUS
     ;
 
 strictIdentifier
@@ -625,13 +626,14 @@ quotedIdentifier
     ;
 
 number
-    : DECIMAL_VALUE            #decimalLiteral
-    | SCIENTIFIC_DECIMAL_VALUE #scientificDecimalLiteral
-    | INTEGER_VALUE            #integerLiteral
-    | BIGINT_LITERAL           #bigIntLiteral
-    | SMALLINT_LITERAL         #smallIntLiteral
-    | TINYINT_LITERAL          #tinyIntLiteral
-    | DOUBLE_LITERAL           #doubleLiteral
+    : MINUS? DECIMAL_VALUE            #decimalLiteral
+    | MINUS? SCIENTIFIC_DECIMAL_VALUE #scientificDecimalLiteral
+    | MINUS? INTEGER_VALUE            #integerLiteral
+    | MINUS? BIGINT_LITERAL           #bigIntLiteral
+    | MINUS? SMALLINT_LITERAL         #smallIntLiteral
+    | MINUS? TINYINT_LITERAL          #tinyIntLiteral
+    | MINUS? DOUBLE_LITERAL           #doubleLiteral
+    | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
 nonReserved
@@ -751,6 +753,7 @@ FUNCTIONS: 'FUNCTIONS';
 DROP: 'DROP';
 UNION: 'UNION';
 EXCEPT: 'EXCEPT';
+SETMINUS: 'MINUS';
 INTERSECT: 'INTERSECT';
 TO: 'TO';
 TABLESAMPLE: 'TABLESAMPLE';
@@ -924,6 +927,11 @@ SCIENTIFIC_DECIMAL_VALUE
 DOUBLE_LITERAL
     :
     (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'D'
+    ;
+
+BIGDECIMAL_LITERAL
+    :
+    (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'BD'
     ;
 
 IDENTIFIER

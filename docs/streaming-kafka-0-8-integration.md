@@ -29,7 +29,7 @@ Next, we discuss how to use this approach in your streaming application.
             [ZK quorum], [consumer group id], [per-topic number of Kafka partitions to consume])
 
     You can also specify the key and value classes and their corresponding decoder classes using variations of `createStream`. See the [API docs](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/KafkaWordCount.scala).
+	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/KafkaWordCount.scala).
 	</div>
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.kafka.*;
@@ -39,7 +39,7 @@ Next, we discuss how to use this approach in your streaming application.
             [ZK quorum], [consumer group id], [per-topic number of Kafka partitions to consume]);
 
     You can also specify the key and value classes and their corresponding decoder classes using variations of `createStream`. See the [API docs](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaKafkaWordCount.java).
+	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaKafkaWordCount.java).
 
 	</div>
 	<div data-lang="python" markdown="1">
@@ -49,7 +49,7 @@ Next, we discuss how to use this approach in your streaming application.
 			[ZK quorum], [consumer group id], [per-topic number of Kafka partitions to consume])
 
 	By default, the Python API will decode Kafka data as UTF8 encoded strings. You can specify your custom decoding function to decode the byte arrays in Kafka records to any arbitrary data type. See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/kafka_wordcount.py).
+	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/kafka_wordcount.py).
 	</div>
 	</div>
 
@@ -106,7 +106,7 @@ Next, we discuss how to use this approach in your streaming application.
 
 	You can also pass a `messageHandler` to `createDirectStream` to access `MessageAndMetadata` that contains metadata about the current message and transform it to any desired type.
 	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/DirectKafkaWordCount.scala).
+	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/DirectKafkaWordCount.scala).
 	</div>
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.kafka.*;
@@ -118,7 +118,7 @@ Next, we discuss how to use this approach in your streaming application.
 
 	You can also pass a `messageHandler` to `createDirectStream` to access `MessageAndMetadata` that contains metadata about the current message and transform it to any desired type.
 	See the [API docs](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaDirectKafkaWordCount.java).
+	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaDirectKafkaWordCount.java).
 
 	</div>
 	<div data-lang="python" markdown="1">
@@ -127,7 +127,7 @@ Next, we discuss how to use this approach in your streaming application.
 
 	You can also pass a `messageHandler` to `createDirectStream` to access `KafkaMessageAndMetadata` that contains metadata about the current message and transform it to any desired type.
 	By default, the Python API will decode Kafka data as UTF8 encoded strings. You can specify your custom decoding function to decode the byte arrays in Kafka records to any arbitrary data type. See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/direct_kafka_wordcount.py).
+	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/direct_kafka_wordcount.py).
 	</div>
 	</div>
 

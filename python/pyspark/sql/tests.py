@@ -178,6 +178,11 @@ class DataTypeTests(unittest.TestCase):
         dt = DateType()
         self.assertEqual(dt.fromInternal(0), datetime.date(1970, 1, 1))
 
+    # regression test for SPARK-17035
+    def test_timestamp_microsecond(self):
+        tst = TimestampType()
+        self.assertEqual(tst.toInternal(datetime.datetime.max) % 1000000, 999999)
+
     def test_empty_row(self):
         row = Row()
         self.assertEqual(len(row), 0)
@@ -411,6 +416,22 @@ class SQLTests(ReusedPySparkTestCase):
         df3 = self.spark.createDataFrame(rdd, df.schema)
         self.assertEqual(10, df3.count())
 
+    def test_apply_schema_to_dict_and_rows(self):
+        schema = StructType().add("b", StringType()).add("a", IntegerType())
+        input = [{"a": 1}, {"b": "coffee"}]
+        rdd = self.sc.parallelize(input)
+        for verify in [False, True]:
+            df = self.spark.createDataFrame(input, schema, verifySchema=verify)
+            df2 = self.spark.createDataFrame(rdd, schema, verifySchema=verify)
+            self.assertEqual(df.schema, df2.schema)
+
+            rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x, b=None))
+            df3 = self.spark.createDataFrame(rdd, schema, verifySchema=verify)
+            self.assertEqual(10, df3.count())
+            input = [Row(a=x, b=str(x)) for x in range(10)]
+            df4 = self.spark.createDataFrame(input, schema, verifySchema=verify)
+            self.assertEqual(10, df4.count())
+
     def test_create_dataframe_schema_mismatch(self):
         input = [Row(a=1)]
         rdd = self.sc.parallelize(range(3)).map(lambda i: Row(a=i))
@@ -553,7 +574,7 @@ class SQLTests(ReusedPySparkTestCase):
         def check_datatype(datatype):
             pickled = pickle.loads(pickle.dumps(datatype))
             assert datatype == pickled
-            scala_datatype = self.spark._wrapped._ssql_ctx.parseDataType(datatype.json())
+            scala_datatype = self.spark._jsparkSession.parseDataType(datatype.json())
             python_datatype = _parse_datatype_json_string(scala_datatype.json())
             assert datatype == python_datatype
 

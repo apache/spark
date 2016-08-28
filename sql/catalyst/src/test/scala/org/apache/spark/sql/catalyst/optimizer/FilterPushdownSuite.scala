@@ -111,6 +111,12 @@ class FilterPushdownSuite extends PlanTest {
     assert(optimized == correctAnswer)
   }
 
+  test("SPARK-16994: filter should not be pushed through limit") {
+    val originalQuery = testRelation.limit(10).where('a === 1).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, originalQuery)
+  }
+
   test("can't push without rewrite") {
     val originalQuery =
       testRelation
@@ -980,5 +986,19 @@ class FilterPushdownSuite extends PlanTest {
       .where('a - 'b > 1).select('a, 'b, 'c, 'window).analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("join condition pushdown: deterministic and non-deterministic") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    // Verify that all conditions preceding the first non-deterministic condition are pushed down
+    // by the optimizer and others are not.
+    val originalQuery = x.join(y, condition = Some("x.a".attr === 5 && "y.a".attr === 5 &&
+      "x.a".attr === Rand(10) && "y.b".attr === 5))
+    val correctAnswer = x.where("x.a".attr === 5).join(y.where("y.a".attr === 5),
+        condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 }

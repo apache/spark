@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
-import scala.util.Try
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
@@ -799,7 +798,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create an [[AlterTableDiscoverPartitionsCommand]] command
+   * Create an [[AlterTableRecoverPartitionsCommand]] command
    *
    * For example:
    * {{{
@@ -972,7 +971,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     // Storage format
     val defaultStorage: CatalogStorageFormat = {
       val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
-      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, conf)
+      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType)
       CatalogStorageFormat(
         locationUri = None,
         inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
@@ -1116,7 +1115,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   override def visitGenericFileFormat(
       ctx: GenericFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
     val source = ctx.identifier.getText
-    HiveSerDe.sourceToSerDe(source, conf) match {
+    HiveSerDe.sourceToSerDe(source) match {
       case Some(s) =>
         CatalogStorageFormat.empty.copy(
           inputFormat = s.inputFormat,
@@ -1182,7 +1181,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         entry("mapkey.delim", ctx.keysTerminatedBy) ++
         Option(ctx.linesSeparatedBy).toSeq.map { token =>
           val value = string(token)
-          assert(
+          validate(
             value == "\n",
             s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
             ctx)

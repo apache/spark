@@ -427,6 +427,21 @@ Apart from these, the following properties are also available, and may be useful
     with <code>spark.jars.packages</code>.
   </td>
 </tr>
+<tr>
+  <td><code>spark.pyspark.driver.python</code></td>
+  <td></td>
+  <td>
+    Python binary executable to use for PySpark in driver.
+    (default is <code>spark.pyspark.python</code>)
+  </td>
+</tr>
+<tr>
+  <td><code>spark.pyspark.python</code></td>
+  <td></td>
+  <td>
+    Python binary executable to use for PySpark in both driver and executors.
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior
@@ -575,6 +590,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.enabled</code></td>
+  <td>true</td>
+  <td>
+    Whether to run the web UI for the Spark application.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.killEnabled</code></td>
   <td>true</td>
   <td>
@@ -601,6 +623,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>1000</td>
   <td>
     How many stages the Spark UI and status APIs remember before garbage
+    collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.retainedTasks</code></td>
+  <td>100000</td>
+  <td>
+    How many tasks the Spark UI and status APIs remember before garbage
     collecting.
   </td>
 </tr>
@@ -1450,14 +1480,19 @@ Apart from these, the following properties are also available, and may be useful
         <td>
             <p>Whether to enable SSL connections on all supported protocols.</p>
 
+            <p>When <code>spark.ssl.enabled</code> is configured, <code>spark.ssl.protocol</code>
+            is required.</p>
+
             <p>All the SSL settings like <code>spark.ssl.xxx</code> where <code>xxx</code> is a
             particular configuration property, denote the global configuration for all the supported
             protocols. In order to override the global configuration for the particular protocol,
             the properties must be overwritten in the protocol-specific namespace.</p>
 
             <p>Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
-            particular protocol denoted by <code>YYY</code>. Currently <code>YYY</code> can be
-            only <code>fs</code> for file server.</p>
+            particular protocol denoted by <code>YYY</code>. Example values for <code>YYY</code>
+            include <code>fs</code>, <code>ui</code>, <code>standalone</code>, and
+            <code>historyServer</code>.  See <a href="security.html#ssl-configuration">SSL
+            Configuration</a> for details on hierarchical SSL configuration for services.</p>
         </td>
     </tr>
     <tr>
@@ -1784,11 +1819,13 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python2.7</code> if available, otherwise <code>python</code>).</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python2.7</code> if available, otherwise <code>python</code>).
+    Property <code>spark.pyspark.python</code> take precedence if it is set</td>
   </tr>
   <tr>
     <td><code>PYSPARK_DRIVER_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark in driver only (default is <code>PYSPARK_PYTHON</code>).</td>
+    <td>Python binary executable to use for PySpark in driver only (default is <code>PYSPARK_PYTHON</code>).
+    Property <code>spark.pyspark.driver.python</code> take precedence if it is set</td>
   </tr>
   <tr>
     <td><code>SPARKR_DRIVER_R</code></td>

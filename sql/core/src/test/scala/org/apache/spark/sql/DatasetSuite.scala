@@ -878,6 +878,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = spark.createDataset(data)(enc)
     checkDataset(ds, (("a", "b"), "c"), (null, "d"))
   }
+
+  test("SPARK-16995: flat mapping on Dataset containing a column created with lit/expr") {
+    val df = Seq("1").toDF("a")
+
+    import df.sparkSession.implicits._
+
+    checkDataset(
+      df.withColumn("b", lit(0)).as[ClassData]
+        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
+    checkDataset(
+      df.withColumn("b", expr("0")).as[ClassData]
+        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
+  }
 }
 
 case class Generic[T](id: T, value: Double)
