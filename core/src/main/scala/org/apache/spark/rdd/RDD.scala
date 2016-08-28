@@ -1350,12 +1350,11 @@ abstract class RDD[T: ClassTag](
 
     // This bitset tracks which partitions have been computed. We don't have to worry about
     // recomputations or speculative tasks because the DAGScheduler ensures that our result handler
-    // will only be called once per partition. The +1 here
+    // will only be called once per partition.
     val partitionStatuses = new java.util.BitSet(totalPartitions)
     // We'll use the convention that a set bit denotes the _absence_ of a partition's result.
-    // This is done deliberately in order to let us call `nextSetBit()` to find the "high watermark"
-    // boundary between the prefix of partitions that have been computed and the first outstanding
-    // partition.
+    // This is done in order to let us call `nextSetBit()` to find the "frontier" between the prefix
+    // of partitions that have been computed and the first outstanding partition.
     partitionStatuses.set(0, totalPartitions - 1, true)
 
     // The "frontier" is the the largest partitionId such that all earlier partitions have
