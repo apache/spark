@@ -1788,13 +1788,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   def testCommandAvailable(command: String): Boolean = {
-    val attempt = Try(Process(command).run(
-      new ProcessLogger {
-        override def out(s: => String): Unit = ()
-        override def buffer[T](f: => T): T = f
-        override def err(s: => String): Unit = ()
-      }
-    ).exitValue())
+    val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
     attempt.isSuccess && attempt.get == 0
   }
 }
