@@ -469,7 +469,7 @@ class HiveDDLCommandSuite extends PlanTest {
     val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
     val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
     assert(command.mode == SaveMode.ErrorIfExists)
-    assert(command.viewType == ViewType.Any)
+    assert(command.viewType == ViewType.Permanent)
     assert(command.name.database.isEmpty)
     assert(command.name.table == "view1")
     assert(command.originalText == Some("SELECT * FROM tab1"))
@@ -480,7 +480,7 @@ class HiveDDLCommandSuite extends PlanTest {
     val v1 = "CREATE VIEW IF NOT EXISTS view1 AS SELECT * FROM tab1"
     val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
     assert(command.mode == SaveMode.Ignore)
-    assert(command.viewType == ViewType.Any)
+    assert(command.viewType == ViewType.Permanent)
 
     val v2 = "CREATE OR REPLACE VIEW IF NOT EXISTS view1 AS SELECT * FROM tab1"
     val e = intercept[ParseException] {
@@ -500,7 +500,7 @@ class HiveDDLCommandSuite extends PlanTest {
       """.stripMargin
     val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
     assert(command.mode == SaveMode.Overwrite)
-    assert(command.viewType == ViewType.Any)
+    assert(command.viewType == ViewType.Permanent)
     assert(command.name.database.isEmpty)
     assert(command.name.table == "view1")
     assert(command.userSpecifiedColumns == Seq("col1" -> None, "col3" -> Some("hello")))
@@ -513,6 +513,26 @@ class HiveDDLCommandSuite extends PlanTest {
     val v1 = "CREATE TEMPORARY VIEW testView AS SELECT id FROM jt"
     val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
     assert(command.viewType == ViewType.Temporary)
+    assert(command.mode == SaveMode.ErrorIfExists)
+    assert(command.name.database.isEmpty)
+    assert(command.name.table == "testView")
+    assert(command.originalText == Option("SELECT id FROM jt"))
+    assert(command.userSpecifiedColumns.isEmpty)
+    assert(command.comment.isEmpty)
+    assert(command.properties.isEmpty)
+  }
+
+  test("alter view as select") {
+    val v1 = "ALTER VIEW testView AS SELECT id FROM jt"
+    val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
+    assert(command.mode == SaveMode.Overwrite)
+    assert(command.viewType == ViewType.Any)
+    assert(command.name.database.isEmpty)
+    assert(command.name.table == "testView")
+    assert(command.originalText == Option("SELECT id FROM jt"))
+    assert(command.userSpecifiedColumns.isEmpty)
+    assert(command.comment.isEmpty)
+    assert(command.properties.isEmpty)
   }
 
   test("create view -- partitioned view") {

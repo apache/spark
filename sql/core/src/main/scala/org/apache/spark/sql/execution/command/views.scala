@@ -47,7 +47,6 @@ import org.apache.spark.sql.types.StructType
  *             2) Ignore: noop;
  *             3) ErrorIfExists throws analysis exception.
  * @param viewType the type of this view.
- * @param isAlterViewAsSelect if true, this original DDL command is ALTER VIEW AS SELECT
  */
 case class CreateViewCommand(
     name: TableIdentifier,
@@ -57,8 +56,7 @@ case class CreateViewCommand(
     originalText: Option[String],
     child: LogicalPlan,
     mode: SaveMode,
-    viewType: ViewType,
-    isAlterViewAsSelect: Boolean = false)
+    viewType: ViewType)
   extends RunnableCommand {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
@@ -105,8 +103,7 @@ case class CreateViewCommand(
     //                the permanent view. Here, it follows the same resolution like DROP VIEW,
     //                since users are unable to specify the keyword TEMPORARY.
     if (viewType == ViewType.Temporary ||
-        (viewType != ViewType.Permanent && isAlterViewAsSelect &&
-          sessionState.catalog.isTemporaryTable(name))) {
+        (viewType != ViewType.Permanent && sessionState.catalog.isTemporaryTable(name))) {
       createTemporaryView(sparkSession, analyzedPlan)
     } else {
       // Adds default database for permanent table if it doesn't exist, so that tableExists()
