@@ -121,6 +121,11 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
     jobWaiter.cancel()
   }
 
+  private[spark] def cancelWithoutFailing(): Unit = {
+    _cancelled = true
+    jobWaiter.cancel(failJob = false)
+  }
+
   override def ready(atMost: Duration)(implicit permit: CanAwait): SimpleFutureAction.this.type = {
     jobWaiter.completionFuture.ready(atMost)
     this

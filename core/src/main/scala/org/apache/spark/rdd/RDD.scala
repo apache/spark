@@ -1440,7 +1440,7 @@ abstract class RDD[T: ClassTag](
         }
       }
       if (!jobFuture.isCompleted) {
-        jobFuture.cancel()
+        jobFuture.cancelWithoutFailing()
       }
 
       partitionsScanned += partitionsToCompute.length

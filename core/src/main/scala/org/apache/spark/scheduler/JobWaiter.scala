@@ -46,11 +46,13 @@ private[spark] class JobWaiter[T](
 
   /**
    * Sends a signal to the DAGScheduler to cancel the job. The cancellation itself is handled
-   * asynchronously. After the low level scheduler cancels all the tasks belonging to this job, it
-   * will fail this job with a SparkException.
+   * asynchronously.
+   *
+   * @param failJob if true, fail the job with a SparkException after the low level scheduler
+   *                cancels all the tasks belonging to this job.
    */
-  def cancel() {
-    dagScheduler.cancelJob(jobId)
+  def cancel(failJob: Boolean = true) {
+    dagScheduler.cancelJob(jobId, failJob)
   }
 
   override def taskSucceeded(index: Int, result: Any): Unit = {

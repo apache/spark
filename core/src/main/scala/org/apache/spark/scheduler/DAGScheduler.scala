@@ -696,9 +696,9 @@ class DAGScheduler(
   /**
    * Cancel a job that is running or waiting in the queue.
    */
-  def cancelJob(jobId: Int): Unit = {
+  def cancelJob(jobId: Int, failJob: Boolean = true): Unit = {
     logInfo("Asked to cancel job " + jobId)
-    eventProcessLoop.post(JobCancelled(jobId))
+    eventProcessLoop.post(JobCancelled(jobId, failJob))
   }
 
   /**
@@ -1362,12 +1362,17 @@ class DAGScheduler(
     }
   }
 
-  private[scheduler] def handleJobCancellation(jobId: Int, reason: String = "") {
+  private[scheduler] def handleJobCancellation(
+      jobId: Int,
+      reason: String = "",
+      failJob: Boolean = true) {
     if (!jobIdToStageIds.contains(jobId)) {
       logDebug("Trying to cancel unregistered job " + jobId)
+    } else if (failJob) {
+      cancelJobAndIndependentStages(
+        jobIdToActiveJob(jobId), Some("Job %d cancelled %s".format(jobId, reason)))
     } else {
-      failJobAndIndependentStages(
-        jobIdToActiveJob(jobId), "Job %d cancelled %s".format(jobId, reason))
+      cancelJobAndIndependentStages(jobIdToActiveJob(jobId), None)
     }
   }
 
@@ -1414,19 +1419,19 @@ class DAGScheduler(
       activeJobs.filter(job => stageDependsOn(job.finalStage, failedStage)).toSeq
     failedStage.latestInfo.completionTime = Some(clock.getTimeMillis())
     for (job <- dependentJobs) {
-      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason", exception)
+      cancelJobAndIndependentStages(
+        job, Some(s"Job aborted due to stage failure: $reason"), exception)
     }
     if (dependentJobs.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
     }
   }
 
-  /** Fails a job and all stages that are only used by that job, and cleans up relevant state. */
-  private def failJobAndIndependentStages(
+  /** Cancels a job and all stages that are only used by that job, and cleans up relevant state. */
+  private def cancelJobAndIndependentStages(
       job: ActiveJob,
-      failureReason: String,
-      exception: Option[Throwable] = None): Unit = {
-    val error = new SparkException(failureReason, exception.getOrElse(null))
+      maybeFailureReason: Option[String],
+      maybeException: Option[Throwable] = None): Unit = {
     var ableToCancelStages = true
 
     val shouldInterruptThread =
@@ -1453,7 +1458,7 @@ class DAGScheduler(
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptThread)
-              markStageAsFinished(stage, Some(failureReason))
+              markStageAsFinished(stage, maybeFailureReason)
             } catch {
               case e: UnsupportedOperationException =>
                 logInfo(s"Could not cancel tasks for stage $stageId", e)
@@ -1468,8 +1473,14 @@ class DAGScheduler(
       // SPARK-15783 important to cleanup state first, just for tests where we have some asserts
       // against the state.  Otherwise we have a *little* bit of flakiness in the tests.
       cleanupStateForJobAndIndependentStages(job)
-      job.listener.jobFailed(error)
-      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))
+      if (maybeFailureReason.isDefined) {
+        // Job was cancelled due to failure
+        val error = new SparkException(maybeFailureReason.get, maybeException.orNull)
+        job.listener.jobFailed(error)
+        listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))
+      } else {
+        listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
+      }
     }
   }
 
@@ -1612,8 +1623,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case StageCancelled(stageId) =>
       dagScheduler.handleStageCancellation(stageId)
 
-    case JobCancelled(jobId) =>
-      dagScheduler.handleJobCancellation(jobId)
+    case JobCancelled(jobId, failJob) =>
+      dagScheduler.handleJobCancellation(jobId, reason = "", failJob)
 
     case JobGroupCancelled(groupId) =>
       dagScheduler.handleJobGroupCancelled(groupId)
