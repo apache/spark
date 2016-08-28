@@ -126,17 +126,22 @@ function formatLogsCells(execLogs, type) {
     return result;
 }
 
-<<<<<<< HEAD
 function formatWorkersCells(worker, type) {
     if ((!worker) || (worker['ui_url'] === undefined)) return "";
     if (type !== 'display') return worker['ui_url'];
     return '<td><a href=' + worker['ui_url'] + '>Worker</a></td>'
-=======
+}
+
+function workersExist(execs) {
+    return execs.some(function(exec) {
+        return !($.isEmptyObject(exec["worker"]));
+    });
+}
+
 function logsExist(execs) {
     return execs.some(function(exec) {
         return !($.isEmptyObject(exec["executorLogs"]));
     });
->>>>>>> master
 }
 
 // Determine Color Opacity from 0.5-1
@@ -415,11 +420,8 @@ $(document).ready(function () {
                             data: 'id', render: function (data, type) {
                                 return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
                             }
-                        }
-<<<<<<< HEAD
                         },
                         {data: 'worker', render: formatWorkersCells}
-=======
                     ],
                     "columnDefs": [
                         {
@@ -429,8 +431,11 @@ $(document).ready(function () {
                         {
                             "targets": [ 16 ],
                             "visible": getThreadDumpEnabled()
+                        },
+                        {
+                            "targets": [ 17 ],
+                            "visible": workersExist(response)
                         }
->>>>>>> master
                     ],
                     "order": [[0, "asc"]]
                 };
