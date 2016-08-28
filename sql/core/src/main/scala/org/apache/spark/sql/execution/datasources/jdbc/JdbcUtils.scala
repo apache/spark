@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, DriverManager, PreparedStatement}
+import java.sql.{Connection, Driver, DriverManager, PreparedStatement, SQLException}
 import java.util.Properties
 
 import scala.collection.JavaConverters._
@@ -55,7 +55,7 @@ object JdbcUtils extends Logging {
       DriverManager.getDriver(url).getClass.getCanonicalName
     }
     () => {
-      userSpecifiedDriverClass.foreach(DriverRegistry.register)
+      DriverRegistry.register(driverClass)
       val driver: Driver = DriverManager.getDrivers.asScala.collectFirst {
         case d: DriverWrapper if d.wrapped.getClass.getCanonicalName == driverClass => d
         case d if d.getClass.getCanonicalName == driverClass => d
@@ -99,6 +99,22 @@ object JdbcUtils extends Logging {
   }
 
   /**
+   * Truncates a table from the JDBC database.
+   */
+  def truncateTable(conn: Connection, table: String): Unit = {
+    val statement = conn.createStatement
+    try {
+      statement.executeUpdate(s"TRUNCATE TABLE $table")
+    } finally {
+      statement.close()
+    }
+  }
+
+  def isCascadingTruncateTable(url: String): Option[Boolean] = {
+    JdbcDialects.get(url).isCascadingTruncateTable()
+  }
+
+  /**
    * Returns a PreparedStatement that inserts a row into table via conn.
    */
   def insertStatement(conn: Connection, table: String, rddSchema: StructType, dialect: JdbcDialect)
@@ -136,6 +152,79 @@ object JdbcUtils extends Logging {
   private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
+  }
+
+  // A `JDBCValueSetter` is responsible for setting a value from `Row` into a field for
+  // `PreparedStatement`. The last argument `Int` means the index for the value to be set
+  // in the SQL statement and also used for the value in `Row`.
+  private type JDBCValueSetter = (PreparedStatement, Row, Int) => Unit
+
+  private def makeSetter(
+      conn: Connection,
+      dialect: JdbcDialect,
+      dataType: DataType): JDBCValueSetter = dataType match {
+    case IntegerType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setInt(pos + 1, row.getInt(pos))
+
+    case LongType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setLong(pos + 1, row.getLong(pos))
+
+    case DoubleType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setDouble(pos + 1, row.getDouble(pos))
+
+    case FloatType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setFloat(pos + 1, row.getFloat(pos))
+
+    case ShortType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setInt(pos + 1, row.getShort(pos))
+
+    case ByteType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setInt(pos + 1, row.getByte(pos))
+
+    case BooleanType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setBoolean(pos + 1, row.getBoolean(pos))
+
+    case StringType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setString(pos + 1, row.getString(pos))
+
+    case BinaryType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setBytes(pos + 1, row.getAs[Array[Byte]](pos))
+
+    case TimestampType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
+
+    case DateType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setDate(pos + 1, row.getAs[java.sql.Date](pos))
+
+    case t: DecimalType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setBigDecimal(pos + 1, row.getDecimal(pos))
+
+    case ArrayType(et, _) =>
+      // remove type length parameters from end of type name
+      val typeName = getJdbcType(et, dialect).databaseTypeDefinition
+        .toLowerCase.split("\\(")(0)
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        val array = conn.createArrayOf(
+          typeName,
+          row.getSeq[AnyRef](pos).toArray)
+        stmt.setArray(pos + 1, array)
+
+    case _ =>
+      (_: PreparedStatement, _: Row, pos: Int) =>
+        throw new IllegalArgumentException(
+          s"Can't translate non-null value for field $pos")
   }
 
   /**
@@ -199,6 +288,9 @@ object JdbcUtils extends Logging {
         conn.setTransactionIsolation(finalIsolationLevel)
       }
       val stmt = insertStatement(conn, table, rddSchema, dialect)
+      val setters: Array[JDBCValueSetter] = rddSchema.fields.map(_.dataType)
+        .map(makeSetter(conn, dialect, _)).toArray
+
       try {
         var rowCount = 0
         while (iterator.hasNext) {
@@ -209,30 +301,7 @@ object JdbcUtils extends Logging {
             if (row.isNullAt(i)) {
               stmt.setNull(i + 1, nullTypes(i))
             } else {
-              rddSchema.fields(i).dataType match {
-                case IntegerType => stmt.setInt(i + 1, row.getInt(i))
-                case LongType => stmt.setLong(i + 1, row.getLong(i))
-                case DoubleType => stmt.setDouble(i + 1, row.getDouble(i))
-                case FloatType => stmt.setFloat(i + 1, row.getFloat(i))
-                case ShortType => stmt.setInt(i + 1, row.getShort(i))
-                case ByteType => stmt.setInt(i + 1, row.getByte(i))
-                case BooleanType => stmt.setBoolean(i + 1, row.getBoolean(i))
-                case StringType => stmt.setString(i + 1, row.getString(i))
-                case BinaryType => stmt.setBytes(i + 1, row.getAs[Array[Byte]](i))
-                case TimestampType => stmt.setTimestamp(i + 1, row.getAs[java.sql.Timestamp](i))
-                case DateType => stmt.setDate(i + 1, row.getAs[java.sql.Date](i))
-                case t: DecimalType => stmt.setBigDecimal(i + 1, row.getDecimal(i))
-                case ArrayType(et, _) =>
-                  // remove type length parameters from end of type name
-                  val typeName = getJdbcType(et, dialect).databaseTypeDefinition
-                    .toLowerCase.split("\\(")(0)
-                  val array = conn.createArrayOf(
-                    typeName,
-                    row.getSeq[AnyRef](i).toArray)
-                  stmt.setArray(i + 1, array)
-                case _ => throw new IllegalArgumentException(
-                  s"Can't translate non-null value for field $i")
-              }
+              setters(i).apply(stmt, row, i)
             }
             i = i + 1
           }
@@ -253,6 +322,17 @@ object JdbcUtils extends Logging {
         conn.commit()
       }
       committed = true
+    } catch {
+      case e: SQLException =>
+        val cause = e.getNextException
+        if (e.getCause != cause) {
+          if (e.getCause == null) {
+            e.initCause(cause)
+          } else {
+            e.addSuppressed(cause)
+          }
+        }
+        throw e
     } finally {
       if (!committed) {
         // The stage must fail.  We got here through an exception path, so
@@ -317,5 +397,4 @@ object JdbcUtils extends Logging {
       getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect, isolationLevel)
     )
   }
-
 }

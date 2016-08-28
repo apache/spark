@@ -83,7 +83,12 @@ abstract class ProbabilisticClassificationModel[
   def setProbabilityCol(value: String): M = set(probabilityCol, value).asInstanceOf[M]
 
   /** @group setParam */
-  def setThresholds(value: Array[Double]): M = set(thresholds, value).asInstanceOf[M]
+  def setThresholds(value: Array[Double]): M = {
+    require(value.length == numClasses, this.getClass.getSimpleName +
+      ".setThresholds() called with non-matching numClasses and thresholds.length." +
+      s" numClasses=$numClasses, but thresholds has length ${value.length}")
+    set(thresholds, value).asInstanceOf[M]
+  }
 
   /**
    * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by

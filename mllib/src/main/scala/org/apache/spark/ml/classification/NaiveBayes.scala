@@ -101,6 +101,14 @@ class NaiveBayes @Since("1.5.0") (
   setDefault(modelType -> OldNaiveBayes.Multinomial)
 
   override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
+    val numClasses = getNumClasses(dataset)
+
+    if (isDefined(thresholds)) {
+      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
+        ".train() called with non-matching numClasses and thresholds.length." +
+        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
+    }
+
     val oldDataset: RDD[OldLabeledPoint] =
       extractLabeledPoints(dataset).map(OldLabeledPoint.fromML)
     val oldModel = OldNaiveBayes.train(oldDataset, $(smoothing), $(modelType))

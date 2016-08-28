@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.types._
 
 class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -43,6 +44,13 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(IsNull(Literal.create(null, tpe)), true)
       checkEvaluation(IsNotNull(Literal.create(null, tpe)), false)
     }
+  }
+
+  test("AssertNotNUll") {
+    val ex = intercept[RuntimeException] {
+      evaluate(AssertNotNull(Literal(null), Seq.empty[String]))
+    }.getMessage
+    assert(ex.contains("Null value appeared in non-nullable field"))
   }
 
   test("IsNaN") {

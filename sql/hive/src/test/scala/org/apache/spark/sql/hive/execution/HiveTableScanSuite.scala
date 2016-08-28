@@ -102,7 +102,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
 
   test("Verify SQLConf HIVE_METASTORE_PARTITION_PRUNING") {
     val view = "src"
-    withTempTable(view) {
+    withTempView(view) {
       spark.range(1, 5).createOrReplaceTempView(view)
       val table = "table_with_partition"
       withTable(table) {

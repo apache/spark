@@ -33,7 +33,7 @@ The primary Machine Learning API for Spark is now the [DataFrame](sql-programmin
 
 * DataFrames provide a more user-friendly API than RDDs.  The many benefits of DataFrames include Spark Datasources, SQL/DataFrame queries, Tungsten and Catalyst optimizations, and uniform APIs across languages.
 * The DataFrame-based API for MLlib provides a uniform API across ML algorithms and across multiple languages.
-* DataFrames facilitate practical ML Pipelines, particularly feature transformations.  See the [Pipelines guide](ml-pipeline.md) for details.
+* DataFrames facilitate practical ML Pipelines, particularly feature transformations.  See the [Pipelines guide](ml-pipeline.html) for details.
 
 # Dependencies
 

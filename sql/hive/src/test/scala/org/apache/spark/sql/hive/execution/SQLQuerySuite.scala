@@ -19,6 +19,9 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
+import scala.sys.process.Process
+import scala.util.Try
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
@@ -26,7 +29,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
@@ -64,14 +66,17 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import spark.implicits._
 
   test("script") {
-    val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
-    df.createOrReplaceTempView("script_table")
-    val query1 = sql(
-      """
-        |SELECT col1 FROM (from(SELECT c1, c2, c3 FROM script_table) tempt_table
-        |REDUCE c1, c2, c3 USING 'bash src/test/resources/test_script.sh' AS
-        |(col1 STRING, col2 STRING)) script_test_table""".stripMargin)
-    checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
+    if (testCommandAvailable("bash") && testCommandAvailable("echo | sed")) {
+      val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
+      df.createOrReplaceTempView("script_table")
+      val query1 = sql(
+        """
+          |SELECT col1 FROM (from(SELECT c1, c2, c3 FROM script_table) tempt_table
+          |REDUCE c1, c2, c3 USING 'bash src/test/resources/test_script.sh' AS
+          |(col1 STRING, col2 STRING)) script_test_table""".stripMargin)
+      checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
+    }
+    // else skip this test
   }
 
   test("UDTF") {
@@ -122,7 +127,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-13651: generator outputs shouldn't be resolved from its child's output") {
-    withTempTable("src") {
+    withTempView("src") {
       Seq(("id1", "value1")).toDF("key", "value").createOrReplaceTempView("src")
       val query =
         sql("SELECT genoutput.* FROM src " +
@@ -430,8 +435,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             assert(r.options("path") === location)
           case None => // OK.
         }
-        assert(
-          catalogTable.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER) === format)
+        assert(catalogTable.provider.get === format)
 
       case r: MetastoreRelation =>
         if (isDataSourceParquet) {
@@ -636,19 +640,35 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("specifying the column list for CTAS") {
-    Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
+    withTempView("mytable1") {
+      Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
+      withTable("gen__tmp") {
+        sql("create table gen__tmp as select key as a, value as b from mytable1")
+        checkAnswer(
+          sql("SELECT a, b from gen__tmp"),
+          sql("select key, value from mytable1").collect())
+      }
 
-    sql("create table gen__tmp as select key as a, value as b from mytable1")
-    checkAnswer(
-      sql("SELECT a, b from gen__tmp"),
-      sql("select key, value from mytable1").collect())
-    sql("DROP TABLE gen__tmp")
+      withTable("gen__tmp") {
+        val e = intercept[AnalysisException] {
+          sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+        }.getMessage
+        assert(e.contains("Schema may not be specified in a Create Table As Select (CTAS)"))
+      }
 
-    intercept[AnalysisException] {
-      sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+      withTable("gen__tmp") {
+        val e = intercept[AnalysisException] {
+          sql(
+            """
+              |CREATE TABLE gen__tmp
+              |PARTITIONED BY (key string)
+              |AS SELECT key, value FROM mytable1
+            """.stripMargin)
+        }.getMessage
+        assert(e.contains("A Create Table As Select (CTAS) statement is not allowed to " +
+          "create a partitioned table using Hive's file formats"))
+      }
     }
-
-    sql("drop table mytable1")
   }
 
   test("command substitution") {
@@ -952,7 +972,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("Sorting columns are not in Generate") {
-    withTempTable("data") {
+    withTempView("data") {
       spark.range(1, 5)
         .select(array($"id", $"id" + 1).as("a"), $"id".as("b"), (lit(10) - $"id").as("c"))
         .createOrReplaceTempView("data")
@@ -1229,7 +1249,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-10741: Sort on Aggregate using parquet") {
     withTable("test10741") {
-      withTempTable("src") {
+      withTempView("src") {
         Seq("a" -> 5, "a" -> 9, "b" -> 6).toDF("c1", "c2").createOrReplaceTempView("src")
         sql("CREATE TABLE test10741 STORED AS PARQUET AS SELECT * FROM src")
       }
@@ -1483,7 +1503,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("multi-insert with lateral view") {
-    withTempTable("t1") {
+    withTempView("t1") {
       spark.range(10)
         .select(array($"id", $"id" + 1).as("arr"), $"id")
         .createOrReplaceTempView("source")
@@ -1765,5 +1785,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           Row(2))
       }
     }
+  }
+
+  def testCommandAvailable(command: String): Boolean = {
+    val attempt = Try(Process(command).run().exitValue())
+    attempt.isSuccess && attempt.get == 0
   }
 }

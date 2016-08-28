@@ -42,7 +42,7 @@ object SparkSQLExample {
     // $example on:init_session$
     val spark = SparkSession
       .builder()
-      .appName("Spark SQL Example")
+      .appName("Spark SQL basic example")
       .config("spark.some.config.option", "some-value")
       .getOrCreate()
 

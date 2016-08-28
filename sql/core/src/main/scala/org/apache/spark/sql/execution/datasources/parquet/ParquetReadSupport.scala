@@ -26,17 +26,15 @@ import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
 import org.apache.parquet.io.api.RecordMaterializer
 import org.apache.parquet.schema._
-import org.apache.parquet.schema.OriginalType._
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types._
 
 /**
  * A Parquet [[ReadSupport]] implementation for reading Parquet records as Catalyst
- * [[InternalRow]]s.
+ * [[UnsafeRow]]s.
  *
  * The API interface of [[ReadSupport]] is a little bit over complicated because of historical
  * reasons.  In older versions of parquet-mr (say 1.6.0rc3 and prior), [[ReadSupport]] need to be
@@ -50,7 +48,7 @@ import org.apache.spark.sql.types._
  * Due to this reason, we no longer rely on [[ReadContext]] to pass requested schema from [[init()]]
  * to [[prepareForRead()]], but use a private `var` for simplicity.
  */
-private[parquet] class ParquetReadSupport extends ReadSupport[InternalRow] with Logging {
+private[parquet] class ParquetReadSupport extends ReadSupport[UnsafeRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
   /**
@@ -74,13 +72,13 @@ private[parquet] class ParquetReadSupport extends ReadSupport[InternalRow] with 
   /**
    * Called on executor side after [[init()]], before instantiating actual Parquet record readers.
    * Responsible for instantiating [[RecordMaterializer]], which is used for converting Parquet
-   * records to Catalyst [[InternalRow]]s.
+   * records to Catalyst [[UnsafeRow]]s.
    */
   override def prepareForRead(
       conf: Configuration,
       keyValueMetaData: JMap[String, String],
       fileSchema: MessageType,
-      readContext: ReadContext): RecordMaterializer[InternalRow] = {
+      readContext: ReadContext): RecordMaterializer[UnsafeRow] = {
     log.debug(s"Preparing for read Parquet file with message type: $fileSchema")
     val parquetRequestedSchema = readContext.getRequestedSchema
 
@@ -123,12 +121,6 @@ private[parquet] object ParquetReadSupport {
   }
 
   private def clipParquetType(parquetType: Type, catalystType: DataType): Type = {
-    val primName = if (parquetType.isPrimitive()) {
-      parquetType.asPrimitiveType().getPrimitiveTypeName()
-    } else {
-      null
-    }
-
     catalystType match {
       case t: ArrayType if !isPrimitiveCatalystType(t.elementType) =>
         // Only clips array types with nested type as element type.
@@ -142,16 +134,6 @@ private[parquet] object ParquetReadSupport {
 
       case t: StructType =>
         clipParquetGroup(parquetType.asGroupType(), t)
-
-      case _: ByteType if primName == INT32 =>
-        // SPARK-16632: Handle case where Hive stores bytes in a int32 field without specifying
-        // the original type.
-        Types.primitive(INT32, parquetType.getRepetition()).as(INT_8).named(parquetType.getName())
-
-      case _: ShortType if primName == INT32 =>
-        // SPARK-16632: Handle case where Hive stores shorts in a int32 field without specifying
-        // the original type.
-        Types.primitive(INT32, parquetType.getRepetition()).as(INT_16).named(parquetType.getName())
 
       case _ =>
         // UDTs and primitive types are not clipped.  For UDTs, a clipped version might not be able

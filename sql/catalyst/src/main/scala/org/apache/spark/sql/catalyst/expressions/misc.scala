@@ -554,7 +554,7 @@ object XxHash64Function extends InterpretedHashFunction {
 @ExpressionDescription(
   usage = "_FUNC_() - Returns the current database.",
   extended = "> SELECT _FUNC_()")
-private[sql] case class CurrentDatabase() extends LeafExpression with Unevaluable {
+case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def foldable: Boolean = true
   override def nullable: Boolean = false

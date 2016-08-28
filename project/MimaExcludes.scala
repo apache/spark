@@ -38,11 +38,19 @@ object MimaExcludes {
   lazy val v21excludes = v20excludes ++ {
     Seq(
       // [SPARK-16199][SQL] Add a method to list the referenced columns in data source Filter
+<<<<<<< HEAD
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references")
     ) ++
     Seq(
       // [SPARK-16520] [WEBUI] Link executors to corresponding worker pages
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.ExecutorInfo.this")
+=======
+      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references"),
+      // [SPARK-16853][SQL] Fixes encoder error in DataSet typed select
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.Dataset.select"),
+      // [SPARK-16967] Move Mesos to Module
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkMasterRegex.MESOS_REGEX")
+>>>>>>> master
     )
   }
 
@@ -786,7 +794,10 @@ object MimaExcludes {
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.jdbc"),
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.parquetFile"),
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.applySchema")
-    )
+    ) ++ Seq(
+        // [SPARK-14743] Improve delegation token handling in secure cluster
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.SparkHadoopUtil.getTimeFromNowToRenewal")
+      )
   }
 
   def excludes(version: String) = version match {

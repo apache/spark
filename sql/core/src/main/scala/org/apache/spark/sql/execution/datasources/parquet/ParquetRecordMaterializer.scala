@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import org.apache.parquet.io.api.{GroupConverter, RecordMaterializer}
 import org.apache.parquet.schema.MessageType
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -32,12 +32,12 @@ import org.apache.spark.sql.types.StructType
  */
 private[parquet] class ParquetRecordMaterializer(
     parquetSchema: MessageType, catalystSchema: StructType, schemaConverter: ParquetSchemaConverter)
-  extends RecordMaterializer[InternalRow] {
+  extends RecordMaterializer[UnsafeRow] {
 
   private val rootConverter =
     new ParquetRowConverter(schemaConverter, parquetSchema, catalystSchema, NoopUpdater)
 
-  override def getCurrentRecord: InternalRow = rootConverter.currentRecord
+  override def getCurrentRecord: UnsafeRow = rootConverter.currentRecord
 
   override def getRootConverter: GroupConverter = rootConverter
 }

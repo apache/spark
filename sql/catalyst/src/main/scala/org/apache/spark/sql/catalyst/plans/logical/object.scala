@@ -155,6 +155,8 @@ object MapElements {
     val deserialized = CatalystSerde.deserialize[T](child)
     val mapped = MapElements(
       func,
+      implicitly[Encoder[T]].clsTag.runtimeClass,
+      implicitly[Encoder[T]].schema,
       CatalystSerde.generateObjAttr[U],
       deserialized)
     CatalystSerde.serialize[U](mapped)
@@ -166,12 +168,19 @@ object MapElements {
  */
 case class MapElements(
     func: AnyRef,
+    argumentClass: Class[_],
+    argumentSchema: StructType,
     outputObjAttr: Attribute,
     child: LogicalPlan) extends ObjectConsumer with ObjectProducer
 
 object TypedFilter {
   def apply[T : Encoder](func: AnyRef, child: LogicalPlan): TypedFilter = {
-    TypedFilter(func, UnresolvedDeserializer(encoderFor[T].deserializer), child)
+    TypedFilter(
+      func,
+      implicitly[Encoder[T]].clsTag.runtimeClass,
+      implicitly[Encoder[T]].schema,
+      UnresolvedDeserializer(encoderFor[T].deserializer),
+      child)
   }
 }
 
@@ -186,6 +195,8 @@ object TypedFilter {
  */
 case class TypedFilter(
     func: AnyRef,
+    argumentClass: Class[_],
+    argumentSchema: StructType,
     deserializer: Expression,
     child: LogicalPlan) extends UnaryNode {
 
@@ -213,6 +224,8 @@ object AppendColumns {
       child: LogicalPlan): AppendColumns = {
     new AppendColumns(
       func.asInstanceOf[Any => Any],
+      implicitly[Encoder[T]].clsTag.runtimeClass,
+      implicitly[Encoder[T]].schema,
       UnresolvedDeserializer(encoderFor[T].deserializer),
       encoderFor[U].namedExpressions,
       child)
@@ -228,6 +241,8 @@ object AppendColumns {
  */
 case class AppendColumns(
     func: Any => Any,
+    argumentClass: Class[_],
+    argumentSchema: StructType,
     deserializer: Expression,
     serializer: Seq[NamedExpression],
     child: LogicalPlan) extends UnaryNode {

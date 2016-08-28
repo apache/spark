@@ -30,7 +30,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-16337 temporary view refresh") {
-    withTempTable("view_refresh") {
+    withTempView("view_refresh") {
       withTable("view_table") {
         // Create a Parquet directory
         spark.range(start = 0, end = 100, step = 1, numPartitions = 3)

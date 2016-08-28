@@ -34,7 +34,7 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("estimates the size of limit") {
-    withTempTable("test") {
+    withTempView("test") {
       Seq(("one", 1), ("two", 2), ("three", 3), ("four", 4)).toDF("k", "v")
         .createOrReplaceTempView("test")
       Seq((0, 1), (1, 24), (2, 48)).foreach { case (limit, expected) =>
@@ -58,7 +58,7 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("estimates the size of a limit 0 on outer join") {
-    withTempTable("test") {
+    withTempView("test") {
       Seq(("one", 1), ("two", 2), ("three", 3), ("four", 4)).toDF("k", "v")
         .createOrReplaceTempView("test")
       val df1 = spark.table("test")
