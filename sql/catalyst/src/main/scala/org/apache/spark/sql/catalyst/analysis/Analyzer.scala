@@ -692,10 +692,10 @@ class Analyzer(
     planToSearchFrom.findByBreadthFirst(_.planId == targetPlanId) match {
       case Some(foundPlan) =>
         foundPlan.resolve(nameParts, resolver).getOrElse {
-          failAnalysis(s"Could not find $name in ${planToSearchFrom.output.mkString(", ")}")
+          failAnalysis(s"Could not find $name in ${foundPlan.output.mkString(", ")}")
         }
       case None =>
-        failAnalysis(s"Could not find $name in ${planToSearchFrom.output.mkString(", ")}")
+        failAnalysis(s"Could not find $name in any logical plan.")
     }
   }
 
