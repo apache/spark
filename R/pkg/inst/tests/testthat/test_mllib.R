@@ -99,6 +99,10 @@ test_that("spark.glm summary", {
   expect_match(out[2], "Deviance Residuals:")
   expect_true(any(grepl("AIC: 59.22", out)))
 
+  # Test spark.glm works with regularization parameter
+  regStats <- summary(spark.glm(training, Sepal_Width ~ Sepal_Length + Species, regParam = 0.3))
+  expect_equal(regStats$aic, 136.7, tolerance = 1e-3)
+
   # binomial family
   df <- suppressWarnings(createDataFrame(iris))
   training <- df[df$Species %in% c("versicolor", "virginica"), ]

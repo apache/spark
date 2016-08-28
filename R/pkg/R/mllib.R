@@ -141,6 +141,7 @@ predict_internal <- function(object, newData) {
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
 #' @param tol positive convergence tolerance of iterations.
+#' @param regParam regularization parameter for L2 regularization.
 #' @param maxIter integer giving the maximal number of IRLS iterations.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
@@ -171,7 +172,8 @@ predict_internal <- function(object, newData) {
 #' @note spark.glm since 2.0.0
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL) {
+          function(data, formula, family = gaussian, tol = 1e-6, regParam = 0.0, maxIter = 25,
+                   weightCol = NULL) {
             if (is.character(family)) {
               family <- get(family, mode = "function", envir = parent.frame())
             }
@@ -190,7 +192,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, family$family, family$link,
-                                tol, as.integer(maxIter), as.character(weightCol))
+                                tol, regParam, as.integer(maxIter), as.character(weightCol))
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
