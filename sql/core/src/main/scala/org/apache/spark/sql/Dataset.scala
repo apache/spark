@@ -2452,7 +2452,7 @@ class Dataset[T] private[sql](
       originalText = None,
       child = logicalPlan,
       if (replace) SaveMode.Overwrite else SaveMode.ErrorIfExists,
-      isTemporary = true)
+      ViewType.Temporary)
   }
 
   /**

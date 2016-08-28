@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{SaveMode, ViewType}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
@@ -1307,6 +1307,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       case _ => throw new ParseException(
         "CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.", ctx)
     }
+    val viewType = if (isTemporary) ViewType.Temporary else ViewType.Any
     val originalText = source(query)
 
     CreateViewCommand(
@@ -1317,7 +1318,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       Some(originalText),
       plan(query),
       mode,
-      isTemporary = isTemporary,
+      viewType,
       isAlterViewAsSelect = isAlterViewAsSelect)
   }
 

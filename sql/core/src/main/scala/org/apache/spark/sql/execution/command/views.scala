@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession, ViewType}
 import org.apache.spark.sql.catalyst.{SQLBuilder, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
@@ -41,16 +41,13 @@ import org.apache.spark.sql.types.StructType
  *                     Dataset API.
  * @param child the logical plan that represents the view; this is used to generate a canonicalized
  *              version of the SQL that can be saved in the catalog.
- * @param mode only three modes are applicable here: Ignore, Overwrite and ErrorIfExists. If the
+ * @param mode only three modes are supported here: Ignore, Overwrite and ErrorIfExists. If the
  *             view already exists, CreateViewCommand behaves based on the mode:
  *             1) Overwrite: update the view;
  *             2) Ignore: noop;
  *             3) ErrorIfExists throws analysis exception.
- * @param isTemporary if true, the view is created as a temporary view. Temporary views are dropped
- *                 at the end of current Spark session. Existing permanent relations with the same
- *                 name are not visible to the current session while the temporary view exists,
- *                 unless they are specified with full qualified table name with database prefix.
-  * @param isAlterViewAsSelect if true, this original DDL command is ALTER VIEW AS SELECT
+ * @param viewType the type of this view.
+ * @param isAlterViewAsSelect if true, this original DDL command is ALTER VIEW AS SELECT
  */
 case class CreateViewCommand(
     name: TableIdentifier,
@@ -60,7 +57,7 @@ case class CreateViewCommand(
     originalText: Option[String],
     child: LogicalPlan,
     mode: SaveMode,
-    isTemporary: Boolean,
+    viewType: ViewType,
     isAlterViewAsSelect: Boolean = false)
   extends RunnableCommand {
 
@@ -74,19 +71,14 @@ case class CreateViewCommand(
   assert(mode != SaveMode.Append,
     "CREATE or ALTER VIEW can only use ErrorIfExists, Ignore or Overwrite.")
 
-  if (!isTemporary) {
-    require(originalText.isDefined,
-      "The table to created with CREATE VIEW must have 'originalText'.")
-  }
-
   // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with 'CREATE TEMPORARY TABLE'
-  if (mode == SaveMode.Ignore && isTemporary) {
+  if (mode == SaveMode.Ignore && viewType == ViewType.Temporary) {
     throw new AnalysisException(
       "It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
   }
 
   // Temporary view names should NOT contain database prefix like "database.table"
-  if (isTemporary && name.database.isDefined) {
+  if (viewType == ViewType.Temporary && name.database.isDefined) {
     val database = name.database.get
     throw new AnalysisException(
       s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
@@ -112,7 +104,9 @@ case class CreateViewCommand(
     // 2) ALTER VIEW: alter the temporary view if the temp view exists; otherwise, try to alter
     //                the permanent view. Here, it follows the same resolution like DROP VIEW,
     //                since users are unable to specify the keyword TEMPORARY.
-    if (isTemporary || (isAlterViewAsSelect && sessionState.catalog.isTemporaryTable(name))) {
+    if (viewType == ViewType.Temporary ||
+        (viewType != ViewType.Permanent && isAlterViewAsSelect &&
+          sessionState.catalog.isTemporaryTable(name))) {
       createTemporaryView(sparkSession, analyzedPlan)
     } else {
       // Adds default database for permanent table if it doesn't exist, so that tableExists()
