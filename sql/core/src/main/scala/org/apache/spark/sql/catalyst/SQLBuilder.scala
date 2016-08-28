@@ -468,8 +468,8 @@ class SQLBuilder private (
 
     object RemoveSubqueriesAboveSQLTable extends Rule[LogicalPlan] {
       override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-        case SubqueryAlias(_, t: Scanner) => t
-        case SubqueryAlias(_, r: LogicalRelation) => r
+        case SubqueryAlias(_, t: Scanner, _) => t
+        case SubqueryAlias(_, r: LogicalRelation, _) => r
       }
     }
 

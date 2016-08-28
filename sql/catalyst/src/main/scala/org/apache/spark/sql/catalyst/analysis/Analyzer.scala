@@ -480,7 +480,7 @@ class Analyzer(
           r
         case i @ InsertIntoTable(r: MultiInstanceRelation, _, _, _, _) =>
           r
-        case s @ Scanner(_, _, SubqueryAlias(_, r: MultiInstanceRelation)) =>
+        case s @ Scanner(_, _, SubqueryAlias(_, r: MultiInstanceRelation, _)) =>
           r
       }.toSet
     }
