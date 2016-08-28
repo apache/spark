@@ -277,12 +277,24 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     checkCreateTableOrView(TableIdentifier(table, Some("default")), "VIEW")
   }
 
+  // These table properties should not be included in the output statement of SHOW CREATE TABLE
+  val excludedTableProperties = Set(
+    // The following are hive-generated statistics fields
+    "COLUMN_STATS_ACCURATE",
+    "numFiles",
+    "numPartitions",
+    "numRows",
+    "rawDataSize",
+    "totalSize"
+  )
+
   private def checkCreateTableOrView(table: TableIdentifier, checkType: String): Unit = {
     val db = table.database.getOrElse("default")
     val expected = spark.sharedState.externalCatalog.getTable(db, table.table)
     val shownDDL = sql(s"SHOW CREATE TABLE ${table.quotedString}").head().getString(0)
     sql(s"DROP $checkType ${table.quotedString}")
 
+    checkExcludedTableProperties(shownDDL)
     try {
       sql(shownDDL)
       val actual = spark.sharedState.externalCatalog.getTable(db, table.table)
@@ -290,6 +302,10 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     } finally {
       sql(s"DROP $checkType IF EXISTS ${table.table}")
     }
+  }
+
+  private def checkExcludedTableProperties(shownDDL: String): Unit = {
+    excludedTableProperties.foreach(p => assert(!shownDDL.contains(p)))
   }
 
   private def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
@@ -302,18 +318,11 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
         "last_modified_by",
         "last_modified_time",
         "Owner:",
-        "COLUMN_STATS_ACCURATE",
         // The following are hive specific schema parameters which we do not need to match exactly.
-        "numFiles",
-        "numRows",
-        "rawDataSize",
-        "totalSize",
         "totalNumberFiles",
         "maxFileSize",
-        "minFileSize",
-        // EXTERNAL is not non-deterministic, but it is filtered out for external tables.
-        "EXTERNAL"
-      )
+        "minFileSize"
+      ) ++ excludedTableProperties
 
       table.copy(
         createTime = 0L,

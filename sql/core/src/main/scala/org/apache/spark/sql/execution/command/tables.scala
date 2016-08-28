@@ -794,8 +794,10 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showHiveTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.properties.nonEmpty) {
       val filteredProps = metadata.properties.filterNot {
-        // Skips "EXTERNAL" property for external tables
-        case (key, _) => key == "EXTERNAL" && metadata.tableType == EXTERNAL
+        // Skips all the stats info (See the JIRA: HIVE-13792)
+        case (key, _) =>
+          key == "numFiles" || key == "numRows" || key == "totalSize" || key == "numPartitions" ||
+          key == "rawDataSize" || key == "COLUMN_STATS_ACCURATE"
       }
 
       val props = filteredProps.map { case (key, value) =>
