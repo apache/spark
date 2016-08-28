@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LocalRelation}
-import org.apache.spark.sql.types.{ObjectType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, ObjectType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -110,16 +110,34 @@ object ExpressionEncoder {
 
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
 
-    val serializer = encoders.map {
-      case e if e.flat => e.serializer.head
-      case other => CreateStruct(other.serializer)
-    }.zipWithIndex.map { case (expr, index) =>
-      expr.transformUp {
-        case BoundReference(0, t, _) =>
-          Invoke(
-            BoundReference(0, ObjectType(cls), nullable = true),
-            s"_${index + 1}",
-            t)
+    val serializer = encoders.zipWithIndex.map { case (enc, index) =>
+      val originalInputObject = enc.serializer.head.collect { case b: BoundReference => b }.head
+      val newInputObject = Invoke(
+        BoundReference(0, ObjectType(cls), nullable = true),
+        s"_${index + 1}",
+        originalInputObject.dataType)
+
+      val newSerializer = enc.serializer.map(_.transformUp {
+        case b: BoundReference if b == originalInputObject => newInputObject
+      })
+
+      if (enc.flat) {
+        newSerializer.head
+      } else {
+        // For non-flat encoder, the input object is not top level anymore after being combined to
+        // a tuple encoder, thus it can be null and we should wrap the `CreateStruct` with `If` and
+        // null check to handle null case correctly.
+        // e.g. for Encoder[(Int, String)], the serializer expressions will create 2 columns, and is
+        // not able to handle the case when the input tuple is null. This is not a problem as there
+        // is a check to make sure the input object won't be null. However, if this encoder is used
+        // to create a bigger tuple encoder, the original input object becomes a filed of the new
+        // input tuple and can be null. So instead of creating a struct directly here, we should add
+        // a null/None check and return a null struct if the null/None check fails.
+        val struct = CreateStruct(newSerializer)
+        val nullCheck = Or(
+          IsNull(newInputObject),
+          Invoke(Literal.fromObject(None), "equals", BooleanType, newInputObject :: Nil))
+        If(nullCheck, Literal.create(null, struct.dataType), struct)
       }
     }
 
@@ -150,6 +168,10 @@ object ExpressionEncoder {
       deserializer,
       ClassTag(cls))
   }
+
+  // Tuple1
+  def tuple[T](e: ExpressionEncoder[T]): ExpressionEncoder[Tuple1[T]] =
+    tuple(Seq(e)).asInstanceOf[ExpressionEncoder[Tuple1[T]]]
 
   def tuple[T1, T2](
       e1: ExpressionEncoder[T1],
@@ -196,6 +218,19 @@ case class ExpressionEncoder[T](
   extends Encoder[T] {
 
   if (flat) require(serializer.size == 1)
+
+  // serializer expressions are used to encode an object to a row, while the object is usually an
+  // intermediate value produced inside an operator, not from the output of the child operator. This
+  // is quite different from normal expressions, and `AttributeReference` doesn't work here
+  // (intermediate value is not an attribute). We assume that all serializer expressions use a same
+  // `BoundReference` to refer to the object, and throw exception if they don't.
+  assert(serializer.forall(_.references.isEmpty), "serializer cannot reference to any attributes.")
+  assert(serializer.flatMap { ser =>
+    val boundRefs = ser.collect { case b: BoundReference => b }
+    assert(boundRefs.nonEmpty,
+      "each serializer expression should contains at least one `BoundReference`")
+    boundRefs
+  }.distinct.length <= 1, "all serializer expressions must use the same BoundReference.")
 
   /**
    * Returns a new copy of this encoder, where the `deserializer` is resolved and bound to the

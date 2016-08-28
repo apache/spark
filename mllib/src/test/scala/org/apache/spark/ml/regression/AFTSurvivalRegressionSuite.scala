@@ -390,6 +390,18 @@ class AFTSurvivalRegressionSuite
     testEstimatorAndModelReadWrite(aft, datasetMultivariate,
       AFTSurvivalRegressionSuite.allParamSettings, checkModelData)
   }
+
+  test("SPARK-15892: Incorrectly merged AFTAggregator with zero total count") {
+    // This `dataset` will contain an empty partition because it has two rows but
+    // the parallelism is bigger than that. Because the issue was about `AFTAggregator`s
+    // being merged incorrectly when it has an empty partition, running the codes below
+    // should not throw an exception.
+    val dataset = spark.createDataFrame(
+      sc.parallelize(generateAFTInput(
+        1, Array(5.5), Array(0.8), 2, 42, 1.0, 2.0, 2.0), numSlices = 3))
+    val trainer = new AFTSurvivalRegression()
+    trainer.fit(dataset)
+  }
 }
 
 object AFTSurvivalRegressionSuite {

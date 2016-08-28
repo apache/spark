@@ -4,3 +4,4 @@ org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 org.apache.spark.sql.execution.datasources.text.TextFileFormat
 org.apache.spark.sql.execution.streaming.ConsoleSinkProvider
+org.apache.spark.sql.execution.streaming.TextSocketSourceProvider

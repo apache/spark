@@ -233,7 +233,7 @@ class ReplSuite extends SparkFunSuite {
   }
 
   test("SPARK-1199 two instances of same class don't type check.") {
-    val output = runInterpreter("local-cluster[1,1,1024]",
+    val output = runInterpreter("local",
       """
         |case class Sum(exp: String, exp2: String)
         |val a = Sum("A", "B")
@@ -305,7 +305,7 @@ class ReplSuite extends SparkFunSuite {
   }
 
   test("SPARK-2632 importing a method from non serializable class and not using it.") {
-    val output = runInterpreter("local",
+    val output = runInterpreter("local-cluster[1,1,1024]",
     """
       |class TestClass() { def testMethod = 3 }
       |val t = new TestClass

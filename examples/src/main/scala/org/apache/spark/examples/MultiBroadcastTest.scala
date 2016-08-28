@@ -33,8 +33,6 @@ object MultiBroadcastTest {
       .appName("Multi-Broadcast Test")
       .getOrCreate()
 
-    val sc = spark.sparkContext
-
     val slices = if (args.length > 0) args(0).toInt else 2
     val num = if (args.length > 1) args(1).toInt else 1000000
 
@@ -48,9 +46,9 @@ object MultiBroadcastTest {
       arr2(i) = i
     }
 
-    val barr1 = sc.broadcast(arr1)
-    val barr2 = sc.broadcast(arr2)
-    val observedSizes: RDD[(Int, Int)] = sc.parallelize(1 to 10, slices).map { _ =>
+    val barr1 = spark.sparkContext.broadcast(arr1)
+    val barr2 = spark.sparkContext.broadcast(arr2)
+    val observedSizes: RDD[(Int, Int)] = spark.sparkContext.parallelize(1 to 10, slices).map { _ =>
       (barr1.value.length, barr2.value.length)
     }
     // Collect the small RDD so we can print the observed sizes locally.

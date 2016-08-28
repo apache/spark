@@ -179,11 +179,7 @@ class MulticlassMetrics(JavaModelWrapper):
     1.0...
     >>> metrics.fMeasure(0.0, 2.0)
     0.52...
-    >>> metrics.precision()
-    0.66...
-    >>> metrics.recall()
-    0.66...
-    >>> metrics.accuracy()
+    >>> metrics.accuracy
     0.66...
     >>> metrics.weightedFalsePositiveRate
     0.19...
@@ -273,6 +269,7 @@ class MulticlassMetrics(JavaModelWrapper):
             else:
                 return self.call("fMeasure", label, beta)
 
+    @property
     @since('2.0.0')
     def accuracy(self):
         """

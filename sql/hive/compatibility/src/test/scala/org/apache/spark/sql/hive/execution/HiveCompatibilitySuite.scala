@@ -517,6 +517,18 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // This test uses CREATE EXTERNAL TABLE without specifying LOCATION
     "alter2",
 
+    // [SPARK-16248][SQL] Whitelist the list of Hive fallback functions
+    "udf_field",
+    "udf_reflect2",
+    "udf_xpath",
+    "udf_xpath_boolean",
+    "udf_xpath_double",
+    "udf_xpath_float",
+    "udf_xpath_int",
+    "udf_xpath_long",
+    "udf_xpath_short",
+    "udf_xpath_string",
+
     // These tests DROP TABLE that don't exist (but do not specify IF EXISTS)
     "alter_rename_partition1",
     "date_1",
@@ -967,8 +979,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_PI",
     "udf_acos",
     "udf_add",
-    "udf_array",
-    "udf_array_contains",
+    // "udf_array",  -- done in array.sql
+    // "udf_array_contains",  -- done in array.sql
     "udf_ascii",
     "udf_asin",
     "udf_atan",
@@ -1004,7 +1016,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_elt",
     "udf_equal",
     "udf_exp",
-    "udf_field",
     "udf_find_in_set",
     "udf_float",
     "udf_floor",
@@ -1049,7 +1060,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_power",
     "udf_radians",
     "udf_rand",
-    "udf_reflect2",
     "udf_regexp",
     "udf_regexp_extract",
     "udf_regexp_replace",
@@ -1090,14 +1100,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_variance",
     "udf_weekofyear",
     "udf_when",
-    "udf_xpath",
-    "udf_xpath_boolean",
-    "udf_xpath_double",
-    "udf_xpath_float",
-    "udf_xpath_int",
-    "udf_xpath_long",
-    "udf_xpath_short",
-    "udf_xpath_string",
     "union10",
     "union11",
     "union13",

@@ -91,7 +91,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       (f: => Unit): Unit = {
     withParquetDataFrame(data, testVectorized) { df =>
       df.createOrReplaceTempView(tableName)
-      withTempTable(tableName)(f)
+      withTempView(tableName)(f)
     }
   }
 
@@ -124,8 +124,8 @@ private[sql] trait ParquetTest extends SQLTestUtils {
 
   protected def writeMetadata(
       schema: StructType, path: Path, configuration: Configuration): Unit = {
-    val parquetSchema = new CatalystSchemaConverter().convert(schema)
-    val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> schema.json).asJava
+    val parquetSchema = new ParquetSchemaConverter().convert(schema)
+    val extraMetadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schema.json).asJava
     val createdBy = s"Apache Spark ${org.apache.spark.SPARK_VERSION}"
     val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, createdBy)
     val parquetMetadata = new ParquetMetadata(fileMetadata, Seq.empty[BlockMetaData].asJava)

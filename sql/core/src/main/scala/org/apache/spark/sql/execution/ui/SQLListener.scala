@@ -42,14 +42,18 @@ case class SparkListenerSQLExecutionStart(
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
   extends SparkListenerEvent
 
-private[sql] class SQLHistoryListenerFactory extends SparkHistoryListenerFactory {
+@DeveloperApi
+case class SparkListenerDriverAccumUpdates(executionId: Long, accumUpdates: Seq[(Long, Long)])
+  extends SparkListenerEvent
+
+class SQLHistoryListenerFactory extends SparkHistoryListenerFactory {
 
   override def createListeners(conf: SparkConf, sparkUI: SparkUI): Seq[SparkListener] = {
     List(new SQLHistoryListener(conf, sparkUI))
   }
 }
 
-private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Logging {
+class SQLListener(conf: SparkConf) extends SparkListener with Logging {
 
   private val retainedExecutions = conf.getInt("spark.sql.ui.retainedExecutions", 1000)
 
@@ -251,6 +255,13 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
         }
       }
     }
+    case SparkListenerDriverAccumUpdates(executionId, accumUpdates) => synchronized {
+      _executionIdToData.get(executionId).foreach { executionUIData =>
+        for ((accId, accValue) <- accumUpdates) {
+          executionUIData.driverAccumUpdates(accId) = accValue
+        }
+      }
+    }
     case _ => // Ignore
   }
 
@@ -296,7 +307,9 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
             (accumulatorUpdate._1, accumulatorUpdate._2)
           }
         }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
-        mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
+
+        val driverUpdates = executionUIData.driverAccumUpdates.toSeq
+        mergeAccumulatorUpdates(accumulatorUpdates ++ driverUpdates, accumulatorId =>
           executionUIData.accumulatorMetrics(accumulatorId).metricType)
       case None =>
         // This execution has been dropped
@@ -320,7 +333,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
 /**
  * A [[SQLListener]] for rendering the SQL UI in the history server.
  */
-private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
+class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
   extends SQLListener(conf) {
 
   private var sqlTabAttached = false
@@ -368,10 +381,15 @@ private[ui] class SQLExecutionUIData(
     val physicalPlanDescription: String,
     val physicalPlanGraph: SparkPlanGraph,
     val accumulatorMetrics: Map[Long, SQLPlanMetric],
-    val submissionTime: Long,
-    var completionTime: Option[Long] = None,
-    val jobs: mutable.HashMap[Long, JobExecutionStatus] = mutable.HashMap.empty,
-    val stages: mutable.ArrayBuffer[Int] = mutable.ArrayBuffer()) {
+    val submissionTime: Long) {
+
+  var completionTime: Option[Long] = None
+
+  val jobs: mutable.HashMap[Long, JobExecutionStatus] = mutable.HashMap.empty
+
+  val stages: mutable.ArrayBuffer[Int] = mutable.ArrayBuffer()
+
+  val driverAccumUpdates: mutable.HashMap[Long, Long] = mutable.HashMap.empty
 
   /**
    * Return whether there are running jobs in this execution.

@@ -152,7 +152,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
       val (buf1, buf2) = generateKeyPrefixTestData(N, rand.nextLong & 0xff)
       referenceKeyPrefixSort(buf1, 0, N, sortType.referenceComparator)
       val outOffset = RadixSort.sortKeyPrefixArray(
-        buf2, N, sortType.startByteIdx, sortType.endByteIdx,
+        buf2, 0, N, sortType.startByteIdx, sortType.endByteIdx,
         sortType.descending, sortType.signed)
       val res1 = collectToArray(buf1, 0, N * 2)
       val res2 = collectToArray(buf2, outOffset, N * 2)
@@ -177,7 +177,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
       val (buf1, buf2) = generateKeyPrefixTestData(N, rand.nextLong & mask)
       referenceKeyPrefixSort(buf1, 0, N, sortType.referenceComparator)
       val outOffset = RadixSort.sortKeyPrefixArray(
-        buf2, N, sortType.startByteIdx, sortType.endByteIdx,
+        buf2, 0, N, sortType.startByteIdx, sortType.endByteIdx,
         sortType.descending, sortType.signed)
       val res1 = collectToArray(buf1, 0, N * 2)
       val res2 = collectToArray(buf2, outOffset, N * 2)

@@ -153,7 +153,7 @@ class OrcSourceSuite extends OrcSuite {
     super.beforeAll()
 
     spark.sql(
-      s"""CREATE TEMPORARY TABLE normal_orc_source
+      s"""CREATE TEMPORARY VIEW normal_orc_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
@@ -161,7 +161,7 @@ class OrcSourceSuite extends OrcSuite {
        """.stripMargin)
 
     spark.sql(
-      s"""CREATE TEMPORARY TABLE normal_orc_as_source
+      s"""CREATE TEMPORARY VIEW normal_orc_as_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'

@@ -26,12 +26,12 @@ import scala.util.{Sorting, Try}
 import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
 import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext}
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
@@ -99,7 +99,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   with HasPredictionCol with HasCheckpointInterval with HasSeed {
 
   /**
-   * Param for rank of the matrix factorization (>= 1).
+   * Param for rank of the matrix factorization (positive).
    * Default: 10
    * @group param
    */
@@ -109,7 +109,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getRank: Int = $(rank)
 
   /**
-   * Param for number of user blocks (>= 1).
+   * Param for number of user blocks (positive).
    * Default: 10
    * @group param
    */
@@ -120,7 +120,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getNumUserBlocks: Int = $(numUserBlocks)
 
   /**
-   * Param for number of item blocks (>= 1).
+   * Param for number of item blocks (positive).
    * Default: 10
    * @group param
    */
@@ -141,7 +141,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getImplicitPrefs: Boolean = $(implicitPrefs)
 
   /**
-   * Param for the alpha parameter in the implicit preference formulation (>= 0).
+   * Param for the alpha parameter in the implicit preference formulation (nonnegative).
    * Default: 1.0
    * @group param
    */
@@ -174,7 +174,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
 
   /**
    * Param for StorageLevel for intermediate datasets. Pass in a string representation of
-   * [[StorageLevel]]. Cannot be "NONE".
+   * `StorageLevel`. Cannot be "NONE".
    * Default: "MEMORY_AND_DISK".
    *
    * @group expertParam
@@ -188,7 +188,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
 
   /**
    * Param for StorageLevel for ALS model factors. Pass in a string representation of
-   * [[StorageLevel]].
+   * `StorageLevel`.
    * Default: "MEMORY_AND_DISK".
    *
    * @group expertParam
@@ -222,14 +222,12 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
 }
 
 /**
- * :: Experimental ::
  * Model fitted by ALS.
  *
  * @param rank rank of the matrix factorization model
  * @param userFactors a DataFrame that stores user factors in two columns: `id` and `features`
  * @param itemFactors a DataFrame that stores item factors in two columns: `id` and `features`
  */
-@Experimental
 @Since("1.3.0")
 class ALSModel private[ml] (
     @Since("1.4.0") override val uid: String,
@@ -320,9 +318,9 @@ object ALSModel extends MLReadable[ALSModel] {
       implicit val format = DefaultFormats
       val rank = (metadata.metadata \ "rank").extract[Int]
       val userPath = new Path(path, "userFactors").toString
-      val userFactors = sqlContext.read.format("parquet").load(userPath)
+      val userFactors = sparkSession.read.format("parquet").load(userPath)
       val itemPath = new Path(path, "itemFactors").toString
-      val itemFactors = sqlContext.read.format("parquet").load(itemPath)
+      val itemFactors = sparkSession.read.format("parquet").load(itemPath)
 
       val model = new ALSModel(metadata.uid, rank, userFactors, itemFactors)
 
@@ -333,7 +331,6 @@ object ALSModel extends MLReadable[ALSModel] {
 }
 
 /**
- * :: Experimental ::
  * Alternating Least Squares (ALS) matrix factorization.
  *
  * ALS attempts to estimate the ratings matrix `R` as the product of two lower-rank matrices,
@@ -354,15 +351,14 @@ object ALSModel extends MLReadable[ALSModel] {
  *
  * For implicit preference data, the algorithm used is based on
  * "Collaborative Filtering for Implicit Feedback Datasets", available at
- * [[http://dx.doi.org/10.1109/ICDM.2008.22]], adapted for the blocked approach used here.
+ * http://dx.doi.org/10.1109/ICDM.2008.22, adapted for the blocked approach used here.
  *
  * Essentially instead of finding the low-rank approximations to the rating matrix `R`,
  * this finds the approximations for a preference matrix `P` where the elements of `P` are 1 if
- * r > 0 and 0 if r <= 0. The ratings then act as 'confidence' values related to strength of
+ * r &gt; 0 and 0 if r &lt;= 0. The ratings then act as 'confidence' values related to strength of
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
-@Experimental
 @Since("1.3.0")
 class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] with ALSParams
   with DefaultParamsWritable {

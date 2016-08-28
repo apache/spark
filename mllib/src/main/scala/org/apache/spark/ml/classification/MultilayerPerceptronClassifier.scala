@@ -100,7 +100,7 @@ private[classification] trait MultilayerPerceptronParams extends PredictorParams
   @Since("2.0.0")
   final def getInitialWeights: Vector = $(initialWeights)
 
-  setDefault(maxIter -> 100, tol -> 1e-4, blockSize -> 128,
+  setDefault(maxIter -> 100, tol -> 1e-6, blockSize -> 128,
     solver -> MultilayerPerceptronClassifier.LBFGS, stepSize -> 0.03)
 }
 
@@ -190,7 +190,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   /**
    * Set the convergence tolerance of iterations.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
-   * Default is 1E-4.
+   * Default is 1E-6.
    *
    * @group setParam
    */
@@ -296,7 +296,7 @@ object MultilayerPerceptronClassifier
 class MultilayerPerceptronClassificationModel private[ml] (
     @Since("1.5.0") override val uid: String,
     @Since("1.5.0") val layers: Array[Int],
-    @Since("1.5.0") val weights: Vector)
+    @Since("2.0.0") val weights: Vector)
   extends PredictionModel[Vector, MultilayerPerceptronClassificationModel]
   with Serializable with MLWritable {
 
@@ -356,7 +356,7 @@ object MultilayerPerceptronClassificationModel
       // Save model data: layers, weights
       val data = Data(instance.layers, instance.weights)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -370,7 +370,7 @@ object MultilayerPerceptronClassificationModel
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath).select("layers", "weights").head()
+      val data = sparkSession.read.parquet(dataPath).select("layers", "weights").head()
       val layers = data.getAs[Seq[Int]](0).toArray
       val weights = data.getAs[Vector](1)
       val model = new MultilayerPerceptronClassificationModel(metadata.uid, layers, weights)

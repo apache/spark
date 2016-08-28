@@ -20,7 +20,6 @@ package org.apache.spark.examples.ml
 
 import java.io.File
 
-import com.google.common.io.Files
 import scopt.OptionParser
 
 import org.apache.spark.examples.mllib.AbstractParams
@@ -55,14 +54,13 @@ object DataFrameExample {
       }
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    }.getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
+  def run(params: Params): Unit = {
     val spark = SparkSession
       .builder
       .appName(s"DataFrameExample with $params")

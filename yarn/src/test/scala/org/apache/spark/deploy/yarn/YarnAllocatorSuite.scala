@@ -111,6 +111,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   def createContainer(host: String): Container = {
+    // When YARN 2.6+ is required, avoid deprecation by using version with long second arg
     val containerId = ContainerId.newInstance(appAttemptId, containerNum)
     containerNum += 1
     val nodeId = NodeId.newInstance(host, 1000)

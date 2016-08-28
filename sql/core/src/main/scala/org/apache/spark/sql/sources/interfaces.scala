@@ -148,9 +148,9 @@ trait StreamSinkProvider {
 @DeveloperApi
 trait CreatableRelationProvider {
   /**
-   * Creates a relation with the given parameters based on the contents of the given
-   * DataFrame. The mode specifies the expected behavior of createRelation when
-   * data already exists.
+   * Save the DataFrame to the destination and return a relation with the given parameters based on
+   * the contents of the given DataFrame. The mode specifies the expected behavior of createRelation
+   * when data already exists.
    * Right now, there are three modes, Append, Overwrite, and ErrorIfExists.
    * Append mode means that when saving a DataFrame to a data source, if data already exists,
    * contents of the DataFrame are expected to be appended to existing data.

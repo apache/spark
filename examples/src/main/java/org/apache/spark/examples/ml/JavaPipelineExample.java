@@ -60,7 +60,7 @@ public class JavaPipelineExample {
       .setOutputCol("features");
     LogisticRegression lr = new LogisticRegression()
       .setMaxIter(10)
-      .setRegParam(0.01);
+      .setRegParam(0.001);
     Pipeline pipeline = new Pipeline()
       .setStages(new PipelineStage[] {tokenizer, hashingTF, lr});
 
@@ -71,7 +71,7 @@ public class JavaPipelineExample {
     Dataset<Row> test = spark.createDataFrame(Arrays.asList(
       new JavaDocument(4L, "spark i j k"),
       new JavaDocument(5L, "l m n"),
-      new JavaDocument(6L, "mapreduce spark"),
+      new JavaDocument(6L, "spark hadoop spark"),
       new JavaDocument(7L, "apache hadoop")
     ), JavaDocument.class);
 

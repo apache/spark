@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.util
 
 import scala.util.control.NonFatal
 
@@ -30,7 +31,6 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable}
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
 
 /**
@@ -347,7 +347,7 @@ abstract class HiveComparisonTest
                 queryString.replace("../../data", testDataPath))
               val containsCommands = originalQuery.analyzed.collectFirst {
                 case _: Command => ()
-                case _: LogicalInsertIntoHiveTable => ()
+                case _: InsertIntoTable => ()
               }.nonEmpty
 
               if (containsCommands) {
@@ -497,6 +497,8 @@ abstract class HiveComparisonTest
         }
       }
 
+      val savedSettings = new util.HashMap[String, String]
+      savedSettings.putAll(TestHive.conf.settings)
       try {
         try {
           if (tryWithoutResettingFirst && canSpeculativelyTryWithoutReset) {
@@ -515,6 +517,9 @@ abstract class HiveComparisonTest
         }
       } catch {
         case tf: org.scalatest.exceptions.TestFailedException => throw tf
+      } finally {
+        TestHive.conf.settings.clear()
+        TestHive.conf.settings.putAll(savedSettings)
       }
     }
   }

@@ -111,10 +111,13 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     def apply[A : Encoder](data: A*): CheckAnswerRows = {
       val encoder = encoderFor[A]
       val toExternalRow = RowEncoder(encoder.schema).resolveAndBind()
-      CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))), false)
+      CheckAnswerRows(
+        data.map(d => toExternalRow.fromRow(encoder.toRow(d))),
+        lastOnly = false,
+        isSorted = false)
     }
 
-    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, false)
+    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, false, false)
   }
 
   /**
@@ -123,15 +126,22 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
    */
   object CheckLastBatch {
     def apply[A : Encoder](data: A*): CheckAnswerRows = {
-      val encoder = encoderFor[A]
-      val toExternalRow = RowEncoder(encoder.schema).resolveAndBind()
-      CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))), true)
+      apply(isSorted = false, data: _*)
     }
 
-    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, true)
+    def apply[A: Encoder](isSorted: Boolean, data: A*): CheckAnswerRows = {
+      val encoder = encoderFor[A]
+      val toExternalRow = RowEncoder(encoder.schema).resolveAndBind()
+      CheckAnswerRows(
+        data.map(d => toExternalRow.fromRow(encoder.toRow(d))),
+        lastOnly = true,
+        isSorted = isSorted)
+    }
+
+    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, true, false)
   }
 
-  case class CheckAnswerRows(expectedAnswer: Seq[Row], lastOnly: Boolean)
+  case class CheckAnswerRows(expectedAnswer: Seq[Row], lastOnly: Boolean, isSorted: Boolean)
       extends StreamAction with StreamMustBeRunning {
     override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
     private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
@@ -178,8 +188,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       new AssertOnQuery(condition, message)
     }
 
-    def apply(message: String)(condition: StreamExecution => Boolean): AssertOnQuery = {
-      new AssertOnQuery(condition, message)
+    def apply(message: String)(condition: StreamExecution => Unit): AssertOnQuery = {
+      new AssertOnQuery(s => { condition(s); true }, message)
     }
   }
 
@@ -295,13 +305,13 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
               spark
                 .streams
                 .startQuery(
-                  StreamExecution.nextName,
-                  metadataRoot,
+                  None,
+                  Some(metadataRoot),
                   stream,
                   sink,
                   outputMode,
-                  trigger,
-                  triggerClock)
+                  trigger = trigger,
+                  triggerClock = triggerClock)
                 .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {
@@ -316,6 +326,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                    "can not advance manual clock when a stream is not running")
             verify(currentStream.triggerClock.isInstanceOf[ManualClock],
                    s"can not advance clock of type ${currentStream.triggerClock.getClass}")
+            val clock = currentStream.triggerClock.asInstanceOf[ManualClock]
+            // Make sure we don't advance ManualClock too early. See SPARK-16002.
+            eventually("ManualClock has not yet entered the waiting state") {
+              assert(clock.isWaiting)
+            }
             currentStream.triggerClock.asInstanceOf[ManualClock].advance(timeToAdd)
 
           case StopStream =>
@@ -343,7 +358,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
           case ef: ExpectFailure[_] =>
             verify(currentStream != null, "can not expect failure when stream is not running")
             try failAfter(streamingTimeout) {
-              val thrownException = intercept[ContinuousQueryException] {
+              val thrownException = intercept[StreamingQueryException] {
                 currentStream.awaitTermination()
               }
               eventually("microbatch thread not stopped after termination with failure") {
@@ -414,7 +429,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                 failTest("Error adding data", e)
             }
 
-          case CheckAnswerRows(expectedAnswer, lastOnly) =>
+          case CheckAnswerRows(expectedAnswer, lastOnly, isSorted) =>
             verify(currentStream != null, "stream not running")
             // Get the map of source index to the current source objects
             val indexToSource = currentStream
@@ -436,7 +451,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                 failTest("Exception while getting data from sink", e)
             }
 
-            QueryTest.sameRows(expectedAnswer, sparkAnswer).foreach {
+            QueryTest.sameRows(expectedAnswer, sparkAnswer, isSorted).foreach {
               error => failTest(error)
             }
         }
@@ -553,7 +568,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
         case e: ExpectException[_] =>
           val thrownException =
             withClue(s"Did not throw ${e.t.runtimeClass.getSimpleName} when expected.") {
-              intercept[ContinuousQueryException] {
+              intercept[StreamingQueryException] {
                 failAfter(testTimeout) {
                   awaitTermFunc()
                 }

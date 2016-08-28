@@ -49,7 +49,8 @@ class ReplSuite extends SparkFunSuite {
 
     val oldExecutorClasspath = System.getProperty(CONF_EXECUTOR_CLASSPATH)
     System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
-
+    Main.sparkContext = null
+    Main.sparkSession = null // causes recreation of SparkContext for each test.
     Main.conf.set("spark.master", master)
     Main.doMain(Array("-classpath", classpath), new SparkILoop(in, new PrintWriter(out)))
 
@@ -276,7 +277,7 @@ class ReplSuite extends SparkFunSuite {
   }
 
   test("SPARK-1199 two instances of same class don't type check.") {
-    val output = runInterpreter("local-cluster[1,1,1024]",
+    val output = runInterpreter("local",
       """
         |case class Sum(exp: String, exp2: String)
         |val a = Sum("A", "B")
@@ -336,7 +337,7 @@ class ReplSuite extends SparkFunSuite {
   }
 
   test("SPARK-2632 importing a method from non serializable class and not using it.") {
-    val output = runInterpreter("local",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
       |class TestClass() { def testMethod = 3 }
       |val t = new TestClass
@@ -393,6 +394,20 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("ret: Array[(Int, Iterable[Foo])] = Array((1,", output)
+  }
+
+  test("replicating blocks of object with class defined in repl") {
+    val output = runInterpreter("local-cluster[2,1,1024]",
+      """
+        |import org.apache.spark.storage.StorageLevel._
+        |case class Foo(i: Int)
+        |val ret = sc.parallelize((1 to 100).map(Foo), 10).persist(MEMORY_ONLY_2)
+        |ret.count()
+        |sc.getExecutorStorageStatus.map(s => s.rddBlocksById(ret.id).size).sum
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+    assertContains(": Int = 20", output)
   }
 
   test("line wrapper only initialized once when used as encoder outer scope") {

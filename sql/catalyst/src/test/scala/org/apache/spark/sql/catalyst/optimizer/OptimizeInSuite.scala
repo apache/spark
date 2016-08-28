@@ -42,6 +42,30 @@ class OptimizeInSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
+  test("OptimizedIn test: Remove deterministic repetitions") {
+    val originalQuery =
+      testRelation
+        .where(In(UnresolvedAttribute("a"),
+          Seq(Literal(1), Literal(1), Literal(2), Literal(2), Literal(1), Literal(2))))
+        .where(In(UnresolvedAttribute("b"),
+          Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
+            Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
+            Rand(0), Rand(0))))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
+        .where(In(UnresolvedAttribute("b"),
+          Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
+            Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
+            Rand(0), Rand(0))))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("OptimizedIn test: In clause not optimized to InSet when less than 10 items") {
     val originalQuery =
       testRelation

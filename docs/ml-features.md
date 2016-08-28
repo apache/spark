@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Extracting, transforming and selecting features - spark.ml
-displayTitle: Extracting, transforming and selecting features - spark.ml
+title: Extracting, transforming and selecting features
+displayTitle: Extracting, transforming and selecting features
 ---
 
 This section covers algorithms for working with features, roughly divided into these groups:
@@ -46,14 +46,18 @@ In MLlib, we separate TF and IDF to make them flexible.
 `HashingTF` is a `Transformer` which takes sets of terms and converts those sets into 
 fixed-length feature vectors.  In text processing, a "set of terms" might be a bag of words.
 `HashingTF` utilizes the [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing).
-A raw feature is mapped into an index (term) by applying a hash function. Then term frequencies 
+A raw feature is mapped into an index (term) by applying a hash function. The hash function
+used here is [MurmurHash 3](https://en.wikipedia.org/wiki/MurmurHash). Then term frequencies
 are calculated based on the mapped indices. This approach avoids the need to compute a global 
 term-to-index map, which can be expensive for a large corpus, but it suffers from potential hash 
 collisions, where different raw features may become the same term after hashing. To reduce the 
 chance of collision, we can increase the target feature dimension, i.e. the number of buckets 
 of the hash table. Since a simple modulo is used to transform the hash function to a column index, 
 it is advisable to use a power of two as the feature dimension, otherwise the features will 
-not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`. 
+not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`.
+An optional binary toggle parameter controls term frequency counts. When set to true all nonzero
+frequency counts are set to 1. This is especially useful for discrete probabilistic models that
+model binary, rather than integer, counts.
 
 `CountVectorizer` converts text documents to vectors of term counts. Refer to [CountVectorizer
 ](ml-features.html#countvectorizer) for more details.
@@ -145,9 +149,11 @@ for more details on the API.
  passed to other algorithms like LDA.
 
  During the fitting process, `CountVectorizer` will select the top `vocabSize` words ordered by
- term frequency across the corpus. An optional parameter "minDF" also affects the fitting process
+ term frequency across the corpus. An optional parameter `minDF` also affects the fitting process
  by specifying the minimum number (or fraction if < 1.0) of documents a term must appear in to be
- included in the vocabulary.
+ included in the vocabulary. Another optional binary toggle parameter controls the output vector.
+ If set to true all nonzero counts are set to 1. This is especially useful for discrete probabilistic
+ models that model binary, rather than integer, counts.
 
 **Examples**
 
@@ -210,7 +216,7 @@ for more details on the API.
 
 [RegexTokenizer](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer) allows more
  advanced tokenization based on regular expression (regex) matching.
- By default, the parameter "pattern" (regex, default: \\s+) is used as delimiters to split the input text.
+ By default, the parameter "pattern" (regex, default: `"\\s+"`) is used as delimiters to split the input text.
  Alternatively, users can set parameter "gaps" to false indicating the regex "pattern" denotes
  "tokens" rather than splitting gaps, and find all matching occurrences as the tokenization result.
 
@@ -251,11 +257,12 @@ frequently and don't carry as much meaning.
 `StopWordsRemover` takes as input a sequence of strings (e.g. the output
 of a [Tokenizer](ml-features.html#tokenizer)) and drops all the stop
 words from the input sequences. The list of stopwords is specified by
-the `stopWords` parameter.  We provide [a list of stop
-words](http://ir.dcs.gla.ac.uk/resources/linguistic_utils/stop_words) by
-default, accessible by calling `getStopWords` on a newly instantiated
-`StopWordsRemover` instance. A boolean parameter `caseSensitive` indicates
-if the matches should be case sensitive (false by default).
+the `stopWords` parameter. Default stop words for some languages are accessible 
+by calling `StopWordsRemover.loadDefaultStopWords(language)`, for which available 
+options are "danish", "dutch", "english", "finnish", "french", "german", "hungarian", 
+"italian", "norwegian", "portuguese", "russian", "spanish", "swedish" and "turkish". 
+A boolean parameter `caseSensitive` indicates if the matches should be case sensitive 
+(false by default).
 
 **Examples**
 
@@ -346,7 +353,10 @@ for more details on the API.
 
 Binarization is the process of thresholding numerical features to binary (0/1) features.
 
-`Binarizer` takes the common parameters `inputCol` and `outputCol`, as well as the `threshold` for binarization. Feature values greater than the threshold are binarized to 1.0; values equal to or less than the threshold are binarized to 0.0.
+`Binarizer` takes the common parameters `inputCol` and `outputCol`, as well as the `threshold`
+for binarization. Feature values greater than the threshold are binarized to 1.0; values equal
+to or less than the threshold are binarized to 0.0. Both Vector and Double types are supported
+for `inputCol`.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -724,7 +734,7 @@ for more details on the API.
 
 `Normalizer` is a `Transformer` which transforms a dataset of `Vector` rows, normalizing each `Vector` to have unit norm.  It takes parameter `p`, which specifies the [p-norm](http://en.wikipedia.org/wiki/Norm_%28mathematics%29#p-norm) used for normalization.  ($p = 2$ by default.)  This normalization can help standardize your input data and improve the behavior of learning algorithms.
 
-The following example demonstrates how to load a dataset in libsvm format and then normalize each row to have unit $L^2$ norm and unit $L^\infty$ norm.
+The following example demonstrates how to load a dataset in libsvm format and then normalize each row to have unit $L^1$ norm and unit $L^\infty$ norm.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -758,7 +768,7 @@ for more details on the API.
 `StandardScaler` transforms a dataset of `Vector` rows, normalizing each feature to have unit standard deviation and/or zero mean.  It takes parameters:
 
 * `withStd`: True by default. Scales the data to unit standard deviation.
-* `withMean`: False by default. Centers the data with mean before scaling. It will build a dense output, so this does not work on sparse input and will raise an exception.
+* `withMean`: False by default. Centers the data with mean before scaling. It will build a dense output, so take care when applying to sparse input.
 
 `StandardScaler` is an `Estimator` which can be `fit` on a dataset to produce a `StandardScalerModel`; this amounts to computing summary statistics.  The model can then transform a `Vector` column in a dataset to have unit standard deviation and/or zero mean features.
 
@@ -805,7 +815,7 @@ The rescaled value for a feature E is calculated as,
 `\begin{equation}
   Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
 \end{equation}`
-For the case `E_{max} == E_{min}`, `Rescaled(e_i) = 0.5 * (max + min)`
+For the case `$E_{max} == E_{min}$`, `$Rescaled(e_i) = 0.5 * (max + min)$`
 
 Note that since zero values will probably be transformed to non-zero values, output of the transformer will be `DenseVector` even for sparse input.
 
@@ -1092,14 +1102,13 @@ for more details on the API.
 ## QuantileDiscretizer
 
 `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
-categorical features.
-The bin ranges are chosen by taking a sample of the data and dividing it into roughly equal parts.
-The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
-This attempts to find `numBuckets` partitions based on a sample of the given input data, but it may
-find fewer depending on the data sample values.
-
-Note that the result may be different every time you run it, since the sample strategy behind it is
-non-deterministic.
+categorical features. The number of bins is set by the `numBuckets` parameter.
+The bin ranges are chosen using an approximate algorithm (see the documentation for
+[approxQuantile](api/scala/index.html#org.apache.spark.sql.DataFrameStatFunctions) for a
+detailed description). The precision of the approximation can be controlled with the
+`relativeError` parameter. When set to zero, exact quantiles are calculated
+(**Note:** Computing exact quantiles is an expensive operation). The lower and upper bin bounds
+will be `-Infinity` and `+Infinity` covering all real values.
 
 **Examples**
 

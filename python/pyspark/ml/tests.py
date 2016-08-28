@@ -16,7 +16,7 @@
 #
 
 """
-Unit tests for Spark ML Python APIs.
+Unit tests for MLlib Python DataFrame-based APIs.
 """
 import sys
 if sys.version > '3':
@@ -61,7 +61,7 @@ from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor, \
     GeneralizedLinearRegression
 from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams
-from pyspark.mllib.common import _java2py
+from pyspark.ml.common import _java2py
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
@@ -229,6 +229,17 @@ class PipelineTests(PySparkTestCase):
         self.assertEqual(4, model2.dataset_index)
         self.assertEqual(5, transformer3.dataset_index)
         self.assertEqual(6, dataset.index)
+
+    def test_identity_pipeline(self):
+        dataset = MockDataset()
+
+        def doTransform(pipeline):
+            pipeline_model = pipeline.fit(dataset)
+            return pipeline_model.transform(dataset)
+        # check that empty pipeline did not perform any transformation
+        self.assertEqual(dataset.index, doTransform(Pipeline(stages=[])).index)
+        # check that failure to set stages param will raise KeyError for missing param
+        self.assertRaises(KeyError, lambda: doTransform(Pipeline()))
 
 
 class TestParams(HasMaxIter, HasInputCol, HasSeed):
@@ -1195,12 +1206,12 @@ class VectorTests(MLlibTestCase):
 
     def _test_serialize(self, v):
         self.assertEqual(v, ser.loads(ser.dumps(v)))
-        jvec = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(v)))
-        nv = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jvec)))
+        jvec = self.sc._jvm.org.apache.spark.ml.python.MLSerDe.loads(bytearray(ser.dumps(v)))
+        nv = ser.loads(bytes(self.sc._jvm.org.apache.spark.ml.python.MLSerDe.dumps(jvec)))
         self.assertEqual(v, nv)
         vs = [v] * 100
-        jvecs = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(vs)))
-        nvs = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jvecs)))
+        jvecs = self.sc._jvm.org.apache.spark.ml.python.MLSerDe.loads(bytearray(ser.dumps(vs)))
+        nvs = ser.loads(bytes(self.sc._jvm.org.apache.spark.ml.python.MLSerDe.dumps(jvecs)))
         self.assertEqual(vs, nvs)
 
     def test_serialize(self):

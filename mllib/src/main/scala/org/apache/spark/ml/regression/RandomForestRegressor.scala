@@ -20,7 +20,7 @@ package org.apache.spark.ml.regression
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
@@ -37,12 +37,10 @@ import org.apache.spark.sql.functions._
 
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] learning algorithm for regression.
  * It supports both continuous and categorical features.
  */
 @Since("1.4.0")
-@Experimental
 class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, RandomForestRegressor, RandomForestRegressionModel]
   with RandomForestRegressorParams with DefaultParamsWritable {
@@ -118,7 +116,6 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 }
 
 @Since("1.4.0")
-@Experimental
 object RandomForestRegressor extends DefaultParamsReadable[RandomForestRegressor]{
   /** Accessor for supported impurity settings: variance */
   @Since("1.4.0")
@@ -135,7 +132,6 @@ object RandomForestRegressor extends DefaultParamsReadable[RandomForestRegressor
 }
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for regression.
  * It supports both continuous and categorical features.
  *
@@ -143,7 +139,6 @@ object RandomForestRegressor extends DefaultParamsReadable[RandomForestRegressor
  * @param numFeatures  Number of features used by this model
  */
 @Since("1.4.0")
-@Experimental
 class RandomForestRegressionModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
@@ -244,7 +239,7 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
       val extraMetadata: JObject = Map(
         "numFeatures" -> instance.numFeatures,
         "numTrees" -> instance.getNumTrees)
-      EnsembleModelReadWrite.saveImpl(instance, path, sqlContext, extraMetadata)
+      EnsembleModelReadWrite.saveImpl(instance, path, sparkSession, extraMetadata)
     }
   }
 
@@ -257,7 +252,7 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
     override def load(path: String): RandomForestRegressionModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
-        EnsembleModelReadWrite.loadImpl(path, sqlContext, className, treeClassName)
+        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numTrees = (metadata.metadata \ "numTrees").extract[Int]
 

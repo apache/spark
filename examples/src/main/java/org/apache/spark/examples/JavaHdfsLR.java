@@ -126,7 +126,7 @@ public final class JavaHdfsLR {
       .appName("JavaHdfsLR")
       .getOrCreate();
 
-    JavaRDD<String> lines = spark.read().text(args[0]).javaRDD();
+    JavaRDD<String> lines = spark.read().textFile(args[0]).javaRDD();
     JavaRDD<DataPoint> points = lines.map(new ParsePoint()).cache();
     int ITERATIONS = Integer.parseInt(args[1]);
 

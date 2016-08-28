@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
+import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
@@ -52,6 +53,14 @@ private[sql] class JSONOptions(
   val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
   private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
   val columnNameOfCorruptRecord = parameters.get("columnNameOfCorruptRecord")
+
+  // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
+  val dateFormat: FastDateFormat =
+    FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"))
+
+  val timestampFormat: FastDateFormat =
+    FastDateFormat.getInstance(
+      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"))
 
   // Parse mode flags
   if (!ParseModes.isValidMode(parseMode)) {

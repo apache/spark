@@ -36,7 +36,11 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   def initializeSpark() {
     intp.beQuietDuring {
       processLine("""
-        @transient val spark = org.apache.spark.repl.Main.createSparkSession()
+        @transient val spark = if (org.apache.spark.repl.Main.sparkSession != null) {
+            org.apache.spark.repl.Main.sparkSession
+          } else {
+            org.apache.spark.repl.Main.createSparkSession()
+          }
         @transient val sc = {
           val _sc = spark.sparkContext
           _sc.uiWebUrl.foreach(webUrl => println(s"Spark context Web UI available at ${webUrl}"))
@@ -50,6 +54,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
       processLine("import spark.implicits._")
       processLine("import spark.sql")
       processLine("import org.apache.spark.sql.functions._")
+      replayCommandStack = Nil // remove above commands from session history.
     }
   }
 
@@ -70,7 +75,8 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     echo("Type :help for more information.")
   }
 
-  private val blockedCommands = Set("implicits", "javap", "power", "type", "kind", "reset")
+  /** Add repl commands that needs to be blocked. e.g. reset */
+  private val blockedCommands = Set[String]()
 
   /** Standard commands */
   lazy val sparkStandardCommands: List[SparkILoop.this.LoopCommand] =
@@ -87,6 +93,12 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   override def loadFiles(settings: Settings): Unit = {
     initializeSpark()
     super.loadFiles(settings)
+  }
+
+  override def resetCommand(line: String): Unit = {
+    super.resetCommand(line)
+    initializeSpark()
+    echo("Note that after :reset, state of SparkSession and SparkContext is unchanged.")
   }
 }
 

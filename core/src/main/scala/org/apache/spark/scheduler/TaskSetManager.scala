@@ -83,7 +83,7 @@ private[spark] class TaskSetManager(
   val copiesRunning = new Array[Int](numTasks)
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
-  // key is taskId, value is a Map of executor id to when it failed
+  // key is taskId (aka TaskInfo.index), value is a Map of executor id to when it failed
   private val failedExecutors = new HashMap[Int, HashMap[String, Long]]()
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
@@ -270,7 +270,7 @@ private[spark] class TaskSetManager(
    * Is this re-execution of a failed task on an executor it already failed in before
    * EXECUTOR_TASK_BLACKLIST_TIMEOUT has elapsed ?
    */
-  private def executorIsBlacklisted(execId: String, taskId: Int): Boolean = {
+  private[scheduler] def executorIsBlacklisted(execId: String, taskId: Int): Boolean = {
     if (failedExecutors.contains(taskId)) {
       val failed = failedExecutors.get(taskId).get
 
@@ -573,6 +573,56 @@ private[spark] class TaskSetManager(
       index += 1
     }
     index
+  }
+
+  /**
+   * Check whether the given task set has been blacklisted to the point that it can't run anywhere.
+   *
+   * It is possible that this taskset has become impossible to schedule *anywhere* due to the
+   * blacklist.  The most common scenario would be if there are fewer executors than
+   * spark.task.maxFailures. We need to detect this so we can fail the task set, otherwise the job
+   * will hang.
+   *
+   * There's a tradeoff here: we could make sure all tasks in the task set are schedulable, but that
+   * would add extra time to each iteration of the scheduling loop. Here, we take the approach of
+   * making sure at least one of the unscheduled tasks is schedulable. This means we may not detect
+   * the hang as quickly as we could have, but we'll always detect the hang eventually, and the
+   * method is faster in the typical case. In the worst case, this method can take
+   * O(maxTaskFailures + numTasks) time, but it will be faster when there haven't been any task
+   * failures (this is because the method picks on unscheduled task, and then iterates through each
+   * executor until it finds one that the task hasn't failed on already).
+   */
+  private[scheduler] def abortIfCompletelyBlacklisted(executors: Iterable[String]): Unit = {
+
+    val pendingTask: Option[Int] = {
+      // usually this will just take the last pending task, but because of the lazy removal
+      // from each list, we may need to go deeper in the list.  We poll from the end because
+      // failed tasks are put back at the end of allPendingTasks, so we're more likely to find
+      // an unschedulable task this way.
+      val indexOffset = allPendingTasks.lastIndexWhere { indexInTaskSet =>
+        copiesRunning(indexInTaskSet) == 0 && !successful(indexInTaskSet)
+      }
+      if (indexOffset == -1) {
+        None
+      } else {
+        Some(allPendingTasks(indexOffset))
+      }
+    }
+
+    // If no executors have registered yet, don't abort the stage, just wait.  We probably
+    // got here because a task set was added before the executors registered.
+    if (executors.nonEmpty) {
+      // take any task that needs to be scheduled, and see if we can find some executor it *could*
+      // run on
+      pendingTask.foreach { taskId =>
+        if (executors.forall(executorIsBlacklisted(_, taskId))) {
+          val execs = executors.toIndexedSeq.sorted.mkString("(", ",", ")")
+          val partition = tasks(taskId).partitionId
+          abort(s"Aborting ${taskSet} because task $taskId (partition $partition)" +
+            s" has already failed on executors $execs, and no other executors are available.")
+        }
+      }
+    }
   }
 
   /**

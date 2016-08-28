@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -127,7 +128,7 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
   }
 }
 
-private[sql] object SetOperation {
+object SetOperation {
   def unapply(p: SetOperation): Option[(LogicalPlan, LogicalPlan)] = Some((p.left, p.right))
 }
 
@@ -159,7 +160,7 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
     }
   }
 
-  override def statistics: Statistics = {
+  override lazy val statistics: Statistics = {
     val leftSize = left.statistics.sizeInBytes
     val rightSize = right.statistics.sizeInBytes
     val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
@@ -184,7 +185,7 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
       left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
       duplicateResolved
 
-  override def statistics: Statistics = {
+  override lazy val statistics: Statistics = {
     left.statistics.copy()
   }
 }
@@ -224,7 +225,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     children.length > 1 && childrenResolved && allChildrenCompatible
   }
 
-  override def statistics: Statistics = {
+  override lazy val statistics: Statistics = {
     val sizeInBytes = children.map(_.statistics.sizeInBytes).sum
     Statistics(sizeInBytes = sizeInBytes)
   }
@@ -333,7 +334,7 @@ case class Join(
     case _ => resolvedExceptNatural
   }
 
-  override def statistics: Statistics = joinType match {
+  override lazy val statistics: Statistics = joinType match {
     case LeftAnti | LeftSemi =>
       // LeftSemi and LeftAnti won't ever be bigger than left
       left.statistics.copy()
@@ -351,7 +352,7 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   // set isBroadcastable to true so the child will be broadcasted
-  override def statistics: Statistics = super.statistics.copy(isBroadcastable = true)
+  override lazy val statistics: Statistics = super.statistics.copy(isBroadcastable = true)
 }
 
 case class InsertIntoTable(
@@ -365,18 +366,19 @@ case class InsertIntoTable(
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty
 
-  private[spark] lazy val expectedColumns = {
+  lazy val expectedColumns = {
     if (table.output.isEmpty) {
       None
     } else {
-      val numDynamicPartitions = partition.values.count(_.isEmpty)
-      val (partitionColumns, dataColumns) = table.output
-          .partition(a => partition.keySet.contains(a.name))
-      Some(dataColumns ++ partitionColumns.takeRight(numDynamicPartitions))
+      // Note: The parser (visitPartitionSpec in AstBuilder) already turns
+      // keys in partition to their lowercase forms.
+      val staticPartCols = partition.filter(_._2.isDefined).keySet
+      Some(table.output.filterNot(a => staticPartCols.contains(a.name)))
     }
   }
 
   assert(overwrite || !ifNotExists)
+  assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
   override lazy val resolved: Boolean =
     childrenResolved && table.resolved && expectedColumns.forall { expected =>
     child.output.size == expected.size && child.output.zip(expected).forall {
@@ -391,11 +393,10 @@ case class InsertIntoTable(
  * This operator will be removed during analysis and the relations will be substituted into child.
  *
  * @param child The final query of this CTE.
- * @param cteRelations Queries that this CTE defined,
- *                     key is the alias of the CTE definition,
- *                     value is the CTE definition.
+ * @param cteRelations A sequence of pair (alias, the CTE definition) that this CTE defined
+ *                     Each CTE can see the base tables and the previously defined CTEs only.
  */
-case class With(child: LogicalPlan, cteRelations: Map[String, SubqueryAlias]) extends UnaryNode {
+case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
@@ -421,9 +422,12 @@ case class Sort(
 
 /** Factory for constructing new `Range` nodes. */
 object Range {
-  def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {
+  def apply(start: Long, end: Long, step: Long, numSlices: Option[Int]): Range = {
     val output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
     new Range(start, end, step, numSlices, output)
+  }
+  def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {
+    Range(start, end, step, Some(numSlices))
   }
 }
 
@@ -431,7 +435,7 @@ case class Range(
     start: Long,
     end: Long,
     step: Long,
-    numSlices: Int,
+    numSlices: Option[Int],
     output: Seq[Attribute])
   extends LeafNode with MultiInstanceRelation {
 
@@ -448,19 +452,23 @@ case class Range(
     }
   }
 
+  def toSQL(): String = {
+    if (numSlices.isDefined) {
+      s"SELECT id AS `${output.head.name}` FROM range($start, $end, $step, ${numSlices.get})"
+    } else {
+      s"SELECT id AS `${output.head.name}` FROM range($start, $end, $step)"
+    }
+  }
+
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
-  override def statistics: Statistics = {
+  override lazy val statistics: Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements
     Statistics( sizeInBytes = sizeInBytes )
   }
 
   override def simpleString: String = {
-    if (step == 1) {
-      s"Range ($start, $end, splits=$numSlices)"
-    } else {
-      s"Range ($start, $end, step=$step, splits=$numSlices)"
-    }
+    s"Range ($start, $end, step=$step, splits=$numSlices)"
   }
 }
 
@@ -482,10 +490,12 @@ case class Aggregate(
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
-  override def validConstraints: Set[Expression] =
-    child.constraints.union(getAliasedConstraints(aggregateExpressions))
+  override def validConstraints: Set[Expression] = {
+    val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
+    child.constraints.union(getAliasedConstraints(nonAgg))
+  }
 
-  override def statistics: Statistics = {
+  override lazy val statistics: Statistics = {
     if (groupingExpressions.isEmpty) {
       super.statistics.copy(sizeInBytes = 1)
     } else {
@@ -506,7 +516,7 @@ case class Window(
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 }
 
-private[sql] object Expand {
+object Expand {
   /**
    * Extract attribute set according to the grouping id.
    *
@@ -585,7 +595,7 @@ case class Expand(
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
-  override def statistics: Statistics = {
+  override lazy val statistics: Statistics = {
     val sizeInBytes = super.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
@@ -659,7 +669,13 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
   }
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
-    val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
+    val sizeInBytes = if (limit == 0) {
+      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
+      // (product of children).
+      1
+    } else {
+      (limit: Long) * output.map(a => a.dataType.defaultSize).sum
+    }
     child.statistics.copy(sizeInBytes = sizeInBytes)
   }
 }
@@ -674,12 +690,22 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   }
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
-    val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
+    val sizeInBytes = if (limit == 0) {
+      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
+      // (product of children).
+      1
+    } else {
+      (limit: Long) * output.map(a => a.dataType.defaultSize).sum
+    }
     child.statistics.copy(sizeInBytes = sizeInBytes)
   }
 }
 
-case class SubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
+case class SubqueryAlias(
+    alias: String,
+    child: LogicalPlan,
+    view: Option[TableIdentifier])
+  extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 }
@@ -705,7 +731,7 @@ case class Sample(
 
   override def output: Seq[Attribute] = child.output
 
-  override def statistics: Statistics = {
+  override lazy val statistics: Statistics = {
     val ratio = upperBound - lowerBound
     // BigInt can't multiply with Double
     var sizeInBytes = child.statistics.sizeInBytes * (ratio * 100).toInt / 100
@@ -752,5 +778,5 @@ case object OneRowRelation extends LeafNode {
    *
    * [[LeafNode]]s must override this.
    */
-  override def statistics: Statistics = Statistics(sizeInBytes = 1)
+  override lazy val statistics: Statistics = Statistics(sizeInBytes = 1)
 }

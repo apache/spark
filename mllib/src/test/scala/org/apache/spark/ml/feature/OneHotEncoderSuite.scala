@@ -49,7 +49,9 @@ class OneHotEncoderSuite
     val encoder = new OneHotEncoder()
       .setInputCol("labelIndex")
       .setOutputCol("labelVec")
-      .setDropLast(false)
+    assert(encoder.getDropLast === true)
+    encoder.setDropLast(false)
+    assert(encoder.getDropLast === false)
     val encoded = encoder.transform(transformed)
 
     val output = encoded.select("id", "labelVec").rdd.map { r =>

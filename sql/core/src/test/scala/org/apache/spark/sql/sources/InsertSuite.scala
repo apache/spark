@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -87,15 +88,13 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
   }
 
   test("SELECT clause generating a different number of columns is not allowed.") {
-    val message = intercept[RuntimeException] {
+    val message = intercept[AnalysisException] {
       sql(
         s"""
         |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
       """.stripMargin)
     }.getMessage
-    assert(
-      message.contains("generates the same number of columns as its schema"),
-      "SELECT clause generating a different number of columns should not be not allowed."
+    assert(message.contains("the number of columns are different")
     )
   }
 
@@ -258,5 +257,29 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     )
 
     spark.catalog.dropTempView("oneToTen")
+  }
+
+  test("SPARK-15824 - Execute an INSERT wrapped in a WITH statement immediately") {
+    withTable("target", "target2") {
+      sql(s"CREATE TABLE target(a INT, b STRING) USING JSON")
+      sql("WITH tbl AS (SELECT * FROM jt) INSERT OVERWRITE TABLE target SELECT a, b FROM tbl")
+      checkAnswer(
+        sql("SELECT a, b FROM target"),
+        sql("SELECT a, b FROM jt")
+      )
+
+      sql(s"CREATE TABLE target2(a INT, b STRING) USING JSON")
+      val e = sql(
+        """
+          |WITH tbl AS (SELECT * FROM jt)
+          |FROM tbl
+          |INSERT INTO target2 SELECT a, b WHERE a <= 5
+          |INSERT INTO target2 SELECT a, b WHERE a > 5
+        """.stripMargin)
+      checkAnswer(
+        sql("SELECT a, b FROM target2"),
+        sql("SELECT a, b FROM jt")
+      )
+    }
   }
 }

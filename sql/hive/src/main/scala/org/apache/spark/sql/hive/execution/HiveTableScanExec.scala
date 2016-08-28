@@ -54,7 +54,7 @@ case class HiveTableScanExec(
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
     "Partition pruning predicates only supported for partitioned tables.")
 
-  private[sql] override lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def producedAttributes: AttributeSet = outputSet ++

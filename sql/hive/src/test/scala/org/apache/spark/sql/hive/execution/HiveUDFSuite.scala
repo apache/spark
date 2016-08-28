@@ -142,6 +142,13 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql("SELECT array(max(key), max(key)) FROM src").collect().toSeq)
   }
 
+  test("SPARK-16228 Percentile needs explicit cast to double") {
+    sql("select percentile(value, cast(0.5 as double)) from values 1,2,3 T(value)")
+    sql("select percentile_approx(value, cast(0.5 as double)) from values 1.0,2.0,3.0 T(value)")
+    sql("select percentile(value, 0.5) from values 1,2,3 T(value)")
+    sql("select percentile_approx(value, 0.5) from values 1.0,2.0,3.0 T(value)")
+  }
+
   test("Generic UDAF aggregates") {
     checkAnswer(sql("SELECT ceiling(percentile_approx(key, 0.99999D)) FROM src LIMIT 1"),
       sql("SELECT max(key) FROM src LIMIT 1").collect().toSeq)
@@ -351,7 +358,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("Hive UDF in group by") {
-    withTempTable("tab1") {
+    withTempView("tab1") {
       Seq(Tuple1(1451400761)).toDF("test_date").createOrReplaceTempView("tab1")
       sql(s"CREATE TEMPORARY FUNCTION testUDFToDate AS '${classOf[GenericUDFToDate].getName}'")
       val count = sql("select testUDFToDate(cast(test_date as timestamp))" +

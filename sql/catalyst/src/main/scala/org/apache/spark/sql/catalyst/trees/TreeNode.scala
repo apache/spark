@@ -23,7 +23,7 @@ import scala.collection.Map
 import scala.collection.mutable.Stack
 import scala.reflect.ClassTag
 
-import org.apache.commons.lang.ClassUtils
+import org.apache.commons.lang3.ClassUtils
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -105,7 +105,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   def find(f: BaseType => Boolean): Option[BaseType] = f(this) match {
     case true => Some(this)
-    case false => children.foldLeft(None: Option[BaseType]) { (l, r) => l.orElse(r.find(f)) }
+    case false => children.foldLeft(Option.empty[BaseType]) { (l, r) => l.orElse(r.find(f)) }
   }
 
   /**
@@ -165,7 +165,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def collectFirst[B](pf: PartialFunction[BaseType, B]): Option[B] = {
     val lifted = pf.lift
     lifted(this).orElse {
-      children.foldLeft(None: Option[B]) { (l, r) => l.orElse(r.collectFirst(pf)) }
+      children.foldLeft(Option.empty[B]) { (l, r) => l.orElse(r.collectFirst(pf)) }
     }
   }
 
@@ -315,25 +315,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   protected def transformChildren(
       rule: PartialFunction[BaseType, BaseType],
       nextOperation: (BaseType, PartialFunction[BaseType, BaseType]) => BaseType): BaseType = {
-    var changed = false
-    val newArgs = mapProductIterator {
-      case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
-        if (!(newChild fastEquals arg)) {
-          changed = true
-          newChild
-        } else {
-          arg
-        }
-      case Some(arg: TreeNode[_]) if containsChild(arg) =>
-        val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
-        if (!(newChild fastEquals arg)) {
-          changed = true
-          Some(newChild)
-        } else {
-          Some(arg)
-        }
-      case m: Map[_, _] => m.mapValues {
+    if (children.nonEmpty) {
+      var changed = false
+      val newArgs = mapProductIterator {
         case arg: TreeNode[_] if containsChild(arg) =>
           val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
           if (!(newChild fastEquals arg)) {
@@ -342,33 +326,53 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
           } else {
             arg
           }
-        case other => other
-      }.view.force // `mapValues` is lazy and we need to force it to materialize
-      case d: DataType => d // Avoid unpacking Structs
-      case args: Traversable[_] => args.map {
-        case arg: TreeNode[_] if containsChild(arg) =>
+        case Some(arg: TreeNode[_]) if containsChild(arg) =>
           val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
           if (!(newChild fastEquals arg)) {
             changed = true
-            newChild
+            Some(newChild)
           } else {
-            arg
+            Some(arg)
           }
-        case tuple @ (arg1: TreeNode[_], arg2: TreeNode[_]) =>
-          val newChild1 = nextOperation(arg1.asInstanceOf[BaseType], rule)
-          val newChild2 = nextOperation(arg2.asInstanceOf[BaseType], rule)
-          if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
-            changed = true
-            (newChild1, newChild2)
-          } else {
-            tuple
-          }
-        case other => other
+        case m: Map[_, _] => m.mapValues {
+          case arg: TreeNode[_] if containsChild(arg) =>
+            val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
+            if (!(newChild fastEquals arg)) {
+              changed = true
+              newChild
+            } else {
+              arg
+            }
+          case other => other
+        }.view.force // `mapValues` is lazy and we need to force it to materialize
+        case d: DataType => d // Avoid unpacking Structs
+        case args: Traversable[_] => args.map {
+          case arg: TreeNode[_] if containsChild(arg) =>
+            val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
+            if (!(newChild fastEquals arg)) {
+              changed = true
+              newChild
+            } else {
+              arg
+            }
+          case tuple@(arg1: TreeNode[_], arg2: TreeNode[_]) =>
+            val newChild1 = nextOperation(arg1.asInstanceOf[BaseType], rule)
+            val newChild2 = nextOperation(arg2.asInstanceOf[BaseType], rule)
+            if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
+              changed = true
+              (newChild1, newChild2)
+            } else {
+              tuple
+            }
+          case other => other
+        }
+        case nonChild: AnyRef => nonChild
+        case null => null
       }
-      case nonChild: AnyRef => nonChild
-      case null => null
+      if (changed) makeCopy(newArgs) else this
+    } else {
+      this
     }
-    if (changed) makeCopy(newArgs) else this
   }
 
   /**
@@ -448,10 +452,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case tn: TreeNode[_] => tn.simpleString :: Nil
     case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
     case iter: Iterable[_] if iter.isEmpty => Nil
-    case seq: Seq[_] => seq.mkString("[", ", ", "]") :: Nil
-    case set: Set[_] => set.mkString("{", ", ", "}") :: Nil
+    case seq: Seq[_] => Utils.truncatedString(seq, "[", ", ", "]") :: Nil
+    case set: Set[_] => Utils.truncatedString(set.toSeq, "{", ", ", "}") :: Nil
     case array: Array[_] if array.isEmpty => Nil
-    case array: Array[_] => array.mkString("[", ", ", "]") :: Nil
+    case array: Array[_] => Utils.truncatedString(array, "[", ", ", "]") :: Nil
     case null => Nil
     case None => Nil
     case Some(null) => Nil
@@ -534,9 +538,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
-        depth + 2, lastChildren :+ false :+ false, builder, verbose))
+        depth + 2, lastChildren :+ children.isEmpty :+ false, builder, verbose))
       innerChildren.last.generateTreeString(
-        depth + 2, lastChildren :+ false :+ true, builder, verbose)
+        depth + 2, lastChildren :+ children.isEmpty :+ true, builder, verbose)
     }
 
     if (children.nonEmpty) {

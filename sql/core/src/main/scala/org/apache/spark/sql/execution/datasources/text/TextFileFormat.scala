@@ -27,7 +27,6 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -36,7 +35,7 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * A data source for reading text files.
  */
-class TextFileFormat extends FileFormat with DataSourceRegister {
+class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "text"
 
@@ -131,7 +130,7 @@ class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemp
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
+        val uniqueWriteJobId = configuration.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
         val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
         new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.txt$extension")

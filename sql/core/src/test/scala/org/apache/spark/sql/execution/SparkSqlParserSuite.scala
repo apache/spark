@@ -46,10 +46,17 @@ class SparkSqlParserSuite extends PlanTest {
   }
 
   test("show functions") {
-    assertEqual("show functions", ShowFunctionsCommand(None, None))
-    assertEqual("show functions foo", ShowFunctionsCommand(None, Some("foo")))
-    assertEqual("show functions foo.bar", ShowFunctionsCommand(Some("foo"), Some("bar")))
-    assertEqual("show functions 'foo\\\\.*'", ShowFunctionsCommand(None, Some("foo\\.*")))
+    assertEqual("show functions", ShowFunctionsCommand(None, None, true, true))
+    assertEqual("show all functions", ShowFunctionsCommand(None, None, true, true))
+    assertEqual("show user functions", ShowFunctionsCommand(None, None, true, false))
+    assertEqual("show system functions", ShowFunctionsCommand(None, None, false, true))
+    intercept("show special functions", "SHOW special FUNCTIONS")
+    assertEqual("show functions foo",
+      ShowFunctionsCommand(None, Some("foo"), true, true))
+    assertEqual("show functions foo.bar",
+      ShowFunctionsCommand(Some("foo"), Some("bar"), true, true))
+    assertEqual("show functions 'foo\\\\.*'",
+      ShowFunctionsCommand(None, Some("foo\\.*"), true, true))
     intercept("show functions foo.bar.baz", "Unsupported function name")
   }
 

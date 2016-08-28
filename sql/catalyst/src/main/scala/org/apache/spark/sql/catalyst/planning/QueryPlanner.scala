@@ -27,6 +27,14 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
  * empty list should be returned.
  */
 abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends Logging {
+
+  /**
+   * Returns a placeholder for a physical plan that executes `plan`. This placeholder will be
+   * filled in automatically by the QueryPlanner using the other execution strategies that are
+   * available.
+   */
+  protected def planLater(plan: LogicalPlan): PhysicalPlan
+
   def apply(plan: LogicalPlan): Seq[PhysicalPlan]
 }
 
@@ -47,17 +55,47 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
   /** A list of execution strategies that can be used by the planner */
   def strategies: Seq[GenericStrategy[PhysicalPlan]]
 
-  /**
-   * Returns a placeholder for a physical plan that executes `plan`. This placeholder will be
-   * filled in automatically by the QueryPlanner using the other execution strategies that are
-   * available.
-   */
-  protected def planLater(plan: LogicalPlan): PhysicalPlan = this.plan(plan).next()
-
   def plan(plan: LogicalPlan): Iterator[PhysicalPlan] = {
     // Obviously a lot to do here still...
-    val iter = strategies.view.flatMap(_(plan)).toIterator
-    assert(iter.hasNext, s"No plan for $plan")
-    iter
+
+    // Collect physical plan candidates.
+    val candidates = strategies.iterator.flatMap(_(plan))
+
+    // The candidates may contain placeholders marked as [[planLater]],
+    // so try to replace them by their child plans.
+    val plans = candidates.flatMap { candidate =>
+      val placeholders = collectPlaceholders(candidate)
+
+      if (placeholders.isEmpty) {
+        // Take the candidate as is because it does not contain placeholders.
+        Iterator(candidate)
+      } else {
+        // Plan the logical plan marked as [[planLater]] and replace the placeholders.
+        placeholders.iterator.foldLeft(Iterator(candidate)) {
+          case (candidatesWithPlaceholders, (placeholder, logicalPlan)) =>
+            // Plan the logical plan for the placeholder.
+            val childPlans = this.plan(logicalPlan)
+
+            candidatesWithPlaceholders.flatMap { candidateWithPlaceholders =>
+              childPlans.map { childPlan =>
+                // Replace the placeholder by the child plan
+                candidateWithPlaceholders.transformUp {
+                  case p if p == placeholder => childPlan
+                }
+              }
+            }
+        }
+      }
+    }
+
+    val pruned = prunePlans(plans)
+    assert(pruned.hasNext, s"No plan for $plan")
+    pruned
   }
+
+  /** Collects placeholders marked as [[planLater]] by strategy and its [[LogicalPlan]]s */
+  protected def collectPlaceholders(plan: PhysicalPlan): Seq[(PhysicalPlan, LogicalPlan)]
+
+  /** Prunes bad plans to prevent combinatorial explosion. */
+  protected def prunePlans(plans: Iterator[PhysicalPlan]): Iterator[PhysicalPlan]
 }

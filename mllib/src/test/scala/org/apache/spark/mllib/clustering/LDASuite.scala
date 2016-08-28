@@ -118,8 +118,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(weights.length == 2)
         val bdvTopicDist = topicDistribution.asBreeze
         val top2Indices = argtopk(bdvTopicDist, 2)
-        assert(top2Indices.toArray === indices)
-        assert(bdvTopicDist(top2Indices).toArray === weights)
+        assert(top2Indices.toSet === indices.toSet)
+        assert(bdvTopicDist(top2Indices).toArray.toSet === weights.toSet)
     }
 
     // Check: log probabilities

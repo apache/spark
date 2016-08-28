@@ -21,7 +21,7 @@ import java.io.{File, PrintWriter}
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.command.AnalyzeTableCommand
 import org.apache.spark.sql.execution.joins._
@@ -115,7 +115,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     }
   }
 
-  ignore("analyze MetastoreRelations") {
+  test("analyze MetastoreRelations") {
     def queryTotalSize(tableName: String): BigInt =
       spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName)).statistics.sizeInBytes
 
@@ -155,18 +155,17 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
 
     sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
 
-    // This seems to be flaky.
-    // assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
+    assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
 
     sql("DROP TABLE analyzeTable_part").collect()
 
     // Try to analyze a temp table
     sql("""SELECT * FROM src""").createOrReplaceTempView("tempTable")
-    intercept[UnsupportedOperationException] {
+    intercept[AnalysisException] {
       sql("ANALYZE TABLE tempTable COMPUTE STATISTICS")
     }
     spark.sessionState.catalog.dropTable(
-      TableIdentifier("tempTable"), ignoreIfNotExists = true)
+      TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
   }
 
   test("estimates the size of a test MetastoreRelation") {

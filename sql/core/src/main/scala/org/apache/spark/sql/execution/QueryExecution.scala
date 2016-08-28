@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCom
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
+import org.apache.spark.util.Utils
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -74,6 +75,8 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   lazy val sparkPlan: SparkPlan = {
     SparkSession.setActiveSession(sparkSession)
+    // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
+    //       but we will implement to choose the best plan.
     planner.plan(ReturnAnswer(optimizedPlan)).next()
   }
 
@@ -98,7 +101,8 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     PlanSubqueries(sparkSession),
     EnsureRequirements(sparkSession.sessionState.conf),
     CollapseCodegenStages(sparkSession.sessionState.conf),
-    ReuseExchange(sparkSession.sessionState.conf))
+    ReuseExchange(sparkSession.sessionState.conf),
+    ReuseSubquery(sparkSession.sessionState.conf))
 
   protected def stringOrError[A](f: => A): String =
     try f.toString catch { case e: Throwable => e.toString }
@@ -110,24 +114,27 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
    */
   def hiveResultString(): Seq[String] = executedPlan match {
     case ExecutedCommandExec(desc: DescribeTableCommand) =>
-      // If it is a describe command for a Hive table, we want to have the output format
-      // be similar with Hive.
-      desc.run(sparkSession).map {
-        case Row(name: String, dataType: String, comment) =>
-          Seq(name, dataType,
-            Option(comment.asInstanceOf[String]).getOrElse(""))
-            .map(s => String.format(s"%-20s", s))
-            .mkString("\t")
+      SQLExecution.withNewExecutionId(sparkSession, this) {
+        // If it is a describe command for a Hive table, we want to have the output format
+        // be similar with Hive.
+        desc.run(sparkSession).map {
+          case Row(name: String, dataType: String, comment) =>
+            Seq(name, dataType,
+              Option(comment.asInstanceOf[String]).getOrElse(""))
+              .map(s => String.format(s"%-20s", s))
+              .mkString("\t")
+        }
       }
     case command: ExecutedCommandExec =>
       command.executeCollect().map(_.getString(0))
-
     case other =>
-      val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
-      // We need the types so we can output struct field names
-      val types = analyzed.output.map(_.dataType)
-      // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t")).toSeq
+      SQLExecution.withNewExecutionId(sparkSession, this) {
+        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
+        // We need the types so we can output struct field names
+        val types = analyzed.output.map(_.dataType)
+        // Reformat to match hive tab delimited output.
+        result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t")).toSeq
+      }
   }
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
@@ -206,8 +213,8 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   }
 
   override def toString: String = {
-    def output =
-      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
+    def output = Utils.truncatedString(
+      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ")
     val analyzedPlan = Seq(
       stringOrError(output),
       stringOrError(analyzed.treeString(verbose = true))

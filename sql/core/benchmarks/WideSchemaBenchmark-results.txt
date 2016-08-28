@@ -1,0 +1,93 @@
+OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-36-generic
+Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+parsing large select:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+1 select expressions                             3 /    5          0.0     2967064.0       1.0X
+100 select expressions                          11 /   12          0.0    11369518.0       0.3X
+2500 select expressions                        243 /  250          0.0   242561004.0       0.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-36-generic
+Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+many column field r/w:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+1 cols x 100000 rows (read in-mem)              28 /   40          3.6         278.8       1.0X
+1 cols x 100000 rows (exec in-mem)              28 /   42          3.5         284.0       1.0X
+1 cols x 100000 rows (read parquet)             23 /   35          4.4         228.8       1.2X
+1 cols x 100000 rows (write parquet)           163 /  182          0.6        1633.0       0.2X
+100 cols x 1000 rows (read in-mem)              27 /   39          3.7         266.9       1.0X
+100 cols x 1000 rows (exec in-mem)              48 /   79          2.1         481.7       0.6X
+100 cols x 1000 rows (read parquet)             25 /   36          3.9         254.3       1.1X
+100 cols x 1000 rows (write parquet)           182 /  196          0.5        1819.5       0.2X
+2500 cols x 40 rows (read in-mem)              280 /  315          0.4        2797.1       0.1X
+2500 cols x 40 rows (exec in-mem)              606 /  638          0.2        6064.3       0.0X
+2500 cols x 40 rows (read parquet)             836 /  843          0.1        8356.4       0.0X
+2500 cols x 40 rows (write parquet)            490 /  522          0.2        4900.6       0.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-36-generic
+Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+wide shallowly nested struct field r/w:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+1 wide x 100000 rows (read in-mem)              22 /   35          4.6         216.0       1.0X
+1 wide x 100000 rows (exec in-mem)              40 /   63          2.5         400.6       0.5X
+1 wide x 100000 rows (read parquet)             93 /  134          1.1         933.9       0.2X
+1 wide x 100000 rows (write parquet)           133 /  174          0.7        1334.3       0.2X
+100 wide x 1000 rows (read in-mem)              22 /   44          4.5         223.3       1.0X
+100 wide x 1000 rows (exec in-mem)              88 /  138          1.1         878.6       0.2X
+100 wide x 1000 rows (read parquet)            117 /  186          0.9        1172.0       0.2X
+100 wide x 1000 rows (write parquet)           144 /  174          0.7        1441.6       0.1X
+2500 wide x 40 rows (read in-mem)               36 /   57          2.8         358.9       0.6X
+2500 wide x 40 rows (exec in-mem)             1466 / 1507          0.1       14656.6       0.0X
+2500 wide x 40 rows (read parquet)             690 /  802          0.1        6898.2       0.0X
+2500 wide x 40 rows (write parquet)            197 /  207          0.5        1970.9       0.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-36-generic
+Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+deeply nested struct field r/w:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+1 deep x 100000 rows (read in-mem)              22 /   35          4.5         223.9       1.0X
+1 deep x 100000 rows (exec in-mem)              28 /   52          3.6         280.6       0.8X
+1 deep x 100000 rows (read parquet)             41 /   65          2.4         410.5       0.5X
+1 deep x 100000 rows (write parquet)           163 /  173          0.6        1634.5       0.1X
+100 deep x 1000 rows (read in-mem)              43 /   63          2.3         425.9       0.5X
+100 deep x 1000 rows (exec in-mem)             232 /  280          0.4        2321.7       0.1X
+100 deep x 1000 rows (read parquet)           1989 / 2281          0.1       19886.6       0.0X
+100 deep x 1000 rows (write parquet)           144 /  184          0.7        1442.6       0.2X
+250 deep x 400 rows (read in-mem)               68 /   95          1.5         680.9       0.3X
+250 deep x 400 rows (exec in-mem)             1310 / 1403          0.1       13096.4       0.0X
+250 deep x 400 rows (read parquet)          41477 / 41847          0.0      414766.8       0.0X
+250 deep x 400 rows (write parquet)            243 /  272          0.4        2433.1       0.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-36-generic
+Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+bushy struct field r/w:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+1 x 1 deep x 100000 rows (read in-mem)          23 /   36          4.4         229.8       1.0X
+1 x 1 deep x 100000 rows (exec in-mem)          27 /   48          3.7         269.6       0.9X
+1 x 1 deep x 100000 rows (read parquet)         25 /   33          4.0         247.5       0.9X
+1 x 1 deep x 100000 rows (write parquet)        82 /  134          1.2         821.1       0.3X
+128 x 8 deep x 1000 rows (read in-mem)          19 /   29          5.3         189.5       1.2X
+128 x 8 deep x 1000 rows (exec in-mem)         144 /  165          0.7        1440.4       0.2X
+128 x 8 deep x 1000 rows (read parquet)        117 /  159          0.9        1174.4       0.2X
+128 x 8 deep x 1000 rows (write parquet)       135 /  162          0.7        1349.0       0.2X
+1024 x 11 deep x 100 rows (read in-mem)         30 /   49          3.3         304.4       0.8X
+1024 x 11 deep x 100 rows (exec in-mem)       1146 / 1183          0.1       11457.6       0.0X
+1024 x 11 deep x 100 rows (read parquet)       712 /  758          0.1        7119.5       0.0X
+1024 x 11 deep x 100 rows (write parquet)       104 /  143          1.0        1037.3       0.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-36-generic
+Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+wide array field r/w:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+1 wide x 100000 rows (read in-mem)              18 /   31          5.6         179.3       1.0X
+1 wide x 100000 rows (exec in-mem)              31 /   47          3.2         310.2       0.6X
+1 wide x 100000 rows (read parquet)             45 /   73          2.2         445.1       0.4X
+1 wide x 100000 rows (write parquet)           109 /  140          0.9        1085.9       0.2X
+100 wide x 1000 rows (read in-mem)              17 /   25          5.8         172.7       1.0X
+100 wide x 1000 rows (exec in-mem)              18 /   22          5.4         184.6       1.0X
+100 wide x 1000 rows (read parquet)             26 /   42          3.8         261.8       0.7X
+100 wide x 1000 rows (write parquet)           150 /  164          0.7        1499.4       0.1X
+2500 wide x 40 rows (read in-mem)               19 /   31          5.1         194.7       0.9X
+2500 wide x 40 rows (exec in-mem)               19 /   24          5.3         188.5       1.0X
+2500 wide x 40 rows (read parquet)              33 /   47          3.0         334.4       0.5X
+2500 wide x 40 rows (write parquet)            153 /  164          0.7        1528.2       0.1X
+

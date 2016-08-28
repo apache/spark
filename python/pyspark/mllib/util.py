@@ -26,6 +26,7 @@ if sys.version > '3':
 from pyspark import SparkContext, since
 from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
+from pyspark.sql import DataFrame
 
 
 class MLUtils(object):
@@ -200,6 +201,166 @@ class MLUtils(object):
         """
         return callMLlibFunc("loadVectors", sc, path)
 
+    @staticmethod
+    @since("2.0.0")
+    def convertVectorColumnsToML(dataset, *cols):
+        """
+        Converts vector columns in an input DataFrame from the
+        :py:class:`pyspark.mllib.linalg.Vector` type to the new
+        :py:class:`pyspark.ml.linalg.Vector` type under the `spark.ml`
+        package.
+
+        :param dataset:
+          input dataset
+        :param cols:
+          a list of vector columns to be converted.
+          New vector columns will be ignored. If unspecified, all old
+          vector columns will be converted excepted nested ones.
+        :return:
+          the input dataset with old vector columns converted to the
+          new vector type
+
+        >>> import pyspark
+        >>> from pyspark.mllib.linalg import Vectors
+        >>> from pyspark.mllib.util import MLUtils
+        >>> df = spark.createDataFrame(
+        ...     [(0, Vectors.sparse(2, [1], [1.0]), Vectors.dense(2.0, 3.0))],
+        ...     ["id", "x", "y"])
+        >>> r1 = MLUtils.convertVectorColumnsToML(df).first()
+        >>> isinstance(r1.x, pyspark.ml.linalg.SparseVector)
+        True
+        >>> isinstance(r1.y, pyspark.ml.linalg.DenseVector)
+        True
+        >>> r2 = MLUtils.convertVectorColumnsToML(df, "x").first()
+        >>> isinstance(r2.x, pyspark.ml.linalg.SparseVector)
+        True
+        >>> isinstance(r2.y, pyspark.mllib.linalg.DenseVector)
+        True
+        """
+        if not isinstance(dataset, DataFrame):
+            raise TypeError("Input dataset must be a DataFrame but got {}.".format(type(dataset)))
+        return callMLlibFunc("convertVectorColumnsToML", dataset, list(cols))
+
+    @staticmethod
+    @since("2.0.0")
+    def convertVectorColumnsFromML(dataset, *cols):
+        """
+        Converts vector columns in an input DataFrame to the
+        :py:class:`pyspark.mllib.linalg.Vector` type from the new
+        :py:class:`pyspark.ml.linalg.Vector` type under the `spark.ml`
+        package.
+
+        :param dataset:
+          input dataset
+        :param cols:
+          a list of vector columns to be converted.
+          Old vector columns will be ignored. If unspecified, all new
+          vector columns will be converted except nested ones.
+        :return:
+          the input dataset with new vector columns converted to the
+          old vector type
+
+        >>> import pyspark
+        >>> from pyspark.ml.linalg import Vectors
+        >>> from pyspark.mllib.util import MLUtils
+        >>> df = spark.createDataFrame(
+        ...     [(0, Vectors.sparse(2, [1], [1.0]), Vectors.dense(2.0, 3.0))],
+        ...     ["id", "x", "y"])
+        >>> r1 = MLUtils.convertVectorColumnsFromML(df).first()
+        >>> isinstance(r1.x, pyspark.mllib.linalg.SparseVector)
+        True
+        >>> isinstance(r1.y, pyspark.mllib.linalg.DenseVector)
+        True
+        >>> r2 = MLUtils.convertVectorColumnsFromML(df, "x").first()
+        >>> isinstance(r2.x, pyspark.mllib.linalg.SparseVector)
+        True
+        >>> isinstance(r2.y, pyspark.ml.linalg.DenseVector)
+        True
+        """
+        if not isinstance(dataset, DataFrame):
+            raise TypeError("Input dataset must be a DataFrame but got {}.".format(type(dataset)))
+        return callMLlibFunc("convertVectorColumnsFromML", dataset, list(cols))
+
+    @staticmethod
+    @since("2.0.0")
+    def convertMatrixColumnsToML(dataset, *cols):
+        """
+        Converts matrix columns in an input DataFrame from the
+        :py:class:`pyspark.mllib.linalg.Matrix` type to the new
+        :py:class:`pyspark.ml.linalg.Matrix` type under the `spark.ml`
+        package.
+
+        :param dataset:
+          input dataset
+        :param cols:
+          a list of matrix columns to be converted.
+          New matrix columns will be ignored. If unspecified, all old
+          matrix columns will be converted excepted nested ones.
+        :return:
+          the input dataset with old matrix columns converted to the
+          new matrix type
+
+        >>> import pyspark
+        >>> from pyspark.mllib.linalg import Matrices
+        >>> from pyspark.mllib.util import MLUtils
+        >>> df = spark.createDataFrame(
+        ...     [(0, Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4]),
+        ...     Matrices.dense(2, 2, range(4)))], ["id", "x", "y"])
+        >>> r1 = MLUtils.convertMatrixColumnsToML(df).first()
+        >>> isinstance(r1.x, pyspark.ml.linalg.SparseMatrix)
+        True
+        >>> isinstance(r1.y, pyspark.ml.linalg.DenseMatrix)
+        True
+        >>> r2 = MLUtils.convertMatrixColumnsToML(df, "x").first()
+        >>> isinstance(r2.x, pyspark.ml.linalg.SparseMatrix)
+        True
+        >>> isinstance(r2.y, pyspark.mllib.linalg.DenseMatrix)
+        True
+        """
+        if not isinstance(dataset, DataFrame):
+            raise TypeError("Input dataset must be a DataFrame but got {}.".format(type(dataset)))
+        return callMLlibFunc("convertMatrixColumnsToML", dataset, list(cols))
+
+    @staticmethod
+    @since("2.0.0")
+    def convertMatrixColumnsFromML(dataset, *cols):
+        """
+        Converts matrix columns in an input DataFrame to the
+        :py:class:`pyspark.mllib.linalg.Matrix` type from the new
+        :py:class:`pyspark.ml.linalg.Matrix` type under the `spark.ml`
+        package.
+
+        :param dataset:
+          input dataset
+        :param cols:
+          a list of matrix columns to be converted.
+          Old matrix columns will be ignored. If unspecified, all new
+          matrix columns will be converted except nested ones.
+        :return:
+          the input dataset with new matrix columns converted to the
+          old matrix type
+
+        >>> import pyspark
+        >>> from pyspark.ml.linalg import Matrices
+        >>> from pyspark.mllib.util import MLUtils
+        >>> df = spark.createDataFrame(
+        ...     [(0, Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4]),
+        ...     Matrices.dense(2, 2, range(4)))], ["id", "x", "y"])
+        >>> r1 = MLUtils.convertMatrixColumnsFromML(df).first()
+        >>> isinstance(r1.x, pyspark.mllib.linalg.SparseMatrix)
+        True
+        >>> isinstance(r1.y, pyspark.mllib.linalg.DenseMatrix)
+        True
+        >>> r2 = MLUtils.convertMatrixColumnsFromML(df, "x").first()
+        >>> isinstance(r2.x, pyspark.mllib.linalg.SparseMatrix)
+        True
+        >>> isinstance(r2.y, pyspark.ml.linalg.DenseMatrix)
+        True
+        """
+        if not isinstance(dataset, DataFrame):
+            raise TypeError("Input dataset must be a DataFrame but got {}.".format(type(dataset)))
+        return callMLlibFunc("convertMatrixColumnsFromML", dataset, list(cols))
+
 
 class Saveable(object):
     """
@@ -355,6 +516,7 @@ def _test():
         .master("local[2]")\
         .appName("mllib.util tests")\
         .getOrCreate()
+    globs['spark'] = spark
     globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()

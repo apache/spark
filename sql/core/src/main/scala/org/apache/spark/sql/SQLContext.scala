@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.streaming.ContinuousQueryManager
+import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -51,7 +51,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * @groupname specificdata Specific Data Sources
  * @groupname config Configuration
  * @groupname dataframes Custom DataFrame Creation
- * @groupname dataset Custom DataFrame Creation
+ * @groupname dataset Custom Dataset Creation
  * @groupname Ungrouped Support functions for language integrated queries
  * @since 1.0.0
  */
@@ -346,15 +346,73 @@ class SQLContext private[sql](val sparkSession: SparkSession)
     sparkSession.createDataFrame(rowRDD, schema, needsConversion)
   }
 
-
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * == Example ==
+   *
+   * {{{
+   *
+   *   import spark.implicits._
+   *   case class Person(name: String, age: Long)
+   *   val data = Seq(Person("Michael", 29), Person("Andy", 30), Person("Justin", 19))
+   *   val ds = spark.createDataset(data)
+   *
+   *   ds.show()
+   *   // +-------+---+
+   *   // |   name|age|
+   *   // +-------+---+
+   *   // |Michael| 29|
+   *   // |   Andy| 30|
+   *   // | Justin| 19|
+   *   // +-------+---+
+   * }}}
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
 
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from an RDD of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
 
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from a [[java.util.List]] of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * == Java Example ==
+   *
+   * {{{
+   *     List<String> data = Arrays.asList("hello", "world");
+   *     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+   * }}}
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
@@ -433,7 +491,8 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Returns a [[DataFrameReader]] that can be used to read data and streams in as a [[DataFrame]].
+   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
+   * [[DataFrame]].
    * {{{
    *   sqlContext.read.parquet("/path/to/file.parquet")
    *   sqlContext.read.schema(schema).json("/path/to/file.json")
@@ -443,6 +502,21 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.4.0
    */
   def read: DataFrameReader = sparkSession.read
+
+
+  /**
+   * :: Experimental ::
+   * Returns a [[DataStreamReader]] that can be used to read streaming data in as a [[DataFrame]].
+   * {{{
+   *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
+   *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def readStream: DataStreamReader = sparkSession.readStream
+
 
   /**
    * Creates an external table from the given path and returns the corresponding DataFrame.
@@ -551,51 +625,51 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
    * in a range from 0 to `end` (exclusive) with step value 1.
    *
-   * @since 2.0.0
-   * @group dataset
+   * @since 1.4.1
+   * @group dataframe
    */
   @Experimental
-  def range(end: Long): Dataset[java.lang.Long] = sparkSession.range(end)
+  def range(end: Long): DataFrame = sparkSession.range(end).toDF()
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
    * in a range from `start` to `end` (exclusive) with step value 1.
    *
-   * @since 2.0.0
-   * @group dataset
+   * @since 1.4.0
+   * @group dataframe
    */
   @Experimental
-  def range(start: Long, end: Long): Dataset[java.lang.Long] = sparkSession.range(start, end)
+  def range(start: Long, end: Long): DataFrame = sparkSession.range(start, end).toDF()
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
    * in a range from `start` to `end` (exclusive) with a step value.
    *
    * @since 2.0.0
-   * @group dataset
+   * @group dataframe
    */
   @Experimental
-  def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
-    sparkSession.range(start, end, step)
+  def range(start: Long, end: Long, step: Long): DataFrame = {
+    sparkSession.range(start, end, step).toDF()
   }
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in a range from `start` to `end` (exclusive) with a step value, with partition number
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from `start` to `end` (exclusive) with an step value, with partition number
    * specified.
    *
-   * @since 2.0.0
-   * @group dataset
+   * @since 1.4.0
+   * @group dataframe
    */
   @Experimental
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
-    sparkSession.range(start, end, step, numPartitions)
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
+    sparkSession.range(start, end, step, numPartitions).toDF()
   }
 
   /**
@@ -642,12 +716,12 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Returns a [[ContinuousQueryManager]] that allows managing all the
-   * [[org.apache.spark.sql.streaming.ContinuousQuery ContinuousQueries]] active on `this` context.
+   * Returns a [[StreamingQueryManager]] that allows managing all the
+   * [[org.apache.spark.sql.streaming.StreamingQuery StreamingQueries]] active on `this` context.
    *
    * @since 2.0.0
    */
-  def streams: ContinuousQueryManager = sparkSession.streams
+  def streams: StreamingQueryManager = sparkSession.streams
 
   /**
    * Returns the names of tables in the current database as an array.
@@ -669,14 +743,288 @@ class SQLContext private[sql](val sparkSession: SparkSession)
     sparkSession.catalog.listTables(databaseName).collect().map(_.name)
   }
 
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+  // Deprecated methods
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+
   /**
-   * Parses the data type in our internal string representation. The data type string should
-   * have the same format as the one generated by `toString` in scala.
-   * It is only used by PySpark.
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
    */
-  // TODO: Remove this function (would require updating PySpark).
-  private[sql] def parseDataType(dataTypeString: String): DataType = {
-    DataType.fromJson(dataTypeString)
+  @deprecated("Use createDataFrame instead.", "1.3.0")
+  def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema)
+  }
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
+  @deprecated("Use createDataFrame instead.", "1.3.0")
+  def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema)
+  }
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
+  @deprecated("Use createDataFrame instead.", "1.3.0")
+  def applySchema(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
+    createDataFrame(rdd, beanClass)
+  }
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
+  @deprecated("Use createDataFrame instead.", "1.3.0")
+  def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
+    createDataFrame(rdd, beanClass)
+  }
+
+  /**
+   * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
+   * [[DataFrame]] if no paths are passed in.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().parquet()`.
+   */
+  @deprecated("Use read.parquet() instead.", "1.4.0")
+  @scala.annotation.varargs
+  def parquetFile(paths: String*): DataFrame = {
+    if (paths.isEmpty) {
+      emptyDataFrame
+    } else {
+      read.parquet(paths : _*)
+    }
+  }
+
+  /**
+   * Loads a JSON file (one object per line), returning the result as a [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json() instead.", "1.4.0")
+  def jsonFile(path: String): DataFrame = {
+    read.json(path)
+  }
+
+  /**
+   * Loads a JSON file (one object per line) and applies the given schema,
+   * returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json() instead.", "1.4.0")
+  def jsonFile(path: String, schema: StructType): DataFrame = {
+    read.schema(schema).json(path)
+  }
+
+  /**
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json() instead.", "1.4.0")
+  def jsonFile(path: String, samplingRatio: Double): DataFrame = {
+    read.option("samplingRatio", samplingRatio.toString).json(path)
+  }
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json() instead.", "1.4.0")
+  def jsonRDD(json: RDD[String]): DataFrame = read.json(json)
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json() instead.", "1.4.0")
+  def jsonRDD(json: JavaRDD[String]): DataFrame = read.json(json)
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
+   * returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json() instead.", "1.4.0")
+  def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
+    read.schema(schema).json(json)
+  }
+
+  /**
+   * Loads an JavaRDD<String> storing JSON objects (one object per record) and applies the given
+   * schema, returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json() instead.", "1.4.0")
+  def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
+    read.schema(schema).json(json)
+  }
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record) inferring the
+   * schema, returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json() instead.", "1.4.0")
+  def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
+    read.option("samplingRatio", samplingRatio.toString).json(json)
+  }
+
+  /**
+   * Loads a JavaRDD[String] storing JSON objects (one object per record) inferring the
+   * schema, returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
+   */
+  @deprecated("Use read.json() instead.", "1.4.0")
+  def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
+    read.option("samplingRatio", samplingRatio.toString).json(json)
+  }
+
+  /**
+   * Returns the dataset stored at path as a DataFrame,
+   * using the default data source configured by spark.sql.sources.default.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().load(path)`.
+   */
+  @deprecated("Use read.load(path) instead.", "1.4.0")
+  def load(path: String): DataFrame = {
+    read.load(path)
+  }
+
+  /**
+   * Returns the dataset stored at path as a DataFrame, using the given data source.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).load(path)`.
+   */
+  @deprecated("Use read.format(source).load(path) instead.", "1.4.0")
+  def load(path: String, source: String): DataFrame = {
+    read.format(source).load(path)
+  }
+
+  /**
+   * (Java-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).options(options).load() instead.", "1.4.0")
+  def load(source: String, options: java.util.Map[String, String]): DataFrame = {
+    read.options(options).format(source).load()
+  }
+
+  /**
+   * (Scala-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).options(options).load() instead.", "1.4.0")
+  def load(source: String, options: Map[String, String]): DataFrame = {
+    read.options(options).format(source).load()
+  }
+
+  /**
+   * (Java-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by
+   *            `read().format(source).schema(schema).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).schema(schema).options(options).load() instead.", "1.4.0")
+  def load(
+      source: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    read.format(source).schema(schema).options(options).load()
+  }
+
+  /**
+   * (Scala-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by
+   *            `read().format(source).schema(schema).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).schema(schema).options(options).load() instead.", "1.4.0")
+  def load(source: String, schema: StructType, options: Map[String, String]): DataFrame = {
+    read.format(source).schema(schema).options(options).load()
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
+   */
+  @deprecated("Use read.jdbc() instead.", "1.4.0")
+  def jdbc(url: String, table: String): DataFrame = {
+    read.jdbc(url, table, new Properties)
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table.  Partitions of the table will be retrieved in parallel based on the parameters
+   * passed to this function.
+   *
+   * @param columnName the name of a column of integral type that will be used for partitioning.
+   * @param lowerBound the minimum value of `columnName` used to decide partition stride
+   * @param upperBound the maximum value of `columnName` used to decide partition stride
+   * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
+   *                      evenly into this many partitions
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
+   */
+  @deprecated("Use read.jdbc() instead.", "1.4.0")
+  def jdbc(
+      url: String,
+      table: String,
+      columnName: String,
+      lowerBound: Long,
+      upperBound: Long,
+      numPartitions: Int): DataFrame = {
+    read.jdbc(url, table, columnName, lowerBound, upperBound, numPartitions, new Properties)
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table. The theParts parameter gives a list expressions
+   * suitable for inclusion in WHERE clauses; each one defines one partition
+   * of the [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
+   */
+  @deprecated("Use read.jdbc() instead.", "1.4.0")
+  def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {
+    read.jdbc(url, table, theParts, new Properties)
   }
 }
 
