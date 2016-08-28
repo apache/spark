@@ -1297,7 +1297,7 @@ abstract class RDD[T: ClassTag](
    */
   def take(num: Int): Array[T] = withScope {
     if (!conf.getBoolean("spark.driver.useOldTakeImplementation", false)) {
-      takeOnline[T](num, (x: Array[T]) => x.iterator)
+      mapPartitions(_.take(num)).takeOnline[T](num, (x: Array[T]) => x.iterator)
     } else if (num == 0) {
       new Array[T](0)
     } else {
