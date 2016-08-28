@@ -242,6 +242,15 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     FailureSuiteState.clear()
   }
 
+  test("failure is propagated to take() call") {
+    sc = new SparkContext("local", "test")
+    val data = sc.makeRDD(1 to 3).map { _ => throw new Exception("Intentional task failure")}
+    val thrown = intercept[SparkException] {
+      data.take(1)
+    }
+    assert(thrown.getMessage.contains("Intentional task failure"))
+  }
+
   test("failure because cached RDD partitions are missing from DiskStore (SPARK-15736)") {
     sc = new SparkContext("local[1,2]", "test")
     val rdd = sc.parallelize(1 to 2, 2).persist(StorageLevel.DISK_ONLY)

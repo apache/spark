@@ -1424,15 +1424,14 @@ abstract class RDD[T: ClassTag](
         (it: Iterator[T]) => it.toArray,
         partitionsToCompute,
         handleResult,
-        {
-          // Wake the job submitting thread
-          lock.synchronized {
-            lock.notifyAll()
-          }
-        })
-      // This call is necessary in order for the submitJob() call's resultHandler to be invoked
-      // so that this thread can be notified once the asynchronous job completes.
-      jobFuture.onComplete(_ => ())(scala.concurrent.ExecutionContext.Implicits.global)
+        resultFunc = ())
+      jobFuture.onComplete { _ =>
+        // Wake the job submitting thread
+        lock.synchronized {
+          lock.notifyAll()
+        }
+      }(scala.concurrent.ExecutionContext.Implicits.global)
+
       lock.synchronized {
         while (!jobFuture.isCompleted && !gotEnoughRows) {
           lock.wait()
@@ -1440,6 +1439,10 @@ abstract class RDD[T: ClassTag](
       }
       if (!jobFuture.isCompleted) {
         jobFuture.cancelWithoutFailing()
+      } else {
+        // The job has completed, so attempt to retrieve its value (which is Unit) so that
+        // exceptions can be propagated in case the job failed.
+        jobFuture.value.get.get
       }
 
       partitionsScanned += partitionsToCompute.length
