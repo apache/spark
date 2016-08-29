@@ -394,13 +394,7 @@ case class DataSource(
             sparkSession, globbedPaths, options, partitionSchema, !checkPathExist)
 
         val dataSchema = userSpecifiedSchema.map { schema =>
-          val equality =
-            if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-              org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
-            } else {
-              org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
-            }
-
+          val equality = sparkSession.sessionState.conf.resolver
           StructType(schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
         }.orElse {
           format.inferSchema(
@@ -430,7 +424,7 @@ case class DataSource(
     relation
   }
 
-  /** Writes the give [[DataFrame]] out to this [[DataSource]]. */
+  /** Writes the given [[DataFrame]] out to this [[DataSource]]. */
   def write(
       mode: SaveMode,
       data: DataFrame): BaseRelation = {

@@ -60,6 +60,13 @@ setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 #' @note KMeansModel since 2.0.0
 setClass("KMeansModel", representation(jobj = "jobj"))
 
+#' S4 class that represents a MultilayerPerceptronClassificationModel
+#'
+#' @param jobj a Java object reference to the backing Scala MultilayerPerceptronClassifierWrapper
+#' @export
+#' @note MultilayerPerceptronClassificationModel since 2.1.0
+setClass("MultilayerPerceptronClassificationModel", representation(jobj = "jobj"))
+
 #' S4 class that represents an IsotonicRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala IsotonicRegressionModel
@@ -88,9 +95,9 @@ setClass("ALSModel", representation(jobj = "jobj"))
 #' @rdname write.ml
 #' @name write.ml
 #' @export
-#' @seealso \link{spark.glm}, \link{glm}, \link{spark.gaussianMixture}
-#' @seealso \link{spark.als}, \link{spark.kmeans}, \link{spark.lda}, \link{spark.naiveBayes}
-#' @seealso \link{spark.survreg}, \link{spark.isoreg}
+#' @seealso \link{spark.glm}, \link{glm},
+#' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
+#' @seealso \link{spark.lda}, \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
 #' @seealso \link{read.ml}
 NULL
 
@@ -101,11 +108,22 @@ NULL
 #' @rdname predict
 #' @name predict
 #' @export
-#' @seealso \link{spark.glm}, \link{glm}, \link{spark.gaussianMixture}
-#' @seealso \link{spark.als}, \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
-#' @seealso \link{spark.isoreg}
+#' @seealso \link{spark.glm}, \link{glm},
+#' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
+#' @seealso \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
 NULL
 
+write_internal <- function(object, path, overwrite = FALSE) {
+  writer <- callJMethod(object@jobj, "write")
+  if (overwrite) {
+    writer <- callJMethod(writer, "overwrite")
+  }
+  invisible(callJMethod(writer, "save", path))
+}
+
+predict_internal <- function(object, newData) {
+  dataFrame(callJMethod(object@jobj, "transform", newData@sdf))
+}
 
 #' Generalized Linear Models
 #'
@@ -120,7 +138,7 @@ NULL
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
-#' @param weightCol the weight column name. If this is not set or NULL, we treat all instance
+#' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
 #' @param tol positive convergence tolerance of iterations.
 #' @param maxIter integer giving the maximal number of IRLS iterations.
@@ -173,7 +191,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, family$family, family$link,
                                 tol, as.integer(maxIter), as.character(weightCol))
-            return(new("GeneralizedLinearRegressionModel", jobj = jobj))
+            new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
 #' Generalized Linear Models (R-compliant)
@@ -186,7 +204,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
-#' @param weightCol the weight column name. If this is not set or NULL, we treat all instance
+#' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
 #' @param epsilon positive convergence tolerance of iterations.
 #' @param maxit integer giving the maximal number of IRLS iterations.
@@ -219,7 +237,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
 #' @export
 #' @note summary(GeneralizedLinearRegressionModel) since 2.0.0
 setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
-          function(object, ...) {
+          function(object) {
             jobj <- object@jobj
             is.loaded <- callJMethod(jobj, "isLoaded")
             features <- callJMethod(jobj, "rFeatures")
@@ -245,7 +263,7 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
                         deviance = deviance, df.null = df.null, df.residual = df.residual,
                         aic = aic, iter = iter, family = family, is.loaded = is.loaded)
             class(ans) <- "summary.GeneralizedLinearRegressionModel"
-            return(ans)
+            ans
           })
 
 #  Prints the summary of GeneralizedLinearRegressionModel
@@ -275,8 +293,7 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
     " on", format(unlist(x[c("df.null", "df.residual")])), " degrees of freedom\n"),
     1L, paste, collapse = " "), sep = "")
   cat("AIC: ", format(x$aic, digits = 4L), "\n\n",
-    "Number of Fisher Scoring iterations: ", x$iter, "\n", sep = "")
-  cat("\n")
+    "Number of Fisher Scoring iterations: ", x$iter, "\n\n", sep = "")
   invisible(x)
   }
 
@@ -291,7 +308,7 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
 #' @note predict(GeneralizedLinearRegressionModel) since 1.5.0
 setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
           function(object, newData) {
-            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+            predict_internal(object, newData)
           })
 
 # Makes predictions from a naive Bayes model or a model produced by spark.naiveBayes(),
@@ -305,7 +322,7 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
 #' @note predict(NaiveBayesModel) since 2.0.0
 setMethod("predict", signature(object = "NaiveBayesModel"),
           function(object, newData) {
-            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+            predict_internal(object, newData)
           })
 
 # Returns the summary of a naive Bayes model produced by \code{spark.naiveBayes}
@@ -317,7 +334,7 @@ setMethod("predict", signature(object = "NaiveBayesModel"),
 #' @export
 #' @note summary(NaiveBayesModel) since 2.0.0
 setMethod("summary", signature(object = "NaiveBayesModel"),
-          function(object, ...) {
+          function(object) {
             jobj <- object@jobj
             features <- callJMethod(jobj, "features")
             labels <- callJMethod(jobj, "labels")
@@ -328,7 +345,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
             tables <- matrix(tables, nrow = length(labels))
             rownames(tables) <- unlist(labels)
             colnames(tables) <- unlist(features)
-            return(list(apriori = apriori, tables = tables))
+            list(apriori = apriori, tables = tables)
           })
 
 # Returns posterior probabilities from a Latent Dirichlet Allocation model produced by spark.lda()
@@ -342,7 +359,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @note spark.posterior(LDAModel) since 2.1.0
 setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkDataFrame"),
           function(object, newData) {
-            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+            predict_internal(object, newData)
           })
 
 # Returns the summary of a Latent Dirichlet Allocation model produced by \code{spark.lda}
@@ -377,12 +394,11 @@ setMethod("summary", signature(object = "LDAModel"),
             vocabSize <- callJMethod(jobj, "vocabSize")
             topics <- dataFrame(callJMethod(jobj, "topics", maxTermsPerTopic))
             vocabulary <- callJMethod(jobj, "vocabulary")
-            return(list(docConcentration = unlist(docConcentration),
-                        topicConcentration = topicConcentration,
-                        logLikelihood = logLikelihood, logPerplexity = logPerplexity,
-                        isDistributed = isDistributed, vocabSize = vocabSize,
-                        topics = topics,
-                        vocabulary = unlist(vocabulary)))
+            list(docConcentration = unlist(docConcentration),
+                 topicConcentration = topicConcentration,
+                 logLikelihood = logLikelihood, logPerplexity = logPerplexity,
+                 isDistributed = isDistributed, vocabSize = vocabSize,
+                 topics = topics, vocabulary = unlist(vocabulary))
           })
 
 # Returns the log perplexity of a Latent Dirichlet Allocation model produced by \code{spark.lda}
@@ -395,8 +411,8 @@ setMethod("summary", signature(object = "LDAModel"),
 #' @note spark.perplexity(LDAModel) since 2.1.0
 setMethod("spark.perplexity", signature(object = "LDAModel", data = "SparkDataFrame"),
           function(object, data) {
-            return(ifelse(missing(data), callJMethod(object@jobj, "logPerplexity"),
-                   callJMethod(object@jobj, "computeLogPerplexity", data@sdf)))
+            ifelse(missing(data), callJMethod(object@jobj, "logPerplexity"),
+                   callJMethod(object@jobj, "computeLogPerplexity", data@sdf))
          })
 
 # Saves the Latent Dirichlet Allocation model to the input path.
@@ -412,11 +428,7 @@ setMethod("spark.perplexity", signature(object = "LDAModel", data = "SparkDataFr
 #' @note write.ml(LDAModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "LDAModel", path = "character"),
           function(object, path, overwrite = FALSE) {
-            writer <- callJMethod(object@jobj, "write")
-            if (overwrite) {
-              writer <- callJMethod(writer, "overwrite")
-            }
-            invisible(callJMethod(writer, "save", path))
+            write_internal(object, path, overwrite)
           })
 
 #' Isotonic Regression Model
@@ -429,9 +441,10 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param isotonic Whether the output sequence should be isotonic/increasing (TRUE) or
 #'                 antitonic/decreasing (FALSE)
-#' @param featureIndex The index of the feature if \code{featuresCol} is a vector column (default: `0`),
-#'                     no effect otherwise
+#' @param featureIndex The index of the feature if \code{featuresCol} is a vector column
+#'                     (default: 0), no effect otherwise
 #' @param weightCol The weight column name.
+#' @param ... additional arguments passed to the method.
 #' @return \code{spark.isoreg} returns a fitted Isotonic Regression model
 #' @rdname spark.isoreg
 #' @aliases spark.isoreg,SparkDataFrame,formula-method
@@ -471,9 +484,9 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
             }
 
             jobj <- callJStatic("org.apache.spark.ml.r.IsotonicRegressionWrapper", "fit",
-            data@sdf, formula, as.logical(isotonic), as.integer(featureIndex),
-              as.character(weightCol))
-            return(new("IsotonicRegressionModel", jobj = jobj))
+                                data@sdf, formula, as.logical(isotonic), as.integer(featureIndex),
+                                as.character(weightCol))
+            new("IsotonicRegressionModel", jobj = jobj)
           })
 
 #  Predicted values based on an isotonicRegression model
@@ -487,23 +500,22 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
 #' @note predict(IsotonicRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "IsotonicRegressionModel"),
           function(object, newData) {
-            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+            predict_internal(object, newData)
           })
 
 #  Get the summary of an IsotonicRegressionModel model
 
-#' @param ... Other optional arguments to summary of an IsotonicRegressionModel
 #' @return \code{summary} returns the model's boundaries and prediction as lists
 #' @rdname spark.isoreg
 #' @aliases summary,IsotonicRegressionModel-method
 #' @export
 #' @note summary(IsotonicRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "IsotonicRegressionModel"),
-          function(object, ...) {
+          function(object) {
             jobj <- object@jobj
             boundaries <- callJMethod(jobj, "boundaries")
             predictions <- callJMethod(jobj, "predictions")
-            return(list(boundaries = boundaries, predictions = predictions))
+            list(boundaries = boundaries, predictions = predictions)
           })
 
 #' K-Means Clustering Model
@@ -553,7 +565,7 @@ setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"
             initMode <- match.arg(initMode)
             jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", data@sdf, formula,
                                 as.integer(k), as.integer(maxIter), initMode)
-            return(new("KMeansModel", jobj = jobj))
+            new("KMeansModel", jobj = jobj)
           })
 
 #' Get fitted result from a k-means model
@@ -576,14 +588,14 @@ setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"
 #'}
 #' @note fitted since 2.0.0
 setMethod("fitted", signature(object = "KMeansModel"),
-          function(object, method = c("centers", "classes"), ...) {
+          function(object, method = c("centers", "classes")) {
             method <- match.arg(method)
             jobj <- object@jobj
             is.loaded <- callJMethod(jobj, "isLoaded")
             if (is.loaded) {
-              stop(paste("Saved-loaded k-means model does not support 'fitted' method"))
+              stop("Saved-loaded k-means model does not support 'fitted' method")
             } else {
-              return(dataFrame(callJMethod(jobj, "fitted", method)))
+              dataFrame(callJMethod(jobj, "fitted", method))
             }
           })
 
@@ -595,7 +607,7 @@ setMethod("fitted", signature(object = "KMeansModel"),
 #' @export
 #' @note summary(KMeansModel) since 2.0.0
 setMethod("summary", signature(object = "KMeansModel"),
-          function(object, ...) {
+          function(object) {
             jobj <- object@jobj
             is.loaded <- callJMethod(jobj, "isLoaded")
             features <- callJMethod(jobj, "features")
@@ -610,8 +622,8 @@ setMethod("summary", signature(object = "KMeansModel"),
             } else {
               dataFrame(callJMethod(jobj, "cluster"))
             }
-            return(list(coefficients = coefficients, size = size,
-                   cluster = cluster, is.loaded = is.loaded))
+            list(coefficients = coefficients, size = size,
+                 cluster = cluster, is.loaded = is.loaded)
           })
 
 #  Predicted values based on a k-means model
@@ -623,7 +635,96 @@ setMethod("summary", signature(object = "KMeansModel"),
 #' @note predict(KMeansModel) since 2.0.0
 setMethod("predict", signature(object = "KMeansModel"),
           function(object, newData) {
-            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+            predict_internal(object, newData)
+          })
+
+#' Multilayer Perceptron Classification Model
+#'
+#' \code{spark.mlp} fits a multi-layer perceptron neural network model against a SparkDataFrame.
+#' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
+#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
+#' Only categorical data is supported.
+#' For more details, see
+#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html}{
+#'   Multilayer Perceptron}
+#'
+#' @param data a \code{SparkDataFrame} of observations and labels for model fitting.
+#' @param blockSize blockSize parameter.
+#' @param layers integer vector containing the number of nodes for each layer
+#' @param solver solver parameter, supported options: "gd" (minibatch gradient descent) or "l-bfgs".
+#' @param maxIter maximum iteration number.
+#' @param tol convergence tolerance of iterations.
+#' @param stepSize stepSize parameter.
+#' @param seed seed parameter for weights initialization.
+#' @param ... additional arguments passed to the method.
+#' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model.
+#' @rdname spark.mlp
+#' @aliases spark.mlp,SparkDataFrame-method
+#' @name spark.mlp
+#' @seealso \link{read.ml}
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
+#'
+#' # fit a Multilayer Perceptron Classification Model
+#' model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs",
+#'                    maxIter = 100, tol = 0.5, stepSize = 1, seed = 1)
+#'
+#' # get the summary of the model
+#' summary(model)
+#'
+#' # make predictions
+#' predictions <- predict(model, df)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
+#' @note spark.mlp since 2.1.0
+setMethod("spark.mlp", signature(data = "SparkDataFrame"),
+          function(data, blockSize = 128, layers = c(3, 5, 2), solver = "l-bfgs", maxIter = 100,
+                   tol = 0.5, stepSize = 1, seed = 1) {
+            jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
+                                "fit", data@sdf, as.integer(blockSize), as.array(layers),
+                                as.character(solver), as.integer(maxIter), as.numeric(tol),
+                                as.numeric(stepSize), as.integer(seed))
+            new("MultilayerPerceptronClassificationModel", jobj = jobj)
+          })
+
+# Makes predictions from a model produced by spark.mlp().
+
+#' @param newData a SparkDataFrame for testing.
+#' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
+#' "prediction".
+#' @rdname spark.mlp
+#' @aliases predict,MultilayerPerceptronClassificationModel-method
+#' @export
+#' @note predict(MultilayerPerceptronClassificationModel) since 2.1.0
+setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel"),
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
+
+# Returns the summary of a Multilayer Perceptron Classification Model produced by \code{spark.mlp}
+
+#' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
+#' @return \code{summary} returns a list containing \code{layers}, the label distribution, and
+#'         \code{tables}, conditional probabilities given the target label.
+#' @rdname spark.mlp
+#' @export
+#' @aliases summary,MultilayerPerceptronClassificationModel-method
+#' @note summary(MultilayerPerceptronClassificationModel) since 2.1.0
+setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
+          function(object) {
+            jobj <- object@jobj
+            labelCount <- callJMethod(jobj, "labelCount")
+            layers <- unlist(callJMethod(jobj, "layers"))
+            weights <- callJMethod(jobj, "weights")
+            weights <- matrix(weights, nrow = length(weights))
+            list(labelCount = labelCount, layers = layers, weights = weights)
           })
 
 #' Naive Bayes Models
@@ -642,14 +743,15 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @rdname spark.naiveBayes
 #' @aliases spark.naiveBayes,SparkDataFrame,formula-method
 #' @name spark.naiveBayes
-#' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
+#' @seealso e1071: \url{https://cran.r-project.org/package=e1071}
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- createDataFrame(infert)
+#' data <- as.data.frame(UCBAdmissions)
+#' df <- createDataFrame(data)
 #'
 #' # fit a Bernoulli naive Bayes model
-#' model <- spark.naiveBayes(df, education ~ ., smoothing = 0)
+#' model <- spark.naiveBayes(df, Admit ~ Gender + Dept, smoothing = 0)
 #'
 #' # get the summary of the model
 #' summary(model)
@@ -665,11 +767,11 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' }
 #' @note spark.naiveBayes since 2.0.0
 setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, smoothing = 1.0, ...) {
+          function(data, formula, smoothing = 1.0) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
             formula, data@sdf, smoothing)
-            return(new("NaiveBayesModel", jobj = jobj))
+            new("NaiveBayesModel", jobj = jobj)
           })
 
 # Saves the Bernoulli naive Bayes model to the input path.
@@ -680,15 +782,11 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 #'
 #' @rdname spark.naiveBayes
 #' @export
-#' @seealso \link{read.ml}
+#' @seealso \link{write.ml}
 #' @note write.ml(NaiveBayesModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
           function(object, path, overwrite = FALSE) {
-            writer <- callJMethod(object@jobj, "write")
-            if (overwrite) {
-              writer <- callJMethod(writer, "overwrite")
-            }
-            invisible(callJMethod(writer, "save", path))
+            write_internal(object, path, overwrite)
           })
 
 # Saves the AFT survival regression model to the input path.
@@ -699,14 +797,10 @@ setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
 #' @rdname spark.survreg
 #' @export
 #' @note write.ml(AFTSurvivalRegressionModel, character) since 2.0.0
-#' @seealso \link{read.ml}
+#' @seealso \link{write.ml}
 setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
-            writer <- callJMethod(object@jobj, "write")
-            if (overwrite) {
-              writer <- callJMethod(writer, "overwrite")
-            }
-            invisible(callJMethod(writer, "save", path))
+            write_internal(object, path, overwrite)
           })
 
 #  Saves the generalized linear model to the input path.
@@ -720,11 +814,7 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
 #' @note write.ml(GeneralizedLinearRegressionModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
-            writer <- callJMethod(object@jobj, "write")
-            if (overwrite) {
-              writer <- callJMethod(writer, "overwrite")
-            }
-            invisible(callJMethod(writer, "save", path))
+            write_internal(object, path, overwrite)
           })
 
 #  Save fitted MLlib model to the input path
@@ -738,11 +828,24 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 #' @note write.ml(KMeansModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
           function(object, path, overwrite = FALSE) {
-            writer <- callJMethod(object@jobj, "write")
-            if (overwrite) {
-              writer <- callJMethod(writer, "overwrite")
-            }
-            invisible(callJMethod(writer, "save", path))
+            write_internal(object, path, overwrite)
+          })
+
+# Saves the Multilayer Perceptron Classification Model to the input path.
+
+#' @param path the directory where the model is saved.
+#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.mlp
+#' @aliases write.ml,MultilayerPerceptronClassificationModel,character-method
+#' @export
+#' @seealso \link{write.ml}
+#' @note write.ml(MultilayerPerceptronClassificationModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationModel",
+          path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
           })
 
 #  Save fitted IsotonicRegressionModel to the input path
@@ -757,11 +860,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @note write.ml(IsotonicRegression, character) since 2.1.0
 setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
-            writer <- callJMethod(object@jobj, "write")
-            if (overwrite) {
-              writer <- callJMethod(writer, "overwrite")
-            }
-           invisible(callJMethod(writer, "save", path))
+            write_internal(object, path, overwrite)
           })
 
 #  Save fitted MLlib model to the input path
@@ -776,11 +875,7 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 #' @note write.ml(GaussianMixtureModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "character"),
           function(object, path, overwrite = FALSE) {
-            writer <- callJMethod(object@jobj, "write")
-            if (overwrite) {
-              writer <- callJMethod(writer, "overwrite")
-            }
-            invisible(callJMethod(writer, "save", path))
+            write_internal(object, path, overwrite)
           })
 
 #' Load a fitted MLlib model from the input path.
@@ -801,23 +896,25 @@ read.ml <- function(path) {
   path <- suppressWarnings(normalizePath(path))
   jobj <- callJStatic("org.apache.spark.ml.r.RWrappers", "load", path)
   if (isInstanceOf(jobj, "org.apache.spark.ml.r.NaiveBayesWrapper")) {
-    return(new("NaiveBayesModel", jobj = jobj))
+    new("NaiveBayesModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.AFTSurvivalRegressionWrapper")) {
-    return(new("AFTSurvivalRegressionModel", jobj = jobj))
+    new("AFTSurvivalRegressionModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper")) {
-      return(new("GeneralizedLinearRegressionModel", jobj = jobj))
+    new("GeneralizedLinearRegressionModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.KMeansWrapper")) {
-      return(new("KMeansModel", jobj = jobj))
+    new("KMeansModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.LDAWrapper")) {
-      return(new("LDAModel", jobj = jobj))
+    new("LDAModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper")) {
+    new("MultilayerPerceptronClassificationModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.IsotonicRegressionWrapper")) {
-      return(new("IsotonicRegressionModel", jobj = jobj))
+    new("IsotonicRegressionModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GaussianMixtureWrapper")) {
-      return(new("GaussianMixtureModel", jobj = jobj))
+    new("GaussianMixtureModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.ALSWrapper")) {
-      return(new("ALSModel", jobj = jobj))
+    new("ALSModel", jobj = jobj)
   } else {
-    stop(paste("Unsupported model: ", jobj))
+    stop("Unsupported model: ", jobj)
   }
 }
 
@@ -834,7 +931,7 @@ read.ml <- function(path) {
 #'                Note that operator '.' is not supported currently.
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model.
 #' @rdname spark.survreg
-#' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/}
+#' @seealso survival: \url{https://cran.r-project.org/package=survival}
 #' @export
 #' @examples
 #' \dontrun{
@@ -860,7 +957,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
                                 "fit", formula, data@sdf)
-            return(new("AFTSurvivalRegressionModel", jobj = jobj))
+            new("AFTSurvivalRegressionModel", jobj = jobj)
           })
 
 #' Latent Dirichlet Allocation
@@ -889,10 +986,11 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @param customizedStopWords stopwords that need to be removed from the given corpus. Ignore the
 #'        parameter if libSVM-format column is used as the features column.
 #' @param maxVocabSize maximum vocabulary size, default 1 << 18
+#' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model
 #' @rdname spark.lda
 #' @aliases spark.lda,SparkDataFrame-method
-#' @seealso topicmodels: \url{https://cran.r-project.org/web/packages/topicmodels/}
+#' @seealso topicmodels: \url{https://cran.r-project.org/package=topicmodels}
 #' @export
 #' @examples
 #' \dontrun{
@@ -926,7 +1024,7 @@ setMethod("spark.lda", signature(data = "SparkDataFrame"),
                                 as.numeric(subsamplingRate), topicConcentration,
                                 as.array(docConcentration), as.array(customizedStopWords),
                                 maxVocabSize)
-            return(new("LDAModel", jobj = jobj))
+            new("LDAModel", jobj = jobj)
           })
 
 # Returns a summary of the AFT survival regression model produced by spark.survreg,
@@ -946,7 +1044,7 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
             coefficients <- as.matrix(unlist(coefficients))
             colnames(coefficients) <- c("Value")
             rownames(coefficients) <- unlist(features)
-            return(list(coefficients = coefficients))
+            list(coefficients = coefficients)
           })
 
 # Makes predictions from an AFT survival regression model or a model produced by
@@ -960,7 +1058,7 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
 #' @note predict(AFTSurvivalRegressionModel) since 2.0.0
 setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
           function(object, newData) {
-            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+            predict_internal(object, newData)
           })
 
 #' Multivariate Gaussian Mixture Model (GMM)
@@ -977,11 +1075,12 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' @param k number of independent Gaussians in the mixture model.
 #' @param maxIter maximum iteration number.
 #' @param tol the convergence tolerance.
+#' @param ... additional arguments passed to the method.
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @return \code{spark.gaussianMixture} returns a fitted multivariate gaussian mixture model.
 #' @rdname spark.gaussianMixture
 #' @name spark.gaussianMixture
-#' @seealso mixtools: \url{https://cran.r-project.org/web/packages/mixtools/}
+#' @seealso mixtools: \url{https://cran.r-project.org/package=mixtools}
 #' @export
 #' @examples
 #' \dontrun{
@@ -1014,20 +1113,19 @@ setMethod("spark.gaussianMixture", signature(data = "SparkDataFrame", formula = 
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.GaussianMixtureWrapper", "fit", data@sdf,
                                 formula, as.integer(k), as.integer(maxIter), as.numeric(tol))
-            return(new("GaussianMixtureModel", jobj = jobj))
+            new("GaussianMixtureModel", jobj = jobj)
           })
 
 #  Get the summary of a multivariate gaussian mixture model
 
 #' @param object a fitted gaussian mixture model.
-#' @param ... currently not used argument(s) passed to the method.
 #' @return \code{summary} returns the model's lambda, mu, sigma and posterior.
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @rdname spark.gaussianMixture
 #' @export
 #' @note summary(GaussianMixtureModel) since 2.1.0
 setMethod("summary", signature(object = "GaussianMixtureModel"),
-          function(object, ...) {
+          function(object) {
             jobj <- object@jobj
             is.loaded <- callJMethod(jobj, "isLoaded")
             lambda <- unlist(callJMethod(jobj, "lambda"))
@@ -1052,8 +1150,8 @@ setMethod("summary", signature(object = "GaussianMixtureModel"),
             } else {
               dataFrame(callJMethod(jobj, "posterior"))
             }
-            return(list(lambda = lambda, mu = mu, sigma = sigma,
-                   posterior = posterior, is.loaded = is.loaded))
+            list(lambda = lambda, mu = mu, sigma = sigma,
+                 posterior = posterior, is.loaded = is.loaded)
           })
 
 #  Predicted values based on a gaussian mixture model
@@ -1067,7 +1165,7 @@ setMethod("summary", signature(object = "GaussianMixtureModel"),
 #' @note predict(GaussianMixtureModel) since 2.1.0
 setMethod("predict", signature(object = "GaussianMixtureModel"),
           function(object, newData) {
-            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+            predict_internal(object, newData)
           })
 
 #' Alternating Least Squares (ALS) for Collaborative Filtering
@@ -1094,7 +1192,7 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @param numUserBlocks number of user blocks used to parallelize computation (> 0).
 #' @param numItemBlocks number of item blocks used to parallelize computation (> 0).
 #' @param checkpointInterval number of checkpoint intervals (>= 1) or disable checkpoint (-1).
-#'
+#' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.als} returns a fitted ALS model
 #' @rdname spark.als
 #' @aliases spark.als,SparkDataFrame-method
@@ -1149,7 +1247,7 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
                                 reg, as.integer(maxIter), implicitPrefs, alpha, nonnegative,
                                 as.integer(numUserBlocks), as.integer(numItemBlocks),
                                 as.integer(checkpointInterval), as.integer(seed))
-            return(new("ALSModel", jobj = jobj))
+            new("ALSModel", jobj = jobj)
           })
 
 # Returns a summary of the ALS model produced by spark.als.
@@ -1163,17 +1261,17 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
 #' @export
 #' @note summary(ALSModel) since 2.1.0
 setMethod("summary", signature(object = "ALSModel"),
-function(object, ...) {
-    jobj <- object@jobj
-    user <- callJMethod(jobj, "userCol")
-    item <- callJMethod(jobj, "itemCol")
-    rating <- callJMethod(jobj, "ratingCol")
-    userFactors <- dataFrame(callJMethod(jobj, "userFactors"))
-    itemFactors <- dataFrame(callJMethod(jobj, "itemFactors"))
-    rank <- callJMethod(jobj, "rank")
-    return(list(user = user, item = item, rating = rating, userFactors = userFactors,
-                itemFactors = itemFactors, rank = rank))
-})
+          function(object) {
+            jobj <- object@jobj
+            user <- callJMethod(jobj, "userCol")
+            item <- callJMethod(jobj, "itemCol")
+            rating <- callJMethod(jobj, "ratingCol")
+            userFactors <- dataFrame(callJMethod(jobj, "userFactors"))
+            itemFactors <- dataFrame(callJMethod(jobj, "itemFactors"))
+            rank <- callJMethod(jobj, "rank")
+            list(user = user, item = item, rating = rating, userFactors = userFactors,
+                 itemFactors = itemFactors, rank = rank)
+          })
 
 
 # Makes predictions from an ALS model or a model produced by spark.als.
@@ -1185,9 +1283,9 @@ function(object, ...) {
 #' @export
 #' @note predict(ALSModel) since 2.1.0
 setMethod("predict", signature(object = "ALSModel"),
-function(object, newData) {
-    return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
-})
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
 
 
 # Saves the ALS model to the input path.
@@ -1203,10 +1301,6 @@ function(object, newData) {
 #' @seealso \link{read.ml}
 #' @note write.ml(ALSModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "ALSModel", path = "character"),
-function(object, path, overwrite = FALSE) {
-    writer <- callJMethod(object@jobj, "write")
-    if (overwrite) {
-        writer <- callJMethod(writer, "overwrite")
-    }
-    invisible(callJMethod(writer, "save", path))
-})
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
