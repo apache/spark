@@ -76,9 +76,11 @@ class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: Str
  * (n + d choose d) (including 1 and first-order values). For example, let f([a, b, c], 3) be the
  * function that expands [a, b, c] to their monomials of degree 3. We have the following recursion:
  *
- * {{{
- * f([a, b, c], 3) = f([a, b], 3) ++ f([a, b], 2) * c ++ f([a, b], 1) * c^2 ++ [c^3]
- * }}}
+ * <p><blockquote>
+ *    $$
+ *    f([a, b, c], 3) &= f([a, b], 3) ++ f([a, b], 2) * c ++ f([a, b], 1) * c^2 ++ [c^3]
+ *    $$
+ * </blockquote></p>
  *
  * To handle sparsity, if c is zero, we can skip all monomials that contain it. We remember the
  * current index and increment it properly for sparse input.

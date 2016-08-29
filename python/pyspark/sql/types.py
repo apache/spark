@@ -189,7 +189,7 @@ class TimestampType(AtomicType):
         if dt is not None:
             seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
                        else time.mktime(dt.timetuple()))
-            return int(seconds * 1e6 + dt.microsecond)
+            return int(seconds) * 1000000 + dt.microsecond
 
     def fromInternal(self, ts):
         if ts is not None:
@@ -851,7 +851,7 @@ def _parse_datatype_json_string(json_string):
     >>> def check_datatype(datatype):
     ...     pickled = pickle.loads(pickle.dumps(datatype))
     ...     assert datatype == pickled
-    ...     scala_datatype = sqlContext._ssql_ctx.parseDataType(datatype.json())
+    ...     scala_datatype = spark._jsparkSession.parseDataType(datatype.json())
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
     >>> for cls in _all_atomic_types.values():
@@ -1551,11 +1551,11 @@ register_input_converter(DateConverter())
 def _test():
     import doctest
     from pyspark.context import SparkContext
-    from pyspark.sql import SQLContext
+    from pyspark.sql import SparkSession
     globs = globals()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlContext'] = SQLContext(sc)
+    globs['spark'] = SparkSession.builder.getOrCreate()
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
