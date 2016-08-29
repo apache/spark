@@ -21,13 +21,6 @@ Function InstallR {
   [CmdletBinding()]
   Param()
 
-  if ( -not(Test-Path Env:\R_VERSION) ) {
-    $version = "patched"
-  }
-  Else {
-    $version = $env:R_VERSION
-  }
-
   if ( -not(Test-Path Env:\R_ARCH) ) {
     $arch = "i386"
   }
@@ -35,30 +28,30 @@ Function InstallR {
     $arch = $env:R_ARCH
   }
 
-  If ($version -eq "devel") {
+  If ($rVer -eq "devel") {
     $url_path = ""
-    $version = "devel"
+    $rVer = "devel"
   }
-  ElseIf (($version -eq "stable") -or ($version -eq "release")) {
+  ElseIf (($rVer -eq "stable") -or ($rVer -eq "release")) {
     $url_path = ""
-    $version = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-release).Content).version
-    If ($version -eq "3.2.4") {
-      $version = "3.2.4revised"
+    $rVer = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-release).Content).version
+    If ($rVer -eq "3.2.4") {
+      $rVer = "3.2.4revised"
     }
   }
-  ElseIf ($version -eq "patched") {
+  ElseIf ($rVer -eq "patched") {
     $url_path = ""
-    $version = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-release).Content).version + "patched"
+    $rVer = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-release).Content).version + "patched"
   }
-  ElseIf ($version -eq "oldrel") {
-    $version = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-oldrel).Content).version
-    $url_path = ("old/" + $version + "/")
+  ElseIf ($rVer -eq "oldrel") {
+    $rVer = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-oldrel).Content).version
+    $url_path = ("old/" + $rVer + "/")
   }
   Else {
-      $url_path = ("old/" + $version + "/")
+      $url_path = ("old/" + $rVer + "/")
   }
 
-  $rurl = $CRAN + "/bin/windows/base/" + $url_path + "R-" + $version + "-win.exe"
+  $rurl = $CRAN + "/bin/windows/base/" + $url_path + "R-" + $rVer + "-win.exe"
 
   # Downloading R
   Start-FileDownload $rurl "../R-win.exe"
@@ -76,14 +69,7 @@ Function InstallR {
 }
 
 Function InstallRtools {
-  if ( -not(Test-Path Env:\RTOOLS_VERSION) ) {
-    # Determining Rtools version
-    $rtoolsver = $(Invoke-WebRequest ($CRAN + "/bin/windows/Rtools/VERSION.txt")).Content.Split(' ')[2].Split('.')[0..1] -Join ''
-  }
-  Else {
-    $rtoolsver = $env:RTOOLS_VERSION
-  }
-
+  $rtoolsver = rtoolsVer.Split('.')[0..1] -Join ''
   $rtoolsurl = $CRAN + "/bin/windows/Rtools/Rtools$rtoolsver.exe"
 
   # Downloading Rtools
@@ -149,15 +135,12 @@ $env:HADOOP_HOME = "$hadoopPath/winutils-master/hadoop-$hadoopVer"
 Pop-Location
 
 # ========================== R
-$env:PATH = "C:\Program Files (x86)\Git\bin;" + $env:PATH
+$rVer = "3.3.1"
+$rToolsVer = "3.4.0"
+
 InstallR
-if ((Test-Path "src") -or ($env:USE_RTOOLS)) {
-  InstallRtools
-}
-Else {
-  # Skipping download of Rtools because src/ directory is missing.
-}
-$env:PATH.Split(";")
+InstallRtools
+
 $env:R_LIBS_USER = 'c:\RLibrary'
 if ( -not(Test-Path $env:R_LIBS_USER) ) {
   mkdir $env:R_LIBS_USER
