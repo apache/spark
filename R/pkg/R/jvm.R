@@ -23,13 +23,21 @@
 #' values are automatically converted to R objects for simple objects. Other
 #' values are returned as "jobj" which are references to objects on JVM.
 #'
+#' @details
+#' This is a low level function to access the JVM directly and should only be used
+#' for advanced use cases. The arguments and return values that are primitive R
+#' types (like integer, numeric, character, lists) are automatically translated to/from
+#' Java types (like Integer, Double, String, Array). A full list can be found in
+#' serialize.R and deserialize.R in the Apache Spark code base.
+#'
 #' @param x object to invoke the method on. Should be a "jobj" created by newJObject.
 #' @param methodName method name to call.
 #' @param ... parameters to pass to the Java method.
 #' @return the return value of the Java method. Either returned as a R object
-#'  if it can be deserialized or returned as a "jobj".
+#'  if it can be deserialized or returned as a "jobj". See details section for more.
 #' @export
 #' @seealso \link{sparkR.callJStatic}, \link{sparkR.newJObject}
+#' @rdname sparkR.callJMethod
 #' @examples
 #' \dontrun{
 #' sparkR.session() # Need to have a Spark JVM running before calling newJObject
@@ -49,13 +57,21 @@ sparkR.callJMethod <- function(x, methodName, ...) {
 #' value is automatically converted to R objects for simple objects. Other
 #' values are returned as "jobj" which are references to objects on JVM.
 #'
+#' @details
+#' This is a low level function to access the JVM directly and should only be used
+#' for advanced use cases. The arguments and return values that are primitive R
+#' types (like integer, numeric, character, lists) are automatically translated to/from
+#' Java types (like Integer, Double, String, Array). A full list can be found in
+#' serialize.R and deserialize.R in the Apache Spark code base.
+#'
 #' @param x fully qualified Java class name that contains the static method to invoke.
 #' @param methodName name of static method to invoke.
 #' @param ... parameters to pass to the Java method.
 #' @return the return value of the Java method. Either returned as a R object
-#'  if it can be deserialized or returned as a "jobj".
+#'  if it can be deserialized or returned as a "jobj". See details section for more.
 #' @export
 #' @seealso \link{sparkR.callJMethod}, \link{sparkR.newJObject}
+#' @rdname sparkR.callJStatic
 #' @examples
 #' \dontrun{
 #' sparkR.session() # Need to have a Spark JVM running before calling callJStatic
@@ -73,12 +89,20 @@ sparkR.callJStatic <- function(x, methodName, ...) {
 #' value is automatically converted to an R object for simple objects. Other
 #' values are returned as a "jobj" which is a reference to an object on JVM.
 #'
+#' @details
+#' This is a low level function to access the JVM directly and should only be used
+#' for advanced use cases. The arguments and return values that are primitive R
+#' types (like integer, numeric, character, lists) are automatically translated to/from
+#' Java types (like Integer, Double, String, Array). A full list can be found in
+#' serialize.R and deserialize.R in the Apache Spark code base.
+#'
 #' @param x fully qualified Java class name.
 #' @param ... arguments to be passed to the constructor.
 #' @return the object created. Either returned as a R object
-#'   if it can be deserialized or returned as a "jobj".
+#'   if it can be deserialized or returned as a "jobj". See details section for more.
 #' @export
 #' @seealso \link{sparkR.callJMethod}, \link{sparkR.callJStatic}
+#' @rdname sparkR.newJObject
 #' @examples
 #' \dontrun{
 #' sparkR.session() # Need to have a Spark JVM running before calling newJObject
