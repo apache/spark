@@ -276,24 +276,64 @@ class ChiSqSelector(object):
     """
     Creates a ChiSquared feature selector.
 
-    :param numTopFeatures: number of features that selector will select.
-
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(3, {0: 8.0, 1: 7.0})),
     ...     LabeledPoint(1.0, SparseVector(3, {1: 9.0, 2: 6.0})),
     ...     LabeledPoint(1.0, [0.0, 9.0, 8.0]),
     ...     LabeledPoint(2.0, [8.0, 9.0, 5.0])
     ... ]
-    >>> model = ChiSqSelector(1).fit(sc.parallelize(data))
+    >>> model = ChiSqSelector().setNumTopFeatures(1).fit(sc.parallelize(data))
     >>> model.transform(SparseVector(3, {1: 9.0, 2: 6.0}))
     SparseVector(1, {0: 6.0})
     >>> model.transform(DenseVector([8.0, 9.0, 5.0]))
     DenseVector([5.0])
+    >>> model = ChiSqSelector().setPercentile(0.34).fit(sc.parallelize(data))
+    >>> model.transform(SparseVector(3, {1: 9.0, 2: 6.0}))
+    SparseVector(1, {0: 6.0})
+    >>> model.transform(DenseVector([8.0, 9.0, 5.0]))
+    DenseVector([5.0])
+    >>> data = [
+    ...     LabeledPoint(0.0, SparseVector(4, {0: 8.0, 1: 7.0})),
+    ...     LabeledPoint(1.0, SparseVector(4, {1: 9.0, 2: 6.0, 3: 4.0})),
+    ...     LabeledPoint(1.0, [0.0, 9.0, 8.0, 4.0]),
+    ...     LabeledPoint(2.0, [8.0, 9.0, 5.0, 9.0])
+    ... ]
+    >>> model = ChiSqSelector().setAlpha(0.1).fit(sc.parallelize(data))
+    >>> model.transform(DenseVector([1.0,2.0,3.0,4.0]))
+    DenseVector([4.0])
 
     .. versionadded:: 1.4.0
     """
-    def __init__(self, numTopFeatures):
-        self.numTopFeatures = int(numTopFeatures)
+    def __init__(self):
+        self.param = 50
+        self.fitFunc = "fitChiSqSelectorKBest"
+
+    @since('2.1.0')
+    def setNumTopFeatures(self, numTopFeatures):
+        """
+        set numTopFeature for feature selection by number of top features
+        """
+        self.param = int(numTopFeatures)
+        self.fitFunc = "fitChiSqSelectorKBest"
+        return self
+
+    @since('2.1.0')
+    def setPercentile(self, percentile):
+        """
+        set Percentile [0.0, 1.0] for feature selection by percentile
+        """
+        self.param = float(percentile)
+        self.fitFunc = "fitChiSqSelectorPercentile"
+        return self
+
+    @since('2.1.0')
+    def setAlpha(self, alpha):
+        """
+        set Alpha [0.0, 1.0] for feature selection by FPR
+        """
+        self.param = float(alpha)
+        self.fitFunc = "fitChiSqSelectorFPR"
+        return self
 
     @since('1.4.0')
     def fit(self, data):
@@ -305,7 +345,7 @@ class ChiSqSelector(object):
                      treated as categorical for each distinct value.
                      Apply feature discretizer before using this function.
         """
-        jmodel = callMLlibFunc("fitChiSqSelector", self.numTopFeatures, data)
+        jmodel = callMLlibFunc(self.fitFunc, self.param, data)
         return ChiSqSelectorModel(jmodel)
 
 
