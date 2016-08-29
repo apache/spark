@@ -227,7 +227,6 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
     None
   }
 
-
   /**
    * Removes all the log entry earlier than thresholdBatchId (exclusive).
    */

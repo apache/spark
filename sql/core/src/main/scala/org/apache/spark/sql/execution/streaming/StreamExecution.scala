@@ -402,8 +402,6 @@ class StreamExecution(
     logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
     // Update committed offsets.
     committedOffsets ++= availableOffsets
-
-
     postEvent(new QueryProgress(this.toInfo))
   }
 
