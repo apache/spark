@@ -265,7 +265,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         userSpecifiedPartitionCols.map(p => s"PARTITIONED BY ($p)").getOrElse("")
       val schemaClause = userSpecifiedSchema.map(s => s"($s)").getOrElse("")
       val uri = path.toURI
-      sql(
+      val sqlCreateTable =
         s"""
            |CREATE TABLE $tabName $schemaClause
            |USING parquet
@@ -273,11 +273,18 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
            |  path '$uri'
            |)
            |$partitionClause
-         """.stripMargin)
-      val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName))
+         """.stripMargin
+      if (userSpecifiedSchema.isEmpty && userSpecifiedPartitionCols.nonEmpty) {
+        val e = intercept[AnalysisException](sql(sqlCreateTable)).getMessage
+        assert(e.contains(
+          "not allowed to specify partition columns when the table schema is not defined"))
+      } else {
+        sql(sqlCreateTable)
+        val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName))
 
-      assert(expectedSchema == tableMetadata.schema)
-      assert(expectedPartitionCols == tableMetadata.partitionColumnNames)
+        assert(expectedSchema == tableMetadata.schema)
+        assert(expectedPartitionCols == tableMetadata.partitionColumnNames)
+      }
     }
   }
 

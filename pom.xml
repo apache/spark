@@ -119,8 +119,6 @@
     <java.version>1.7</java.version>
     <maven.version>3.3.9</maven.version>
     <sbt.project.name>spark</sbt.project.name>
-    <mesos.version>1.0.0</mesos.version>
-    <mesos.classifier>shaded-protobuf</mesos.classifier>
     <slf4j.version>1.7.16</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>2.2.0</hadoop.version>
@@ -526,18 +524,6 @@
         <artifactId>protobuf-java</artifactId>
         <version>${protobuf.version}</version>
         <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.mesos</groupId>
-        <artifactId>mesos</artifactId>
-        <version>${mesos.version}</version>
-        <classifier>${mesos.classifier}</classifier>
-        <exclusions>
-          <exclusion>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.roaringbitmap</groupId>
@@ -2524,6 +2510,13 @@
       <modules>
         <module>yarn</module>
         <module>common/network-yarn</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>mesos</id>
+      <modules>
+        <module>mesos</module>
       </modules>
     </profile>
 

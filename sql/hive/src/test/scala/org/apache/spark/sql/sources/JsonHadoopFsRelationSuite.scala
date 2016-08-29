@@ -32,10 +32,6 @@ class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
   override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: NullType => false
     case _: BinaryType => false
-    // `TimestampType` is disabled because `DatatypeConverter.parseDateTime()`
-    // in `DateTimeUtils` parses the formatted string wrongly when the date is
-    // too early. (e.g. "1600-07-13T08:36:32.847").
-    case _: TimestampType => false
     case _: CalendarIntervalType => false
     case _ => true
   }
