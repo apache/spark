@@ -26,7 +26,7 @@ cache:
 # Install maven and dependencies
 install:
   - ps: |
-          Import-Module '.\dev\appveyor-tool.ps1'
+          Import-Module '.\dev\appveyor-install-r.ps1'
           Bootstrap
   - ps: .\dev\appveyor-install-dependencies.ps1
   - cmd: R -e "install.packages('testthat', repos='http://cran.us.r-project.org')"
