@@ -210,8 +210,8 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       checkTableStats(parquetTable, 4236, Some(500))
 
       sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
-      sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
-      checkTableStats(parquetTable, 8472, Some(1000))
+      sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
+      checkTableStats(parquetTable, 8472, None)
 
       withSQLConf("spark.sql.hive.convertMetastoreOrc" -> "true") {
         checkTableStats(orcTable, 3023, Some(500))

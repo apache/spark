@@ -403,14 +403,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def alterTableStats(tableDefinition: CatalogTable): Unit = withClient {
     assert(tableDefinition.catalogStats.isDefined)
+    // first we need to clear the old (i.e. inaccurate) stats
+    var propertiesWithStats: Map[String, String] =
+      tableDefinition.properties - (STATISTICS_TOTAL_SIZE, STATISTICS_NUM_ROWS)
     val stats = tableDefinition.catalogStats.get
     // convert table statistics to properties so that we can persist them through hive api
-    var statsProperties: Map[String, String] =
-      Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
+    propertiesWithStats += (STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
     if (stats.rowCount.isDefined) {
-      statsProperties += (STATISTICS_NUM_ROWS -> stats.rowCount.get.toString())
+      propertiesWithStats += (STATISTICS_NUM_ROWS -> stats.rowCount.get.toString())
     }
-    alterTable(tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties))
+    alterTable(tableDefinition.copy(properties = propertiesWithStats))
   }
 
   override def getTable(db: String, table: String): CatalogTable = withClient {
