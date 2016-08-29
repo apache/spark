@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{execution, Row}
+import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal, SortOrder}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -37,36 +37,65 @@ class PlannerSuite extends SharedSQLContext {
 
   setupTestData()
 
-  private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
+  private def testPartialAggregationPlan(query: LogicalPlan): Seq[SparkPlan] = {
     val planner = spark.sessionState.planner
     import planner._
-    val plannedOption = Aggregation(query).headOption
-    val planned =
-      plannedOption.getOrElse(
-        fail(s"Could query play aggregation query $query. Is it an aggregation query?"))
-    val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
-
-    // For the new aggregation code path, there will be four aggregate operator for
-    // distinct aggregations.
-    assert(
-      aggregations.size == 2 || aggregations.size == 4,
-      s"The plan of query $query does not have partial aggregations.")
+    val ensureRequirements = EnsureRequirements(spark.sessionState.conf)
+    val planned = Aggregation(query).headOption.map(ensureRequirements(_))
+      .getOrElse(fail(s"Could query play aggregation query $query. Is it an aggregation query?"))
+    planned.collect { case n if n.nodeName contains "Aggregate" => n }
   }
 
   test("count is partially aggregated") {
     val query = testData.groupBy('value).agg(count('key)).queryExecution.analyzed
-    testPartialAggregationPlan(query)
+    assert(testPartialAggregationPlan(query).size == 2,
+      s"The plan of query $query does not have partial aggregations.")
   }
 
   test("count distinct is partially aggregated") {
     val query = testData.groupBy('value).agg(countDistinct('key)).queryExecution.analyzed
     testPartialAggregationPlan(query)
+    // For the new aggregation code path, there will be four aggregate operator for  distinct
+    // aggregations.
+    assert(testPartialAggregationPlan(query).size == 4,
+      s"The plan of query $query does not have partial aggregations.")
   }
 
   test("mixed aggregates are partially aggregated") {
     val query =
       testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.analyzed
-    testPartialAggregationPlan(query)
+    // For the new aggregation code path, there will be four aggregate operator for  distinct
+    // aggregations.
+    assert(testPartialAggregationPlan(query).size == 4,
+      s"The plan of query $query does not have partial aggregations.")
+  }
+
+  test("non-partial aggregation for aggregates") {
+    withTempView("testNonPartialAggregation") {
+      val schema = StructType(StructField(s"value", IntegerType, true) :: Nil)
+      val row = Row.fromSeq(Seq.fill(1)(null))
+      val rowRDD = sparkContext.parallelize(row :: Nil)
+      spark.createDataFrame(rowRDD, schema).repartition($"value")
+        .createOrReplaceTempView("testNonPartialAggregation")
+
+      val planned1 = sql("SELECT SUM(value) FROM testNonPartialAggregation GROUP BY value")
+        .queryExecution.executedPlan
+
+      // If input data are already partitioned and the same columns are used in grouping keys and
+      // aggregation values, no partial aggregation exist in query plans.
+      val aggOps1 = planned1.collect { case n if n.nodeName contains "Aggregate" => n }
+      assert(aggOps1.size == 1, s"The plan $planned1 has partial aggregations.")
+
+      val planned2 = sql(
+        """
+          |SELECT t.value, SUM(DISTINCT t.value)
+          |FROM (SELECT * FROM testNonPartialAggregation ORDER BY value) t
+          |GROUP BY t.value
+        """.stripMargin).queryExecution.executedPlan
+
+      val aggOps2 = planned1.collect { case n if n.nodeName contains "Aggregate" => n }
+      assert(aggOps2.size == 1, s"The plan $planned2 has partial aggregations.")
+    }
   }
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
@@ -406,6 +435,44 @@ class PlannerSuite extends SharedSQLContext {
     val inputPlan = DummySparkPlan(
       children = DummySparkPlan(outputOrdering = Seq(orderingA, orderingB)) :: Nil,
       requiredChildOrdering = Seq(Seq(orderingA)),
+      requiredChildDistribution = Seq(UnspecifiedDistribution)
+    )
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case s: SortExec => true }.nonEmpty) {
+      fail(s"No sorts should have been added:\n$outputPlan")
+    }
+  }
+
+  test("EnsureRequirements skips sort when required ordering is semantically equal to " +
+    "existing ordering") {
+    val exprId: ExprId = NamedExpression.newExprId
+    val attribute1 =
+      AttributeReference(
+        name = "col1",
+        dataType = LongType,
+        nullable = false
+      ) (exprId = exprId,
+        qualifier = Some("col1_qualifier")
+      )
+
+    val attribute2 =
+      AttributeReference(
+        name = "col1",
+        dataType = LongType,
+        nullable = false
+      ) (exprId = exprId)
+
+    val orderingA1 = SortOrder(attribute1, Ascending)
+    val orderingA2 = SortOrder(attribute2, Ascending)
+
+    assert(orderingA1 != orderingA2, s"$orderingA1 should NOT equal to $orderingA2")
+    assert(orderingA1.semanticEquals(orderingA2),
+      s"$orderingA1 should be semantically equal to $orderingA2")
+
+    val inputPlan = DummySparkPlan(
+      children = DummySparkPlan(outputOrdering = Seq(orderingA1)) :: Nil,
+      requiredChildOrdering = Seq(Seq(orderingA2)),
       requiredChildDistribution = Seq(UnspecifiedDistribution)
     )
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
