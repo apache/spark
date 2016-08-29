@@ -251,9 +251,22 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression with 
     case (v: Short, ShortType) => v + "S"
     case (v: Long, LongType) => v + "L"
     // Float type doesn't have a suffix
-    case (v: Float, FloatType) => s"CAST($v AS ${FloatType.sql})"
-    case (v: Double, DoubleType) => v + "D"
-    case (v: Decimal, t: DecimalType) => s"CAST($v AS ${t.sql})"
+    case (v: Float, FloatType) =>
+      val castedValue = v match {
+        case _ if v.isNaN => "'NaN'"
+        case Float.PositiveInfinity => "'Infinity'"
+        case Float.NegativeInfinity => "'-Infinity'"
+        case _ => v
+      }
+      s"CAST($castedValue AS ${FloatType.sql})"
+    case (v: Double, DoubleType) =>
+      v match {
+        case _ if v.isNaN => s"CAST('NaN' AS ${DoubleType.sql})"
+        case Double.PositiveInfinity => s"CAST('Infinity' AS ${DoubleType.sql})"
+        case Double.NegativeInfinity => s"CAST('-Infinity' AS ${DoubleType.sql})"
+        case _ => v + "D"
+      }
+    case (v: Decimal, t: DecimalType) => v + "BD"
     case (v: Int, DateType) => s"DATE '${DateTimeUtils.toJavaDate(v)}'"
     case (v: Long, TimestampType) => s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
     case _ => value.toString
