@@ -60,6 +60,10 @@ public class TransportConf {
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
   }
 
+  public int getInt(String name, int defaultValue) {
+    return conf.getInt(name, defaultValue);
+  }
+
   private String getConfKey(String suffix) {
     return "spark." + module + "." + suffix;
   }

@@ -80,7 +80,7 @@ private[hive] trait HiveClient {
   def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit
 
   /** Drop the specified table. */
-  def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean): Unit
+  def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
 
   /** Alter a table whose name matches the one specified in `table`, assuming it exists. */
   final def alterTable(table: CatalogTable): Unit = alterTable(table.identifier.table, table)
@@ -121,7 +121,8 @@ private[hive] trait HiveClient {
       db: String,
       table: String,
       specs: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit
 
   /**
    * Rename one or many existing table partitions, assuming they exist.

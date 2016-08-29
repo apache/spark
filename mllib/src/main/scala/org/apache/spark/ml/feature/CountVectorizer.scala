@@ -18,7 +18,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
@@ -116,10 +116,8 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
 }
 
 /**
- * :: Experimental ::
  * Extracts a vocabulary from document collections and generates a [[CountVectorizerModel]].
  */
-@Experimental
 @Since("1.5.0")
 class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[CountVectorizerModel] with CountVectorizerParams with DefaultParamsWritable {
@@ -201,11 +199,9 @@ object CountVectorizer extends DefaultParamsReadable[CountVectorizer] {
 }
 
 /**
- * :: Experimental ::
  * Converts a text document to a sparse vector of token counts.
  * @param vocabulary An Array over terms. Only the terms in the vocabulary will be counted.
  */
-@Experimental
 @Since("1.5.0")
 class CountVectorizerModel(
     @Since("1.5.0") override val uid: String,

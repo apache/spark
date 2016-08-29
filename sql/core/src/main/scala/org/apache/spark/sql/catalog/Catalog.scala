@@ -85,7 +85,8 @@ abstract class Catalog {
   def listFunctions(dbName: String): Dataset[Function]
 
   /**
-   * Returns a list of columns for the given table in the current database.
+   * Returns a list of columns for the given table in the current database or
+   * the given temporary table.
    *
    * @since 2.0.0
    */

@@ -84,6 +84,7 @@ statement
     | ALTER VIEW tableIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
     | ALTER TABLE tableIdentifier partitionSpec? SET locationSpec      #setTableLocation
+    | ALTER TABLE tableIdentifier RECOVER PARTITIONS                   #recoverPartitions
     | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?                   #dropTable
     | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
     | CREATE (OR REPLACE)? TEMPORARY? VIEW (IF NOT EXISTS)? tableIdentifier
@@ -121,6 +122,7 @@ statement
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         tableIdentifier partitionSpec?                                 #loadData
     | TRUNCATE TABLE tableIdentifier partitionSpec?                    #truncateTable
+    | MSCK REPAIR TABLE tableIdentifier                                #repairTable
     | op=(ADD | LIST) identifier .*?                                   #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
@@ -154,7 +156,6 @@ unsupportedHiveNativeCommands
     | kw1=UNLOCK kw2=DATABASE
     | kw1=CREATE kw2=TEMPORARY kw3=MACRO
     | kw1=DROP kw2=TEMPORARY kw3=MACRO
-    | kw1=MSCK kw2=REPAIR kw3=TABLE
     | kw1=ALTER kw2=TABLE tableIdentifier kw3=NOT kw4=CLUSTERED
     | kw1=ALTER kw2=TABLE tableIdentifier kw3=CLUSTERED kw4=BY
     | kw1=ALTER kw2=TABLE tableIdentifier kw3=NOT kw4=SORTED
@@ -170,7 +171,7 @@ unsupportedHiveNativeCommands
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CONCATENATE
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=SET kw4=FILEFORMAT
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=ADD kw4=COLUMNS
-    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CHANGE kw4=COLUMNS?
+    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CHANGE kw4=COLUMN?
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=REPLACE kw4=COLUMNS
     | kw1=START kw2=TRANSACTION
     | kw1=COMMIT
@@ -312,7 +313,7 @@ multiInsertQueryBody
 
 queryTerm
     : queryPrimary                                                                         #queryTermDefault
-    | left=queryTerm operator=(INTERSECT | UNION | EXCEPT) setQuantifier? right=queryTerm  #setOperation
+    | left=queryTerm operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
     ;
 
 queryPrimary
@@ -432,6 +433,7 @@ relationPrimary
     | '(' queryNoWith ')' sample? (AS? strictIdentifier)?           #aliasedQuery
     | '(' relation ')' sample? (AS? strictIdentifier)?              #aliasedRelation
     | inlineTable                                                   #inlineTableDefault2
+    | identifier '(' (expression (',' expression)*)? ')'            #tableValuedFunction
     ;
 
 inlineTable
@@ -500,6 +502,7 @@ valueExpression
 
 primaryExpression
     : constant                                                                                 #constantDefault
+    | name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #timeFunctionCall
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
     | '(' expression (',' expression)+ ')'                                                     #rowConstructor
@@ -609,7 +612,7 @@ qualifiedName
 identifier
     : strictIdentifier
     | ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | JOIN | CROSS | ON
-    | UNION | INTERSECT | EXCEPT
+    | UNION | INTERSECT | EXCEPT | SETMINUS
     ;
 
 strictIdentifier
@@ -623,13 +626,14 @@ quotedIdentifier
     ;
 
 number
-    : DECIMAL_VALUE            #decimalLiteral
-    | SCIENTIFIC_DECIMAL_VALUE #scientificDecimalLiteral
-    | INTEGER_VALUE            #integerLiteral
-    | BIGINT_LITERAL           #bigIntLiteral
-    | SMALLINT_LITERAL         #smallIntLiteral
-    | TINYINT_LITERAL          #tinyIntLiteral
-    | DOUBLE_LITERAL           #doubleLiteral
+    : MINUS? DECIMAL_VALUE            #decimalLiteral
+    | MINUS? SCIENTIFIC_DECIMAL_VALUE #scientificDecimalLiteral
+    | MINUS? INTEGER_VALUE            #integerLiteral
+    | MINUS? BIGINT_LITERAL           #bigIntLiteral
+    | MINUS? SMALLINT_LITERAL         #smallIntLiteral
+    | MINUS? TINYINT_LITERAL          #tinyIntLiteral
+    | MINUS? DOUBLE_LITERAL           #doubleLiteral
+    | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
 nonReserved
@@ -652,7 +656,7 @@ nonReserved
     | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
     | DBPROPERTIES | DFS | TRUNCATE | COMPUTE | LIST
     | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
-    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
+    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | RECOVER | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
     | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION | LOCAL | INPATH
     | ASC | DESC | LIMIT | RENAME | SETS
     | AT | NULLS | OVERWRITE | ALL | ALTER | AS | BETWEEN | BY | CREATE | DELETE
@@ -660,7 +664,7 @@ nonReserved
     | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
     | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
     | UNBOUNDED | WHEN
-    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
+    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT | CURRENT_DATE | CURRENT_TIMESTAMP
     ;
 
 SELECT: 'SELECT';
@@ -749,6 +753,7 @@ FUNCTIONS: 'FUNCTIONS';
 DROP: 'DROP';
 UNION: 'UNION';
 EXCEPT: 'EXCEPT';
+SETMINUS: 'MINUS';
 INTERSECT: 'INTERSECT';
 TO: 'TO';
 TABLESAMPLE: 'TABLESAMPLE';
@@ -865,6 +870,7 @@ LOCK: 'LOCK';
 UNLOCK: 'UNLOCK';
 MSCK: 'MSCK';
 REPAIR: 'REPAIR';
+RECOVER: 'RECOVER';
 EXPORT: 'EXPORT';
 IMPORT: 'IMPORT';
 LOAD: 'LOAD';
@@ -880,6 +886,8 @@ OPTION: 'OPTION';
 ANTI: 'ANTI';
 LOCAL: 'LOCAL';
 INPATH: 'INPATH';
+CURRENT_DATE: 'CURRENT_DATE';
+CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
@@ -919,6 +927,11 @@ SCIENTIFIC_DECIMAL_VALUE
 DOUBLE_LITERAL
     :
     (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'D'
+    ;
+
+BIGDECIMAL_LITERAL
+    :
+    (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'BD'
     ;
 
 IDENTIFIER

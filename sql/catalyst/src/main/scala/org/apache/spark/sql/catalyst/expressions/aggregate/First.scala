@@ -43,7 +43,7 @@ case class First(child: Expression, ignoreNullsExpr: Expression) extends Declara
       throw new AnalysisException("The second argument of First should be a boolean literal.")
   }
 
-  override def children: Seq[Expression] = child :: Nil
+  override def children: Seq[Expression] = child :: ignoreNullsExpr :: Nil
 
   override def nullable: Boolean = true
 
@@ -54,7 +54,7 @@ case class First(child: Expression, ignoreNullsExpr: Expression) extends Declara
   override def dataType: DataType = child.dataType
 
   // Expected input data type.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, BooleanType)
 
   private lazy val first = AttributeReference("first", child.dataType)()
 

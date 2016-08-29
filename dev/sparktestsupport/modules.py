@@ -458,6 +458,13 @@ yarn = Module(
     ]
 )
 
+mesos = Module(
+    name="mesos",
+    dependencies=[],
+    source_file_regexes=["mesos/"],
+    sbt_test_goals=["mesos/test"]
+)
+
 # The root module is a dummy module which is used to run all of the tests.
 # No other modules should directly depend on this module.
 root = Module(

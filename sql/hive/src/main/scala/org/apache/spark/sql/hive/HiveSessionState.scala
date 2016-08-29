@@ -33,22 +33,18 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
 
   self =>
 
-  private lazy val sharedState: HiveSharedState = {
-    sparkSession.sharedState.asInstanceOf[HiveSharedState]
-  }
-
   /**
    * A Hive client used for interacting with the metastore.
    */
-  lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
+  lazy val metadataHive: HiveClient =
+    sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client.newSession()
 
   /**
    * Internal catalog for managing table and database states.
    */
   override lazy val catalog = {
     new HiveSessionCatalog(
-      sharedState.externalCatalog,
-      metadataHive,
+      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
       sparkSession,
       functionResourceLoader,
       functionRegistry,
@@ -64,7 +60,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
         catalog.OrcConversions ::
-        catalog.CreateTables ::
+        PreprocessDDL(conf) ::
         PreprocessTableInsertion(conf) ::
         DataSourceAnalysis(conf) ::
         (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)

@@ -259,7 +259,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
       // We use an Iterable rather than explicitly converting to a seq so that updates
       // will propagate
       val outputOpIdToSparkJobIds: Iterable[OutputOpIdAndSparkJobId] =
-        Option(batchTimeToOutputOpIdSparkJobIdPair.get(batchTime).asScala)
+        Option(batchTimeToOutputOpIdSparkJobIdPair.get(batchTime)).map(_.asScala)
           .getOrElse(Seq.empty)
       _batchUIData.outputOpIdSparkJobIdPairs = outputOpIdToSparkJobIds
     }

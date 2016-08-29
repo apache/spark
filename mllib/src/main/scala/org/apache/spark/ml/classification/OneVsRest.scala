@@ -29,7 +29,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vector
@@ -117,7 +117,6 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
 }
 
 /**
- * :: Experimental ::
  * Model produced by [[OneVsRest]].
  * This stores the models resulting from training k binary classifiers: one for each class.
  * Each example is scored against all k models, and the model with the highest score
@@ -130,7 +129,6 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
  *               (taking label 0).
  */
 @Since("1.4.0")
-@Experimental
 final class OneVsRestModel private[ml] (
     @Since("1.4.0") override val uid: String,
     private[ml] val labelMetadata: Metadata,
@@ -260,8 +258,6 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
 }
 
 /**
- * :: Experimental ::
- *
  * Reduction of Multiclass Classification to Binary Classification.
  * Performs reduction using one against all strategy.
  * For a multiclass classification with k classes, train k models (one per class).
@@ -269,7 +265,6 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
  * is picked to label the example.
  */
 @Since("1.4.0")
-@Experimental
 final class OneVsRest @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends Estimator[OneVsRestModel] with OneVsRestParams with MLWritable {

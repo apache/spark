@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
@@ -39,7 +39,11 @@ import org.apache.spark.sql.catalyst.util.StringUtils
  *
  * All public methods should be synchronized for thread-safety.
  */
-class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends ExternalCatalog {
+class InMemoryCatalog(
+    conf: SparkConf = new SparkConf,
+    hadoopConfig: Configuration = new Configuration)
+  extends ExternalCatalog {
+
   import CatalogTypes.TablePartitionSpec
 
   private class TableDesc(var table: CatalogTable) {
@@ -192,9 +196,10 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
   // --------------------------------------------------------------------------
 
   override def createTable(
-      db: String,
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
+    assert(tableDefinition.identifier.database.isDefined)
+    val db = tableDefinition.identifier.database.get
     requireDbExists(db)
     val table = tableDefinition.identifier.table
     if (tableExists(db, table)) {
@@ -220,7 +225,8 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
   override def dropTable(
       db: String,
       table: String,
-      ignoreIfNotExists: Boolean): Unit = synchronized {
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = synchronized {
     requireDbExists(db)
     if (tableExists(db, table)) {
       if (getTable(db, table).tableType == CatalogTableType.MANAGED) {
@@ -265,7 +271,9 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
     catalog(db).tables.remove(oldName)
   }
 
-  override def alterTable(db: String, tableDefinition: CatalogTable): Unit = synchronized {
+  override def alterTable(tableDefinition: CatalogTable): Unit = synchronized {
+    assert(tableDefinition.identifier.database.isDefined)
+    val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
     catalog(db).tables(tableDefinition.identifier.table).table = tableDefinition
   }
@@ -358,7 +366,8 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       db: String,
       table: String,
       partSpecs: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit = synchronized {
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = synchronized {
     requireTableExists(db, table)
     val existingParts = catalog(db).tables(table).partitions
     if (!ignoreIfNotExists) {

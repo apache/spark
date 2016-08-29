@@ -17,14 +17,13 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
- * :: Experimental ::
  * A feature transformer that converts the input array of strings into an array of n-grams. Null
  * values in the input array are ignored.
  * It returns an array of n-grams where each n-gram is represented by a space-separated string of
@@ -34,7 +33,6 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  * When the input array length is less than n (number of elements per n-gram), no n-grams are
  * returned.
  */
-@Experimental
 @Since("1.5.0")
 class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends UnaryTransformer[Seq[String], Seq[String], NGram] with DefaultParamsWritable {

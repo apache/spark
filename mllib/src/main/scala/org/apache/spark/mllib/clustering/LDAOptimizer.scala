@@ -28,6 +28,7 @@ import org.apache.spark.graphx._
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: DeveloperApi ::
@@ -472,12 +473,13 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
         gammaPart = gammad :: gammaPart
       }
       Iterator((stat, gammaPart))
-    }
+    }.persist(StorageLevel.MEMORY_AND_DISK)
     val statsSum: BDM[Double] = stats.map(_._1).treeAggregate(BDM.zeros[Double](k, vocabSize))(
       _ += _, _ += _)
-    expElogbetaBc.unpersist()
     val gammat: BDM[Double] = breeze.linalg.DenseMatrix.vertcat(
       stats.map(_._2).flatMap(list => list).collect().map(_.toDenseMatrix): _*)
+    stats.unpersist()
+    expElogbetaBc.destroy(false)
     val batchResult = statsSum :* expElogbeta.t
 
     // Note that this is an optimization to avoid batch.count
@@ -508,8 +510,9 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val weight = rho()
     val N = gammat.rows.toDouble
     val alpha = this.alpha.asBreeze.toDenseVector
-    val logphat: BDM[Double] = sum(LDAUtils.dirichletExpectation(gammat)(::, breeze.linalg.*)) / N
-    val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat.toDenseVector)
+    val logphat: BDV[Double] =
+      sum(LDAUtils.dirichletExpectation(gammat)(::, breeze.linalg.*)).t / N
+    val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat)
 
     val c = N * trigamma(sum(alpha))
     val q = -N * trigamma(alpha)

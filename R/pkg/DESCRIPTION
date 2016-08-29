@@ -1,20 +1,25 @@
 Package: SparkR
 Type: Package
-Title: R frontend for Spark
+Title: R Frontend for Apache Spark
 Version: 2.0.0
-Date: 2013-09-09
-Author: The Apache Software Foundation
-Maintainer: Shivaram Venkataraman <shivaram@cs.berkeley.edu>
-Imports:
-    methods
+Date: 2016-07-07
+Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
+                    email = "shivaram@cs.berkeley.edu"),
+             person("Xiangrui", "Meng", role = "aut",
+                    email = "meng@databricks.com"),
+             person("Felix", "Cheung", role = "aut",
+                    email = "felixcheung@apache.org"),
+             person(family = "The Apache Software Foundation", role = c("aut", "cph")))
+URL: http://www.apache.org/ http://spark.apache.org/
+BugReports: https://issues.apache.org/jira/secure/CreateIssueDetails!init.jspa?pid=12315420&components=12325400&issuetype=4
 Depends:
     R (>= 3.0),
-    methods,
+    methods
 Suggests:
     testthat,
     e1071,
     survival
-Description: R frontend for Spark
+Description: The SparkR package provides an R frontend for Apache Spark.
 License: Apache License (== 2.0)
 Collate:
     'schema.R'
@@ -33,6 +38,7 @@ Collate:
     'context.R'
     'deserialize.R'
     'functions.R'
+    'install.R'
     'mllib.R'
     'serialize.R'
     'sparkR.R'

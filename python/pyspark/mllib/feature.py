@@ -60,8 +60,6 @@ class VectorTransformer(object):
 
 class Normalizer(VectorTransformer):
     """
-    .. note:: Experimental
-
     Normalizes samples individually to unit L\ :sup:`p`\  norm
 
     For any 1 <= `p` < float('inf'), normalizes samples using
@@ -131,8 +129,6 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
 
 class StandardScalerModel(JavaVectorTransformer):
     """
-    .. note:: Experimental
-
     Represents a StandardScaler model that can transform vectors.
 
     .. versionadded:: 1.2.0
@@ -207,16 +203,13 @@ class StandardScalerModel(JavaVectorTransformer):
 
 class StandardScaler(object):
     """
-    .. note:: Experimental
-
     Standardizes features by removing the mean and scaling to unit
     variance using column summary statistics on the samples in the
     training set.
 
     :param withMean: False by default. Centers the data with mean
-                     before scaling. It will build a dense output, so this
-                     does not work on sparse input and will raise an
-                     exception.
+                     before scaling. It will build a dense output, so take
+                     care when applying to sparse input.
     :param withStd: True by default. Scales the data to unit
                     standard deviation.
 
@@ -262,8 +255,6 @@ class StandardScaler(object):
 
 class ChiSqSelectorModel(JavaVectorTransformer):
     """
-    .. note:: Experimental
-
     Represents a Chi Squared selector model.
 
     .. versionadded:: 1.4.0
@@ -282,8 +273,6 @@ class ChiSqSelectorModel(JavaVectorTransformer):
 
 class ChiSqSelector(object):
     """
-    .. note:: Experimental
-
     Creates a ChiSquared feature selector.
 
     :param numTopFeatures: number of features that selector will select.
@@ -361,8 +350,6 @@ class PCA(object):
 
 class HashingTF(object):
     """
-    .. note:: Experimental
-
     Maps a sequence of terms to their term frequencies using the hashing
     trick.
 
@@ -448,8 +435,6 @@ class IDFModel(JavaVectorTransformer):
 
 class IDF(object):
     """
-    .. note:: Experimental
-
     Inverse document frequency (IDF).
 
     The standard formulation is used: `idf = log((m + 1) / (d(t) + 1))`,
@@ -697,8 +682,6 @@ class Word2Vec(object):
 
 class ElementwiseProduct(VectorTransformer):
     """
-    .. note:: Experimental
-
     Scales each column of the vector, with the supplied weight vector.
     i.e the elementwise product.
 

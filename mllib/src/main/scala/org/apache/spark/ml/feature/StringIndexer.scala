@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Transformer}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
@@ -55,7 +55,6 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
 }
 
 /**
- * :: Experimental ::
  * A label indexer that maps a string column of labels to an ML column of label indices.
  * If the input column is numeric, we cast it to string and index the string values.
  * The indices are in [0, numLabels), ordered by label frequencies.
@@ -63,7 +62,6 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
  *
  * @see [[IndexToString]] for the inverse transformation
  */
-@Experimental
 @Since("1.4.0")
 class StringIndexer @Since("1.4.0") (
     @Since("1.4.0") override val uid: String) extends Estimator[StringIndexerModel]
@@ -87,6 +85,7 @@ class StringIndexer @Since("1.4.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
+    transformSchema(dataset.schema, logging = true)
     val counts = dataset.select(col($(inputCol)).cast(StringType))
       .rdd
       .map(_.getString(0))
@@ -112,7 +111,6 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[StringIndexer]].
  *
  * NOTE: During transformation, if the input column does not exist,
@@ -121,7 +119,6 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
  *
  * @param labels  Ordered list of labels, corresponding to indices to be assigned.
  */
-@Experimental
 @Since("1.4.0")
 class StringIndexerModel (
     @Since("1.4.0") override val uid: String,
@@ -164,7 +161,7 @@ class StringIndexerModel (
         "Skip StringIndexerModel.")
       return dataset.toDF
     }
-    validateAndTransformSchema(dataset.schema)
+    transformSchema(dataset.schema, logging = true)
 
     val indexer = udf { label: String =>
       if (labelToIndex.contains(label)) {
@@ -250,7 +247,6 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
 }
 
 /**
- * :: Experimental ::
  * A [[Transformer]] that maps a column of indices back to a new column of corresponding
  * string values.
  * The index-string mapping is either from the ML attributes of the input column,
@@ -258,7 +254,6 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
  *
  * @see [[StringIndexer]] for converting strings into indices
  */
-@Experimental
 @Since("1.5.0")
 class IndexToString private[ml] (@Since("1.5.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
@@ -311,6 +306,7 @@ class IndexToString private[ml] (@Since("1.5.0") override val uid: String)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val inputColSchema = dataset.schema($(inputCol))
     // If the labels array is empty use column metadata
     val values = if (!isDefined(labels) || $(labels).isEmpty) {

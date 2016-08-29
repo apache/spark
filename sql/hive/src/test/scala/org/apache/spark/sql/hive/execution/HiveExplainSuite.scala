@@ -78,7 +78,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("SPARK-6212: The EXPLAIN output of CTAS only shows the analyzed plan") {
-    withTempTable("jt") {
+    withTempView("jt") {
       val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
       spark.read.json(rdd).createOrReplaceTempView("jt")
       val outputs = sql(

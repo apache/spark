@@ -46,6 +46,7 @@ object ModelSelectionViaTrainValidationSplitExample {
     val Array(training, test) = data.randomSplit(Array(0.9, 0.1), seed = 12345)
 
     val lr = new LinearRegression()
+        .setMaxIter(10)
 
     // We use a ParamGridBuilder to construct a grid of parameters to search over.
     // TrainValidationSplit will try all combinations of values and determine best model using
