@@ -455,11 +455,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   override def tableExists(db: String, table: String): Boolean = withClient {
-    try {
-      client.getTableOption(db, table).isDefined
-    } catch {
-      case e: AnalysisException if e.message.contains("Hive index table is not supported") => true
-    }
+    client.tableExists(db, table)
   }
 
   override def listTables(db: String): Seq[String] = withClient {
