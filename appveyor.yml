@@ -23,9 +23,10 @@ configuration: Debug
 cache:
   - C:\Users\appveyor\.m2
 
-# Install maven and dependencies
 install:
+  # Install maven and dependencies
   - ps: .\dev\appveyor-install-dependencies.ps1
+  # Required package for R unit tests
   - cmd: R -e "install.packages('testthat', repos='http://cran.us.r-project.org')"
 
 build_script:
