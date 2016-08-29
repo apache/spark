@@ -22,25 +22,25 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 
 private[sql] case class CommonSubqueryExec(
     attributes: Seq[Attribute],
     @transient subquery: CommonSubquery)
-  extends LeafExecNode {
+  extends UnaryExecNode {
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(subquery) ++ super.innerChildren
+  override val child: SparkPlan = subquery.executedChild
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = attributes
 
-  override def outputPartitioning: Partitioning = subquery.child.outputPartitioning
+  override def outputPartitioning: Partitioning = subquery.executedChild.outputPartitioning
 
-  override def outputOrdering: Seq[SortOrder] = subquery.child.outputOrdering
+  override def outputOrdering: Seq[SortOrder] = subquery.executedChild.outputOrdering
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")

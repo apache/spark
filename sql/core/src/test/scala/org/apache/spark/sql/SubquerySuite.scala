@@ -583,7 +583,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       val df = sql("WITH s AS (SELECT 1 FROM dedup) SELECT * FROM s s1 join s s2")
 
       val commonSubqueries = df.queryExecution.sparkPlan.collect {
-        case c: CommonSubqueryExec => c.subquery.child
+        case c: CommonSubqueryExec => c.subquery.executedChild
       }.distinct
       assert(commonSubqueries.length == 1)
 
@@ -591,7 +591,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         "SELECT * FROM s1 JOIN (SELECT * FROM s1, s2)")
 
       val commonSubqueries2 = df2.queryExecution.sparkPlan.collect {
-        case c: CommonSubqueryExec => c.subquery.child
+        case c: CommonSubqueryExec => c.subquery.executedChild
       }.distinct
       assert(commonSubqueries2.length == 1)
 
@@ -599,7 +599,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         "WHERE a.id = 1 AND b.id > 0")
 
       val commonSubqueries3 = df3.queryExecution.sparkPlan.collect {
-        case c: CommonSubqueryExec => c.subquery.child
+        case c: CommonSubqueryExec => c.subquery.executedChild
       }.distinct
       assert(commonSubqueries3.length == 1)
     }
@@ -607,7 +607,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     // Using a self-join as CTE to test if de-duplicated attributes work for this.
     val df4 = sql("WITH j AS (SELECT * FROM (SELECT * FROM l JOIN l)) SELECT * FROM j j1, j j2")
     val commonSubqueries4 = df4.queryExecution.sparkPlan.collect {
-      case c: CommonSubqueryExec => c.subquery.child
+      case c: CommonSubqueryExec => c.subquery.executedChild
     }.distinct
     assert(commonSubqueries4.length == 1)
 
@@ -619,7 +619,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     val df5 = sql("WITH cte AS (SELECT * FROM l a, l b), cte2 AS (SELECT * FROM cte j1, cte) " +
       "SELECT * FROM cte2 j3, cte j4")
     val commonSubqueries5 = df5.queryExecution.sparkPlan.collect {
-      case c: CommonSubqueryExec => c.subquery.child
+      case c: CommonSubqueryExec => c.subquery.executedChild
     }.distinct
     assert(commonSubqueries5.length == 1)
   }
@@ -630,7 +630,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         "SELECT * FROM (SELECT * FROM cte WHERE a = 1) x JOIN (SELECT * FROM cte WHERE b = 1.0) y")
 
       val commonSubqueries = df.queryExecution.sparkPlan.collect {
-        case c: CommonSubqueryExec => c.subquery.child
+        case c: CommonSubqueryExec => c.subquery.executedChild
       }.distinct
       assert(commonSubqueries.length == 1)
       val pushdownFilter = commonSubqueries(0).collect {
@@ -655,7 +655,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         "SELECT * FROM cte x, cte y WHERE x.b = y.b AND x.a = 1 AND x.b = 1 + 1")
 
       val commonSubqueries2 = df2.queryExecution.sparkPlan.collect {
-        case c: CommonSubqueryExec => c.subquery.child
+        case c: CommonSubqueryExec => c.subquery.executedChild
       }.distinct
       assert(commonSubqueries2.length == 1)
       val pushdownFilter2 = commonSubqueries2(0).collect {
@@ -680,7 +680,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       "WHERE a = (SELECT max(b) FROM t1)) SELECT * FROM t2 x UNION ALL SELECT * FROM t2 y")
     checkAnswer(df, Array(Row(1), Row(1)))
     val commonSubqueries = df.queryExecution.sparkPlan.collect {
-      case c: CommonSubqueryExec => c.subquery.child
+      case c: CommonSubqueryExec => c.subquery.executedChild
     }.distinct
     assert(commonSubqueries.length == 1)
   }
@@ -691,7 +691,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         "SELECT * FROM (SELECT a FROM cte) x JOIN (SELECT b FROM cte) y")
 
       val commonSubqueries = df.queryExecution.sparkPlan.collect {
-        case c: CommonSubqueryExec => c.subquery.child
+        case c: CommonSubqueryExec => c.subquery.executedChild
       }.distinct
       assert(commonSubqueries.length == 1)
 

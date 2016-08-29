@@ -22,17 +22,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.SparkPlan
 
 private[sql] case class CommonSubquery(
     output: Seq[Attribute],
-    @transient child: SparkPlan)(
+    @transient child: LogicalPlan)(
+    @transient val executedChild: SparkPlan,
     private[sql] val _statistics: Statistics,
     @transient private[sql] var _computedOutput: RDD[InternalRow] = null)
-  extends logical.LeafNode {
-
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
+  extends logical.UnaryNode {
 
   override def producedAttributes: AttributeSet = outputSet
 
@@ -41,12 +40,12 @@ private[sql] case class CommonSubquery(
   lazy val numRows: Long = computedOutput.count
 
   def withOutput(newOutput: Seq[Attribute]): CommonSubquery = {
-    CommonSubquery(newOutput, child)(_statistics, _computedOutput)
+    CommonSubquery(newOutput, child)(executedChild, _statistics, _computedOutput)
   }
 
   def computedOutput: RDD[InternalRow] = this.synchronized {
     if (_computedOutput == null) {
-      _computedOutput = child.execute()
+      _computedOutput = executedChild.execute()
     }
     _computedOutput
   }
