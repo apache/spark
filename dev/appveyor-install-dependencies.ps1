@@ -26,29 +26,29 @@ Function InstallR {
   }
 
   If ($rVer -eq "devel") {
-    $url_path = ""
+    $urlPath = ""
     $rVer = "devel"
   }
   ElseIf (($rVer -eq "stable") -or ($rVer -eq "release")) {
-    $url_path = ""
+    $urlPath = ""
     $rVer = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-release).Content).version
     If ($rVer -eq "3.2.4") {
       $rVer = "3.2.4revised"
     }
   }
   ElseIf ($rVer -eq "patched") {
-    $url_path = ""
+    $urlPath = ""
     $rVer = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-release).Content).version + "patched"
   }
   ElseIf ($rVer -eq "oldrel") {
     $rVer = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-oldrel).Content).version
-    $url_path = ("old/" + $rVer + "/")
+    $urlPath = ("old/" + $rVer + "/")
   }
   Else {
-      $url_path = ("old/" + $rVer + "/")
+      $urlPath = ("old/" + $rVer + "/")
   }
 
-  $rurl = $CRAN + "/bin/windows/base/" + $url_path + "R-" + $rVer + "-win.exe"
+  $rurl = $CRAN + "/bin/windows/base/" + $urlPath + "R-" + $rVer + "-win.exe"
 
   # Downloading R
   Start-FileDownload $rurl "../R-win.exe"
@@ -79,12 +79,12 @@ Function InstallRtools {
   echo "Rtools is now available on drive $RtoolsDrive"
 
   if ( -not(Test-Path Env:\GCC_PATH) ) {
-    $gcc_path = "gcc-4.6.3"
+    $gccPath = "gcc-4.6.3"
   }
   Else {
-    $gcc_path = $env:GCC_PATH
+    $gccPath = $env:GCC_PATH
   }
-  $env:PATH = $RtoolsDrive + '\Rtools\bin;' + $RtoolsDrive + '\Rtools\MinGW\bin;' + $RtoolsDrive + '\Rtools\' + $gcc_path + '\bin;' + $env:PATH
+  $env:PATH = $RtoolsDrive + '\Rtools\bin;' + $RtoolsDrive + '\Rtools\MinGW\bin;' + $RtoolsDrive + '\Rtools\' + $gccPath + '\bin;' + $env:PATH
   $env:BINPREF=$RtoolsDrive + '/Rtools/mingw_$(WIN)/bin/'
 }
 
