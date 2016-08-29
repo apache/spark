@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
-import org.apache.spark.sql.{SaveMode, ViewType}
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
@@ -1254,7 +1254,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           ic.identifier.getText -> Option(ic.STRING).map(string)
         }
       }
-      val viewType = if (ctx.TEMPORARY != null) ViewType.Temporary else ViewType.Permanent
+      val viewType = if (ctx.TEMPORARY != null) TemporaryView else PermanentView
       createView(
         ctx,
         ctx.tableIdentifier,
@@ -1270,7 +1270,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Alter the query of a view. This creates a [[CreateViewCommand]] command.
+   * Alter the query of a view. This creates a [[CreateViewCommand]] command. The view type could be
+   * either temporary or permanent.
    */
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
     createView(
@@ -1282,7 +1283,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       properties = Map.empty,
       ignoreIfExists = false,
       replace = true,
-      ViewType.Any
+      AnyTypeView
     )
   }
 

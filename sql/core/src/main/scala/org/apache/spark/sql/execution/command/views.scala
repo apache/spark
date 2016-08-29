@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession, ViewType}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLBuilder, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
@@ -70,13 +70,13 @@ case class CreateViewCommand(
     "CREATE or ALTER VIEW can only use ErrorIfExists, Ignore or Overwrite.")
 
   // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with 'CREATE TEMPORARY TABLE'
-  if (mode == SaveMode.Ignore && viewType == ViewType.Temporary) {
+  if (mode == SaveMode.Ignore && viewType == TemporaryView) {
     throw new AnalysisException(
       "It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
   }
 
   // Temporary view names should NOT contain database prefix like "database.table"
-  if (viewType == ViewType.Temporary && name.database.isDefined) {
+  if (viewType == TemporaryView && name.database.isDefined) {
     val database = name.database.get
     throw new AnalysisException(
       s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
@@ -96,45 +96,40 @@ case class CreateViewCommand(
     }
     val sessionState = sparkSession.sessionState
 
-    // 1) CREATE VIEW: create a temp view when users explicitly specify the keyword TEMPORARY;
-    //                 otherwise, create a permanent view no matter whether the temporary view
-    //                 with the same name exists or not.
-    // 2) ALTER VIEW: alter the temporary view if the temp view exists; otherwise, try to alter
-    //                the permanent view. Here, it follows the same resolution like DROP VIEW,
-    //                since users are unable to specify the keyword TEMPORARY.
-    if (viewType == ViewType.Temporary ||
-        (viewType != ViewType.Permanent && sessionState.catalog.isTemporaryTable(name))) {
-      createTemporaryView(sparkSession, analyzedPlan)
-    } else {
-      // Adds default database for permanent table if it doesn't exist, so that tableExists()
-      // only check permanent tables.
-      val database = name.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-      val qualifiedName = name.copy(database = Option(database))
-
-      if (sessionState.catalog.tableExists(qualifiedName)) {
-        val tableMetadata = sessionState.catalog.getTableMetadata(qualifiedName)
-        if (mode == SaveMode.Ignore) {
-          // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
-          // already exists.
-        } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
-          throw new AnalysisException(
-            "Existing table is not a view. The following is an existing table, " +
-              s"not a view: $qualifiedName")
-        } else if (mode == SaveMode.Overwrite) {
-          // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-          sessionState.catalog.alterTable(prepareTable(sparkSession, analyzedPlan))
+    viewType match {
+      case TemporaryView =>
+        createTemporaryView(sparkSession, analyzedPlan)
+      case AnyTypeView if sessionState.catalog.isTemporaryTable(name) =>
+        createTemporaryView(sparkSession, analyzedPlan)
+      case _ =>
+        // Adds default database for permanent table if it doesn't exist, so that tableExists()
+        // only check permanent tables.
+        val database = name.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+        val qualifiedName = name.copy(database = Option(database))
+        if (sessionState.catalog.tableExists(qualifiedName)) {
+          val tableMetadata = sessionState.catalog.getTableMetadata(qualifiedName)
+          if (mode == SaveMode.Ignore) {
+            // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target
+            // view already exists.
+          } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
+            throw new AnalysisException(
+              "Existing table is not a view. The following is an existing table, " +
+                s"not a view: $qualifiedName")
+          } else if (mode == SaveMode.Overwrite) {
+            // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
+            sessionState.catalog.alterTable(prepareTable(sparkSession, analyzedPlan))
+          } else {
+            // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
+            // exists.
+            throw new AnalysisException(
+              s"View $qualifiedName already exists. If you want to update the view definition, " +
+                "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
+          }
         } else {
-          // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
-          // exists.
-          throw new AnalysisException(
-            s"View $qualifiedName already exists. If you want to update the view definition, " +
-              "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
+          // Create the view if it doesn't exist.
+          sessionState.catalog.createTable(
+            prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
         }
-      } else {
-        // Create the view if it doesn't exist.
-        sessionState.catalog.createTable(
-          prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
-      }
     }
     Seq.empty[Row]
   }
@@ -200,3 +195,27 @@ case class CreateViewCommand(
     )
   }
 }
+
+/**
+ * The trait used to represent the type of a view.
+ */
+sealed trait ViewType
+
+/**
+ * Temporary means local temporary views. The views are session-scoped and automatically dropped
+ * when the session terminates. Do not qualify a temporary table with a schema name. Existing
+ * permanent tables or views with the same name are not visible while the temporary view exists,
+ * unless they are referenced with schema-qualified names.
+ */
+case object TemporaryView extends ViewType
+
+/**
+ * Permanent means global permanent views. The views are global-scoped and accessible by all
+ * sessions. The permanent views stays until they are explicitly dropped.
+ */
+case object PermanentView extends ViewType
+
+/**
+ * Any means the view type is unknown.
+ */
+case object AnyTypeView extends ViewType
