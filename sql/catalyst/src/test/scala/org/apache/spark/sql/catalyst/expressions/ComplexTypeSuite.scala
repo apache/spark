@@ -175,9 +175,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   /**
-  * CreateStruct is now [[Unevaluable]]
+  * CreateStruct is now a constructor for [[CreateNamedStruct]]
   */
-  ignore("CreateStruct") {
+  test("CreateStruct") {
     val row = create_row(1, 2, 3)
     val c1 = 'a.int.at(0)
     val c3 = 'c.int.at(2)
