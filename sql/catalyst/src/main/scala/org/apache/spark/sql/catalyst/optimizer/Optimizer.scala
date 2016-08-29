@@ -2138,8 +2138,7 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer)
           val rewrites = buildRewrites(child, subqueries(0).asInstanceOf[Filter].child)
           pushToOtherPlan(otherCond, rewrites)
       }).reduce(Or)
-
-    plan transform {
+    plan transformDown {
       case f @ Filter(cond, s @ SubqueryAlias(alias, subquery, v, true)) if s.sameResult(keyPlan) =>
         val pushdownCond: Expression = subqueries.foldLeft(firstPushdownCondition) {
           case (currentCond, sub) =>
@@ -2149,6 +2148,7 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer)
 
         val newSubquery = Filter(pushdownCond, subquery)
         val optimized = optimizer.execute(newSubquery)
+
         // Check if any optimization is performed.
         if (optimized.sameResult(newSubquery)) {
           // No optimization happens. Let's keep original subquery.
@@ -2244,7 +2244,11 @@ object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
         if (duplicateSubqueries.indexWhere(s => s.sameResult(child)) < 0) {
           child
         } else {
-          SubqueryAlias(alias, child, v, commonSubquery = true)
+          // Strip all wrapped subqueries.
+          val newChild = child.transformDown {
+            case s: SubqueryAlias => s.child
+          }
+          SubqueryAlias(alias, newChild, v, commonSubquery = true)
         }
     }
   }
