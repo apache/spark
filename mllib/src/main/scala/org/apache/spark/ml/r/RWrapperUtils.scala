@@ -30,18 +30,18 @@ object RWrapperUtils extends Logging {
    * Here is to change the column name to avoid "column already exists" error.
    *
    * @param rFormula RFormula instance
-   * @param data input dataset
+   * @param data Input dataset
    * @return Unit
    */
   def checkDataColumns(rFormula: RFormula, data: Dataset[_]): Unit = {
-    if (data.schema.fieldNames.contains("label")) {
+    if (data.schema.fieldNames.contains(rFormula.getLabelCol)) {
       logWarning("data containing 'label' column, so change its name to avoid conflict")
-      rFormula.setLabelCol("label_output")
+      rFormula.setLabelCol(rFormula.getLabelCol + "_output")
     }
 
-    if (data.schema.fieldNames.contains("features")) {
+    if (data.schema.fieldNames.contains(rFormula.getFeaturesCol)) {
       logWarning("data containing 'features' column, so change its name to avoid conflict")
-      rFormula.setFeaturesCol("features_output")
+      rFormula.setFeaturesCol(rFormula.getFeaturesCol + "_output")
     }
   }
 }

@@ -72,6 +72,7 @@ private[r] object KMeansWrapper extends MLReadable[KMeansWrapper] {
 
     val rFormula = new RFormula()
       .setFormula(formula)
+      .setFeaturesCol("features")
     RWrapperUtils.checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 
