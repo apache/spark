@@ -18,9 +18,6 @@ under the License.
 $CRAN = "https://cloud.r-project.org"
 
 Function InstallR {
-  [CmdletBinding()]
-  Param()
-
   if ( -not(Test-Path Env:\R_ARCH) ) {
     $arch = "i386"
   }
