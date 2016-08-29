@@ -791,13 +791,22 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     }
   }
 
+  // These table properties should not be included in the output statement of SHOW CREATE TABLE
+  val excludedTableProperties = Set(
+    // The following are hive-generated statistics fields
+    "COLUMN_STATS_ACCURATE",
+    "numFiles",
+    "numPartitions",
+    "numRows",
+    "rawDataSize",
+    "totalSize"
+  )
+
   private def showHiveTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.properties.nonEmpty) {
       val filteredProps = metadata.properties.filterNot {
         // Skips all the stats info (See the JIRA: HIVE-13792)
-        case (key, _) =>
-          key == "numFiles" || key == "numRows" || key == "totalSize" || key == "numPartitions" ||
-          key == "rawDataSize" || key == "COLUMN_STATS_ACCURATE"
+        case (key, _) => excludedTableProperties.contains(key)
       }
 
       val props = filteredProps.map { case (key, value) =>
