@@ -144,7 +144,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
     // dynamic_partitioning_columns are partitioning columns that do not assigned
     // values in the PARTITION clause (e.g. c in the above example).
     case insert @ logical.InsertIntoTable(
-      relation @ LogicalRelation(t: HadoopFsRelation, _, _), parts, query, overwrite, false)
+      relation @ LogicalRelation(t: HadoopFsRelation, _, _, _), parts, query, overwrite, false)
       if query.resolved && parts.exists(_._2.isDefined) =>
 
       val projectList = convertStaticPartitions(
@@ -159,7 +159,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
 
     case i @ logical.InsertIntoTable(
-           l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false)
+           l @ LogicalRelation(t: HadoopFsRelation, _, _, _), part, query, overwrite, false)
         if query.resolved && t.schema.asNullable == query.schema.asNullable =>
 
       // Sanity checks
@@ -170,7 +170,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
       val outputPath = t.location.paths.head
       val inputPaths = query.collect {
-        case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.paths
+        case LogicalRelation(r: HadoopFsRelation, _, _, _) => r.location.paths
       }.flatten
 
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
@@ -207,11 +207,10 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         className = table.provider.get,
         options = table.storage.properties)
 
-    val logicalRel = LogicalRelation(
+    LogicalRelation(
       dataSource.resolveRelation(),
-      metastoreTableIdentifier = Some(table.identifier))
-    logicalRel.inheritedStats = table.catalogStats
-    logicalRel
+      metastoreTableIdentifier = Some(table.identifier),
+      inheritedStats = table.catalogStats)
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -230,7 +229,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
  */
 object DataSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _)) =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _, _)) =>
       pruneFilterProjectRaw(
         l,
         projects,
@@ -238,21 +237,22 @@ object DataSourceStrategy extends Strategy with Logging {
         (requestedColumns, allPredicates, _) =>
           toCatalystRDD(l, requestedColumns, t.buildScan(requestedColumns, allPredicates))) :: Nil
 
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedFilteredScan, _, _)) =>
+    case PhysicalOperation(projects, filters,
+      l @ LogicalRelation(t: PrunedFilteredScan, _, _, _)) =>
       pruneFilterProject(
         l,
         projects,
         filters,
         (a, f) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f))) :: Nil
 
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan, _, _)) =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan, _, _, _)) =>
       pruneFilterProject(
         l,
         projects,
         filters,
         (a, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray))) :: Nil
 
-    case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
+    case l @ LogicalRelation(baseRelation: TableScan, _, _, _) =>
       RowDataSourceScanExec(
         l.output,
         toCatalystRDD(l, baseRelation.buildScan()),
@@ -261,7 +261,7 @@ object DataSourceStrategy extends Strategy with Logging {
         Map.empty,
         None) :: Nil
 
-    case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
+    case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _, _),
       part, query, overwrite, false) if part.isEmpty =>
       ExecutedCommandExec(InsertIntoDataSourceCommand(l, query, overwrite)) :: Nil
 

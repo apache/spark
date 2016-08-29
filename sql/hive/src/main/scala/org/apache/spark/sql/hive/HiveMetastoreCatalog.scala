@@ -80,11 +80,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             className = table.provider.get,
             options = table.storage.properties)
 
-        val logicalRel = LogicalRelation(
+        LogicalRelation(
           dataSource.resolveRelation(checkPathExist = true),
-          metastoreTableIdentifier = Some(TableIdentifier(in.name, Some(in.database))))
-        logicalRel.inheritedStats = table.catalogStats
-        logicalRel
+          metastoreTableIdentifier = Some(TableIdentifier(in.name, Some(in.database))),
+          inheritedStats = table.catalogStats)
       }
     }
 
@@ -147,7 +146,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
     cachedDataSourceTables.getIfPresent(tableIdentifier) match {
       case null => None // Cache miss
-      case logical @ LogicalRelation(relation: HadoopFsRelation, _, _) =>
+      case logical @ LogicalRelation(relation: HadoopFsRelation, _, _, _) =>
         val cachedRelationFileFormatClass = relation.fileFormat.getClass
 
         expectedFileFormat match {
@@ -298,9 +297,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
       logicalRelation
     }
-    val logicalRel = result.copy(expectedOutputAttributes = Some(metastoreRelation.output))
-    logicalRel.inheritedStats = Some(metastoreRelation.statistics)
-    logicalRel
+    result.copy(
+      expectedOutputAttributes = Some(metastoreRelation.output),
+      inheritedStats = Some(metastoreRelation.statistics))
   }
 
   /**
