@@ -693,11 +693,12 @@ class HiveDDLSuite
     val sourceTabName = "tab1"
     val targetTabName = "tab2"
     withTable(sourceTabName, targetTabName) {
-      sql(s"CREATE TABLE $sourceTabName AS SELECT 1 key, 'a' value")
+      sql(s"CREATE TABLE $sourceTabName TBLPROPERTIES('prop1'='value1') AS SELECT 1 key, 'a'")
       sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
 
       val sourceTable = catalog.getTableMetadata(TableIdentifier(sourceTabName, Some("default")))
       assert(sourceTable.tableType == CatalogTableType.MANAGED)
+      assert(sourceTable.properties.get("prop1").nonEmpty)
       val targetTable = catalog.getTableMetadata(TableIdentifier(targetTabName, Some("default")))
 
       checkCreateTableLike(sourceTable, targetTable)
@@ -780,8 +781,26 @@ class HiveDDLSuite
       "the view text and original text in the created table must be empty")
     assert(targetTable.comment.isEmpty,
       "the comment in the created table must be empty")
-    assert(targetTable.properties.get("comment").isEmpty,
-      "the comment in the created table must be empty")
+
+    val metastoreGeneratedProperties = Seq(
+      "CreateTime",
+      "transient_lastDdlTime",
+      "grantTime",
+      "lastUpdateTime",
+      "last_modified_by",
+      "last_modified_time",
+      "Owner:",
+      "COLUMN_STATS_ACCURATE",
+      "numFiles",
+      "numRows",
+      "rawDataSize",
+      "totalSize",
+      "totalNumberFiles",
+      "maxFileSize",
+      "minFileSize"
+    )
+    assert(targetTable.properties.filterKeys(!metastoreGeneratedProperties.contains(_)).isEmpty,
+      "the table properties of source tables should not be copied in the created table")
 
     if (DDLUtils.isDatasourceTable(sourceTable)) {
       assert(DDLUtils.isDatasourceTable(targetTable),
