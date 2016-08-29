@@ -371,7 +371,7 @@ sparkR.session <- function(
 <<<<<<< 8f0c35a4d0dd458719627be5f524792bf244d70a
 =======
   if (nzchar(master)) {
-    assign("spark.master", master, envir = sparkConfigMap)
+    sparkConfigMap[["spark.master"]] <- master
   }
 
   # do not download if it is run in the sparkR shell
@@ -592,13 +592,5 @@ sparkCheckInstall <- function(sparkHome, master) {
     }
   } else {
     NULL
-  }
-}
-
-# Utility function for print enviroment
-printEnvs <- function(env) {
-  envNames <- names(env)
-  for (envName in envNames) {
-    cat(paste0(envName, "=", env[[envName]], "\n"))
   }
 }
