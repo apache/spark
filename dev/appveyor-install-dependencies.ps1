@@ -113,7 +113,7 @@ if (!(Test-Path $tools))
     New-Item -ItemType Directory -Force -Path $tools | Out-Null
 }
 
-# ========================== maven
+# ========================== Maven
 Push-Location $tools
 
 $mavenVer = "3.3.9"
