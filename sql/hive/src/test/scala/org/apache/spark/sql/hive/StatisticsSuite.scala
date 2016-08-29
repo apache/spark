@@ -23,6 +23,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.execution.command.AnalyzeTableCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
@@ -169,16 +170,20 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
   }
 
-  test("test table-level statistics for hive tables created in HiveExternalCatalog") {
-    def checkTableStats(tableName: String, rowCount: Option[BigInt]): Unit = {
-      val df = sql(s"SELECT * FROM $tableName")
-      val statsSeq = df.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
-        mr.statistics
-      }
-      assert(statsSeq.size === 1)
-      assert(statsSeq.head.rowCount === rowCount)
+  private def checkTableStats(
+      tableName: String,
+      totalSize: Long,
+      rowCount: Option[BigInt]): Unit = {
+    val df = sql(s"SELECT * FROM $tableName")
+    val statsSeq = df.queryExecution.analyzed.collect { case rel: LeafNode =>
+      rel.statistics
     }
+    assert(statsSeq.size === 1)
+    assert(statsSeq.head.sizeInBytes === totalSize)
+    assert(statsSeq.head.rowCount === rowCount)
+  }
 
+  test("test table-level statistics for hive tables created in HiveExternalCatalog") {
     val textTable = "textTable"
     val parquetTable = "parquetTable"
     val orcTable = "orcTable"
@@ -188,54 +193,33 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
-      checkTableStats(textTable, None)
+      checkTableStats(textTable, 5812, None)
 
       // without noscan, we count the number of rows
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS")
-      checkTableStats(textTable, Some(500))
-
-      // After "ALTER TABLE" command (without setting STATS_GENERATED_VIA_STATS_TASK),
-      // StatsSetupConst.COLUMN_STATS_ACCURATE will be set to false, this logic is in Hive.
-      sql(s"alter table $textTable set TBLPROPERTIES ('numRows'='2')")
-      checkTableStats(textTable, None)
+      checkTableStats(textTable, 5812, Some(500))
 
       // test statistics of LogicalRelation inherited from MetastoreRelation
       sql(s"CREATE TABLE $parquetTable (key STRING, value STRING) STORED AS PARQUET")
       sql(s"CREATE TABLE $orcTable (key STRING, value STRING) STORED AS ORC")
       sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
       sql(s"INSERT INTO TABLE $orcTable SELECT * FROM src")
-      sql(s"INSERT INTO TABLE $orcTable SELECT * FROM src")
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
       sql(s"ANALYZE TABLE $orcTable COMPUTE STATISTICS")
 
-      var df = sql(s"SELECT * FROM $parquetTable")
-      var statsSeq = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
-        rel.statistics
-      }
-      assert(statsSeq.size === 1)
-      assert(statsSeq.head.rowCount === Some(500))
+      checkTableStats(parquetTable, 4236, Some(500))
+
+      sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
+      sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
+      checkTableStats(parquetTable, 8472, Some(1000))
 
       withSQLConf("spark.sql.hive.convertMetastoreOrc" -> "true") {
-        df = sql(s"SELECT * FROM $orcTable")
-        statsSeq = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
-          rel.statistics
-        }
-        assert(statsSeq.size === 1)
-        assert(statsSeq.head.rowCount === Some(1000))
+        checkTableStats(orcTable, 3023, Some(500))
       }
     }
   }
 
   test("test table-level statistics for data source table created in HiveExternalCatalog") {
-    def checkTableStats(tableName: String, rowCount: Option[BigInt]): Unit = {
-      val df = sql(s"SELECT * FROM $tableName")
-      val statsSeq = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
-        rel.statistics
-      }
-      assert(statsSeq.size === 1)
-      assert(statsSeq.head.rowCount === rowCount)
-    }
-
     val parquetTable = "parquetTable"
     withTable(parquetTable) {
       sql(s"CREATE TABLE $parquetTable (key STRING, value STRING) USING PARQUET")
@@ -243,11 +227,11 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
-      checkTableStats(parquetTable, None)
+      checkTableStats(parquetTable, 4236, None)
 
       // without noscan, we count the number of rows
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
-      checkTableStats(parquetTable, Some(500))
+      checkTableStats(parquetTable, 4236, Some(500))
     }
   }
 

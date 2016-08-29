@@ -23,7 +23,6 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.thrift.TException
 
@@ -403,25 +402,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   override def alterTableStats(tableDefinition: CatalogTable): Unit = withClient {
-    // convert Spark's statistics to Hive table's properties
-    var statsProperties: Map[String, String] = Map()
-    if (tableDefinition.catalogStats.isDefined) {
-      val stats = tableDefinition.catalogStats.get
-      statsProperties += (StatsSetupConst.TOTAL_SIZE -> stats.sizeInBytes.toString())
-      if (stats.rowCount.isDefined) {
-        // We need to set STATS_GENERATED_VIA_STATS_TASK here so that we can persist
-        // ROW_COUNT in metastore. This constraint comes from Hive metastore (HIVE-8648).
-        statsProperties += (StatsSetupConst.ROW_COUNT -> stats.rowCount.get.toString(),
-          StatsSetupConst.STATS_GENERATED_VIA_STATS_TASK -> StatsSetupConst.TRUE)
-      }
+    assert(tableDefinition.catalogStats.isDefined)
+    val stats = tableDefinition.catalogStats.get
+    // convert table statistics to properties so that we can persist them through hive api
+    var statsProperties: Map[String, String] =
+      Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
+    if (stats.rowCount.isDefined) {
+      statsProperties += (STATISTICS_NUM_ROWS -> stats.rowCount.get.toString())
     }
-
-    val table = if (statsProperties.nonEmpty) {
-      tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties)
-    } else {
-      tableDefinition
-    }
-    alterTable(table)
+    alterTable(tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties))
   }
 
   override def getTable(db: String, table: String): CatalogTable = withClient {
@@ -632,6 +621,10 @@ object HiveExternalCatalog {
   val DATASOURCE_SCHEMA_PARTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "partCol."
   val DATASOURCE_SCHEMA_BUCKETCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "bucketCol."
   val DATASOURCE_SCHEMA_SORTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "sortCol."
+
+  val STATISTICS_PREFIX = "spark.sql.statistics."
+  val STATISTICS_TOTAL_SIZE = STATISTICS_PREFIX + "totalSize"
+  val STATISTICS_NUM_ROWS = STATISTICS_PREFIX + "numRows"
 
   def getProviderFromTableProperties(metadata: CatalogTable): Option[String] = {
     metadata.properties.get(DATASOURCE_PROVIDER)

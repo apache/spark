@@ -25,7 +25,6 @@ import scala.language.reflectiveCalls
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
@@ -47,6 +46,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.{CircularBuffer, Utils}
 
@@ -432,15 +432,13 @@ private[hive] class HiveClientImpl(
 
   // Construct Spark's statistics from information in Hive metastore.
   private def constructStatsFromHive(properties: Map[String, String]): Option[Statistics] = {
-    val statsTrue = properties.getOrElse(StatsSetupConst.COLUMN_STATS_ACCURATE, "false").toBoolean
-    // If the stats are not accurate, we do not load them.
-    if (statsTrue && properties.contains(StatsSetupConst.TOTAL_SIZE)) {
-      val totalSize = BigInt(properties.get(StatsSetupConst.TOTAL_SIZE).get)
+    if (properties.contains(HiveExternalCatalog.STATISTICS_TOTAL_SIZE)) {
+      val totalSize = BigInt(properties.get(HiveExternalCatalog.STATISTICS_TOTAL_SIZE).get)
       // TODO: we will compute "estimatedSize" when we have column stats:
       // average size of row * number of rows
       Some(Statistics(
         sizeInBytes = totalSize,
-        rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_))))
+        rowCount = properties.get(HiveExternalCatalog.STATISTICS_NUM_ROWS).map(BigInt(_))))
     } else {
       None
     }
