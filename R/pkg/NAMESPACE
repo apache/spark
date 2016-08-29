@@ -35,7 +35,8 @@ exportMethods("glm",
               "spark.perplexity",
               "spark.isoreg",
               "spark.gaussianMixture",
-              "spark.als")
+              "spark.als",
+              "spark.kstest")
 
 # Job group lifecycle management methods
 export("setJobGroup",
@@ -335,7 +336,8 @@ export("as.DataFrame",
        "tables",
        "uncacheTable",
        "print.summary.GeneralizedLinearRegressionModel",
-       "read.ml")
+       "read.ml",
+       "print.summary.KSTest")
 
 export("structField",
        "structField.jobj",
@@ -359,6 +361,7 @@ S3method(print, jobj)
 S3method(print, structField)
 S3method(print, structType)
 S3method(print, summary.GeneralizedLinearRegressionModel)
+S3method(print, summary.KSTest)
 S3method(structField, character)
 S3method(structField, jobj)
 S3method(structType, jobj)

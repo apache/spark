@@ -736,4 +736,24 @@ test_that("spark.als", {
   unlink(modelPath)
 })
 
+test_that("spark.kstest", {
+  data <- data.frame(test = c(0.1, 0.15, 0.2, 0.3, 0.25, -1, -0.5))
+  df <- createDataFrame(data)
+  testResult <- spark.kstest(df, "test", "norm")
+  stats <- summary(testResult)
+
+  rStats <- ks.test(data$test, "pnorm", alternative = "two.sided")
+
+  expect_equal(stats$p.value, rStats$p.value, tolerance = 1e-4)
+  expect_equal(stats$statistic, unname(rStats$statistic), tolerance = 1e-4)
+
+  testResult <- spark.kstest(df, "test", "norm", -0.5)
+  stats <- summary(testResult)
+
+  rStats <- ks.test(data$test, "pnorm", -0.5, 1, alternative = "two.sided")
+
+  expect_equal(stats$p.value, rStats$p.value, tolerance = 1e-4)
+  expect_equal(stats$statistic, unname(rStats$statistic), tolerance = 1e-4)
+})
+
 sparkR.session.stop()
