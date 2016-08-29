@@ -416,6 +416,14 @@ class AddFileTests(PySparkTestCase):
         with open(download_path) as test_file:
             self.assertEqual("Hello World!\n", test_file.readline())
 
+    def test_add_folder_locally(self):
+        path = os.path.join(SPARK_HOME, "python/test_support/test_folder/")
+        self.sc.addFile(path, recursive=True)
+        download_path = SparkFiles.get("test_folder/test_folder2/hello.txt")
+        self.assertNotEqual(path, download_path)
+        with open(download_path) as test_file:
+            self.assertEqual("Hello World!\n", test_file.readline())
+
     def test_add_py_file_locally(self):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this fails due to `userlibrary` not being on the Python path:
