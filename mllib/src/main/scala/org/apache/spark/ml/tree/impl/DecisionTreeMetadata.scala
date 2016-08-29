@@ -26,7 +26,7 @@ import org.apache.spark.ml.tree.RandomForestParams
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.configuration.Strategy
-import org.apache.spark.mllib.tree.impurity.Impurity
+import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -67,6 +67,15 @@ private[spark] class DecisionTreeMetadata(
 
   def isContinuous(featureIndex: Int): Boolean = !featureArity.contains(featureIndex)
 
+  /** Creates an impurityAggregator instance that owns its data and is for a single node */
+  def createImpurityAggregator(): ImpurityAggregatorSingle = {
+    impurity match {
+      case Entropy => new EntropyAggregatorSingle(numClasses)
+      case Gini => new GiniAggregatorSingle(numClasses)
+      case Variance => new VarianceAggregatorSingle
+    }
+  }
+
   /**
    * Number of splits for the given feature.
    * For unordered features, there is 1 bin per split.
@@ -77,7 +86,6 @@ private[spark] class DecisionTreeMetadata(
   } else {
     numBins(featureIndex) - 1
   }
-
 
   /**
    * Set number of splits for a continuous feature.

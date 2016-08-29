@@ -18,15 +18,16 @@
 package org.apache.spark.ml.tree.impl
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{DenseVector, Vectors}
 import org.apache.spark.ml.tree._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext}
 
 private[ml] object TreeTests extends SparkFunSuite {
 
@@ -193,6 +194,55 @@ private[ml] object TreeTests extends SparkFunSuite {
     new LabeledPoint(12.0, Vectors.dense(Array(4.0))),
     new LabeledPoint(14.0, Vectors.dense(Array(5.0)))
   ))
+
+  /**
+   * Builds and returns a 2-tuple of DataFrames (train, test) consisting of a
+   * training and test set to use in fitting and evaluating transformers. The "features"
+   * column of the generated DataFrames consist entirely of categorical features.
+   *
+   * Generated points have a positive label with probability 0.5.
+   *
+   * @param seed Integer seed to use for random value generation
+   * @param sqlContext SQLContext to use in generating data
+   * @param nexamples Total number of training + test instances to generate (default: 1000)
+   * @param nfeatures Number of features (default: 20)
+   * @param trainFraction Fraction of generated points to include in training set (default: 0.75)
+   */
+  def buildCategoricalData(
+      seed: Integer,
+      sqlContext: SQLContext,
+      nexamples: Integer = 1000,
+      nfeatures: Integer = 20,
+      nclasses: Integer = 2,
+      trainFraction: Double = 0.75): (DataFrame, DataFrame) = {
+
+    val sc = sqlContext.sparkContext
+    val rng = new Random(seed)
+    // Expected sum of features per row
+    val expectedSum = nfeatures * ((nclasses - 1) / 2.0)
+
+    val generatedData: RDD[LabeledPoint] = sc.parallelize(1.to(nexamples)).map { _ =>
+      // Generate a feature vector of size nfeatures consisting of 0/1 values
+      val features = 1.to(nfeatures).map(_ => rng.nextInt(nclasses).toDouble).toArray
+      // If the number of positive-valued features is greater than the expected sum,
+      // then the instance has a label of 1, else 0.
+      val label = if (features.sum > expectedSum) 1 else 0
+      val featureVec = new DenseVector(features)
+      new LabeledPoint(label, featureVec)
+    }
+    // Create a map of categorical feature index to arity; each feature has arity nclasses
+    val featuresMap: Map[Int, Int] = 1.to(nfeatures).map { featureIdx =>
+      (featureIdx, nclasses.toInt)
+    }.toMap
+
+    // Convert the data RDD to a DataFrame with metadata indicating the arity of each of its
+    // categorical features
+    val df = setMetadata(generatedData, featuresMap, nclasses)
+    // Split the DataFrame into training and test data
+    val Array(train, test) = df.randomSplit(
+      Array(trainFraction, 1.0 - trainFraction), seed.toLong)
+    (train, test)
+  }
 
   /**
    * Mapping from all Params to valid settings which differ from the defaults.
