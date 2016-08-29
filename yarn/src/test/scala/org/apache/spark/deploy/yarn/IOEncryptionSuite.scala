@@ -22,7 +22,6 @@ import java.security.PrivilegedExceptionAction
 import java.util.UUID
 
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.mockito.MockitoAnnotations
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
 import org.apache.spark._
@@ -57,7 +56,6 @@ class IOEncryptionSuite extends SparkFunSuite with Matchers with BeforeAndAfterA
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    MockitoAnnotations.initMocks(this)
   }
 
   override def afterEach(): Unit = {
@@ -98,13 +96,13 @@ class IOEncryptionSuite extends SparkFunSuite with Matchers with BeforeAndAfterA
 
     val encryptedBytes = outputStream.toByteArray
     val encryptedStr = new String(encryptedBytes)
-    assert (plainStr !==  encryptedStr)
+    assert(plainStr !== encryptedStr)
 
     val inputStream = new ByteArrayInputStream(encryptedBytes)
     val wrappedInputStream = serializerManager.wrapStream(blockId, inputStream)
     val decryptedBytes = new Array[Byte](1024)
     val len = wrappedInputStream.read(decryptedBytes)
     val decryptedStr = new String(decryptedBytes, 0, len, StandardCharsets.UTF_8)
-    assert (decryptedStr === plainStr)
+    assert(decryptedStr === plainStr)
   }
 }
