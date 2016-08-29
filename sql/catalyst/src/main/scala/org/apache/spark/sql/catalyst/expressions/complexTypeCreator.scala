@@ -175,8 +175,8 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 * a helper mixin to encapsulate [[CreateStruct]] => [[CreateNamedStruct]] transformation.
 */
 sealed trait CreateStructLikeFactory[T <: Expression] extends (Seq[Expression] => T) {
-  protected case class CretaeStructHelper( children : Seq[Expression] ) {
-    private def attributeNames: Seq[String] = for {
+  protected def mkNamedStructArgs( children : Seq[Expression] ) = {
+    val attNames = for {
       (child, idx) <- children.zipWithIndex
     } yield {
       child match {
@@ -184,19 +184,9 @@ sealed trait CreateStructLikeFactory[T <: Expression] extends (Seq[Expression] =
         case _ => s"col${idx + 1}"
       }
     }
-
-    private def mkNamedStructArgs: Seq[Expression] = {
-      for {
-        (name, expression) <- attributeNames.zip(children)
-        nameLiteral = Literal(name)
-        newChild <- Seq(nameLiteral, expression)
-      } yield{
-        newChild
-      }
+    attNames.zip(children).flatMap {
+      case (name, expression) => Seq(Literal(name), expression)
     }
-
-    def safe: CreateNamedStruct = CreateNamedStruct(mkNamedStructArgs)
-    def unsafe: CreateNamedStructUnsafe = CreateNamedStructUnsafe(mkNamedStructArgs)
   }
 }
 
@@ -206,12 +196,15 @@ sealed trait CreateStructLikeFactory[T <: Expression] extends (Seq[Expression] =
 object CreateStruct extends CreateStructLikeFactory[CreateNamedStruct]{
   @ExpressionDescription(
     usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
-  def apply(children: Seq[Expression]) : CreateNamedStruct = CretaeStructHelper(children).safe
+  def apply(children: Seq[Expression]) : CreateNamedStruct =
+    CreateNamedStruct(mkNamedStructArgs(children))
 
-  def expressionInfo: ExpressionInfo = new ExpressionInfo( "CreateStruct",
+  private def expressionInfo: ExpressionInfo = new ExpressionInfo( "CreateStruct",
     "struct",
     "_FUNC_(col1, col2, col3, ...)",
     "Creates a struct with the given field values.")
+  def registryEntry: (String, (ExpressionInfo, CreateStruct.type)) =
+    "struct" -> (expressionInfo -> this)
 }
 
 /**
@@ -314,7 +307,7 @@ object CreateStructUnsafe extends CreateStructLikeFactory[CreateNamedStructUnsaf
   @ExpressionDescription(
     usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
   def apply(children: Seq[Expression]) : CreateNamedStructUnsafe =
-    CretaeStructHelper(children).unsafe
+    CreateNamedStructUnsafe(mkNamedStructArgs(children))
 }
 
 /**
