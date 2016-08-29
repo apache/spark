@@ -26,7 +26,7 @@ if (!(Test-Path $tools))
 # ========================== maven
 Push-Location $tools
 
-$mavenVer = "3.3.3"
+$mavenVer = "3.3.9"
 Start-FileDownload "https://archive.apache.org/dist/maven/maven-3/$mavenVer/binaries/apache-maven-$mavenVer-bin.zip" "maven.zip"
 
 # extract
