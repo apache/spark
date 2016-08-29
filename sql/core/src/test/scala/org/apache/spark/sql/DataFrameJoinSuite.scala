@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.Join
-import org.apache.spark.sql.execution.joins.BroadcastHashJoin
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -142,11 +142,11 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
 
     // equijoin - should be converted into broadcast join
     val plan1 = df1.join(broadcast(df2), "key").queryExecution.sparkPlan
-    assert(plan1.collect { case p: BroadcastHashJoin => p }.size === 1)
+    assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size === 1)
 
     // no join key -- should not be a broadcast join
     val plan2 = df1.join(broadcast(df2)).queryExecution.sparkPlan
-    assert(plan2.collect { case p: BroadcastHashJoin => p }.size === 0)
+    assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size === 0)
 
     // planner should not crash without a join
     broadcast(df1).queryExecution.sparkPlan
@@ -154,7 +154,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     // SPARK-12275: no physical plan for BroadcastHint in some condition
     withTempPath { path =>
       df1.write.parquet(path.getCanonicalPath)
-      val pf1 = sqlContext.read.parquet(path.getCanonicalPath)
+      val pf1 = spark.read.parquet(path.getCanonicalPath)
       assert(df1.join(broadcast(pf1)).count() === 4)
     }
   }
@@ -203,5 +203,34 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       leftJoin2Inner,
       Row(1, 2, "1", 1, 3, "1") :: Nil)
+  }
+
+  test("process outer join results using the non-nullable columns in the join input") {
+    // Filter data using a non-nullable column from a right table
+    val df1 = Seq((0, 0), (1, 0), (2, 0), (3, 0), (4, 0)).toDF("id", "count")
+    val df2 = Seq(Tuple1(0), Tuple1(1)).toDF("id").groupBy("id").count
+    checkAnswer(
+      df1.join(df2, df1("id") === df2("id"), "left_outer").filter(df2("count").isNull),
+      Row(2, 0, null, null) ::
+      Row(3, 0, null, null) ::
+      Row(4, 0, null, null) :: Nil
+    )
+
+    // Coalesce data using non-nullable columns in input tables
+    val df3 = Seq((1, 1)).toDF("a", "b")
+    val df4 = Seq((2, 2)).toDF("a", "b")
+    checkAnswer(
+      df3.join(df4, df3("a") === df4("a"), "outer")
+        .select(coalesce(df3("a"), df3("b")), coalesce(df4("a"), df4("b"))),
+      Row(1, null) :: Row(null, 2) :: Nil
+    )
+  }
+
+  test("SPARK-16991: Full outer join followed by inner join produces wrong results") {
+    val a = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val b = Seq((2, 5), (3, 4)).toDF("a", "c")
+    val c = Seq((3, 1)).toDF("a", "d")
+    val ab = a.join(b, Seq("a"), "fullouter")
+    checkAnswer(ab.join(c, "a"), Row(3, null, 4, 1) :: Nil)
   }
 }

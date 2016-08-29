@@ -26,10 +26,11 @@ import scala.xml.{Elem, Node, Unparsed}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
-import org.apache.spark.{InternalAccumulator, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo, TaskLocality}
 import org.apache.spark.ui._
+import org.apache.spark.ui.exec.ExecutorsListener
 import org.apache.spark.ui.jobs.UIData._
 import org.apache.spark.util.{Distribution, Utils}
 
@@ -39,6 +40,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
   private val progressListener = parent.progressListener
   private val operationGraphListener = parent.operationGraphListener
+  private val executorsListener = parent.executorsListener
 
   private val TIMELINE_LEGEND = {
     <div class="legend-area">
@@ -131,7 +133,14 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val stageData = stageDataOption.get
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
-      val numCompleted = tasks.count(_.taskInfo.finished)
+      val numCompleted = stageData.numCompleteTasks
+      val totalTasks = stageData.numActiveTasks +
+        stageData.numCompleteTasks + stageData.numFailedTasks
+      val totalTasksNumStr = if (totalTasks == tasks.size) {
+        s"$totalTasks"
+      } else {
+        s"$totalTasks, showing ${tasks.size}"
+      }
 
       val allAccumulables = progressListener.stageIdToData((stageId, stageAttemptId)).accumulables
       val externalAccumulables = allAccumulables.values.filter { acc => !acc.internal }
@@ -296,7 +305,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           currentTime,
           pageSize = taskPageSize,
           sortColumn = taskSortColumn,
-          desc = taskSortDesc
+          desc = taskSortDesc,
+          executorsListener = executorsListener
         )
         (_taskTable, _taskTable.table(page))
       } catch {
@@ -564,6 +574,18 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val maybeAccumulableTable: Seq[Node] =
         if (hasAccumulators) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
 
+      val aggMetrics =
+        <span class="collapse-aggregated-metrics collapse-table"
+              onClick="collapseTable('collapse-aggregated-metrics','aggregated-metrics')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Aggregated Metrics by Executor</a>
+          </h4>
+        </span>
+        <div class="aggregated-metrics collapsible-table">
+          {executorTable.toNodeSeq}
+        </div>
+
       val content =
         summary ++
         dagViz ++
@@ -572,11 +594,12 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           // Only show the tasks in the table
           stageData.taskData.values.toSeq.filter(t => taskIdsInPage.contains(t.taskInfo.taskId)),
           currentTime) ++
-        <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
+        <h4>Summary Metrics for <a href="#tasks-section">{numCompleted} Completed Tasks</a></h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
-        <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
+        aggMetrics ++
         maybeAccumulableTable ++
-        <h4 id="tasks-section">Tasks</h4> ++ taskTableHTML ++ jsForScrollingDownToTaskTable
+        <h4 id="tasks-section">Tasks ({totalTasksNumStr})</h4> ++
+          taskTableHTML ++ jsForScrollingDownToTaskTable
       UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
     }
   }
@@ -746,7 +769,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     </div> ++
     <script type="text/javascript">
       {Unparsed(s"drawTaskAssignmentTimeline(" +
-      s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime)")}
+      s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime, " +
+        s"${UIUtils.getTimeZoneOffset()})")}
     </script>
   }
 
@@ -767,7 +791,7 @@ private[ui] object StagePage {
   }
 
   private[ui] def getSchedulerDelay(
-      info: TaskInfo, metrics: TaskMetrics, currentTime: Long): Long = {
+      info: TaskInfo, metrics: TaskMetricsUIData, currentTime: Long): Long = {
     if (info.finished) {
       val totalExecutionTime = info.finishTime - info.launchTime
       val executorOverhead = (metrics.executorDeserializeTime +
@@ -834,7 +858,8 @@ private[ui] class TaskTableRowData(
     val shuffleRead: Option[TaskTableRowShuffleReadData],
     val shuffleWrite: Option[TaskTableRowShuffleWriteData],
     val bytesSpilled: Option[TaskTableRowBytesSpilledData],
-    val error: String)
+    val error: String,
+    val logs: Map[String, String])
 
 private[ui] class TaskDataSource(
     tasks: Seq[TaskUIData],
@@ -847,7 +872,8 @@ private[ui] class TaskDataSource(
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
-    desc: Boolean) extends PagedDataSource[TaskTableRowData](pageSize) {
+    desc: Boolean,
+    executorsListener: ExecutorsListener) extends PagedDataSource[TaskTableRowData](pageSize) {
   import StagePage._
 
   // Convert TaskUIData to TaskTableRowData which contains the final contents to show in the table
@@ -991,6 +1017,8 @@ private[ui] class TaskDataSource(
         None
       }
 
+    val logs = executorsListener.executorToLogUrls.getOrElse(info.executorId, Map.empty)
+
     new TaskTableRowData(
       info.index,
       info.taskId,
@@ -1014,7 +1042,8 @@ private[ui] class TaskDataSource(
       shuffleRead,
       shuffleWrite,
       bytesSpilled,
-      taskData.errorMessage.getOrElse(""))
+      taskData.errorMessage.getOrElse(""),
+      logs)
   }
 
   /**
@@ -1216,7 +1245,8 @@ private[ui] class TaskPagedTable(
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
-    desc: Boolean) extends PagedTable[TaskTableRowData] {
+    desc: Boolean,
+    executorsListener: ExecutorsListener) extends PagedTable[TaskTableRowData] {
 
   // We only track peak memory used for unsafe operators
   private val displayPeakExecutionMemory = conf.getBoolean("spark.sql.unsafe.enabled", true)
@@ -1243,7 +1273,8 @@ private[ui] class TaskPagedTable(
     currentTime,
     pageSize,
     sortColumn,
-    desc)
+    desc,
+    executorsListener)
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
@@ -1340,7 +1371,16 @@ private[ui] class TaskPagedTable(
       <td>{if (task.speculative) s"${task.attempt} (speculative)" else task.attempt.toString}</td>
       <td>{task.status}</td>
       <td>{task.taskLocality}</td>
-      <td>{task.executorIdAndHost}</td>
+      <td>
+        <div style="float: left">{task.executorIdAndHost}</div>
+        <div style="float: right">
+        {
+          task.logs.map {
+            case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
+          }
+        }
+        </div>
+      </td>
       <td>{UIUtils.formatDate(new Date(task.launchTime))}</td>
       <td>{task.formatDuration}</td>
       <td class={TaskDetailsClassNames.SCHEDULER_DELAY}>

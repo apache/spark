@@ -52,7 +52,7 @@ abstract class AggregationIterator(
    * - PartialMerge (for single distinct)
    * - Partial and PartialMerge (for single distinct)
    * - Final
-   * - Complete (for SortBasedAggregate with functions that does not support Partial)
+   * - Complete (for SortAggregate with functions that does not support Partial)
    * - Final and Complete (currently not used)
    *
    * TODO: AggregateMode should have only two modes: Update and Merge, AggregateExpression
@@ -234,7 +234,22 @@ abstract class AggregationIterator(
       val resultProjection = UnsafeProjection.create(
         groupingAttributes ++ bufferAttributes,
         groupingAttributes ++ bufferAttributes)
+
+      // TypedImperativeAggregate stores generic object in aggregation buffer, and requires
+      // calling serialization before shuffling. See [[TypedImperativeAggregate]] for more info.
+      val typedImperativeAggregates: Array[TypedImperativeAggregate[_]] = {
+        aggregateFunctions.collect {
+          case (ag: TypedImperativeAggregate[_]) => ag
+        }
+      }
+
       (currentGroupingKey: UnsafeRow, currentBuffer: MutableRow) => {
+        // Serializes the generic object stored in aggregation buffer
+        var i = 0
+        while (i < typedImperativeAggregates.length) {
+          typedImperativeAggregates(i).serializeAggregateBufferInPlace(currentBuffer)
+          i += 1
+        }
         resultProjection(joinedRow(currentGroupingKey, currentBuffer))
       }
     } else {

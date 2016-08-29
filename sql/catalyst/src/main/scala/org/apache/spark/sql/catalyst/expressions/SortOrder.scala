@@ -61,12 +61,26 @@ case class SortOrder(child: Expression, direction: SortDirection)
   override def sql: String = child.sql + " " + direction.sql
 
   def isAscending: Boolean = direction == Ascending
+
+  def semanticEquals(other: SortOrder): Boolean =
+    (direction == other.direction) && child.semanticEquals(other.child)
 }
 
 /**
- * An expression to generate a 64-bit long prefix used in sorting.
+ * An expression to generate a 64-bit long prefix used in sorting. If the sort must operate over
+ * null keys as well, this.nullValue can be used in place of emitted null prefixes in the sort.
  */
 case class SortPrefix(child: SortOrder) extends UnaryExpression {
+
+  val nullValue = child.child.dataType match {
+    case BooleanType | DateType | TimestampType | _: IntegralType =>
+      Long.MinValue
+    case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
+      Long.MinValue
+    case _: DecimalType =>
+      DoublePrefixComparator.computePrefix(Double.NegativeInfinity)
+    case _ => 0L
+  }
 
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 
@@ -75,20 +89,19 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
     val input = childCode.value
     val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getName
     val DoublePrefixCmp = classOf[DoublePrefixComparator].getName
-
-    val (nullValue: Long, prefixCode: String) = child.child.dataType match {
+    val prefixCode = child.child.dataType match {
       case BooleanType =>
-        (Long.MinValue, s"$input ? 1L : 0L")
+        s"$input ? 1L : 0L"
       case _: IntegralType =>
-        (Long.MinValue, s"(long) $input")
+        s"(long) $input"
       case DateType | TimestampType =>
-        (Long.MinValue, s"(long) $input")
+        s"(long) $input"
       case FloatType | DoubleType =>
-        (0L, s"$DoublePrefixCmp.computePrefix((double)$input)")
-      case StringType => (0L, s"$input.getPrefix()")
-      case BinaryType => (0L, s"$BinaryPrefixCmp.computePrefix($input)")
+        s"$DoublePrefixCmp.computePrefix((double)$input)"
+      case StringType => s"$input.getPrefix()"
+      case BinaryType => s"$BinaryPrefixCmp.computePrefix($input)"
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-        val prefix = if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
+        if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
           s"$input.toUnscaledLong()"
         } else {
           // reduce the scale to fit in a long
@@ -96,17 +109,15 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
           val s = p - (dt.precision - dt.scale)
           s"$input.changePrecision($p, $s) ? $input.toUnscaledLong() : ${Long.MinValue}L"
         }
-        (Long.MinValue, prefix)
       case dt: DecimalType =>
-        (DoublePrefixComparator.computePrefix(Double.NegativeInfinity),
-          s"$DoublePrefixCmp.computePrefix($input.toDouble())")
-      case _ => (0L, "0L")
+        s"$DoublePrefixCmp.computePrefix($input.toDouble())"
+      case _ => "0L"
     }
 
     ev.copy(code = childCode.code +
       s"""
-         |long ${ev.value} = ${nullValue}L;
-         |boolean ${ev.isNull} = false;
+         |long ${ev.value} = 0L;
+         |boolean ${ev.isNull} = ${childCode.isNull};
          |if (!${childCode.isNull}) {
          |  ${ev.value} = $prefixCode;
          |}

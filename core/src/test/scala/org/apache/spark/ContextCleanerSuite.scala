@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
+import org.apache.spark.util.Utils
 
 /**
  * An abstract base class for context cleaner tests, which sets up a context with a config
@@ -206,8 +207,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
   }
 
   test("automatically cleanup normal checkpoint") {
-    val checkpointDir = java.io.File.createTempFile("temp", "")
-    checkpointDir.deleteOnExit()
+    val checkpointDir = Utils.createTempDir()
     checkpointDir.delete()
     var rdd = newPairRDD()
     sc.setCheckpointDir(checkpointDir.toString)

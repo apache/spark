@@ -21,9 +21,12 @@ import java.util.Random
 
 import breeze.linalg.{*, axpy => Baxpy, DenseMatrix => BDM, DenseVector => BDV, Vector => BV}
 
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -64,8 +67,9 @@ private[ann] trait Layer extends Serializable {
    * @return the layer model
    */
   def createModel(initialWeights: BDV[Double]): LayerModel
+
   /**
-   * Returns the instance of the layer with random generated weights
+   * Returns the instance of the layer with random generated weights.
    *
    * @param weights vector for weights initialization, must be equal to weightSize
    * @param random random number generator
@@ -83,11 +87,11 @@ private[ann] trait LayerModel extends Serializable {
 
   val weights: BDV[Double]
   /**
-   * Evaluates the data (process the data through the layer)
+   * Evaluates the data (process the data through the layer).
    * Output is allocated based on the size provided by the
-   * LayerModel implementation and the stack (batch) size
+   * LayerModel implementation and the stack (batch) size.
    * Developer is responsible for checking the size of output
-   * when writing to it
+   * when writing to it.
    *
    * @param data data
    * @param output output (modified in place)
@@ -95,11 +99,11 @@ private[ann] trait LayerModel extends Serializable {
   def eval(data: BDM[Double], output: BDM[Double]): Unit
 
   /**
-   * Computes the delta for back propagation
+   * Computes the delta for back propagation.
    * Delta is allocated based on the size provided by the
-   * LayerModel implementation and the stack (batch) size
+   * LayerModel implementation and the stack (batch) size.
    * Developer is responsible for checking the size of
-   * prevDelta when writing to it
+   * prevDelta when writing to it.
    *
    * @param delta delta of this layer
    * @param output output of this layer
@@ -108,10 +112,10 @@ private[ann] trait LayerModel extends Serializable {
   def computePrevDelta(delta: BDM[Double], output: BDM[Double], prevDelta: BDM[Double]): Unit
 
   /**
-   * Computes the gradient
-   * cumGrad is a wrapper on the part of the weight vector
-   * size of cumGrad is based on weightSize provided by
-   * implementation of LayerModel
+   * Computes the gradient.
+   * cumGrad is a wrapper on the part of the weight vector.
+   * Size of cumGrad is based on weightSize provided by
+   * implementation of LayerModel.
    *
    * @param delta delta for this layer
    * @param input input data
@@ -197,11 +201,11 @@ private[ann] object AffineLayerModel {
   }
 
   /**
-   * Initialize weights randomly in the interval
-   * Uses [Bottou-88] heuristic [-a/sqrt(in); a/sqrt(in)]
-   * where a is chosen in a such way that the weight variance corresponds
+   * Initialize weights randomly in the interval.
+   * Uses [Bottou-88] heuristic [-a/sqrt(in); a/sqrt(in)],
+   * where `a` is chosen in such a way that the weight variance corresponds
    * to the points to the maximal curvature of the activation function
-   * (which is approximately 2.38 for a standard sigmoid)
+   * (which is approximately 2.38 for a standard sigmoid).
    *
    * @param numIn number of inputs
    * @param numOut number of outputs
@@ -306,7 +310,7 @@ private[ann] class FunctionalLayer (val activationFunction: ActivationFunction) 
 /**
  * Functional layer model. Holds no weights.
  *
- * @param layer functiona layer
+ * @param layer functional layer
  */
 private[ann] class FunctionalLayerModel private[ann] (val layer: FunctionalLayer)
   extends LayerModel {
@@ -352,6 +356,7 @@ private[ann] trait TopologyModel extends Serializable {
    * Array of layer models
    */
   val layerModels: Array[LayerModel]
+
   /**
    * Forward propagation
    *
@@ -410,7 +415,7 @@ private[ml] object FeedForwardTopology {
    * Creates a multi-layer perceptron
    *
    * @param layerSizes sizes of layers including input and output size
-   * @param softmaxOnTop wether to use SoftMax or Sigmoid function for an output layer.
+   * @param softmaxOnTop whether to use SoftMax or Sigmoid function for an output layer.
    *                Softmax is default
    * @return multilayer perceptron topology
    */
@@ -577,18 +582,11 @@ private[ann] object FeedForwardModel {
  * @param dataStacker data stacker
  */
 private[ann] class ANNGradient(topology: Topology, dataStacker: DataStacker) extends Gradient {
-
-  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
-    val gradient = Vectors.zeros(weights.size)
-    val loss = compute(data, label, weights, gradient)
-    (gradient, loss)
-  }
-
   override def compute(
-    data: Vector,
+    data: OldVector,
     label: Double,
-    weights: Vector,
-    cumGradient: Vector): Double = {
+    weights: OldVector,
+    cumGradient: OldVector): Double = {
     val (input, target, realBatchSize) = dataStacker.unstack(data)
     val model = topology.model(weights)
     model.computeGradient(input, target, cumGradient, realBatchSize)
@@ -619,8 +617,8 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
       data.map { v =>
         (0.0,
           Vectors.fromBreeze(BDV.vertcat(
-            v._1.toBreeze.toDenseVector,
-            v._2.toBreeze.toDenseVector))
+            v._1.asBreeze.toDenseVector,
+            v._2.asBreeze.toDenseVector))
           ) }
     } else {
       data.mapPartitions { it =>
@@ -662,15 +660,15 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
 private[ann] class ANNUpdater extends Updater {
 
   override def compute(
-    weightsOld: Vector,
-    gradient: Vector,
+    weightsOld: OldVector,
+    gradient: OldVector,
     stepSize: Double,
     iter: Int,
-    regParam: Double): (Vector, Double) = {
+    regParam: Double): (OldVector, Double) = {
     val thisIterStepSize = stepSize
-    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
-    Baxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
-    (Vectors.fromBreeze(brzWeights), 0)
+    val brzWeights: BV[Double] = weightsOld.asBreeze.toDenseVector
+    Baxpy(-thisIterStepSize, gradient.asBreeze, brzWeights)
+    (OldVectors.fromBreeze(brzWeights), 0)
   }
 }
 
@@ -813,7 +811,13 @@ private[ml] class FeedForwardTrainer(
       getWeights
     }
     // TODO: deprecate standard optimizer because it needs Vector
-    val newWeights = optimizer.optimize(dataStacker.stack(data), w)
+    val trainData = dataStacker.stack(data).map { v =>
+      (v._1, OldVectors.fromML(v._2))
+    }
+    val handlePersistence = trainData.getStorageLevel == StorageLevel.NONE
+    if (handlePersistence) trainData.persist(StorageLevel.MEMORY_AND_DISK)
+    val newWeights = optimizer.optimize(trainData, w)
+    if (handlePersistence) trainData.unpersist()
     topology.model(newWeights)
   }
 

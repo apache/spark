@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util._
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
@@ -35,7 +35,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  */
 private[spark] case class Heartbeat(
     executorId: String,
-    accumUpdates: Array[(Long, Seq[AccumulableInfo])], // taskId -> accum updates
+    accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])], // taskId -> accumulator updates
     blockManagerId: BlockManagerId)
 
 /**
@@ -166,7 +166,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   }
 
   /**
-   * Send ExecutorRemoved to the event loop to remove a executor. Only for test.
+   * Send ExecutorRemoved to the event loop to remove an executor. Only for test.
    *
    * @return if HeartbeatReceiver is stopped, return None. Otherwise, return a Some(Future) that
    *         indicate if this operation is successful.

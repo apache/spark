@@ -91,14 +91,17 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
     case that: UserDefinedType[_] => this.acceptsType(that)
     case _ => false
   }
+
+  override def catalogString: String = sqlType.simpleString
 }
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * The user defined type in Python.
  *
  * Note: This can only be accessed via Python UDF, or accessed as serialized object.
  */
+@DeveloperApi
 private[sql] class PythonUserDefinedType(
     val sqlType: DataType,
     override val pyUDT: String,

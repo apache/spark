@@ -25,7 +25,7 @@ import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 
-import org.apache.spark.sql.{sources, Row, SQLContext}
+import org.apache.spark.sql.{sources, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GenericInternalRow, InterpretedPredicate, InterpretedProjection, JoinedRow, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -33,38 +33,42 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
-class SimpleTextSource extends FileFormat with DataSourceRegister {
+class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
   override def shortName(): String = "test"
 
   override def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     Some(DataType.fromJson(options("dataSchema")).asInstanceOf[StructType])
   }
 
   override def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
-      dataSchema: StructType): OutputWriterFactory = new OutputWriterFactory {
-    override private[sql] def newInstance(
-        path: String,
-        bucketId: Option[Int],
-        dataSchema: StructType,
-        context: TaskAttemptContext): OutputWriter = {
-      new SimpleTextOutputWriter(path, context)
+      dataSchema: StructType): OutputWriterFactory = {
+    SimpleTextRelation.lastHadoopConf = Option(job.getConfiguration)
+    new OutputWriterFactory {
+      override def newInstance(
+          path: String,
+          bucketId: Option[Int],
+          dataSchema: StructType,
+          context: TaskAttemptContext): OutputWriter = {
+        new SimpleTextOutputWriter(path, context)
+      }
     }
   }
 
   override def buildReader(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
-
+      options: Map[String, String],
+      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    SimpleTextRelation.lastHadoopConf = Option(hadoopConf)
     SimpleTextRelation.requiredColumns = requiredSchema.fieldNames
     SimpleTextRelation.pushedFilters = filters.toSet
 
@@ -74,9 +78,8 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
       inputAttributes.find(_.name == field.name)
     }
 
-    val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
-    val broadcastedConf =
-      sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
+    val broadcastedHadoopConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
       val predicate = {
@@ -95,7 +98,7 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
       val projection = new InterpretedProjection(outputAttributes, inputAttributes)
 
       val unsafeRowIterator =
-        new HadoopFileLinesReader(file, broadcastedConf.value.value).map { line =>
+        new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map { line =>
           val record = line.toString
           new GenericInternalRow(record.split(",", -1).zip(fieldTypes).map {
             case (v, dataType) =>
@@ -141,7 +144,7 @@ class AppendingTextOutputFormat(outputFile: Path) extends TextOutputFormat[NullW
 
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
     val configuration = context.getConfiguration
-    val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+    val uniqueWriteJobId = configuration.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
     val taskAttemptId = context.getTaskAttemptID
     val split = taskAttemptId.getTaskID.getId
     val name = FileOutputFormat.getOutputName(context)
@@ -164,4 +167,7 @@ object SimpleTextRelation {
 
   // Used to test failure callback
   var callbackCalled = false
+
+  // Used by the test case to check the value propagated in the hadoop confs.
+  var lastHadoopConf: Option[Configuration] = None
 }

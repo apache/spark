@@ -17,11 +17,11 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
 
 class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
@@ -35,7 +35,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
   private def split(s: String): Seq[String] = s.split("\\s+")
 
   test("CountVectorizerModel common cases") {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, split("a b c d"),
         Vectors.sparse(4, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0)))),
       (1, split("a b b c d  a"),
@@ -55,7 +55,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("CountVectorizer common cases") {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, split("a b c d e"),
         Vectors.sparse(5, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0), (4, 1.0)))),
       (1, split("a a a a a a"), Vectors.sparse(5, Seq((0, 6.0)))),
@@ -76,11 +76,11 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("CountVectorizer vocabSize and minDF") {
-    val df = sqlContext.createDataFrame(Seq(
-      (0, split("a b c d"), Vectors.sparse(3, Seq((0, 1.0), (1, 1.0)))),
-      (1, split("a b c"), Vectors.sparse(3, Seq((0, 1.0), (1, 1.0)))),
-      (2, split("a b"), Vectors.sparse(3, Seq((0, 1.0), (1, 1.0)))),
-      (3, split("a"), Vectors.sparse(3, Seq((0, 1.0)))))
+    val df = spark.createDataFrame(Seq(
+      (0, split("a b c d"), Vectors.sparse(2, Seq((0, 1.0), (1, 1.0)))),
+      (1, split("a b c"), Vectors.sparse(2, Seq((0, 1.0), (1, 1.0)))),
+      (2, split("a b"), Vectors.sparse(2, Seq((0, 1.0), (1, 1.0)))),
+      (3, split("a"), Vectors.sparse(2, Seq((0, 1.0)))))
     ).toDF("id", "words", "expected")
     val cvModel = new CountVectorizer()
       .setInputCol("words")
@@ -118,7 +118,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
 
   test("CountVectorizer throws exception when vocab is empty") {
     intercept[IllegalArgumentException] {
-      val df = sqlContext.createDataFrame(Seq(
+      val df = spark.createDataFrame(Seq(
         (0, split("a a b b c c")),
         (1, split("aa bb cc")))
       ).toDF("id", "words")
@@ -132,7 +132,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("CountVectorizerModel with minTF count") {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, split("a a a b b c c c d "), Vectors.sparse(4, Seq((0, 3.0), (2, 3.0)))),
       (1, split("c c c c c c"), Vectors.sparse(4, Seq((2, 6.0)))),
       (2, split("a"), Vectors.sparse(4, Seq())),
@@ -151,7 +151,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("CountVectorizerModel with minTF freq") {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, split("a a a b b c c c d "), Vectors.sparse(4, Seq((0, 3.0), (2, 3.0)))),
       (1, split("c c c c c c"), Vectors.sparse(4, Seq((2, 6.0)))),
       (2, split("a"), Vectors.sparse(4, Seq((0, 1.0)))),
@@ -170,7 +170,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("CountVectorizerModel and CountVectorizer with binary") {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, split("a a a a b b b b c d"),
       Vectors.sparse(4, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0)))),
       (1, split("c c c"), Vectors.sparse(4, Seq((2, 1.0)))),

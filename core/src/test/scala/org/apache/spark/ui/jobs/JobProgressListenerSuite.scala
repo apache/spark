@@ -25,7 +25,8 @@ import org.apache.spark._
 import org.apache.spark.{LocalSparkContext, SparkConf, Success}
 import org.apache.spark.executor._
 import org.apache.spark.scheduler._
-import org.apache.spark.util.Utils
+import org.apache.spark.ui.jobs.UIData.TaskUIData
+import org.apache.spark.util.{AccumulatorContext, Utils}
 
 class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with Matchers {
 
@@ -83,18 +84,27 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
   }
 
   test("test LRU eviction of stages") {
+    def runWithListener(listener: JobProgressListener) : Unit = {
+      for (i <- 1 to 50) {
+        listener.onStageSubmitted(createStageStartEvent(i))
+        listener.onStageCompleted(createStageEndEvent(i))
+      }
+      assertActiveJobsStateIsEmpty(listener)
+    }
     val conf = new SparkConf()
     conf.set("spark.ui.retainedStages", 5.toString)
-    val listener = new JobProgressListener(conf)
+    var listener = new JobProgressListener(conf)
 
-    for (i <- 1 to 50) {
-      listener.onStageSubmitted(createStageStartEvent(i))
-      listener.onStageCompleted(createStageEndEvent(i))
-    }
-    assertActiveJobsStateIsEmpty(listener)
-
+    // Test with 5 retainedStages
+    runWithListener(listener)
     listener.completedStages.size should be (5)
     listener.completedStages.map(_.stageId).toSet should be (Set(50, 49, 48, 47, 46))
+
+    // Test with 0 retainedStages
+    conf.set("spark.ui.retainedStages", 0.toString)
+    listener = new JobProgressListener(conf)
+    runWithListener(listener)
+    listener.completedStages.size should be (0)
   }
 
   test("test clearing of stageIdToActiveJobs") {
@@ -120,20 +130,29 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
   }
 
   test("test clearing of jobGroupToJobIds") {
+    def runWithListener(listener: JobProgressListener): Unit = {
+      // Run 50 jobs, each with one stage
+      for (jobId <- 0 to 50) {
+        listener.onJobStart(createJobStartEvent(jobId, Seq(0), jobGroup = Some(jobId.toString)))
+        listener.onStageSubmitted(createStageStartEvent(0))
+        listener.onStageCompleted(createStageEndEvent(0, failed = false))
+        listener.onJobEnd(createJobEndEvent(jobId, false))
+      }
+      assertActiveJobsStateIsEmpty(listener)
+    }
     val conf = new SparkConf()
     conf.set("spark.ui.retainedJobs", 5.toString)
-    val listener = new JobProgressListener(conf)
 
-    // Run 50 jobs, each with one stage
-    for (jobId <- 0 to 50) {
-      listener.onJobStart(createJobStartEvent(jobId, Seq(0), jobGroup = Some(jobId.toString)))
-      listener.onStageSubmitted(createStageStartEvent(0))
-      listener.onStageCompleted(createStageEndEvent(0, failed = false))
-      listener.onJobEnd(createJobEndEvent(jobId, false))
-    }
-    assertActiveJobsStateIsEmpty(listener)
+    var listener = new JobProgressListener(conf)
+    runWithListener(listener)
     // This collection won't become empty, but it should be bounded by spark.ui.retainedJobs
     listener.jobGroupToJobIds.size should be (5)
+
+    // Test with 0 jobs
+    conf.set("spark.ui.retainedJobs", 0.toString)
+    listener = new JobProgressListener(conf)
+    runWithListener(listener)
+    listener.jobGroupToJobIds.size should be (0)
   }
 
   test("test LRU eviction of jobs") {
@@ -183,7 +202,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
   test("test executor id to summary") {
     val conf = new SparkConf()
     val listener = new JobProgressListener(conf)
-    val taskMetrics = new TaskMetrics()
+    val taskMetrics = TaskMetrics.empty
     val shuffleReadMetrics = taskMetrics.createTempShuffleReadMetrics()
     assert(listener.stageIdToData.size === 0)
 
@@ -230,7 +249,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
   test("test task success vs failure counting for different task end reasons") {
     val conf = new SparkConf()
     val listener = new JobProgressListener(conf)
-    val metrics = new TaskMetrics()
+    val metrics = TaskMetrics.empty
     val taskInfo = new TaskInfo(1234L, 0, 3, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
     val task = new ShuffleMapTask(0)
@@ -242,7 +261,6 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       new FetchFailed(null, 0, 0, 0, "ignored"),
       ExceptionFailure("Exception", "description", null, null, None),
       TaskResultLost,
-      TaskKilled,
       ExecutorLostFailure("0", true, Some("Induced failure")),
       UnknownReason)
     var failCount = 0
@@ -253,6 +271,11 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       assert(listener.stageIdToData((task.stageId, 0)).numCompleteTasks === 0)
       assert(listener.stageIdToData((task.stageId, 0)).numFailedTasks === failCount)
     }
+
+    // Make sure killed tasks are accounted for correctly.
+    listener.onTaskEnd(
+      SparkListenerTaskEnd(task.stageId, 0, taskType, TaskKilled, taskInfo, metrics))
+    assert(listener.stageIdToData((task.stageId, 0)).numKilledTasks === 1)
 
     // Make sure we count success as success.
     listener.onTaskEnd(
@@ -269,7 +292,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     val execId = "exe-1"
 
     def makeTaskMetrics(base: Int): TaskMetrics = {
-      val taskMetrics = new TaskMetrics
+      val taskMetrics = TaskMetrics.empty
       val shuffleReadMetrics = taskMetrics.createTempShuffleReadMetrics()
       val shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics
       val inputMetrics = taskMetrics.inputMetrics
@@ -300,9 +323,9 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     listener.onTaskStart(SparkListenerTaskStart(1, 0, makeTaskInfo(1237L)))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(execId, Array(
-      (1234L, 0, 0, makeTaskMetrics(0).accumulatorUpdates()),
-      (1235L, 0, 0, makeTaskMetrics(100).accumulatorUpdates()),
-      (1236L, 1, 0, makeTaskMetrics(200).accumulatorUpdates()))))
+      (1234L, 0, 0, makeTaskMetrics(0).accumulators().map(AccumulatorSuite.makeInfo)),
+      (1235L, 0, 0, makeTaskMetrics(100).accumulators().map(AccumulatorSuite.makeInfo)),
+      (1236L, 1, 0, makeTaskMetrics(200).accumulators().map(AccumulatorSuite.makeInfo)))))
 
     var stage0Data = listener.stageIdToData.get((0, 0)).get
     var stage1Data = listener.stageIdToData.get((1, 0)).get
@@ -358,5 +381,31 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       stage0Data.taskData.get(1234L).get.metrics.get.shuffleReadMetrics.totalBlocksFetched == 302)
     assert(
       stage1Data.taskData.get(1237L).get.metrics.get.shuffleReadMetrics.totalBlocksFetched == 402)
+  }
+
+  test("drop internal and sql accumulators") {
+    val taskInfo = new TaskInfo(0, 0, 0, 0, "", "", TaskLocality.ANY, false)
+    val internalAccum =
+      AccumulableInfo(id = 1, name = Some("internal"), None, None, true, false, None)
+    val sqlAccum = AccumulableInfo(
+      id = 2,
+      name = Some("sql"),
+      update = None,
+      value = None,
+      internal = false,
+      countFailedValues = false,
+      metadata = Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
+    val userAccum = AccumulableInfo(
+      id = 3,
+      name = Some("user"),
+      update = None,
+      value = None,
+      internal = false,
+      countFailedValues = false,
+      metadata = None)
+    taskInfo.accumulables ++= Seq(internalAccum, sqlAccum, userAccum)
+
+    val newTaskInfo = TaskUIData.dropInternalAndSQLAccumulables(taskInfo)
+    assert(newTaskInfo.accumulables === Seq(userAccum))
   }
 }

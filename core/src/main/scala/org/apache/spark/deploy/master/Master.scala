@@ -17,25 +17,17 @@
 
 package org.apache.spark.deploy.master
 
-import java.io.FileNotFoundException
-import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeUnit}
+import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration.Duration
-import scala.language.postfixOps
 import scala.util.Random
-
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
   ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages._
-import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
@@ -43,9 +35,7 @@ import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
-import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[deploy] class Master(
@@ -59,10 +49,6 @@ private[deploy] class Master(
   private val forwardMessageThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread")
 
-  private val rebuildUIThread =
-    ThreadUtils.newDaemonSingleThreadExecutor("master-rebuild-ui-thread")
-  private val rebuildUIContext = ExecutionContext.fromExecutor(rebuildUIThread)
-
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss") // For application IDs
@@ -72,6 +58,7 @@ private[deploy] class Master(
   private val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
   private val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
   private val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
+  private val MAX_EXECUTOR_RETRIES = conf.getInt("spark.deploy.maxExecutorRetries", 10)
 
   val workers = new HashSet[WorkerInfo]
   val idToApp = new HashMap[String, ApplicationInfo]
@@ -85,8 +72,6 @@ private[deploy] class Master(
   private val addressToApp = new HashMap[RpcAddress, ApplicationInfo]
   private val completedApps = new ArrayBuffer[ApplicationInfo]
   private var nextAppNumber = 0
-  // Using ConcurrentHashMap so that master-rebuild-ui-thread can add a UI after asyncRebuildUI
-  private val appIdToUI = new ConcurrentHashMap[String, SparkUI]
 
   private val drivers = new HashSet[DriverInfo]
   private val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -199,7 +184,6 @@ private[deploy] class Master(
       checkForWorkerTimeOutTask.cancel(true)
     }
     forwardMessageThread.shutdownNow()
-    rebuildUIThread.shutdownNow()
     webUi.stop()
     restServer.foreach(_.stop())
     masterMetricsSystem.stop()
@@ -282,19 +266,20 @@ private[deploy] class Master(
 
             val normalExit = exitStatus == Some(0)
             // Only retry certain number of times so we don't go into an infinite loop.
-            if (!normalExit) {
-              if (appInfo.incrementRetryCount() < ApplicationState.MAX_NUM_RETRY) {
-                schedule()
-              } else {
-                val execs = appInfo.executors.values
-                if (!execs.exists(_.state == ExecutorState.RUNNING)) {
-                  logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
-                    s"${appInfo.retryCount} times; removing it")
-                  removeApplication(appInfo, ApplicationState.FAILED)
-                }
+            // Important note: this code path is not exercised by tests, so be very careful when
+            // changing this `if` condition.
+            if (!normalExit
+                && appInfo.incrementRetryCount() >= MAX_EXECUTOR_RETRIES
+                && MAX_EXECUTOR_RETRIES >= 0) { // < 0 disables this application-killing path
+              val execs = appInfo.executors.values
+              if (!execs.exists(_.state == ExecutorState.RUNNING)) {
+                logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
+                  s"${appInfo.retryCount} times; removing it")
+                removeApplication(appInfo, ApplicationState.FAILED)
               }
             }
           }
+          schedule()
         case None =>
           logWarning(s"Got status update for unknown executor $appId/$execId")
       }
@@ -391,9 +376,6 @@ private[deploy] class Master(
     case CheckForWorkerTimeOut =>
       timeOutDeadWorkers()
 
-    case AttachCompletedRebuildUI(appId) =>
-      // An asyncRebuildSparkUI has completed, so need to attach to master webUi
-      Option(appIdToUI.get(appId)).foreach { ui => webUi.attachSparkUI(ui) }
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -844,16 +826,12 @@ private[deploy] class Master(
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach { a =>
-          Option(appIdToUI.remove(a.id)).foreach { ui => webUi.detachSparkUI(ui) }
           applicationMetricsSystem.removeSource(a.appSource)
         }
         completedApps.trimStart(toRemove)
       }
       completedApps += app // Remember it in our history
       waitingApps -= app
-
-      // If application events are logged, use them to rebuild the UI
-      asyncRebuildSparkUI(app)
 
       for (exec <- app.executors.values) {
         killExecutor(exec)
@@ -953,90 +931,7 @@ private[deploy] class Master(
     exec.state = ExecutorState.KILLED
   }
 
-  /**
-   * Rebuild a new SparkUI from the given application's event logs.
-   * Return the UI if successful, else None
-   */
-  private[master] def rebuildSparkUI(app: ApplicationInfo): Option[SparkUI] = {
-    val futureUI = asyncRebuildSparkUI(app)
-    ThreadUtils.awaitResult(futureUI, Duration.Inf)
-  }
-
-  /** Rebuild a new SparkUI asynchronously to not block RPC event loop */
-  private[master] def asyncRebuildSparkUI(app: ApplicationInfo): Future[Option[SparkUI]] = {
-    val appName = app.desc.name
-    val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
-    val eventLogDir = app.desc.eventLogDir
-      .getOrElse {
-        // Event logging is disabled for this application
-        app.appUIUrlAtHistoryServer = Some(notFoundBasePath)
-        return Future.successful(None)
-      }
-    val futureUI = Future {
-      val eventLogFilePrefix = EventLoggingListener.getLogPath(
-        eventLogDir, app.id, appAttemptId = None, compressionCodecName = app.desc.eventLogCodec)
-      val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
-      val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
-        EventLoggingListener.IN_PROGRESS))
-
-      val eventLogFile = if (inProgressExists) {
-        // Event logging is enabled for this application, but the application is still in progress
-        logWarning(s"Application $appName is still in progress, it may be terminated abnormally.")
-        eventLogFilePrefix + EventLoggingListener.IN_PROGRESS
-      } else {
-        eventLogFilePrefix
-      }
-
-      val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
-      val replayBus = new ReplayListenerBus()
-      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
-        appName, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
-      try {
-        replayBus.replay(logInput, eventLogFile, inProgressExists)
-      } finally {
-        logInput.close()
-      }
-
-      Some(ui)
-    }(rebuildUIContext)
-
-    futureUI.onSuccess { case Some(ui) =>
-      appIdToUI.put(app.id, ui)
-      // `self` can be null if we are already in the process of shutting down
-      // This happens frequently in tests where `local-cluster` is used
-      if (self != null) {
-        self.send(AttachCompletedRebuildUI(app.id))
-      }
-      // Application UI is successfully rebuilt, so link the Master UI to it
-      // NOTE - app.appUIUrlAtHistoryServer is volatile
-      app.appUIUrlAtHistoryServer = Some(ui.basePath)
-    }(ThreadUtils.sameThread)
-
-    futureUI.onFailure {
-      case fnf: FileNotFoundException =>
-        // Event logging is enabled for this application, but no event logs are found
-        val title = s"Application history not found (${app.id})"
-        var msg = s"No event logs found for application $appName in ${app.desc.eventLogDir.get}."
-        logWarning(msg)
-        msg += " Did you specify the correct logging directory?"
-        msg = URLEncoder.encode(msg, "UTF-8")
-        app.appUIUrlAtHistoryServer = Some(notFoundBasePath + s"?msg=$msg&title=$title")
-
-      case e: Exception =>
-        // Relay exception message to application UI page
-        val title = s"Application history load error (${app.id})"
-        val exception = URLEncoder.encode(Utils.exceptionString(e), "UTF-8")
-        var msg = s"Exception in replaying log for application $appName!"
-        logError(msg, e)
-        msg = URLEncoder.encode(msg, "UTF-8")
-        app.appUIUrlAtHistoryServer =
-            Some(notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title")
-    }(ThreadUtils.sameThread)
-
-    futureUI
-  }
-
-  /** Generate a new app ID given a app's submission date */
+  /** Generate a new app ID given an app's submission date */
   private def newApplicationId(submitDate: Date): String = {
     val appId = "app-%s-%04d".format(createDateFormat.format(submitDate), nextAppNumber)
     nextAppNumber += 1

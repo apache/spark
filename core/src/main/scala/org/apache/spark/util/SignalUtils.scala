@@ -92,9 +92,11 @@ private[spark] object SignalUtils extends Logging {
       // register old handler, will receive incoming signals while this handler is running
       Signal.handle(signal, prevHandler)
 
-      // run all actions, escalate to parent handler if no action catches the signal
-      // (i.e. all actions return false)
-      val escalate = actions.asScala.forall { action => !action() }
+      // Run all actions, escalate to parent handler if no action catches the signal
+      // (i.e. all actions return false). Note that calling `map` is to ensure that
+      // all actions are run, `forall` is short-circuited and will stop evaluating
+      // after reaching a first false predicate.
+      val escalate = actions.asScala.map(action => action()).forall(_ == false)
       if (escalate) {
         prevHandler.handle(sig)
       }

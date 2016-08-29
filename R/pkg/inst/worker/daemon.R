@@ -44,7 +44,7 @@ while (TRUE) {
     if (inherits(p, "masterProcess")) {
       close(inputCon)
       Sys.setenv(SPARKR_WORKER_PORT = port)
-      source(script)
+      try(source(script))
       # Set SIGUSR1 so that child can exit
       tools::pskill(Sys.getpid(), tools::SIGUSR1)
       parallel:::mcexit(0L)

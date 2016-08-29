@@ -177,30 +177,30 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       (Seq[Integer](3), null, null)).toDF("key", "value1", "value2")
     data3.write.saveAsTable("agg3")
 
-    val emptyDF = sqlContext.createDataFrame(
+    val emptyDF = spark.createDataFrame(
       sparkContext.emptyRDD[Row],
       StructType(StructField("key", StringType) :: StructField("value", IntegerType) :: Nil))
-    emptyDF.registerTempTable("emptyTable")
+    emptyDF.createOrReplaceTempView("emptyTable")
 
     // Register UDAFs
-    sqlContext.udf.register("mydoublesum", new MyDoubleSum)
-    sqlContext.udf.register("mydoubleavg", new MyDoubleAvg)
-    sqlContext.udf.register("longProductSum", new LongProductSum)
+    spark.udf.register("mydoublesum", new MyDoubleSum)
+    spark.udf.register("mydoubleavg", new MyDoubleAvg)
+    spark.udf.register("longProductSum", new LongProductSum)
   }
 
   override def afterAll(): Unit = {
     try {
-      sqlContext.sql("DROP TABLE IF EXISTS agg1")
-      sqlContext.sql("DROP TABLE IF EXISTS agg2")
-      sqlContext.sql("DROP TABLE IF EXISTS agg3")
-      sqlContext.dropTempTable("emptyTable")
+      spark.sql("DROP TABLE IF EXISTS agg1")
+      spark.sql("DROP TABLE IF EXISTS agg2")
+      spark.sql("DROP TABLE IF EXISTS agg3")
+      spark.catalog.dropTempView("emptyTable")
     } finally {
       super.afterAll()
     }
   }
 
   test("group by function") {
-    Seq((1, 2)).toDF("a", "b").registerTempTable("data")
+    Seq((1, 2)).toDF("a", "b").createOrReplaceTempView("data")
 
     checkAnswer(
       sql("SELECT floor(a) AS a, collect_set(b) FROM data GROUP BY floor(a) ORDER BY a"),
@@ -210,7 +210,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   test("empty table") {
     // If there is no GROUP BY clause and the table is empty, we will generate a single row.
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  AVG(value),
@@ -227,7 +227,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(null, 0, 0, 0, null, null, null, null, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  AVG(value),
@@ -246,7 +246,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
     // If there is a GROUP BY clause and the table is empty, there is no output.
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  AVG(value),
@@ -266,7 +266,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("null literal") {
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  AVG(null),
@@ -282,7 +282,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("only do grouping") {
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT key
           |FROM agg1
@@ -291,7 +291,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT DISTINCT value1, key
           |FROM agg2
@@ -308,7 +308,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(null, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT value1, key
           |FROM agg2
@@ -326,7 +326,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(null, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT DISTINCT key
           |FROM agg3
@@ -341,7 +341,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(Seq[Integer](3)) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT value1, key
           |FROM agg3
@@ -363,7 +363,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("case in-sensitive resolution") {
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT avg(value), kEY - 100
           |FROM agg1
@@ -372,7 +372,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(20.0, -99) :: Row(-0.5, -98) :: Row(null, -97) :: Row(10.0, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT sum(distinct value1), kEY - 100, count(distinct value1)
           |FROM agg2
@@ -381,7 +381,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(40, -99, 2) :: Row(0, -98, 2) :: Row(null, -97, 0) :: Row(30, null, 3) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT valUe * key - 100
           |FROM agg1
@@ -397,7 +397,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("test average no key in output") {
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT avg(value)
           |FROM agg1
@@ -408,7 +408,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("test average") {
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT key, avg(value)
           |FROM agg1
@@ -417,7 +417,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(1, 20.0) :: Row(2, -0.5) :: Row(3, null) :: Row(null, 10.0) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT key, mean(value)
           |FROM agg1
@@ -426,7 +426,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(1, 20.0) :: Row(2, -0.5) :: Row(3, null) :: Row(null, 10.0) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT avg(value), key
           |FROM agg1
@@ -435,7 +435,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(20.0, 1) :: Row(-0.5, 2) :: Row(null, 3) :: Row(10.0, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT avg(value) + 1.5, key + 10
           |FROM agg1
@@ -444,7 +444,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(21.5, 11) :: Row(1.0, 12) :: Row(null, 13) :: Row(11.5, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT avg(value) FROM agg1
         """.stripMargin),
@@ -456,7 +456,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     // deterministic.
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
       checkAnswer(
-        sqlContext.sql(
+        spark.sql(
           """
             |SELECT
             |  first_valUE(key),
@@ -472,7 +472,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(null, 3, null, 3, 1, 3, 1, 3) :: Nil)
 
       checkAnswer(
-        sqlContext.sql(
+        spark.sql(
           """
             |SELECT
             |  first_valUE(key),
@@ -491,7 +491,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("udaf") {
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  key,
@@ -511,7 +511,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("interpreted aggregate function") {
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT mydoublesum(value), key
           |FROM agg1
@@ -520,14 +520,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(60.0, 1) :: Row(-1.0, 2) :: Row(null, 3) :: Row(30.0, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT mydoublesum(value) FROM agg1
         """.stripMargin),
       Row(89.0) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT mydoublesum(null)
         """.stripMargin),
@@ -536,7 +536,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("interpreted and expression-based aggregation functions") {
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT mydoublesum(value), key, avg(value)
           |FROM agg1
@@ -548,7 +548,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(30.0, null, 10.0) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  mydoublesum(value + 1.5 * key),
@@ -568,7 +568,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   test("single distinct column set") {
     // DISTINCT is not meaningful with Max and Min, so we just ignore the DISTINCT keyword.
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  min(distinct value1),
@@ -581,7 +581,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(-60, 70.0, 101.0/9.0, 5.6, 100))
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  mydoubleavg(distinct value1),
@@ -600,7 +600,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(110.0, 10.0, 20.0, null, 109.0, 11.0, 30.0) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  key,
@@ -618,7 +618,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  count(value1),
@@ -637,7 +637,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("single distinct multiple columns set") {
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  key,
@@ -653,7 +653,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("multiple distinct multiple columns sets") {
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  key,
@@ -681,7 +681,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("test count") {
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  count(value2),
@@ -704,7 +704,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(0, null, 1, 1, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT
           |  count(value2),
@@ -783,31 +783,31 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       (5, 8, 17),
       (6, 2, 11)).toDF("a", "b", "c")
 
-    covar_tab.registerTempTable("covar_tab")
+    covar_tab.createOrReplaceTempView("covar_tab")
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT corr(b, c) FROM covar_tab WHERE a < 1
         """.stripMargin),
       Row(null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT corr(b, c) FROM covar_tab WHERE a < 3
         """.stripMargin),
       Row(null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT corr(b, c) FROM covar_tab WHERE a = 3
         """.stripMargin),
       Row(Double.NaN) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      spark.sql(
         """
           |SELECT a, corr(b, c) FROM covar_tab GROUP BY a ORDER BY a
         """.stripMargin),
@@ -818,7 +818,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       Row(5, Double.NaN) ::
       Row(6, Double.NaN) :: Nil)
 
-    val corr7 = sqlContext.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
+    val corr7 = spark.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
     assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
   }
 
@@ -852,7 +852,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("no aggregation function (SPARK-11486)") {
-    val df = sqlContext.range(20).selectExpr("id", "repeat(id, 1) as s")
+    val df = spark.range(20).selectExpr("id", "repeat(id, 1) as s")
       .groupBy("s").count()
       .groupBy().count()
     checkAnswer(df, Row(20) :: Nil)
@@ -869,10 +869,10 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       DateType, TimestampType,
       ArrayType(IntegerType), MapType(StringType, LongType), struct,
       new UDT.MyDenseVectorUDT())
-    // Right now, we will use SortBasedAggregate to handle UDAFs.
-    // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortBasedAggregate to use
+    // Right now, we will use SortAggregate to handle UDAFs.
+    // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortAggregate to use
     // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
-    // SortBasedAggregate to use a safe row as the aggregation buffer.
+    // SortAggregate to use a safe row as the aggregation buffer.
     Seq(dataTypes, UnsafeRow.mutableFieldTypes.asScala.toSeq).foreach { dataTypes =>
       val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
         StructField(s"col$index", dataType, nullable = true)
@@ -906,8 +906,8 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       }
 
       // Create a DF for the schema with random data.
-      val rdd = sqlContext.sparkContext.parallelize(data, 1)
-      val df = sqlContext.createDataFrame(rdd, schema)
+      val rdd = spark.sparkContext.parallelize(data, 1)
+      val df = spark.createDataFrame(rdd, schema)
 
       val allColumns = df.schema.fields.map(f => col(f.name))
       val expectedAnswer =
@@ -923,8 +923,8 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("udaf without specifying inputSchema") {
-    withTempTable("noInputSchemaUDAF") {
-      sqlContext.udf.register("noInputSchema", new ScalaAggregateFunctionWithoutInputSchema)
+    withTempView("noInputSchemaUDAF") {
+      spark.udf.register("noInputSchema", new ScalaAggregateFunctionWithoutInputSchema)
 
       val data =
         Row(1, Seq(Row(1), Row(2), Row(3))) ::
@@ -935,13 +935,13 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           StructField("key", IntegerType) ::
             StructField("myArray",
               ArrayType(StructType(StructField("v", IntegerType) :: Nil))) :: Nil)
-      sqlContext.createDataFrame(
+      spark.createDataFrame(
         sparkContext.parallelize(data, 2),
         schema)
-        .registerTempTable("noInputSchemaUDAF")
+        .createOrReplaceTempView("noInputSchemaUDAF")
 
       checkAnswer(
-        sqlContext.sql(
+        spark.sql(
           """
             |SELECT key, noInputSchema(myArray)
             |FROM noInputSchemaUDAF
@@ -950,7 +950,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(1, 21) :: Row(2, -10) :: Nil)
 
       checkAnswer(
-        sqlContext.sql(
+        spark.sql(
           """
             |SELECT noInputSchema(myArray)
             |FROM noInputSchemaUDAF
@@ -958,34 +958,66 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(11) :: Nil)
     }
   }
+
+  test("SPARK-15206: single distinct aggregate function in having clause") {
+    checkAnswer(
+      sql(
+        """
+          |select key, count(distinct value1)
+          |from agg2 group by key
+          |having count(distinct value1) > 0
+        """.stripMargin),
+      Seq(
+        Row(null, 3),
+        Row(1, 2),
+        Row(2, 2)
+      )
+    )
+  }
+
+  test("SPARK-15206: multiple distinct aggregate function in having clause") {
+    checkAnswer(
+      sql(
+        """
+          |select key, count(distinct value1), count(distinct value2)
+          |from agg2 group by key
+          |having count(distinct value1) > 0 and count(distinct value2) = 3
+        """.stripMargin),
+      Seq(
+        Row(null, 3, 3),
+        Row(1, 2, 3)
+      )
+    )
+  }
 }
 
 
-class TungstenAggregationQuerySuite extends AggregationQuerySuite
+class HashAggregationQuerySuite extends AggregationQuerySuite
 
 
-class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
+class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    Seq(false, true).foreach { enableColumnarHashMap =>
-      withSQLConf("spark.sql.codegen.aggregate.map.enabled" -> enableColumnarHashMap.toString) {
+    Seq(0, 10).foreach { maxColumnarHashMapColumns =>
+      withSQLConf("spark.sql.codegen.aggregate.map.columns.max" ->
+        maxColumnarHashMapColumns.toString) {
         (1 to 3).foreach { fallbackStartsAt =>
           withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->
             s"${(fallbackStartsAt - 1).toString}, ${fallbackStartsAt.toString}") {
             // Create a new df to make sure its physical operator picks up
             // spark.sql.TungstenAggregate.testFallbackStartsAt.
             // todo: remove it?
-            val newActual = Dataset.ofRows(sqlContext, actual.logicalPlan)
+            val newActual = Dataset.ofRows(spark, actual.logicalPlan)
 
             QueryTest.checkAnswer(newActual, expectedAnswer) match {
               case Some(errorMessage) =>
                 val newErrorMessage =
                   s"""
-                    |The following aggregation query failed when using TungstenAggregate with
-                    |controlled fallback (it falls back to bytes to bytes map once it has processed
-                    |${fallbackStartsAt -1} input rows and to sort-based aggregation once it has
-                    |processed $fallbackStartsAt input rows). The query is ${actual.queryExecution}
-                    |
+                     |The following aggregation query failed when using HashAggregate with
+                     |controlled fallback (it falls back to bytes to bytes map once it has processed
+                     |${fallbackStartsAt - 1} input rows and to sort-based aggregation once it has
+                     |processed $fallbackStartsAt input rows). The query is ${actual.queryExecution}
+                     |
                     |$errorMessage
                   """.stripMargin
 

@@ -21,7 +21,6 @@ import javax.ws.rs.{DefaultValue, GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.deploy.history.ApplicationHistoryInfo
-import org.apache.spark.deploy.master.{ApplicationInfo => InternalApplicationInfo}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class ApplicationListResource(uiRoot: UIRoot) {
@@ -84,33 +83,4 @@ private[spark] object ApplicationsListResource {
       }
     )
   }
-
-  def convertApplicationInfo(
-      internal: InternalApplicationInfo,
-      completed: Boolean): ApplicationInfo = {
-    // standalone application info always has just one attempt
-    new ApplicationInfo(
-      id = internal.id,
-      name = internal.desc.name,
-      coresGranted = Some(internal.coresGranted),
-      maxCores = internal.desc.maxCores,
-      coresPerExecutor = internal.desc.coresPerExecutor,
-      memoryPerExecutorMB = Some(internal.desc.memoryPerExecutorMB),
-      attempts = Seq(new ApplicationAttemptInfo(
-        attemptId = None,
-        startTime = new Date(internal.startTime),
-        endTime = new Date(internal.endTime),
-        duration =
-          if (internal.endTime > 0) {
-            internal.endTime - internal.startTime
-          } else {
-            0
-          },
-        lastUpdated = new Date(internal.endTime),
-        sparkUser = internal.desc.user,
-        completed = completed
-      ))
-    )
-  }
-
 }

@@ -209,26 +209,13 @@ object Unions {
 }
 
 /**
- * Extractor for retrieving Int value.
- */
-object IntegerIndex {
-  def unapply(a: Any): Option[Int] = a match {
-    case Literal(a: Int, IntegerType) => Some(a)
-    // When resolving ordinal in Sort and Group By, negative values are extracted
-    // for issuing error messages.
-    case UnaryMinus(IntegerLiteral(v)) => Some(-v)
-    case _ => None
-  }
-}
-
-/**
  * An extractor used when planning the physical execution of an aggregation. Compared with a logical
  * aggregation, the following transformations are performed:
  *  - Unnamed grouping expressions are named so that they can be referred to across phases of
  *    aggregation
  *  - Aggregations that appear multiple times are deduplicated.
- *  - The compution of the aggregations themselves is separated from the final result. For example,
- *    the `count` in `count + 1` will be split into an [[AggregateExpression]] and a final
+ *  - The computation of the aggregations themselves is separated from the final result. For
+ *    example, the `count` in `count + 1` will be split into an [[AggregateExpression]] and a final
  *    computation that computes `count.resultAttribute + 1`.
  */
 object PhysicalAggregation {

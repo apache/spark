@@ -49,6 +49,7 @@ else:
     import unittest
 
 from pyspark import SparkContext
+import pyspark.ml.linalg as newlinalg
 from pyspark.mllib.common import _to_java_object_rdd
 from pyspark.mllib.clustering import StreamingKMeans, StreamingKMeansModel
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
@@ -66,7 +67,8 @@ from pyspark.mllib.util import LinearDataGenerator
 from pyspark.mllib.util import MLUtils
 from pyspark.serializers import PickleSerializer
 from pyspark.streaming import StreamingContext
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
+from pyspark.sql.utils import IllegalArgumentException
 from pyspark.streaming import StreamingContext
 
 _have_scipy = False
@@ -83,9 +85,10 @@ ser = PickleSerializer()
 class MLlibTestCase(unittest.TestCase):
     def setUp(self):
         self.sc = SparkContext('local[4]', "MLlib tests")
+        self.spark = SparkSession(self.sc)
 
     def tearDown(self):
-        self.sc.stop()
+        self.spark.stop()
 
 
 class MLLibStreamingTestCase(unittest.TestCase):
@@ -147,12 +150,12 @@ class VectorTests(MLlibTestCase):
 
     def _test_serialize(self, v):
         self.assertEqual(v, ser.loads(ser.dumps(v)))
-        jvec = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(v)))
-        nv = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jvec)))
+        jvec = self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(bytearray(ser.dumps(v)))
+        nv = ser.loads(bytes(self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(jvec)))
         self.assertEqual(v, nv)
         vs = [v] * 100
-        jvecs = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(vs)))
-        nvs = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jvecs)))
+        jvecs = self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(bytearray(ser.dumps(vs)))
+        nvs = ser.loads(bytes(self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(jvecs)))
         self.assertEqual(vs, nvs)
 
     def test_serialize(self):
@@ -421,6 +424,74 @@ class VectorTests(MLlibTestCase):
         tmp = SparseVector(4, [0, 2], [3, 0])
         self.assertEqual(tmp.numNonzeros(), 1)
 
+    def test_ml_mllib_vector_conversion(self):
+        # to ml
+        # dense
+        mllibDV = Vectors.dense([1, 2, 3])
+        mlDV1 = newlinalg.Vectors.dense([1, 2, 3])
+        mlDV2 = mllibDV.asML()
+        self.assertEqual(mlDV2, mlDV1)
+        # sparse
+        mllibSV = Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        mlSV1 = newlinalg.Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        mlSV2 = mllibSV.asML()
+        self.assertEqual(mlSV2, mlSV1)
+        # from ml
+        # dense
+        mllibDV1 = Vectors.dense([1, 2, 3])
+        mlDV = newlinalg.Vectors.dense([1, 2, 3])
+        mllibDV2 = Vectors.fromML(mlDV)
+        self.assertEqual(mllibDV1, mllibDV2)
+        # sparse
+        mllibSV1 = Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        mlSV = newlinalg.Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        mllibSV2 = Vectors.fromML(mlSV)
+        self.assertEqual(mllibSV1, mllibSV2)
+
+    def test_ml_mllib_matrix_conversion(self):
+        # to ml
+        # dense
+        mllibDM = Matrices.dense(2, 2, [0, 1, 2, 3])
+        mlDM1 = newlinalg.Matrices.dense(2, 2, [0, 1, 2, 3])
+        mlDM2 = mllibDM.asML()
+        self.assertEqual(mlDM2, mlDM1)
+        # transposed
+        mllibDMt = DenseMatrix(2, 2, [0, 1, 2, 3], True)
+        mlDMt1 = newlinalg.DenseMatrix(2, 2, [0, 1, 2, 3], True)
+        mlDMt2 = mllibDMt.asML()
+        self.assertEqual(mlDMt2, mlDMt1)
+        # sparse
+        mllibSM = Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        mlSM1 = newlinalg.Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        mlSM2 = mllibSM.asML()
+        self.assertEqual(mlSM2, mlSM1)
+        # transposed
+        mllibSMt = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        mlSMt1 = newlinalg.SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        mlSMt2 = mllibSMt.asML()
+        self.assertEqual(mlSMt2, mlSMt1)
+        # from ml
+        # dense
+        mllibDM1 = Matrices.dense(2, 2, [1, 2, 3, 4])
+        mlDM = newlinalg.Matrices.dense(2, 2, [1, 2, 3, 4])
+        mllibDM2 = Matrices.fromML(mlDM)
+        self.assertEqual(mllibDM1, mllibDM2)
+        # transposed
+        mllibDMt1 = DenseMatrix(2, 2, [1, 2, 3, 4], True)
+        mlDMt = newlinalg.DenseMatrix(2, 2, [1, 2, 3, 4], True)
+        mllibDMt2 = Matrices.fromML(mlDMt)
+        self.assertEqual(mllibDMt1, mllibDMt2)
+        # sparse
+        mllibSM1 = Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        mlSM = newlinalg.Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        mllibSM2 = Matrices.fromML(mlSM)
+        self.assertEqual(mllibSM1, mllibSM2)
+        # transposed
+        mllibSMt1 = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        mlSMt = newlinalg.SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        mllibSMt2 = Matrices.fromML(mlSMt)
+        self.assertEqual(mllibSMt1, mllibSMt2)
+
 
 class ListTests(MLlibTestCase):
 
@@ -479,7 +550,7 @@ class ListTests(MLlibTestCase):
             [-6, -7],
         ])
         clusters = GaussianMixture.train(data, 2, convergenceTol=0.001,
-                                         maxIterations=10, seed=56)
+                                         maxIterations=10, seed=1)
         labels = clusters.predict(data).collect()
         self.assertEqual(labels[0], labels[1])
         self.assertEqual(labels[2], labels[3])
@@ -698,7 +769,6 @@ class VectorUDTTests(MLlibTestCase):
             self.assertEqual(v, self.udt.deserialize(self.udt.serialize(v)))
 
     def test_infer_schema(self):
-        sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([LabeledPoint(1.0, self.dv1), LabeledPoint(0.0, self.sv1)])
         df = rdd.toDF()
         schema = df.schema
@@ -731,7 +801,6 @@ class MatrixUDTTests(MLlibTestCase):
             self.assertEqual(m, self.udt.deserialize(self.udt.serialize(m)))
 
     def test_infer_schema(self):
-        sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([("dense", self.dm1), ("sparse", self.sm1)])
         df = rdd.toDF()
         schema = df.schema
@@ -919,7 +988,7 @@ class ChiSqTestTests(MLlibTestCase):
 
         # Negative counts in observed
         neg_obs = Vectors.dense([1.0, 2.0, 3.0, -4.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, neg_obs, expected1)
+        self.assertRaises(IllegalArgumentException, Statistics.chiSqTest, neg_obs, expected1)
 
         # Count = 0.0 in expected but not observed
         zero_expected = Vectors.dense([1.0, 0.0, 3.0])
@@ -930,7 +999,8 @@ class ChiSqTestTests(MLlibTestCase):
 
         # 0.0 in expected and observed simultaneously
         zero_observed = Vectors.dense([2.0, 0.0, 1.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, zero_observed, zero_expected)
+        self.assertRaises(
+            IllegalArgumentException, Statistics.chiSqTest, zero_observed, zero_expected)
 
     def test_matrix_independence(self):
         data = [40.0, 24.0, 29.0, 56.0, 32.0, 42.0, 31.0, 10.0, 0.0, 30.0, 15.0, 12.0]
@@ -944,15 +1014,15 @@ class ChiSqTestTests(MLlibTestCase):
 
         # Negative counts
         neg_counts = Matrices.dense(2, 2, [4.0, 5.0, 3.0, -3.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, neg_counts)
+        self.assertRaises(IllegalArgumentException, Statistics.chiSqTest, neg_counts)
 
         # Row sum = 0.0
         row_zero = Matrices.dense(2, 2, [0.0, 1.0, 0.0, 2.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, row_zero)
+        self.assertRaises(IllegalArgumentException, Statistics.chiSqTest, row_zero)
 
         # Column sum = 0.0
         col_zero = Matrices.dense(2, 2, [0.0, 0.0, 2.0, 2.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, col_zero)
+        self.assertRaises(IllegalArgumentException, Statistics.chiSqTest, col_zero)
 
     def test_chi_sq_pearson(self):
         data = [
@@ -1580,8 +1650,8 @@ class ALSTests(MLlibTestCase):
 
     def test_als_ratings_serialize(self):
         r = Rating(7, 1123, 3.14)
-        jr = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(r)))
-        nr = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jr)))
+        jr = self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(bytearray(ser.dumps(r)))
+        nr = ser.loads(bytes(self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(jr)))
         self.assertEqual(r.user, nr.user)
         self.assertEqual(r.product, nr.product)
         self.assertAlmostEqual(r.rating, nr.rating, 2)
@@ -1589,7 +1659,8 @@ class ALSTests(MLlibTestCase):
     def test_als_ratings_id_long_error(self):
         r = Rating(1205640308657491975, 50233468418, 1.0)
         # rating user id exceeds max int value, should fail when pickled
-        self.assertRaises(Py4JJavaError, self.sc._jvm.SerDe.loads, bytearray(ser.dumps(r)))
+        self.assertRaises(Py4JJavaError, self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads,
+                          bytearray(ser.dumps(r)))
 
 
 class HashingTFTest(MLlibTestCase):

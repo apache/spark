@@ -46,7 +46,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     // The parent may be also an RRDD, so we should launch it first.
     val parentIterator = firstParent[T].iterator(partition, context)
 
-    runner.compute(parentIterator, partition.index, context)
+    runner.compute(parentIterator, partition.index)
   }
 }
 

@@ -190,7 +190,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  test("compact") {
+  testWithUninterruptibleThread("compact") {
     withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
       withFileStreamSinkLog { sinkLog =>
         for (batchId <- 0 to 10) {
@@ -210,14 +210,14 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  test("delete expired file") {
+  testWithUninterruptibleThread("delete expired file") {
     // Set FILE_SINK_LOG_CLEANUP_DELAY to 0 so that we can detect the deleting behaviour
     // deterministically
     withSQLConf(
       SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3",
       SQLConf.FILE_SINK_LOG_CLEANUP_DELAY.key -> "0") {
       withFileStreamSinkLog { sinkLog =>
-        val fs = sinkLog.metadataPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+        val fs = sinkLog.metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
 
         def listBatchFiles(): Set[String] = {
           fs.listStatus(sinkLog.metadataPath).map(_.getPath.getName).filter { fileName =>
@@ -263,7 +263,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
 
   private def withFileStreamSinkLog(f: FileStreamSinkLog => Unit): Unit = {
     withTempDir { file =>
-      val sinkLog = new FileStreamSinkLog(sqlContext, file.getCanonicalPath)
+      val sinkLog = new FileStreamSinkLog(spark, file.getCanonicalPath)
       f(sinkLog)
     }
   }

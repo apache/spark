@@ -32,7 +32,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.util.Utils
 
 /**
@@ -75,8 +75,8 @@ class DecisionTreeModel @Since("1.0.0") (
    * @return JavaRDD of predictions for each of the given data points
    */
   @Since("1.2.0")
-  def predict(features: JavaRDD[Vector]): JavaRDD[Double] = {
-    predict(features.rdd)
+  def predict(features: JavaRDD[Vector]): JavaRDD[java.lang.Double] = {
+    predict(features.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
   }
 
   /**
@@ -202,9 +202,6 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
     }
 
     def save(sc: SparkContext, path: String, model: DecisionTreeModel): Unit = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
-
       // SPARK-6120: We do a hacky check here so users understand why save() is failing
       //             when they run the ML guide example.
       // TODO: Fix this issue for real.
@@ -235,17 +232,16 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
 
       // Create Parquet data.
       val nodes = model.topNode.subtreeIterator.toSeq
-      val dataRDD: DataFrame = sc.parallelize(nodes)
-        .map(NodeData.apply(0, _))
-        .toDF()
-      dataRDD.write.parquet(Loader.dataPath(path))
+      val dataRDD = sc.parallelize(nodes).map(NodeData.apply(0, _))
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      spark.createDataFrame(dataRDD).write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String, algo: String, numNodes: Int): DecisionTreeModel = {
-      val datapath = Loader.dataPath(path)
-      val sqlContext = SQLContext.getOrCreate(sc)
       // Load Parquet data.
-      val dataRDD = sqlContext.read.parquet(datapath)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      val dataPath = Loader.dataPath(path)
+      val dataRDD = spark.read.parquet(dataPath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[NodeData](dataRDD.schema)
       val nodes = dataRDD.rdd.map(NodeData.apply)
@@ -254,7 +250,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       assert(trees.length == 1,
         "Decision tree should contain exactly one tree but got ${trees.size} trees.")
       val model = new DecisionTreeModel(trees(0), Algo.fromString(algo))
-      assert(model.numNodes == numNodes, s"Unable to load DecisionTreeModel data from: $datapath." +
+      assert(model.numNodes == numNodes, s"Unable to load DecisionTreeModel data from: $dataPath." +
         s" Expected $numNodes nodes but found ${model.numNodes}")
       model
     }

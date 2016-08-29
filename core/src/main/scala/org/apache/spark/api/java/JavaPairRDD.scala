@@ -139,9 +139,12 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * math.ceil(numItems * samplingRate) over all key values.
    */
   def sampleByKey(withReplacement: Boolean,
-      fractions: java.util.Map[K, Double],
+      fractions: java.util.Map[K, jl.Double],
       seed: Long): JavaPairRDD[K, V] =
-    new JavaPairRDD[K, V](rdd.sampleByKey(withReplacement, fractions.asScala, seed))
+    new JavaPairRDD[K, V](rdd.sampleByKey(
+      withReplacement,
+      fractions.asScala.mapValues(_.toDouble).toMap, // map to Scala Double; toMap to serialize
+      seed))
 
   /**
    * Return a subset of this RDD sampled by key (via stratified sampling).
@@ -154,7 +157,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Use Utils.random.nextLong as the default seed for the random number generator.
    */
   def sampleByKey(withReplacement: Boolean,
-      fractions: java.util.Map[K, Double]): JavaPairRDD[K, V] =
+      fractions: java.util.Map[K, jl.Double]): JavaPairRDD[K, V] =
     sampleByKey(withReplacement, fractions, Utils.random.nextLong)
 
   /**
@@ -168,9 +171,12 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * two additional passes.
    */
   def sampleByKeyExact(withReplacement: Boolean,
-      fractions: java.util.Map[K, Double],
+      fractions: java.util.Map[K, jl.Double],
       seed: Long): JavaPairRDD[K, V] =
-    new JavaPairRDD[K, V](rdd.sampleByKeyExact(withReplacement, fractions.asScala, seed))
+    new JavaPairRDD[K, V](rdd.sampleByKeyExact(
+      withReplacement,
+      fractions.asScala.mapValues(_.toDouble).toMap, // map to Scala Double; toMap to serialize
+      seed))
 
   /**
    * Return a subset of this RDD sampled by key (via stratified sampling) containing exactly
@@ -186,7 +192,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def sampleByKeyExact(
       withReplacement: Boolean,
-      fractions: java.util.Map[K, Double]): JavaPairRDD[K, V] =
+      fractions: java.util.Map[K, jl.Double]): JavaPairRDD[K, V] =
     sampleByKeyExact(withReplacement, fractions, Utils.random.nextLong)
 
   /**

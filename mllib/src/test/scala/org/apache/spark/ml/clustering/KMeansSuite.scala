@@ -20,13 +20,14 @@ package org.apache.spark.ml.clustering
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
 private[clustering] case class TestRow(features: Vector)
 
@@ -38,7 +39,8 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    dataset = KMeansSuite.generateKMeansData(sqlContext, 50, 3, k)
+
+    dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
   }
 
   test("default parameters") {
@@ -121,6 +123,21 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(clusterSizes.forall(_ >= 0))
   }
 
+  test("KMeansModel transform with non-default feature and prediction cols") {
+    val featuresColName = "kmeans_model_features"
+    val predictionColName = "kmeans_model_prediction"
+
+    val model = new KMeans().setK(k).setSeed(1).fit(dataset)
+    model.setFeaturesCol(featuresColName).setPredictionCol(predictionColName)
+
+    val transformed = model.transform(dataset.withColumnRenamed("features", featuresColName))
+    Seq(featuresColName, predictionColName).foreach { column =>
+      assert(transformed.columns.contains(column))
+    }
+    assert(model.getFeaturesCol == featuresColName)
+    assert(model.getPredictionCol == predictionColName)
+  }
+
   test("read/write") {
     def checkModelData(model: KMeansModel, model2: KMeansModel): Unit = {
       assert(model.clusterCenters === model2.clusterCenters)
@@ -141,16 +158,16 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
 }
 
 object KMeansSuite {
-  def generateKMeansData(sql: SQLContext, rows: Int, dim: Int, k: Int): DataFrame = {
-    val sc = sql.sparkContext
+  def generateKMeansData(spark: SparkSession, rows: Int, dim: Int, k: Int): DataFrame = {
+    val sc = spark.sparkContext
     val rdd = sc.parallelize(1 to rows).map(i => Vectors.dense(Array.fill(dim)((i % k).toDouble)))
-      .map(v => new TestRow(v))
-    sql.createDataFrame(rdd)
+      .map(v => TestRow(v))
+    spark.createDataFrame(rdd)
   }
 
   def generateKMeansModel(dim: Int, k: Int, seed: Int = 42): KMeansModel = {
     val clusterCenters = (1 to k)
-      .map(i => Vectors.dense(Array.fill(dim)(new Random(seed).nextDouble)))
+      .map(i => MLlibVectors.dense(Array.fill(dim)(new Random(seed).nextDouble)))
     new KMeansModel("test model", new MLlibKMeansModel(clusterCenters.toArray))
   }
 

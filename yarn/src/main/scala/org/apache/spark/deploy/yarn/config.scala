@@ -33,10 +33,17 @@ package object config {
     .toSequence
     .createOptional
 
-  private[spark] val ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
+  private[spark] val AM_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.yarn.am.attemptFailuresValidityInterval")
       .doc("Interval after which AM failures will be considered independent and " +
         "not accumulate towards the attempt count.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
+
+  private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
+    ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
+      .doc("Interval after which Executor failures will be considered independent and not " +
+        "accumulate towards the attempt count.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
@@ -236,10 +243,21 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
-  private[spark] val TOKEN_RENEWAL_INTERVAL = ConfigBuilder("spark.yarn.token.renewal.interval")
-    .internal()
-    .timeConf(TimeUnit.MILLISECONDS)
-    .createOptional
+  /* Rolled log aggregation configuration. */
+
+  private[spark] val ROLLED_LOG_INCLUDE_PATTERN =
+    ConfigBuilder("spark.yarn.rolledLog.includePattern")
+      .doc("Java Regex to filter the log files which match the defined include pattern and those " +
+        "log files will be aggregated in a rolling fashion.")
+      .stringConf
+      .createOptional
+
+  private[spark] val ROLLED_LOG_EXCLUDE_PATTERN =
+    ConfigBuilder("spark.yarn.rolledLog.excludePattern")
+      .doc("Java Regex to filter the log files which match the defined exclude pattern and those " +
+        "log files will not be aggregated in a rolling fashion.")
+      .stringConf
+      .createOptional
 
   /* Private configs. */
 
@@ -300,6 +318,16 @@ package object config {
     .internal()
     .stringConf
     .createOptional
+
+  private[spark] val CREDENTIALS_RENEWAL_TIME = ConfigBuilder("spark.yarn.credentials.renewalTime")
+    .internal()
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefault(Long.MaxValue)
+
+  private[spark] val CREDENTIALS_UPDATE_TIME = ConfigBuilder("spark.yarn.credentials.updateTime")
+    .internal()
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefault(Long.MaxValue)
 
   // The list of cache-related config entries. This is used by Client and the AM to clean
   // up the environment so that these settings do not appear on the web UI.

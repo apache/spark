@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.types.StructType
 
@@ -33,7 +33,7 @@ class CommitFailureTestSource extends SimpleTextSource {
    * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
    */
   override def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory =

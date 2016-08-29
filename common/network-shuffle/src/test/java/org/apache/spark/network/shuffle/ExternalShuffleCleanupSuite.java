@@ -37,6 +37,7 @@ public class ExternalShuffleCleanupSuite {
   // Same-thread Executor used to ensure cleanup happens synchronously in test thread.
   private Executor sameThreadExecutor = MoreExecutors.sameThreadExecutor();
   private TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+  private static final String SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager";
 
   @Test
   public void noCleanupAndCleanup() throws IOException {
@@ -44,12 +45,12 @@ public class ExternalShuffleCleanupSuite {
 
     ExternalShuffleBlockResolver resolver =
       new ExternalShuffleBlockResolver(conf, null, sameThreadExecutor);
-    resolver.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
+    resolver.registerExecutor("app", "exec0", dataContext.createExecutorInfo(SORT_MANAGER));
     resolver.applicationRemoved("app", false /* cleanup */);
 
     assertStillThere(dataContext);
 
-    resolver.registerExecutor("app", "exec1", dataContext.createExecutorInfo("shuffleMgr"));
+    resolver.registerExecutor("app", "exec1", dataContext.createExecutorInfo(SORT_MANAGER));
     resolver.applicationRemoved("app", true /* cleanup */);
 
     assertCleanedUp(dataContext);
@@ -69,7 +70,7 @@ public class ExternalShuffleCleanupSuite {
     ExternalShuffleBlockResolver manager =
       new ExternalShuffleBlockResolver(conf, null, noThreadExecutor);
 
-    manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
+    manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo(SORT_MANAGER));
     manager.applicationRemoved("app", true);
 
     assertTrue(cleanupCalled.get());
@@ -87,8 +88,8 @@ public class ExternalShuffleCleanupSuite {
     ExternalShuffleBlockResolver resolver =
       new ExternalShuffleBlockResolver(conf, null, sameThreadExecutor);
 
-    resolver.registerExecutor("app", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
-    resolver.registerExecutor("app", "exec1", dataContext1.createExecutorInfo("shuffleMgr"));
+    resolver.registerExecutor("app", "exec0", dataContext0.createExecutorInfo(SORT_MANAGER));
+    resolver.registerExecutor("app", "exec1", dataContext1.createExecutorInfo(SORT_MANAGER));
     resolver.applicationRemoved("app", true);
 
     assertCleanedUp(dataContext0);
@@ -103,8 +104,8 @@ public class ExternalShuffleCleanupSuite {
     ExternalShuffleBlockResolver resolver =
       new ExternalShuffleBlockResolver(conf, null, sameThreadExecutor);
 
-    resolver.registerExecutor("app-0", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
-    resolver.registerExecutor("app-1", "exec0", dataContext1.createExecutorInfo("shuffleMgr"));
+    resolver.registerExecutor("app-0", "exec0", dataContext0.createExecutorInfo(SORT_MANAGER));
+    resolver.registerExecutor("app-1", "exec0", dataContext1.createExecutorInfo(SORT_MANAGER));
 
     resolver.applicationRemoved("app-nonexistent", true);
     assertStillThere(dataContext0);

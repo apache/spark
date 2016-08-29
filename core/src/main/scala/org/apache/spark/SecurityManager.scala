@@ -50,17 +50,19 @@ import org.apache.spark.util.Utils
  * secure the UI if it has data that other users should not be allowed to see. The javax
  * servlet filter specified by the user can authenticate the user and then once the user
  * is logged in, Spark can compare that user versus the view acls to make sure they are
- * authorized to view the UI. The configs 'spark.acls.enable' and 'spark.ui.view.acls'
- * control the behavior of the acls. Note that the person who started the application
- * always has view access to the UI.
+ * authorized to view the UI. The configs 'spark.acls.enable', 'spark.ui.view.acls' and
+ * 'spark.ui.view.acls.groups' control the behavior of the acls. Note that the person who
+ * started the application always has view access to the UI.
  *
- * Spark has a set of modify acls (`spark.modify.acls`) that controls which users have permission
- * to  modify a single application. This would include things like killing the application. By
- * default the person who started the application has modify access. For modify access through
- * the UI, you must have a filter that does authentication in place for the modify acls to work
- * properly.
+ * Spark has a set of individual and group modify acls (`spark.modify.acls`) and
+ * (`spark.modify.acls.groups`) that controls which users and groups have permission to
+ * modify a single application. This would include things like killing the application.
+ * By default the person who started the application has modify access. For modify access
+ * through the UI, you must have a filter that does authentication in place for the modify
+ * acls to work properly.
  *
- * Spark also has a set of admin acls (`spark.admin.acls`) which is a set of users/administrators
+ * Spark also has a set of individual and group admin acls (`spark.admin.acls`) and
+ * (`spark.admin.acls.groups`) which is a set of users/administrators and admin groups
  * who always have permission to view or modify the Spark application.
  *
  * Starting from version 1.3, Spark has partial support for encrypted connections with SSL.
@@ -184,6 +186,9 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
 
   import SecurityManager._
 
+  // allow all users/groups to have view/modify permissions
+  private val WILDCARD_ACL = "*"
+
   private val authOn = sparkConf.getBoolean(SecurityManager.SPARK_AUTH_CONF, false)
   // keep spark.ui.acls.enable for backwards compatibility with 1.0
   private var aclsOn =
@@ -193,11 +198,19 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   private var adminAcls: Set[String] =
     stringToSet(sparkConf.get("spark.admin.acls", ""))
 
+  // admin group acls should be set before view or modify group acls
+  private var adminAclsGroups : Set[String] =
+    stringToSet(sparkConf.get("spark.admin.acls.groups", ""))
+
   private var viewAcls: Set[String] = _
+
+  private var viewAclsGroups: Set[String] = _
 
   // list of users who have permission to modify the application. This should
   // apply to both UI and CLI for things like killing the application.
   private var modifyAcls: Set[String] = _
+
+  private var modifyAclsGroups: Set[String] = _
 
   // always add the current user and SPARK_USER to the viewAcls
   private val defaultAclUsers = Set[String](System.getProperty("user.name", ""),
@@ -206,11 +219,16 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   setViewAcls(defaultAclUsers, sparkConf.get("spark.ui.view.acls", ""))
   setModifyAcls(defaultAclUsers, sparkConf.get("spark.modify.acls", ""))
 
+  setViewAclsGroups(sparkConf.get("spark.ui.view.acls.groups", ""));
+  setModifyAclsGroups(sparkConf.get("spark.modify.acls.groups", ""));
+
   private val secretKey = generateSecretKey()
   logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
     "; ui acls " + (if (aclsOn) "enabled" else "disabled") +
-    "; users with view permissions: " + viewAcls.toString() +
-    "; users with modify permissions: " + modifyAcls.toString())
+    "; users  with view permissions: " + viewAcls.toString() +
+    "; groups with view permissions: " + viewAclsGroups.toString() +
+    "; users  with modify permissions: " + modifyAcls.toString() +
+    "; groups with modify permissions: " + modifyAclsGroups.toString())
 
   // Set our own authenticator to properly negotiate user/password for HTTP connections.
   // This is needed by the HTTP client fetching from the HttpServer. Put here so its
@@ -264,7 +282,10 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
       }: TrustManager
     })
 
-    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.getOrElse("Default"))
+    require(fileServerSSLOptions.protocol.isDefined,
+      "spark.ssl.protocol is required when enabling SSL connections.")
+
+    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.get)
     sslContext.init(null, trustStoreManagers.getOrElse(credulousTrustStoreManagers), null)
 
     val hostVerifier = new HostnameVerifier {
@@ -303,13 +324,30 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   }
 
   /**
+   * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
+   * acls groups you should also set the view and modify acls groups again to pick up the changes.
+   */
+  def setViewAclsGroups(allowedUserGroups: String) {
+    viewAclsGroups = (adminAclsGroups ++ stringToSet(allowedUserGroups));
+    logInfo("Changing view acls groups to: " + viewAclsGroups.mkString(","))
+  }
+
+  /**
    * Checking the existence of "*" is necessary as YARN can't recognize the "*" in "defaultuser,*"
    */
   def getViewAcls: String = {
-    if (viewAcls.contains("*")) {
-      "*"
+    if (viewAcls.contains(WILDCARD_ACL)) {
+      WILDCARD_ACL
     } else {
       viewAcls.mkString(",")
+    }
+  }
+
+  def getViewAclsGroups: String = {
+    if (viewAclsGroups.contains(WILDCARD_ACL)) {
+      WILDCARD_ACL
+    } else {
+      viewAclsGroups.mkString(",")
     }
   }
 
@@ -323,13 +361,30 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   }
 
   /**
+   * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
+   * acls groups you should also set the view and modify acls groups again to pick up the changes.
+   */
+  def setModifyAclsGroups(allowedUserGroups: String) {
+    modifyAclsGroups = (adminAclsGroups ++ stringToSet(allowedUserGroups));
+    logInfo("Changing modify acls groups to: " + modifyAclsGroups.mkString(","))
+  }
+
+  /**
    * Checking the existence of "*" is necessary as YARN can't recognize the "*" in "defaultuser,*"
    */
   def getModifyAcls: String = {
-    if (modifyAcls.contains("*")) {
-      "*"
+    if (modifyAcls.contains(WILDCARD_ACL)) {
+      WILDCARD_ACL
     } else {
       modifyAcls.mkString(",")
+    }
+  }
+
+  def getModifyAclsGroups: String = {
+    if (modifyAclsGroups.contains(WILDCARD_ACL)) {
+      WILDCARD_ACL
+    } else {
+      modifyAclsGroups.mkString(",")
     }
   }
 
@@ -340,6 +395,15 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   def setAdminAcls(adminUsers: String) {
     adminAcls = stringToSet(adminUsers)
     logInfo("Changing admin acls to: " + adminAcls.mkString(","))
+  }
+
+  /**
+   * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
+   * acls groups you should also set the view and modify acls groups again to pick up the changes.
+   */
+  def setAdminAclsGroups(adminUserGroups: String) {
+    adminAclsGroups = stringToSet(adminUserGroups)
+    logInfo("Changing admin acls groups to: " + adminAclsGroups.mkString(","))
   }
 
   def setAcls(aclSetting: Boolean) {
@@ -398,35 +462,48 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   def aclsEnabled(): Boolean = aclsOn
 
   /**
-   * Checks the given user against the view acl list to see if they have
+   * Checks the given user against the view acl and groups list to see if they have
    * authorization to view the UI. If the UI acls are disabled
    * via spark.acls.enable, all users have view access. If the user is null
-   * it is assumed authentication is off and all users have access.
+   * it is assumed authentication is off and all users have access. Also if any one of the
+   * UI acls or groups specify the WILDCARD(*) then all users have view access.
    *
    * @param user to see if is authorized
    * @return true is the user has permission, otherwise false
    */
   def checkUIViewPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
-      viewAcls.mkString(","))
-    !aclsEnabled || user == null || viewAcls.contains(user) || viewAcls.contains("*")
+      viewAcls.mkString(",") + " viewAclsGroups=" + viewAclsGroups.mkString(","))
+    if (!aclsEnabled || user == null || viewAcls.contains(user) ||
+        viewAcls.contains(WILDCARD_ACL) || viewAclsGroups.contains(WILDCARD_ACL)) {
+      return true
+    }
+    val currentUserGroups = Utils.getCurrentUserGroups(sparkConf, user)
+    logDebug("userGroups=" + currentUserGroups.mkString(","))
+    viewAclsGroups.exists(currentUserGroups.contains(_))
   }
 
   /**
-   * Checks the given user against the modify acl list to see if they have
-   * authorization to modify the application. If the UI acls are disabled
+   * Checks the given user against the modify acl and groups list to see if they have
+   * authorization to modify the application. If the modify acls are disabled
    * via spark.acls.enable, all users have modify access. If the user is null
-   * it is assumed authentication isn't turned on and all users have access.
+   * it is assumed authentication isn't turned on and all users have access. Also if any one
+   * of the modify acls or groups specify the WILDCARD(*) then all users have modify access.
    *
    * @param user to see if is authorized
    * @return true is the user has permission, otherwise false
    */
   def checkModifyPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
-      modifyAcls.mkString(","))
-    !aclsEnabled || user == null || modifyAcls.contains(user) || modifyAcls.contains("*")
+      modifyAcls.mkString(",") + " modifyAclsGroups=" + modifyAclsGroups.mkString(","))
+    if (!aclsEnabled || user == null || modifyAcls.contains(user) ||
+        modifyAcls.contains(WILDCARD_ACL) || modifyAclsGroups.contains(WILDCARD_ACL)) {
+      return true
+    }
+    val currentUserGroups = Utils.getCurrentUserGroups(sparkConf, user)
+    logDebug("userGroups=" + currentUserGroups)
+    modifyAclsGroups.exists(currentUserGroups.contains(_))
   }
-
 
   /**
    * Check to see if authentication for the Spark communication protocols is enabled

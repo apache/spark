@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.vectorized
 
 import java.nio.charset.StandardCharsets
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -279,6 +281,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val buffer = new Array[Byte](16)
       Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET, 2.234)
       Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET + 8, 1.123)
+
+      if (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN)) {
+        // Ensure array contains Liitle Endian doubles
+        var bb = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN)
+        Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET, bb.getDouble(0))
+        Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET + 8, bb.getDouble(8))
+      }
 
       column.putDoubles(idx, 1, buffer, 8)
       column.putDoubles(idx + 1, 1, buffer, 0)
@@ -776,6 +785,25 @@ class ColumnarBatchSuite extends SparkFunSuite {
         compareStruct(schema, columnarBatchRow, newRow, 0)
         batch.close()
       }
+    }
+  }
+
+  test("exceeding maximum capacity should throw an error") {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
+      val column = ColumnVector.allocate(1, ByteType, memMode)
+      column.MAX_CAPACITY = 15
+      column.appendBytes(5, 0.toByte)
+      // Successfully allocate twice the requested capacity
+      assert(column.capacity == 10)
+      column.appendBytes(10, 0.toByte)
+      // Allocated capacity doesn't exceed MAX_CAPACITY
+      assert(column.capacity == 15)
+      val ex = intercept[RuntimeException] {
+        // Over-allocating beyond MAX_CAPACITY throws an exception
+        column.appendBytes(10, 0.toByte)
+      }
+      assert(ex.getMessage.contains(s"Cannot reserve more than ${column.MAX_CAPACITY} bytes in " +
+        s"the vectorized reader"))
     }
   }
 }

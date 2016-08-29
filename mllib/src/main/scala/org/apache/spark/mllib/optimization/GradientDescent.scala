@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{norm, DenseVector => BDV}
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
@@ -53,11 +53,9 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
   }
 
   /**
-   * :: Experimental ::
    * Set fraction of data to be used for each SGD iteration.
    * Default 1.0 (corresponding to deterministic/classical gradient descent)
    */
-  @Experimental
   def setMiniBatchFraction(fraction: Double): this.type = {
     require(fraction > 0 && fraction <= 1.0,
       s"Fraction for mini-batch SGD must be in range (0, 1] but got ${fraction}")
@@ -197,6 +195,11 @@ object GradientDescent extends Logging {
         "< 1.0 can be unstable because of the stochasticity in sampling.")
     }
 
+    if (numIterations * miniBatchFraction < 1.0) {
+      logWarning("Not all examples will be used if numIterations * miniBatchFraction < 1.0: " +
+        s"numIterations=$numIterations and miniBatchFraction=$miniBatchFraction")
+    }
+
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
     // Record previous weight and current one to calculate solution vector difference
 
@@ -296,8 +299,8 @@ object GradientDescent extends Logging {
       currentWeights: Vector,
       convergenceTol: Double): Boolean = {
     // To compare with convergence tolerance.
-    val previousBDV = previousWeights.toBreeze.toDenseVector
-    val currentBDV = currentWeights.toBreeze.toDenseVector
+    val previousBDV = previousWeights.asBreeze.toDenseVector
+    val currentBDV = currentWeights.asBreeze.toDenseVector
 
     // This represents the difference of updated weights in the iteration.
     val solutionVecDiff: Double = norm(previousBDV - currentBDV)

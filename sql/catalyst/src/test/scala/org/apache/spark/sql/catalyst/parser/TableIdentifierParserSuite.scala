@@ -53,8 +53,9 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     "bigint", "binary", "boolean", "current_date", "current_timestamp", "date", "double", "float",
     "int", "smallint", "timestamp", "at")
 
-  val hiveNonReservedRegression = Seq("left", "right", "left", "right", "full", "inner", "semi",
-    "union", "except", "intersect", "schema", "database")
+  val hiveStrictNonReservedKeyword = Seq("anti", "full", "inner", "left", "semi", "right",
+    "natural", "union", "intersect", "except", "database", "on", "join", "cross", "select", "from",
+    "where", "having", "from", "to", "table", "with", "not")
 
   test("table identifier") {
     // Regular names.
@@ -67,11 +68,18 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     }
   }
 
-  test("table identifier - keywords") {
+  test("quoted identifiers") {
+    assert(TableIdentifier("z", Some("x.y")) === parseTableIdentifier("`x.y`.z"))
+    assert(TableIdentifier("y.z", Some("x")) === parseTableIdentifier("x.`y.z`"))
+    assert(TableIdentifier("z", Some("`x.y`")) === parseTableIdentifier("```x.y```.z"))
+    assert(TableIdentifier("`y.z`", Some("x")) === parseTableIdentifier("x.```y.z```"))
+    assert(TableIdentifier("x.y.z", None) === parseTableIdentifier("`x.y.z`"))
+  }
+
+  test("table identifier - strict keywords") {
     // SQL Keywords.
-    val keywords = Seq("select", "from", "where") ++ hiveNonReservedRegression
-    keywords.foreach { keyword =>
-      intercept[ParseException](parseTableIdentifier(keyword))
+    hiveStrictNonReservedKeyword.foreach { keyword =>
+      assert(TableIdentifier(keyword) === parseTableIdentifier(keyword))
       assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
       assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
     }

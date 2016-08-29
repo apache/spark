@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.mutable.Map
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
@@ -38,13 +39,23 @@ import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
  * representations (e.g. logical plans that operate on local Scala collections), or are simply not
  * supported by this builder (yet).
  */
-class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
-  require(logicalPlan.resolved, "SQLBuilder only supports resolved logical query plans")
+class SQLBuilder private (
+    logicalPlan: LogicalPlan,
+    nextSubqueryId: AtomicLong,
+    nextGenAttrId: AtomicLong,
+    exprIdMap: Map[Long, Long]) extends Logging {
+  require(logicalPlan.resolved,
+    "SQLBuilder only supports resolved logical query plans. Current plan:\n" + logicalPlan)
+
+  def this(logicalPlan: LogicalPlan) =
+    this(logicalPlan, new AtomicLong(0), new AtomicLong(0), Map.empty[Long, Long])
 
   def this(df: Dataset[_]) = this(df.queryExecution.analyzed)
 
-  private val nextSubqueryId = new AtomicLong(0)
   private def newSubqueryName(): String = s"gen_subquery_${nextSubqueryId.getAndIncrement()}"
+  private def normalizedName(n: NamedExpression): String = synchronized {
+    "gen_attr_" + exprIdMap.getOrElseUpdate(n.exprId.id, nextGenAttrId.getAndIncrement())
+  }
 
   def toSQL: String = {
     val canonicalizedPlan = Canonicalizer.execute(logicalPlan)
@@ -64,12 +75,18 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
     val aliasedOutput = canonicalizedPlan.output.zip(outputNames).map {
       case (attr, name) => Alias(attr.withQualifier(None), name)()
     }
-    val finalPlan = Project(aliasedOutput, SubqueryAlias(finalName, canonicalizedPlan))
+    val finalPlan = Project(aliasedOutput, SubqueryAlias(finalName, canonicalizedPlan, None))
 
     try {
       val replaced = finalPlan.transformAllExpressions {
-        case e: SubqueryExpression =>
-          SubqueryHolder(new SQLBuilder(e.query).toSQL)
+        case s: SubqueryExpression =>
+          val query = new SQLBuilder(s.plan, nextSubqueryId, nextGenAttrId, exprIdMap).toSQL
+          val sql = s match {
+            case _: ListQuery => query
+            case _: Exists => s"EXISTS($query)"
+            case _ => s"($query)"
+          }
+          SubqueryHolder(sql)
         case e: NonSQLExpression =>
           throw new UnsupportedOperationException(
             s"Expression $e doesn't have a SQL representation"
@@ -162,6 +179,11 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
         qualifiedName + " TABLESAMPLE(" + fraction + " PERCENT)"
       }.getOrElse(qualifiedName)
 
+    case relation: CatalogRelation =>
+      val m = relation.catalogTable
+      val qualifiedName = s"${quoteIdentifier(m.database)}.${quoteIdentifier(m.identifier.table)}"
+      qualifiedName
+
     case Sort(orders, _, RepartitionByExpression(partitionExprs, child, _))
         if orders.map(_.child) == partitionExprs =>
       build(toSQL(child), "CLUSTER BY", partitionExprs.map(_.sql).mkString(", "))
@@ -182,6 +204,12 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
 
     case p: ScriptTransformation =>
       scriptTransformationToSQL(p)
+
+    case p: LocalRelation =>
+      p.toSQL(newSubqueryName())
+
+    case p: Range =>
+      p.toSQL()
 
     case OneRowRelation =>
       ""
@@ -267,7 +295,7 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
     //   5. the table alias for output columns of generator.
     //   6. the AS keyword
     //   7. the column alias, can be more than one, e.g. AS key, value
-    // An concrete example: "tbl LATERAL VIEW EXPLODE(map_col) sub_q AS key, value", and the builder
+    // A concrete example: "tbl LATERAL VIEW EXPLODE(map_col) sub_q AS key, value", and the builder
     // will put it in FROM clause later.
     build(
       childSQL,
@@ -369,8 +397,6 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
     )
   }
 
-  private def normalizedName(n: NamedExpression): String = "gen_attr_" + n.exprId.id
-
   object Canonicalizer extends RuleExecutor[LogicalPlan] {
     override protected def batches: Seq[Batch] = Seq(
       Batch("Prepare", FixedPoint(100),
@@ -403,7 +429,9 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
         // that table relation, as we can only convert table sample to standard SQL string.
         ResolveSQLTable,
         // Insert sub queries on top of operators that need to appear after FROM clause.
-        AddSubquery
+        AddSubquery,
+        // Reconstruct subquery expressions.
+        ConstructSubqueryExpressions
       )
     )
 
@@ -418,7 +446,7 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
 
     object RemoveSubqueriesAboveSQLTable extends Rule[LogicalPlan] {
       override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-        case SubqueryAlias(_, t @ ExtractSQLTable(_)) => t
+        case SubqueryAlias(_, t @ ExtractSQLTable(_), _) => t
       }
     }
 
@@ -483,8 +511,59 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
       }
     }
 
+    object ConstructSubqueryExpressions extends Rule[LogicalPlan] {
+      def apply(tree: LogicalPlan): LogicalPlan = tree transformAllExpressions {
+        case ScalarSubquery(query, conditions, exprId) if conditions.nonEmpty =>
+          def rewriteAggregate(a: Aggregate): Aggregate = {
+            val filter = Filter(conditions.reduce(And), addSubqueryIfNeeded(a.child))
+            Aggregate(Nil, a.aggregateExpressions.take(1), filter)
+          }
+          val cleaned = query match {
+            case Project(_, child) => child
+            case child => child
+          }
+          val rewrite = cleaned match {
+            case a: Aggregate =>
+              rewriteAggregate(a)
+            case Filter(c, a: Aggregate) =>
+              Filter(c, rewriteAggregate(a))
+          }
+          ScalarSubquery(rewrite, Seq.empty, exprId)
+
+        case PredicateSubquery(query, conditions, false, exprId) =>
+          val subquery = addSubqueryIfNeeded(query)
+          val plan = if (conditions.isEmpty) {
+            subquery
+          } else {
+            Project(Seq(Alias(Literal(1), "1")()),
+              Filter(conditions.reduce(And), subquery))
+          }
+          Exists(plan, exprId)
+
+        case PredicateSubquery(query, conditions, true, exprId) =>
+          val (in, correlated) = conditions.partition(_.isInstanceOf[EqualTo])
+          val (outer, inner) = in.zipWithIndex.map {
+            case (EqualTo(l, r), i) if query.outputSet.intersect(r.references).nonEmpty =>
+              (l, Alias(r, s"_c$i")())
+            case (EqualTo(r, l), i) =>
+              (l, Alias(r, s"_c$i")())
+          }.unzip
+          val wrapped = addSubqueryIfNeeded(query)
+          val filtered = if (correlated.nonEmpty) {
+            Filter(conditions.reduce(And), wrapped)
+          } else {
+            wrapped
+          }
+          val value = outer match {
+            case Seq(expr) => expr
+            case exprs => CreateStruct(exprs)
+          }
+          In(value, Seq(ListQuery(Project(inner, filtered), exprId)))
+      }
+    }
+
     private def addSubquery(plan: LogicalPlan): SubqueryAlias = {
-      SubqueryAlias(newSubqueryName(), plan)
+      SubqueryAlias(newSubqueryName(), plan, None)
     }
 
     private def addSubqueryIfNeeded(plan: LogicalPlan): LogicalPlan = plan match {
@@ -525,9 +604,8 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
   /**
    * A place holder for generated SQL for subquery expression.
    */
-  case class SubqueryHolder(query: String) extends LeafExpression with Unevaluable {
+  case class SubqueryHolder(override val sql: String) extends LeafExpression with Unevaluable {
     override def dataType: DataType = NullType
     override def nullable: Boolean = true
-    override def sql: String = s"($query)"
   }
 }

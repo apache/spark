@@ -23,7 +23,7 @@ if sys.version > '3':
     unicode = str
 
 from pyspark import SparkContext, since
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.common import inherit_doc
 
 
 def _jvm():
@@ -120,14 +120,13 @@ class MLWritable(object):
     .. versionadded:: 2.0.0
     """
 
-    @property
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
+        """Returns an MLWriter instance for this ML instance."""
         raise NotImplementedError("MLWritable is not yet implemented for type: %r" % type(self))
 
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write.save(path)
+        self.write().save(path)
 
 
 @inherit_doc
@@ -136,9 +135,8 @@ class JavaMLWritable(MLWritable):
     (Private) Mixin for ML instances that provide :py:class:`JavaMLWriter`.
     """
 
-    @property
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
+        """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
 
@@ -221,7 +219,7 @@ class MLReadable(object):
 
     @classmethod
     def read(cls):
-        """Returns an JavaMLReader instance for this class."""
+        """Returns an MLReader instance for this class."""
         raise NotImplementedError("MLReadable.read() not implemented for type: %r" % cls)
 
     @classmethod
@@ -238,5 +236,21 @@ class JavaMLReadable(MLReadable):
 
     @classmethod
     def read(cls):
-        """Returns an JavaMLReader instance for this class."""
+        """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
+
+
+@inherit_doc
+class JavaPredictionModel():
+    """
+    (Private) Java Model for prediction tasks (regression and classification).
+    To be mixed in with class:`pyspark.ml.JavaModel`
+    """
+
+    @property
+    @since("2.1.0")
+    def numFeatures(self):
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        return self._call_java("numFeatures")

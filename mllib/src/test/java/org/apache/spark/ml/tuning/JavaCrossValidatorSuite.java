@@ -17,50 +17,39 @@
 
 package org.apache.spark.ml.tuning;
 
-import java.io.Serializable;
+import java.io.IOException;
 import java.util.List;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator;
+import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.param.ParamMap;
-import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
+import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
-public class JavaCrossValidatorSuite implements Serializable {
 
-  private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
+public class JavaCrossValidatorSuite extends SharedSparkSession {
+
   private transient Dataset<Row> dataset;
 
-  @Before
-  public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaCrossValidatorSuite");
-    jsql = new SQLContext(jsc);
+  @Override
+  public void setUp() throws IOException {
+    super.setUp();
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
-    dataset = jsql.createDataFrame(jsc.parallelize(points, 2), LabeledPoint.class);
-  }
-
-  @After
-  public void tearDown() {
-    jsc.stop();
-    jsc = null;
+    dataset = spark.createDataFrame(jsc.parallelize(points, 2), LabeledPoint.class);
   }
 
   @Test
   public void crossValidationWithLogisticRegression() {
     LogisticRegression lr = new LogisticRegression();
     ParamMap[] lrParamMaps = new ParamGridBuilder()
-      .addGrid(lr.regParam(), new double[] {0.001, 1000.0})
-      .addGrid(lr.maxIter(), new int[] {0, 10})
+      .addGrid(lr.regParam(), new double[]{0.001, 1000.0})
+      .addGrid(lr.maxIter(), new int[]{0, 10})
       .build();
     BinaryClassificationEvaluator eval = new BinaryClassificationEvaluator();
     CrossValidator cv = new CrossValidator()

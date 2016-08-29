@@ -22,7 +22,6 @@ import java.util.concurrent.{ExecutorService, TimeUnit}
 import scala.collection.Map
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.mockito.Matchers
 import org.mockito.Matchers._
@@ -174,9 +173,9 @@ class HeartbeatReceiverSuite
     val dummyExecutorEndpointRef1 = rpcEnv.setupEndpoint("fake-executor-1", dummyExecutorEndpoint1)
     val dummyExecutorEndpointRef2 = rpcEnv.setupEndpoint("fake-executor-2", dummyExecutorEndpoint2)
     fakeSchedulerBackend.driverEndpoint.askWithRetry[Boolean](
-      RegisterExecutor(executorId1, dummyExecutorEndpointRef1, 0, Map.empty))
+      RegisterExecutor(executorId1, dummyExecutorEndpointRef1, "1.2.3.4", 0, Map.empty))
     fakeSchedulerBackend.driverEndpoint.askWithRetry[Boolean](
-      RegisterExecutor(executorId2, dummyExecutorEndpointRef2, 0, Map.empty))
+      RegisterExecutor(executorId2, dummyExecutorEndpointRef2, "1.2.3.5", 0, Map.empty))
     heartbeatReceiverRef.askWithRetry[Boolean](TaskSchedulerIsSet)
     addExecutorAndVerify(executorId1)
     addExecutorAndVerify(executorId2)
@@ -211,10 +210,10 @@ class HeartbeatReceiverSuite
   private def triggerHeartbeat(
       executorId: String,
       executorShouldReregister: Boolean): Unit = {
-    val metrics = new TaskMetrics
+    val metrics = TaskMetrics.empty
     val blockManagerId = BlockManagerId(executorId, "localhost", 12345)
     val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](
-      Heartbeat(executorId, Array(1L -> metrics.accumulatorUpdates()), blockManagerId))
+      Heartbeat(executorId, Array(1L -> metrics.accumulators()), blockManagerId))
     if (executorShouldReregister) {
       assert(response.reregisterBlockManager)
     } else {
@@ -222,7 +221,7 @@ class HeartbeatReceiverSuite
       // Additionally verify that the scheduler callback is called with the correct parameters
       verify(scheduler).executorHeartbeatReceived(
         Matchers.eq(executorId),
-        Matchers.eq(Array(1L -> metrics.accumulatorUpdates())),
+        Matchers.eq(Array(1L -> metrics.accumulators())),
         Matchers.eq(blockManagerId))
     }
   }
@@ -242,8 +241,8 @@ class HeartbeatReceiverSuite
   }
 
   private def getTrackedExecutors: Map[String, Long] = {
-    // We may receive undesired SparkListenerExecutorAdded from LocalBackend, so exclude it from
-    // the map. See SPARK-10800.
+    // We may receive undesired SparkListenerExecutorAdded from LocalSchedulerBackend,
+    // so exclude it from the map. See SPARK-10800.
     heartbeatReceiver.invokePrivate(_executorLastSeen()).
       filterKeys(_ != SparkContext.DRIVER_IDENTIFIER)
   }

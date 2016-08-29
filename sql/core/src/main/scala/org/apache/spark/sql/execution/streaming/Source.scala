@@ -34,9 +34,12 @@ trait Source  {
   def getOffset: Option[Offset]
 
   /**
-   * Returns the data that is is between the offsets (`start`, `end`].  When `start` is `None` then
-   * the batch should begin with the first available record.  This method must always return the
+   * Returns the data that is between the offsets (`start`, `end`]. When `start` is `None` then
+   * the batch should begin with the first available record. This method must always return the
    * same data for a particular `start` and `end` pair.
    */
   def getBatch(start: Option[Offset], end: Offset): DataFrame
+
+  /** Stop this source and free any resources it has allocated. */
+  def stop(): Unit
 }

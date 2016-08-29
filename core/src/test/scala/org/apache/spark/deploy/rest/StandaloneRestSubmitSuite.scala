@@ -408,7 +408,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   /**
    * Start a [[StandaloneRestServer]] that communicates with the given endpoint.
-   * If `faulty` is true, start an [[FaultyStandaloneRestServer]] instead.
+   * If `faulty` is true, start a [[FaultyStandaloneRestServer]] instead.
    * Return the master URL that corresponds to the address of this server.
    */
   private def startServer(

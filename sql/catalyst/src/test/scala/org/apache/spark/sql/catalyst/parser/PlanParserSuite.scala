@@ -14,25 +14,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedGenerator, UnresolvedInlineTable, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.types.IntegerType
 
+/**
+ * Parser test cases for rules defined in [[CatalystSqlParser]] / [[AstBuilder]].
+ *
+ * There is also SparkSqlParserSuite in sql/core module for parser rules defined in sql/core module.
+ */
 class PlanParserSuite extends PlanTest {
   import CatalystSqlParser._
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
 
-  def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
+  private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
     comparePlans(parsePlan(sqlCommand), plan)
   }
 
-  def intercept(sqlCommand: String, messages: String*): Unit = {
+  private def intercept(sqlCommand: String, messages: String*): Unit = {
     val e = intercept[ParseException](parsePlan(sqlCommand))
     messages.foreach { message =>
       assert(e.message.contains(message))
@@ -46,19 +52,9 @@ class PlanParserSuite extends PlanTest {
     assertEqual("SELECT * FROM a", plan)
   }
 
-  test("show functions") {
-    assertEqual("show functions", ShowFunctions(None, None))
-    assertEqual("show functions foo", ShowFunctions(None, Some("foo")))
-    assertEqual("show functions foo.bar", ShowFunctions(Some("foo"), Some("bar")))
-    assertEqual("show functions 'foo\\\\.*'", ShowFunctions(None, Some("foo\\.*")))
-    intercept("show functions foo.bar.baz", "SHOW FUNCTIONS unsupported name")
-  }
-
-  test("describe function") {
-    assertEqual("describe function bar", DescribeFunction("bar", isExtended = false))
-    assertEqual("describe function extended bar", DescribeFunction("bar", isExtended = true))
-    assertEqual("describe function foo.bar", DescribeFunction("foo.bar", isExtended = false))
-    assertEqual("describe function extended f.bar", DescribeFunction("f.bar", isExtended = true))
+  test("explain") {
+    intercept("EXPLAIN logical SELECT 1", "Unsupported SQL statement")
+    intercept("EXPLAIN formatted SELECT 1", "Unsupported SQL statement")
   }
 
   test("set operations") {
@@ -71,6 +67,9 @@ class PlanParserSuite extends PlanTest {
     assertEqual("select * from a except select * from b", a.except(b))
     intercept("select * from a except all select * from b", "EXCEPT ALL is not supported.")
     assertEqual("select * from a except distinct select * from b", a.except(b))
+    assertEqual("select * from a minus select * from b", a.except(b))
+    intercept("select * from a minus all select * from b", "MINUS ALL is not supported.")
+    assertEqual("select * from a minus distinct select * from b", a.except(b))
     assertEqual("select * from a intersect select * from b", a.intersect(b))
     intercept("select * from a intersect all select * from b", "INTERSECT ALL is not supported.")
     assertEqual("select * from a intersect distinct select * from b", a.intersect(b))
@@ -80,8 +79,8 @@ class PlanParserSuite extends PlanTest {
     def cte(plan: LogicalPlan, namedPlans: (String, LogicalPlan)*): With = {
       val ctes = namedPlans.map {
         case (name, cte) =>
-          name -> SubqueryAlias(name, cte)
-      }.toMap
+          name -> SubqueryAlias(name, cte, None)
+      }
       With(plan, ctes)
     }
     assertEqual(
@@ -97,7 +96,7 @@ class PlanParserSuite extends PlanTest {
         "cte2" -> table("cte1").select(star())))
     intercept(
       "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1",
-      "Name 'cte1' is used for multiple common table expressions")
+      "Found duplicate keys 'cte1'")
   }
 
   test("simple select query") {
@@ -110,6 +109,7 @@ class PlanParserSuite extends PlanTest {
       table("db", "c").select('a, 'b).where('x < 1))
     assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select('a, 'b)))
     assertEqual("select all a, b from db.c", table("db", "c").select('a, 'b))
+    assertEqual("select from tbl", OneRowRelation.select('from.as("tbl")))
   }
 
   test("reverse select query") {
@@ -153,9 +153,9 @@ class PlanParserSuite extends PlanTest {
       ("", basePlan),
       (" order by a, b desc", basePlan.orderBy('a.asc, 'b.desc)),
       (" sort by a, b desc", basePlan.sortBy('a.asc, 'b.desc)),
-      (" distribute by a, b", basePlan.distribute('a, 'b)),
-      (" distribute by a sort by b", basePlan.distribute('a).sortBy('b.asc)),
-      (" cluster by a, b", basePlan.distribute('a, 'b).sortBy('a.asc, 'b.asc))
+      (" distribute by a, b", basePlan.distribute('a, 'b)()),
+      (" distribute by a sort by b", basePlan.distribute('a)().sortBy('b.asc)),
+      (" cluster by a, b", basePlan.distribute('a, 'b)().sortBy('a.asc, 'b.asc))
     )
 
     orderSortDistrClusterClauses.foreach {
@@ -185,14 +185,12 @@ class PlanParserSuite extends PlanTest {
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
       insert(Map.empty, overwrite = true))
-    assertEqual(s"insert overwrite table s if not exists $sql",
-      insert(Map.empty, overwrite = true, ifNotExists = true))
+    assertEqual(s"insert overwrite table s partition (e = 1) if not exists $sql",
+      insert(Map("e" -> Option("1")), overwrite = true, ifNotExists = true))
     assertEqual(s"insert into s $sql",
       insert(Map.empty))
     assertEqual(s"insert into table s partition (c = 'd', e = 1) $sql",
       insert(Map("c" -> Option("d"), "e" -> Option("1"))))
-    assertEqual(s"insert overwrite table s partition (c = 'd', x) if not exists $sql",
-      insert(Map("c" -> Option("d"), "x" -> None), overwrite = true, ifNotExists = true))
 
     // Multi insert
     val plan2 = table("t").where('x > 5).select(star())
@@ -201,6 +199,13 @@ class PlanParserSuite extends PlanTest {
         table("s"), Map.empty, plan.limit(1), overwrite = false, ifNotExists = false).union(
         InsertIntoTable(
           table("u"), Map.empty, plan2, overwrite = false, ifNotExists = false)))
+  }
+
+  test ("insert with if not exists") {
+    val sql = "select * from t"
+    intercept(s"insert overwrite table s partition (e = 1, x) if not exists $sql",
+      "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [x]")
+    intercept[ParseException](parsePlan(s"insert overwrite table s if not exists $sql"))
   }
 
   test("aggregation") {
@@ -261,11 +266,14 @@ class PlanParserSuite extends PlanTest {
   }
 
   test("lateral view") {
+    val explode = UnresolvedGenerator(FunctionIdentifier("explode"), Seq('x))
+    val jsonTuple = UnresolvedGenerator(FunctionIdentifier("json_tuple"), Seq('x, 'y))
+
     // Single lateral view
     assertEqual(
       "select * from t lateral view explode(x) expl as x",
       table("t")
-        .generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
+        .generate(explode, join = true, outer = false, Some("expl"), Seq("x"))
         .select(star()))
 
     // Multiple lateral views
@@ -275,12 +283,12 @@ class PlanParserSuite extends PlanTest {
         |lateral view explode(x) expl
         |lateral view outer json_tuple(x, y) jtup q, z""".stripMargin,
       table("t")
-        .generate(Explode('x), join = true, outer = false, Some("expl"), Seq.empty)
-        .generate(JsonTuple(Seq('x, 'y)), join = true, outer = true, Some("jtup"), Seq("q", "z"))
+        .generate(explode, join = true, outer = false, Some("expl"), Seq.empty)
+        .generate(jsonTuple, join = true, outer = true, Some("jtup"), Seq("q", "z"))
         .select(star()))
 
     // Multi-Insert lateral views.
-    val from = table("t1").generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
+    val from = table("t1").generate(explode, join = true, outer = false, Some("expl"), Seq("x"))
     assertEqual(
       """from t1
         |lateral view explode(x) expl as x
@@ -292,7 +300,7 @@ class PlanParserSuite extends PlanTest {
         |where s < 10
       """.stripMargin,
       Union(from
-        .generate(JsonTuple(Seq('x, 'y)), join = true, outer = false, Some("jtup"), Seq("q", "z"))
+        .generate(jsonTuple, join = true, outer = false, Some("jtup"), Seq("q", "z"))
         .select(star())
         .insertInto("t2"),
         from.where('s < 10).select(star()).insertInto("t3")))
@@ -300,7 +308,7 @@ class PlanParserSuite extends PlanTest {
     // Unresolved generator.
     val expected = table("t")
       .generate(
-        UnresolvedGenerator("posexplode", Seq('x)),
+        UnresolvedGenerator(FunctionIdentifier("posexplode"), Seq('x)),
         join = true,
         outer = false,
         Some("posexpl"),
@@ -367,9 +375,13 @@ class PlanParserSuite extends PlanTest {
     assertEqual(s"$sql tablesample(bucket 4 out of 10) as x",
       Sample(0, .4d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
     intercept(s"$sql tablesample(bucket 4 out of 10 on x) as x",
-      "TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported")
+      "TABLESAMPLE(BUCKET x OUT OF y ON colname) is not supported")
     intercept(s"$sql tablesample(bucket 11 out of 10) as x",
       s"Sampling fraction (${11.0/10.0}) must be on interval [0, 1]")
+    intercept("SELECT * FROM parquet_t0 TABLESAMPLE(300M) s",
+      "TABLESAMPLE(byteLengthLiteral) is not supported")
+    intercept("SELECT * FROM parquet_t0 TABLESAMPLE(BUCKET 3 OUT OF 32 ON rand()) s",
+      "TABLESAMPLE(BUCKET x OUT OF y ON function) is not supported")
   }
 
   test("sub-query") {
@@ -413,19 +425,29 @@ class PlanParserSuite extends PlanTest {
     assertEqual("table d.t", table("d", "t"))
   }
 
-  test("inline table") {
-    assertEqual("values 1, 2, 3, 4", LocalRelation.fromExternalRows(
-      Seq('col1.int),
-      Seq(1, 2, 3, 4).map(x => Row(x))))
+  test("table valued function") {
     assertEqual(
-      "values (1, 'a'), (2, 'b'), (3, 'c') as tbl(a, b)",
-      LocalRelation.fromExternalRows(
-        Seq('a.int, 'b.string),
-        Seq((1, "a"), (2, "b"), (3, "c")).map(x => Row(x._1, x._2))).as("tbl"))
-    intercept("values (a, 'a'), (b, 'b')",
-      "All expressions in an inline table must be constants.")
-    intercept("values (1, 'a'), (2, 'b') as tbl(a, b, c)",
-      "Number of aliases must match the number of fields in an inline table.")
-    intercept[ArrayIndexOutOfBoundsException](parsePlan("values (1, 'a'), (2, 'b', 5Y)"))
+      "select * from range(2)",
+      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
+  }
+
+  test("inline table") {
+    assertEqual("values 1, 2, 3, 4",
+      UnresolvedInlineTable(Seq("col1"), Seq(1, 2, 3, 4).map(x => Seq(Literal(x)))))
+
+    assertEqual(
+      "values (1, 'a'), (2, 'b') as tbl(a, b)",
+      UnresolvedInlineTable(
+        Seq("a", "b"),
+        Seq(Literal(1), Literal("a")) :: Seq(Literal(2), Literal("b")) :: Nil).as("tbl"))
+  }
+
+  test("simple select query with !> and !<") {
+    // !< is equivalent to >=
+    assertEqual("select a, b from db.c where x !< 1",
+      table("db", "c").where('x >= 1).select('a, 'b))
+    // !> is equivalent to <=
+    assertEqual("select a, b from db.c where x !> 1",
+      table("db", "c").where('x <= 1).select('a, 'b))
   }
 }

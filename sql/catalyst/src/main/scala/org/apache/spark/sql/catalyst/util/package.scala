@@ -153,15 +153,7 @@ package object util {
     "`" + name.replace("`", "``") + "`"
   }
 
-  /**
-   * Returns the string representation of this expression that is safe to be put in
-   * code comments of generated code. The length is capped at 128 characters.
-   */
-  def toCommentSafeString(str: String): String = {
-    val len = math.min(str.length, 128)
-    val suffix = if (str.length > len) "..." else ""
-    str.substring(0, len).replace("*/", "\\*\\/").replace("\\u", "\\\\u") + suffix
-  }
+  def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
   /* FIX ME
   implicit class debugLogging(a: Any) {

@@ -26,7 +26,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.metric.LongSQLMetric
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.unsafe.Platform
 
 /**
@@ -40,17 +40,17 @@ import org.apache.spark.unsafe.Platform
  *
  * @param numFields the number of fields in the row being serialized.
  */
-private[sql] class UnsafeRowSerializer(
+class UnsafeRowSerializer(
     numFields: Int,
-    dataSize: LongSQLMetric = null) extends Serializer with Serializable {
+    dataSize: SQLMetric = null) extends Serializer with Serializable {
   override def newInstance(): SerializerInstance =
     new UnsafeRowSerializerInstance(numFields, dataSize)
-  override private[spark] def supportsRelocationOfSerializedObjects: Boolean = true
+  override def supportsRelocationOfSerializedObjects: Boolean = true
 }
 
 private class UnsafeRowSerializerInstance(
     numFields: Int,
-    dataSize: LongSQLMetric) extends SerializerInstance {
+    dataSize: SQLMetric) extends SerializerInstance {
   /**
    * Serializes a stream of UnsafeRows. Within the stream, each record consists of a record
    * length (stored as a 4-byte integer, written high byte first), followed by the record's bytes.
@@ -60,13 +60,10 @@ private class UnsafeRowSerializerInstance(
     private[this] val dOut: DataOutputStream =
       new DataOutputStream(new BufferedOutputStream(out))
 
-    // LongSQLMetricParam.add() is faster than LongSQLMetric.+=
-    val localDataSize = if (dataSize != null) dataSize.localValue else null
-
     override def writeValue[T: ClassTag](value: T): SerializationStream = {
       val row = value.asInstanceOf[UnsafeRow]
-      if (localDataSize != null) {
-        localDataSize.add(row.getSizeInBytes)
+      if (dataSize != null) {
+        dataSize.add(row.getSizeInBytes)
       }
       dOut.writeInt(row.getSizeInBytes)
       row.writeToStream(dOut, writeBuffer)

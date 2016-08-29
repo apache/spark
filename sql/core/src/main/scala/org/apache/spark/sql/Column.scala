@@ -24,9 +24,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.DataTypeParser
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
 
@@ -37,6 +39,14 @@ private[sql] object Column {
   def apply(expr: Expression): Column = new Column(expr)
 
   def unapply(col: Column): Option[Expression] = Some(col.expr)
+
+  private[sql] def generateAlias(e: Expression): String = {
+    e match {
+      case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
+        a.aggregateFunction.toString
+      case expr => usePrettyExpression(expr).sql
+    }
+  }
 }
 
 /**
@@ -59,19 +69,33 @@ class TypedColumn[-T, U](
    * on a decoded object.
    */
   private[sql] def withInputType(
-      inputDeserializer: Expression,
+      inputEncoder: ExpressionEncoder[_],
       inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
-    val unresolvedDeserializer = UnresolvedDeserializer(inputDeserializer, inputAttributes)
+    val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
     val newExpr = expr transform {
       case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
-        ta.copy(inputDeserializer = Some(unresolvedDeserializer))
+        ta.copy(
+          inputDeserializer = Some(unresolvedDeserializer),
+          inputClass = Some(inputEncoder.clsTag.runtimeClass),
+          inputSchema = Some(inputEncoder.schema))
     }
     new TypedColumn[T, U](newExpr, encoder)
   }
+
+  /**
+   * Gives the TypedColumn a name (alias).
+   * If the current TypedColumn has metadata associated with it, this metadata will be propagated
+   * to the new column.
+   *
+   * @group expr_ops
+   * @since 2.0.0
+   */
+  override def name(alias: String): TypedColumn[T, U] =
+    new TypedColumn[T, U](super.name(alias).expr, encoder)
+
 }
 
 /**
- * :: Experimental ::
  * A column that will be computed based on the data in a [[DataFrame]].
  *
  * A new column is constructed based on the input columns present in a dataframe:
@@ -100,7 +124,6 @@ class TypedColumn[-T, U](
  *
  * @since 1.3.0
  */
-@Experimental
 class Column(protected[sql] val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
@@ -110,6 +133,15 @@ class Column(protected[sql] val expr: Expression) extends Logging {
       UnresolvedStar(Some(parts))
     case _ => UnresolvedAttribute.quotedString(name)
   })
+
+  override def toString: String = usePrettyExpression(expr).sql
+
+  override def equals(that: Any): Boolean = that match {
+    case that: Column => that.expr.equals(this.expr)
+    case _ => false
+  }
+
+  override def hashCode: Int = this.expr.hashCode()
 
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
@@ -130,31 +162,27 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     // Leave an unaliased generator with an empty list of names since the analyzer will generate
     // the correct defaults after the nested expression's type has been resolved.
     case explode: Explode => MultiAlias(explode, Nil)
+    case explode: PosExplode => MultiAlias(explode, Nil)
 
     case jt: JsonTuple => MultiAlias(jt, Nil)
 
-    case func: UnresolvedFunction => UnresolvedAlias(func, Some(usePrettyExpression(func).sql))
+    case func: UnresolvedFunction => UnresolvedAlias(func, Some(Column.generateAlias))
 
     // If we have a top level Cast, there is a chance to give it a better alias, if there is a
     // NamedExpression under this Cast.
-    case c: Cast => c.transformUp {
-      case Cast(ne: NamedExpression, to) => UnresolvedAlias(Cast(ne, to))
-    } match {
-      case ne: NamedExpression => ne
-      case other => Alias(expr, usePrettyExpression(expr).sql)()
-    }
+    case c: Cast =>
+      c.transformUp {
+        case Cast(ne: NamedExpression, to) => UnresolvedAlias(Cast(ne, to))
+      } match {
+        case ne: NamedExpression => ne
+        case other => Alias(expr, usePrettyExpression(expr).sql)()
+      }
+
+    case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
+      UnresolvedAlias(a, Some(Column.generateAlias))
 
     case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
-
-  override def toString: String = usePrettyExpression(expr).sql
-
-  override def equals(that: Any): Boolean = that match {
-    case that: Column => that.expr.equals(this.expr)
-    case _ => false
-  }
-
-  override def hashCode: Int = this.expr.hashCode
 
   /**
    * Provides a type hint about the expected return value of this column.  This information can
@@ -910,12 +938,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: Symbol): Column = withExpr {
-    expr match {
-      case ne: NamedExpression => Alias(expr, alias.name)(explicitMetadata = Some(ne.metadata))
-      case other => Alias(other, alias.name)()
-    }
-  }
+  def as(alias: Symbol): Column = name(alias.name)
 
   /**
    * Gives the column an alias with metadata.
@@ -979,7 +1002,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def cast(to: String): Column = cast(DataTypeParser.parse(to))
+  def cast(to: String): Column = cast(CatalystSqlParser.parseDataType(to))
 
   /**
    * Returns an ordering used in sorting.
@@ -1075,6 +1098,22 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.4.0
    */
   def over(window: expressions.WindowSpec): Column = window.withAggregate(this)
+
+  /**
+   * Define a empty analytic clause. In this case the analytic function is applied
+   * and presented for all rows in the result set.
+   *
+   * {{{
+   *   df.select(
+   *     sum("price").over(),
+   *     avg("price").over()
+   *   )
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.0.0
+   */
+  def over(): Column = over(Window.spec)
 
 }
 

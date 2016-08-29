@@ -17,30 +17,30 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
+import org.apache.spark.sql._
 
 
 object LDASuite {
   def generateLDAData(
-      sql: SQLContext,
+      spark: SparkSession,
       rows: Int,
       k: Int,
       vocabSize: Int): DataFrame = {
     val avgWC = 1  // average instances of each word in a doc
-    val sc = sql.sparkContext
+    val sc = spark.sparkContext
     val rng = new java.util.Random()
     rng.setSeed(1)
     val rdd = sc.parallelize(1 to rows).map { i =>
       Vectors.dense(Array.fill(vocabSize)(rng.nextInt(2 * avgWC).toDouble))
     }.map(v => new TestRow(v))
-    sql.createDataFrame(rdd)
+    spark.createDataFrame(rdd)
   }
 
   /**
@@ -68,7 +68,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    dataset = LDASuite.generateLDAData(sqlContext, 50, k, vocabSize)
+    dataset = LDASuite.generateLDAData(spark, 50, k, vocabSize)
   }
 
   test("default parameters") {
@@ -140,7 +140,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       new LDA().setTopicConcentration(-1.1)
     }
 
-    val dummyDF = sqlContext.createDataFrame(Seq(
+    val dummyDF = spark.createDataFrame(Seq(
       (1, Vectors.dense(1.0, 2.0)))).toDF("id", "features")
     // validate parameters
     lda.transformSchema(dummyDF.schema)
@@ -274,7 +274,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     // There should be 1 checkpoint remaining.
     assert(model.getCheckpointFiles.length === 1)
     val checkpointFile = new Path(model.getCheckpointFiles.head)
-    val fs = checkpointFile.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+    val fs = checkpointFile.getFileSystem(spark.sparkContext.hadoopConfiguration)
     assert(fs.exists(checkpointFile))
     model.deleteCheckpointFiles()
     assert(model.getCheckpointFiles.isEmpty)

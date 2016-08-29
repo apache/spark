@@ -35,7 +35,6 @@ import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql._
@@ -44,44 +43,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-
-/**
- * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
- * Configuration for Hive is read from hive-site.xml on the classpath.
- *
- * @since 1.0.0
- */
-class HiveContext private[hive](
-    @transient private val sparkSession: SparkSession,
-    isRootContext: Boolean)
-  extends SQLContext(sparkSession, isRootContext) with Logging {
-
-  self =>
-
-  def this(sc: SparkContext) = {
-    this(new SparkSession(HiveUtils.withHiveExternalCatalog(sc)), true)
-  }
-
-  def this(sc: JavaSparkContext) = this(sc.sc)
-
-  /**
-   * Returns a new HiveContext as new session, which will have separated SQLConf, UDF/UDAF,
-   * temporary tables and SessionState, but sharing the same CacheManager, IsolatedClientLoader
-   * and Hive client (both of execution and metadata) with existing HiveContext.
-   */
-  override def newSession(): HiveContext = {
-    new HiveContext(sparkSession.newSession(), isRootContext = false)
-  }
-
-  protected[sql] override def sessionState: HiveSessionState = {
-    sparkSession.sessionState.asInstanceOf[HiveSessionState]
-  }
-
-  protected[sql] override def sharedState: HiveSharedState = {
-    sparkSession.sharedState.asInstanceOf[HiveSharedState]
-  }
-
-}
 
 
 private[spark] object HiveUtils extends Logging {
@@ -135,17 +96,12 @@ private[spark] object HiveUtils extends Logging {
       .booleanConf
       .createWithDefault(false)
 
-  val CONVERT_CTAS = SQLConfigBuilder("spark.sql.hive.convertCTAS")
-    .doc("When true, a table created by a Hive CTAS statement (no USING clause) will be " +
-      "converted to a data source table, using the data source set by spark.sql.sources.default.")
-    .booleanConf
-    .createWithDefault(false)
-
   val CONVERT_METASTORE_ORC = SQLConfigBuilder("spark.sql.hive.convertMetastoreOrc")
+    .internal()
     .doc("When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
       "the built in support.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val HIVE_METASTORE_SHARED_PREFIXES = SQLConfigBuilder("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
@@ -217,7 +173,7 @@ private[spark] object HiveUtils extends Logging {
   /**
    * Configurations needed to create a [[HiveClient]].
    */
-  private[hive] def hiveClientConfigurations(hiveconf: HiveConf): Map[String, String] = {
+  private[hive] def hiveClientConfigurations(hadoopConf: Configuration): Map[String, String] = {
     // Hive 0.14.0 introduces timeout operations in HiveConf, and changes default values of a bunch
     // of time `ConfVar`s by adding time suffixes (`s`, `ms`, and `d` etc.).  This breaks backwards-
     // compatibility when users are trying to connecting to a Hive metastore of lower version,
@@ -266,7 +222,7 @@ private[spark] object HiveUtils extends Logging {
       ConfVars.SPARK_RPC_CLIENT_CONNECT_TIMEOUT -> TimeUnit.MILLISECONDS,
       ConfVars.SPARK_RPC_CLIENT_HANDSHAKE_TIMEOUT -> TimeUnit.MILLISECONDS
     ).map { case (confVar, unit) =>
-      confVar.varname -> hiveconf.getTimeVar(confVar, unit).toString
+      confVar.varname -> HiveConf.getTimeVar(hadoopConf, confVar, unit).toString
     }.toMap
   }
 
@@ -303,14 +259,12 @@ private[spark] object HiveUtils extends Logging {
   protected[hive] def newClientForMetadata(
       conf: SparkConf,
       hadoopConf: Configuration): HiveClient = {
-    val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
-    val configurations = hiveClientConfigurations(hiveConf)
-    newClientForMetadata(conf, hiveConf, hadoopConf, configurations)
+    val configurations = hiveClientConfigurations(hadoopConf)
+    newClientForMetadata(conf, hadoopConf, configurations)
   }
 
   protected[hive] def newClientForMetadata(
       conf: SparkConf,
-      hiveConf: HiveConf,
       hadoopConf: Configuration,
       configurations: Map[String, String]): HiveClient = {
     val sqlConf = new SQLConf
@@ -320,12 +274,6 @@ private[spark] object HiveUtils extends Logging {
     val hiveMetastoreSharedPrefixes = HiveUtils.hiveMetastoreSharedPrefixes(sqlConf)
     val hiveMetastoreBarrierPrefixes = HiveUtils.hiveMetastoreBarrierPrefixes(sqlConf)
     val metaVersion = IsolatedClientLoader.hiveVersion(hiveMetastoreVersion)
-
-    val defaultWarehouseLocation = hiveConf.get("hive.metastore.warehouse.dir")
-    logInfo("default warehouse location is " + defaultWarehouseLocation)
-
-    // `configure` goes second to override other settings.
-    val allConfig = hiveConf.asScala.map(e => e.getKey -> e.getValue).toMap ++ configurations
 
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
       if (hiveExecutionVersion != hiveMetastoreVersion) {
@@ -360,7 +308,7 @@ private[spark] object HiveUtils extends Logging {
         sparkConf = conf,
         hadoopConf = hadoopConf,
         execJars = jars.toSeq,
-        config = allConfig,
+        config = configurations,
         isolationOn = true,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
@@ -373,7 +321,7 @@ private[spark] object HiveUtils extends Logging {
         hadoopVersion = VersionInfo.getVersion,
         sparkConf = conf,
         hadoopConf = hadoopConf,
-        config = allConfig,
+        config = configurations,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else {
@@ -403,7 +351,7 @@ private[spark] object HiveUtils extends Logging {
         sparkConf = conf,
         hadoopConf = hadoopConf,
         execJars = jars.toSeq,
-        config = allConfig,
+        config = configurations,
         isolationOn = true,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
@@ -426,7 +374,7 @@ private[spark] object HiveUtils extends Logging {
         propMap.put(confvar.varname, confvar.getDefaultExpr())
       }
     }
-    propMap.put(HiveConf.ConfVars.METASTOREWAREHOUSE.varname, localMetastore.toURI.toString)
+    propMap.put(SQLConf.WAREHOUSE_PATH.key, localMetastore.toURI.toString)
     propMap.put(HiveConf.ConfVars.METASTORECONNECTURLKEY.varname,
       s"jdbc:derby:${withInMemoryMode};databaseName=${localMetastore.getAbsolutePath};create=true")
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
@@ -438,7 +386,7 @@ private[spark] object HiveUtils extends Logging {
     // Remote means that the metastore server is running in its own process.
     // When the mode is remote, configurations like "javax.jdo.option.ConnectionURL" will not be
     // used (because they are used by remote metastore server that talks to the database).
-    // Because execution Hive should always connects to a embedded derby metastore.
+    // Because execution Hive should always connects to an embedded derby metastore.
     // We have to remove the value of hive.metastore.uris. So, the execution Hive client connects
     // to the actual embedded derby metastore instead of the remote metastore.
     // You can search HiveConf.ConfVars.METASTOREURIS in the code of HiveConf (in Hive's repo).

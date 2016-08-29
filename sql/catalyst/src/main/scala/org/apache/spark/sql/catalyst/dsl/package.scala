@@ -25,6 +25,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
@@ -175,6 +176,15 @@ package object dsl {
       Invoke(function, "apply", returnType, argument :: Nil)
     }
 
+    def windowSpec(
+        partitionSpec: Seq[Expression],
+        orderSpec: Seq[SortOrder],
+        frame: WindowFrame): WindowSpecDefinition =
+      WindowSpecDefinition(partitionSpec, orderSpec, frame)
+
+    def windowExpr(windowFunc: Expression, windowSpec: WindowSpecDefinition): WindowExpression =
+      WindowExpression(windowFunc, windowSpec)
+
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
     // TODO more implicit class for literal?
     implicit class DslString(val s: String) extends ImplicitOperators {
@@ -283,11 +293,7 @@ package object dsl {
 
       def where(condition: Expression): LogicalPlan = Filter(condition, logicalPlan)
 
-      def filter[T : Encoder](func: T => Boolean): LogicalPlan = {
-        val deserialized = logicalPlan.deserialize[T]
-        val condition = expressions.callFunction(func, BooleanType, deserialized.output.head)
-        Filter(condition, deserialized).serialize[T]
-      }
+      def filter[T : Encoder](func: T => Boolean): LogicalPlan = TypedFilter(func, logicalPlan)
 
       def serialize[T : Encoder]: LogicalPlan = CatalystSerde.serialize[T](logicalPlan)
 
@@ -337,7 +343,7 @@ package object dsl {
           orderSpec: Seq[SortOrder]): LogicalPlan =
         Window(windowExpressions, partitionSpec, orderSpec, logicalPlan)
 
-      def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)
+      def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan, None)
 
       def except(otherPlan: LogicalPlan): LogicalPlan = Except(logicalPlan, otherPlan)
 
@@ -361,11 +367,14 @@ package object dsl {
 
       def as(alias: String): LogicalPlan = logicalPlan match {
         case UnresolvedRelation(tbl, _) => UnresolvedRelation(tbl, Option(alias))
-        case plan => SubqueryAlias(alias, plan)
+        case plan => SubqueryAlias(alias, plan, None)
       }
 
-      def distribute(exprs: Expression*): LogicalPlan =
-        RepartitionByExpression(exprs, logicalPlan)
+      def repartition(num: Integer): LogicalPlan =
+        Repartition(num, shuffle = true, logicalPlan)
+
+      def distribute(exprs: Expression*)(n: Int = -1): LogicalPlan =
+        RepartitionByExpression(exprs, logicalPlan, numPartitions = if (n < 0) None else Some(n))
 
       def analyze: LogicalPlan =
         EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))

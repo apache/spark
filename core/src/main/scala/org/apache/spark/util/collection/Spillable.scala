@@ -41,7 +41,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
   protected def forceSpill(): Boolean
 
   // Number of elements read from input since last spill
-  @volatile protected def elementsRead: Long = _elementsRead
+  protected def elementsRead: Long = _elementsRead
 
   // Called by subclasses every time a record is read
   // It's used for checking spilling frequency
@@ -83,7 +83,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
     if (elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
       // Claim up to double our current memory from the shuffle memory pool
       val amountToRequest = 2 * currentMemory - myMemoryThreshold
-      val granted = acquireOnHeapMemory(amountToRequest)
+      val granted = acquireMemory(amountToRequest)
       myMemoryThreshold += granted
       // If we were granted too little memory to grow further (either tryToAcquire returned 0,
       // or we already had more memory than myMemoryThreshold), spill the current collection
@@ -112,7 +112,6 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
       if (!isSpilled) {
         0L
       } else {
-        _elementsRead = 0
         val freeMemory = myMemoryThreshold - initialMemoryThreshold
         _memoryBytesSpilled += freeMemory
         releaseMemory()
@@ -132,7 +131,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    * Release our memory back to the execution pool so that other tasks can grab it.
    */
   def releaseMemory(): Unit = {
-    freeOnHeapMemory(myMemoryThreshold - initialMemoryThreshold)
+    freeMemory(myMemoryThreshold - initialMemoryThreshold)
     myMemoryThreshold = initialMemoryThreshold
   }
 

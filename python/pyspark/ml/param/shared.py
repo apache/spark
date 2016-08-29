@@ -34,8 +34,7 @@ class HasMaxIter(Params):
         """
         Sets the value of :py:attr:`maxIter`.
         """
-        self._set(maxIter=value)
-        return self
+        return self._set(maxIter=value)
 
     def getMaxIter(self):
         """
@@ -58,8 +57,7 @@ class HasRegParam(Params):
         """
         Sets the value of :py:attr:`regParam`.
         """
-        self._set(regParam=value)
-        return self
+        return self._set(regParam=value)
 
     def getRegParam(self):
         """
@@ -83,8 +81,7 @@ class HasFeaturesCol(Params):
         """
         Sets the value of :py:attr:`featuresCol`.
         """
-        self._set(featuresCol=value)
-        return self
+        return self._set(featuresCol=value)
 
     def getFeaturesCol(self):
         """
@@ -108,8 +105,7 @@ class HasLabelCol(Params):
         """
         Sets the value of :py:attr:`labelCol`.
         """
-        self._set(labelCol=value)
-        return self
+        return self._set(labelCol=value)
 
     def getLabelCol(self):
         """
@@ -133,8 +129,7 @@ class HasPredictionCol(Params):
         """
         Sets the value of :py:attr:`predictionCol`.
         """
-        self._set(predictionCol=value)
-        return self
+        return self._set(predictionCol=value)
 
     def getPredictionCol(self):
         """
@@ -158,8 +153,7 @@ class HasProbabilityCol(Params):
         """
         Sets the value of :py:attr:`probabilityCol`.
         """
-        self._set(probabilityCol=value)
-        return self
+        return self._set(probabilityCol=value)
 
     def getProbabilityCol(self):
         """
@@ -183,8 +177,7 @@ class HasRawPredictionCol(Params):
         """
         Sets the value of :py:attr:`rawPredictionCol`.
         """
-        self._set(rawPredictionCol=value)
-        return self
+        return self._set(rawPredictionCol=value)
 
     def getRawPredictionCol(self):
         """
@@ -207,8 +200,7 @@ class HasInputCol(Params):
         """
         Sets the value of :py:attr:`inputCol`.
         """
-        self._set(inputCol=value)
-        return self
+        return self._set(inputCol=value)
 
     def getInputCol(self):
         """
@@ -231,8 +223,7 @@ class HasInputCols(Params):
         """
         Sets the value of :py:attr:`inputCols`.
         """
-        self._set(inputCols=value)
-        return self
+        return self._set(inputCols=value)
 
     def getInputCols(self):
         """
@@ -256,8 +247,7 @@ class HasOutputCol(Params):
         """
         Sets the value of :py:attr:`outputCol`.
         """
-        self._set(outputCol=value)
-        return self
+        return self._set(outputCol=value)
 
     def getOutputCol(self):
         """
@@ -280,8 +270,7 @@ class HasNumFeatures(Params):
         """
         Sets the value of :py:attr:`numFeatures`.
         """
-        self._set(numFeatures=value)
-        return self
+        return self._set(numFeatures=value)
 
     def getNumFeatures(self):
         """
@@ -304,8 +293,7 @@ class HasCheckpointInterval(Params):
         """
         Sets the value of :py:attr:`checkpointInterval`.
         """
-        self._set(checkpointInterval=value)
-        return self
+        return self._set(checkpointInterval=value)
 
     def getCheckpointInterval(self):
         """
@@ -329,8 +317,7 @@ class HasSeed(Params):
         """
         Sets the value of :py:attr:`seed`.
         """
-        self._set(seed=value)
-        return self
+        return self._set(seed=value)
 
     def getSeed(self):
         """
@@ -341,10 +328,10 @@ class HasSeed(Params):
 
 class HasTol(Params):
     """
-    Mixin for param tol: the convergence tolerance for iterative algorithms.
+    Mixin for param tol: the convergence tolerance for iterative algorithms (>= 0).
     """
 
-    tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms.", typeConverter=TypeConverters.toFloat)
+    tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms (>= 0).", typeConverter=TypeConverters.toFloat)
 
     def __init__(self):
         super(HasTol, self).__init__()
@@ -353,8 +340,7 @@ class HasTol(Params):
         """
         Sets the value of :py:attr:`tol`.
         """
-        self._set(tol=value)
-        return self
+        return self._set(tol=value)
 
     def getTol(self):
         """
@@ -365,10 +351,10 @@ class HasTol(Params):
 
 class HasStepSize(Params):
     """
-    Mixin for param stepSize: Step size to be used for each iteration of optimization.
+    Mixin for param stepSize: Step size to be used for each iteration of optimization (>= 0).
     """
 
-    stepSize = Param(Params._dummy(), "stepSize", "Step size to be used for each iteration of optimization.", typeConverter=TypeConverters.toFloat)
+    stepSize = Param(Params._dummy(), "stepSize", "Step size to be used for each iteration of optimization (>= 0).", typeConverter=TypeConverters.toFloat)
 
     def __init__(self):
         super(HasStepSize, self).__init__()
@@ -377,8 +363,7 @@ class HasStepSize(Params):
         """
         Sets the value of :py:attr:`stepSize`.
         """
-        self._set(stepSize=value)
-        return self
+        return self._set(stepSize=value)
 
     def getStepSize(self):
         """
@@ -389,10 +374,10 @@ class HasStepSize(Params):
 
 class HasHandleInvalid(Params):
     """
-    Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
+    Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later.
     """
 
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", typeConverter=TypeConverters.toString)
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later.", typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(HasHandleInvalid, self).__init__()
@@ -401,8 +386,7 @@ class HasHandleInvalid(Params):
         """
         Sets the value of :py:attr:`handleInvalid`.
         """
-        self._set(handleInvalid=value)
-        return self
+        return self._set(handleInvalid=value)
 
     def getHandleInvalid(self):
         """
@@ -426,8 +410,7 @@ class HasElasticNetParam(Params):
         """
         Sets the value of :py:attr:`elasticNetParam`.
         """
-        self._set(elasticNetParam=value)
-        return self
+        return self._set(elasticNetParam=value)
 
     def getElasticNetParam(self):
         """
@@ -451,8 +434,7 @@ class HasFitIntercept(Params):
         """
         Sets the value of :py:attr:`fitIntercept`.
         """
-        self._set(fitIntercept=value)
-        return self
+        return self._set(fitIntercept=value)
 
     def getFitIntercept(self):
         """
@@ -476,8 +458,7 @@ class HasStandardization(Params):
         """
         Sets the value of :py:attr:`standardization`.
         """
-        self._set(standardization=value)
-        return self
+        return self._set(standardization=value)
 
     def getStandardization(self):
         """
@@ -500,8 +481,7 @@ class HasThresholds(Params):
         """
         Sets the value of :py:attr:`thresholds`.
         """
-        self._set(thresholds=value)
-        return self
+        return self._set(thresholds=value)
 
     def getThresholds(self):
         """
@@ -524,8 +504,7 @@ class HasWeightCol(Params):
         """
         Sets the value of :py:attr:`weightCol`.
         """
-        self._set(weightCol=value)
-        return self
+        return self._set(weightCol=value)
 
     def getWeightCol(self):
         """
@@ -549,8 +528,7 @@ class HasSolver(Params):
         """
         Sets the value of :py:attr:`solver`.
         """
-        self._set(solver=value)
-        return self
+        return self._set(solver=value)
 
     def getSolver(self):
         """
@@ -573,14 +551,37 @@ class HasVarianceCol(Params):
         """
         Sets the value of :py:attr:`varianceCol`.
         """
-        self._set(varianceCol=value)
-        return self
+        return self._set(varianceCol=value)
 
     def getVarianceCol(self):
         """
         Gets the value of varianceCol or its default value.
         """
         return self.getOrDefault(self.varianceCol)
+
+
+class HasAggregationDepth(Params):
+    """
+    Mixin for param aggregationDepth: suggested depth for treeAggregate (>= 2).
+    """
+
+    aggregationDepth = Param(Params._dummy(), "aggregationDepth", "suggested depth for treeAggregate (>= 2).", typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(HasAggregationDepth, self).__init__()
+        self._setDefault(aggregationDepth=2)
+
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
+
+    def getAggregationDepth(self):
+        """
+        Gets the value of aggregationDepth or its default value.
+        """
+        return self.getOrDefault(self.aggregationDepth)
 
 
 class DecisionTreeParams(Params):
@@ -603,8 +604,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`maxDepth`.
         """
-        self._set(maxDepth=value)
-        return self
+        return self._set(maxDepth=value)
 
     def getMaxDepth(self):
         """
@@ -616,8 +616,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`maxBins`.
         """
-        self._set(maxBins=value)
-        return self
+        return self._set(maxBins=value)
 
     def getMaxBins(self):
         """
@@ -629,8 +628,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`minInstancesPerNode`.
         """
-        self._set(minInstancesPerNode=value)
-        return self
+        return self._set(minInstancesPerNode=value)
 
     def getMinInstancesPerNode(self):
         """
@@ -642,8 +640,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`minInfoGain`.
         """
-        self._set(minInfoGain=value)
-        return self
+        return self._set(minInfoGain=value)
 
     def getMinInfoGain(self):
         """
@@ -655,8 +652,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`maxMemoryInMB`.
         """
-        self._set(maxMemoryInMB=value)
-        return self
+        return self._set(maxMemoryInMB=value)
 
     def getMaxMemoryInMB(self):
         """
@@ -668,8 +664,7 @@ class DecisionTreeParams(Params):
         """
         Sets the value of :py:attr:`cacheNodeIds`.
         """
-        self._set(cacheNodeIds=value)
-        return self
+        return self._set(cacheNodeIds=value)
 
     def getCacheNodeIds(self):
         """

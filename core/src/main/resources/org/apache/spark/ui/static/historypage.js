@@ -15,28 +15,6 @@
  * limitations under the License.
  */
 
-// this function works exactly the same as UIUtils.formatDuration
-function formatDuration(milliseconds) {
-  if (milliseconds < 100) {
-    return milliseconds + " ms";
-  }
-  var seconds = milliseconds * 1.0 / 1000;
-  if (seconds < 1) {
-    return seconds.toFixed(1) + " s";
-  }
-  if (seconds < 60) {
-    return seconds.toFixed(0) + " s";
-  }
-  var minutes = seconds / 60;
-  if (minutes < 10) {
-    return minutes.toFixed(1) + " min";
-  } else if (minutes < 60) {
-    return minutes.toFixed(0) + " min";
-  }
-  var hours = minutes / 60;
-  return hours.toFixed(1) + " h";
-}
-
 function makeIdNumeric(id) {
   var strs = id.split("_");
   if (strs.length < 3) {
@@ -54,7 +32,8 @@ function makeIdNumeric(id) {
 }
 
 function formatDate(date) {
-  return date.split(".")[0].replace("T", " ");
+  if (date <= 0) return "-";
+  else return date.split(".")[0].replace("T", " ");
 }
 
 function getParameterByName(name, searchString) {

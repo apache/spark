@@ -20,7 +20,6 @@ package org.apache.spark.ml.linalg
 import scala.util.Random
 
 import breeze.linalg.{squaredDistance => breezeSquaredDistance, DenseMatrix => BDM}
-import org.json4s.jackson.JsonMethods.{parse => parseJson}
 
 import org.apache.spark.ml.SparkMLFunSuite
 import org.apache.spark.ml.util.TestingUtils._
@@ -70,6 +69,12 @@ class VectorsSuite extends SparkMLFunSuite {
   test("sparse vector construction with too many indices vs size") {
     intercept[IllegalArgumentException] {
       Vectors.sparse(3, Array(1, 2, 3, 4), Array(3.0, 5.0, 7.0, 9.0))
+    }
+  }
+
+  test("sparse vector construction with negative indices") {
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(3, Array(-1, 1), Array(3.0, 5.0))
     }
   }
 
@@ -231,7 +236,7 @@ class VectorsSuite extends SparkMLFunSuite {
       val denseVector1 = Vectors.dense(sparseVector1.toArray)
       val denseVector2 = Vectors.dense(sparseVector2.toArray)
 
-      val squaredDist = breezeSquaredDistance(sparseVector1.toBreeze, sparseVector2.toBreeze)
+      val squaredDist = breezeSquaredDistance(sparseVector1.asBreeze, sparseVector2.asBreeze)
 
       // SparseVector vs. SparseVector
       assert(Vectors.sqdist(sparseVector1, sparseVector2) ~== squaredDist relTol 1E-8)
@@ -338,21 +343,5 @@ class VectorsSuite extends SparkMLFunSuite {
     assert(v.slice(Array(0, 2)) === new SparseVector(2, Array(1), Array(2.2)))
     assert(v.slice(Array(2, 0)) === new SparseVector(2, Array(0), Array(2.2)))
     assert(v.slice(Array(2, 0, 3, 4)) === new SparseVector(4, Array(0, 3), Array(2.2, 4.4)))
-  }
-
-  test("toJson/fromJson") {
-    val sv0 = Vectors.sparse(0, Array.empty, Array.empty)
-    val sv1 = Vectors.sparse(1, Array.empty, Array.empty)
-    val sv2 = Vectors.sparse(2, Array(1), Array(2.0))
-    val dv0 = Vectors.dense(Array.empty[Double])
-    val dv1 = Vectors.dense(1.0)
-    val dv2 = Vectors.dense(0.0, 2.0)
-    for (v <- Seq(sv0, sv1, sv2, dv0, dv1, dv2)) {
-      val json = v.toJson
-      parseJson(json) // `json` should be a valid JSON string
-      val u = Vectors.fromJson(json)
-      assert(u.getClass === v.getClass, "toJson/fromJson should preserve vector types.")
-      assert(u === v, "toJson/fromJson should preserve vector values.")
-    }
   }
 }

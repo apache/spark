@@ -113,9 +113,9 @@ case class KeyRemoved(key: UnsafeRow) extends StoreUpdate
  * the store is the active instance. Accordingly, it either keeps it loaded and performs
  * maintenance, or unloads the store.
  */
-private[state] object StateStore extends Logging {
+object StateStore extends Logging {
 
-  val MAINTENANCE_INTERVAL_CONFIG = "spark.streaming.stateStore.maintenanceInterval"
+  val MAINTENANCE_INTERVAL_CONFIG = "spark.sql.streaming.stateStore.maintenanceInterval"
   val MAINTENANCE_INTERVAL_DEFAULT_SECS = 60
 
   private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()
@@ -155,6 +155,10 @@ private[state] object StateStore extends Logging {
     loadedProviders.contains(storeId)
   }
 
+  def isMaintenanceRunning: Boolean = loadedProviders.synchronized {
+    maintenanceTask != null
+  }
+
   /** Unload and stop all state store providers */
   def stop(): Unit = loadedProviders.synchronized {
     loadedProviders.clear()
@@ -187,44 +191,44 @@ private[state] object StateStore extends Logging {
    */
   private def doMaintenance(): Unit = {
     logDebug("Doing maintenance")
-    loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
-      try {
-        if (verifyIfStoreInstanceActive(id)) {
-          provider.doMaintenance()
-        } else {
-          unload(id)
-          logInfo(s"Unloaded $provider")
+    if (SparkEnv.get == null) {
+      stop()
+    } else {
+      loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
+        try {
+          if (verifyIfStoreInstanceActive(id)) {
+            provider.doMaintenance()
+          } else {
+            unload(id)
+            logInfo(s"Unloaded $provider")
+          }
+        } catch {
+          case NonFatal(e) =>
+            logWarning(s"Error managing $provider, stopping management thread")
+            stop()
         }
-      } catch {
-        case NonFatal(e) =>
-          logWarning(s"Error managing $provider")
       }
     }
   }
 
   private def reportActiveStoreInstance(storeId: StateStoreId): Unit = {
-    try {
+    if (SparkEnv.get != null) {
       val host = SparkEnv.get.blockManager.blockManagerId.host
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
       coordinatorRef.foreach(_.reportActiveInstance(storeId, host, executorId))
       logDebug(s"Reported that the loaded instance $storeId is active")
-    } catch {
-      case NonFatal(e) =>
-        logWarning(s"Error reporting active instance of $storeId")
     }
   }
 
   private def verifyIfStoreInstanceActive(storeId: StateStoreId): Boolean = {
-    try {
+    if (SparkEnv.get != null) {
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
       val verified =
         coordinatorRef.map(_.verifyIfInstanceActive(storeId, executorId)).getOrElse(false)
-      logDebug(s"Verified whether the loaded instance $storeId is active: $verified" )
+      logDebug(s"Verified whether the loaded instance $storeId is active: $verified")
       verified
-    } catch {
-      case NonFatal(e) =>
-        logWarning(s"Error verifying active instance of $storeId")
-        false
+    } else {
+      false
     }
   }
 

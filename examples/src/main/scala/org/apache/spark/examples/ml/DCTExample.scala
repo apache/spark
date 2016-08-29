@@ -18,18 +18,18 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.DCT
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object DCTExample {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("DCTExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("DCTExample")
+      .getOrCreate()
 
     // $example on$
     val data = Seq(
@@ -37,7 +37,7 @@ object DCTExample {
       Vectors.dense(-1.0, 2.0, 4.0, -7.0),
       Vectors.dense(14.0, -2.0, -5.0, 1.0))
 
-    val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+    val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("features")
 
     val dct = new DCT()
       .setInputCol("features")
@@ -45,9 +45,10 @@ object DCTExample {
       .setInverse(false)
 
     val dctDf = dct.transform(df)
-    dctDf.select("featuresDCT").show(3)
+    dctDf.select("featuresDCT").show(false)
     // $example off$
-    sc.stop()
+
+    spark.stop()
   }
 }
 // scalastyle:on println

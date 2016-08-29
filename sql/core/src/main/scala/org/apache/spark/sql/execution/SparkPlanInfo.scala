@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.execution.exchange.ReusedExchange
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
 import org.apache.spark.util.Utils
 
@@ -47,16 +47,15 @@ class SparkPlanInfo(
   }
 }
 
-private[sql] object SparkPlanInfo {
+private[execution] object SparkPlanInfo {
 
   def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
     val children = plan match {
-      case ReusedExchange(_, child) => child :: Nil
+      case ReusedExchangeExec(_, child) => child :: Nil
       case _ => plan.children ++ plan.subqueries
     }
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
-      new SQLMetricInfo(metric.name.getOrElse(key), metric.id,
-        Utils.getFormattedClassName(metric.param))
+      new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
     }
 
     new SparkPlanInfo(plan.nodeName, plan.simpleString, children.map(fromSparkPlan),

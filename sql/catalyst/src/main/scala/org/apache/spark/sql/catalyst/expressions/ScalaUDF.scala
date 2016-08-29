@@ -23,6 +23,7 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * User-defined function.
+ * Note that the user-defined functions must be deterministic.
  * @param function  The user defined scala function to run.
  *                  Note that if you use primitive parameters, you are not able to check if it is
  *                  null or not, and the UDF will return null for you if the primitive input is

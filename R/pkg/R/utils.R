@@ -110,9 +110,12 @@ isRDD <- function(name, env) {
 #' @return the hash code as an integer
 #' @export
 #' @examples
+#'\dontrun{
 #' hashCode(1L) # 1
 #' hashCode(1.0) # 1072693248
 #' hashCode("1") # 49
+#'}
+#' @note hashCode since 1.4.0
 hashCode <- function(key) {
   if (class(key) == "integer") {
     as.integer(key[[1]])
@@ -123,20 +126,16 @@ hashCode <- function(key) {
     as.integer(bitwXor(intBits[2], intBits[1]))
   } else if (class(key) == "character") {
     # TODO: SPARK-7839 means we might not have the native library available
-    if (is.loaded("stringHashCode")) {
-      .Call("stringHashCode", key)
+    n <- nchar(key)
+    if (n == 0) {
+      0L
     } else {
-      n <- nchar(key)
-      if (n == 0) {
-        0L
-      } else {
-        asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
-        hashC <- 0
-        for (k in 1:length(asciiVals)) {
-          hashC <- mult31AndAdd(hashC, asciiVals[k])
-        }
-        as.integer(hashC)
+      asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
+      hashC <- 0
+      for (k in 1:length(asciiVals)) {
+        hashC <- mult31AndAdd(hashC, asciiVals[k])
       }
+      as.integer(hashC)
     }
   } else {
     warning(paste("Could not hash object, returning 0", sep = ""))
@@ -157,8 +156,11 @@ wrapInt <- function(value) {
 
 # Multiply `val` by 31 and add `addVal` to the result. Ensures that
 # integer-overflows are handled at every step.
+#
+# TODO: this function does not handle integer overflow well
 mult31AndAdd <- function(val, addVal) {
   vec <- c(bitwShiftL(val, c(4, 3, 2, 1, 0)), addVal)
+  vec[is.na(vec)] <- 0
   Reduce(function(a, b) {
           wrapInt(as.numeric(a) + as.numeric(b))
          },
@@ -309,6 +311,15 @@ convertEnvsToList <- function(keys, vals) {
   lapply(ls(keys),
          function(name) {
            list(keys[[name]], vals[[name]])
+         })
+}
+
+# Utility function to merge 2 environments with the second overriding values in the first
+# env1 is changed in place
+overrideEnvs <- function(env1, env2) {
+  lapply(ls(env2),
+         function(name) {
+           env1[[name]] <- env2[[name]]
          })
 }
 
@@ -486,7 +497,7 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
 #   checkedFunc An environment of function objects examined during cleanClosure. It can be
 #               considered as a "name"-to-"list of functions" mapping.
 # return value
-#   a new version of func that has an correct environment (closure).
+#   a new version of func that has a correct environment (closure).
 cleanClosure <- function(func, checkedFuncs = new.env()) {
   if (is.function(func)) {
     newEnv <- new.env(parent = .GlobalEnv)
@@ -626,13 +637,13 @@ convertNamedListToEnv <- function(namedList) {
 
 # Assign a new environment for attach() and with() methods
 assignNewEnv <- function(data) {
-  stopifnot(class(data) == "DataFrame")
+  stopifnot(class(data) == "SparkDataFrame")
   cols <- columns(data)
   stopifnot(length(cols) > 0)
 
   env <- new.env()
   for (i in 1:length(cols)) {
-    assign(x = cols[i], value = data[, cols[i]], envir = env)
+    assign(x = cols[i], value = data[, cols[i], drop = F], envir = env)
   }
   env
 }
@@ -660,4 +671,29 @@ varargsToJProperties <- function(...) {
     })
   }
   props
+}
+
+launchScript <- function(script, combinedArgs, capture = FALSE) {
+  if (.Platform$OS.type == "windows") {
+    scriptWithArgs <- paste(script, combinedArgs, sep = " ")
+    shell(scriptWithArgs, translate = TRUE, wait = capture, intern = capture) # nolint
+  } else {
+    system2(script, combinedArgs, wait = capture, stdout = capture)
+  }
+}
+
+getSparkContext <- function() {
+  if (!exists(".sparkRjsc", envir = .sparkREnv)) {
+    stop("SparkR has not been initialized. Please call sparkR.session()")
+  }
+  sc <- get(".sparkRjsc", envir = .sparkREnv)
+  sc
+}
+
+isMasterLocal <- function(master) {
+  grepl("^local(\\[([0-9]+|\\*)\\])?$", master, perl = TRUE)
+}
+
+isSparkRShell <- function() {
+  grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
 }

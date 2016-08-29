@@ -19,200 +19,111 @@ package org.apache.spark.sql.execution.metric
 
 import java.text.NumberFormat
 
-import org.apache.spark.{Accumulable, AccumulableParam, Accumulators, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 
-/**
- * Create a layer for specialized metric. We cannot add `@specialized` to
- * `Accumulable/AccumulableParam` because it will break Java source compatibility.
- *
- * An implementation of SQLMetric should override `+=` and `add` to avoid boxing.
- */
-private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
-    name: String,
-    val param: SQLMetricParam[R, T]) extends Accumulable[R, T](param.zero, param, Some(name)) {
+
+class SQLMetric(val metricType: String, initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
+  // This is a workaround for SPARK-11013.
+  // We may use -1 as initial value of the accumulator, if the accumulator is valid, we will
+  // update it at the end of task and the value will be at least 0. Then we can filter out the -1
+  // values before calculate max, min, etc.
+  private[this] var _value = initValue
+  private var _zeroValue = initValue
+
+  override def copy(): SQLMetric = {
+    val newAcc = new SQLMetric(metricType, _value)
+    newAcc._zeroValue = initValue
+    newAcc
+  }
+
+  override def reset(): Unit = _value = _zeroValue
+
+  override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
+    case o: SQLMetric => _value += o.value
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+  }
+
+  override def isZero(): Boolean = _value == _zeroValue
+
+  override def add(v: Long): Unit = _value += v
+
+  def +=(v: Long): Unit = _value += v
+
+  override def value: Long = _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    new AccumulableInfo(id, Some(name), update, value, true, countFailedValues,
-      Some(SQLMetrics.ACCUM_IDENTIFIER))
-  }
-
-  def reset(): Unit = {
-    this.value = param.zero
+    new AccumulableInfo(
+      id, name, update, value, true, true, Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
   }
 }
 
-/**
- * Create a layer for specialized metric. We cannot add `@specialized` to
- * `Accumulable/AccumulableParam` because it will break Java source compatibility.
- */
-private[sql] trait SQLMetricParam[R <: SQLMetricValue[T], T] extends AccumulableParam[R, T] {
 
-  /**
-   * A function that defines how we aggregate the final accumulator results among all tasks,
-   * and represent it in string for a SQL physical operator.
-   */
-  val stringValue: Seq[T] => String
+object SQLMetrics {
+  private val SUM_METRIC = "sum"
+  private val SIZE_METRIC = "size"
+  private val TIMING_METRIC = "timing"
 
-  def zero: R
-}
-
-/**
- * Create a layer for specialized metric. We cannot add `@specialized` to
- * `Accumulable/AccumulableParam` because it will break Java source compatibility.
- */
-private[sql] trait SQLMetricValue[T] extends Serializable {
-
-  def value: T
-
-  override def toString: String = value.toString
-}
-
-/**
- * A wrapper of Long to avoid boxing and unboxing when using Accumulator
- */
-private[sql] class LongSQLMetricValue(private var _value : Long) extends SQLMetricValue[Long] {
-
-  def add(incr: Long): LongSQLMetricValue = {
-    _value += incr
-    this
-  }
-
-  // Although there is a boxing here, it's fine because it's only called in SQLListener
-  override def value: Long = _value
-
-  // Needed for SQLListenerSuite
-  override def equals(other: Any): Boolean = other match {
-    case o: LongSQLMetricValue => value == o.value
-    case _ => false
-  }
-
-  override def hashCode(): Int = _value.hashCode()
-}
-
-/**
- * A specialized long Accumulable to avoid boxing and unboxing when using Accumulator's
- * `+=` and `add`.
- */
-private[sql] class LongSQLMetric private[metric](name: String, param: LongSQLMetricParam)
-  extends SQLMetric[LongSQLMetricValue, Long](name, param) {
-
-  override def +=(term: Long): Unit = {
-    localValue.add(term)
-  }
-
-  override def add(term: Long): Unit = {
-    localValue.add(term)
-  }
-}
-
-private class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialValue: Long)
-  extends SQLMetricParam[LongSQLMetricValue, Long] {
-
-  override def addAccumulator(r: LongSQLMetricValue, t: Long): LongSQLMetricValue = r.add(t)
-
-  override def addInPlace(r1: LongSQLMetricValue, r2: LongSQLMetricValue): LongSQLMetricValue =
-    r1.add(r2.value)
-
-  override def zero(initialValue: LongSQLMetricValue): LongSQLMetricValue = zero
-
-  override def zero: LongSQLMetricValue = new LongSQLMetricValue(initialValue)
-}
-
-private object LongSQLMetricParam
-  extends LongSQLMetricParam(x => NumberFormat.getInstance().format(x.sum), 0L)
-
-private object StatisticsBytesSQLMetricParam extends LongSQLMetricParam(
-  (values: Seq[Long]) => {
-    // This is a workaround for SPARK-11013.
-    // We use -1 as initial value of the accumulator, if the accumulator is valid, we will update
-    // it at the end of task and the value will be at least 0.
-    val validValues = values.filter(_ >= 0)
-    val Seq(sum, min, med, max) = {
-      val metric = if (validValues.length == 0) {
-        Seq.fill(4)(0L)
-      } else {
-        val sorted = validValues.sorted
-        Seq(sorted.sum, sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
-      }
-      metric.map(Utils.bytesToString)
-    }
-    s"\n$sum ($min, $med, $max)"
-  }, -1L)
-
-private object StatisticsTimingSQLMetricParam extends LongSQLMetricParam(
-  (values: Seq[Long]) => {
-    // This is a workaround for SPARK-11013.
-    // We use -1 as initial value of the accumulator, if the accumulator is valid, we will update
-    // it at the end of task and the value will be at least 0.
-    val validValues = values.filter(_ >= 0)
-    val Seq(sum, min, med, max) = {
-      val metric = if (validValues.length == 0) {
-        Seq.fill(4)(0L)
-      } else {
-        val sorted = validValues.sorted
-        Seq(sorted.sum, sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
-      }
-      metric.map(Utils.msDurationToString)
-    }
-    s"\n$sum ($min, $med, $max)"
-  }, -1L)
-
-private[sql] object SQLMetrics {
-
-  // Identifier for distinguishing SQL metrics from other accumulators
-  private[sql] val ACCUM_IDENTIFIER = "sql"
-
-  private def createLongMetric(
-      sc: SparkContext,
-      name: String,
-      param: LongSQLMetricParam): LongSQLMetric = {
-    val acc = new LongSQLMetric(name, param)
-    // This is an internal accumulator so we need to register it explicitly.
-    Accumulators.register(acc)
-    sc.cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+  def createMetric(sc: SparkContext, name: String): SQLMetric = {
+    val acc = new SQLMetric(SUM_METRIC)
+    acc.register(sc, name = Some(name), countFailedValues = false)
     acc
-  }
-
-  def createLongMetric(sc: SparkContext, name: String): LongSQLMetric = {
-    createLongMetric(sc, name, LongSQLMetricParam)
   }
 
   /**
    * Create a metric to report the size information (including total, min, med, max) like data size,
    * spill size, etc.
    */
-  def createSizeMetric(sc: SparkContext, name: String): LongSQLMetric = {
+  def createSizeMetric(sc: SparkContext, name: String): SQLMetric = {
     // The final result of this metric in physical operator UI may looks like:
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
-    createLongMetric(sc, s"$name total (min, med, max)", StatisticsBytesSQLMetricParam)
+    val acc = new SQLMetric(SIZE_METRIC, -1)
+    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    acc
   }
 
-  def createTimingMetric(sc: SparkContext, name: String): LongSQLMetric = {
+  def createTimingMetric(sc: SparkContext, name: String): SQLMetric = {
     // The final result of this metric in physical operator UI may looks like:
     // duration(min, med, max):
     // 5s (800ms, 1s, 2s)
-    createLongMetric(sc, s"$name total (min, med, max)", StatisticsTimingSQLMetricParam)
-  }
-
-  def getMetricParam(metricParamName: String): SQLMetricParam[SQLMetricValue[Any], Any] = {
-    val longSQLMetricParam = Utils.getFormattedClassName(LongSQLMetricParam)
-    val bytesSQLMetricParam = Utils.getFormattedClassName(StatisticsBytesSQLMetricParam)
-    val timingsSQLMetricParam = Utils.getFormattedClassName(StatisticsTimingSQLMetricParam)
-    val metricParam = metricParamName match {
-      case `longSQLMetricParam` => LongSQLMetricParam
-      case `bytesSQLMetricParam` => StatisticsBytesSQLMetricParam
-      case `timingsSQLMetricParam` => StatisticsTimingSQLMetricParam
-    }
-    metricParam.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]]
+    val acc = new SQLMetric(TIMING_METRIC, -1)
+    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    acc
   }
 
   /**
-   * A metric that its value will be ignored. Use this one when we need a metric parameter but don't
-   * care about the value.
+   * A function that defines how we aggregate the final accumulator results among all tasks,
+   * and represent it in string for a SQL physical operator.
    */
-  val nullLongMetric = new LongSQLMetric("null", LongSQLMetricParam)
+  def stringValue(metricsType: String, values: Seq[Long]): String = {
+    if (metricsType == SUM_METRIC) {
+      val numberFormat = NumberFormat.getInstance()
+      numberFormat.setGroupingUsed(false)
+      numberFormat.format(values.sum)
+    } else {
+      val strFormat: Long => String = if (metricsType == SIZE_METRIC) {
+        Utils.bytesToString
+      } else if (metricsType == TIMING_METRIC) {
+        Utils.msDurationToString
+      } else {
+        throw new IllegalStateException("unexpected metrics type: " + metricsType)
+      }
+
+      val validValues = values.filter(_ >= 0)
+      val Seq(sum, min, med, max) = {
+        val metric = if (validValues.isEmpty) {
+          Seq.fill(4)(0L)
+        } else {
+          val sorted = validValues.sorted
+          Seq(sorted.sum, sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
+        }
+        metric.map(strFormat)
+      }
+      s"\n$sum ($min, $med, $max)"
+    }
+  }
 }

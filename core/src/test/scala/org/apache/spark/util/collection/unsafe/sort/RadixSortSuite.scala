@@ -26,7 +26,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
-import org.apache.spark.util.Benchmark
 import org.apache.spark.util.collection.Sorter
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -94,7 +93,8 @@ class RadixSortSuite extends SparkFunSuite with Logging {
   }
 
   private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int, refCmp: PrefixComparator) {
-    new Sorter(UnsafeSortDataFormat.INSTANCE).sort(
+    val sortBuffer = new LongArray(MemoryBlock.fromLongArray(new Array[Long](buf.size().toInt)))
+    new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(
       buf, lo, hi, new Comparator[RecordPointerAndKeyPrefix] {
         override def compare(
             r1: RecordPointerAndKeyPrefix,
@@ -152,7 +152,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
       val (buf1, buf2) = generateKeyPrefixTestData(N, rand.nextLong & 0xff)
       referenceKeyPrefixSort(buf1, 0, N, sortType.referenceComparator)
       val outOffset = RadixSort.sortKeyPrefixArray(
-        buf2, N, sortType.startByteIdx, sortType.endByteIdx,
+        buf2, 0, N, sortType.startByteIdx, sortType.endByteIdx,
         sortType.descending, sortType.signed)
       val res1 = collectToArray(buf1, 0, N * 2)
       val res2 = collectToArray(buf2, outOffset, N * 2)
@@ -177,88 +177,11 @@ class RadixSortSuite extends SparkFunSuite with Logging {
       val (buf1, buf2) = generateKeyPrefixTestData(N, rand.nextLong & mask)
       referenceKeyPrefixSort(buf1, 0, N, sortType.referenceComparator)
       val outOffset = RadixSort.sortKeyPrefixArray(
-        buf2, N, sortType.startByteIdx, sortType.endByteIdx,
+        buf2, 0, N, sortType.startByteIdx, sortType.endByteIdx,
         sortType.descending, sortType.signed)
       val res1 = collectToArray(buf1, 0, N * 2)
       val res2 = collectToArray(buf2, outOffset, N * 2)
       assert(res1.view == res2.view)
     }
-  }
-
-  ignore("microbenchmarks") {
-    val size = 25000000
-    val rand = new XORShiftRandom(123)
-    val benchmark = new Benchmark("radix sort " + size, size)
-    benchmark.addTimerCase("reference TimSort key prefix array") { timer =>
-      val array = Array.tabulate[Long](size * 2) { i => rand.nextLong }
-      val buf = new LongArray(MemoryBlock.fromLongArray(array))
-      timer.startTiming()
-      referenceKeyPrefixSort(buf, 0, size, PrefixComparators.BINARY)
-      timer.stopTiming()
-    }
-    benchmark.addTimerCase("reference Arrays.sort") { timer =>
-      val ref = Array.tabulate[Long](size) { i => rand.nextLong }
-      timer.startTiming()
-      Arrays.sort(ref)
-      timer.stopTiming()
-    }
-    benchmark.addTimerCase("radix sort one byte") { timer =>
-      val array = new Array[Long](size * 2)
-      var i = 0
-      while (i < size) {
-        array(i) = rand.nextLong & 0xff
-        i += 1
-      }
-      val buf = new LongArray(MemoryBlock.fromLongArray(array))
-      timer.startTiming()
-      RadixSort.sort(buf, size, 0, 7, false, false)
-      timer.stopTiming()
-    }
-    benchmark.addTimerCase("radix sort two bytes") { timer =>
-      val array = new Array[Long](size * 2)
-      var i = 0
-      while (i < size) {
-        array(i) = rand.nextLong & 0xffff
-        i += 1
-      }
-      val buf = new LongArray(MemoryBlock.fromLongArray(array))
-      timer.startTiming()
-      RadixSort.sort(buf, size, 0, 7, false, false)
-      timer.stopTiming()
-    }
-    benchmark.addTimerCase("radix sort eight bytes") { timer =>
-      val array = new Array[Long](size * 2)
-      var i = 0
-      while (i < size) {
-        array(i) = rand.nextLong
-        i += 1
-      }
-      val buf = new LongArray(MemoryBlock.fromLongArray(array))
-      timer.startTiming()
-      RadixSort.sort(buf, size, 0, 7, false, false)
-      timer.stopTiming()
-    }
-    benchmark.addTimerCase("radix sort key prefix array") { timer =>
-      val (_, buf2) = generateKeyPrefixTestData(size, rand.nextLong)
-      timer.startTiming()
-      RadixSort.sortKeyPrefixArray(buf2, size, 0, 7, false, false)
-      timer.stopTiming()
-    }
-    benchmark.run
-
-    /**
-      Running benchmark: radix sort 25000000
-      Java HotSpot(TM) 64-Bit Server VM 1.8.0_66-b17 on Linux 3.13.0-44-generic
-      Intel(R) Core(TM) i7-4600U CPU @ 2.10GHz
-
-      radix sort 25000000:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      -------------------------------------------------------------------------------------------
-      reference TimSort key prefix array     15546 / 15859          1.6         621.9       1.0X
-      reference Arrays.sort                    2416 / 2446         10.3          96.6       6.4X
-      radix sort one byte                       133 /  137        188.4           5.3     117.2X
-      radix sort two bytes                      255 /  258         98.2          10.2      61.1X
-      radix sort eight bytes                    991 /  997         25.2          39.6      15.7X
-      radix sort key prefix array              1540 / 1563         16.2          61.6      10.1X
-    */
   }
 }
