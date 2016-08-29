@@ -136,6 +136,7 @@ package object config {
 
   private[spark] val IO_CRYPTO_CIPHER_TRANSFORMATION =
     ConfigBuilder("spark.io.crypto.cipher.transformation")
+      .internal()
       .stringConf
       .createWithDefaultString("AES/CTR/NoPadding")
 }
