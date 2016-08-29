@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.AbstractIterator
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -77,7 +79,9 @@ case class UserDefinedGenerator(
   private def initializeConverters(): Unit = {
     inputRow = new InterpretedProjection(children)
     convertToScala = {
-      val inputSchema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
+      val inputSchema = StructType(children.map { e =>
+        StructField(e.simpleString, e.dataType, nullable = true)
+      })
       CatalystTypeConverters.createToScalaConverter(inputSchema)
     }.asInstanceOf[InternalRow => Row]
   }
@@ -104,8 +108,7 @@ case class UserDefinedGenerator(
 @ExpressionDescription(
   usage = "_FUNC_(n, v1, ..., vk) - Separate v1, ..., vk into n rows.",
   extended = "> SELECT _FUNC_(2, 1, 2, 3);\n  [1,2]\n  [3,null]")
-case class Stack(children: Seq[Expression])
-    extends Expression with Generator with CodegenFallback {
+case class Stack(children: Seq[Expression]) extends Expression with Generator {
 
   private lazy val numRows = children.head.eval().asInstanceOf[Int]
   private lazy val numFields = Math.ceil((children.length - 1.0) / numRows).toInt
@@ -144,23 +147,64 @@ case class Stack(children: Seq[Expression])
       InternalRow(fields: _*)
     }
   }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val values = children.tail
+    val iteratorClass = classOf[AbstractIterator[_]].getName
+    val rowClass = classOf[GenericInternalRow].getName
+    def genRowUpdate(row: Int): String = {
+      val columnUpdates = (0 until numFields).map { col =>
+        val index = row * numFields + col
+        if (index < values.length) {
+          val e = values(index)
+          val eval = values(index).genCode(ctx)
+          val update = s"data[$col] = ${eval.value};"
+          if (e.nullable) {
+            s"if (${eval.isNull}) data[$col] = null; else $update"
+          } else {
+            update
+          }
+        } else {
+          s"data[$col] = null;"
+        }
+      }
+      s"case $row:\n${columnUpdates.mkString("\n")}\nbreak;"
+    }
+    ev.copy(code =
+      s"""
+        |$iteratorClass<InternalRow> ${ev.value} = new $iteratorClass<$rowClass>() {
+        |  private int n = 0;
+        |  private Object[] data = new Object[$numFields];
+        |  private $rowClass row = new $rowClass(data);
+        |  public boolean hasNext() {
+        |    return n < $numRows;
+        |  }
+        |  public $rowClass next() {
+        |    switch (n) {
+        |      ${(0 until numRows).map(genRowUpdate).mkString("\n")}
+        |    }
+        |    n++;
+        |    return row;
+        |  }
+        |};
+      """.stripMargin)
+  }
 }
 
 /**
- * A base class for Explode and PosExplode
+ * A base class for [[Inline]], [[Explode]] and [[PosExplode]].
  */
-abstract class ExplodeBase(child: Expression, position: Boolean)
-  extends UnaryExpression with Generator with CodegenFallback with Serializable {
+abstract class ExplodeBase extends UnaryExpression with Generator with Serializable {
+  val position: Boolean
 
   override def children: Seq[Expression] = child :: Nil
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType]) {
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case _: ArrayType | _: MapType =>
       TypeCheckResult.TypeCheckSuccess
-    } else {
+    case _ =>
       TypeCheckResult.TypeCheckFailure(
         s"input to function explode should be array or map type, not ${child.dataType}")
-    }
   }
 
   // hive-compatible default alias for explode function ("col" for array, "key", "value" for map)
@@ -168,7 +212,7 @@ abstract class ExplodeBase(child: Expression, position: Boolean)
     case ArrayType(et, containsNull) =>
       if (position) {
         new StructType()
-          .add("pos", IntegerType, false)
+          .add("pos", IntegerType, nullable = false)
           .add("col", et, containsNull)
       } else {
         new StructType()
@@ -177,12 +221,12 @@ abstract class ExplodeBase(child: Expression, position: Boolean)
     case MapType(kt, vt, valueContainsNull) =>
       if (position) {
         new StructType()
-          .add("pos", IntegerType, false)
-          .add("key", kt, false)
+          .add("pos", IntegerType, nullable = false)
+          .add("key", kt, nullable = false)
           .add("value", vt, valueContainsNull)
       } else {
         new StructType()
-          .add("key", kt, false)
+          .add("key", kt, nullable = false)
           .add("value", vt, valueContainsNull)
       }
   }
@@ -235,7 +279,9 @@ abstract class ExplodeBase(child: Expression, position: Boolean)
   usage = "_FUNC_(a) - Separates the elements of array a into multiple rows, or the elements of map a into multiple rows and columns.",
   extended = "> SELECT _FUNC_(array(10,20));\n  10\n  20")
 // scalastyle:on line.size.limit
-case class Explode(child: Expression) extends ExplodeBase(child, position = false)
+case class Explode(child: Expression) extends ExplodeBase {
+  override val position: Boolean = false
+}
 
 /**
  * Given an input array produces a sequence of rows for each position and value in the array.
@@ -251,7 +297,9 @@ case class Explode(child: Expression) extends ExplodeBase(child, position = fals
   usage = "_FUNC_(a) - Separates the elements of array a into multiple rows with positions, or the elements of a map into multiple rows and columns with positions.",
   extended = "> SELECT _FUNC_(array(10,20));\n  0\t10\n  1\t20")
 // scalastyle:on line.size.limit
-case class PosExplode(child: Expression) extends ExplodeBase(child, position = true)
+case class PosExplode(child: Expression) extends ExplodeBase {
+  override val position = true
+}
 
 /**
  * Explodes an array of structs into a table.
@@ -259,12 +307,11 @@ case class PosExplode(child: Expression) extends ExplodeBase(child, position = t
 @ExpressionDescription(
   usage = "_FUNC_(a) - Explodes an array of structs into a table.",
   extended = "> SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));\n  [1,a]\n  [2,b]")
-case class Inline(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
-
-  override def children: Seq[Expression] = child :: Nil
+case class Inline(child: Expression) extends ExplodeBase {
+  override val position: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case ArrayType(et, _) if et.isInstanceOf[StructType] =>
+    case ArrayType(st: StructType, _) =>
       TypeCheckResult.TypeCheckSuccess
     case _ =>
       TypeCheckResult.TypeCheckFailure(
@@ -272,7 +319,7 @@ case class Inline(child: Expression) extends UnaryExpression with Generator with
   }
 
   override def elementSchema: StructType = child.dataType match {
-    case ArrayType(et : StructType, _) => et
+    case ArrayType(st: StructType, _) => st
   }
 
   private lazy val numFields = elementSchema.fields.length

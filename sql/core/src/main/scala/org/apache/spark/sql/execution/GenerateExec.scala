@@ -127,17 +127,17 @@ case class GenerateExec(
     val data = boundGenerator.genCode(ctx)
 
     boundGenerator match {
-      case e: Explode => codeGenExplode(ctx, e.child, values, data, row)
+      case e: ExplodeBase => codeGenExplode(ctx, e, values, data, row)
       case g => codeGenTraversableOnce(ctx, g, values, data, row)
     }
   }
 
   /**
-   * Generate code for [[Explode]].
+   * Generate code for [[ExplodeBase]] expressions.
    */
   private def codeGenExplode(
       ctx: CodegenContext,
-      e: Expression,
+      e: ExplodeBase,
       input: Seq[ExprCode],
       data: ExprCode,
       row: ExprCode): String = {
@@ -148,10 +148,32 @@ case class GenerateExec(
     // Add a check if the generate outer flag is true.
     val checks = optionalCode(outer, data.isNull)
 
+    // Add position
+    val position = if (e.position) {
+      Seq(ExprCode("", "false", index))
+    } else {
+      Seq.empty
+    }
+
     // Generate code for either ArrayData or MapData
-    val (initMapData, values) = e.dataType match {
+    val (initMapData, updateRowData, values) = e.child.dataType match {
+      case ArrayType(struct: StructType, nullable) if e.isInstanceOf[Inline] =>
+        val row = codeGenAccessor(ctx, data.value, "col", index, struct, nullable, checks)
+        val extendedChecks = checks ++ optionalCode(nullable, row.isNull)
+        val columns = struct.fields.toSeq.zipWithIndex.map { case (field, fieldIndex) =>
+          codeGenAccessor(
+            ctx,
+            row.value,
+            field.name,
+            fieldIndex.toString,
+            field.dataType,
+            field.nullable,
+            extendedChecks)
+        }
+        ("", row.code, columns)
+
       case ArrayType(dataType, nullable) =>
-        ("", Seq(codeGenAccessor(ctx, data.value, "col", index, dataType, nullable, checks)))
+        ("", "", Seq(codeGenAccessor(ctx, data.value, "col", index, dataType, nullable, checks)))
 
       case MapType(keyType, valueType, valueContainsNull) =>
         // Materialize the key and the value arrays before we enter the loop.
@@ -165,7 +187,7 @@ case class GenerateExec(
         val values = Seq(
           codeGenAccessor(ctx, keyArray, "key", index, keyType, nullable = false, checks),
           codeGenAccessor(ctx, valueArray, "value", index, valueType, valueContainsNull, checks))
-        (initArrayData, values)
+        (initArrayData, "", values)
     }
 
     // In case of outer we need to make sure the loop is executed at-least once when the array/map
@@ -180,7 +202,8 @@ case class GenerateExec(
        |int $numElements = ${data.isNull} ? 0 : ${data.value}.numElements();
        |for (int $index = $init; $index < $numElements; $index++) {
        |  $numOutput.add(1);
-       |  ${consume(ctx, input ++ values)}
+       |  $updateRowData
+       |  ${consume(ctx, input ++ position ++ values)}
        |}
      """.stripMargin
   }
@@ -211,7 +234,7 @@ case class GenerateExec(
 
     // In case of outer we need to make sure the loop is executed at-least-once when the iterator
     // contains no input. We do this by adding an 'outer' variable which guarantees execution of
-    // the first iteration even if there is no input. Evaluation of the iterator is prevented by a
+    // the first iteration even if there is no input. Evaluation of the iterator is prevented by
     // checks in the next() and accessor code.
     val hasNextCode = s"$hasNext = $iterator.hasNext()"
     val outerVal = ctx.freshName("outer")
