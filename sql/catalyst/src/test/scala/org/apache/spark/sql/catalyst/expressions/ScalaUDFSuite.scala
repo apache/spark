@@ -36,10 +36,10 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringType,
       Literal.create(null, StringType) :: Nil)
 
-    val e1 = intercept[RuntimeException](udf.eval())
+    val e1 = intercept[NullPointerException](udf.eval())
     assert(e1.getMessage.contains("Given UDF throws NPE during execution"))
 
-    val e2 = intercept[RuntimeException] {
+    val e2 = intercept[NullPointerException] {
       checkEvalutionWithUnsafeProjection(udf, null)
     }
     assert(e2.getMessage.contains("Given UDF throws NPE during execution"))

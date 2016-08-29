@@ -1039,7 +1039,9 @@ case class ScalaUDF(
          try {
            $resultTerm = (${ctx.boxedType(dataType)})$catalystConverterTerm.apply($getFuncResult);
          } catch (NullPointerException e) {
-           throw new RuntimeException($scalaUDF.npeErrorMessage(), e);
+           NullPointerException npe = new NullPointerException($scalaUDF.npeErrorMessage());
+           npe.setStackTrace(e.getStackTrace());
+           throw npe;
          }
        """.stripMargin
 
@@ -1065,7 +1067,9 @@ case class ScalaUDF(
       f(input)
     } catch {
       case e: NullPointerException =>
-        throw new RuntimeException(npeErrorMessage, e)
+        val npe = new NullPointerException(npeErrorMessage)
+        npe.setStackTrace(e.getStackTrace)
+        throw npe
     }
 
     converter(result)
