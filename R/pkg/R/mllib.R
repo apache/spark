@@ -172,8 +172,8 @@ predict_internal <- function(object, newData) {
 #' @note spark.glm since 2.0.0
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, family = gaussian, tol = 1e-6, regParam = 0.0, maxIter = 25,
-                   weightCol = NULL) {
+          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
+                   regParam = 0.0) {
             if (is.character(family)) {
               family <- get(family, mode = "function", envir = parent.frame())
             }
@@ -192,7 +192,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, family$family, family$link,
-                                tol, regParam, as.integer(maxIter), as.character(weightCol))
+                                tol, as.integer(maxIter), as.character(weightCol), regParam)
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
