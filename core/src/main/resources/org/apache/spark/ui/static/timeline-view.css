@@ -83,6 +83,10 @@ rect.getting-result-time-proportion {
   stroke: #75B0A6;
 }
 
+.vis-item .vis-item-content {
+    width: 100%
+}
+
 .vis.timeline {
   line-height: 14px;
 }
