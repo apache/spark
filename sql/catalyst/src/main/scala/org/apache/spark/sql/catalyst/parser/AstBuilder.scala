@@ -26,7 +26,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -90,10 +90,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
     // Apply CTEs
     query.optional(ctx.ctes) {
-      val ctes = ctx.ctes.namedQuery.asScala.map {
-        case nCtx =>
-          val namedQuery = visitNamedQuery(nCtx)
-          (namedQuery.alias, namedQuery)
+      val ctes = ctx.ctes.namedQuery.asScala.map { nCtx =>
+        val namedQuery = visitNamedQuery(nCtx)
+        (namedQuery.alias, namedQuery)
       }
       // Check for duplicate names.
       checkDuplicateKeys(ctes, ctx)
@@ -530,54 +529,39 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a joins between two or more logical plans.
+   * Create a relation including its joins.
    */
-  override def visitJoinRelation(ctx: JoinRelationContext): LogicalPlan = withOrigin(ctx) {
-    /** Build a join between two plans. */
-    def join(ctx: JoinRelationContext, left: LogicalPlan, right: LogicalPlan): Join = {
-      val baseJoinType = ctx.joinType match {
-        case null => Inner
-        case jt if jt.FULL != null => FullOuter
-        case jt if jt.SEMI != null => LeftSemi
-        case jt if jt.ANTI != null => LeftAnti
-        case jt if jt.LEFT != null => LeftOuter
-        case jt if jt.RIGHT != null => RightOuter
-        case _ => Inner
-      }
-
-      // Resolve the join type and join condition
-      val (joinType, condition) = Option(ctx.joinCriteria) match {
-        case Some(c) if c.USING != null =>
-          val columns = c.identifier.asScala.map { column =>
-            UnresolvedAttribute.quoted(column.getText)
+  override def visitRelation(ctx: RelationContext): LogicalPlan = withOrigin(ctx) {
+    ctx.joinRelation.asScala.foldLeft(plan(ctx.relationPrimary)) {
+      case (left, join) =>
+        withOrigin(join) {
+          val baseJoinType = join.joinType match {
+            case null => Inner
+            case jt if jt.FULL != null => FullOuter
+            case jt if jt.SEMI != null => LeftSemi
+            case jt if jt.ANTI != null => LeftAnti
+            case jt if jt.LEFT != null => LeftOuter
+            case jt if jt.RIGHT != null => RightOuter
+            case _ => Inner
           }
-          (UsingJoin(baseJoinType, columns), None)
-        case Some(c) if c.booleanExpression != null =>
-          (baseJoinType, Option(expression(c.booleanExpression)))
-        case None if ctx.NATURAL != null =>
-          (NaturalJoin(baseJoinType), None)
-        case None =>
-          (baseJoinType, None)
-      }
-      Join(left, right, joinType, condition)
-    }
 
-    // Handle all consecutive join clauses. ANTLR produces a right nested tree in which the the
-    // first join clause is at the top. However fields of previously referenced tables can be used
-    // in following join clauses. The tree needs to be reversed in order to make this work.
-    var result = plan(ctx.left)
-    var current = ctx
-    while (current != null) {
-      current.right match {
-        case right: JoinRelationContext =>
-          result = join(current, result, plan(right.left))
-          current = right
-        case right =>
-          result = join(current, result, plan(right))
-          current = null
-      }
+          // Resolve the join type and join condition
+          val (joinType, condition) = Option(join.joinCriteria) match {
+            case Some(c) if c.USING != null =>
+              val columns = c.identifier.asScala.map { column =>
+                UnresolvedAttribute.quoted(column.getText)
+              }
+              (UsingJoin(baseJoinType, columns), None)
+            case Some(c) if c.booleanExpression != null =>
+              (baseJoinType, Option(expression(c.booleanExpression)))
+            case None if join.NATURAL != null =>
+              (NaturalJoin(baseJoinType), None)
+            case None =>
+              (baseJoinType, None)
+          }
+          Join(left, plan(join.right), joinType, condition)
+        }
     }
-    result
   }
 
   /**
