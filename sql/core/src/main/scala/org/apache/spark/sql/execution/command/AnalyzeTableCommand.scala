@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -45,29 +45,25 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
         oldRowCount: Long,
         newTotalSize: Long): Unit = {
 
-      var needUpdate = false
-      val totalSize = if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-        needUpdate = true
-        newTotalSize
-      } else {
-        oldTotalSize
+      var newStats: Option[Statistics] = None
+      if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
+        newStats = Some(Statistics(sizeInBytes = newTotalSize))
       }
-      var numRows: Option[BigInt] = None
       if (!noscan) {
-        val newRowCount = sparkSession.table(tableName).count()
+        val newRowCount = Dataset.ofRows(sparkSession, relation).count()
         if (newRowCount >= 0 && newRowCount != oldRowCount) {
-          numRows = Some(BigInt(newRowCount))
-          needUpdate = true
+          newStats = if (newStats.isDefined) {
+            newStats.map(_.copy(rowCount = Some(BigInt(newRowCount))))
+          } else {
+            Some(Statistics(sizeInBytes = oldTotalSize, rowCount = Some(BigInt(newRowCount))))
+          }
         }
       }
       // Update the metastore if the above statistics of the table are different from those
       // recorded in the metastore.
-      if (needUpdate) {
+      if (newStats.isDefined) {
         sessionState.catalog.alterTable(
-          catalogTable.copy(
-            catalogStats = Some(Statistics(
-              sizeInBytes = totalSize, rowCount = numRows))),
-          fromAnalyze = true)
+          catalogTable.copy(catalogStats = newStats), fromAnalyze = true)
 
         // Refresh the cache of the table in the catalog.
         sessionState.catalog.refreshTable(tableIdent)
