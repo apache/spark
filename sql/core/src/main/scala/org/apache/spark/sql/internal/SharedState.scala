@@ -115,6 +115,7 @@ object SharedState {
   private def externalCatalogClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
       case "hive" => HIVE_EXTERNAL_CATALOG_CLASS_NAME
+      case "test-hive" => HIVE_EXTERNAL_CATALOG_CLASS_NAME
       case "in-memory" => classOf[InMemoryCatalog].getCanonicalName
     }
   }

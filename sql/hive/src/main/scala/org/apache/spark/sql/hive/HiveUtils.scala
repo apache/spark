@@ -52,6 +52,11 @@ private[spark] object HiveUtils extends Logging {
     sc
   }
 
+  def withTestHiveExternalCatalog(sc: SparkContext): SparkContext = {
+    sc.conf.set(CATALOG_IMPLEMENTATION.key, "test-hive")
+    sc
+  }
+
   /** The version of hive used internally by Spark SQL. */
   val hiveExecutionVersion: String = "1.2.1"
 
