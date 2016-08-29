@@ -219,7 +219,6 @@ class TextSocketSourceProvider extends StreamSourceProvider with DataSourceRegis
       parameters: Map[String, String]): Source = {
     val host = parameters("host")
     val port = parameters("port").toInt
-
     new TextSocketSource(host, port, parseIncludeTimestamp(parameters), sqlContext)
   }
 

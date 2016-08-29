@@ -766,7 +766,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       }
     }
   }
-
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {

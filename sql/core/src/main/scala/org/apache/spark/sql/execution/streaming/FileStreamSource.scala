@@ -33,12 +33,12 @@ import org.apache.spark.sql.types.StructType
  * TODO: Clean up the metadata log files periodically.
  */
 class FileStreamSource(
-                        sparkSession: SparkSession,
-                        path: String,
-                        fileFormatClassName: String,
-                        override val schema: StructType,
-                        metadataPath: String,
-                        options: Map[String, String]) extends Source with Logging {
+    sparkSession: SparkSession,
+    path: String,
+    fileFormatClassName: String,
+    override val schema: StructType,
+    metadataPath: String,
+    options: Map[String, String]) extends Source with Logging {
 
   import FileStreamSource._
 
@@ -164,7 +164,6 @@ class FileStreamSource(
   override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.offset == -1)
 
   override def toString: String = s"FileStreamSource[$qualifiedBasePath]"
-
 
   /**
    * Informs the source that Spark has completed processing all data for offsets less than or
