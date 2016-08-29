@@ -30,7 +30,7 @@ $mavenVer = "3.3.9"
 Start-FileDownload "https://archive.apache.org/dist/maven/maven-3/$mavenVer/binaries/apache-maven-$mavenVer-bin.zip" "maven.zip"
 
 # extract
-Invoke-Expression "7z.exe x maven.zip" | Out-Null
+Invoke-Expression "7z.exe x maven.zip"
 
 # add maven to environment variables
 $env:Path += ";$tools\apache-maven-$mavenVer\bin"
@@ -51,10 +51,10 @@ Push-Location $hadoopPath
 Start-FileDownload "https://github.com/steveloughran/winutils/archive/master.zip" "winutils-master.zip"
 
 # extract
-Invoke-Expression "7z.exe x winutils-master.zip" | Out-Null
+Invoke-Expression "7z.exe x winutils-master.zip"
 
 # add hadoop bin to environment variables
-$env:HADOOP_HOME = "$hadoopPath/hadoop-$hadoopVer"
+$env:HADOOP_HOME = "$hadoopPath/winutils-master/hadoop-$hadoopVer"
 
 Pop-Location
 

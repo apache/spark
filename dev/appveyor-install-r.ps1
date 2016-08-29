@@ -124,44 +124,34 @@ Function InstallRtools {
   $env:BINPREF=$RtoolsDrive + '/Rtools/mingw_$(WIN)/bin/'
 }
 
-Function Bootstrap {
-  [CmdletBinding()]
-  Param()
+[CmdletBinding()]
+Param()
 
-  Progress "Bootstrap: Start"
+Progress "Bootstrap: Start"
 
-  Progress "Adding GnuWin32 tools to PATH"
-  $env:PATH = "C:\Program Files (x86)\Git\bin;" + $env:PATH
+Progress "Adding GnuWin32 tools to PATH"
+$env:PATH = "C:\Program Files (x86)\Git\bin;" + $env:PATH
 
-  Progress "Setting time zone"
-  tzutil /g
-  tzutil /s "GMT Standard Time"
-  tzutil /g
+Progress "Setting time zone"
+tzutil /g
+tzutil /s "GMT Standard Time"
+tzutil /g
 
-  InstallR
+InstallR
 
-  if ((Test-Path "src") -or ($env:USE_RTOOLS)) {
-    InstallRtools
-  }
-  Else {
-    Progress "Skipping download of Rtools because src/ directory is missing."
-  }
-
-  Progress "Downloading and installing travis-tool.sh"
-  Invoke-WebRequest https://raw.github.com/krlmlr/r-appveyor/master/r-travis/scripts/travis-tool.sh -OutFile "..\travis-tool.sh"
-  echo '@bash.exe ../travis-tool.sh %*' | Out-File -Encoding ASCII .\travis-tool.sh.cmd
-  cat .\travis-tool.sh.cmd
-  bash -c "echo '^travis-tool\.sh\.cmd$' >> .Rbuildignore"
-  cat .\.Rbuildignore
-
-  $env:PATH.Split(";")
-
-  Progress "Setting R_LIBS_USER"
-  $env:R_LIBS_USER = 'c:\RLibrary'
-  if ( -not(Test-Path $env:R_LIBS_USER) ) {
-    mkdir $env:R_LIBS_USER
-  }
-
-  Progress "Bootstrap: Done"
+if ((Test-Path "src") -or ($env:USE_RTOOLS)) {
+  InstallRtools
+}
+Else {
+  Progress "Skipping download of Rtools because src/ directory is missing."
 }
 
+$env:PATH.Split(";")
+
+Progress "Setting R_LIBS_USER"
+$env:R_LIBS_USER = 'c:\RLibrary'
+if ( -not(Test-Path $env:R_LIBS_USER) ) {
+  mkdir $env:R_LIBS_USER
+}
+
+Progress "Bootstrap: Done"
