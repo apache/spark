@@ -1444,6 +1444,7 @@ abstract class RDD[T: ClassTag](
         // exceptions can be propagated in case the job failed.
         jobFuture.value.get.get
       }
+      sparkContext.progressBar.foreach(_.finishAll())
 
       partitionsScanned += partitionsToCompute.length
     }
