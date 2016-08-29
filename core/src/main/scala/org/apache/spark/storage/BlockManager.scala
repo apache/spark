@@ -166,8 +166,7 @@ private[spark] class BlockManager(
 
     blockReplicationPolicy = {
       val priorityClass = conf.get(
-        "spark.replication.topologyawareness.prioritizer",
-        "org.apache.spark.storage.RandomBlockReplicationPolicy")
+        "spark.storage.replication.policy", classOf[RandomBlockReplicationPolicy].getName)
       val clazz = Utils.classForName(priorityClass)
       val ret = clazz.newInstance.asInstanceOf[BlockReplicationPolicy]
       logInfo(s"Using $priorityClass for block replication policy")

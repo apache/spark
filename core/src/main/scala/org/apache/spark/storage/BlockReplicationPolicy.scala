@@ -41,7 +41,7 @@ trait BlockReplicationPolicy {
    * @param peersReplicatedTo Set of peers already replicated to
    * @param blockId BlockId of the block being replicated. This can be used as a source of
    *                randomness if needed.
-   * @param numPeersToReplicateTo Number of peers we need to replicate to
+   * @param numReplicas Number of peers we need to replicate to
    * @return A prioritized list of peers. Lower the index of a peer, higher its priority.
    *         This returns a list of size at most `numPeersToReplicateTo`.
    */
@@ -50,7 +50,7 @@ trait BlockReplicationPolicy {
       peers: Seq[BlockManagerId],
       peersReplicatedTo: mutable.HashSet[BlockManagerId],
       blockId: BlockId,
-      numPeersToReplicateTo: Int): List[BlockManagerId]
+      numReplicas: Int): List[BlockManagerId]
 }
 
 @DeveloperApi
@@ -101,9 +101,9 @@ class RandomBlockReplicationPolicy
    * @return list of m random unique indices
    */
   private def getSampleIds(n: Int, m: Int, r: Random): List[Int] = {
-    val indices = (n - m + 1 to n).foldLeft(Set.empty[Int]) {case (s, i) =>
+    val indices = (n - m + 1 to n).foldLeft(Set.empty[Int]) {case (set, i) =>
       val t = r.nextInt(i) + 1
-      if (s.contains(t)) s + i else s + t
+      if (set.contains(t)) set + i else set + t
     }
     // we shuffle the result to ensure a random arrangement within the sample
     // to avoid any bias from set implementations
