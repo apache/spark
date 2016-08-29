@@ -17,36 +17,6 @@ under the License.
 
 $CRAN = "https://cloud.r-project.org"
 
-# Found at http://zduck.com/2012/powershell-batch-files-exit-codes/
-Function Exec
-{
-    [CmdletBinding()]
-    param (
-        [Parameter(Position=0, Mandatory=1)]
-        [scriptblock]$Command,
-        [Parameter(Position=1, Mandatory=0)]
-        [string]$ErrorMessage = "Execution of command failed.`n$Command"
-    )
-    $ErrorActionPreference = "Continue"
-    & $Command 2>&1 | %{ "$_" }
-    if ($LastExitCode -ne 0) {
-        throw "Exec: $ErrorMessage`nExit code: $LastExitCode"
-    }
-}
-
-Function Progress
-{
-    [CmdletBinding()]
-    param (
-        [Parameter(Position=0, Mandatory=0)]
-        [string]$Message = ""
-    )
-
-    $ProgressMessage = '== ' + (Get-Date) + ': ' + $Message
-
-    Write-Host $ProgressMessage -ForegroundColor Magenta
-}
-
 Function InstallR {
   [CmdletBinding()]
   Param()
@@ -64,8 +34,6 @@ Function InstallR {
   Else {
     $arch = $env:R_ARCH
   }
-
-  Progress ("Version: " + $version)
 
   If ($version -eq "devel") {
     $url_path = ""
@@ -90,29 +58,26 @@ Function InstallR {
       $url_path = ("old/" + $version + "/")
   }
 
-  Progress ("URL path: " + $url_path)
-
   $rurl = $CRAN + "/bin/windows/base/" + $url_path + "R-" + $version + "-win.exe"
 
-  Progress ("Downloading R from: " + $rurl)
-  Exec { bash -c ("curl --silent -o ../R-win.exe -L " + $rurl) }
+  # Downloading R
+  Start-FileDownload $rurl "../R-win.exe"
 
-  Progress "Running R installer"
+  # Running R installer
   Start-Process -FilePath ..\R-win.exe -ArgumentList "/VERYSILENT /DIR=C:\R" -NoNewWindow -Wait
 
   $RDrive = "C:"
   echo "R is now available on drive $RDrive"
 
-  Progress "Setting PATH"
   $env:PATH = $RDrive + '\R\bin\' + $arch + ';' + 'C:\MinGW\msys\1.0\bin;' + $env:PATH
 
-  Progress "Testing R installation"
+  # Testing R installation
   Rscript -e "sessionInfo()"
 }
 
 Function InstallRtools {
   if ( -not(Test-Path Env:\RTOOLS_VERSION) ) {
-    Progress "Determining Rtools version"
+    # Determining Rtools version
     $rtoolsver = $(Invoke-WebRequest ($CRAN + "/bin/windows/Rtools/VERSION.txt")).Content.Split(' ')[2].Split('.')[0..1] -Join ''
   }
   Else {
@@ -121,16 +86,15 @@ Function InstallRtools {
 
   $rtoolsurl = $CRAN + "/bin/windows/Rtools/Rtools$rtoolsver.exe"
 
-  Progress ("Downloading Rtools from: " + $rtoolsurl)
+  # Downloading Rtools
   bash -c ("curl --silent -o ../Rtools-current.exe -L " + $rtoolsurl)
 
-  Progress "Running Rtools installer"
+  # Running Rtools installer
   Start-Process -FilePath ..\Rtools-current.exe -ArgumentList /VERYSILENT -NoNewWindow -Wait
 
   $RtoolsDrive = "C:"
   echo "Rtools is now available on drive $RtoolsDrive"
 
-  Progress "Setting PATH"
   if ( -not(Test-Path Env:\GCC_PATH) ) {
     $gcc_path = "gcc-4.6.3"
   }
@@ -191,7 +155,7 @@ if ((Test-Path "src") -or ($env:USE_RTOOLS)) {
   InstallRtools
 }
 Else {
-  Progress "Skipping download of Rtools because src/ directory is missing."
+  # Skipping download of Rtools because src/ directory is missing.
 }
 $env:PATH.Split(";")
 $env:R_LIBS_USER = 'c:\RLibrary'
