@@ -57,9 +57,9 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkTuple(
       Inline(CreateArray(Seq(
-        CreateStruct(Seq(Literal(0), Literal("a"))).toCreateNamedStruct,
-        CreateStruct(Seq(Literal(1), Literal("b"))).toCreateNamedStruct,
-        CreateStruct(Seq(Literal(2), Literal("c"))).toCreateNamedStruct
+        CreateStruct(Seq(Literal(0), Literal("a"))),
+        CreateStruct(Seq(Literal(1), Literal("b"))),
+        CreateStruct(Seq(Literal(2), Literal("c")))
       ))),
       correct_answer)
   }

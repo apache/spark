@@ -174,48 +174,45 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 /**
 * a helper mixin to encapsulate [[CreateStruct]] => [[CreateNamedStruct]] transformation.
 */
-sealed trait CreateStructLike{
-  def children : Seq[Expression]
-
-  protected def attributeNames = for {
-    (child, idx) <- children.zipWithIndex
-  } yield {
-    child match {
-      case ne: NamedExpression => ne.name
-      case _ => s"col${idx + 1}"
+sealed trait CreateStructLikeFactory[T <: Expression] extends (Seq[Expression] => T) {
+  protected case class CretaeStructHelper( children : Seq[Expression] ) {
+    private def attributeNames: Seq[String] = for {
+      (child, idx) <- children.zipWithIndex
+    } yield {
+      child match {
+        case ne: NamedExpression => ne.name
+        case _ => s"col${idx + 1}"
+      }
     }
-  }
 
-  protected def mkNamedStructArgs = {
-    for {
-      (name, expression) <- attributeNames.zip(children)
-      nameLiteral = Literal(name)
-      newChild <- Seq(nameLiteral, expression)
-    } yield{
-      newChild
+    private def mkNamedStructArgs: Seq[Expression] = {
+      for {
+        (name, expression) <- attributeNames.zip(children)
+        nameLiteral = Literal(name)
+        newChild <- Seq(nameLiteral, expression)
+      } yield{
+        newChild
+      }
     }
+
+    def safe: CreateNamedStruct = CreateNamedStruct(mkNamedStructArgs)
+    def unsafe: CreateNamedStructUnsafe = CreateNamedStructUnsafe(mkNamedStructArgs)
   }
 }
 
 /**
  * Returns a Row containing the evaluation of all children expressions.
  */
-@ExpressionDescription(
-  usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
-case class CreateStruct(children: Seq[Expression]) extends Expression
-  with Unevaluable with CreateStructLike {
+object CreateStruct extends CreateStructLikeFactory[CreateNamedStruct]{
+  @ExpressionDescription(
+    usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
+  def apply(children: Seq[Expression]) : CreateNamedStruct = CretaeStructHelper(children).safe
 
-  override def foldable: Boolean = children.forall(_.foldable)
-
-  override lazy val dataType: StructType = toCreateNamedStruct.dataType
-
-  override def nullable: Boolean = false
-
-  override def prettyName: String = "struct"
-
-  def toCreateNamedStruct : CreateNamedStruct = CreateNamedStruct(mkNamedStructArgs)
+  def expressionInfo: ExpressionInfo = new ExpressionInfo( "CreateStruct",
+    "struct",
+    "_FUNC_(col1, col2, col3, ...)",
+    "Creates a struct with the given field values.")
 }
-
 
 /**
  * Creates a struct with the given field names and values
@@ -238,6 +235,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
 
   private lazy val (nameExprs, valExprs) =
     children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
+
+  def valueExpressions: List[Expression] = valExprs
 
   private lazy val names = nameExprs.map(_.eval(EmptyRow))
 
@@ -311,23 +310,12 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
  * returns UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
  * this expression automatically at runtime.
  */
-case class CreateStructUnsafe(children: Seq[Expression]) extends Expression
-  with Unevaluable with CreateStructLike {
-
-  override def foldable: Boolean = children.forall(_.foldable)
-
-  override lazy val resolved: Boolean = childrenResolved
-
-  override lazy val dataType: StructType = toCreateNamedStructUnsafe.dataType
-
-  override def nullable: Boolean = false
-
-  override def prettyName: String = "struct_unsafe"
-
-  def toCreateNamedStructUnsafe : CreateNamedStructUnsafe =
-    CreateNamedStructUnsafe(mkNamedStructArgs)
+object CreateStructUnsafe extends CreateStructLikeFactory[CreateNamedStructUnsafe]{
+  @ExpressionDescription(
+    usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
+  def apply(children: Seq[Expression]) : CreateNamedStructUnsafe =
+    CretaeStructHelper(children).unsafe
 }
-
 
 /**
  * Creates a struct with the given field names and values. This is a variant that returns

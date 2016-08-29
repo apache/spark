@@ -356,7 +356,7 @@ object FunctionRegistry {
     expression[MapValues]("map_values"),
     expression[Size]("size"),
     expression[SortArray]("sort_array"),
-    expression[CreateStruct]("struct"),
+    "struct" -> ( CreateStruct.expressionInfo -> CreateStruct ),
 
     // misc functions
     expression[AssertTrue]("assert_true"),

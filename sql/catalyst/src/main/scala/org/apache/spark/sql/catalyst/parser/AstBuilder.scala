@@ -675,7 +675,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         // inline table comes in two styles:
         // style 1: values (1), (2), (3)  -- multiple columns are supported
         // style 2: values 1, 2, 3  -- only a single column is supported here
-        case CreateStruct(children) => children  // style 1
+        case cns: CreateNamedStruct => cns.valueExpressions  // style 1
         case child => Seq(child)  // style 2
       }
     }

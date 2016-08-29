@@ -109,7 +109,6 @@ class Analyzer(
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables ::
-      ResolveCreateStruct ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -653,11 +652,18 @@ class Analyzer(
             case s: Star => s.expand(child, resolver)
             case o => o :: Nil
           })
-        case c: CreateStruct if containsStar(c.children) =>
-          c.copy(children = c.children.flatMap {
-            case s: Star => s.expand(child, resolver)
-            case o => o :: Nil
-          })
+        case c: CreateNamedStruct if containsStar(c.valueExpressions) =>
+          val newChildren = for {
+            kv @ Seq(k, v) <- c.children.grouped(2)
+            expanded = v match {
+              case s: Star => CreateStruct(s.expand(child, resolver)).children
+              case _ => kv
+            }
+            starChild <- expanded
+          } yield {
+            starChild
+          }
+          c.copy(children = newChildren.toList )
         case c: CreateArray if containsStar(c.children) =>
           c.copy(children = c.children.flatMap {
             case s: Star => s.expand(child, resolver)
@@ -1139,7 +1145,7 @@ class Analyzer(
         case In(e, Seq(l @ ListQuery(_, exprId))) if e.resolved =>
           // Get the left hand side expressions.
           val expressions = e match {
-            case CreateStruct(exprs) => exprs
+            case cns : CreateNamedStruct => cns.valueExpressions
             case expr => Seq(expr)
           }
           resolveSubQuery(l, plans, expressions.size) { (rewrite, conditions) =>
@@ -2070,20 +2076,6 @@ object EliminateSubqueryAliases extends Rule[LogicalPlan] {
 object EliminateUnions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Union(children) if children.size == 1 => children.head
-  }
-}
-
-/**
-* Replaces [[CreateStruct]] and [[CreateStructUnsafe]] with
-* [[CreateNamedStruct]] and [[CreateNamedStructUnsafe]].
-* This eliminates the need for specual care in [[CleanupAliases]] when removing aliases.
-*/
-object ResolveCreateStruct extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case aPlan : LogicalPlan => aPlan transformExpressionsDown {
-      case ct : CreateStruct => ct.toCreateNamedStruct
-      case ct : CreateStructUnsafe => ct.toCreateNamedStructUnsafe
-    }
   }
 }
 
