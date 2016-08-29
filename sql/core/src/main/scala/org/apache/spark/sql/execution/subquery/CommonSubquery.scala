@@ -51,5 +51,5 @@ private[sql] case class CommonSubquery(
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] =
-    Seq(_statistics, _computedOutput)
+    Seq(executedChild, _statistics, _computedOutput)
 }
