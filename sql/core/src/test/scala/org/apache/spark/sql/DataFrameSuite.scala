@@ -1452,6 +1452,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "2") {
       val df = spark.range(100).toDF()
       val join = df.join(df, "id")
+      val plan = join.queryExecution.executedPlan
       checkAnswer(join, df)
       assert(
         join.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
