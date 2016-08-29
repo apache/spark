@@ -680,7 +680,7 @@ private[spark] class MesosClusterScheduler(
             retryState = Some(new MesosClusterRetryState(status, retries, nextRetry, waitTimeSec)))
           pendingRetryDrivers += newDriverDescription
           pendingRetryDriversState.persist(taskId, newDriverDescription)
-        } else if (TaskState.isFinished(TaskState.fromMesos(status.getState))) {
+        } else if (TaskState.isFinished(mesosToTaskState(status.getState))) {
           removeFromLaunchedDrivers(taskId)
           state.finishDate = Some(new Date())
           if (finishedDrivers.size >= retainedDrivers) {

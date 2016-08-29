@@ -180,7 +180,7 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
   private def isFileAlreadyExistsException(e: IOException): Boolean = {
     e.isInstanceOf[FileAlreadyExistsException] ||
       // Old Hadoop versions don't throw FileAlreadyExistsException. Although it's fixed in
-      // HADOOP-9361, we still need to support old Hadoop versions.
+      // HADOOP-9361 in Hadoop 2.5, we still need to support old Hadoop versions.
       (e.getMessage != null && e.getMessage.startsWith("File already exists: "))
   }
 
@@ -225,6 +225,20 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
       }
     }
     None
+  }
+
+  /**
+   * Removes all the log entry earlier than thresholdBatchId (exclusive).
+   */
+  override def purge(thresholdBatchId: Long): Unit = {
+    val batchIds = fileManager.list(metadataPath, batchFilesFilter)
+      .map(f => pathToBatchId(f.getPath))
+
+    for (batchId <- batchIds if batchId < thresholdBatchId) {
+      val path = batchIdToPath(batchId)
+      fileManager.delete(path)
+      logTrace(s"Removed metadata log file: $path")
+    }
   }
 
   private def createFileManager(): FileManager = {
