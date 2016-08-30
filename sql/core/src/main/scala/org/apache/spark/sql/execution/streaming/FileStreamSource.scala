@@ -49,6 +49,14 @@ class FileStreamSource(
     fs.makeQualified(new Path(path))  // can contains glob patterns
   }
 
+  private val optionsWithPartitionBasePath = if (!SparkHadoopUtil.get.isGlobPath(new Path(path))) {
+    options.get("path").map { path =>
+      sourceOptions.optionMapWithoutPath + (("basePath", path))
+    }.getOrElse(sourceOptions.optionMapWithoutPath)
+  } else {
+    sourceOptions.optionMapWithoutPath
+  }
+
   private val metadataLog = new HDFSMetadataLog[Seq[FileEntry]](sparkSession, metadataPath)
 
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
@@ -129,20 +137,13 @@ class FileStreamSource(
     val files = metadataLog.get(Some(startId + 1), Some(endId)).flatMap(_._2)
     logInfo(s"Processing ${files.length} files from ${startId + 1}:$endId")
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
-    val newOptions = if (!SparkHadoopUtil.get.isGlobPath(new Path(path))) {
-      options.get("path").map { path =>
-        sourceOptions.optionMapWithoutPath + (("basePath", path))
-      }.getOrElse(sourceOptions.optionMapWithoutPath)
-    } else {
-      sourceOptions.optionMapWithoutPath
-    }
     val newDataSource =
       DataSource(
         sparkSession,
         paths = files.map(_.path),
         userSpecifiedSchema = Some(schema),
         className = fileFormatClassName,
-        options = newOptions)
+        options = optionsWithPartitionBasePath)
     Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation()))
   }
 
