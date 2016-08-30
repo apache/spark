@@ -220,7 +220,7 @@ trait FileFormat {
   }
 
   /**
-   * Allow FileFormat's to have a pluggable way to utilize pushed filters to eliminate partitions
+   * Allow FileFormats to have a pluggable way to utilize pushed filters to eliminate partitions
    * before execution. By default no pruning is performed and the original partitioning is
    * preserved.
    */

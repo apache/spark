@@ -60,7 +60,7 @@ class ParquetFileFormat
   with Logging
   with Serializable {
 
-  // Attempt to cache parquet metadata for this instance of
+  // Attempt to cache parquet metadata
   @transient @volatile private var cachedMetadata: ParquetMetadata = _
 
   override def shortName(): String = "parquet"
