@@ -68,6 +68,9 @@ private[hive] trait HiveClient {
   /** List the names of all the databases that match the specified pattern. */
   def listDatabases(pattern: String): Seq[String]
 
+  /** Return whether a table/view with the specified name exists. */
+  def tableExists(dbName: String, tableName: String): Boolean
+
   /** Returns the specified table, or throws [[NoSuchTableException]]. */
   final def getTable(dbName: String, tableName: String): CatalogTable = {
     getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException(dbName, tableName))

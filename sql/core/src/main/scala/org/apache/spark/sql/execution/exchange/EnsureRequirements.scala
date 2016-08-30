@@ -164,7 +164,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         // If an aggregation needs a shuffle and support partial aggregations, a map-side partial
         // aggregation and a shuffle are added as children.
         val (mergeAgg, mapSideAgg) = AggUtils.createMapMergeAggregatePair(operator)
-        (mergeAgg, createShuffleExchange(requiredChildDistributions.head, mapSideAgg) :: Nil)
+        (mergeAgg, createShuffleExchange(
+          requiredChildDistributions.head, ensureDistributionAndOrdering(mapSideAgg)) :: Nil)
       case _ =>
         // Ensure that the operator's children satisfy their output distribution requirements:
         val childrenWithDist = operator.children.zip(requiredChildDistributions)
@@ -250,7 +251,16 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
       if (requiredOrdering.nonEmpty) {
         // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
-        if (requiredOrdering != child.outputOrdering.take(requiredOrdering.length)) {
+        val orderingMatched = if (requiredOrdering.length > child.outputOrdering.length) {
+          false
+        } else {
+          requiredOrdering.zip(child.outputOrdering).forall {
+            case (requiredOrder, childOutputOrder) =>
+              requiredOrder.semanticEquals(childOutputOrder)
+          }
+        }
+
+        if (!orderingMatched) {
           SortExec(requiredOrdering, global = false, child = child)
         } else {
           child
