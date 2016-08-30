@@ -34,10 +34,10 @@ Function InstallR {
   $rurl = $CRAN + "/bin/windows/base/" + $urlPath + "R-" + $rVer + "-win.exe"
 
   # Downloading R
-  Start-FileDownload $rurl "../R-win.exe"
+  Start-FileDownload $rurl "R-win.exe"
 
   # Running R installer
-  Start-Process -FilePath ..\R-win.exe -ArgumentList "/VERYSILENT /DIR=C:\R" -NoNewWindow -Wait
+  Start-Process -FilePath .\R-win.exe -ArgumentList "/VERYSILENT /DIR=C:\R" -NoNewWindow -Wait
 
   $RDrive = "C:"
   echo "R is now available on drive $RDrive"
@@ -53,10 +53,10 @@ Function InstallRtools {
   $rtoolsurl = $CRAN + "/bin/windows/Rtools/Rtools$rtoolsver.exe"
 
   # Downloading Rtools
-  Start-FileDownload $rtoolsurl "../Rtools-current.exe"
+  Start-FileDownload $rtoolsurl "Rtools-current.exe"
 
   # Running Rtools installer
-  Start-Process -FilePath ..\Rtools-current.exe -ArgumentList /VERYSILENT -NoNewWindow -Wait
+  Start-Process -FilePath .\Rtools-current.exe -ArgumentList /VERYSILENT -NoNewWindow -Wait
 
   $RtoolsDrive = "C:"
   echo "Rtools is now available on drive $RtoolsDrive"
@@ -74,8 +74,7 @@ Function InstallRtools {
 # create tools directory outside of Spark directory
 $up = (Get-Item -Path ".." -Verbose).FullName
 $tools = "$up\tools"
-if (!(Test-Path $tools))
-{
+if (!(Test-Path $tools)) {
     New-Item -ItemType Directory -Force -Path $tools | Out-Null
 }
 
@@ -98,8 +97,7 @@ Pop-Location
 # ========================== Hadoop bin package
 $hadoopVer = "2.6.0"
 $hadoopPath = "$tools\hadoop"
-if (!(Test-Path $hadoopPath))
-{
+if (!(Test-Path $hadoopPath)) {
     New-Item -ItemType Directory -Force -Path $hadoopPath | Out-Null
 }
 Push-Location $hadoopPath
