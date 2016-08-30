@@ -74,7 +74,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
   def genComparisons(ctx: CodegenContext, ordering: Seq[SortOrder]): String = {
     val comparisons = ordering.map { order =>
       val eval = order.child.genCode(ctx)
-      val asc = order.direction == Ascending
+      val asc = order.isAscending
       val isNullA = ctx.freshName("isNullA")
       val primitiveA = ctx.freshName("primitiveA")
       val isNullB = ctx.freshName("isNullB")
@@ -99,17 +99,17 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           if ($isNullA && $isNullB) {
             // Nothing
           } else if ($isNullA) {
-            return ${ if (order.nullOrder == null) {
-                        if (order.direction == Ascending) "-1" else "1"
-                     } else {
-                        if (order.nullOrder == NullFirst) "-1" else "1"
-                     }};
+            return ${
+        order.direction match {
+          case Ascending | DescendingNullFirst => "-1"
+          case Descending | AscendingNullLast => "1"
+        }};
           } else if ($isNullB) {
-            return ${ if (order.nullOrder == null) {
-                        if (order.direction == Ascending) "1" else "-1"
-                     } else {
-                        if (order.nullOrder == NullFirst) "1" else "-1"
-                     }};
+            return ${
+        order.direction match {
+          case Ascending | DescendingNullFirst => "1"
+          case Descending | AscendingNullLast => "-1"
+        }};
           } else {
             int comp = ${ctx.genComp(order.child.dataType, primitiveA, primitiveB)};
             if (comp != 0) {

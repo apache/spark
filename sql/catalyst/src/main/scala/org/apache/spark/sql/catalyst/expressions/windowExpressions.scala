@@ -357,8 +357,8 @@ abstract class OffsetWindowFunction
         s"Offset expression must be a foldable integer expression: $x")
     }
     val boundary = direction match {
-      case Ascending => ValueFollowing(offsetValue)
-      case Descending => ValuePreceding(offsetValue)
+      case Ascending | AscendingNullLast => ValueFollowing(offsetValue)
+      case Descending | DescendingNullFirst => ValuePreceding(offsetValue)
     }
     SpecifiedWindowFrame(RowFrame, boundary, boundary)
   }

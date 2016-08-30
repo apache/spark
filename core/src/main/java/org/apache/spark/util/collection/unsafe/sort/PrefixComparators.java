@@ -27,54 +27,45 @@ import org.apache.spark.unsafe.types.UTF8String;
 public class PrefixComparators {
   private PrefixComparators() {}
 
-  public static final PrefixComparator STRING = new UnsignedPrefixComparator();
-  public static final PrefixComparator STRING_NULLFIRST =
-          new UnsignedPrefixComparatorNullFirst();
+  public static final PrefixComparator STRING =
+          new UnsignedPrefixComparator();
   public static final PrefixComparator STRING_NULLLAST =
           new UnsignedPrefixComparatorNullLast();
 
-  public static final PrefixComparator STRING_DESC = new UnsignedPrefixComparatorDesc();
   public static final PrefixComparator STRING_DESC_NULLFIRST =
           new UnsignedPrefixComparatorDescNullFirst();
-  public static final PrefixComparator STRING_DESC_NULLLAST =
-          new UnsignedPrefixComparatorDescNullLast();
+  public static final PrefixComparator STRING_DESC =
+          new UnsignedPrefixComparatorDesc();
 
-
-  public static final PrefixComparator BINARY = new UnsignedPrefixComparator();
-  public static final PrefixComparator BINARY_NULLFIRST =
-          new UnsignedPrefixComparatorNullFirst();
+  public static final PrefixComparator BINARY =
+          new UnsignedPrefixComparator();
   public static final PrefixComparator BINARY_NULLLAST =
           new UnsignedPrefixComparatorNullLast();
 
-  public static final PrefixComparator BINARY_DESC = new UnsignedPrefixComparatorDesc();
   public static final PrefixComparator BINARY_DESC_NULLFIRST =
           new UnsignedPrefixComparatorDescNullFirst();
-  public static final PrefixComparator BINARY_DESC_NULLLAST =
-          new UnsignedPrefixComparatorDescNullLast();
+  public static final PrefixComparator BINARY_DESC =
+          new UnsignedPrefixComparatorDesc();
 
-  public static final PrefixComparator LONG = new SignedPrefixComparator();
-  public static final PrefixComparator LONG_NULLFIRST =
-          new SignedPrefixComparatorDescNullFirst();
+  public static final PrefixComparator LONG =
+          new SignedPrefixComparator();
   public static final PrefixComparator LONG_NULLLAST =
-          new SignedPrefixComparatorDescNullLast();
+          new SignedPrefixComparatorNullLast();
 
-  public static final PrefixComparator LONG_DESC = new SignedPrefixComparatorDesc();
   public static final PrefixComparator LONG_DESC_NULLFIRST =
           new SignedPrefixComparatorDescNullFirst();
-  public static final PrefixComparator LONG_DESC_NULLLAST =
-          new SignedPrefixComparatorDescNullLast();
+  public static final PrefixComparator LONG_DESC =
+          new SignedPrefixComparatorDesc();
 
-  public static final PrefixComparator DOUBLE = new UnsignedPrefixComparator();
-  public static final PrefixComparator DOUBLE_NULLFIRST =
-          new UnsignedPrefixComparatorNullFirst();
+  public static final PrefixComparator DOUBLE =
+          new UnsignedPrefixComparator();
   public static final PrefixComparator DOUBLE_NULLLAST =
           new UnsignedPrefixComparatorNullLast();
 
-  public static final PrefixComparator DOUBLE_DESC = new UnsignedPrefixComparatorDesc();
   public static final PrefixComparator DOUBLE_DESC_NULLFIRST =
           new UnsignedPrefixComparatorDescNullFirst();
-  public static final PrefixComparator DOUBLE_DESC_NULLLAST =
-          new UnsignedPrefixComparatorDescNullLast();
+  public static final PrefixComparator DOUBLE_DESC =
+          new UnsignedPrefixComparatorDesc();
 
   public static final class StringPrefixComparator {
     public static long computePrefix(UTF8String value) {
@@ -124,7 +115,8 @@ public class PrefixComparators {
   // Standard prefix comparator implementations
   //
 
-  public static final class UnsignedPrefixComparatorNullFirst extends RadixSortSupport {
+  // unsigned asc null first (default)
+  public static final class UnsignedPrefixComparator extends RadixSortSupport {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return false; }
     @Override public NullOrder nullOrder() { return NullOrder.FIRST; }
@@ -141,6 +133,7 @@ public class PrefixComparators {
     }
   }
 
+  // unsigned asc null last
   public static final class UnsignedPrefixComparatorNullLast extends RadixSortSupport {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return false; }
@@ -158,15 +151,7 @@ public class PrefixComparators {
     }
   }
 
-  public static final class UnsignedPrefixComparator extends RadixSortSupport {
-    @Override public boolean sortDescending() { return false; }
-    @Override public boolean sortSigned() { return false; }
-    @Override public NullOrder nullOrder() { return null; }
-    public int compare(long aPrefix, long bPrefix) {
-      return UnsignedLongs.compare(aPrefix, bPrefix);
-    }
-  }
-
+  // unsigned desc null first
   public static final class UnsignedPrefixComparatorDescNullFirst extends RadixSortSupport {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return false; }
@@ -184,7 +169,8 @@ public class PrefixComparators {
     }
   }
 
-  public static final class UnsignedPrefixComparatorDescNullLast extends RadixSortSupport {
+  // unsigned desc null last (default)
+  public static final class UnsignedPrefixComparatorDesc extends RadixSortSupport {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return false; }
     @Override public NullOrder nullOrder() { return NullOrder.LAST; }
@@ -201,16 +187,8 @@ public class PrefixComparators {
     }
   }
 
-  public static final class UnsignedPrefixComparatorDesc extends RadixSortSupport {
-    @Override public boolean sortDescending() { return true; }
-    @Override public boolean sortSigned() { return false; }
-    @Override public NullOrder nullOrder() { return null; }
-    public int compare(long bPrefix, long aPrefix) {
-      return UnsignedLongs.compare(aPrefix, bPrefix);
-    }
-  }
-
-  public static final class SingedPrefixComparatorNullFirst extends RadixSortSupport {
+  // signed asc null first (default)
+  public static final class SignedPrefixComparator extends RadixSortSupport {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return true; }
     @Override public NullOrder nullOrder() { return NullOrder.FIRST; }
@@ -227,7 +205,8 @@ public class PrefixComparators {
     }
   }
 
-  public static final class SingedPrefixComparatorNullLast extends RadixSortSupport {
+  // signed asc null last
+  public static final class SignedPrefixComparatorNullLast extends RadixSortSupport {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return true; }
     @Override public NullOrder nullOrder() { return NullOrder.LAST; }
@@ -244,15 +223,7 @@ public class PrefixComparators {
     }
   }
 
-  public static final class SignedPrefixComparator extends RadixSortSupport {
-    @Override public boolean sortDescending() { return false; }
-    @Override public boolean sortSigned() { return true; }
-    @Override public NullOrder nullOrder() { return null; }
-    public int compare(long a, long b) {
-      return (a < b) ? -1 : (a > b) ? 1 : 0;
-    }
-  }
-
+  // signed desc null first
   public static final class SignedPrefixComparatorDescNullFirst extends RadixSortSupport {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return true; }
@@ -270,7 +241,8 @@ public class PrefixComparators {
     }
   }
 
-  public static final class SignedPrefixComparatorDescNullLast extends RadixSortSupport {
+  // signed desc null last (default)
+  public static final class SignedPrefixComparatorDesc extends RadixSortSupport {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return true; }
     @Override public NullOrder nullOrder() { return NullOrder.LAST; }
@@ -283,15 +255,6 @@ public class PrefixComparators {
       } else if (a == Long.MIN_VALUE) {
         return -1;
       }
-      return (a < b) ? -1 : (a > b) ? 1 : 0;
-    }
-  }
-
-  public static final class SignedPrefixComparatorDesc extends RadixSortSupport {
-    @Override public boolean sortDescending() { return true; }
-    @Override public boolean sortSigned() { return true; }
-    @Override public NullOrder nullOrder() { return null; }
-    public int compare(long b, long a) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
   }

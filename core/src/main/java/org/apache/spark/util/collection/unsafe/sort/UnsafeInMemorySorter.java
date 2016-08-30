@@ -334,22 +334,13 @@ public final class UnsafeInMemorySorter {
       assert radixSortSupport != null : "Nulls are only stored separately with radix sort";
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
 
+      // The null order is either LAST or FIRST, regardless of sorting direction (ASC|DESC)
       if (radixSortSupport.nullOrder() == PrefixComparator.NullOrder.LAST) {
         queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
         queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
       } else if (radixSortSupport.nullOrder() == PrefixComparator.NullOrder.FIRST) {
         queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
         queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
-      } else {
-        if (radixSortSupport.sortDescending()) {
-          // Nulls are smaller than non-nulls if no Null ordering is specified.
-          queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
-          queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
-
-        } else {
-          queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
-          queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
-        }
       }
       return new UnsafeExternalSorter.ChainedIterator(queue);
     } else {

@@ -130,8 +130,8 @@ case class WindowExec(
           val current = newMutableProjection(expr :: Nil, child.output)
           // Flip the sign of the offset when processing the order is descending
           val boundOffset = sortExpr.direction match {
-            case Descending => -offset
-            case Ascending => offset
+            case Descending | DescendingNullFirst => -offset
+            case Ascending | AscendingNullLast => offset
           }
           // Create the projection which returns the current 'value' modified by adding the offset.
           val boundExpr = Add(expr, Cast(Literal.create(boundOffset, IntegerType), expr.dataType))
@@ -145,7 +145,7 @@ case class WindowExec(
         // to the result of bound value projection. This is done manually because we want to use
         // Code Generation (if it is enabled).
         val sortExprs = exprs.zipWithIndex.map { case (e, i) =>
-          SortOrder(BoundReference(i, e.dataType, e.nullable), e.direction, e.nullOrder)
+          SortOrder(BoundReference(i, e.dataType, e.nullable), e.direction)
         }
         val ordering = newOrdering(sortExprs, Nil)
         RangeBoundOrdering(ordering, current, bound)

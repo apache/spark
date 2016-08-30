@@ -54,56 +54,39 @@ object SortPrefixUtils {
 
   private def getPrefixComparatorWithNullOrder(
      sortOrder: SortOrder, signedType: String): PrefixComparator = {
-    if (sortOrder.isAscending) {
-      if (sortOrder.nullOrder != null) {
-        if (sortOrder.nullOrder == NullFirst) {
-          signedType match {
-            case "LONG" => PrefixComparators.LONG_NULLFIRST
-            case "STRING" => PrefixComparators.STRING_NULLFIRST
-            case "BINARY" => PrefixComparators.BINARY_NULLFIRST
-            case "DOUBLE" => PrefixComparators.DOUBLE_NULLFIRST
-          }
-        } else {
-          signedType match {
-            case "LONG" => PrefixComparators.LONG_NULLLAST
-            case "STRING" => PrefixComparators.STRING_NULLLAST
-            case "BINARY" => PrefixComparators.BINARY_NULLLAST
-            case "DOUBLE" => PrefixComparators.DOUBLE_NULLLAST
-          }
+    sortOrder.direction match {
+      case AscendingNullLast =>
+        signedType match {
+          case "LONG" => PrefixComparators.LONG_NULLLAST
+          case "STRING" => PrefixComparators.STRING_NULLLAST
+          case "BINARY" => PrefixComparators.BINARY_NULLLAST
+          case "DOUBLE" => PrefixComparators.DOUBLE_NULLLAST
         }
-      } else {
+      case Ascending =>
+        // or the default NULLS FIRST
         signedType match {
           case "LONG" => PrefixComparators.LONG
           case "STRING" => PrefixComparators.STRING
           case "BINARY" => PrefixComparators.BINARY
           case "DOUBLE" => PrefixComparators.DOUBLE
         }
-      }
-    } else {
-      if (sortOrder.nullOrder != null) {
-        if (sortOrder.nullOrder == NullFirst) {
-          signedType match {
-            case "LONG" => PrefixComparators.LONG_DESC_NULLFIRST
-            case "STRING" => PrefixComparators.STRING_DESC_NULLFIRST
-            case "BINARY" => PrefixComparators.BINARY_DESC_NULLFIRST
-            case "DOUBLE" => PrefixComparators.DOUBLE_DESC_NULLFIRST
-          }
-        } else {
-          signedType match {
-            case "LONG" => PrefixComparators.LONG_DESC_NULLLAST
-            case "STRING" => PrefixComparators.STRING_DESC_NULLLAST
-            case "BINARY" => PrefixComparators.BINARY_DESC_NULLLAST
-            case "DOUBLE" => PrefixComparators.DOUBLE_DESC_NULLLAST
-          }
+      case DescendingNullFirst =>
+        signedType match {
+          case "LONG" => PrefixComparators.LONG_DESC_NULLFIRST
+          case "STRING" => PrefixComparators.STRING_DESC_NULLFIRST
+          case "BINARY" => PrefixComparators.BINARY_DESC_NULLFIRST
+          case "DOUBLE" => PrefixComparators.DOUBLE_DESC_NULLFIRST
         }
-      } else {
+      case Descending =>
+        // or the default NULLS LAST
         signedType match {
           case "LONG" => PrefixComparators.LONG_DESC
           case "STRING" => PrefixComparators.STRING_DESC
           case "BINARY" => PrefixComparators.BINARY_DESC
           case "DOUBLE" => PrefixComparators.DOUBLE_DESC
         }
-      }
+      case _ => throw new IllegalArgumentException(
+        "This should not happen. Contact Spark contributors for this error.")
     }
   }
 
