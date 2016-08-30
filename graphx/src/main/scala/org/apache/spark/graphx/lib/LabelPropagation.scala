@@ -58,7 +58,7 @@ object LabelPropagation {
       }.toMap
     }
     def vertexProgram(vid: VertexId, attr: Long, message: Map[VertexId, Long]): VertexId = {
-      if (message.isEmpty) attr else message.maxBy(_._2)._1
+      if (Map(attr->1L) ++ message).maxBy(e=>(e._2,e._1))._1
     }
     val initialMessage = Map[VertexId, Long]()
     Pregel(lpaGraph, initialMessage, maxIterations = maxSteps)(
