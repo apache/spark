@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.types
 
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{runtimeMirror, TypeTag}
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.util.Utils
 
 /**
  * A non-concrete data type, reserved for internal uses.
@@ -130,11 +127,6 @@ protected[sql] abstract class AtomicType extends DataType {
   private[sql] type InternalType
   private[sql] val tag: TypeTag[InternalType]
   private[sql] val ordering: Ordering[InternalType]
-
-  @transient private[sql] val classTag = ScalaReflectionLock.synchronized {
-    val mirror = runtimeMirror(Utils.getSparkClassLoader)
-    ClassTag[InternalType](mirror.runtimeClass(tag.tpe))
-  }
 }
 
 

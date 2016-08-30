@@ -273,9 +273,11 @@ class DataStreamReader(OptionUtils):
 
         >>> s = spark.readStream.schema(sdf_schema)
         """
+        from pyspark.sql import SparkSession
         if not isinstance(schema, StructType):
             raise TypeError("schema should be StructType")
-        jschema = self._spark._ssql_ctx.parseDataType(schema.json())
+        spark = SparkSession.builder.getOrCreate()
+        jschema = spark._jsparkSession.parseDataType(schema.json())
         self._jreader = self._jreader.schema(jschema)
         return self
 
@@ -589,7 +591,7 @@ class DataStreamWriter(object):
 
         .. note:: Experimental.
 
-        :param source: string, name of the data source, e.g. 'json', 'parquet'.
+        :param source: string, name of the data source, which for now can be 'parquet'.
 
         >>> writer = sdf.writeStream.format('json')
         """

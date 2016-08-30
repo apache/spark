@@ -195,8 +195,8 @@ Next, we discuss how to use this approach in your streaming application.
 		    for o in offsetRanges:
 		        print "%s %s %s %s" % (o.topic, o.partition, o.fromOffset, o.untilOffset)
 
-		directKafkaStream\
-		    .transform(storeOffsetRanges)\
+		directKafkaStream \
+		    .transform(storeOffsetRanges) \
 		    .foreachRDD(printOffsetRanges)
 	</div>
 	</div>
