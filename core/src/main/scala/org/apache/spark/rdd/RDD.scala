@@ -1349,23 +1349,11 @@ abstract class RDD[T: ClassTag](
     // we process partitions in order of their partition ids. Partitions may be computed out of
     // order. Once we have received all partitions up to partition N then we can perform driver-side
     // processing on partitions 1 through N to determine whether we've received enough items.
+    val completedPartitions = new mutable.HashMap[Int, Array[T]]() // key is partition id
 
-    // This bitset tracks which partitions have been computed. We don't have to worry about
-    // recomputations or speculative tasks because the DAGScheduler ensures that our result handler
-    // will only be called once per partition.
-    val partitionStatuses = new java.util.BitSet(totalPartitions)
-    // We'll use the convention that a set bit denotes the _absence_ of a partition's result.
-    // This is done in order to let us call `nextSetBit()` to find the "frontier" between the prefix
-    // of partitions that have been computed and the first outstanding partition.
-    partitionStatuses.set(0, totalPartitions - 1, true)
-
-    // The "frontier" is the the largest partitionId such that all earlier partitions have
-    // been computed. If all partitions have been computed, the frontier is -1.
+    // The "frontier" is the id of the first missing partition.
+    // If all partitions have been computed, the frontier is `totalPartitions`.
     var frontier: Int = 0
-
-    // Because partitions may arrive out-of-order, we need to partitions' output until we have
-    // received all preceding partitions.
-    val bufferedPartitions = new mutable.HashMap[Int, Array[T]]() // key is partition id
 
     var jobFuture: SimpleFutureAction[Unit] = null
 
@@ -1375,25 +1363,22 @@ abstract class RDD[T: ClassTag](
         logDebug(s"Ignoring result for partition $partitionId of $this because we have enough rows")
       } else {
         logDebug(s"Handling result for partition $partitionId of $this")
-        // Mark the partition as completed and buffer the result in case we can't process it now.
-        partitionStatuses.clear(partitionId)
-        bufferedPartitions(partitionId) = result
+        // Buffer the result in case we can't process it now.
+        completedPartitions(partitionId) = result
         // Determine whether we can process buffered results, which we can only do if the frontier
         // partition was received (since frontier is always the first outstanding partition)
         assert(frontier != -1)
         if (partitionId == frontier) {
-          frontier = partitionStatuses.nextSetBit(0)
-          val partitionsIter = bufferedPartitions
-            .keySet.filter { pid => pid < frontier || frontier == -1 }.toSeq.sorted.iterator
-          while (!gotEnoughRows && partitionsIter.hasNext) {
-            val partitionToUnpack = partitionsIter.next()
-            logDebug(s"Unpacking partition $partitionToUnpack of $this")
-            val rawPartitionData = bufferedPartitions.remove(partitionToUnpack).get
+          while (!gotEnoughRows && completedPartitions.contains(frontier)) {
+            logDebug(s"Unpacking partition $frontier of $this")
+            val rawPartitionData = completedPartitions.remove(frontier).get
             resultToReturn ++= unpackPartition(rawPartitionData)
+            frontier += 1
+
             if (resultToReturn.size >= num) {
               // We have unpacked enough results to reach the desired number of results, so discard
               // any remaining partitions' data:
-              bufferedPartitions.clear()
+              completedPartitions.clear()
               // Set a flag so that future task completion events are ignored:
               gotEnoughRows = true
               // Cancel the job so we can return sooner
