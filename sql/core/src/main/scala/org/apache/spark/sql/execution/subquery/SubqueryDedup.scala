@@ -45,13 +45,14 @@ private[sql] class SubqueryDedup {
   private[sql] def createCommonSubquery(
       sparkSession: SparkSession,
       planToDedup: LogicalPlan): CommonSubquery = {
+    val execution = sparkSession.sessionState.executePlan(planToDedup)
     lookupCommonSubquery(planToDedup).map(_.subquery).getOrElse {
       val common =
         CommonSubqueryItem(
           planToDedup,
           CommonSubquery(planToDedup.output,
-            sparkSession.sessionState.executePlan(planToDedup).executedPlan)
-            (planToDedup,
+            execution.executedPlan)
+            (execution.optimizedPlan,
             planToDedup.statistics))
       subqueryData += common
       common.subquery

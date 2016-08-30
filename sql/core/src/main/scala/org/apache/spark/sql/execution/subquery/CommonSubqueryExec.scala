@@ -31,6 +31,8 @@ private[sql] case class CommonSubqueryExec(
     @transient subquery: CommonSubquery)
   extends LeafExecNode {
 
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(subquery.child)
+
   override def argString: String = Utils.truncatedString(attributes, "[", ", ", "]")
 
   override lazy val metrics = Map(
