@@ -453,9 +453,9 @@ abstract class HadoopFsRelation private[sql](
           val jobConf = new JobConf(hadoopConf, this.getClass())
           val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
           if (pathFilter != null) {
-            Try(fs.listStatus(qualified, pathFilter)).getOrElse(Array.empty)
+            fs.listStatus(qualified, pathFilter)
           } else {
-            Try(fs.listStatus(qualified)).getOrElse(Array.empty)
+            fs.listStatus(qualified)
           }
         }.filterNot { status =>
           val name = status.getPath.getName
@@ -903,7 +903,7 @@ private[sql] object HadoopFsRelation extends Logging {
       val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(serializableConfiguration.value)
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      Try(listLeafFiles(fs, fs.getFileStatus(qualified))).getOrElse(Array.empty)
+      listLeafFiles(fs, fs.getFileStatus(qualified))
     }.map { status =>
       FakeFileStatus(
         status.getPath.toString,

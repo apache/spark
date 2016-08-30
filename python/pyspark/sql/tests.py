@@ -305,6 +305,11 @@ class SQLTests(ReusedPySparkTestCase):
         [res] = self.sqlCtx.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
         self.assertEqual(4, res[0])
 
+    def test_udf_without_arguments(self):
+        self.sqlCtx.registerFunction("foo", lambda: "bar")
+        [row] = self.sqlCtx.sql("SELECT foo()").collect()
+        self.assertEqual(row[0], "bar")
+
     def test_udf_with_array_type(self):
         d = [Row(l=list(range(3)), d={"key": list(range(5))})]
         rdd = self.sc.parallelize(d)

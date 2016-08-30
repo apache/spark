@@ -205,6 +205,21 @@ SPARK_MASTER_OPTS supports the following system properties:
   </td>
 </tr>
 <tr>
+  <td><code>spark.deploy.maxExecutorRetries</code></td>
+  <td>10</td>
+  <td>
+    Limit on the maximum number of back-to-back executor failures that can occur before the
+    standalone cluster manager removes a faulty application. An application will never be removed
+    if it has any running executors. If an application experiences more than
+    <code>spark.deploy.maxExecutorRetries</code> failures in a row, no executors
+    successfully start running in between those failures, and the application has no running
+    executors then the standalone cluster manager will remove the application and mark it as failed.
+    To disable this automatic removal, set <code>spark.deploy.maxExecutorRetries</code> to
+    <code>-1</code>.
+    <br/>
+  </td>
+</tr>
+<tr>
   <td><code>spark.worker.timeout</code></td>
   <td>60</td>
   <td>
