@@ -23,7 +23,6 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.execution.command.AnalyzeTableCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
@@ -170,17 +169,26 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
   }
 
-  private def checkTableStats(
+  private def checkMetastoreRelationStats(
       tableName: String,
       totalSize: Long,
       rowCount: Option[BigInt]): Unit = {
     val df = sql(s"SELECT * FROM $tableName")
-    val statsSeq = df.queryExecution.analyzed.collect { case rel: LeafNode =>
+    val relations = df.queryExecution.analyzed.collect { case rel: MetastoreRelation =>
       rel.statistics
+      assert(rel.statistics.sizeInBytes === totalSize)
+      assert(rel.statistics.rowCount === rowCount)
     }
-    assert(statsSeq.size === 1)
-    assert(statsSeq.head.sizeInBytes === totalSize)
-    assert(statsSeq.head.rowCount === rowCount)
+    assert(relations.size === 1)
+  }
+
+  private def checkLogicalRelationStats(tableName: String, rowCount: Option[BigInt]): Unit = {
+    val df = sql(s"SELECT * FROM $tableName")
+    val relations = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
+      assert(rel.statistics.sizeInBytes === rel.relation.sizeInBytes)
+      assert(rel.statistics.rowCount === rowCount)
+    }
+    assert(relations.size === 1)
   }
 
   test("test table-level statistics for hive tables created in HiveExternalCatalog") {
@@ -193,11 +201,16 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
-      checkTableStats(textTable, 5812, None)
+      checkMetastoreRelationStats(textTable, 5812, None)
 
       // without noscan, we count the number of rows
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS")
-      checkTableStats(textTable, 5812, Some(500))
+      checkMetastoreRelationStats(textTable, 5812, Some(500))
+
+      // test whether the old stats are removed
+      sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
+      sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
+      checkMetastoreRelationStats(textTable, 11624, None)
 
       // test statistics of LogicalRelation inherited from MetastoreRelation
       sql(s"CREATE TABLE $parquetTable (key STRING, value STRING) STORED AS PARQUET")
@@ -207,14 +220,10 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
       sql(s"ANALYZE TABLE $orcTable COMPUTE STATISTICS")
 
-      checkTableStats(parquetTable, 4236, Some(500))
-
-      sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
-      sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
-      checkTableStats(parquetTable, 8472, None)
+      checkLogicalRelationStats(parquetTable, Some(500))
 
       withSQLConf("spark.sql.hive.convertMetastoreOrc" -> "true") {
-        checkTableStats(orcTable, 3023, Some(500))
+        checkLogicalRelationStats(orcTable, Some(500))
       }
     }
   }
@@ -227,11 +236,11 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
-      checkTableStats(parquetTable, 4236, None)
+      checkLogicalRelationStats(parquetTable, None)
 
       // without noscan, we count the number of rows
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
-      checkTableStats(parquetTable, 4236, Some(500))
+      checkLogicalRelationStats(parquetTable, Some(500))
     }
   }
 

@@ -79,11 +79,11 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
   test("test table-level statistics for data source table created in InMemoryCatalog") {
     def checkTableStats(tableName: String, rowCount: Option[BigInt]): Unit = {
       val df = sql(s"SELECT * FROM $tableName")
-      val statsSeq = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
-        rel.statistics
+      val relations = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
+        assert(rel.statistics.sizeInBytes === rel.relation.sizeInBytes)
+        assert(rel.statistics.rowCount === rowCount)
       }
-      assert(statsSeq.size === 1)
-      assert(statsSeq.head.rowCount === rowCount)
+      assert(relations.size === 1)
     }
 
     val tableName = "tbl"
