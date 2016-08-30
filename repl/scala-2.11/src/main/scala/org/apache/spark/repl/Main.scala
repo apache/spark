@@ -44,7 +44,9 @@ object Main extends Logging {
 
   private def scalaOptionError(msg: String): Unit = {
     hasErrors = true
+    //scalastyle:off
     Console.err.println(msg)
+    //scalastyle: on
   }
 
   def main(args: Array[String]) {
