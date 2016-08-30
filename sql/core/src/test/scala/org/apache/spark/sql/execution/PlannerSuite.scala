@@ -18,12 +18,13 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{execution, DataFrame, Row}
+import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.aggregate.SortAggregateExec
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchange}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
@@ -68,6 +69,25 @@ class PlannerSuite extends SharedSQLContext {
     // aggregations.
     assert(testPartialAggregationPlan(query).size == 4,
       s"The plan of query $query does not have partial aggregations.")
+  }
+
+  test("SPARK-17289 sort-based partial aggregation needs a sort operator as a child") {
+    withTempView("testSortBasedPartialAggregation") {
+      val schema = StructType(
+        StructField(s"key", IntegerType, true) :: StructField(s"value", StringType, true) :: Nil)
+      val rowRDD = sparkContext.parallelize((0 until 1000).map(d => Row(d % 2, d.toString)))
+      spark.createDataFrame(rowRDD, schema)
+        .createOrReplaceTempView("testSortBasedPartialAggregation")
+
+      // This test assumes a query below uses sort-based aggregations
+      val planned = sql("SELECT MAX(value) FROM testSortBasedPartialAggregation GROUP BY key")
+        .queryExecution.executedPlan
+      // This line extracts both SortAggregate and Sort operators
+      val extractedOps = planned.collect { case n if n.nodeName contains "Sort" => n }
+      val aggOps = extractedOps.collect { case n if n.nodeName contains "SortAggregate" => n }
+      assert(extractedOps.size == 4 && aggOps.size == 2,
+        s"The plan $planned does not have correct sort-based partial aggregate pairs.")
+    }
   }
 
   test("non-partial aggregation for aggregates") {
