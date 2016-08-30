@@ -135,8 +135,8 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
         val node = oldPeriphery(nodeIdx)
         val leftCount = stats.leftImpurityCalculator.count
         val rightCount = stats.rightImpurityCalculator.count
-        if (split.nonEmpty && stats.gain > minInfoGain
-            && leftCount >= minInstancesPerNode && rightCount >= minInstancesPerNode) {
+        if (split.nonEmpty && stats.gain > minInfoGain &&
+          leftCount >= minInstancesPerNode && rightCount >= minInstancesPerNode) {
           // TODO: remove node id
           node.leftChild = Some(LearningNode(node.id * 2, isLeaf = false,
             ImpurityStats.getEmptyImpurityStats(stats.leftImpurityCalculator)))
@@ -147,7 +147,12 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
           node.stats = stats
           Iterator(node.leftChild.get, node.rightChild.get)
         } else {
-          node.stats = ImpurityStats.getInvalidImpurityStats(stats.impurityCalculator)
+          // If we're not considering a node with 0 impurity, set the node's stats to
+          // invalid values to indicate that it could not be split due to parameters of
+          // the learning algorithm
+          if (stats.impurity != 0) {
+            node.stats = ImpurityStats.getInvalidImpurityStats(stats.impurityCalculator)
+          }
           node.isLeaf = true
           Iterator()
         }

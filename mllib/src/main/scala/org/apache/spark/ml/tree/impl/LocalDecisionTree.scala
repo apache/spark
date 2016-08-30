@@ -185,10 +185,8 @@ private[ml] object LocalDecisionTree {
       splits: Array[Array[Split]]): Array[(Option[Split], ImpurityStats)] = {
     // For each feature, select the best split for each node.
     // This will use:
-    //  - groupedColStore (the features)
-    //  - partitionInfos (the node -> instance mapping)
-    //  - labelsBc (the labels column)
-    // Each worker returns:
+    //  - labels (the labels column)
+    // Returns:
     //   for each active node, best split + info gain,
     //     where the best split is None if no useful split exists
 

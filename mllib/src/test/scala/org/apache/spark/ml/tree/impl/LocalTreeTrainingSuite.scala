@@ -90,11 +90,9 @@ class LocalTreeTrainingSuite
   test("Local & distributed training produce the same tree on a dataset of continuous features") {
     val sqlContext = spark.sqlContext
     import sqlContext.implicits._
-    testEquivalence(TreeTests.varianceData(sc).toDF, TreeTests.allParamSettings)
+    // Use maxDepth = 5 and default params
+    val params = Map[String, Any]("maxDepth" -> 5)
+    testEquivalence(TreeTests.varianceData(sc).toDF, params)
   }
-
-//  test("Local tree training is faster for a dataset that fits on a single machine") {
-//    assert(false)
-//  }
 
 }
