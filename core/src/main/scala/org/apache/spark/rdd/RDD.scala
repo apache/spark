@@ -1350,10 +1350,7 @@ abstract class RDD[T: ClassTag](
     // order. Once we have received all partitions up to partition N then we can perform driver-side
     // processing on partitions 1 through N to determine whether we've received enough items.
     val completedPartitions = new mutable.HashMap[Int, Array[T]]() // key is partition id
-
-    // The "frontier" is the id of the first missing partition.
-    // If all partitions have been computed, the frontier is `totalPartitions`.
-    var frontier: Int = 0
+    var firstMissingPartition: Int = 0
 
     var jobFuture: SimpleFutureAction[Unit] = null
 
@@ -1365,15 +1362,12 @@ abstract class RDD[T: ClassTag](
         logDebug(s"Handling result for partition $partitionId of $this")
         // Buffer the result in case we can't process it now.
         completedPartitions(partitionId) = result
-        // Determine whether we can process buffered results, which we can only do if the frontier
-        // partition was received (since frontier is always the first outstanding partition)
-        assert(frontier != -1)
-        if (partitionId == frontier) {
-          while (!gotEnoughRows && completedPartitions.contains(frontier)) {
-            logDebug(s"Unpacking partition $frontier of $this")
-            val rawPartitionData = completedPartitions.remove(frontier).get
+        if (partitionId == firstMissingPartition) {
+          while (!gotEnoughRows && completedPartitions.contains(firstMissingPartition)) {
+            logDebug(s"Unpacking partition $firstMissingPartition of $this")
+            val rawPartitionData = completedPartitions.remove(firstMissingPartition).get
             resultToReturn ++= unpackPartition(rawPartitionData)
-            frontier += 1
+            firstMissingPartition += 1
 
             if (resultToReturn.size >= num) {
               // We have unpacked enough results to reach the desired number of results, so discard
