@@ -26,7 +26,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.StreamInputInfo
@@ -192,7 +191,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
 
-      val directories = SparkHadoopUtil.get.globToFileStatusIfNecessary(directoryPath)
+      val directories = Option(fs.globStatus(directoryPath)).getOrElse(Array.empty[FileStatus])
           .filter(_.isDirectory)
           .map(_.getPath)
       val newFiles = directories.flatMap(dir =>

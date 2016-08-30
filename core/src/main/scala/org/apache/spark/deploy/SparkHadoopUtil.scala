@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.{FileNotFoundException, IOException}
+import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
@@ -217,31 +218,6 @@ class SparkHadoopUtil extends Logging {
 
   def globPathIfNecessary(pattern: Path): Seq[Path] = {
     if (isGlobPath(pattern)) globPath(pattern) else Seq(pattern)
-  }
-
-  /**
-   * List directories/files matching the path and return the `FileStatus` results.
-   * If the pattern is not a glob regular expression then a simple `getFileStatus(pattern)`
-   * is called to get the status of that path.
-   * If the path/pattern does not match anything in the filesystem,
-   * an empty sequence is returned.
-   * @param pattern pattern
-   * @return a possibly empty array of FileStatus entries
-   */
-  def globToFileStatusIfNecessary(pattern: Path): Array[FileStatus] = {
-    val fs = pattern.getFileSystem(conf)
-    if (isGlobPath(pattern)) {
-      Option(fs.globStatus(pattern)).getOrElse(Array.empty[FileStatus])
-    } else {
-      try {
-        Array(fs.getFileStatus(pattern))
-      } catch {
-        // nothing at the end of the path
-        case e: FileNotFoundException =>
-          logDebug(s"Failed to glob $pattern", e)
-          Array.empty[FileStatus]
-      }
-    }
   }
 
   /**
