@@ -25,6 +25,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.util.DiskChecker;
+import static org.apache.hadoop.util.DiskChecker.DiskErrorException;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
 import org.slf4j.Logger;
@@ -270,9 +272,17 @@ public class YarnShuffleService extends AuxiliaryService {
     }
 
     if (_recoveryPath == null) {
-      _recoveryPath = new Path(localDirs[0]);
+      for (String dir : localDirs) {
+        try {
+          DiskChecker.checkDir(new File(dir));
+          _recoveryPath = new Path(dir);
+          return _recoveryPath;
+        } catch (DiskErrorException e) {
+          logger.warn("Local disk {} not available", dir, e);
+        }
+      }
     }
 
-    return _recoveryPath;
+    return null;
   }
 }
