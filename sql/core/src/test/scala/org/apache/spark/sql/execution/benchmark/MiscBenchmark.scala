@@ -143,13 +143,13 @@ class MiscBenchmark extends BenchmarkBase {
     }
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.4
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.6
     Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
 
     generate explode array:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    generate explode array wholestage off         7095 / 7331          2.4         422.9       1.0X
-    generate explode array wholestage on           631 /  641         26.6          37.6      11.2X
+    generate explode array wholestage off         6920 / 7129          2.4         412.5       1.0X
+    generate explode array wholestage on           623 /  646         26.9          37.1      11.1X
      */
 
     runBenchmark("generate explode map", N) {
@@ -160,13 +160,47 @@ class MiscBenchmark extends BenchmarkBase {
     }
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.4
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.6
     Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
 
     generate explode map:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    generate explode map wholestage off         12856 / 13569          1.3         766.3       1.0X
-    generate explode map wholestage on             865 /  873         19.4          51.6      14.9X
+    generate explode map wholestage off         11978 / 11993          1.4         714.0       1.0X
+    generate explode map wholestage on             866 /  919         19.4          51.6      13.8X
+     */
+
+    runBenchmark("generate posexplode array", N) {
+      val df = sparkSession.range(N).selectExpr(
+        "id as key",
+        "array(rand(), rand(), rand(), rand(), rand()) as values")
+      df.selectExpr("key", "posexplode(values) as (idx, value)").count()
+    }
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.6
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+    generate posexplode array:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate posexplode array wholestage off      7502 / 7513          2.2         447.1       1.0X
+    generate posexplode array wholestage on        617 /  623         27.2          36.8      12.2X
+     */
+
+    runBenchmark("generate inline array", N) {
+      val df = sparkSession.range(N).selectExpr(
+        "id as key",
+        "array((rand(), rand()), (rand(), rand()), (rand(), 0.0d)) as values")
+      df.selectExpr("key", "inline(values) as (r1, r2)").count()
+    }
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.6
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+    generate inline array:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate inline array wholestage off          6901 / 6928          2.4         411.3       1.0X
+    generate inline array wholestage on           1001 / 1010         16.8          59.7       6.9X
      */
   }
 
@@ -180,13 +214,34 @@ class MiscBenchmark extends BenchmarkBase {
     }
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.4
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.6
     Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
 
     generate json_tuple:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    generate json_tuple wholestage off          13097 / 13323          1.3         780.6       1.0X
-    generate json_tuple wholestage on           11815 / 11899          1.4         704.2       1.1X
+    generate json_tuple wholestage off          12695 / 13635          1.3         756.7       1.0X
+    generate json_tuple wholestage on           12044 / 12162          1.4         717.9       1.1X
+     */
+
+    runBenchmark("generate stack", N) {
+      val df = sparkSession.range(N).selectExpr(
+        "id as key",
+        "id % 2 as t1",
+        "id % 3 as t2",
+        "id % 5 as t3",
+        "id % 7 as t4",
+        "id % 13 as t5")
+      df.selectExpr("key", "stack(4, t1, t2, t3, t4, t5)").count()
+    }
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.6
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+    generate stack:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate stack wholestage off               12953 / 13070          1.3         772.1       1.0X
+    generate stack wholestage on                   836 /  847         20.1          49.8      15.5X
      */
   }
 }
