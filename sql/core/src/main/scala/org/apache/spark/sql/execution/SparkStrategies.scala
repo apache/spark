@@ -443,8 +443,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             query)
         ExecutedCommandExec(cmd) :: Nil
 
-      case c: CreateTempViewUsing => ExecutedCommandExec(c) :: Nil
-
       case _ => Nil
     }
   }

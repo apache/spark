@@ -42,8 +42,8 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand}
-import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
+import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand, TemporaryView}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.streaming.{DataStreamWriter, StreamingQuery}
@@ -2429,7 +2429,7 @@ class Dataset[T] private[sql](
    */
   @throws[AnalysisException]
   def createTempView(viewName: String): Unit = withPlan {
-    createViewCommand(viewName, replace = false)
+    createTempViewCommand(viewName, replace = false)
   }
 
   /**
@@ -2440,10 +2440,10 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def createOrReplaceTempView(viewName: String): Unit = withPlan {
-    createViewCommand(viewName, replace = true)
+    createTempViewCommand(viewName, replace = true)
   }
 
-  private def createViewCommand(viewName: String, replace: Boolean): CreateViewCommand = {
+  private def createTempViewCommand(viewName: String, replace: Boolean): CreateViewCommand = {
     CreateViewCommand(
       name = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
       userSpecifiedColumns = Nil,
@@ -2451,9 +2451,8 @@ class Dataset[T] private[sql](
       properties = Map.empty,
       originalText = None,
       child = logicalPlan,
-      allowExisting = false,
-      replace = replace,
-      isTemporary = true)
+      if (replace) SaveMode.Overwrite else SaveMode.ErrorIfExists,
+      TemporaryView)
   }
 
   /**

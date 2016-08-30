@@ -1254,6 +1254,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           ic.identifier.getText -> Option(ic.STRING).map(string)
         }
       }
+      val viewType = if (ctx.TEMPORARY != null) TemporaryView else PermanentView
       createView(
         ctx,
         ctx.tableIdentifier,
@@ -1261,15 +1262,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         userSpecifiedColumns,
         ctx.query,
         Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty),
-        allowExisting = ctx.EXISTS != null,
+        ignoreIfExists = ctx.EXISTS != null,
         replace = ctx.REPLACE != null,
-        isTemporary = ctx.TEMPORARY != null
+        viewType
       )
     }
   }
 
   /**
-   * Alter the query of a view. This creates a [[CreateViewCommand]] command.
+   * Alter the query of a view. This creates a [[CreateViewCommand]] command. The view type could be
+   * either temporary or permanent.
    */
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
     createView(
@@ -1279,9 +1281,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       userSpecifiedColumns = Seq.empty,
       query = ctx.query,
       properties = Map.empty,
-      allowExisting = false,
+      ignoreIfExists = false,
       replace = true,
-      isTemporary = false)
+      AnyTypeView
+    )
   }
 
   /**
@@ -1294,10 +1297,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       userSpecifiedColumns: Seq[(String, Option[String])],
       query: QueryContext,
       properties: Map[String, String],
-      allowExisting: Boolean,
+      ignoreIfExists: Boolean,
       replace: Boolean,
-      isTemporary: Boolean): LogicalPlan = {
+      viewType: ViewType): LogicalPlan = {
+    val mode = (replace, ignoreIfExists) match {
+      case (true, false) => SaveMode.Overwrite
+      case (false, true) => SaveMode.Ignore
+      case (false, false) => SaveMode.ErrorIfExists
+      case _ => throw new ParseException(
+        "CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.", ctx)
+    }
     val originalText = source(query)
+
     CreateViewCommand(
       visitTableIdentifier(name),
       userSpecifiedColumns,
@@ -1305,9 +1316,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       properties,
       Some(originalText),
       plan(query),
-      allowExisting = allowExisting,
-      replace = replace,
-      isTemporary = isTemporary)
+      mode,
+      viewType)
   }
 
   /**
