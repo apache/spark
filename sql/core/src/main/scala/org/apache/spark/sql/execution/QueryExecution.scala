@@ -21,12 +21,13 @@ import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.aggregate.MergePartialAggregate
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.internal.SQLConf
@@ -100,6 +101,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     python.ExtractPythonUDFs,
     PlanSubqueries(sparkSession),
     EnsureRequirements(sparkSession.sessionState.conf),
+    MergePartialAggregate,
     CollapseCodegenStages(sparkSession.sessionState.conf),
     ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf))

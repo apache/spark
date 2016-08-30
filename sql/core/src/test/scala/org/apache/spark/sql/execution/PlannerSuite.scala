@@ -18,21 +18,21 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{execution, Row}
+import org.apache.spark.sql.{execution, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchange}
+import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class PlannerSuite extends SharedSQLContext {
+class PlannerSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   setupTestData()
@@ -517,6 +517,24 @@ class PlannerSuite extends SharedSQLContext {
     if (outputPlan2.collect { case e: ShuffleExchange => true }.size != 2) {
       fail(s"Should have only two shuffles:\n$outputPlan")
     }
+  }
+
+  test("no partial aggregation if input relation is already partitioned") {
+    val input = Seq("a" -> 1, "b" -> 2).toDF("i", "j")
+
+    val aggWithoutDistinct = input.repartition($"i").groupBy($"i").agg(sum($"j"))
+    checkAnswer(aggWithoutDistinct, input.groupBy($"i").agg(sum($"j")))
+    val numShuffles = aggWithoutDistinct.queryExecution.executedPlan.collect {
+      case e: Exchange => e
+    }.length
+    assert(numShuffles == 1)
+
+    val aggWithDistinct = input.repartition($"i", $"j").groupBy($"i").agg(countDistinct($"j"))
+    checkAnswer(aggWithDistinct, input.groupBy($"i").agg(countDistinct($"j")))
+    val numShuffles2 = aggWithDistinct.queryExecution.executedPlan.collect {
+      case e: Exchange => e
+    }.length
+    assert(numShuffles2 == 2)
   }
 }
 
