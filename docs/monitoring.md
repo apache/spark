@@ -114,8 +114,9 @@ The history server can be configured as follows:
     <td>spark.history.retainedApplications</td>
     <td>50</td>
     <td>
-      The number of application UIs to retain in the cache. If this cap is exceeded, then the oldest
-      applications will be removed from the cache.
+      The number of applications to retain UI data for in the cache. If this cap is exceeded, then
+      the oldest applications will be removed from the cache. If an application is not in the cache,
+      it will have to be loaded from disk if its accessed from the UI.
     </td>
   </tr>
   <tr>
