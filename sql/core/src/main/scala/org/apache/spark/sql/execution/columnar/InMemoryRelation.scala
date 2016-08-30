@@ -100,9 +100,14 @@ case class InMemoryRelation(
     buildBuffers()
   }
 
-  def recache(): Unit = {
-    _cachedColumnBuffers.unpersist()
+  def unpersist(blocking: Boolean = true): Unit = {
+    batchStats.reset()
+    _cachedColumnBuffers.unpersist(blocking)
     _cachedColumnBuffers = null
+  }
+
+  def recache(): Unit = {
+    unpersist(true)
     buildBuffers()
   }
 
