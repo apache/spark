@@ -120,6 +120,10 @@ package object config {
     .intConf
     .createWithDefault(100000)
 
+  // To limit how many applications are shown in the History Server summary ui
+  private[spark] val HISTORY_UI_MAX_APPS =
+    ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)
+
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
     .booleanConf
     .createWithDefault(false)
