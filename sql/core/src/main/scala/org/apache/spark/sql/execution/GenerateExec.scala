@@ -127,17 +127,17 @@ case class GenerateExec(
     val data = boundGenerator.genCode(ctx)
 
     boundGenerator match {
-      case e: ExplodeBase => codeGenExplode(ctx, e, values, data, row)
+      case e: CollectionGenerator => codeGenCollection(ctx, e, values, data, row)
       case g => codeGenTraversableOnce(ctx, g, values, data, row)
     }
   }
 
   /**
-   * Generate code for [[ExplodeBase]] expressions.
+   * Generate code for [[CollectionGenerator]] expressions.
    */
-  private def codeGenExplode(
+  private def codeGenCollection(
       ctx: CodegenContext,
-      e: ExplodeBase,
+      e: CollectionGenerator,
       input: Seq[ExprCode],
       data: ExprCode,
       row: ExprCode): String = {
@@ -156,19 +156,12 @@ case class GenerateExec(
     }
 
     // Generate code for either ArrayData or MapData
-    val (initMapData, updateRowData, values) = e.child.dataType match {
-      case ArrayType(struct: StructType, nullable) if e.isInstanceOf[Inline] =>
-        val row = codeGenAccessor(ctx, data.value, "col", index, struct, nullable, checks)
-        val extendedChecks = checks ++ optionalCode(nullable, row.isNull)
-        val columns = struct.fields.toSeq.zipWithIndex.map { case (field, fieldIndex) =>
-          codeGenAccessor(
-            ctx,
-            row.value,
-            field.name,
-            fieldIndex.toString,
-            field.dataType,
-            field.nullable,
-            extendedChecks)
+    val (initMapData, updateRowData, values) = e.collectionSchema match {
+      case ArrayType(st: StructType, nullable) if e.inline =>
+        val row = codeGenAccessor(ctx, data.value, "col", index, st, nullable, checks)
+        val fieldChecks = checks ++ optionalCode(nullable, row.isNull)
+        val columns = st.fields.toSeq.zipWithIndex.map { case (f, i) =>
+          codeGenAccessor(ctx, row.value, f.name, i.toString, f.dataType, f.nullable, fieldChecks)
         }
         ("", row.code, columns)
 

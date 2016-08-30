@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.AbstractIterator
-
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -65,6 +63,21 @@ trait Generator extends Expression {
 }
 
 /**
+ * A collection producing [[Generator]]. This trait provides a different path for code generation,
+ * by allowing code generation to return either an [[ArrayData]] or a [[MapData]] object.
+ */
+trait CollectionGenerator extends Generator {
+  /** The position of an element within the collection should also be returned. */
+  def position: Boolean
+
+  /** Rows will be inlined during generation. */
+  def inline: Boolean
+
+  /** The schema of the returned collection object. */
+  def collectionSchema: DataType = dataType
+}
+
+/**
  * A generator that produces its output using the provided lambda function.
  */
 case class UserDefinedGenerator(
@@ -108,7 +121,9 @@ case class UserDefinedGenerator(
 @ExpressionDescription(
   usage = "_FUNC_(n, v1, ..., vk) - Separate v1, ..., vk into n rows.",
   extended = "> SELECT _FUNC_(2, 1, 2, 3);\n  [1,2]\n  [3,null]")
-case class Stack(children: Seq[Expression]) extends Expression with Generator {
+case class Stack(children: Seq[Expression]) extends CollectionGenerator {
+  override val position: Boolean = false
+  override val inline: Boolean = true
 
   private lazy val numRows = children.head.eval().asInstanceOf[Int]
   private lazy val numFields = Math.ceil((children.length - 1.0) / numRows).toInt
@@ -150,54 +165,23 @@ case class Stack(children: Seq[Expression]) extends Expression with Generator {
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val values = children.tail
-    val iteratorClass = classOf[AbstractIterator[_]].getName
-    val rowClass = classOf[GenericInternalRow].getName
-    def genRowUpdate(row: Int): String = {
-      val columnUpdates = (0 until numFields).map { col =>
+    val dataTypes = values.take(numFields).map(_.dataType)
+    val rows = for (row <- 0 until numRows) yield {
+      val fields = for (col <- 0 until numFields) yield {
         val index = row * numFields + col
-        if (index < values.length) {
-          val e = values(index)
-          val eval = values(index).genCode(ctx)
-          val update = s"data[$col] = ${eval.value};"
-          if (e.nullable) {
-            s"if (${eval.isNull}) data[$col] = null; else $update"
-          } else {
-            update
-          }
-        } else {
-          s"data[$col] = null;"
-        }
+        if (index < values.length) values(index) else Literal(null, dataTypes(col))
       }
-      s"case $row:\n${columnUpdates.mkString("\n")}\nbreak;"
+      CreateStruct(fields)
     }
-    ev.copy(code =
-      s"""
-        |$iteratorClass<InternalRow> ${ev.value} = new $iteratorClass<$rowClass>() {
-        |  private int n = 0;
-        |  private Object[] data = new Object[$numFields];
-        |  private $rowClass row = new $rowClass(data);
-        |  public boolean hasNext() {
-        |    return n < $numRows;
-        |  }
-        |  public $rowClass next() {
-        |    switch (n) {
-        |      ${(0 until numRows).map(genRowUpdate).mkString("\n")}
-        |    }
-        |    n++;
-        |    return row;
-        |  }
-        |};
-      """.stripMargin)
+    CreateArray(rows).genCode(ctx)
   }
 }
 
 /**
- * A base class for [[Inline]], [[Explode]] and [[PosExplode]].
+ * A base class for [[Explode]] and [[PosExplode]].
  */
-abstract class ExplodeBase extends UnaryExpression with Generator with Serializable {
-  val position: Boolean
-
-  override def children: Seq[Expression] = child :: Nil
+abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with Serializable {
+  override val inline: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case _: ArrayType | _: MapType =>
@@ -260,6 +244,8 @@ abstract class ExplodeBase extends UnaryExpression with Generator with Serializa
     }
   }
 
+  override def collectionSchema: DataType = child.dataType
+
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.genCode(ctx)
   }
@@ -307,7 +293,8 @@ case class PosExplode(child: Expression) extends ExplodeBase {
 @ExpressionDescription(
   usage = "_FUNC_(a) - Explodes an array of structs into a table.",
   extended = "> SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));\n  [1,a]\n  [2,b]")
-case class Inline(child: Expression) extends ExplodeBase {
+case class Inline(child: Expression) extends UnaryExpression with CollectionGenerator {
+  override val inline: Boolean = true
   override val position: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
@@ -322,6 +309,8 @@ case class Inline(child: Expression) extends ExplodeBase {
     case ArrayType(st: StructType, _) => st
   }
 
+  override def collectionSchema: DataType = child.dataType
+
   private lazy val numFields = elementSchema.fields.length
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
@@ -332,5 +321,9 @@ case class Inline(child: Expression) extends ExplodeBase {
       for (i <- 0 until inputArray.numElements())
         yield inputArray.getStruct(i, numFields)
     }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    child.genCode(ctx)
   }
 }
