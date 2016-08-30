@@ -134,7 +134,7 @@ class AppClientSuite
     val ci = new AppClientInst(masterRpcEnv.address.toSparkURL)
 
     // requests to master should fail immediately
-    whenReady(ci.client.requestTotalExecutors(3), timeout(0.seconds)) { success =>
+    whenReady(ci.client.requestTotalExecutors(3), timeout(1.seconds)) { success =>
       assert(success === false)
     }
   }

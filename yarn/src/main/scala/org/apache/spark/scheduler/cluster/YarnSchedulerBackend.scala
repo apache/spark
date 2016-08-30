@@ -212,35 +212,35 @@ private[spark] abstract class YarnSchedulerBackend(
     extends ThreadSafeRpcEndpoint with Logging {
     private var amEndpoint: Option[RpcEndpointRef] = None
 
-    private val askAmThreadPool =
-      ThreadUtils.newDaemonCachedThreadPool("yarn-scheduler-ask-am-thread-pool")
-    implicit val askAmExecutor = ExecutionContext.fromExecutor(askAmThreadPool)
-
     private[YarnSchedulerBackend] def handleExecutorDisconnectedFromDriver(
         executorId: String,
         executorRpcAddress: RpcAddress): Unit = {
-      amEndpoint match {
+      val removeExecutorMessage = amEndpoint match {
         case Some(am) =>
           val lossReasonRequest = GetExecutorLossReason(executorId)
-          val future = am.ask[ExecutorLossReason](lossReasonRequest, askTimeout)
-          future onSuccess {
-            case reason: ExecutorLossReason =>
-              driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
-          }
-          future onFailure {
-            case NonFatal(e) =>
-              logWarning(s"Attempted to get executor loss reason" +
-                s" for executor id ${executorId} at RPC address ${executorRpcAddress}," +
-                s" but got no response. Marking as slave lost.", e)
-              driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, SlaveLost()))
-            case t => throw t
-          }
+          am.ask[ExecutorLossReason](lossReasonRequest, askTimeout)
+            .map { reason => RemoveExecutor(executorId, reason) }(ThreadUtils.sameThread)
+            .recover {
+              case NonFatal(e) =>
+                logWarning(s"Attempted to get executor loss reason" +
+                  s" for executor id ${executorId} at RPC address ${executorRpcAddress}," +
+                  s" but got no response. Marking as slave lost.", e)
+                RemoveExecutor(executorId, SlaveLost())
+            }(ThreadUtils.sameThread)
         case None =>
           logWarning("Attempted to check for an executor loss reason" +
             " before the AM has registered!")
-          driverEndpoint.askWithRetry[Boolean](
-            RemoveExecutor(executorId, SlaveLost("AM is not yet registered.")))
+          Future.successful(RemoveExecutor(executorId, SlaveLost("AM is not yet registered.")))
       }
+
+      removeExecutorMessage
+        .flatMap { message =>
+          driverEndpoint.ask[Boolean](message)
+        }(ThreadUtils.sameThread)
+        .onFailure {
+          case NonFatal(e) => logError(
+            s"Error requesting driver to remove executor $executorId after disconnection.", e)
+        }(ThreadUtils.sameThread)
     }
 
     override def receive: PartialFunction[Any, Unit] = {
@@ -262,8 +262,9 @@ private[spark] abstract class YarnSchedulerBackend(
         logWarning(reason.toString)
         driverEndpoint.ask[Boolean](r).onFailure {
           case e =>
-            logError(s"Error requesting driver to remove executor $executorId for reason $reason")
-        }
+            logError("Error requesting driver to remove executor" +
+              s" $executorId for reason $reason", e)
+        }(ThreadUtils.sameThread)
     }
 
 
@@ -276,7 +277,7 @@ private[spark] abstract class YarnSchedulerBackend(
               case Failure(NonFatal(e)) =>
                 logError(s"Sending $r to AM was unsuccessful", e)
                 context.sendFailure(e)
-            }
+            }(ThreadUtils.sameThread)
           case None =>
             logWarning("Attempted to request executors before the AM has registered!")
             context.reply(false)
@@ -290,7 +291,7 @@ private[spark] abstract class YarnSchedulerBackend(
               case Failure(NonFatal(e)) =>
                 logError(s"Sending $k to AM was unsuccessful", e)
                 context.sendFailure(e)
-            }
+            }(ThreadUtils.sameThread)
           case None =>
             logWarning("Attempted to kill executors before the AM has registered!")
             context.reply(false)
@@ -305,10 +306,6 @@ private[spark] abstract class YarnSchedulerBackend(
         logWarning(s"ApplicationMaster has disassociated: $remoteAddress")
         amEndpoint = None
       }
-    }
-
-    override def onStop(): Unit = {
-      askAmThreadPool.shutdownNow()
     }
   }
 }

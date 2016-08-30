@@ -81,14 +81,6 @@ private[spark] class StandaloneAppClient(
     private val registrationRetryThread =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("appclient-registration-retry-thread")
 
-    // A thread pool to perform receive then reply actions in a thread so as not to block the
-    // event loop.
-    private val askAndReplyThreadPool =
-      ThreadUtils.newDaemonCachedThreadPool("appclient-receive-and-reply-threadpool")
-
-    private val askAndReplyExecutionContext =
-      ExecutionContext.fromExecutorService(askAndReplyThreadPool)
-
     override def onStart(): Unit = {
       try {
         registerWithMaster(1)
@@ -231,7 +223,7 @@ private[spark] class StandaloneAppClient(
         case Success(b) => context.reply(b)
         case Failure(ie: InterruptedException) => // Cancelled
         case Failure(NonFatal(t)) => context.sendFailure(t)
-      }(askAndReplyExecutionContext)
+      }(ThreadUtils.sameThread)
     }
 
     override def onDisconnected(address: RpcAddress): Unit = {
@@ -271,7 +263,6 @@ private[spark] class StandaloneAppClient(
       registrationRetryThread.shutdownNow()
       registerMasterFutures.get.foreach(_.cancel(true))
       registerMasterThreadPool.shutdownNow()
-      askAndReplyThreadPool.shutdownNow()
     }
 
   }
