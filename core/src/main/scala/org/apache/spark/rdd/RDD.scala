@@ -21,6 +21,8 @@ import java.util.Random
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.io.Codec
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
@@ -1365,6 +1367,8 @@ abstract class RDD[T: ClassTag](
     // received all preceding partitions.
     val bufferedPartitions = new mutable.HashMap[Int, Array[T]]() // key is partition id
 
+    var jobFuture: SimpleFutureAction[Unit] = null
+
     // This callback is invoked as individual partitions complete.
     def handleResult(partitionId: Int, result: Array[T]): Unit = lock.synchronized {
       if (gotEnoughRows) {
@@ -1392,8 +1396,8 @@ abstract class RDD[T: ClassTag](
               bufferedPartitions.clear()
               // Set a flag so that future task completion events are ignored:
               gotEnoughRows = true
-              // Notify the main thread so that it can interrupt the job:
-              lock.notifyAll()
+              // Cancel the job so we can return sooner
+              jobFuture.cancelWithoutFailing()
             }
           }
         }
@@ -1419,31 +1423,18 @@ abstract class RDD[T: ClassTag](
       val partitionsToCompute =
         partitionsScanned.until(math.min(partitionsScanned + numPartsToTry, totalPartitions).toInt)
 
-      val jobFuture: SimpleFutureAction[Unit] = sc.submitJob(
-        this,
-        (it: Iterator[T]) => it.toArray,
-        partitionsToCompute,
-        handleResult,
-        resultFunc = ())
-      jobFuture.onComplete { _ =>
-        // Wake the job submitting thread
-        lock.synchronized {
-          lock.notifyAll()
-        }
-      }(scala.concurrent.ExecutionContext.Implicits.global)
-
       lock.synchronized {
-        while (!jobFuture.isCompleted && !gotEnoughRows) {
-          lock.wait()
-        }
+        jobFuture = sc.submitJob(
+          this,
+          (it: Iterator[T]) => it.toArray,
+          partitionsToCompute,
+          handleResult,
+          resultFunc = ())
       }
-      if (!jobFuture.isCompleted) {
-        jobFuture.cancelWithoutFailing()
-      } else {
-        // The job has completed, so attempt to retrieve its value (which is Unit) so that
-        // exceptions can be propagated in case the job failed.
-        jobFuture.value.get.get
-      }
+
+      // scalastyle:off awaitresult
+      Await.result(jobFuture, Duration.Inf)
+      // scalastyle:on awaitresult
       sparkContext.progressBar.foreach(_.finishAll())
 
       partitionsScanned += partitionsToCompute.length

@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import scala.concurrent.{Future, Promise}
 
 import org.apache.spark.internal.Logging
@@ -34,7 +32,6 @@ private[spark] class JobWaiter[T](
     resultHandler: (Int, T) => Unit)
   extends JobListener with Logging {
 
-  private val finishedTasks = new AtomicInteger(0)
   // If the job is finished, this will be its result. In the case of 0 task jobs (e.g. zero
   // partition RDDs), we set the jobResult directly to JobSucceeded.
   private val jobPromise: Promise[Unit] =
@@ -60,9 +57,10 @@ private[spark] class JobWaiter[T](
     synchronized {
       resultHandler(index, result.asInstanceOf[T])
     }
-    if (finishedTasks.incrementAndGet() == totalTasks) {
-      jobPromise.success(())
-    }
+  }
+
+  override def markJobSucceeded(): Unit = {
+    jobPromise.success(())
   }
 
   override def jobFailed(exception: Exception): Unit = {

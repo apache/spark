@@ -188,6 +188,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   var failure: Exception = _
   val jobListener = new JobListener() {
     override def taskSucceeded(index: Int, result: Any) = results.put(index, result)
+    override def markJobSucceeded(): Unit = {}
     override def jobFailed(exception: Exception) = { failure = exception }
   }
 
@@ -196,6 +197,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     val results = new HashMap[Int, Any]
     var failure: Exception = null
     override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
+    override def markJobSucceeded(): Unit = {}
     override def jobFailed(exception: Exception): Unit = { failure = exception }
   }
 
@@ -393,6 +395,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     var failureReason: Option[Exception] = None
     val fakeListener = new JobListener() {
       override def taskSucceeded(partition: Int, value: Any): Unit = numResults += 1
+      override def markJobSucceeded(): Unit = {}
       override def jobFailed(exception: Exception): Unit = {
         failureReason = Some(exception)
       }
@@ -1413,6 +1416,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     class FailureRecordingJobListener() extends JobListener {
       var failureMessage: String = _
       override def taskSucceeded(index: Int, result: Any) {}
+      override def markJobSucceeded(): Unit = {}
       override def jobFailed(exception: Exception): Unit = { failureMessage = exception.getMessage }
     }
     val listener1 = new FailureRecordingJobListener()
