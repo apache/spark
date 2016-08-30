@@ -32,15 +32,7 @@ class SimplifyCastsSuite extends PlanTest {
     val batches = Batch("SimplifyCasts", FixedPoint(50), SimplifyCasts) :: Nil
   }
 
-  test("non-nullable to non-nullable array cast") {
-    val input = LocalRelation('a.array(ArrayType(IntegerType, false)))
-    val plan = input.select('a.cast(ArrayType(IntegerType, false)).as("casted")).analyze
-    val optimized = Optimize.execute(plan)
-    val expected = input.select('a.as("casted")).analyze
-    comparePlans(optimized, expected)
-  }
-
-  test("non-nullable to nullable array cast") {
+  test("non-nullable element array to nullable element array cast") {
     val input = LocalRelation('a.array(ArrayType(IntegerType, false)))
     val plan = input.select('a.cast(ArrayType(IntegerType, true)).as("casted")).analyze
     val optimized = Optimize.execute(plan)
@@ -48,31 +40,14 @@ class SimplifyCastsSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test("nullable to non-nullable array cast") {
+  test("nullable element to non-nullable element array cast") {
     val input = LocalRelation('a.array(ArrayType(IntegerType, true)))
     val plan = input.select('a.cast(ArrayType(IntegerType, false)).as("casted")).analyze
     val optimized = Optimize.execute(plan)
     comparePlans(optimized, plan)
   }
 
-  test("nullable to nullable array cast") {
-    val input = LocalRelation('a.array(ArrayType(IntegerType, true)))
-    val plan = input.select('a.cast(ArrayType(IntegerType, true)).as("casted")).analyze
-    val optimized = Optimize.execute(plan)
-    val expected = input.select('a.as("casted")).analyze
-    comparePlans(optimized, expected)
-  }
-
-  test("non-nullable to non-nullable map cast") {
-    val input = LocalRelation('m.map(MapType(StringType, StringType, false)))
-    val plan = input.select('m.cast(MapType(StringType, StringType, false))
-      .as("casted")).analyze
-    val optimized = Optimize.execute(plan)
-    val expected = input.select('m.as("casted")).analyze
-    comparePlans(optimized, expected)
-  }
-
-  test("non-nullable to nullable map cast") {
+  test("non-nullable value map to nullable value map cast") {
     val input = LocalRelation('m.map(MapType(StringType, StringType, false)))
     val plan = input.select('m.cast(MapType(StringType, StringType, true))
       .as("casted")).analyze
@@ -81,21 +56,12 @@ class SimplifyCastsSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test("nullable to non-nullable map cast") {
+  test("nullable value map to non-nullable value map cast") {
     val input = LocalRelation('m.map(MapType(StringType, StringType, true)))
     val plan = input.select('m.cast(MapType(StringType, StringType, false))
       .as("casted")).analyze
     val optimized = Optimize.execute(plan)
     comparePlans(optimized, plan)
-  }
-
-  test("nullable to nullable map cast") {
-    val input = LocalRelation('m.map(MapType(StringType, StringType, true)))
-    val plan = input.select('m.cast(MapType(StringType, StringType, true))
-      .as("casted")).analyze
-    val optimized = Optimize.execute(plan)
-    val expected = input.select('m.as("casted")).analyze
-    comparePlans(optimized, expected)
   }
 }
 
