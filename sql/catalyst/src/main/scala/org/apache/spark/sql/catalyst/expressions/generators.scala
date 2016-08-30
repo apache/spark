@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -121,9 +123,7 @@ case class UserDefinedGenerator(
 @ExpressionDescription(
   usage = "_FUNC_(n, v1, ..., vk) - Separate v1, ..., vk into n rows.",
   extended = "> SELECT _FUNC_(2, 1, 2, 3);\n  [1,2]\n  [3,null]")
-case class Stack(children: Seq[Expression]) extends CollectionGenerator {
-  override val position: Boolean = false
-  override val inline: Boolean = true
+case class Stack(children: Seq[Expression]) extends Generator {
 
   private lazy val numRows = children.head.eval().asInstanceOf[Int]
   private lazy val numFields = Math.ceil((children.length - 1.0) / numRows).toInt
@@ -164,6 +164,9 @@ case class Stack(children: Seq[Expression]) extends CollectionGenerator {
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // Rows - we write these into an array.
+    val rowData = ctx.freshName("rows")
+    ctx.addMutableState("InternalRow[]", rowData, s"this.$rowData = new InternalRow[$numRows];")
     val values = children.tail
     val dataTypes = values.take(numFields).map(_.dataType)
     val rows = for (row <- 0 until numRows) yield {
@@ -171,9 +174,17 @@ case class Stack(children: Seq[Expression]) extends CollectionGenerator {
         val index = row * numFields + col
         if (index < values.length) values(index) else Literal(null, dataTypes(col))
       }
-      CreateStruct(fields)
+      val eval = CreateStruct(fields).genCode(ctx)
+      s"${eval.code}\nthis.$rowData[$row] = ${eval.value};"
     }
-    CreateArray(rows).genCode(ctx)
+
+    // Create the iterator.
+    val wrapperClass = classOf[mutable.WrappedArray[_]].getName
+    ctx.addMutableState(
+      s"$wrapperClass<InternalRow>",
+      ev.value,
+      s"this.${ev.value} = $wrapperClass$$.MODULE$$.make(this.$rowData);")
+    ev.copy(code = rows.mkString("\n"), isNull = "false")
   }
 }
 
