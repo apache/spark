@@ -24,14 +24,19 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.util.Utils
 
 private[sql] case class CommonSubquery(
     output: Seq[Attribute],
-    @transient child: LogicalPlan)(
-    @transient val executedChild: SparkPlan,
+    @transient child: SparkPlan)(
+    @transient val logicalChild: LogicalPlan,
     private[sql] val _statistics: Statistics,
     @transient private[sql] var _computedOutput: RDD[InternalRow] = null)
-  extends logical.UnaryNode {
+  extends logical.LeafNode {
+
+  override def argString: String = Utils.truncatedString(output, "[", ", ", "]")
+
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(logicalChild)
 
   override def producedAttributes: AttributeSet = outputSet
 
@@ -40,16 +45,16 @@ private[sql] case class CommonSubquery(
   lazy val numRows: Long = computedOutput.count
 
   def withOutput(newOutput: Seq[Attribute]): CommonSubquery = {
-    CommonSubquery(newOutput, child)(executedChild, _statistics, _computedOutput)
+    CommonSubquery(newOutput, child)(logicalChild, _statistics, _computedOutput)
   }
 
   def computedOutput: RDD[InternalRow] = this.synchronized {
     if (_computedOutput == null) {
-      _computedOutput = executedChild.execute()
+      _computedOutput = child.execute()
     }
     _computedOutput
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] =
-    Seq(executedChild, _statistics, _computedOutput)
+    Seq(logicalChild, _statistics, _computedOutput)
 }

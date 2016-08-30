@@ -50,8 +50,8 @@ private[sql] class SubqueryDedup {
         CommonSubqueryItem(
           planToDedup,
           CommonSubquery(planToDedup.output,
-            planToDedup)
-            (sparkSession.sessionState.executePlan(planToDedup).executedPlan,
+            sparkSession.sessionState.executePlan(planToDedup).executedPlan)
+            (planToDedup,
             planToDedup.statistics))
       subqueryData += common
       common.subquery
