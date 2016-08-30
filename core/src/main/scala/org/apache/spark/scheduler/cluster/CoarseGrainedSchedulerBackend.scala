@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.concurrent.Future
 
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
 import org.apache.spark.internal.Logging
@@ -407,13 +408,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   // Called by subclasses when notified of a lost worker
-  def removeExecutor(executorId: String, reason: ExecutorLossReason) {
+  protected def removeExecutor(executorId: String, reason: ExecutorLossReason) {
     try {
       driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
     } catch {
       case e: Exception =>
         throw new SparkException("Error notifying standalone scheduler's driver endpoint", e)
     }
+  }
+
+  protected def removeExecutorAsync(
+      executorId: String,
+      reason: ExecutorLossReason): Future[Boolean] = {
+    driverEndpoint.ask[Boolean](RemoveExecutor(executorId, reason))
   }
 
   def sufficientResourcesRegistered(): Boolean = true
