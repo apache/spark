@@ -689,3 +689,11 @@ getSparkContext <- function() {
   sc <- get(".sparkRjsc", envir = .sparkREnv)
   sc
 }
+
+isMasterLocal <- function(master) {
+  grepl("^local(\\[([0-9]+|\\*)\\])?$", master, perl = TRUE)
+}
+
+isSparkRShell <- function() {
+  grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
+}

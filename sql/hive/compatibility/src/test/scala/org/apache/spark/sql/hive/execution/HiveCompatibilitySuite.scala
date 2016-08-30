@@ -979,8 +979,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_PI",
     "udf_acos",
     "udf_add",
-    "udf_array",
-    "udf_array_contains",
+    // "udf_array",  -- done in array.sql
+    // "udf_array_contains",  -- done in array.sql
     "udf_ascii",
     "udf_asin",
     "udf_atan",

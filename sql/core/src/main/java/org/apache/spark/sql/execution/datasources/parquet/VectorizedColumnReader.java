@@ -221,15 +221,15 @@ public class VectorizedColumnReader {
         if (column.dataType() == DataTypes.IntegerType ||
             DecimalType.is32BitDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
-            column.putInt(i, dictionary.decodeToInt(dictionaryIds.getInt(i)));
+            column.putInt(i, dictionary.decodeToInt(dictionaryIds.getDictId(i)));
           }
         } else if (column.dataType() == DataTypes.ByteType) {
           for (int i = rowId; i < rowId + num; ++i) {
-            column.putByte(i, (byte) dictionary.decodeToInt(dictionaryIds.getInt(i)));
+            column.putByte(i, (byte) dictionary.decodeToInt(dictionaryIds.getDictId(i)));
           }
         } else if (column.dataType() == DataTypes.ShortType) {
           for (int i = rowId; i < rowId + num; ++i) {
-            column.putShort(i, (short) dictionary.decodeToInt(dictionaryIds.getInt(i)));
+            column.putShort(i, (short) dictionary.decodeToInt(dictionaryIds.getDictId(i)));
           }
         } else {
           throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
@@ -240,7 +240,7 @@ public class VectorizedColumnReader {
         if (column.dataType() == DataTypes.LongType ||
             DecimalType.is64BitDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
-            column.putLong(i, dictionary.decodeToLong(dictionaryIds.getInt(i)));
+            column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));
           }
         } else {
           throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
@@ -249,20 +249,20 @@ public class VectorizedColumnReader {
 
       case FLOAT:
         for (int i = rowId; i < rowId + num; ++i) {
-          column.putFloat(i, dictionary.decodeToFloat(dictionaryIds.getInt(i)));
+          column.putFloat(i, dictionary.decodeToFloat(dictionaryIds.getDictId(i)));
         }
         break;
 
       case DOUBLE:
         for (int i = rowId; i < rowId + num; ++i) {
-          column.putDouble(i, dictionary.decodeToDouble(dictionaryIds.getInt(i)));
+          column.putDouble(i, dictionary.decodeToDouble(dictionaryIds.getDictId(i)));
         }
         break;
       case INT96:
         if (column.dataType() == DataTypes.TimestampType) {
           for (int i = rowId; i < rowId + num; ++i) {
             // TODO: Convert dictionary of Binaries to dictionary of Longs
-            Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
+            Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
             column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
           }
         } else {
@@ -275,7 +275,7 @@ public class VectorizedColumnReader {
         // and reuse it across batches. This should mean adding a ByteArray would just update
         // the length and offset.
         for (int i = rowId; i < rowId + num; ++i) {
-          Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
+          Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
           column.putByteArray(i, v.getBytes());
         }
         break;
@@ -283,17 +283,17 @@ public class VectorizedColumnReader {
         // DecimalType written in the legacy mode
         if (DecimalType.is32BitDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
-            Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
+            Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
             column.putInt(i, (int) ParquetRowConverter.binaryToUnscaledLong(v));
           }
         } else if (DecimalType.is64BitDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
-            Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
+            Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
             column.putLong(i, ParquetRowConverter.binaryToUnscaledLong(v));
           }
         } else if (DecimalType.isByteArrayDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
-            Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
+            Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
             column.putByteArray(i, v.getBytes());
           }
         } else {

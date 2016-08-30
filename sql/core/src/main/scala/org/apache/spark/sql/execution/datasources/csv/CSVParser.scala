@@ -85,12 +85,9 @@ private[csv] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) exten
   private val buffer = new CharArrayWriter()
   private val writer = new CsvWriter(buffer, writerSettings)
 
-  def writeRow(row: Seq[String], includeHeader: Boolean): Unit = {
-    if (includeHeader) {
-      writer.writeHeaders()
-    }
-    writer.writeRow(row.toArray: _*)
-  }
+  def writeHeader(): Unit = writer.writeHeaders()
+
+  def writeRow(row: Seq[String]): Unit = writer.writeRow(row.toArray: _*)
 
   def flush(): String = {
     writer.flush()
