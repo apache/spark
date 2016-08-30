@@ -20,7 +20,6 @@ package org.apache.spark.network.util;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.base.Charsets;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.fusesource.leveldbjni.internal.NativeDB;
 import org.iq80.leveldb.DB;
@@ -30,6 +29,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * LevelDB utility class available in the network package.
@@ -121,7 +121,7 @@ public class LevelDBProvider {
 
   public static class StoreVersion {
 
-    final static byte[] KEY = "StoreVersion".getBytes(Charsets.UTF_8);
+    final static byte[] KEY = "StoreVersion".getBytes(StandardCharsets.UTF_8);
 
     public final int major;
     public final int minor;
@@ -149,5 +149,4 @@ public class LevelDBProvider {
       return result;
     }
   }
-
 }

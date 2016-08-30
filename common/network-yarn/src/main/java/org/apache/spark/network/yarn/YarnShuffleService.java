@@ -19,6 +19,7 @@ package org.apache.spark.network.yarn;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +28,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Charsets;
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
@@ -208,22 +208,20 @@ public class YarnShuffleService extends AuxiliaryService {
   }
 
   private void reloadCreds(DB db) throws IOException {
-    if (db != null) {
-      if (isAuthenticationEnabled()) {
-        logger.info("Going to reload spark shuffle data");
-        DBIterator itr = db.iterator();
-        itr.seek(APP_CREDS_KEY_PREFIX.getBytes(Charsets.UTF_8));
-        while (itr.hasNext()) {
-          Map.Entry<byte[], byte[]> e = itr.next();
-          String key = new String(e.getKey(), Charsets.UTF_8);
-          if (!key.startsWith(APP_CREDS_KEY_PREFIX)) {
-            break;
-          }
-          String id = parseDbAppKey(key);
-          ByteBuffer secret = mapper.readValue(e.getValue(), ByteBuffer.class);
-          logger.info("Reloading tokens for app: " + id);
-          secretManager.registerApp(id, secret);
+    if (isAuthenticationEnabled()) {
+      logger.info("Going to reload spark shuffle data");
+      DBIterator itr = db.iterator();
+      itr.seek(APP_CREDS_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
+      while (itr.hasNext()) {
+        Map.Entry<byte[], byte[]> e = itr.next();
+        String key = new String(e.getKey(), StandardCharsets.UTF_8);
+        if (!key.startsWith(APP_CREDS_KEY_PREFIX)) {
+          break;
         }
+        String id = parseDbAppKey(key);
+        ByteBuffer secret = mapper.readValue(e.getValue(), ByteBuffer.class);
+        logger.info("Reloading tokens for app: " + id);
+        secretManager.registerApp(id, secret);
       }
     }
   }
@@ -231,7 +229,7 @@ public class YarnShuffleService extends AuxiliaryService {
   private static String parseDbAppKey(String s) throws IOException {
     if (!s.startsWith(APP_CREDS_KEY_PREFIX)) {
       throw new IllegalArgumentException("expected a string starting with " + APP_CREDS_KEY_PREFIX);
-      }
+    }
     String json = s.substring(APP_CREDS_KEY_PREFIX.length() + 1);
     AppId parsed = mapper.readValue(json, AppId.class);
     return parsed.appId;
@@ -240,8 +238,8 @@ public class YarnShuffleService extends AuxiliaryService {
   private static byte[] dbAppKey(AppId appExecId) throws IOException {
     // we stick a common prefix on all the keys so we can find them in the DB
     String appExecJson = mapper.writeValueAsString(appExecId);
-    String key = (APP_CREDS_KEY_PREFIX+ ";" + appExecJson);
-    return key.getBytes(Charsets.UTF_8);
+    String key = (APP_CREDS_KEY_PREFIX + ";" + appExecJson);
+    return key.getBytes(StandardCharsets.UTF_8);
   }
 
   @Override
@@ -254,7 +252,7 @@ public class YarnShuffleService extends AuxiliaryService {
         AppId fullId = new AppId(appId);
         if (db != null) {
           byte[] key = dbAppKey(fullId);
-          byte[] value = mapper.writeValueAsString(shuffleSecret).getBytes(Charsets.UTF_8);
+          byte[] value = mapper.writeValueAsString(shuffleSecret).getBytes(StandardCharsets.UTF_8);
           db.put(key, value);
         }
         secretManager.registerApp(appId, shuffleSecret);
@@ -368,7 +366,7 @@ public class YarnShuffleService extends AuxiliaryService {
   }
 
   /**
-   * Simply encodes an executor's full ID, which is appId + execId.
+   * Simply encodes an application ID.
    */
   public static class AppId {
     public final String appId;
