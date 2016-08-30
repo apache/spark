@@ -55,7 +55,8 @@ private[ann] class SigmoidLayerWithSquaredError extends Layer {
 private[ann] class SigmoidLayerModelWithSquaredError
   extends FunctionalLayerModel(new FunctionalLayer(new SigmoidFunction)) with LossFunction {
   override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
-    ApplyInPlace(output, target, delta, (o: Double, t: Double) => o - t)
+    delta := output
+    delta -= target
     val error = Bsum(delta :* delta) / 2 / output.cols
     ApplyInPlace(delta, output, delta, (x: Double, o: Double) => x * (o - o * o))
     error
@@ -118,7 +119,8 @@ private[ann] class SoftmaxLayerModelWithCrossEntropyLoss extends LayerModel with
   }
 
   override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
-    ApplyInPlace(output, target, delta, (o: Double, t: Double) => o - t)
+    delta := output
+    delta -= target
     -Bsum( target :* brzlog(output)) / output.cols
   }
 }
