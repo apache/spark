@@ -184,4 +184,9 @@ abstract class ExternalCatalog {
 
   def listFunctions(db: String, pattern: String): Seq[String]
 
+  // --------------------------------------------------------------------------
+  // Resources
+  // --------------------------------------------------------------------------
+
+  def addJar(path: String): Unit
 }

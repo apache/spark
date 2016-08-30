@@ -171,6 +171,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   }
 
   def addJar(path: String): Unit = {
+    sparkSession.sharedState.externalCatalog.addJar(path)
     sparkSession.sparkContext.addJar(path)
 
     val uri = new Path(path).toUri

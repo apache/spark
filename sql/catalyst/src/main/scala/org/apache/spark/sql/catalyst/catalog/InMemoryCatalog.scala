@@ -509,4 +509,10 @@ class InMemoryCatalog(
     StringUtils.filterPattern(catalog(db).functions.keysIterator.toSeq, pattern)
   }
 
+  // --------------------------------------------------------------------------
+  // Resources
+  // --------------------------------------------------------------------------
+
+  override def addJar(path: String): Unit = { /* no-op */ }
+
 }
