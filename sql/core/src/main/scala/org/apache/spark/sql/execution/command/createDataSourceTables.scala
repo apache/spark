@@ -174,7 +174,7 @@ case class CreateDataSourceTableAsSelectCommand(
 
           EliminateSubqueryAliases(
             sessionState.catalog.lookupRelation(tableIdent)) match {
-            case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
+            case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _, _) =>
               // check if the file formats match
               l.relation match {
                 case r: HadoopFsRelation if r.fileFormat.getClass != dataSource.providingClass =>

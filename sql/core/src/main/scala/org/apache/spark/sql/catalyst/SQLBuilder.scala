@@ -590,7 +590,7 @@ class SQLBuilder private (
 
   object ExtractSQLTable {
     def unapply(plan: LogicalPlan): Option[SQLTable] = plan match {
-      case l @ LogicalRelation(_, _, Some(TableIdentifier(table, Some(database)))) =>
+      case l @ LogicalRelation(_, _, Some(TableIdentifier(table, Some(database))), _) =>
         Some(SQLTable(database, table, l.output.map(_.withQualifier(None))))
 
       case relation: CatalogRelation =>

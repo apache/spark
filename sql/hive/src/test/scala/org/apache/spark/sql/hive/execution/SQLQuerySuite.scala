@@ -424,7 +424,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val catalogTable =
       sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
     relation match {
-      case LogicalRelation(r: HadoopFsRelation, _, _) =>
+      case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
         if (!isDataSourceParquet) {
           fail(
             s"${classOf[MetastoreRelation].getCanonicalName} is expected, but found " +
