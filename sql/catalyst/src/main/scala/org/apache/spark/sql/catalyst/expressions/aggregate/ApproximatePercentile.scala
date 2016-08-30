@@ -39,7 +39,7 @@ import org.apache.spark.sql.types._
  *
  * @param child child expression that can produce column value with `child.eval(inputRow)`
  * @param percentageExpression Expression that represents a single percentage value or
- *                             a array of percentage values. Each percentage value must be between
+ *                             an array of percentage values. Each percentage value must be between
  *                             0.0 and 1.0.
  * @param accuracyExpression Integer literal expression of approximation accuracy. Higher value
  *                           yields better accuracy, the default value is
