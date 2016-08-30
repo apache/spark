@@ -25,27 +25,10 @@ Function InstallR {
     $arch = $env:R_ARCH
   }
 
-  If ($rVer -eq "devel") {
-    $urlPath = ""
-    $rVer = "devel"
-  }
-  ElseIf (($rVer -eq "stable") -or ($rVer -eq "release")) {
-    $urlPath = ""
-    $rVer = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-release).Content).version
-    If ($rVer -eq "3.2.4") {
-      $rVer = "3.2.4revised"
-    }
-  }
-  ElseIf ($rVer -eq "patched") {
-    $urlPath = ""
-    $rVer = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-release).Content).version + "patched"
-  }
-  ElseIf ($rVer -eq "oldrel") {
-    $rVer = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-oldrel).Content).version
+  $urlPath = ""
+  $latestVer = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-release).Content).version
+  If ($rVer -ne $latestVer) {
     $urlPath = ("old/" + $rVer + "/")
-  }
-  Else {
-      $urlPath = ("old/" + $rVer + "/")
   }
 
   $rurl = $CRAN + "/bin/windows/base/" + $urlPath + "R-" + $rVer + "-win.exe"
@@ -132,7 +115,7 @@ $env:HADOOP_HOME = "$hadoopPath/winutils-master/hadoop-$hadoopVer"
 Pop-Location
 
 # ========================== R
-$rVer = "3.3.0"
+$rVer = "3.3.1"
 $rToolsVer = "3.4.0"
 
 InstallR
