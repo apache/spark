@@ -53,7 +53,7 @@ Function InstallRtools {
   $rtoolsurl = $CRAN + "/bin/windows/Rtools/Rtools$rtoolsver.exe"
 
   # Downloading Rtools
-  bash -c ("curl --silent -o ../Rtools-current.exe -L " + $rtoolsurl)
+  Start-FileDownload $rtoolsurl "../Rtools-current.exe"
 
   # Running Rtools installer
   Start-Process -FilePath ..\Rtools-current.exe -ArgumentList /VERYSILENT -NoNewWindow -Wait
