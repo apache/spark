@@ -1269,19 +1269,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Alter the query of a view. This creates a [[CreateViewCommand]] command.
+   * Alter the query of a view. This creates a [[AlterViewCommand]] command.
    */
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
-    createView(
-      ctx,
-      name = ctx.tableIdentifier,
-      comment = None,
-      userSpecifiedColumns = Seq.empty,
-      query = ctx.query,
-      properties = Map.empty,
-      allowExisting = false,
-      replace = true,
-      isTemporary = false)
+    AlterViewCommand(
+      name = visitTableIdentifier(ctx.tableIdentifier),
+      originalText = source(ctx.query),
+      query = plan(ctx.query))
   }
 
   /**

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -60,15 +61,15 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       var e = intercept[AnalysisException] {
         sql("CREATE OR REPLACE VIEW tab1 AS SELECT * FROM jt")
       }.getMessage
-      assert(e.contains("The following is an existing table, not a view: `default`.`tab1`"))
+      assert(e.contains("`default`.`tab1` is not a view"))
       e = intercept[AnalysisException] {
         sql("CREATE VIEW tab1 AS SELECT * FROM jt")
       }.getMessage
-      assert(e.contains("The following is an existing table, not a view: `default`.`tab1`"))
+      assert(e.contains("`default`.`tab1` is not a view"))
       e = intercept[AnalysisException] {
         sql("ALTER VIEW tab1 AS SELECT * FROM jt")
       }.getMessage
-      assert(e.contains("The following is an existing table, not a view: `default`.`tab1`"))
+      assert(e.contains("`default`.`tab1` is not a view"))
     }
   }
 
@@ -270,6 +271,50 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("ALTER VIEW testView AS SELECT * FROM jt2")
         // make sure the view has been changed.
         checkAnswer(sql("SELECT * FROM testView ORDER BY i"), (1 to 9).map(i => Row(i, i)))
+      }
+    }
+  }
+
+  test("should not allow ALTER VIEW when the view does not exist") {
+    intercept[NoSuchTableException](
+      sql("ALTER VIEW testView AS SELECT 1, 2")
+    )
+
+    intercept[NoSuchTableException](
+      sql("ALTER VIEW default.testView AS SELECT 1, 2")
+    )
+  }
+
+  test("ALTER VIEW should alter temp view if view name has no database part and temp view exists") {
+    withTempView("test_view") {
+      withView("test_view") {
+        sql("CREATE VIEW test_view AS SELECT 1 AS a, 2 AS b")
+        sql("CREATE TEMP VIEW test_view AS SELECT 1 AS a, 2 AS b")
+
+        sql("ALTER VIEW test_view AS SELECT 3 AS i, 4 AS j")
+
+        // The temporary view should be updated.
+        checkAnswer(spark.table("test_view"), Row(3, 4))
+
+        // The permanent view should stay same.
+        checkAnswer(spark.table("default.test_view"), Row(1, 2))
+      }
+    }
+  }
+
+  test("ALTER VIEW should alter permanent view if view name has database part") {
+    withTempView("test_view") {
+      withView("test_view") {
+        sql("CREATE VIEW test_view AS SELECT 1 AS a, 2 AS b")
+        sql("CREATE TEMP VIEW test_view AS SELECT 1 AS a, 2 AS b")
+
+        sql("ALTER VIEW default.test_view AS SELECT 3 AS i, 4 AS j")
+
+        // The temporary view should stay same.
+        checkAnswer(spark.table("test_view"), Row(1, 2))
+
+        // The permanent view should be updated.
+        checkAnswer(spark.table("default.test_view"), Row(3, 4))
       }
     }
   }
