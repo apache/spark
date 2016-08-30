@@ -325,13 +325,13 @@ private[spark] class TaskSchedulerImpl(
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     for (taskSet <- sortedTaskSets) {
       var launchedAnyTask = false
-      var launchedTaskAtMaxLocality = false
-      for (maxLocality <- taskSet.myLocalityLevels) {
+      var launchedTaskAtCurrentMaxLocality = false
+      for (currentMaxLocality <- taskSet.myLocalityLevels) {
         do {
-          launchedTaskAtMaxLocality = resourceOfferSingleTaskSet(
-            taskSet, maxLocality, shuffledOffers, availableCpus, tasks)
-          launchedAnyTask |= launchedTaskAtMaxLocality
-        } while (launchedTaskAtMaxLocality)
+          launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(
+            taskSet, currentMaxLocality, shuffledOffers, availableCpus, tasks)
+          launchedAnyTask |= launchedTaskAtCurrentMaxLocality
+        } while (launchedTaskAtCurrentMaxLocality)
       }
       if (!launchedAnyTask) {
         taskSet.abortIfCompletelyBlacklisted(executorIdToHost.keys)
