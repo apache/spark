@@ -642,7 +642,6 @@ class HiveDDLSuite
   test("create table with the same name as an index table") {
     val tabName = "tab1"
     val indexName = tabName + "_index"
-    val indexTabName = "default__tab1_tab1_index__"
     withTable(tabName) {
       // Spark SQL does not support creating index. Thus, we have to use Hive client.
       val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
@@ -651,6 +650,8 @@ class HiveDDLSuite
       try {
         client.runSqlHive(
           s"CREATE INDEX $indexName ON TABLE $tabName (a) AS 'COMPACT' WITH DEFERRED REBUILD")
+        val indexTabName =
+          spark.sessionState.catalog.listTables("default", s"*$indexName*").head.table
         intercept[TableAlreadyExistsException] {
           sql(s"CREATE TABLE $indexTabName(b int)")
         }
