@@ -623,23 +623,26 @@ class HiveDDLSuite
     }
   }
 
-  test("CREATE TABLE LIKE a temporary table") {
-    val sourceTabName = "tab1"
+  test("CREATE TABLE LIKE a temporary view") {
+    val sourceViewName = "tab1"
     val targetTabName = "tab2"
-    withTable(sourceTabName, targetTabName) {
-      spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
-        .createTempView(sourceTabName)
-      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
+    withTempView(sourceViewName) {
+      withTable(targetTabName) {
+        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+          .createTempView(sourceViewName)
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName")
 
-      val sourceTable =
-        spark.sessionState.catalog.getTableMetadata(TableIdentifier(sourceTabName, None))
-      val targetTable =
-        spark.sessionState.catalog.getTableMetadata(TableIdentifier(targetTabName, Some("default")))
+        val sourceTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(sourceViewName, None))
+        val targetTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(targetTabName, Some("default")))
 
-      assert(targetTable.storage.serde ==
-        Option(classOf[LazySimpleSerDe].getCanonicalName))
+        // Source table is a temporary view, which does not have a serde
+        // We always pick the default serde, which is LazySimpleSerDe
+        assert(targetTable.storage.serde == Option(classOf[LazySimpleSerDe].getCanonicalName))
 
-      checkCreateTableLike(sourceTable, targetTable)
+        checkCreateTableLike(sourceTable, targetTable)
+      }
     }
   }
 
@@ -758,6 +761,9 @@ class HiveDDLSuite
         assert(sourceView.viewText.nonEmpty && sourceView.viewOriginalText.nonEmpty)
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
+        // Source table is a view, which does not have a serde
+        // We always pick the default serde, which is LazySimpleSerDe
+        assert(targetTable.storage.serde == Option(classOf[LazySimpleSerDe].getCanonicalName))
 
         checkCreateTableLike(sourceView, targetTable)
       }
@@ -773,12 +779,15 @@ class HiveDDLSuite
   }
 
   private def checkCreateTableLike(sourceTable: CatalogTable, targetTable: CatalogTable): Unit = {
-    // The original source should be a MANAGED table with empty view text and original text
-    // The location of table should not be empty.
+    // The created table should be a MANAGED table with empty view text and original text.
     assert(targetTable.tableType == CatalogTableType.MANAGED,
       "the created table must be a Hive managed table")
     assert(targetTable.viewText.isEmpty && targetTable.viewOriginalText.isEmpty,
       "the view text and original text in the created table must be empty")
+    // The location of created table should not be empty. Although Spark SQL does not set it,
+    // when creating it, Hive populates it.
+    assert(targetTable.storage.locationUri.nonEmpty,
+      "the location of created table should not be empty")
     assert(targetTable.comment.isEmpty,
       "the comment in the created table must be empty")
 

@@ -67,12 +67,6 @@ case class CreateTableLikeCommand(
 
     val sourceTableDesc = catalog.getTableMetadata(sourceTable)
 
-    sourceTableDesc.tableType match {
-      case CatalogTableType.MANAGED | CatalogTableType.EXTERNAL | CatalogTableType.VIEW => // OK
-      case o => throw new AnalysisException(
-        s"CREATE TABLE LIKE is not allowed when the source table is ${o.name}")
-    }
-
     val newSerdeProp =
       if (DDLUtils.isDatasourceTable(sourceTableDesc)) {
         val newPath = catalog.defaultTablePath(targetTable)
@@ -94,7 +88,6 @@ case class CreateTableLikeCommand(
         provider = sourceTableDesc.provider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
         bucketSpec = sourceTableDesc.bucketSpec,
-        properties = Map.empty[String, String],
         unsupportedFeatures = sourceTableDesc.unsupportedFeatures)
 
     catalog.createTable(newTableDesc, ifNotExists)
