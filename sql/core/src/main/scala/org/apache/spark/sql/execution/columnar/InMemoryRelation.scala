@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.TaskContext
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -63,6 +64,7 @@ case class InMemoryRelation(
     @transient child: SparkPlan,
     tableName: Option[String])(
     @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
+    // Accumulator tracking (partitionId, batchStats) for each CachedBatch
     val batchStats: CollectionAccumulator[(Int, InternalRow)] =
       child.sqlContext.sparkContext.collectionAccumulator[(Int, InternalRow)])
   extends logical.LeafNode with MultiInstanceRelation {
@@ -106,7 +108,7 @@ case class InMemoryRelation(
 
   private def buildBuffers(): Unit = {
     val output = child.output
-    val cached = child.execute().mapPartitionsWithIndex { (i, rowIterator) =>
+    val cached = child.execute().mapPartitionsInternal { rowIterator =>
       new Iterator[CachedBatch] {
         def next(): CachedBatch = {
           val columnBuilders = output.map { attribute =>
@@ -142,7 +144,7 @@ case class InMemoryRelation(
           val stats = InternalRow.fromSeq(columnBuilders.map(_.columnStats.collectedStatistics)
             .flatMap(_.values))
 
-          batchStats.add((i, stats))
+          batchStats.add((TaskContext.get().partitionId(), stats))
           CachedBatch(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
           }, stats)
