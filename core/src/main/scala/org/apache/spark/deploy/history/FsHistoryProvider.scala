@@ -898,9 +898,7 @@ private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider, prefix
     ("appui.event.count", appUIEventCount),
     ("appui.event.replay.time", appUIEventReplayTime),
     ("update.timer", updateTimer),
-    ("history.merge.timer", historyMergeTimer),
-    ("appui.load.timer", appUiLoadTimer)))
-
+    ("history.merge.timer", historyMergeTimer)))
 }
 
 private[history] object FsHistoryProvider {
