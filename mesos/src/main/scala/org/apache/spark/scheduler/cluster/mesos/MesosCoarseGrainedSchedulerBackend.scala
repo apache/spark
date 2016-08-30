@@ -474,7 +474,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus) {
     val taskId = status.getTaskId.getValue
     val slaveId = status.getSlaveId.getValue
-    val state = TaskState.fromMesos(status.getState)
+    val state = mesosToTaskState(status.getState)
 
     logInfo(s"Mesos task $taskId is now ${status.getState}")
 

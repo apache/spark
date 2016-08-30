@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.json
 import java.io.ByteArrayOutputStream
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 import com.fasterxml.jackson.core._
 
@@ -204,7 +205,12 @@ class JacksonParser(
         case VALUE_STRING =>
           // This one will lose microseconds parts.
           // See https://issues.apache.org/jira/browse/SPARK-10681.
-          DateTimeUtils.stringToTime(parser.getText).getTime * 1000L
+          Try(options.timestampFormat.parse(parser.getText).getTime * 1000L)
+            .getOrElse {
+              // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility.
+              DateTimeUtils.stringToTime(parser.getText).getTime * 1000L
+            }
 
         case VALUE_NUMBER_INT =>
           parser.getLongValue * 1000000L
@@ -214,13 +220,18 @@ class JacksonParser(
       (parser: JsonParser) => parseJsonToken(parser, dataType) {
         case VALUE_STRING =>
           val stringValue = parser.getText
-          if (stringValue.contains("-")) {
-            // The format of this string will probably be "yyyy-mm-dd".
-            DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(parser.getText).getTime)
-          } else {
-            // In Spark 1.5.0, we store the data as number of days since epoch in string.
-            // So, we just convert it to Int.
-            stringValue.toInt
+          // This one will lose microseconds parts.
+          // See https://issues.apache.org/jira/browse/SPARK-10681.x
+          Try(DateTimeUtils.millisToDays(options.dateFormat.parse(parser.getText).getTime))
+            .getOrElse {
+            // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility.
+            Try(DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(parser.getText).getTime))
+              .getOrElse {
+              // In Spark 1.5.0, we store the data as number of days since epoch in string.
+              // So, we just convert it to Int.
+              stringValue.toInt
+            }
           }
       }
 
