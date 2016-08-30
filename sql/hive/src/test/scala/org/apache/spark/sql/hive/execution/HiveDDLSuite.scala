@@ -790,6 +790,8 @@ class HiveDDLSuite
       "the location of created table should not be empty")
     assert(targetTable.comment.isEmpty,
       "the comment in the created table must be empty")
+    assert(targetTable.unsupportedFeatures.isEmpty,
+      "the unsupportedFeatures in the create table must be empty")
 
     val metastoreGeneratedProperties = Seq(
       "CreateTime",

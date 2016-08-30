@@ -44,8 +44,7 @@ import org.apache.spark.util.Utils
  * are identical to the ones defined in the source table.
  *
  * The CatalogTable attributes copied from the source table are storage(inputFormat,
- * outputFormat, serde, compressed, properties), schema, provider, partitionColumnNames,
- * bucketSpec, unsupportedFeatures.
+ * outputFormat, serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -87,8 +86,7 @@ case class CreateTableLikeCommand(
         schema = sourceTableDesc.schema,
         provider = sourceTableDesc.provider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
-        bucketSpec = sourceTableDesc.bucketSpec,
-        unsupportedFeatures = sourceTableDesc.unsupportedFeatures)
+        bucketSpec = sourceTableDesc.bucketSpec)
 
     catalog.createTable(newTableDesc, ifNotExists)
     Seq.empty[Row]
