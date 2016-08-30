@@ -91,8 +91,10 @@ case class ApproximatePercentile(
       // Rule ImplicitTypeCasts can cast other numeric types to double
       case (_, num: Double) => (false, Array(num))
       case (ArrayType(baseType: NumericType, _), arrayData: ArrayData) =>
-         val numericArray = arrayData.toArray(baseType)(baseType.classTag)
-        (true, numericArray.map(baseType.numeric.toDouble))
+         val numericArray = arrayData.toObjectArray(baseType)
+        (true, numericArray.map {x =>
+          baseType.numeric.toDouble(x.asInstanceOf[baseType.InternalType])
+        })
       case other =>
         throw new AnalysisException(s"Invalid data type ${other._1} for parameter percentage")
     }
@@ -183,8 +185,8 @@ object ApproximatePercentile {
    *                   underlying quantileSummaries is compressed.
    */
   class PercentileDigest(
-    private var summaries: QuantileSummaries,
-    private var isCompressed: Boolean) {
+      private var summaries: QuantileSummaries,
+      private var isCompressed: Boolean) {
 
     // Trigger compression if the QuantileSummaries's buffer length exceeds
     // compressThresHoldBufferLength. The buffer length can be get by
@@ -287,10 +289,10 @@ object ApproximatePercentile {
   // An case class to wrap fields of QuantileSummaries, so that we can use the expression encoder
   // to serialize it.
   case class QuantileSummariesData(
-      val compressThreshold: Int,
-      val relativeError: Double,
-      val sampled: Array[Stats] = Array.empty,
-      val count: Long = 0L) {
+      compressThreshold: Int,
+      relativeError: Double,
+      sampled: Array[Stats],
+      count: Long) {
     def this(summary: QuantileSummaries) = {
       this(summary.compressThreshold, summary.relativeError, summary.sampled, summary.count)
     }

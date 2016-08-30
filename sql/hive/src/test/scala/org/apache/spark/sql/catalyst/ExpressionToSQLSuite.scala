@@ -155,7 +155,11 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   test("aggregate functions") {
     checkSqlGeneration("SELECT approx_count_distinct(value) FROM t1 GROUP BY key")
-    checkSqlGeneration("SELECT percentile_approx(value) FROM t1 GROUP BY key")
+    checkSqlGeneration("SELECT percentile_approx(value, 0.25) FROM t1 GROUP BY key")
+    checkSqlGeneration("SELECT percentile_approx(value, array(0.25, 0.75)) FROM t1 GROUP BY key")
+    checkSqlGeneration("SELECT percentile_approx(value, 0.25, 100) FROM t1 GROUP BY key")
+    checkSqlGeneration(
+      "SELECT percentile_approx(value, array(0.25, 0.75), 100) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT avg(value) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT corr(value, key) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT count(value) FROM t1 GROUP BY key")
