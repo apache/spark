@@ -143,6 +143,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             // Ignoring the task kill since the executor is not registered.
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
         }
+
+      case RemoveExecutor(executorId, reason) =>
+        // We will remove the executor's state and cannot restore it. However, the connection
+        // between the driver and the executor may be still alive so that the executor won't exit
+        // automatically, so try to tell the executor to stop itself. See SPARK-13519.
+        executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
+        removeExecutor(executorId, reason)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -194,14 +201,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         for ((_, executorData) <- executorDataMap) {
           executorData.executorEndpoint.send(StopExecutor)
         }
-        context.reply(true)
-
-      case RemoveExecutor(executorId, reason) =>
-        // We will remove the executor's state and cannot restore it. However, the connection
-        // between the driver and the executor may be still alive so that the executor won't exit
-        // automatically, so try to tell the executor to stop itself. See SPARK-13519.
-        executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
-        removeExecutor(executorId, reason)
         context.reply(true)
 
       case RetrieveSparkProps =>
@@ -407,20 +406,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     conf.getInt("spark.default.parallelism", math.max(totalCoreCount.get(), 2))
   }
 
-  // Called by subclasses when notified of a lost worker
+  /**
+   * Called by subclasses when notified of a lost worker. It just fires the message and returns
+   * at once.
+   */
   protected def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
-    try {
-      driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
-    } catch {
-      case e: Exception =>
-        throw new SparkException("Error notifying standalone scheduler's driver endpoint", e)
-    }
-  }
-
-  protected def removeExecutorAsync(
-      executorId: String,
-      reason: ExecutorLossReason): Future[Boolean] = {
-    driverEndpoint.ask[Boolean](RemoveExecutor(executorId, reason))
+    // Only log the failure since we don't care about the result.
+    driverEndpoint.send(RemoveExecutor(executorId, reason))
   }
 
   def sufficientResourcesRegistered(): Boolean = true

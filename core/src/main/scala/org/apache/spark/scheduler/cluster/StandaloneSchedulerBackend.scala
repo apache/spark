@@ -148,17 +148,13 @@ private[spark] class StandaloneSchedulerBackend(
       fullId, hostPort, cores, Utils.megabytesToString(memory)))
   }
 
-  /** Note: this method should not block. See [[StandaloneAppClientListener]] */
   override def executorRemoved(fullId: String, message: String, exitStatus: Option[Int]) {
     val reason: ExecutorLossReason = exitStatus match {
       case Some(code) => ExecutorExited(code, exitCausedByApp = true, message)
       case None => SlaveLost(message)
     }
     logInfo("Executor %s removed: %s".format(fullId, message))
-    // Only log the failure since we don't care about the result.
-    removeExecutorAsync(fullId.split("/")(1), reason).onFailure { case t =>
-      logError(t.getMessage, t)
-    }(ThreadUtils.sameThread)
+    removeExecutor(fullId.split("/")(1), reason)
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
