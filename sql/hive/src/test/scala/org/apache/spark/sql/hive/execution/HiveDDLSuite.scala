@@ -24,8 +24,10 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -378,6 +380,44 @@ class HiveDDLSuite
       expectedSerdeProps)
   }
 
+  test("MSCK REPAIR RABLE") {
+    val catalog = spark.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1")
+    sql("CREATE TABLE tab1 (height INT, length INT) PARTITIONED BY (a INT, b INT)")
+    val part1 = Map("a" -> "1", "b" -> "5")
+    val part2 = Map("a" -> "2", "b" -> "6")
+    val root = new Path(catalog.getTableMetadata(tableIdent).storage.locationUri.get)
+    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    // valid
+    fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
+    fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "a.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "_SUCCESS"))  // file
+    fs.mkdirs(new Path(new Path(root, "A=2"), "B=6"))
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), "b.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), "c.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), ".hiddenFile"))  // file
+    fs.mkdirs(new Path(new Path(root, "A=2/B=6"), "_temporary"))
+
+    // invalid
+    fs.mkdirs(new Path(new Path(root, "a"), "b"))  // bad name
+    fs.mkdirs(new Path(new Path(root, "b=1"), "a=1"))  // wrong order
+    fs.mkdirs(new Path(root, "a=4")) // not enough columns
+    fs.createNewFile(new Path(new Path(root, "a=1"), "b=4"))  // file
+    fs.createNewFile(new Path(new Path(root, "a=1"), "_SUCCESS"))  // _SUCCESS
+    fs.mkdirs(new Path(new Path(root, "a=1"), "_temporary"))  // _temporary
+    fs.mkdirs(new Path(new Path(root, "a=1"), ".b=4"))  // start with .
+
+    try {
+      sql("MSCK REPAIR TABLE tab1")
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+        Set(part1, part2))
+      assert(catalog.getPartition(tableIdent, part1).parameters("numFiles") == "1")
+      assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")
+    } finally {
+      fs.delete(root, true)
+    }
+  }
+
   test("drop table using drop view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1(c1 int)")
@@ -637,6 +677,37 @@ class HiveDDLSuite
     }
   }
 
+  test("create table with the same name as an index table") {
+    val tabName = "tab1"
+    val indexName = tabName + "_index"
+    withTable(tabName) {
+      // Spark SQL does not support creating index. Thus, we have to use Hive client.
+      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      sql(s"CREATE TABLE $tabName(a int)")
+
+      try {
+        client.runSqlHive(
+          s"CREATE INDEX $indexName ON TABLE $tabName (a) AS 'COMPACT' WITH DEFERRED REBUILD")
+        val indexTabName =
+          spark.sessionState.catalog.listTables("default", s"*$indexName*").head.table
+        intercept[TableAlreadyExistsException] {
+          sql(s"CREATE TABLE $indexTabName(b int)")
+        }
+        intercept[TableAlreadyExistsException] {
+          sql(s"ALTER TABLE $tabName RENAME TO $indexTabName")
+        }
+
+        // When tableExists is not invoked, we still can get an AnalysisException
+        val e = intercept[AnalysisException] {
+          sql(s"DESCRIBE $indexTabName")
+        }.getMessage
+        assert(e.contains("Hive index table is not supported."))
+      } finally {
+        client.runSqlHive(s"DROP INDEX IF EXISTS $indexName ON $tabName")
+      }
+    }
+  }
+
   test("desc table for data source table - no user-defined schema") {
     Seq("parquet", "json", "orc").foreach { fileFormat =>
       withTable("t1") {
@@ -690,6 +761,29 @@ class HiveDDLSuite
           Row("Sort Columns:", "[c]", "")
         )
       ))
+    }
+  }
+
+  test("datasource table property keys are not allowed") {
+    import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_PREFIX
+
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(a INT) STORED AS parquet")
+
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE tbl SET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo' = 'loser')")
+      }
+      assert(e.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+
+      val e2 = intercept[AnalysisException] {
+        sql(s"ALTER TABLE tbl UNSET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo')")
+      }
+      assert(e2.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+
+      val e3 = intercept[AnalysisException] {
+        sql(s"CREATE TABLE tbl TBLPROPERTIES ('${DATASOURCE_PREFIX}foo'='anything')")
+      }
+      assert(e3.getMessage.contains(DATASOURCE_PREFIX + "foo"))
     }
   }
 }

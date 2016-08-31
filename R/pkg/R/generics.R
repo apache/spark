@@ -380,6 +380,9 @@ setGeneric("value", function(bcast) { standardGeneric("value") })
 
 ####################  SparkDataFrame Methods ########################
 
+#' @param x a SparkDataFrame or GroupedData.
+#' @param ... further arguments to be passed to or from other methods.
+#' @return A SparkDataFrame.
 #' @rdname summarize
 #' @export
 setGeneric("agg", function (x, ...) { standardGeneric("agg") })
@@ -407,6 +410,8 @@ setGeneric("cache", function(x) { standardGeneric("cache") })
 #' @export
 setGeneric("collect", function(x, ...) { standardGeneric("collect") })
 
+#' @param do.NULL currently not used.
+#' @param prefix currently not used.
 #' @rdname columns
 #' @export
 setGeneric("colnames", function(x, do.NULL = TRUE, prefix = "col") { standardGeneric("colnames") })
@@ -427,15 +432,24 @@ setGeneric("coltypes<-", function(x, value) { standardGeneric("coltypes<-") })
 #' @export
 setGeneric("columns", function(x) {standardGeneric("columns") })
 
-#' @rdname nrow
+#' @param x a GroupedData or Column.
+#' @rdname count
 #' @export
 setGeneric("count", function(x) { standardGeneric("count") })
 
 #' @rdname cov
+#' @param x a Column or a SparkDataFrame.
+#' @param ... additional argument(s). If \code{x} is a Column, a Column
+#'        should be provided. If \code{x} is a SparkDataFrame, two column names should
+#'        be provided.
 #' @export
 setGeneric("cov", function(x, ...) {standardGeneric("cov") })
 
 #' @rdname corr
+#' @param x a Column or a SparkDataFrame.
+#' @param ... additional argument(s). If \code{x} is a Column, a Column
+#'        should be provided. If \code{x} is a SparkDataFrame, two column names should
+#'        be provided.
 #' @export
 setGeneric("corr", function(x, ...) {standardGeneric("corr") })
 
@@ -462,10 +476,14 @@ setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
 #' @export
 setGeneric("dapplyCollect", function(x, func) { standardGeneric("dapplyCollect") })
 
+#' @param x a SparkDataFrame or GroupedData.
+#' @param ... additional argument(s) passed to the method.
 #' @rdname gapply
 #' @export
 setGeneric("gapply", function(x, ...) { standardGeneric("gapply") })
 
+#' @param x a SparkDataFrame or GroupedData.
+#' @param ... additional argument(s) passed to the method.
 #' @rdname gapplyCollect
 #' @export
 setGeneric("gapplyCollect", function(x, ...) { standardGeneric("gapplyCollect") })
@@ -667,8 +685,8 @@ setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") 
 #' @export
 setGeneric("showDF", function(x, ...) { standardGeneric("showDF") })
 
-# @rdname subset
-# @export
+#' @rdname subset
+#' @export
 setGeneric("subset", function(x, ...) { standardGeneric("subset") })
 
 #' @rdname summarize
@@ -735,6 +753,8 @@ setGeneric("between", function(x, bounds) { standardGeneric("between") })
 setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
 
 #' @rdname columnfunctions
+#' @param x a Column object.
+#' @param ... additional argument(s).
 #' @export
 setGeneric("contains", function(x, ...) { standardGeneric("contains") })
 
@@ -830,6 +850,8 @@ setGeneric("array_contains", function(x, value) { standardGeneric("array_contain
 #' @export
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
 
+#' @param x Column to compute on or a GroupedData object.
+#' @param ... additional argument(s) when \code{x} is a GroupedData object.
 #' @rdname avg
 #' @export
 setGeneric("avg", function(x, ...) { standardGeneric("avg") })
@@ -886,9 +908,10 @@ setGeneric("crc32", function(x) { standardGeneric("crc32") })
 #' @export
 setGeneric("hash", function(x, ...) { standardGeneric("hash") })
 
+#' @param x empty. Should be used with no argument.
 #' @rdname cume_dist
 #' @export
-setGeneric("cume_dist", function(x) { standardGeneric("cume_dist") })
+setGeneric("cume_dist", function(x = "missing") { standardGeneric("cume_dist") })
 
 #' @rdname datediff
 #' @export
@@ -918,9 +941,10 @@ setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 #' @export
 setGeneric("decode", function(x, charset) { standardGeneric("decode") })
 
+#' @param x empty. Should be used with no argument.
 #' @rdname dense_rank
 #' @export
-setGeneric("dense_rank", function(x) { standardGeneric("dense_rank") })
+setGeneric("dense_rank", function(x = "missing") { standardGeneric("dense_rank") })
 
 #' @rdname encode
 #' @export
@@ -1034,10 +1058,11 @@ setGeneric("md5", function(x) { standardGeneric("md5") })
 #' @export
 setGeneric("minute", function(x) { standardGeneric("minute") })
 
+#' @param x empty. Should be used with no argument.
 #' @rdname monotonically_increasing_id
 #' @export
 setGeneric("monotonically_increasing_id",
-           function(x) { standardGeneric("monotonically_increasing_id") })
+           function(x = "missing") { standardGeneric("monotonically_increasing_id") })
 
 #' @rdname month
 #' @export
@@ -1047,7 +1072,7 @@ setGeneric("month", function(x) { standardGeneric("month") })
 #' @export
 setGeneric("months_between", function(y, x) { standardGeneric("months_between") })
 
-#' @rdname nrow
+#' @rdname count
 #' @export
 setGeneric("n", function(x) { standardGeneric("n") })
 
@@ -1071,9 +1096,10 @@ setGeneric("ntile", function(x) { standardGeneric("ntile") })
 #' @export
 setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 
+#' @param x empty. Should be used with no argument.
 #' @rdname percent_rank
 #' @export
-setGeneric("percent_rank", function(x) { standardGeneric("percent_rank") })
+setGeneric("percent_rank", function(x = "missing") { standardGeneric("percent_rank") })
 
 #' @rdname pmod
 #' @export
@@ -1114,11 +1140,12 @@ setGeneric("reverse", function(x) { standardGeneric("reverse") })
 
 #' @rdname rint
 #' @export
-setGeneric("rint", function(x, ...) { standardGeneric("rint") })
+setGeneric("rint", function(x) { standardGeneric("rint") })
 
+#' @param x empty. Should be used with no argument.
 #' @rdname row_number
 #' @export
-setGeneric("row_number", function(x) { standardGeneric("row_number") })
+setGeneric("row_number", function(x = "missing") { standardGeneric("row_number") })
 
 #' @rdname rpad
 #' @export
@@ -1176,9 +1203,10 @@ setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array")
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
 
+#' @param x empty. Should be used with no argument.
 #' @rdname spark_partition_id
 #' @export
-setGeneric("spark_partition_id", function(x) { standardGeneric("spark_partition_id") })
+setGeneric("spark_partition_id", function(x = "missing") { standardGeneric("spark_partition_id") })
 
 #' @rdname sd
 #' @export
@@ -1276,10 +1304,16 @@ setGeneric("year", function(x) { standardGeneric("year") })
 #' @export
 setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.glm") })
 
+#' @param x,y For \code{glm}: logical values indicating whether the response vector
+#'          and model matrix used in the fitting process should be returned as
+#'          components of the returned value.
+#' @inheritParams stats::glm
 #' @rdname glm
 #' @export
 setGeneric("glm")
 
+#' @param object a fitted ML model object.
+#' @param ... additional argument(s) passed to the method.
 #' @rdname predict
 #' @export
 setGeneric("predict", function(object, ...) { standardGeneric("predict") })
@@ -1296,13 +1330,29 @@ setGeneric("spark.kmeans", function(data, formula, ...) { standardGeneric("spark
 #' @export
 setGeneric("fitted")
 
+#' @rdname spark.mlp
+#' @export
+setGeneric("spark.mlp", function(data, ...) { standardGeneric("spark.mlp") })
+
 #' @rdname spark.naiveBayes
 #' @export
 setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("spark.naiveBayes") })
 
 #' @rdname spark.survreg
 #' @export
-setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
+setGeneric("spark.survreg", function(data, formula) { standardGeneric("spark.survreg") })
+
+#' @rdname spark.lda
+#' @export
+setGeneric("spark.lda", function(data, ...) { standardGeneric("spark.lda") })
+
+#' @rdname spark.lda
+#' @export
+setGeneric("spark.posterior", function(object, newData) { standardGeneric("spark.posterior") })
+
+#' @rdname spark.lda
+#' @export
+setGeneric("spark.perplexity", function(object, data) { standardGeneric("spark.perplexity") })
 
 #' @rdname spark.isoreg
 #' @export
@@ -1315,6 +1365,13 @@ setGeneric("spark.gaussianMixture",
              standardGeneric("spark.gaussianMixture")
            })
 
+#' @param object a fitted ML model object.
+#' @param path the directory where the model is saved.
+#' @param ... additional argument(s) passed to the method.
 #' @rdname write.ml
 #' @export
 setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })
+
+#' @rdname spark.als
+#' @export
+setGeneric("spark.als", function(data, ...) { standardGeneric("spark.als") })

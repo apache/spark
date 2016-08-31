@@ -656,7 +656,7 @@ methods for creating DStreams from files as input sources.
 	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
 
 - **Streams based on Custom Receivers:** DStreams can be created with data streams received through custom receivers. See the [Custom Receiver
-  Guide](streaming-custom-receivers.html) and [DStream Akka](https://github.com/spark-packages/dstream-akka) for more details.
+  Guide](streaming-custom-receivers.html) for more details.
 
 - **Queue of RDDs as a Stream:** For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
 
@@ -930,7 +930,7 @@ JavaPairDStream<String, Integer> cleanedDStream = wordCounts.transform(
 <div data-lang="python" markdown="1">
 
 {% highlight python %}
-spamInfoRDD = sc.pickleFile(...) # RDD containing spam information
+spamInfoRDD = sc.pickleFile(...)  # RDD containing spam information
 
 # join data stream with spam information to do data cleaning
 cleanedDStream = wordCounts.transform(lambda rdd: rdd.join(spamInfoRDD).filter(...))
@@ -1495,16 +1495,15 @@ See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_
 </div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
-
 def getWordBlacklist(sparkContext):
-    if ('wordBlacklist' not in globals()):
-        globals()['wordBlacklist'] = sparkContext.broadcast(["a", "b", "c"])
-    return globals()['wordBlacklist']
+    if ("wordBlacklist" not in globals()):
+        globals()["wordBlacklist"] = sparkContext.broadcast(["a", "b", "c"])
+    return globals()["wordBlacklist"]
 
 def getDroppedWordsCounter(sparkContext):
-    if ('droppedWordsCounter' not in globals()):
-        globals()['droppedWordsCounter'] = sparkContext.accumulator(0)
-    return globals()['droppedWordsCounter']
+    if ("droppedWordsCounter" not in globals()):
+        globals()["droppedWordsCounter"] = sparkContext.accumulator(0)
+    return globals()["droppedWordsCounter"]
 
 def echo(time, rdd):
     # Get or register the blacklist Broadcast
@@ -1626,12 +1625,12 @@ See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_
 
 # Lazily instantiated global instance of SparkSession
 def getSparkSessionInstance(sparkConf):
-    if ('sparkSessionSingletonInstance' not in globals()):
-        globals()['sparkSessionSingletonInstance'] = SparkSession\
-            .builder\
-            .config(conf=sparkConf)\
+    if ("sparkSessionSingletonInstance" not in globals()):
+        globals()["sparkSessionSingletonInstance"] = SparkSession \
+            .builder \
+            .config(conf=sparkConf) \
             .getOrCreate()
-    return globals()['sparkSessionSingletonInstance']
+    return globals()["sparkSessionSingletonInstance"]
 
 ...
 
@@ -1829,11 +1828,11 @@ This behavior is made simple by using `StreamingContext.getOrCreate`. This is us
 {% highlight python %}
 # Function to create and setup a new StreamingContext
 def functionToCreateContext():
-    sc = SparkContext(...)   # new context
-    ssc = new StreamingContext(...)
-    lines = ssc.socketTextStream(...) # create DStreams
+    sc = SparkContext(...)  # new context
+    ssc = StreamingContext(...)
+    lines = ssc.socketTextStream(...)  # create DStreams
     ...
-    ssc.checkpoint(checkpointDirectory)   # set checkpoint directory
+    ssc.checkpoint(checkpointDirectory)  # set checkpoint directory
     return ssc
 
 # Get StreamingContext from checkpoint data or create a new one
@@ -2383,11 +2382,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     - [Kafka Integration Guide](streaming-kafka-integration.html)
     - [Kinesis Integration Guide](streaming-kinesis-integration.html)
     - [Custom Receiver Guide](streaming-custom-receivers.html)
-* External DStream data sources:
-    - [DStream MQTT](https://github.com/spark-packages/dstream-mqtt)
-    - [DStream Twitter](https://github.com/spark-packages/dstream-twitter)
-    - [DStream Akka](https://github.com/spark-packages/dstream-akka)
-    - [DStream ZeroMQ](https://github.com/spark-packages/dstream-zeromq)
+* Third-party DStream data sources can be found in [Spark Packages](https://spark-packages.org/)
 * API documentation
   - Scala docs
     * [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) and
