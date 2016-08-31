@@ -79,7 +79,7 @@ case class BroadcastHashJoinExec(
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     joinType match {
-      case _: Inner => codegenInner(ctx, input)
+      case _: InnerLike => codegenInner(ctx, input)
       case LeftOuter | RightOuter => codegenOuter(ctx, input)
       case LeftSemi => codegenSemi(ctx, input)
       case LeftAnti => codegenAnti(ctx, input)
@@ -134,7 +134,7 @@ case class BroadcastHashJoinExec(
     ctx.INPUT_ROW = matched
     buildPlan.output.zipWithIndex.map { case (a, i) =>
       val ev = BoundReference(i, a.dataType, a.nullable).genCode(ctx)
-      if (joinType.isInstanceOf[Inner]) {
+      if (joinType.isInstanceOf[InnerLike]) {
         ev
       } else {
         // the variables are needed even there is no matched rows

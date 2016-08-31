@@ -45,7 +45,7 @@ case class SortMergeJoinExec(
 
   override def output: Seq[Attribute] = {
     joinType match {
-      case _: Inner =>
+      case _: InnerLike =>
         left.output ++ right.output
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -64,7 +64,8 @@ case class SortMergeJoinExec(
   }
 
   override def outputPartitioning: Partitioning = joinType match {
-    case _: Inner => PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
+    case _: InnerLike =>
+      PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
     // For left and right outer joins, the output is partitioned by the streamed input's join keys.
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
@@ -111,7 +112,7 @@ case class SortMergeJoinExec(
       val resultProj: InternalRow => InternalRow = UnsafeProjection.create(output, output)
 
       joinType match {
-        case _: Inner =>
+        case _: InnerLike =>
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
             private[this] var currentRightMatches: ArrayBuffer[InternalRow] = _
@@ -318,7 +319,7 @@ case class SortMergeJoinExec(
   }
 
   override def supportCodegen: Boolean = {
-    joinType.isInstanceOf[Inner]
+    joinType.isInstanceOf[InnerLike]
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {

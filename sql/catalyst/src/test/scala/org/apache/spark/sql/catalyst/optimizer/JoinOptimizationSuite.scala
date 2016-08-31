@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner, InnerLike, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
@@ -57,7 +57,7 @@ class JoinOptimizationSuite extends PlanTest {
       val expectedNoCross = expected map {
         seq_pair => {
           val plans = seq_pair._1
-          val noCartesian = plans map { plan => (plan, false) }
+          val noCartesian = plans map { plan => (plan, Inner) }
           (noCartesian, seq_pair._2)
         }
       }
@@ -65,7 +65,7 @@ class JoinOptimizationSuite extends PlanTest {
     }
 
     def testExtractCheckCross
-        (plan: LogicalPlan, expected: Option[(Seq[(LogicalPlan, Boolean)], Seq[Expression])]) {
+        (plan: LogicalPlan, expected: Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]) {
       assert(ExtractFiltersAndInnerJoins.unapply(plan) === expected)
     }
 
@@ -83,25 +83,21 @@ class JoinOptimizationSuite extends PlanTest {
     testExtract(x.join(y).join(x.join(z)).where("x.b".attr === "y.d".attr),
       Some(Seq(x, y, x.join(z)), Seq("x.b".attr === "y.d".attr)))
 
-    val crossJoin = Inner(true)
-    val innerJoin = Inner(false)
-    testExtractCheckCross(x.join(y, crossJoin), Some(Seq((x, true), (y, true)), Seq()))
-    testExtractCheckCross(x.join(y, crossJoin).join(z, crossJoin),
-      Some(Seq((x, true), (y, true), (z, true)), Seq()))
-    testExtractCheckCross(x.join(y, crossJoin, Some("x.b".attr === "y.d".attr)).join(z, crossJoin),
-      Some(Seq((x, true), (y, true), (z, true)), Seq("x.b".attr === "y.d".attr)))
-    testExtractCheckCross(x.join(y, innerJoin, Some("x.b".attr === "y.d".attr)).join(z, crossJoin),
-      Some(Seq((x, false), (y, false), (z, true)), Seq("x.b".attr === "y.d".attr)))
-    testExtractCheckCross(x.join(y, crossJoin, Some("x.b".attr === "y.d".attr)).join(z, innerJoin),
-      Some(Seq((x, true), (y, true), (z, false)), Seq("x.b".attr === "y.d".attr)))
+    testExtractCheckCross(x.join(y, Cross), Some(Seq((x, Cross), (y, Cross)), Seq()))
+    testExtractCheckCross(x.join(y, Cross).join(z, Cross),
+      Some(Seq((x, Cross), (y, Cross), (z, Cross)), Seq()))
+    testExtractCheckCross(x.join(y, Cross, Some("x.b".attr === "y.d".attr)).join(z, Cross),
+      Some(Seq((x, Cross), (y, Cross), (z, Cross)), Seq("x.b".attr === "y.d".attr)))
+    testExtractCheckCross(x.join(y, Inner, Some("x.b".attr === "y.d".attr)).join(z, Cross),
+      Some(Seq((x, Inner), (y, Inner), (z, Cross)), Seq("x.b".attr === "y.d".attr)))
+    testExtractCheckCross(x.join(y, Cross, Some("x.b".attr === "y.d".attr)).join(z, Inner),
+      Some(Seq((x, Cross), (y, Cross), (z, Inner)), Seq("x.b".attr === "y.d".attr)))
   }
 
   test("reorder inner joins") {
     val x = testRelation.subquery('x)
     val y = testRelation1.subquery('y)
     val z = testRelation.subquery('z)
-    val crossJoin = Inner(true)
-    val innerJoin = Inner(false)
 
     val queryAnswers = Seq(
       (
@@ -110,14 +106,14 @@ class JoinOptimizationSuite extends PlanTest {
           .join(y, condition = Some("y.d".attr === "z.a".attr))
       ),
       (
-        x.join(y, crossJoin).join(z, crossJoin)
+        x.join(y, Cross).join(z, Cross)
           .where(("x.b".attr === "z.b".attr) && ("y.d".attr === "z.a".attr)),
-        x.join(z, crossJoin, Some("x.b".attr === "z.b".attr))
-          .join(y, crossJoin, Some("y.d".attr === "z.a".attr))
+        x.join(z, Cross, Some("x.b".attr === "z.b".attr))
+          .join(y, Cross, Some("y.d".attr === "z.a".attr))
       ),
       (
-        x.join(y, innerJoin).join(z, crossJoin).where("x.b".attr === "z.a".attr),
-        x.join(z, crossJoin, Some("x.b".attr === "z.a".attr)).join(y, innerJoin)
+        x.join(y, Inner).join(z, Cross).where("x.b".attr === "z.a".attr),
+        x.join(z, Cross, Some("x.b".attr === "z.a".attr)).join(y, Inner)
       )
     )
 
@@ -134,7 +130,7 @@ class JoinOptimizationSuite extends PlanTest {
       Project(Seq($"x.key", $"y.key"),
         Join(
           SubqueryAlias("x", input, None),
-          BroadcastHint(SubqueryAlias("y", input, None)), Inner(true), None)).analyze
+          BroadcastHint(SubqueryAlias("y", input, None)), Cross, None)).analyze
 
     val optimized = Optimize.execute(query)
 
@@ -142,7 +138,7 @@ class JoinOptimizationSuite extends PlanTest {
       Join(
         Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
         BroadcastHint(Project(Seq($"y.key"), SubqueryAlias("y", input, None))),
-        Inner(true), None).analyze
+        Cross, None).analyze
 
     comparePlans(optimized, expected)
 

@@ -37,7 +37,6 @@ class OuterJoinEliminationSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
   val testRelation1 = LocalRelation('d.int, 'e.int, 'f.int)
-  val innerJoin = Inner(false)
 
   test("joins: full outer to inner") {
     val x = testRelation.subquery('x)
@@ -51,7 +50,7 @@ class OuterJoinEliminationSuite extends PlanTest {
     val left = testRelation.where('b >= 1)
     val right = testRelation1.where('d >= 2)
     val correctAnswer =
-      left.join(right, innerJoin, Option("a".attr === "d".attr)).analyze
+      left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -99,7 +98,7 @@ class OuterJoinEliminationSuite extends PlanTest {
     val left = testRelation.where('b > 2)
     val right = testRelation1
     val correctAnswer =
-      left.join(right, innerJoin, Option("a".attr === "d".attr)).analyze
+      left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -116,7 +115,7 @@ class OuterJoinEliminationSuite extends PlanTest {
     val left = testRelation
     val right = testRelation1.where('e.isNotNull)
     val correctAnswer =
-      left.join(right, innerJoin, Option("a".attr === "d".attr)).analyze
+      left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -134,7 +133,7 @@ class OuterJoinEliminationSuite extends PlanTest {
     val left = testRelation
     val right = testRelation1.where(!'e.isNull || ('d.isNotNull && 'f.isNull))
     val correctAnswer =
-      left.join(right, innerJoin, Option("a".attr === "d".attr)).analyze
+      left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -152,7 +151,7 @@ class OuterJoinEliminationSuite extends PlanTest {
     val left = testRelation
     val right = testRelation1.where('e.in(1, 2))
     val correctAnswer =
-      left.join(right, innerJoin, Option("a".attr === "d".attr)).analyze
+      left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -170,7 +169,7 @@ class OuterJoinEliminationSuite extends PlanTest {
     val left = testRelation
     val right = testRelation1.where((!'e.isNull || ('d.isNotNull && 'f.isNull)) && 'e.isNull)
     val correctAnswer =
-      left.join(right, innerJoin, Option("a".attr === "d".attr)).analyze
+      left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -190,8 +189,7 @@ class OuterJoinEliminationSuite extends PlanTest {
     val left = testRelation
     val right = testRelation1
     val correctAnswer =
-      left.join(right, innerJoin, Option("b".attr + 3 === "e".attr && "a".attr === "d".attr))
-        .analyze
+      left.join(right, Inner, Option("b".attr + 3 === "e".attr && "a".attr === "d".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }

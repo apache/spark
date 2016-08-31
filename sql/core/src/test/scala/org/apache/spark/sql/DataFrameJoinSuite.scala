@@ -198,7 +198,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     val outerJoin2Inner = df.join(df2, $"a.int" === $"b.int", "outer").
       where($"a.int" === 1 && $"b.int2" === 3)
     assert(outerJoin2Inner.queryExecution.optimizedPlan.collect {
-      case j @ Join(_, _, Inner(false), _) => j }.size === 1)
+      case j @ Join(_, _, Inner, _) => j }.size === 1)
     checkAnswer(
       outerJoin2Inner,
       Row(1, 2, "1", 1, 3, "1") :: Nil)
@@ -206,7 +206,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     // right -> inner
     val rightJoin2Inner = df.join(df2, $"a.int" === $"b.int", "right").where($"a.int" === 1)
     assert(rightJoin2Inner.queryExecution.optimizedPlan.collect {
-      case j @ Join(_, _, Inner(false), _) => j }.size === 1)
+      case j @ Join(_, _, Inner, _) => j }.size === 1)
     checkAnswer(
       rightJoin2Inner,
       Row(1, 2, "1", 1, 3, "1") :: Nil)
@@ -214,7 +214,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     // left -> inner
     val leftJoin2Inner = df.join(df2, $"a.int" === $"b.int", "left").where($"b.int2" === 3)
     assert(leftJoin2Inner.queryExecution.optimizedPlan.collect {
-      case j @ Join(_, _, Inner(false), _) => j }.size === 1)
+      case j @ Join(_, _, Inner, _) => j }.size === 1)
     checkAnswer(
       leftJoin2Inner,
       Row(1, 2, "1", 1, 3, "1") :: Nil)

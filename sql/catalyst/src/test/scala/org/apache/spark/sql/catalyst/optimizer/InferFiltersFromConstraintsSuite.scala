@@ -114,10 +114,9 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val y = testRelation.subquery('y)
 
     val originalQuery =
-      x.join(y, Inner(false), Some("x.a".attr === "y.a".attr)).where("x.a".attr > 5).analyze
+      x.join(y, Inner, Some("x.a".attr === "y.a".attr)).where("x.a".attr > 5).analyze
     val correctAnswer = x.where(IsNotNull('a) && 'a.attr > 5)
-      .join(y.where(IsNotNull('a) && 'a.attr > 5), Inner(false),
-        Some("x.a".attr === "y.a".attr)).analyze
+      .join(y.where(IsNotNull('a) && 'a.attr > 5), Inner, Some("x.a".attr === "y.a".attr)).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }

@@ -346,10 +346,10 @@ class PlanParserSuite extends PlanTest {
     def test(sql: String, jt: JoinType, tests: Seq[(String, JoinType) => Unit]): Unit = {
       tests.foreach(_(sql, jt))
     }
-    test("cross join", Inner(true), Seq(testUnconditionalJoin))
-    test(",", Inner(false), Seq(testUnconditionalJoin))
-    test("join", Inner(false), testAll)
-    test("inner join", Inner(false), testAll)
+    test("cross join", Cross, Seq(testUnconditionalJoin))
+    test(",", Inner, Seq(testUnconditionalJoin))
+    test("join", Inner, testAll)
+    test("inner join", Inner, testAll)
     test("left join", LeftOuter, testAll)
     test("left outer join", LeftOuter, testAll)
     test("right join", RightOuter, testAll)

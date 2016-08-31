@@ -38,7 +38,7 @@ trait HashJoin {
 
   override def output: Seq[Attribute] = {
     joinType match {
-      case _: Inner =>
+      case _: InnerLike =>
         left.output ++ right.output
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -225,7 +225,7 @@ trait HashJoin {
       numOutputRows: SQLMetric): Iterator[InternalRow] = {
 
     val joinedIter = joinType match {
-      case _: Inner =>
+      case _: InnerLike =>
         innerJoin(streamedIter, hashed)
       case LeftOuter | RightOuter =>
         outerJoin(streamedIter, hashed)

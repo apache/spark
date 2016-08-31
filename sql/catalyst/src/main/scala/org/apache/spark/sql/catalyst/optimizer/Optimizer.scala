@@ -841,7 +841,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
       val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
         split(splitConjunctivePredicates(filterCondition), left, right)
       joinType match {
-        case _: Inner =>
+        case _: InnerLike =>
           // push down the single side `where` condition into respective sides
           val newLeft = leftFilterConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -888,7 +888,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), left, right)
 
       joinType match {
-        case _: Inner | LeftExistence(_) =>
+        case _: InnerLike | LeftExistence(_) =>
           // push down the single side only join filter for both sides sub queries
           val newLeft = leftJoinConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -949,28 +949,30 @@ object CombineLimits extends Rule[LogicalPlan] {
 case class CheckCartesianProducts(conf: CatalystConf)
     extends Rule[LogicalPlan] with PredicateHelper {
   /**
-   * Check if a join specified by left, right and condition is a cartesian product. Returns true if
+   * Check if a join is a cartesian product. Returns true if
    * there are no join conditions involving references from both left and right.
    */
-  def isCartesianProduct(left: LogicalPlan, right: LogicalPlan, condition: Option[Expression])
+  def isCartesianProduct(join: Join)
       : Boolean = {
-    val conditions = condition.map(splitConjunctivePredicates).getOrElse(Nil)
-    !conditions.map(_.references).exists(refs => refs.exists(left.outputSet.contains)
-        && refs.exists(right.outputSet.contains))
+    val conditions = join.condition.map(splitConjunctivePredicates).getOrElse(Nil)
+    !conditions.map(_.references).exists(refs => refs.exists(join.left.outputSet.contains)
+        && refs.exists(join.right.outputSet.contains))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan =
-    if (conf.allowCartesianProduct) {
+    if (conf.crossJoinEnabled) {
       plan
     } else plan transform {
-      case j @ Join(left, right, Inner(false) | LeftOuter | RightOuter | FullOuter, condition)
-        if isCartesianProduct(left, right, condition) =>
+      case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, condition)
+        if isCartesianProduct(j) =>
           throw new AnalysisException(
             s"""Detected cartesian product for ${j.joinType.sql} join between logical plans
                |${left.treeString(false).trim}
                |and
                |${right.treeString(false).trim}
-               |Use a CROSS JOIN to allow cartesian products between these relations""".stripMargin)
+               |Join condition is missing or trivial.
+               |Use the CROSS JOIN syntax to allow cartesian products between these relations."""
+            .stripMargin)
     }
 }
 

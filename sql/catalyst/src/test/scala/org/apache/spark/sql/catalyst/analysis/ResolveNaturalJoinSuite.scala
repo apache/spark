@@ -35,12 +35,11 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   lazy val r2 = LocalRelation(c, a)
   lazy val r3 = LocalRelation(aNotNull, bNotNull)
   lazy val r4 = LocalRelation(cNotNull, bNotNull)
-  lazy val innerJoin = Inner(false)
 
   test("natural/using inner join") {
-    val naturalPlan = r1.join(r2, NaturalJoin(innerJoin), None)
-    val usingPlan = r1.join(r2, UsingJoin(innerJoin, Seq(UnresolvedAttribute("a"))), None)
-    val expected = r1.join(r2, innerJoin, Some(EqualTo(a, a))).select(a, b, c)
+    val naturalPlan = r1.join(r2, NaturalJoin(Inner), None)
+    val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("a"))), None)
+    val expected = r1.join(r2, Inner, Some(EqualTo(a, a))).select(a, b, c)
     checkAnalysis(naturalPlan, expected)
     checkAnalysis(usingPlan, expected)
   }
@@ -71,9 +70,9 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   }
 
   test("natural/using inner join with no nullability") {
-    val naturalPlan = r3.join(r4, NaturalJoin(innerJoin), None)
-    val usingPlan = r3.join(r4, UsingJoin(innerJoin, Seq(UnresolvedAttribute("b"))), None)
-    val expected = r3.join(r4, innerJoin, Some(EqualTo(bNotNull, bNotNull))).select(
+    val naturalPlan = r3.join(r4, NaturalJoin(Inner), None)
+    val usingPlan = r3.join(r4, UsingJoin(Inner, Seq(UnresolvedAttribute("b"))), None)
+    val expected = r3.join(r4, Inner, Some(EqualTo(bNotNull, bNotNull))).select(
       bNotNull, aNotNull, cNotNull)
     checkAnalysis(naturalPlan, expected)
     checkAnalysis(usingPlan, expected)
@@ -107,7 +106,7 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   }
 
   test("using unresolved attribute") {
-    val usingPlan = r1.join(r2, UsingJoin(innerJoin, Seq(UnresolvedAttribute("d"))), None)
+    val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("d"))), None)
     val error = intercept[AnalysisException] {
       SimpleAnalyzer.checkAnalysis(usingPlan)
     }
@@ -116,15 +115,15 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   }
 
   test("using join with a case sensitive analyzer") {
-    val expected = r1.join(r2, innerJoin, Some(EqualTo(a, a))).select(a, b, c)
+    val expected = r1.join(r2, Inner, Some(EqualTo(a, a))).select(a, b, c)
 
     {
-      val usingPlan = r1.join(r2, UsingJoin(innerJoin, Seq(UnresolvedAttribute("a"))), None)
+      val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("a"))), None)
       checkAnalysis(usingPlan, expected, caseSensitive = true)
     }
 
     {
-      val usingPlan = r1.join(r2, UsingJoin(innerJoin, Seq(UnresolvedAttribute("A"))), None)
+      val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("A"))), None)
       assertAnalysisError(
         usingPlan,
         Seq("using columns ['A] can not be resolved given input columns: [b, a, c, a]"))
@@ -132,15 +131,15 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   }
 
   test("using join with a case insensitive analyzer") {
-    val expected = r1.join(r2, innerJoin, Some(EqualTo(a, a))).select(a, b, c)
+    val expected = r1.join(r2, Inner, Some(EqualTo(a, a))).select(a, b, c)
 
     {
-      val usingPlan = r1.join(r2, UsingJoin(innerJoin, Seq(UnresolvedAttribute("a"))), None)
+      val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("a"))), None)
       checkAnalysis(usingPlan, expected, caseSensitive = false)
     }
 
     {
-      val usingPlan = r1.join(r2, UsingJoin(innerJoin, Seq(UnresolvedAttribute("A"))), None)
+      val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("A"))), None)
       checkAnalysis(usingPlan, expected, caseSensitive = false)
     }
   }

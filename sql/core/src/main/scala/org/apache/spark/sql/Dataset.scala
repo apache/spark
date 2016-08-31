@@ -599,7 +599,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def join(right: Dataset[_]): DataFrame = withPlan {
-    Join(logicalPlan, right.logicalPlan, joinType = Inner(false), None)
+    Join(logicalPlan, right.logicalPlan, joinType = Inner, None)
   }
 
   /**
@@ -774,7 +774,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def crossJoin(right: Dataset[_]): DataFrame = withPlan {
-    Join(logicalPlan, right.logicalPlan, joinType = Inner(true), None)
+    Join(logicalPlan, right.logicalPlan, joinType = Cross, None)
   }
 
   /**

@@ -92,7 +92,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   assertSupportedInStreamingPlan(
     "aggregate - multiple aggregations but only one streaming aggregation",
     Aggregate(Nil, aggExprs("c"), batchRelation).join(
-      Aggregate(Nil, aggExprs("d"), streamRelation), joinType = Inner(false)),
+      Aggregate(Nil, aggExprs("d"), streamRelation), joinType = Inner),
     Update)
 
   assertNotSupportedInStreamingPlan(
@@ -104,7 +104,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Inner joins: Stream-stream not supported
   testBinaryOperationInStreamingPlan(
     "inner join",
-    _.join(_, joinType = Inner(false)),
+    _.join(_, joinType = Inner),
     streamStreamSupported = false)
 
   // Full outer joins: only batch-batch is allowed

@@ -22,13 +22,13 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 
 object JoinType {
   def apply(typ: String): JoinType = typ.toLowerCase.replace("_", "") match {
-    case "inner" => Inner(false)
+    case "inner" => Inner
     case "outer" | "full" | "fullouter" => FullOuter
     case "leftouter" | "left" => LeftOuter
     case "rightouter" | "right" => RightOuter
     case "leftsemi" => LeftSemi
     case "leftanti" => LeftAnti
-    case "cross" => Inner(true)
+    case "cross" => Cross
     case _ =>
       val supported = Seq(
         "inner",
@@ -51,12 +51,18 @@ sealed abstract class JoinType {
  * The explicitCartesian flag indicates if the inner join was constructed with a CROSS join
  * indicating a cartesian product has been explicitly requested.
  */
-case class Inner(explicitCartesian: Boolean) extends JoinType {
-  override def sql: String = if (explicitCartesian) {
-    "CROSS"
-  } else {
-    "INNER"
-  }
+sealed abstract class InnerLike extends JoinType {
+  def explicitCartesian: Boolean
+}
+
+case object Inner extends InnerLike {
+  override def explicitCartesian: Boolean = false
+  override def sql: String = "INNER"
+}
+
+case object Cross extends InnerLike {
+  override def explicitCartesian: Boolean = true
+  override def sql: String = "CROSS"
 }
 
 case object LeftOuter extends JoinType {
@@ -88,13 +94,13 @@ case class ExistenceJoin(exists: Attribute) extends JoinType {
 }
 
 case class NaturalJoin(tpe: JoinType) extends JoinType {
-  require(Seq(Inner(false), LeftOuter, RightOuter, FullOuter).contains(tpe),
+  require(Seq(Inner, LeftOuter, RightOuter, FullOuter).contains(tpe),
     "Unsupported natural join type " + tpe)
   override def sql: String = "NATURAL " + tpe.sql
 }
 
 case class UsingJoin(tpe: JoinType, usingColumns: Seq[UnresolvedAttribute]) extends JoinType {
-  require(Seq(Inner(false), LeftOuter, LeftSemi, RightOuter, FullOuter, LeftAnti).contains(tpe),
+  require(Seq(Inner, LeftOuter, LeftSemi, RightOuter, FullOuter, LeftAnti).contains(tpe),
     "Unsupported using join type " + tpe)
   override def sql: String = "USING " + tpe.sql
 }

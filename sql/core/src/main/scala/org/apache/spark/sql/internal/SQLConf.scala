@@ -362,7 +362,8 @@ object SQLConf {
     .createWithDefault(true)
 
   val CROSS_JOINS_ENABLED = SQLConfigBuilder("spark.sql.crossJoin.enabled")
-    .doc("When false, we will throw an error if a query contains a cross join")
+    .doc("When false, we will throw an error if a query contains a cartesian product without " +
+        "explicit CROSS JOIN syntax.")
     .booleanConf
     .createWithDefault(false)
 
@@ -683,8 +684,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
-  def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
-
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
   def schemaStringLengthThreshold: Int = getConf(SCHEMA_STRING_LENGTH_THRESHOLD)
@@ -710,7 +709,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
 
-  override def allowCartesianProduct: Boolean = getConf(CROSS_JOINS_ENABLED)
+  override def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

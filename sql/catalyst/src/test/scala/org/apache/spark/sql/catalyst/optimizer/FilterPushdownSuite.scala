@@ -45,8 +45,6 @@ class FilterPushdownSuite extends PlanTest {
 
   val testRelation1 = LocalRelation('d.int)
 
-  val innerJoin = Inner(false)
-
   // This test already passes.
   test("eliminate subqueries") {
     val originalQuery =
@@ -740,12 +738,12 @@ class FilterPushdownSuite extends PlanTest {
     val z = LocalRelation('a.int, 'b.int, 'c.int).subquery('z)
 
     val query = x
-      .join(y, innerJoin, Option("x.a".attr === "y.a".attr))
+      .join(y, Inner, Option("x.a".attr === "y.a".attr))
       .where(Exists(z.where("x.a".attr === "z.a".attr)))
       .analyze
     val answer = x
       .where(Exists(z.where("x.a".attr === "z.a".attr)))
-      .join(y, innerJoin, Option("x.a".attr === "y.a".attr))
+      .join(y, Inner, Option("x.a".attr === "y.a".attr))
       .analyze
     val optimized = Optimize.execute(Optimize.execute(query))
     comparePlans(optimized, answer)
@@ -758,13 +756,13 @@ class FilterPushdownSuite extends PlanTest {
     val z = LocalRelation('a.int, 'b.int, 'c.int).subquery('z)
 
     val query = w
-      .join(x, innerJoin, Option("w.a".attr === "x.a".attr))
+      .join(x, Inner, Option("w.a".attr === "x.a".attr))
       .join(y, LeftOuter, Option("x.a".attr === "y.a".attr))
       .where(Exists(z.where("w.a".attr === "z.a".attr)))
       .analyze
     val answer = w
       .where(Exists(z.where("w.a".attr === "z.a".attr)))
-      .join(x, innerJoin, Option("w.a".attr === "x.a".attr))
+      .join(x, Inner, Option("w.a".attr === "x.a".attr))
       .join(y, LeftOuter, Option("x.a".attr === "y.a".attr))
       .analyze
     val optimized = Optimize.execute(Optimize.execute(query))

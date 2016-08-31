@@ -38,20 +38,22 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
    *
    * The joined plan are picked from left to right, prefer those has at least one join condition.
    *
-   * @param input a list LogicalPlans to inner join, and a bool speciying if an explicit cross join
-   *              is allowed.
+   * @param input a list of LogicalPlans to inner join and the type of inner join.
    * @param conditions a list of condition for join.
    */
   @tailrec
-  def createOrderedJoin(input: Seq[(LogicalPlan, Boolean)], conditions: Seq[Expression])
+  def createOrderedJoin(input: Seq[(LogicalPlan, InnerLike)], conditions: Seq[Expression])
     : LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
       val (joinConditions, others) = conditions.partition(
         e => !SubqueryExpression.hasCorrelatedSubquery(e))
-      val explicitCross = input(0)._2 || input(1)._2
-      val join = Join(input(0)._1, input(1)._1, Inner(explicitCross),
-        joinConditions.reduceLeftOption(And))
+      val innerJoinType = if (input.map(_._2).contains(Cross)) {
+        Cross
+      } else {
+        Inner
+      }
+      val join = Join(input(0)._1, input(1)._1, innerJoinType, joinConditions.reduceLeftOption(And))
       if (others.nonEmpty) {
         Filter(others.reduceLeft(And), join)
       } else {
@@ -60,22 +62,22 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     } else {
       val (left, _) :: rest = input.toList
       // find out the first join that have at least one join condition
-      val conditionalJoin = rest.find { planCross =>
-        val plan = planCross._1
+      val conditionalJoin = rest.find { planJoinPair =>
+        val plan = planJoinPair._1
         val refs = left.outputSet ++ plan.outputSet
         conditions.filterNot(canEvaluate(_, left)).filterNot(canEvaluate(_, plan))
           .exists(_.references.subsetOf(refs))
       }
       // pick the next one if no condition left
-      val (right, explicitCross) = conditionalJoin.getOrElse(rest.head)
+      val (right, innerJoinType) = conditionalJoin.getOrElse(rest.head)
 
       val joinedRefs = left.outputSet ++ right.outputSet
       val (joinConditions, others) = conditions.partition(
         e => e.references.subsetOf(joinedRefs) && !SubqueryExpression.hasCorrelatedSubquery(e))
-      val joined = Join(left, right, Inner(explicitCross), joinConditions.reduceLeftOption(And))
+      val joined = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And))
 
       // should not have reference to same logical plan
-      createOrderedJoin(Seq((joined, false)) ++ rest.filterNot(_._1 eq right), others)
+      createOrderedJoin(Seq((joined, Inner)) ++ rest.filterNot(_._1 eq right), others)
     }
   }
 
@@ -120,9 +122,9 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull)
 
     join.joinType match {
-      case RightOuter if leftHasNonNullPredicate => Inner(false)
-      case LeftOuter if rightHasNonNullPredicate => Inner(false)
-      case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate => Inner(false)
+      case RightOuter if leftHasNonNullPredicate => Inner
+      case LeftOuter if rightHasNonNullPredicate => Inner
+      case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate => Inner
       case FullOuter if leftHasNonNullPredicate => LeftOuter
       case FullOuter if rightHasNonNullPredicate => RightOuter
       case o => o

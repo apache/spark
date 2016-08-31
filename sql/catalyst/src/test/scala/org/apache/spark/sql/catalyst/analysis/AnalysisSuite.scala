@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -341,7 +341,7 @@ class AnalysisSuite extends AnalysisTest {
         Join(
           Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
           Project(Seq($"y.key"), SubqueryAlias("y", input, None)),
-          Inner(true), None))
+          Cross, None))
 
     assertAnalysisSuccess(query)
   }

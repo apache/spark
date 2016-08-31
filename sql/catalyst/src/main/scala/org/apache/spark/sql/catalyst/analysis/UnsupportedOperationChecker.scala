@@ -94,7 +94,7 @@ object UnsupportedOperationChecker {
 
           joinType match {
 
-            case _: Inner =>
+            case _: InnerLike =>
               if (left.isStreaming && right.isStreaming) {
                 throwError("Inner join between two streaming DataFrames/Datasets is not supported")
               }
