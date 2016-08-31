@@ -1251,13 +1251,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         CatalogColumn(ic.identifier.getText, null, nullable = true, Option(ic.STRING).map(string))
       }
 
+      val sql = Option(source(ctx.query))
       val tableDesc = CatalogTable(
         identifier = visitTableIdentifier(ctx.tableIdentifier),
         tableType = CatalogTableType.VIEW,
         schema = schema,
         storage = CatalogStorageFormat.empty,
         properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty),
-        viewOriginalText = Option(source(ctx.query)),
+        viewOriginalText = sql,
+        viewText = sql,
         comment = Option(ctx.STRING).map(string))
 
       CreateViewCommand(

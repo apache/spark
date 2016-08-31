@@ -28,9 +28,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
 
 /**
- * Create or replace a view with given query plan. This command will convert the query plan to
- * canonicalized SQL string, and store it as view text in metastore, if we need to create a
- * permanent view.
+ * Create Hive view on non-hive-compatible tables by specifying schema ourselves instead of
+ * depending on Hive meta-store.
  *
  * @param tableDesc the catalog table
  * @param child the logical plan that represents the view; this is used to generate a canonicalized
@@ -60,8 +59,8 @@ case class CreateViewCommand(
   require(tableDesc.tableType == CatalogTableType.VIEW,
     "The type of the table to created with CREATE VIEW must be 'CatalogTableType.VIEW'.")
   if (!isTemporary) {
-    require(tableDesc.viewOriginalText.isDefined,
-      "The table to created with CREATE VIEW must have 'viewOriginalText'.")
+    require(tableDesc.viewText.isDefined,
+      "The table to created with CREATE VIEW must have 'viewText'.")
   }
 
   if (allowExisting && replace) {
@@ -179,8 +178,9 @@ case class CreateViewCommand(
           }
         }
 
+        val viewText = tableDesc.viewText.get
         val viewName = quote(tableDesc.identifier.table)
-        s"SELECT $viewOutput FROM (${tableDesc.viewOriginalText.get}) $viewName"
+        s"SELECT $viewOutput FROM ($viewText) $viewName"
       }
 
     // Validate the view SQL - make sure we can parse it and analyze it.
