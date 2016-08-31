@@ -20,24 +20,17 @@ context("JVM API")
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 
 test_that("Create and call methods on object", {
-  jarr <- newJObject("java.util.ArrayList")
+  jarr <- sparkR.newJObject("java.util.ArrayList")
   # Add an element to the array
-  callJMethod(jarr, "add", 1L)
+  sparkR.callJMethod(jarr, "add", 1L)
   # Check if get returns the same element
-  expect_equal(callJMethod(jarr, "get", 0L), 1L)
+  expect_equal(sparkR.callJMethod(jarr, "get", 0L), 1L)
 })
 
 test_that("Call static methods", {
   # Convert a boolean to a string
-  strTrue <- callJStatic("java.lang.String", "valueOf", TRUE)
+  strTrue <- sparkR.callJStatic("java.lang.String", "valueOf", TRUE)
   expect_equal(strTrue, "true")
-})
-
-test_that("Manually garbage collect objects", {
-  jarr <- newJObject("java.util.ArrayList")
-  cleanup.jobj(jarr)
-  # Using a jobj after GC should throw an error
-  expect_error(print(jarr), "Error in invokeJava.*")
 })
 
 sparkR.session.stop()
