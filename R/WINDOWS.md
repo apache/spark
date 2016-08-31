@@ -20,7 +20,7 @@ directory in Maven in `PATH`.
     mvn -DskipTests -Psparkr package
     ```
 
-    `build/mvn` is a shell script so `mvn` should be used directly on Windows.
+    `.\build\mvn` is a shell script so `mvn` should be used directly on Windows.
 
 ##  Unit tests
 
