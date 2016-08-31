@@ -299,11 +299,11 @@ private[scheduler] object BlacklistTracker extends Logging {
       val maxTaskFailures = conf.getInt("spark.task.maxFailures", 4)
       val maxNodeAttempts = conf.get(config.MAX_TASK_ATTEMPTS_PER_NODE)
 
-      if (maxTaskFailures <= maxNodeAttempts) {
+      if (maxNodeAttempts >= maxTaskFailures) {
         throw new IllegalArgumentException(s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
-          s"( = ${maxNodeAttempts}) was <= spark.task.maxFailures " +
+          s"( = ${maxNodeAttempts}) was >= spark.task.maxFailures " +
           s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
-          s"Spark will not be robust to one failed disk.  Increase " +
+          s"Spark will not be robust to one bad node.  Increase " +
           s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} or spark.task.maxFailures, or disable " +
           s"blacklisting with ${config.BLACKLIST_ENABLED.key}")
       }
@@ -326,7 +326,6 @@ private[scheduler] final class ExecutorFailuresInTaskSet(val node: String) {
     taskToFailureCountAndExpiryTime(taskIndex) = (prevFailureCount + 1, failureExpiryTime)
   }
   def numUniqueTasksWithFailures: Int = taskToFailureCountAndExpiryTime.size
-
 
   override def toString(): String = {
     s"numUniqueTasksWithFailures= $numUniqueTasksWithFailures; " +
@@ -389,7 +388,6 @@ private[scheduler] final class ExecutorFailureList extends Logging {
   override def toString(): String = {
     s"failures = $failures"
   }
-
 }
 
 private final case class BlacklistedExecutor(node: String, expiryTime: Long)
