@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.command.{DDLUtils, AnalyzeTableCommand}
+import org.apache.spark.sql.execution.command.{AnalyzeTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
