@@ -131,7 +131,6 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setK(k)
       .setMaxIterations(maxIterations)
       .setMinDivisibleClusterSize(minDivisibleClusterSize)
-      .setSeed(seed)
     if (seed != null) kmeans.setSeed(seed)
     kmeans.run(data)
   }
