@@ -414,7 +414,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Only log the failure since we don't care about the result.
     driverEndpoint.ask(RemoveExecutor(executorId, reason)).onFailure { case t =>
       logError(t.getMessage, t)
-    }
+    }(ThreadUtils.sameThread)
   }
 
   def sufficientResourcesRegistered(): Boolean = true
