@@ -287,8 +287,8 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("ALTER VIEW AS should try to alter temp view first if view name has no database part") {
-    withTempView("test_view") {
-      withView("test_view") {
+    withView("test_view") {
+      withTempView("test_view") {
         sql("CREATE VIEW test_view AS SELECT 1 AS a, 2 AS b")
         sql("CREATE TEMP VIEW test_view AS SELECT 1 AS a, 2 AS b")
 
@@ -304,8 +304,8 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("ALTER VIEW AS should alter permanent view if view name has database part") {
-    withTempView("test_view") {
-      withView("test_view") {
+    withView("test_view") {
+      withTempView("test_view") {
         sql("CREATE VIEW test_view AS SELECT 1 AS a, 2 AS b")
         sql("CREATE TEMP VIEW test_view AS SELECT 1 AS a, 2 AS b")
 
@@ -321,7 +321,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("ALTER VIEW AS should keep the previous table properties, comment, create_time, etc.") {
-    withTempView("test_view") {
+    withView("test_view") {
       sql(
         """
           |CREATE VIEW test_view
