@@ -17,8 +17,10 @@ directory in Maven in `PATH`.
 5. Open a command shell (`cmd`) in the Spark directory and build Spark with [Maven](http://spark.apache.org/docs/latest/building-spark.html#building-with-buildmvn) and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
 
     ```bash
-    build/mvn -DskipTests -Psparkr package
+    mvn -DskipTests -Psparkr package
     ```
+
+    `build/mvn` is a shell script so `mvn` should be used directly on Windows.
 
 ##  Unit tests
 
