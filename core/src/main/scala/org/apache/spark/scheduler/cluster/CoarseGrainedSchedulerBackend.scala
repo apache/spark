@@ -142,13 +142,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             // Ignoring the task kill since the executor is not registered.
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
         }
-
-      case RemoveExecutor(executorId, reason) =>
-        // We will remove the executor's state and cannot restore it. However, the connection
-        // between the driver and the executor may be still alive so that the executor won't exit
-        // automatically, so try to tell the executor to stop itself. See SPARK-13519.
-        executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
-        removeExecutor(executorId, reason)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -200,6 +193,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         for ((_, executorData) <- executorDataMap) {
           executorData.executorEndpoint.send(StopExecutor)
         }
+        context.reply(true)
+
+      case RemoveExecutor(executorId, reason) =>
+        // We will remove the executor's state and cannot restore it. However, the connection
+        // between the driver and the executor may be still alive so that the executor won't exit
+        // automatically, so try to tell the executor to stop itself. See SPARK-13519.
+        executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
+        removeExecutor(executorId, reason)
         context.reply(true)
 
       case RetrieveSparkProps =>
@@ -410,7 +411,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * at once.
    */
   protected def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
-    driverEndpoint.send(RemoveExecutor(executorId, reason))
+    // Only log the failure since we don't care about the result.
+    driverEndpoint.ask(RemoveExecutor(executorId, reason)).onFailure { case t =>
+      logError(t.getMessage, t)
+    }
   }
 
   def sufficientResourcesRegistered(): Boolean = true
