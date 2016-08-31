@@ -2253,10 +2253,6 @@ test_that("dapplyCollect() on dataframe with a binary column", {
   df <- data.frame(key = 1:3)
   df$bytes <- lapply(df$key, serialize, connection = NULL)
 
-  # TODO clarkfitzg: Related issue- The dataframe can't be collected if this
-  # column is added:
-  #df$arr <- lapply(df$key, function(x) seq(0, 1, length.out=15))
-
   df_spark <- createDataFrame(df)
 
   result1 <- collect(df_spark)
