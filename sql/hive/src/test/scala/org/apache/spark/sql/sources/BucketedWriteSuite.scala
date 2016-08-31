@@ -22,9 +22,9 @@ import java.net.URI
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.catalog.DefaultBucketingInfoExtractor
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -101,9 +101,11 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     )
 
     for (bucketFile <- allBucketFiles) {
-      val bucketId = BucketingUtils.getBucketId(bucketFile.getName).getOrElse {
-        fail(s"Unable to find the related bucket files.")
-      }
+      val bucketId = DefaultBucketingInfoExtractor.Instance
+        .getBucketId(bucketFile.getName)
+        .getOrElse {
+          fail(s"Unable to find the related bucket files.")
+        }
 
       // Remove the duplicate columns in bucketCols and sortCols;
       // Otherwise, we got analysis errors due to duplicate names

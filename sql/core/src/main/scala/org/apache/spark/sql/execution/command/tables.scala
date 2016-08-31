@@ -461,7 +461,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   private def describeBucketingInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     metadata.bucketSpec match {
-      case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames)) =>
+      case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames, _)) =>
         append(buffer, "Num Buckets:", numBuckets.toString, "")
         append(buffer, "Bucket Columns:", bucketColumnNames.mkString("[", ", ", "]"), "")
         append(buffer, "Sort Columns:", sortColumnNames.mkString("[", ", ", "]"), "")

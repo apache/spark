@@ -29,7 +29,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketingInfoExtractor, BucketSpec}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.FileRelation
@@ -63,6 +63,7 @@ abstract class OutputWriterFactory extends Serializable {
   def newInstance(
       path: String,
       bucketId: Option[Int], // TODO: This doesn't belong here...
+      bucketingInfoExtractor: BucketingInfoExtractor,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter
 

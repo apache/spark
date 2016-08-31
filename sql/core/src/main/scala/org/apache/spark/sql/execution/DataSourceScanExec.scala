@@ -382,7 +382,7 @@ case class FileSourceScanExec(
           PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
         }
       }.groupBy { f =>
-        BucketingUtils
+        bucketSpec.infoExtractor
           .getBucketId(new Path(f.filePath).getName)
           .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
       }

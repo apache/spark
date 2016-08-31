@@ -41,6 +41,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.BucketingInfoExtractor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
@@ -135,9 +136,10 @@ class ParquetFileFormat
       override def newInstance(
           path: String,
           bucketId: Option[Int],
+          bucketingInfoExtractor: BucketingInfoExtractor,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new ParquetOutputWriter(path, bucketId, context)
+        new ParquetOutputWriter(path, bucketId, bucketingInfoExtractor, context)
       }
     }
   }
@@ -516,6 +518,7 @@ private[parquet] class ParquetOutputWriterFactory(
   def newInstance(
       path: String,
       bucketId: Option[Int],
+      bucketingInfoExtractor: BucketingInfoExtractor,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
     throw new UnsupportedOperationException(
@@ -529,6 +532,7 @@ private[parquet] class ParquetOutputWriterFactory(
 private[parquet] class ParquetOutputWriter(
     path: String,
     bucketId: Option[Int],
+    bucketingInfoExtractor: BucketingInfoExtractor,
     context: TaskAttemptContext)
   extends OutputWriter {
 
@@ -545,15 +549,16 @@ private[parquet] class ParquetOutputWriter(
         //     `FileOutputCommitter.getWorkPath()`, which points to the base directory of all
         //     partitions in the case of dynamic partitioning.
         override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-          val configuration = context.getConfiguration
-          val uniqueWriteJobId = configuration.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
-          val taskAttemptId = context.getTaskAttemptID
-          val split = taskAttemptId.getTaskID.getId
-          val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
           // It has the `.parquet` extension at the end because (de)compression tools
           // such as gunzip would not be able to decompress this as the compression
           // is not applied on this whole file but on each "page" in Parquet format.
-          new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
+          val filename = bucketingInfoExtractor.getBucketedFilename(
+            context.getTaskAttemptID.getTaskID.getId,
+            context.getConfiguration.get(WriterContainer.DATASOURCE_WRITEJOBUUID),
+            bucketId,
+            extension
+          )
+          new Path(path, filename)
         }
       }
     }

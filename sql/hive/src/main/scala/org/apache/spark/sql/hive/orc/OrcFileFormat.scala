@@ -33,6 +33,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.BucketingInfoExtractor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
@@ -84,9 +85,10 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       override def newInstance(
           path: String,
           bucketId: Option[Int],
+          bucketingInfoExtractor: BucketingInfoExtractor,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new OrcOutputWriter(path, bucketId, dataSchema, context)
+        new OrcOutputWriter(path, bucketId, bucketingInfoExtractor, dataSchema, context)
       }
     }
   }
@@ -207,6 +209,7 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
 private[orc] class OrcOutputWriter(
     path: String,
     bucketId: Option[Int],
+    bucketingInfoExtractor: BucketingInfoExtractor,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
@@ -221,10 +224,6 @@ private[orc] class OrcOutputWriter(
 
   private lazy val recordWriter: RecordWriter[NullWritable, Writable] = {
     recordWriterInstantiated = true
-    val uniqueWriteJobId = conf.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
-    val taskAttemptId = context.getTaskAttemptID
-    val partition = taskAttemptId.getTaskID.getId
-    val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
     val compressionExtension = {
       val name = conf.get(OrcRelation.ORC_COMPRESSION)
       OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
@@ -232,7 +231,13 @@ private[orc] class OrcOutputWriter(
     // It has the `.orc` extension at the end because (de)compression tools
     // such as gunzip would not be able to decompress this as the compression
     // is not applied on this whole file but on each "stream" in ORC format.
-    val filename = f"part-r-$partition%05d-$uniqueWriteJobId$bucketString$compressionExtension.orc"
+    val filename = bucketingInfoExtractor.getBucketedFilename(
+      context.getTaskAttemptID.getTaskID.getId,
+      conf.get(WriterContainer.DATASOURCE_WRITEJOBUUID),
+      bucketId,
+      s"$compressionExtension.orc"
+    )
+    new Path(path, filename)
 
     new OrcOutputFormat().getRecordWriter(
       new Path(path, filename).getFileSystem(conf),

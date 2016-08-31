@@ -28,7 +28,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, DefaultBucketingInfoExtractor}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
@@ -133,7 +133,18 @@ private[datasources] abstract class BaseWriterContainer(
 
   protected def newOutputWriter(path: String, bucketId: Option[Int] = None): OutputWriter = {
     try {
-      outputWriterFactory.newInstance(path, bucketId, dataSchema, taskAttemptContext)
+      val bucketingInfoExtractor = if (relation.bucketSpec.isDefined) {
+        relation.bucketSpec.get.infoExtractor
+      } else {
+        DefaultBucketingInfoExtractor.Instance
+      }
+
+      outputWriterFactory.newInstance(
+        path,
+        bucketId,
+        bucketingInfoExtractor,
+        dataSchema,
+        taskAttemptContext)
     } catch {
       case e: org.apache.hadoop.fs.FileAlreadyExistsException =>
         if (outputCommitter.getClass.getName.contains("Direct")) {

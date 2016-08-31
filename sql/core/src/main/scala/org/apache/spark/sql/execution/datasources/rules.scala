@@ -132,7 +132,7 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
 
   private def checkBucketColumns(schema: StructType, tableDesc: CatalogTable): CatalogTable = {
     tableDesc.bucketSpec match {
-      case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames)) =>
+      case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames, _)) =>
         val normalizedBucketCols = bucketColumnNames.map { colName =>
           normalizeColumnName(tableDesc.identifier, schema, colName, "bucket")
         }

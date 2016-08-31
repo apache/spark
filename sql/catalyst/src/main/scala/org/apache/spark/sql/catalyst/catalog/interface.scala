@@ -67,7 +67,6 @@ case class CatalogStorageFormat(
         serdePropsToString)
     output.filter(_.nonEmpty).mkString("Storage(", ", ", ")")
   }
-
 }
 
 object CatalogStorageFormat {
@@ -99,7 +98,8 @@ case class CatalogTablePartition(
 case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
-    sortColumnNames: Seq[String]) {
+    sortColumnNames: Seq[String],
+    infoExtractor: BucketingInfoExtractor = DefaultBucketingInfoExtractor.Instance) {
   if (numBuckets <= 0) {
     throw new AnalysisException(s"Expected positive number of buckets, but got `$numBuckets`.")
   }
@@ -162,7 +162,7 @@ case class CatalogTable(
     val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
     val bucketStrings = bucketSpec match {
-      case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames)) =>
+      case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames, _)) =>
         val bucketColumnsString = bucketColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
         val sortColumnsString = sortColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
         Seq(
