@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, GreaterThan, Literal}
 import org.apache.spark.sql.execution.{FilterExec, LocalTableScanExec}
 import org.apache.spark.sql.execution.subquery.CommonSubqueryExec
 import org.apache.spark.sql.internal.SQLConf
@@ -50,6 +50,22 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     row(null, 5.0),
     row(6, null)).toDF("c", "d")
 
+  lazy val tab1 = Seq(
+    row(1, 2),
+    row(2, 3),
+    row(5, 6),
+    row(6, 7),
+    row(10, 11),
+    row(11, 12)).toDF("c1", "c2")
+
+  lazy val tab2 = Seq(
+    row(1, 2),
+    row(2, 3),
+    row(5, 6),
+    row(6, 7),
+    row(10, 11),
+    row(11, 12)).toDF("c1", "c2")
+
   lazy val t = r.filter($"c".isNotNull && $"d".isNotNull)
 
   protected override def beforeAll(): Unit = {
@@ -57,6 +73,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     l.createOrReplaceTempView("l")
     r.createOrReplaceTempView("r")
     t.createOrReplaceTempView("t")
+    tab1.createOrReplaceTempView("tab1")
+    tab2.createOrReplaceTempView("tab2")
   }
 
   test("rdd deserialization does not crash [SPARK-15791]") {
@@ -628,7 +646,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       val df = sql("WITH cte AS (SELECT a.a AS a, a.b AS b, b.a AS c, b.b AS d FROM l a, l b) " +
         "SELECT * FROM (SELECT * FROM cte WHERE a = 1) x JOIN (SELECT * FROM cte WHERE b = 1.0) y")
-
       val commonSubqueries = df.queryExecution.sparkPlan.collect {
         case c: CommonSubqueryExec => c.subquery.child
       }.distinct
@@ -650,10 +667,9 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       // There are two Filters:
       // 1. x.a = 1 && x.b = 2.0
       // 2. x.b = 2.0
-      // The pushdown Filter is ((x.a = 1 && x.b = 2.0) || (x.b = 2.0)) => (x.b = 2.0).
+      // The conditions (x.a = 1 && x.b = 2.0) should be pushed down.
       val df2 = sql("WITH cte AS (SELECT a.a AS a, a.b AS b, b.a AS c, b.b AS d FROM l a, l b) " +
         "SELECT * FROM cte x, cte y WHERE x.b = y.b AND x.a = 1 AND x.b = 1 + 1")
-
       val commonSubqueries2 = df2.queryExecution.sparkPlan.collect {
         case c: CommonSubqueryExec => c.subquery.child
       }.distinct
@@ -665,12 +681,34 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       val intConditions2 = pushdownFilter2(0).asInstanceOf[FilterExec].condition.collect {
         case EqualTo(a: AttributeReference, Literal(i, IntegerType)) => (a.name, i)
       }
-      assert(intConditions2.length == 0)
+      assert(intConditions2.length == 1 &&
+        intConditions2(0)._1 == "a" && intConditions2(0)._2 == 1)
       val doubleConditions2 = pushdownFilter2(0).asInstanceOf[FilterExec].condition.collect {
         case EqualTo(a: AttributeReference, Literal(d, DoubleType)) => (a.name, d)
       }
       assert(doubleConditions2.length == 1 &&
         doubleConditions2(0)._1 == "b" && doubleConditions2(0)._2 == 2.0)
+
+      val df3 = sql("with cte as (select c1, case mycount when 0 then null else 1 end cov " +
+        "from (select tab1.c1, count(tab1.c2) as mycount from tab1, tab2 " +
+        "where tab1.c1 = tab2.c1 group by tab1.c1) foo " +
+        "where case mycount when 0 then null else 1 end > 1.0) " +
+        "select * from cte a, cte b where a.c1 > 5 and b.c1 > 10 and a.cov > 2")
+      val commonSubqueries3 = df3.queryExecution.sparkPlan.collect {
+        case c: CommonSubqueryExec => c.subquery.child
+      }.distinct
+      assert(commonSubqueries3.length == 1)
+      val pushdownFilter3 = commonSubqueries3(0).collect {
+        case f: FilterExec => f
+      }
+      // Besides the original Filter, two Filters are pushed down:
+      // One is tab1.c1 > 5 or tab1.c1 > 10, another one is tab2.c1 > 5 or tab2.c1 > 10.
+      assert(pushdownFilter3.length == 3)
+      val intConditions3 = pushdownFilter3(1).asInstanceOf[FilterExec].condition.collect {
+        case GreaterThan(a: AttributeReference, Literal(i, IntegerType)) => (a.name, i)
+      }
+      assert(intConditions3.length == 2)
+      assert(intConditions3(0)._2 == 5 && intConditions3(1)._2 == 10)
     }
   }
 

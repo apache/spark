@@ -1137,13 +1137,39 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer)
       plan: LogicalPlan,
       keyPlan: LogicalPlan,
       subqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
-    val firstCondExprs = splitConjunctivePredicates(subqueries(0).asInstanceOf[Filter].condition)
-    val firstPushdownCondition: Expression = (subqueries(0).asInstanceOf[Filter].condition +:
-      subqueries.tail.map {
-        case Filter(otherCond, child) =>
-          val rewrites = buildRewrites(child, subqueries(0).asInstanceOf[Filter].child)
-          pushToOtherPlan(otherCond, rewrites)
-      }).reduce(Or)
+    val orConds = new ArrayBuffer[Expression]()
+    var pushdownConds = splitConjunctivePredicates(subqueries(0).asInstanceOf[Filter].condition)
+    subqueries.tail.foreach {
+      case Filter(otherCond, child) =>
+        val rewrites = buildRewrites(child, subqueries(0).asInstanceOf[Filter].child)
+        // We can't simply push down all conditions from other Filter by concatenating them with
+        // [[Or]]. Because if any conditions contains a sub-condition which can't be pushed down
+        // through intermediate operators, it makes all concatenated conditions not pushed doen.
+        // E.g., first condition is [a && b] and second condition is [c]. If b can't be pushed
+        // down, the final condition [[a && b] || c] can't be pushed down too.
+        // So we extract the sub-conditions which share the same references and only push down
+        // them.
+        splitConjunctivePredicates(otherCond).foreach { cond =>
+          val rewritten = pushToOtherPlan(cond, rewrites)
+          if (!pushdownConds.exists(_.semanticEquals(rewritten))) {
+            var found = false
+            pushdownConds = pushdownConds.map { pushdown =>
+              if (!found && rewritten.references.subsetOf(pushdown.references)) {
+                found = true
+                Or(pushdown, rewritten)
+              } else {
+                pushdown
+              }
+            }
+            if (!found) orConds += rewritten
+          }
+        }
+    }
+    val firstPushdownCondition: Expression = if (orConds.isEmpty) {
+      pushdownConds.reduce(And)
+    } else {
+      Or(pushdownConds.reduce(And), orConds.reduce(Or))
+    }
     plan transformDown {
       case f @ Filter(cond, s @ SubqueryAlias(alias, subquery, v, true)) if s.sameResult(keyPlan) =>
         val pushdownCond: Expression = subqueries.foldLeft(firstPushdownCondition) {
