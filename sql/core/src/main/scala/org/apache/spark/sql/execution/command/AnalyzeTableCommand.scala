@@ -39,37 +39,6 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
 
-    def updateTableStats(
-        catalogTable: CatalogTable,
-        oldTotalSize: Long,
-        oldRowCount: Long,
-        newTotalSize: Long): Unit = {
-
-      var newStats: Option[Statistics] = None
-      if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-        newStats = Some(Statistics(sizeInBytes = newTotalSize))
-      }
-      if (!noscan) {
-        val newRowCount = Dataset.ofRows(sparkSession, relation).count()
-        if (newRowCount >= 0 && newRowCount != oldRowCount) {
-          newStats = if (newStats.isDefined) {
-            newStats.map(_.copy(rowCount = Some(BigInt(newRowCount))))
-          } else {
-            Some(Statistics(sizeInBytes = oldTotalSize, rowCount = Some(BigInt(newRowCount))))
-          }
-        }
-      }
-      // Update the metastore if the above statistics of the table are different from those
-      // recorded in the metastore.
-      if (newStats.isDefined) {
-        sessionState.catalog.alterTable(
-          catalogTable.copy(catalogStats = newStats), fromAnalyze = true)
-
-        // Refresh the cache of the table in the catalog.
-        sessionState.catalog.refreshTable(tableIdent)
-      }
-    }
-
     relation match {
       case relation: CatalogRelation =>
         val catalogTable: CatalogTable = relation.catalogTable
@@ -133,9 +102,38 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
           newTotalSize = logicalRel.relation.sizeInBytes)
 
       case otherRelation =>
-        throw new AnalysisException(s"ANALYZE TABLE is only supported for Hive tables, " +
-          s"but '${tableIdent.unquotedString}' is a ${otherRelation.nodeName}.")
+        throw new AnalysisException(s"ANALYZE TABLE is not supported for " +
+          s"${otherRelation.nodeName}.")
     }
+
+    def updateTableStats(
+        catalogTable: CatalogTable,
+        oldTotalSize: Long,
+        oldRowCount: Long,
+        newTotalSize: Long): Unit = {
+      var newStats: Option[Statistics] = None
+      if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
+        newStats = Some(Statistics(sizeInBytes = newTotalSize))
+      }
+      if (!noscan) {
+        val newRowCount = Dataset.ofRows(sparkSession, relation).count()
+        if (newRowCount >= 0 && newRowCount != oldRowCount) {
+          newStats = if (newStats.isDefined) {
+            newStats.map(_.copy(rowCount = Some(BigInt(newRowCount))))
+          } else {
+            Some(Statistics(sizeInBytes = oldTotalSize, rowCount = Some(BigInt(newRowCount))))
+          }
+        }
+      }
+      // Update the metastore if the above statistics of the table are different from those
+      // recorded in the metastore.
+      if (newStats.isDefined) {
+        sessionState.catalog.alterTable(catalogTable.copy(catalogStats = newStats))
+        // Refresh the cached data source table in the catalog.
+        sessionState.catalog.refreshTable(tableIdent)
+      }
+    }
+
     Seq.empty[Row]
   }
 }

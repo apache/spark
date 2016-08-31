@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.command.AnalyzeTableCommand
+import org.apache.spark.sql.execution.command.{DDLUtils, AnalyzeTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -171,48 +171,71 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
 
   private def checkMetastoreRelationStats(
       tableName: String,
-      totalSize: Long,
-      rowCount: Option[BigInt]): Unit = {
+      expectedTotalSize: Long,
+      expectedRowCount: Option[BigInt]): Unit = {
     val df = sql(s"SELECT * FROM $tableName")
     val relations = df.queryExecution.analyzed.collect { case rel: MetastoreRelation =>
-      rel.statistics
-      assert(rel.statistics.sizeInBytes === totalSize)
-      assert(rel.statistics.rowCount === rowCount)
-    }
-    assert(relations.size === 1)
-  }
-
-  private def checkLogicalRelationStats(tableName: String, rowCount: Option[BigInt]): Unit = {
-    val df = sql(s"SELECT * FROM $tableName")
-    val relations = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
-      assert(rel.statistics.sizeInBytes === rel.relation.sizeInBytes)
-      assert(rel.statistics.rowCount === rowCount)
+      assert(rel.statistics.sizeInBytes === expectedTotalSize)
+      assert(rel.statistics.rowCount === expectedRowCount)
+      rel
     }
     assert(relations.size === 1)
   }
 
   test("test table-level statistics for hive tables created in HiveExternalCatalog") {
     val textTable = "textTable"
-    val parquetTable = "parquetTable"
-    val orcTable = "orcTable"
-    withTable(textTable, parquetTable, orcTable) {
+    withTable(textTable) {
       sql(s"CREATE TABLE $textTable (key STRING, value STRING) STORED AS TEXTFILE")
+      checkMetastoreRelationStats(textTable,
+        expectedTotalSize = spark.sessionState.conf.defaultSizeInBytes, expectedRowCount = None)
+
       sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
+      // don't have our statistics, MetastoreRelation uses hive's `totalSize`
+      checkMetastoreRelationStats(textTable, expectedTotalSize = 5812, expectedRowCount = None)
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
-      checkMetastoreRelationStats(textTable, 5812, None)
+      checkMetastoreRelationStats(textTable, expectedTotalSize = 5812, expectedRowCount = None)
 
       // without noscan, we count the number of rows
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS")
-      checkMetastoreRelationStats(textTable, 5812, Some(500))
+      checkMetastoreRelationStats(textTable, expectedTotalSize = 5812, expectedRowCount = Some(500))
+    }
+  }
 
-      // test whether the old stats are removed
+  test("test whether the old stats are removed") {
+    val textTable = "textTable"
+    withTable(textTable) {
+      sql(s"CREATE TABLE $textTable (key STRING, value STRING) STORED AS TEXTFILE")
+      sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
+      sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS")
+      checkMetastoreRelationStats(textTable, expectedTotalSize = 5812, expectedRowCount = Some(500))
+
       sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
-      checkMetastoreRelationStats(textTable, 11624, None)
+      // update total size and remove the old and invalid row count
+      checkMetastoreRelationStats(textTable, expectedTotalSize = 11624, expectedRowCount = None)
+    }
+  }
 
-      // test statistics of LogicalRelation inherited from MetastoreRelation
+  private def checkLogicalRelationStats(
+      tableName: String,
+      expectedRowCount: Option[BigInt]): Unit = {
+    val df = sql(s"SELECT * FROM $tableName")
+    val relations = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
+      // TODO: We don't have an expected value here because parquet size is different on Windows
+      // and Linux, we need to find the reason and fix this.
+      assert(rel.statistics.sizeInBytes === rel.relation.sizeInBytes)
+      assert(rel.statistics.rowCount === expectedRowCount)
+      rel
+    }
+    assert(relations.size === 1)
+  }
+
+  test("test statistics of LogicalRelation inherited from MetastoreRelation") {
+    val parquetTable = "parquetTable"
+    val orcTable = "orcTable"
+    withTable(parquetTable, orcTable) {
       sql(s"CREATE TABLE $parquetTable (key STRING, value STRING) STORED AS PARQUET")
       sql(s"CREATE TABLE $orcTable (key STRING, value STRING) STORED AS ORC")
       sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
@@ -220,10 +243,10 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
       sql(s"ANALYZE TABLE $orcTable COMPUTE STATISTICS")
 
-      checkLogicalRelationStats(parquetTable, Some(500))
+      checkLogicalRelationStats(parquetTable, expectedRowCount = Some(500))
 
       withSQLConf("spark.sql.hive.convertMetastoreOrc" -> "true") {
-        checkLogicalRelationStats(orcTable, Some(500))
+        checkLogicalRelationStats(orcTable, expectedRowCount = Some(500))
       }
     }
   }
@@ -232,15 +255,18 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     val parquetTable = "parquetTable"
     withTable(parquetTable) {
       sql(s"CREATE TABLE $parquetTable (key STRING, value STRING) USING PARQUET")
+      val catalogTable = spark.sessionState.catalog.getTableMetadata(TableIdentifier(parquetTable))
+      assert(DDLUtils.isDatasourceTable(catalogTable))
+
       sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
-      checkLogicalRelationStats(parquetTable, None)
+      checkLogicalRelationStats(parquetTable, expectedRowCount = None)
 
       // without noscan, we count the number of rows
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
-      checkLogicalRelationStats(parquetTable, Some(500))
+      checkLogicalRelationStats(parquetTable, expectedRowCount = Some(500))
     }
   }
 

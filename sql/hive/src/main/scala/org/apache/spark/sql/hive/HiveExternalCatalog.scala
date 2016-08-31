@@ -383,36 +383,37 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     requireTableExists(db, tableDefinition.identifier.table)
     verifyTableProperties(tableDefinition)
 
-    if (DDLUtils.isDatasourceTable(tableDefinition)) {
-      val oldDef = client.getTable(db, tableDefinition.identifier.table)
+    // convert table statistics to properties so that we can persist them through hive api
+    val catalogTable = if (tableDefinition.catalogStats.isDefined) {
+      // first we need to clear the old (i.e. inaccurate) stats
+      var propertiesWithStats: Map[String, String] =
+        tableDefinition.properties -(STATISTICS_TOTAL_SIZE, STATISTICS_NUM_ROWS)
+      val stats = tableDefinition.catalogStats.get
+      propertiesWithStats += (STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
+      if (stats.rowCount.isDefined) {
+        propertiesWithStats += (STATISTICS_NUM_ROWS -> stats.rowCount.get.toString())
+      }
+      tableDefinition.copy(properties = propertiesWithStats)
+    } else {
+      tableDefinition
+    }
+
+    if (DDLUtils.isDatasourceTable(catalogTable)) {
+      val oldDef = client.getTable(db, catalogTable.identifier.table)
       // Sets the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
       // to retain the spark specific format if it is. Also add old data source properties to table
       // properties, to retain the data source table format.
       val oldDataSourceProps = oldDef.properties.filter(_._1.startsWith(DATASOURCE_PREFIX))
-      val newDef = tableDefinition.copy(
+      val newDef = catalogTable.copy(
         schema = oldDef.schema,
         partitionColumnNames = oldDef.partitionColumnNames,
         bucketSpec = oldDef.bucketSpec,
-        properties = oldDataSourceProps ++ tableDefinition.properties)
+        properties = oldDataSourceProps ++ catalogTable.properties)
 
       client.alterTable(newDef)
     } else {
-      client.alterTable(tableDefinition)
+      client.alterTable(catalogTable)
     }
-  }
-
-  override def alterTableStats(tableDefinition: CatalogTable): Unit = withClient {
-    assert(tableDefinition.catalogStats.isDefined)
-    // first we need to clear the old (i.e. inaccurate) stats
-    var propertiesWithStats: Map[String, String] =
-      tableDefinition.properties - (STATISTICS_TOTAL_SIZE, STATISTICS_NUM_ROWS)
-    val stats = tableDefinition.catalogStats.get
-    // convert table statistics to properties so that we can persist them through hive api
-    propertiesWithStats += (STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
-    if (stats.rowCount.isDefined) {
-      propertiesWithStats += (STATISTICS_NUM_ROWS -> stats.rowCount.get.toString())
-    }
-    alterTable(tableDefinition.copy(properties = propertiesWithStats))
   }
 
   override def getTable(db: String, table: String): CatalogTable = withClient {

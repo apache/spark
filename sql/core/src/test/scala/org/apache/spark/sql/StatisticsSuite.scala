@@ -82,6 +82,7 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
       val relations = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
         assert(rel.statistics.sizeInBytes === rel.relation.sizeInBytes)
         assert(rel.statistics.rowCount === rowCount)
+        rel
       }
       assert(relations.size === 1)
     }
