@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -43,8 +44,8 @@ import org.apache.spark.util.Utils
  * In the target table definition, the table comment is always empty but the column comments
  * are identical to the ones defined in the source table.
  *
- * The CatalogTable attributes copied from the source table are storage(inputFormat,
- * outputFormat, serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec.
+ * The CatalogTable attributes copied from the source table are storage(inputFormat, outputFormat,
+ * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -65,6 +66,7 @@ case class CreateTableLikeCommand(
     }
 
     val sourceTableDesc = catalog.getTableMetadata(sourceTable)
+    val sourceTableType = sourceTableDesc.tableType
 
     val newSerdeProp =
       if (DDLUtils.isDatasourceTable(sourceTableDesc)) {
@@ -74,9 +76,29 @@ case class CreateTableLikeCommand(
       } else {
         sourceTableDesc.storage.properties
       }
-    val newStorage = sourceTableDesc.storage.copy(
-      locationUri = None,
-      properties = newSerdeProp)
+
+    // Storage format
+    val newStorage =
+      if (sourceTableType == CatalogTableType.VIEW) {
+        val defaultStorageType = sparkSession.conf.get("hive.default.fileformat", "textfile")
+        val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType)
+        CatalogStorageFormat(
+          locationUri = None,
+          inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
+            .orElse(Some("org.apache.hadoop.mapred.TextInputFormat")),
+          outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
+            .orElse(Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
+          serde = None,
+          compressed = false,
+          properties = Map())
+      } else {
+        sourceTableDesc.storage.copy(
+          locationUri = None,
+          properties = newSerdeProp)
+      }
+
+    val newProvider =
+      if (sourceTableType == CatalogTableType.VIEW) Some("hive") else sourceTableDesc.provider
 
     val newTableDesc =
       CatalogTable(
@@ -84,7 +106,7 @@ case class CreateTableLikeCommand(
         tableType = CatalogTableType.MANAGED,
         storage = newStorage,
         schema = sourceTableDesc.schema,
-        provider = sourceTableDesc.provider,
+        provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
         bucketSpec = sourceTableDesc.bucketSpec)
 

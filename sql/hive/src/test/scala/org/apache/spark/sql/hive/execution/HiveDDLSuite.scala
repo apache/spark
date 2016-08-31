@@ -677,10 +677,6 @@ class HiveDDLSuite
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
 
-        // Source table is a temporary view, which does not have a serde
-        // We always pick the default serde, which is LazySimpleSerDe
-        assert(targetTable.storage.serde == Option(classOf[LazySimpleSerDe].getCanonicalName))
-
         checkCreateTableLike(sourceTable, targetTable)
       }
     }
@@ -801,9 +797,6 @@ class HiveDDLSuite
         assert(sourceView.viewText.nonEmpty && sourceView.viewOriginalText.nonEmpty)
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
-        // Source table is a view, which does not have a serde
-        // We always pick the default serde, which is LazySimpleSerDe
-        assert(targetTable.storage.serde == Option(classOf[LazySimpleSerDe].getCanonicalName))
 
         checkCreateTableLike(sourceView, targetTable)
       }
@@ -859,6 +852,18 @@ class HiveDDLSuite
     } else {
       assert(!DDLUtils.isDatasourceTable(targetTable),
         "the target table should be a Hive serde table")
+    }
+
+    if (sourceTable.tableType == CatalogTableType.VIEW) {
+      // Source table is a temporary/permanent view, which does not have a serde, inputFormat and
+      // outputFormat. The created target table uses the default storage formats and serde.
+      assert(targetTable.storage.serde == Option(classOf[LazySimpleSerDe].getCanonicalName))
+      assert(targetTable.storage.inputFormat == Option("org.apache.hadoop.mapred.TextInputFormat"))
+      assert(targetTable.storage.outputFormat ==
+        Option("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
+      // The source temporary/permanent view does not have provider values. `hive` is used in the
+      // created table.
+      assert(targetTable.provider == Option("hive"))
     }
 
     val sourceTablePath = getTablePath(sourceTable)
