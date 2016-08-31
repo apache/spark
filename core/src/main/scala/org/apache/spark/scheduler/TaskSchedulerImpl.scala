@@ -294,9 +294,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
         }
       }
     }
-    if (!launchedTask && blacklistTracker.isDefined) {
-      taskSet.abortIfCompletelyBlacklisted(hostToExecutors)
-    }
     return launchedTask
   }
 
