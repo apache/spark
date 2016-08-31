@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.nio.ByteBuffer
+
+import com.google.common.primitives.{Doubles, Ints, Longs}
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflectionLock}
+import org.apache.spark.sql.catalyst.{InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.{PercentileDigest, PercentileDigestSerializer}
+import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.{PercentileDigest}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.{defaultCompressThreshold, Stats}
@@ -79,8 +82,6 @@ case class ApproximatePercentile(
   // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
   private lazy val accuracy: Int = accuracyExpression.eval().asInstanceOf[Int]
 
-  private lazy val serializer: PercentileDigestSerializer = new PercentileDigestSerializer
-
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(DoubleType, TypeCollection(DoubleType, ArrayType), IntegerType)
   }
@@ -104,6 +105,8 @@ case class ApproximatePercentile(
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
+    } else if (!percentageExpression.foldable || !accuracyExpression.foldable) {
+      TypeCheckFailure(s"The accuracy or percentage provided must be a constant literal")
     } else if (accuracy <= 0) {
       TypeCheckFailure(
         s"The accuracy provided must be a positive integer literal (current value = $accuracy)")
@@ -162,11 +165,11 @@ case class ApproximatePercentile(
   override def prettyName: String = "percentile_approx"
 
   override def serialize(obj: PercentileDigest): Array[Byte] = {
-    serializer.serialize(obj)
+    ApproximatePercentile.serializer.serialize(obj)
   }
 
   override def deserialize(bytes: Array[Byte]): PercentileDigest = {
-    serializer.deserialize(bytes)
+    ApproximatePercentile.serializer.deserialize(bytes)
   }
 }
 
@@ -261,44 +264,58 @@ object ApproximatePercentile {
   /**
    * Serializer  for class [[PercentileDigest]]
    *
-   * This class is NOT thread safe because usage of ExpressionEncoder is not threadsafe.
+   * This class is thread safe.
    */
   class PercentileDigestSerializer {
 
-    // In Scala 2.10, the creation of TypeTag is not thread safe. We need to use ScalaReflectionLock
-    // to protect the creation of this encoder. See SI-6240 for more details.
-    private[this] final val serializer = ScalaReflectionLock.synchronized {
-      ExpressionEncoder[QuantileSummariesData].resolveAndBind()
+    private final def length(summaries: QuantileSummaries): Int = {
+      // summaries.compressThreshold, summary.relativeError, summary.count
+      Ints.BYTES + Doubles.BYTES + Longs.BYTES +
+      // length of summary.sampled
+      Ints.BYTES +
+      // summary.sampled, Array[Stat(value: Double, g: Int, delta: Int)]
+      summaries.sampled.length * (Doubles.BYTES + Ints.BYTES + Ints.BYTES)
     }
 
-    // There are 4 fields in QuantileSummariesData
-    private[this] final val row = new UnsafeRow(4)
-
     final def serialize(obj: PercentileDigest): Array[Byte] = {
-      val data = new QuantileSummariesData(obj.quantileSummaries)
-      serializer.toRow(data).asInstanceOf[UnsafeRow].getBytes
+      val summary = obj.quantileSummaries
+      val buffer = ByteBuffer.wrap(new Array(length(summary)))
+      buffer.putInt(summary.compressThreshold)
+      buffer.putDouble(summary.relativeError)
+      buffer.putLong(summary.count)
+      buffer.putInt(summary.sampled.length)
+
+      var i = 0
+      while (i < summary.sampled.length) {
+        val stat = summary.sampled(i)
+        buffer.putDouble(stat.value)
+        buffer.putInt(stat.g)
+        buffer.putInt(stat.delta)
+        i += 1
+      }
+      buffer.array()
     }
 
     final def deserialize(bytes: Array[Byte]): PercentileDigest = {
-      row.pointTo(bytes, bytes.length)
-      val quantileSummaries = serializer.fromRow(row).toQuantileSummaries
-      new PercentileDigest(quantileSummaries, isCompressed = true)
+      val buffer = ByteBuffer.wrap(bytes)
+      val compressThreshold = buffer.getInt()
+      val relativeError = buffer.getDouble()
+      val count = buffer.getLong()
+      val sampledLength = buffer.getInt()
+      val sampled = new Array[Stats](sampledLength)
+
+      var i = 0
+      while (i < sampledLength) {
+        val value = buffer.getDouble()
+        val g = buffer.getInt()
+        val delta = buffer.getInt()
+        sampled(i) = Stats(value, g, delta)
+        i += 1
+      }
+      val summary = new QuantileSummaries(compressThreshold, relativeError, sampled, count)
+      new PercentileDigest(summary, isCompressed = true)
     }
   }
 
-  // An case class to wrap fields of QuantileSummaries, so that we can use the expression encoder
-  // to serialize it.
-  case class QuantileSummariesData(
-      compressThreshold: Int,
-      relativeError: Double,
-      sampled: Array[Stats],
-      count: Long) {
-    def this(summary: QuantileSummaries) = {
-      this(summary.compressThreshold, summary.relativeError, summary.sampled, summary.count)
-    }
-
-    def toQuantileSummaries: QuantileSummaries = {
-      new QuantileSummaries(compressThreshold, relativeError, sampled, count)
-    }
-  }
+  val serializer: PercentileDigestSerializer = new PercentileDigestSerializer
 }

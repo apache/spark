@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
 import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType}
 import org.apache.spark.util.SizeEstimator
 
-
 class ApproximatePercentileSuite extends SparkFunSuite {
 
   private val random = new java.util.Random()
@@ -42,7 +41,6 @@ class ApproximatePercentileSuite extends SparkFunSuite {
   }
 
   test("serialize and de-serialize") {
-
     val serializer = new PercentileDigestSerializer
 
     // Check empty serialize and de-serialize
@@ -50,7 +48,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     assert(compareEquals(emptyBuffer, serializer.deserialize(serializer.serialize(emptyBuffer))))
 
     val buffer = new PercentileDigest(relativeError = 0.01)
-    (1 to 100).foreach { value =>
+    data.foreach { value =>
       buffer.add(value)
     }
     assert(compareEquals(buffer, serializer.deserialize(serializer.serialize(buffer))))
@@ -208,6 +206,29 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         "a".attr,
         percentageExpression = CreateArray(Seq(0.25D, 0.5D, 0.75D).map(Literal(_)))
       ).sql(isDistinct = true))
+  }
+
+  test("class ApproximatePercentile, fails analysis if percentage or accuracy is not a constant") {
+    val attribute = AttributeReference("a", DoubleType)()
+    val wrongAccuracy = new ApproximatePercentile(
+      attribute,
+      percentageExpression = Literal(0.5D),
+      accuracyExpression = AttributeReference("b", IntegerType)())
+
+    assertEqual(
+      wrongAccuracy.checkInputDataTypes(),
+      TypeCheckFailure("The accuracy or percentage provided must be a constant literal")
+    )
+
+    val wrongPercentage = new ApproximatePercentile(
+      attribute,
+      percentageExpression = attribute,
+      accuracyExpression = Literal(10000))
+
+    assertEqual(
+      wrongPercentage.checkInputDataTypes(),
+      TypeCheckFailure("The accuracy or percentage provided must be a constant literal")
+    )
   }
 
   test("class ApproximatePercentile, fails analysis if parameters are invalid") {
