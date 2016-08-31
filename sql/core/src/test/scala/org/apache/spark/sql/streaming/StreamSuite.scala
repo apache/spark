@@ -298,8 +298,6 @@ class FakeDefaultSource extends StreamSourceProvider {
 
       override def schema: StructType = StructType(StructField("a", IntegerType) :: Nil)
 
-      override def lastCommittedOffset: Option[Offset] = None
-
       override def getOffset: Option[Offset] = {
         if (offset >= 10) {
           None
@@ -313,8 +311,6 @@ class FakeDefaultSource extends StreamSourceProvider {
         val startOffset = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L) + 1
         spark.range(startOffset, end.asInstanceOf[LongOffset].offset + 1).toDF("a")
       }
-
-      override def commit(end: Offset): Unit = {}
 
       override def stop() {}
     }

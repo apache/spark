@@ -317,11 +317,6 @@ class StreamExecution(
         case (src, off) => src.commit(off)
       }
 
-      // The log can also discard old metadata. Trim one batch less than we could, just
-      // in case.
-      if (currentBatchId > 2) {
-        offsetLog.purge(currentBatchId - 2)
-      }
     } else {
       awaitBatchLock.lock()
       try {

@@ -625,12 +625,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
       /** Create a text file with a single data item */
       def createFile(data: Int): File = {
-        // Use 2 character file names padded with zeros so that alphabetical and
-        // numeric order are the same for the generated file names.
-        val file = stringToFile(new File(src, f"$data%02d.txt"), data.toString)
-
-        // File modification times aren't currently used to decide what goes into
-        // the next batch, but they may be used in the future.
+        val file = stringToFile(new File(src, s"$data.txt"), data.toString)
         if (lastFileModTime.nonEmpty) file.setLastModified(lastFileModTime.get + 1000)
         lastFileModTime = Some(file.lastModified)
         file

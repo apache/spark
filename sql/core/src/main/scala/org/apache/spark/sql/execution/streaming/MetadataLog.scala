@@ -24,7 +24,6 @@ package org.apache.spark.sql.execution.streaming
  *  - Allow the user to query the latest batch id.
  *  - Allow the user to query the metadata object of a specified batch id.
  *  - Allow the user to query metadata objects in a range of batch ids.
- *  - Inform the log that it is safe to garbage-collect metadata from a batch
  */
 trait MetadataLog[T] {
 

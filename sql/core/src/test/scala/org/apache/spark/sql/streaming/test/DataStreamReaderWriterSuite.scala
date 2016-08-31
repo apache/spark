@@ -77,8 +77,6 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
     new Source {
       override def schema: StructType = fakeSchema
 
-      override def lastCommittedOffset: Option[Offset] = None
-
       override def getOffset: Option[Offset] = Some(new LongOffset(0))
 
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
@@ -86,8 +84,6 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
 
         Seq[Int]().toDS().toDF()
       }
-
-      override def commit(end: Offset): Unit = {}
 
       override def stop() {}
     }

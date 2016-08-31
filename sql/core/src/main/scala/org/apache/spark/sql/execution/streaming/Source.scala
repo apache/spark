@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.StructType
  * monotonically increasing notion of progress that can be represented as an [[Offset]]. Spark
  * will regularly query each [[Source]] to see if any more data is available.
  */
-trait Source {
+trait Source  {
 
   /** Returns the schema of the data from this source */
   def schema: StructType
@@ -59,7 +59,7 @@ trait Source {
    * Informs the source that Spark has completed processing all data for offsets less than or
    * equal to `end` and will only request offsets greater than `end` in the future.
    */
-  def commit(end: Offset)
+  def commit(end: Offset) : Unit = {}
 
   /** Stop this source and free any resources it has allocated. */
   def stop(): Unit
