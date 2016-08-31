@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
+import java.sql.SQLException
 import java.util.Properties
 
 import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
@@ -72,12 +73,12 @@ class JdbcRelationProvider extends CreatableRelationProvider
       mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
-    val url = parameters.getOrElse("url",
-      sys.error("Saving jdbc source requires url to be set." +
-        " (ie. df.option(\"url\", \"ACTUAL_URL\")"))
-    val table = parameters.getOrElse("dbtable", parameters.getOrElse("table",
-      sys.error("Saving jdbc source requires dbtable to be set." +
-        " (ie. df.option(\"dbtable\", \"ACTUAL_DB_TABLE\")")))
+    require(parameters.isDefinedAt("url"), "Saving jdbc source requires 'url' to be set." +
+        " (ie. df.option(\"url\", \"ACTUAL_URL\")")
+    require(parameters.isDefinedAt("dbtable"), "Saving jdbc source requires 'dbtable' to be set." +
+        " (ie. df.option(\"dbtable\", \"ACTUAL_DB_TABLE\")")
+    val url = parameters("url")
+    val table = parameters("dbtable")
 
     import collection.JavaConverters._
     val props = new Properties()
@@ -89,12 +90,14 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
       val (doCreate, doSave) = (mode, tableExists) match {
         case (SaveMode.Ignore, true) => (false, false)
-        case (SaveMode.ErrorIfExists, true) => sys.error(s"Table $table already exists.")
+        case (SaveMode.ErrorIfExists, true) => throw new SQLException(
+          s"Table $table already exists, and SaveMode is set to ErrorIfExists.")
         case (SaveMode.Overwrite, true) =>
           JdbcUtils.dropTable(conn, table)
           (true, true)
         case (SaveMode.Append, true) => (false, true)
-        case (_, true) => sys.error(s"Unexpected SaveMode, '$mode', for handling existing tables.")
+        case (_, true) => throw new IllegalArgumentException(s"Unexpected SaveMode, '$mode'," +
+          " for handling existing tables.")
         case (_, false) => (true, true)
       }
 
