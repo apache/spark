@@ -87,16 +87,14 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
 
         updateTableStats(
           catalogTable,
-          oldTotalSize = catalogTable.catalogStats.map(_.sizeInBytes.toLong).getOrElse(0L),
-          oldRowCount = catalogTable.catalogStats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L),
+          oldTotalSize = catalogTable.stats.map(_.sizeInBytes.toLong).getOrElse(0L),
+          oldRowCount = catalogTable.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L),
           newTotalSize = newTotalSize)
 
       // data source tables have been converted into LogicalRelations
-      case logicalRel: LogicalRelation if logicalRel.metastoreTableIdentifier.isDefined =>
-        val tableIdentifier = logicalRel.metastoreTableIdentifier.get
-        val catalogTable = sessionState.catalog.getTableMetadata(tableIdentifier)
+      case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
         updateTableStats(
-          catalogTable,
+          logicalRel.catalogTable.get,
           oldTotalSize = logicalRel.statistics.sizeInBytes.toLong,
           oldRowCount = logicalRel.statistics.rowCount.map(_.toLong).getOrElse(-1L),
           newTotalSize = logicalRel.relation.sizeInBytes)
@@ -128,7 +126,7 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
       // Update the metastore if the above statistics of the table are different from those
       // recorded in the metastore.
       if (newStats.isDefined) {
-        sessionState.catalog.alterTable(catalogTable.copy(catalogStats = newStats))
+        sessionState.catalog.alterTable(catalogTable.copy(stats = newStats))
         // Refresh the cached data source table in the catalog.
         sessionState.catalog.refreshTable(tableIdent)
       }

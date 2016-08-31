@@ -203,7 +203,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     }
   }
 
-  test("test whether the old stats are removed") {
+  test("test elimination of the influences of the old stats") {
     val textTable = "textTable"
     withTable(textTable) {
       sql(s"CREATE TABLE $textTable (key STRING, value STRING) STORED AS TEXTFILE")
@@ -243,8 +243,11 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
       sql(s"ANALYZE TABLE $orcTable COMPUTE STATISTICS")
 
-      checkLogicalRelationStats(parquetTable, expectedRowCount = Some(500))
-
+      // the default value for `spark.sql.hive.convertMetastoreParquet` is true, here we just set it
+      // for robustness
+      withSQLConf("spark.sql.hive.convertMetastoreParquet" -> "true") {
+        checkLogicalRelationStats(parquetTable, expectedRowCount = Some(500))
+      }
       withSQLConf("spark.sql.hive.convertMetastoreOrc" -> "true") {
         checkLogicalRelationStats(orcTable, expectedRowCount = Some(500))
       }

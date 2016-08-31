@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.client.HiveClient
@@ -384,16 +385,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     verifyTableProperties(tableDefinition)
 
     // convert table statistics to properties so that we can persist them through hive api
-    val catalogTable = if (tableDefinition.catalogStats.isDefined) {
-      // first we need to clear the old (i.e. inaccurate) stats
-      var propertiesWithStats: Map[String, String] =
-        tableDefinition.properties -(STATISTICS_TOTAL_SIZE, STATISTICS_NUM_ROWS)
-      val stats = tableDefinition.catalogStats.get
-      propertiesWithStats += (STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
+    val catalogTable = if (tableDefinition.stats.isDefined) {
+      val stats = tableDefinition.stats.get
+      var statsProperties: Map[String, String] =
+        Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
       if (stats.rowCount.isDefined) {
-        propertiesWithStats += (STATISTICS_NUM_ROWS -> stats.rowCount.get.toString())
+        statsProperties += (STATISTICS_NUM_ROWS -> stats.rowCount.get.toString())
       }
-      tableDefinition.copy(properties = propertiesWithStats)
+      tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties)
     } else {
       tableDefinition
     }
@@ -432,7 +431,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * properties, and filter out these special entries from table properties.
    */
   private def restoreTableMetadata(table: CatalogTable): CatalogTable = {
-    if (table.tableType == VIEW) {
+    val catalogTable = if (table.tableType == VIEW) {
       table
     } else {
       getProviderFromTableProperties(table).map { provider =>
@@ -461,6 +460,19 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       } getOrElse {
         table.copy(provider = Some("hive"))
       }
+    }
+    // construct Spark's statistics from information in Hive metastore
+    if (catalogTable.properties.contains(STATISTICS_TOTAL_SIZE)) {
+      val totalSize = BigInt(catalogTable.properties.get(STATISTICS_TOTAL_SIZE).get)
+      // TODO: we will compute "estimatedSize" when we have column stats:
+      // average size of row * number of rows
+      catalogTable.copy(
+        properties = removeStatsProperties(catalogTable),
+        stats = Some(Statistics(
+          sizeInBytes = totalSize,
+          rowCount = catalogTable.properties.get(STATISTICS_NUM_ROWS).map(BigInt(_)))))
+    } else {
+      catalogTable
     }
   }
 
@@ -628,6 +640,10 @@ object HiveExternalCatalog {
   val STATISTICS_PREFIX = "spark.sql.statistics."
   val STATISTICS_TOTAL_SIZE = STATISTICS_PREFIX + "totalSize"
   val STATISTICS_NUM_ROWS = STATISTICS_PREFIX + "numRows"
+
+  def removeStatsProperties(metadata: CatalogTable): Map[String, String] = {
+    metadata.properties.filterNot { case (key, _) => key.startsWith(STATISTICS_PREFIX) }
+  }
 
   def getProviderFromTableProperties(metadata: CatalogTable): Option[String] = {
     metadata.properties.get(DATASOURCE_PROVIDER)

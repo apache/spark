@@ -252,11 +252,11 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
         case relation: CatalogRelation =>
           val metadata = relation.catalogTable
           preprocess(i, metadata.identifier.quotedString, metadata.partitionColumnNames)
-        case LogicalRelation(h: HadoopFsRelation, _, identifier, _) =>
-          val tblName = identifier.map(_.quotedString).getOrElse("unknown")
+        case LogicalRelation(h: HadoopFsRelation, _, catalogTable) =>
+          val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, h.partitionSchema.map(_.name))
-        case LogicalRelation(_: InsertableRelation, _, identifier, _) =>
-          val tblName = identifier.map(_.quotedString).getOrElse("unknown")
+        case LogicalRelation(_: InsertableRelation, _, catalogTable) =>
+          val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, Nil)
         case other => i
       }
@@ -306,7 +306,7 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         }
 
       case i @ logical.InsertIntoTable(
-        l @ LogicalRelation(t: InsertableRelation, _, _, _),
+        l @ LogicalRelation(t: InsertableRelation, _, _),
         partition, query, overwrite, ifNotExists) =>
         // Right now, we do not support insert into a data source table with partition specs.
         if (partition.nonEmpty) {
@@ -314,7 +314,7 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         } else {
           // Get all input data source relations of the query.
           val srcRelations = query.collect {
-            case LogicalRelation(src: BaseRelation, _, _, _) => src
+            case LogicalRelation(src: BaseRelation, _, _) => src
           }
           if (srcRelations.contains(t)) {
             failAnalysis(
@@ -325,7 +325,7 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         }
 
       case logical.InsertIntoTable(
-        LogicalRelation(r: HadoopFsRelation, _, _, _), part, query, overwrite, _) =>
+        LogicalRelation(r: HadoopFsRelation, _, _), part, query, overwrite, _) =>
         // We need to make sure the partition columns specified by users do match partition
         // columns of the relation.
         val existingPartitionColumns = r.partitionSchema.fieldNames.toSet
@@ -344,7 +344,7 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
 
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
-          case LogicalRelation(src: BaseRelation, _, _, _) => src
+          case LogicalRelation(src: BaseRelation, _, _) => src
         }
         if (srcRelations.contains(r)) {
           failAnalysis(
@@ -365,10 +365,10 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
           EliminateSubqueryAliases(catalog.lookupRelation(tableDesc.identifier)) match {
             // Only do the check if the table is a data source table
             // (the relation is a BaseRelation).
-            case l @ LogicalRelation(dest: BaseRelation, _, _, _) =>
+            case l @ LogicalRelation(dest: BaseRelation, _, _) =>
               // Get all input data source relations of the query.
               val srcRelations = query.collect {
-                case LogicalRelation(src: BaseRelation, _, _, _) => src
+                case LogicalRelation(src: BaseRelation, _, _) => src
               }
               if (srcRelations.contains(dest)) {
                 failAnalysis(

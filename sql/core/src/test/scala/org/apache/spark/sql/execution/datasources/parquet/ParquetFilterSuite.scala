@@ -64,7 +64,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
         var maybeRelation: Option[HadoopFsRelation] = None
         val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters, LogicalRelation(relation: HadoopFsRelation, _, _, _)
+          case PhysicalOperation(_, filters, LogicalRelation(relation: HadoopFsRelation, _, _)
           ) =>
             maybeRelation = Some(relation)
             filters

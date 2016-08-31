@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.BaseRelation
@@ -33,8 +33,7 @@ import org.apache.spark.util.Utils
 case class LogicalRelation(
     relation: BaseRelation,
     expectedOutputAttributes: Option[Seq[Attribute]] = None,
-    metastoreTableIdentifier: Option[TableIdentifier] = None,
-    inheritedStats: Option[Statistics] = None)
+    catalogTable: Option[CatalogTable] = None)
   extends LeafNode with MultiInstanceRelation {
 
   override val output: Seq[AttributeReference] = {
@@ -53,7 +52,7 @@ case class LogicalRelation(
 
   // Logical Relations are distinct if they have different output for the sake of transformations.
   override def equals(other: Any): Boolean = other match {
-    case l @ LogicalRelation(otherRelation, _, _, _) =>
+    case l @ LogicalRelation(otherRelation, _, _) =>
       relation == otherRelation && output == l.output
     case _ => false
   }
@@ -64,7 +63,7 @@ case class LogicalRelation(
 
   override def sameResult(otherPlan: LogicalPlan): Boolean = {
     otherPlan.canonicalized match {
-      case LogicalRelation(otherRelation, _, _, _) => relation == otherRelation
+      case LogicalRelation(otherRelation, _, _) => relation == otherRelation
       case _ => false
     }
   }
@@ -76,7 +75,7 @@ case class LogicalRelation(
 
   // inheritedStats is inherited from a CatalogRelation
   @transient override lazy val statistics: Statistics = {
-    inheritedStats.map(_.copy(sizeInBytes = relation.sizeInBytes)).getOrElse(
+    catalogTable.flatMap(_.stats.map(_.copy(sizeInBytes = relation.sizeInBytes))).getOrElse(
       Statistics(sizeInBytes = relation.sizeInBytes))
   }
 
@@ -93,7 +92,7 @@ case class LogicalRelation(
     LogicalRelation(
       relation,
       expectedOutputAttributes.map(_.map(_.newInstance())),
-      metastoreTableIdentifier).asInstanceOf[this.type]
+      catalogTable).asInstanceOf[this.type]
   }
 
   override def refresh(): Unit = relation match {

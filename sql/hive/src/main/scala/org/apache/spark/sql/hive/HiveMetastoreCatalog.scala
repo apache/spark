@@ -82,8 +82,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
         LogicalRelation(
           dataSource.resolveRelation(checkPathExist = true),
-          metastoreTableIdentifier = Some(TableIdentifier(in.name, Some(in.database))),
-          inheritedStats = table.catalogStats)
+          catalogTable = Some(table))
       }
     }
 
@@ -146,7 +145,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
     cachedDataSourceTables.getIfPresent(tableIdentifier) match {
       case null => None // Cache miss
-      case logical @ LogicalRelation(relation: HadoopFsRelation, _, _, _) =>
+      case logical @ LogicalRelation(relation: HadoopFsRelation, _, _) =>
         val cachedRelationFileFormatClass = relation.fileFormat.getClass
 
         expectedFileFormat match {
@@ -258,10 +257,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           fileFormat = defaultSource,
           options = options)
 
-        val created = LogicalRelation(
-          relation,
-          metastoreTableIdentifier =
-            Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
+        val created = LogicalRelation(relation, catalogTable = Some(metastoreRelation.catalogTable))
         cachedDataSourceTables.put(tableIdentifier, created)
         created
       }
@@ -287,8 +283,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
               bucketSpec = bucketSpec,
               options = options,
               className = fileType).resolveRelation(),
-              metastoreTableIdentifier =
-                Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
+              catalogTable = Some(metastoreRelation.catalogTable))
 
 
         cachedDataSourceTables.put(tableIdentifier, created)
@@ -297,9 +292,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
       logicalRelation
     }
-    result.copy(
-      expectedOutputAttributes = Some(metastoreRelation.output),
-      inheritedStats = Some(metastoreRelation.statistics))
+    result.copy(expectedOutputAttributes = Some(metastoreRelation.output))
   }
 
   /**

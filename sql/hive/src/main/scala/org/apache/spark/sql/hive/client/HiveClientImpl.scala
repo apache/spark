@@ -44,9 +44,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.{CircularBuffer, Utils}
 
@@ -403,7 +401,6 @@ private[hive] class HiveClientImpl(
             .map(_.asScala.toMap).orNull
         ),
         properties = properties.filter(kv => kv._1 != "comment"),
-        catalogStats = constructStatsFromHive(properties),
         comment = properties.get("comment"),
         viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
@@ -428,20 +425,6 @@ private[hive] class HiveClientImpl(
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"${table.database}.$tableName"
     client.alterTable(qualifiedTableName, hiveTable)
-  }
-
-  // Construct Spark's statistics from information in Hive metastore.
-  private def constructStatsFromHive(properties: Map[String, String]): Option[Statistics] = {
-    if (properties.contains(HiveExternalCatalog.STATISTICS_TOTAL_SIZE)) {
-      val totalSize = BigInt(properties.get(HiveExternalCatalog.STATISTICS_TOTAL_SIZE).get)
-      // TODO: we will compute "estimatedSize" when we have column stats:
-      // average size of row * number of rows
-      Some(Statistics(
-        sizeInBytes = totalSize,
-        rowCount = properties.get(HiveExternalCatalog.STATISTICS_NUM_ROWS).map(BigInt(_))))
-    } else {
-      None
-    }
   }
 
   override def createPartitions(
