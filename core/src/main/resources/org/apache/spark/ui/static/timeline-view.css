@@ -33,10 +33,13 @@ div#application-timeline, div#job-timeline {
   height: 55px;
 }
 
-#task-assignment-timeline div.item.range {
-  padding: 0px;
+#task-assignment-timeline div.vis-item.vis-range {
   height: 26px;
   border-width: 0;
+}
+
+#task-assignment-timeline .vis-item-content {
+  padding: 0px;
 }
 
 .task-assignment-timeline-content {
@@ -87,24 +90,24 @@ rect.getting-result-time-proportion {
     width: 100%
 }
 
-.vis.timeline {
+.vis-timeline {
   line-height: 14px;
 }
 
-.vis.timeline div.content {
+.vis-timeline div.vis-item-content {
   width: 100%;
 }
 
-.vis.timeline .item.stage {
+.vis-timeline .vis-item.stage {
   cursor: pointer;
 }
 
-.vis.timeline .item.stage.succeeded {
+.vis-timeline .vis-item.stage.succeeded {
   background-color: #A0DFFF;
   border-color: #3EC0FF;
 }
 
-.vis.timeline .item.stage.succeeded.selected {
+.vis-timeline .vis-item.stage.succeeded.vis-selected {
   background-color: #A0DFFF;
   border-color: #3EC0FF;
   z-index: auto;
@@ -115,12 +118,12 @@ rect.getting-result-time-proportion {
   stroke: #3EC0FF;
 }
 
-.vis.timeline .item.stage.failed {
+.vis-timeline .vis-item.stage.failed {
   background-color: #FFA1B0;
   border-color: #FF4D6D;
 }
 
-.vis.timeline .item.stage.failed.selected {
+.vis-timeline .vis-item.stage.failed.vis-selected {
   background-color: #FFA1B0;
   border-color: #FF4D6D;
   z-index: auto;
@@ -131,12 +134,12 @@ rect.getting-result-time-proportion {
   stroke: #FF4D6D;
 }
 
-.vis.timeline .item.stage.running {
+.vis-timeline .vis-item.stage.running {
   background-color: #A2FCC0;
   border-color: #36F572;
 }
 
-.vis.timeline .item.stage.running.selected {
+.vis-timeline .vis-item.stage.running.vis-selected {
   background-color: #A2FCC0;
   border-color: #36F572;
   z-index: auto;
@@ -147,20 +150,20 @@ rect.getting-result-time-proportion {
   stroke: #36F572;
 }
 
-.vis.timeline .foreground {
+.vis-timeline .vis-foreground {
   cursor: move;
 }
 
-.vis.timeline .item.job {
+.vis-timeline .vis-item.job {
   cursor: pointer;
 }
 
-.vis.timeline .item.job.succeeded {
+.vis-timeline .vis-item.job.succeeded {
   background-color: #A0DFFF;
   border-color: #3EC0FF;
 }
 
-.vis.timeline .item.job.succeeded.selected {
+.vis-timeline .vis-item.job.succeeded.vis-selected {
   background-color: #A0DFFF;
   border-color: #3EC0FF;
   z-index: auto;
@@ -171,12 +174,12 @@ rect.getting-result-time-proportion {
   stroke: #3EC0FF;
 }
 
-.vis.timeline .item.job.failed {
+.vis-timeline .vis-item.job.failed {
   background-color: #FFA1B0;
   border-color: #FF4D6D;
 }
 
-.vis.timeline .item.job.failed.selected {
+.vis-timeline .vis-item.job.failed.vis-selected {
   background-color: #FFA1B0;
   border-color: #FF4D6D;
   z-index: auto;
@@ -187,12 +190,12 @@ rect.getting-result-time-proportion {
   stroke: #FF4D6D;
 }
 
-.vis.timeline .item.job.running {
+.vis-timeline .vis-item.job.running {
   background-color: #A2FCC0;
   border-color: #36F572;
 }
 
-.vis.timeline .item.job.running.selected {
+.vis-timeline .vis-item.job.running.vis-selected {
   background-color: #A2FCC0;
   border-color: #36F572;
   z-index: auto;
@@ -203,7 +206,7 @@ rect.getting-result-time-proportion {
   stroke: #36F572;
 }
 
-.vis.timeline .item.executor.added {
+.vis-timeline .vis-item.executor.added {
   background-color: #A0DFFF;
   border-color: #3EC0FF;
 }
@@ -213,7 +216,7 @@ rect.getting-result-time-proportion {
   stroke: #3EC0FF;
 }
 
-.vis.timeline .item.executor.removed {
+.vis-timeline .vis-item.executor.removed {
   background-color: #FFA1B0;
   border-color: #FF4D6D;
 }
@@ -223,7 +226,7 @@ rect.getting-result-time-proportion {
   stroke: #FF4D6D;
 }
 
-.vis.timeline .item.executor.selected {
+.vis-timeline .vis-item.executor.vis-selected {
   background-color: #A2FCC0;
   border-color: #36F572;
   z-index: 2;
@@ -262,15 +265,15 @@ span.expand-task-assignment-timeline {
   cursor: pointer;
 }
 
-.vis.timeline .item.range .content {
+.vis-timeline .vis-item.vis-range .vis-item-content {
   position: unset;
 }
 
-.vis.timeline .item .tooltip-inner {
+.vis-timeline .vis-item .tooltip-inner {
   max-width: unset !important;
 }
 
-.vispanel.center {
+.vis-panel.vis-center {
   font-size: 12px;
   line-height: 12px;
 }
