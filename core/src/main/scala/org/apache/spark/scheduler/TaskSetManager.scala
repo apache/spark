@@ -611,7 +611,7 @@ private[spark] class TaskSetManager(
    * executor until it finds one that the task hasn't failed on already).
    */
   private[scheduler] def abortIfCompletelyBlacklisted(
-      executorsByHost: HashMap[String, HashSet[String]]): Unit = {
+      hostToExecutors: HashMap[String, HashSet[String]]): Unit = {
     blacklistTracker.foreach { blacklist =>
       // because this is called in a loop, with multiple resource offers and locality levels,
       // we could end up aborting this taskset multiple times without the !isZombie check
@@ -635,12 +635,12 @@ private[spark] class TaskSetManager(
 
         // If no executors have registered yet, don't abort the stage, just wait.  We probably
         // got here because a task set was added before the executors registered.
-        if (executorsByHost.nonEmpty) {
+        if (hostToExecutors.nonEmpty) {
           pendingTask.foreach { indexInTaskSet =>
             // try to find some executor this task can run on.  Its possible that some *other*
             // task isn't schedulable anywhere, but we will discover that in some later call,
             // when that unschedulable task is the last task remaining.
-            val blacklistedEverywhere = executorsByHost.forall { case (host, execs) =>
+            val blacklistedEverywhere = hostToExecutors.forall { case (host, execs) =>
               // Check if the task can run on the node
               val nodeBlacklisted = blacklist.isNodeBlacklisted(host) ||
                 isNodeBlacklistedForTaskSet(host) ||

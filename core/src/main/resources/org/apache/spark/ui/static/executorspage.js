@@ -15,6 +15,16 @@
  * limitations under the License.
  */
 
+var threadDumpEnabled = false;
+
+function setThreadDumpEnabled(val) {
+    threadDumpEnabled = val;
+}
+
+function getThreadDumpEnabled() {
+    return threadDumpEnabled;
+}
+
 function formatStatus(status, type) {
     if (type !== 'display') return status;
     if (status) {
@@ -116,6 +126,12 @@ function formatLogsCells(execLogs, type) {
     return result;
 }
 
+function logsExist(execs) {
+    return execs.some(function(exec) {
+        return !($.isEmptyObject(exec["executorLogs"]));
+    });
+}
+
 // Determine Color Opacity from 0.5-1
 // activeTasks range from 0 to maxTasks
 function activeTasksAlpha(activeTasks, maxTasks) {
@@ -143,18 +159,16 @@ function totalDurationAlpha(totalGCTime, totalDuration) {
         (Math.min(totalGCTime / totalDuration + 0.5, 1)) : 1;
 }
 
+// When GCTimePercent is edited change ToolTips.TASK_TIME to match
+var GCTimePercent = 0.1;
+
 function totalDurationStyle(totalGCTime, totalDuration) {
     // Red if GC time over GCTimePercent of total time
-    // When GCTimePercent is edited change ToolTips.TASK_TIME to match
-    var GCTimePercent = 0.1;
     return (totalGCTime > GCTimePercent * totalDuration) ?
         ("hsla(0, 100%, 50%, " + totalDurationAlpha(totalGCTime, totalDuration) + ")") : "";
 }
 
 function totalDurationColor(totalGCTime, totalDuration) {
-    // Red if GC time over GCTimePercent of total time
-    // When GCTimePercent is edited change ToolTips.TASK_TIME to match
-    var GCTimePercent = 0.1;
     return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "black";
 }
 
@@ -392,8 +406,18 @@ $(document).ready(function () {
                         {data: 'executorLogs', render: formatLogsCells},
                         {
                             data: 'id', render: function (data, type) {
-                            return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
+                                return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
+                            }
                         }
+                    ],
+                    "columnDefs": [
+                        {
+                            "targets": [ 15 ],
+                            "visible": logsExist(response)
+                        },
+                        {
+                            "targets": [ 16 ],
+                            "visible": getThreadDumpEnabled()
                         }
                     ],
                     "order": [[0, "asc"]]
@@ -458,7 +482,7 @@ $(document).ready(function () {
                     "paging": false,
                     "searching": false,
                     "info": false
-    
+
                 };
     
                 $(sumSelector).DataTable(sumConf);

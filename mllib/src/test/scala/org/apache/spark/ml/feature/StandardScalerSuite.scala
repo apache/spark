@@ -114,6 +114,22 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
     assertResult(standardScaler3.transform(df3))
   }
 
+  test("sparse data and withMean") {
+    val someSparseData = Array(
+      Vectors.sparse(3, Array(0, 1), Array(-2.0, 2.3)),
+      Vectors.sparse(3, Array(1, 2), Array(-5.1, 1.0)),
+      Vectors.dense(1.7, -0.6, 3.3)
+    )
+    val df = spark.createDataFrame(someSparseData.zip(resWithMean)).toDF("features", "expected")
+    val standardScaler = new StandardScaler()
+      .setInputCol("features")
+      .setOutputCol("standardized_features")
+      .setWithMean(true)
+      .setWithStd(false)
+      .fit(df)
+    assertResult(standardScaler.transform(df))
+  }
+
   test("StandardScaler read/write") {
     val t = new StandardScaler()
       .setInputCol("myInputCol")

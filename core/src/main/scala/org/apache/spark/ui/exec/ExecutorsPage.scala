@@ -50,16 +50,15 @@ private[ui] class ExecutorsPage(
     threadDumpEnabled: Boolean)
   extends WebUIPage("") {
   private val listener = parent.listener
-  // When GCTimePercent is edited change ToolTips.TASK_TIME to match
-  private val GCTimePercent = 0.1
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val content =
       <div>
         {
-        <div id="active-executors"></div> ++
+          <div id="active-executors"></div> ++
           <script src={UIUtils.prependBaseUri("/static/utils.js")}></script> ++
-          <script src={UIUtils.prependBaseUri("/static/executorspage.js")}></script>
+          <script src={UIUtils.prependBaseUri("/static/executorspage.js")}></script> ++
+          <script>setThreadDumpEnabled({threadDumpEnabled})</script>
         }
       </div>;
 
