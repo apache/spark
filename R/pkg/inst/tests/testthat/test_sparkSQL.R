@@ -2248,23 +2248,22 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
   expect_identical(expected, result)
 })
 
-test_that("dapplyCollect() on dataframe with list columns", {
+test_that("dapplyCollect() on dataframe with a binary column", {
 
-  df_listcols <- data.frame(key = 1:3)
-  df_listcols$bytes <- lapply(df_listcols$key, serialize, connection = NULL)
+  df <- data.frame(key = 1:3)
+  df$bytes <- lapply(df$key, serialize, connection = NULL)
 
   # TODO clarkfitzg: Related issue- The dataframe can't be collected if this
   # column is added:
-  #df_listcols$arr <- lapply(df_listcols$key,
-  #                          function(x) seq(0, 1, length.out=15))
+  #df$arr <- lapply(df$key, function(x) seq(0, 1, length.out=15))
 
-  df_listcols_spark <- createDataFrame(df_listcols)
+  df_spark <- createDataFrame(df)
 
-  result1 <- collect(df_listcols_spark)
-  expect_identical(df_listcols, result1)
+  result1 <- collect(df_spark)
+  expect_identical(df, result1)
 
-  result2 <- dapplyCollect(df_listcols_spark, function(x) x)
-  expect_equal(df_listcols, result2)
+  result2 <- dapplyCollect(df_spark, function(x) x)
+  expect_equal(df, result2)
 })
 
 test_that("repartition by columns on DataFrame", {
