@@ -211,10 +211,10 @@ private[ml] object TreeTests extends SparkFunSuite {
   def buildCategoricalData(
       seed: Integer,
       sqlContext: SQLContext,
-      nexamples: Integer = 1000,
-      nfeatures: Integer = 20,
-      nclasses: Integer = 2,
-      trainFraction: Double = 0.75): (DataFrame, DataFrame) = {
+      nexamples: Integer,
+      nfeatures: Integer,
+      nclasses: Integer,
+      trainFraction: Double): (DataFrame, DataFrame) = {
 
     val sc = sqlContext.sparkContext
     val rng = new Random(seed)

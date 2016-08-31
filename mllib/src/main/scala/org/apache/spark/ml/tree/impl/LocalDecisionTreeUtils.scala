@@ -114,52 +114,18 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
     new Predict(predict = pred, prob = impurityCalculator.prob(pred))
   }
 
-  /**
-   * On driver: Grow tree based on chosen splits, and compute new set of active nodes.
-   *
-   * @param oldPeriphery  Old periphery of active nodes.
-   * @param bestSplitsAndGains  Best (split, gain) pairs, which can be zipped with the old
-   *                            periphery.  These stats will be used to replace the stats in
-   *                            any nodes which are split.
-   * @param minInfoGain  Threshold for min info gain required to split a node.
-   * @return  New active node periphery.
-   *          If a node is split, then this method will update its fields.
-   */
-  private[impl] def computeActiveNodePeriphery(
-      oldPeriphery: Array[LearningNode],
-      bestSplitsAndGains: Array[(Option[Split], ImpurityStats)],
-      minInfoGain: Double,
-      minInstancesPerNode: Int): Array[LearningNode] = {
-    bestSplitsAndGains.zipWithIndex.flatMap {
-      case ((split, stats), nodeIdx) =>
-        val node = oldPeriphery(nodeIdx)
-        val leftCount = stats.leftImpurityCalculator.count
-        val rightCount = stats.rightImpurityCalculator.count
-        if (split.nonEmpty && stats.gain > minInfoGain &&
-          leftCount >= minInstancesPerNode && rightCount >= minInstancesPerNode) {
-          // TODO: remove node id
-          node.leftChild = Some(LearningNode(node.id * 2, isLeaf = false,
-            ImpurityStats.getEmptyImpurityStats(stats.leftImpurityCalculator)))
-          node.rightChild = Some(LearningNode(node.id * 2 + 1, isLeaf = false,
-            ImpurityStats.getEmptyImpurityStats(stats.rightImpurityCalculator)))
-          node.split = split
-          node.isLeaf = false
-          node.stats = stats
-          Iterator(node.leftChild.get, node.rightChild.get)
-        } else {
-          // If we're not considering a node with 0 impurity, set the node's stats to
-          // invalid values to indicate that it could not be split due to parameters of
-          // the learning algorithm
-          if (stats.impurity != 0) {
-            node.stats = ImpurityStats.getInvalidImpurityStats(stats.impurityCalculator)
-          }
-          node.isLeaf = true
-          Iterator()
-        }
+  /** Converts the passed-in compressed bitmap to a bitset of the specified size */
+  private[impl] def toBitset(bitmap: RoaringBitmap, size: Int): BitSet = {
+    val result = new BitSet(size)
+    val iter = bitmap.getIntIterator
+    while(iter.hasNext) {
+      result.set(iter.next)
     }
+    result
   }
 
   /**
+   * TODO(smurching): Update doc
    * Compute bit vector (1 bit/instance) indicating whether each instance goes left/right.
    * - For each node that we split during this round, produce a bitmap (one bit per row
    *   in the training set)
@@ -175,50 +141,34 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
    */
   private[impl] def aggregateBitVector(
       partitionInfo: PartitionInfo,
-      bestSplits: Array[Option[Split]],
       numRows: Int,
-      allSplits: Array[Array[Split]]): RoaringBitmap = {
+      allSplits: Array[Array[Split]]): BitSet = {
 
-    partitionInfo match {
-      case PartitionInfo(columns: Array[FeatureVector], nodeOffsets: Array[Int],
-        activeNodes: BitSet, fullImpurities: Array[ImpurityAggregatorSingle]) => {
-
+    val bitmap = partitionInfo match {
+      case PartitionInfo(oldCols: Array[FeatureVector], oldNodeOffsets: Array[(Int, Int)],
+      oldActiveNodes: Array[LearningNode], _) => {
         // localFeatureIndex[feature index] = index into PartitionInfo.columns
-        val localFeatureIndex: Map[Int, Int] = columns.map(_.featureIndex).zipWithIndex.toMap
-
-        // Zip active nodes with best splits for each node
-        // TODO(smurching): Simplify this by filtering out splits where the bestSplit is None;
-        val bitSetForNodes: Iterator[RoaringBitmap] = activeNodes.iterator
-          .zip(bestSplits.iterator).flatMap {
-
-          case (nodeIndexInLevel: Int, Some(split: Split)) =>
-            // There's a split for the current active node
-            val fromOffset = nodeOffsets(nodeIndexInLevel)
-            val toOffset = nodeOffsets(nodeIndexInLevel + 1)
+        val localFeatureIndex: Map[Int, Int] = oldCols.map(_.featureIndex).zipWithIndex.toMap
+        // Build up a bitmap identifying whether each row splits left or right
+        // TODO(smurching): copying oldActiveNodes array may be inefficient
+        val splitNodes = oldActiveNodes.filter(node => node.split.isDefined)
+        splitNodes.zipWithIndex.foldLeft(new RoaringBitmap()) {
+          case (bitmap: RoaringBitmap, (node: LearningNode, nodeIdx: Int)) =>
+            // Update bitmap for each node that was split
+            val split = node.split.get
+            val (fromOffset, toOffset) = oldNodeOffsets(nodeIdx)
             // Get the column corresponding to the feature index of the current split
-            // TODO(smurching): Can we do this without the localFeatureIndex map? e.g. is column i
-            // equivalent to feature i when all data is local?
+            // TODO(smurching): Can we do this without the localFeatureIndex map?
+            // e.g. is column i equivalent to feature i when all data is local?
             val colIndex: Int = localFeatureIndex(split.featureIndex)
-            Iterator(bitVectorFromSplit(columns(colIndex), fromOffset,
-              toOffset, split, numRows, allSplits))
-
-          case (nodeIndexInLevel: Int, None) =>
-            // Do not create a bitVector when there is no split.
-            // PartitionInfo.update will detect that there is no
-            // split, by how many instances go left/right.
-            Iterator()
-        }
-
-        // Result is a new empty bitmap if no nodes were split. Otherwise,
-        // result is the OR of the bitmaps for each node
-        if (bitSetForNodes.isEmpty) {
-          new RoaringBitmap()
-        } else {
-          bitSetForNodes.reduce[RoaringBitmap] { (acc, bitv) => acc.or(bitv); acc }
+            val bv: RoaringBitmap = bitVectorFromSplit(oldCols(colIndex), fromOffset,
+              toOffset, split, allSplits)
+            bitmap.or(bv)
+            bitmap
         }
       }
     }
-
+    toBitset(bitmap, numRows)
   }
 
   /**
@@ -241,7 +191,6 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
       from: Int,
       to: Int,
       split: Split,
-      numRows: Int,
       allSplits: Array[Array[Split]]): RoaringBitmap = {
     val bitv = new RoaringBitmap()
     var i = from
