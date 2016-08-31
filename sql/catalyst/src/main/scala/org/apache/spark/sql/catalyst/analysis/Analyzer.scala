@@ -433,6 +433,13 @@ class Analyzer(
     }
   }
 
+  def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
+    expressions.map {
+      case a: Alias => Alias(a.child, a.name)(isGenerated = a.isGenerated)
+      case other => other
+    }
+  }
+
   /**
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
@@ -461,7 +468,18 @@ class Analyzer(
           // an exception from tableExists if the database does not exist.
           u
         } else {
-          lookupTableFromCatalog(u)
+          val relation = lookupTableFromCatalog(u)
+          relation match {
+            case subquery @ SubqueryAlias(alias, plan, tableId) =>
+              plan match {
+                case project @ Project (projectList, LocalRelation(_, _)) =>
+                  SubqueryAlias(alias, project.copy(projectList = newAliases(projectList)), tableId)
+                case _ =>
+                  subquery
+              }
+            case _ =>
+              relation
+          }
         }
     }
   }
@@ -603,14 +621,7 @@ class Analyzer(
         }
     }
 
-    def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
-      expressions.map {
-        case a: Alias => Alias(a.child, a.name)(isGenerated = a.isGenerated)
-        case other => other
-      }
-    }
-
-    def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
+    private def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
       AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
     }
 
@@ -633,13 +644,13 @@ class Analyzer(
     /**
      * Returns true if `exprs` contains a [[Star]].
      */
-    def containsStar(exprs: Seq[Expression]): Boolean =
+    private def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
 
     /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
-    def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
+    private def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
         case f1: UnresolvedFunction if containsStar(f1.children) =>
           f1.copy(children = f1.children.flatMap {
