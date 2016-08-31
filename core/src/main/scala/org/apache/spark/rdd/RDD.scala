@@ -18,7 +18,6 @@
 package org.apache.spark.rdd
 
 import java.util.Random
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
@@ -1341,7 +1340,9 @@ abstract class RDD[T: ClassTag](
       unpackPartition: Array[T] => Iterator[R]): Array[R] = withScope {
     require(num >= 0, s"num cannot be negative, but got num=$num")
     val lock = new Object()
-    val gotEnoughRows = new AtomicBoolean(num == 0)
+    val totalPartitions = partitions.length
+    var partitionsScanned = 0
+    var gotEnoughRows = false
     // This buffer accumulates the rows to be returned.
     val resultToReturn = new ArrayBuffer[R]
     // In order to preserve the behavior of the old `take()` implementation, it's important that
@@ -1354,15 +1355,17 @@ abstract class RDD[T: ClassTag](
     var jobFuture: SimpleFutureAction[Unit] = null
 
     // This callback is invoked as individual partitions complete.
-    def handleResult(partitionId: Int, result: Array[T]): Unit = lock.synchronized {
-      if (gotEnoughRows.get()) {
+    def handleResult(taskIndex: Int, result: Array[T]): Unit = lock.synchronized {
+      val partitionId = partitionsScanned + taskIndex
+      assert(partitionId < totalPartitions)
+      if (gotEnoughRows) {
         logDebug(s"Ignoring result for partition $partitionId of $this because we have enough rows")
       } else {
         logDebug(s"Handling result for partition $partitionId of $this")
         // Buffer the result in case we can't process it now.
         completedPartitions(partitionId) = result
         if (partitionId == firstMissingPartition) {
-          while (!gotEnoughRows.get && completedPartitions.contains(firstMissingPartition)) {
+          while (!gotEnoughRows && completedPartitions.contains(firstMissingPartition)) {
             logDebug(s"Unpacking partition $firstMissingPartition of $this")
             val rawPartitionData = completedPartitions.remove(firstMissingPartition).get
             resultToReturn ++= unpackPartition(rawPartitionData)
@@ -1373,7 +1376,7 @@ abstract class RDD[T: ClassTag](
               // any remaining partitions' data:
               completedPartitions.clear()
               // Set a flag so that future task completion events are ignored:
-              gotEnoughRows.set(true)
+              gotEnoughRows = true
               // Cancel the job so we can return sooner
               jobFuture.cancelWithoutFailing()
             }
@@ -1382,9 +1385,8 @@ abstract class RDD[T: ClassTag](
       }
     }
 
-    val totalPartitions = partitions.length
-    var partitionsScanned = 0
-    while (!gotEnoughRows.get() && partitionsScanned < totalPartitions) {
+    while (!gotEnoughRows && partitionsScanned < totalPartitions) {
+      var numPartitionsToCompute = 0
       lock.synchronized {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
@@ -1403,8 +1405,7 @@ abstract class RDD[T: ClassTag](
 
         val partitionsToCompute = partitionsScanned.until(
           math.min(partitionsScanned + numPartsToTry, totalPartitions).toInt)
-
-        partitionsScanned += partitionsToCompute.length
+        numPartitionsToCompute = partitionsToCompute.length
 
         jobFuture = sc.submitJob(
           this,
@@ -1418,6 +1419,8 @@ abstract class RDD[T: ClassTag](
       Await.result(jobFuture, Duration.Inf)
       // scalastyle:on awaitresult
       sparkContext.progressBar.foreach(_.finishAll())
+
+      partitionsScanned += numPartitionsToCompute
     }
 
     lock.synchronized {
