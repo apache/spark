@@ -30,7 +30,7 @@ install:
   - cmd: R -e "install.packages('testthat', repos='http://cran.us.r-project.org')"
 
 build_script:
-  - cmd: mvn -DskipTests -Psparkr package
+  - cmd: mvn -DskipTests -Psparkr -Phive -Phive-thriftserver package
 
 test_script:
   - cmd: .\bin\spark-submit2.cmd --conf spark.hadoop.fs.default.name="file:///" R\pkg\tests\run-all.R
