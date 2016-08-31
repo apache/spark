@@ -340,7 +340,9 @@ class KMeans @Since("1.5.0") (
   /** @group setParam */
   @Since("2.0.0")
   def setInitialModel(clusterCenters: Array[Vector]): this.type = {
-    setInitialModel(new KMeansModel("initial model", new MLlibKMeansModel(clusterCenters)))
+    setInitialModel(
+      new KMeansModel("initial model",
+        new MLlibKMeansModel(clusterCenters.map(OldVectors.fromML))))
   }
 
   @Since("2.0.0")
