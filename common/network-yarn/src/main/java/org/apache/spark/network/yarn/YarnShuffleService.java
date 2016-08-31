@@ -58,7 +58,7 @@ import org.apache.spark.network.yarn.util.HadoopConfigProvider;
  * the service's.
  */
 public class YarnShuffleService extends AuxiliaryService {
-  private final Logger logger = LoggerFactory.getLogger(YarnShuffleService.class);
+  private static final Logger logger = LoggerFactory.getLogger(YarnShuffleService.class);
 
   // Port on which the shuffle server listens for fetch requests
   private static final String SPARK_SHUFFLE_SERVICE_PORT_KEY = "spark.shuffle.service.port";
