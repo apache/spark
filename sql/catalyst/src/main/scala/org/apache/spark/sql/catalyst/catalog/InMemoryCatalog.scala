@@ -322,6 +322,18 @@ class InMemoryCatalog(
     throw new UnsupportedOperationException("loadPartition is not implemented.")
   }
 
+  override def loadDynamicPartitions(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      replace: Boolean,
+      numDP: Int,
+      holdDDLTime: Boolean,
+      listBucketingEnabled: Boolean): Unit = {
+    throw new UnsupportedOperationException("loadDynamicPartitions is not implemented.")
+  }
+
   // --------------------------------------------------------------------------
   // Partitions
   // --------------------------------------------------------------------------
@@ -454,6 +466,17 @@ class InMemoryCatalog(
       spec: TablePartitionSpec): CatalogTablePartition = synchronized {
     requirePartitionsExist(db, table, Seq(spec))
     catalog(db).tables(table).partitions(spec)
+  }
+
+  override def getPartitionOption(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec): Option[CatalogTablePartition] = synchronized {
+    if (!partitionExists(db, table, spec)) {
+      None
+    } else {
+      Option(catalog(db).tables(table).partitions(spec))
+    }
   }
 
   override def listPartitions(

@@ -503,6 +503,32 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       isSkewedStoreAsSubdir)
   }
 
+  override def loadDynamicPartitions(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      replace: Boolean,
+      numDP: Int,
+      holdDDLTime: Boolean,
+      listBucketingEnabled: Boolean): Unit = withClient {
+    requireTableExists(db, table)
+
+    val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
+    getTable(db, table).partitionColumnNames.foreach { colName =>
+      orderedPartitionSpec.put(colName, partition(colName))
+    }
+
+    client.loadDynamicPartitions(
+      loadPath,
+      s"$db.$table",
+      orderedPartitionSpec,
+      replace,
+      numDP,
+      holdDDLTime,
+      listBucketingEnabled)
+  }
+
   // --------------------------------------------------------------------------
   // Partitions
   // --------------------------------------------------------------------------
@@ -546,6 +572,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       spec: TablePartitionSpec): CatalogTablePartition = withClient {
     client.getPartition(db, table, spec)
+  }
+
+  /**
+   * Returns the specified partition or None if it does not exist.
+   */
+  override def getPartitionOption(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec): Option[CatalogTablePartition] = withClient {
+    client.getPartitionOption(db, table, spec)
   }
 
   /**
