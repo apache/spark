@@ -40,17 +40,17 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   // Note: These are all lazy vals because they depend on each other (e.g. conf) and we
   // want subclasses to override some of the fields. Otherwise, we would get a lot of NPEs.
 
+  // Since both sharedState and sessionState are lazily initialized in SparkSession,
+  // we need to ensure sharedState are initialized before the sessionState; otherwise,
+  // hive-site.xml might not be loaded when we using it.
+  sparkSession.sharedState
+
   /**
    * SQL-specific key-value configurations.
    */
   lazy val conf: SQLConf = new SQLConf
 
   def newHadoopConf(): Configuration = {
-    // Since both sharedState and sessionState are lazily initialized in SparkSession,
-    // we need to ensure sharedState are initialized before the sessionState; otherwise,
-    // hive-site.xml might not be loaded when we using it.
-    sparkSession.sharedState
-
     val hadoopConf = new Configuration(sparkSession.sparkContext.hadoopConfiguration)
     conf.getAllConfs.foreach { case (k, v) => if (v ne null) hadoopConf.set(k, v) }
     hadoopConf
