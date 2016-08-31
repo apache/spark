@@ -24,10 +24,12 @@ private[jdbc] class JDBCOptions(
     @transient private val parameters: Map[String, String])
   extends Serializable {
 
+  require(parameters.isDefinedAt("url"), "Option 'url' is required.")
+  require(parameters.isDefinedAt("dbtable"), "Option 'dbtable' is required.")
   // a JDBC URL
-  val url = parameters.getOrElse("url", sys.error("Option 'url' not specified"))
+  val url = parameters("url")
   // name of table
-  val table = parameters.getOrElse("dbtable", sys.error("Option 'dbtable' not specified"))
+  val table = parameters("dbtable")
   // the column used to partition
   val partitionColumn = parameters.getOrElse("partitionColumn", null)
   // the lower bound of partition column
@@ -37,8 +39,8 @@ private[jdbc] class JDBCOptions(
   // the number of partitions
   val numPartitions = parameters.getOrElse("numPartitions", null)
 
-  if (partitionColumn != null
-      && (lowerBound == null || upperBound == null || numPartitions == null)) {
-      sys.error("Partitioning incompletely specified")
-  }
+  require(partitionColumn == null || 
+    (partitionColumn != null && lowerBound != null && upperBound != null && numPartitions != null),
+    "If 'partitionColumn' is specified then 'lowerBound', 'upperBound'," + 
+      " and 'numPartitions' are required.")
 }
