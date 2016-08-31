@@ -1154,22 +1154,25 @@ class DAGScheduler(
                   updateAccumulators(event)
                   job.finished(rt.outputId) = true
                   job.numFinished += 1
-                  // taskSucceeded runs some user code that might throw an exception. Make sure
-                  // we are resilient against that.
-                  try {
-                    job.listener.taskSucceeded(rt.outputId, event.result)
-                  } catch {
-                    case e: Exception =>
-                      // TODO: Perhaps we want to mark the resultStage as failed?
-                      job.listener.jobFailed(new SparkDriverExecutionException(e))
-                  }
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
                     markStageAsFinished(resultStage)
                     cleanupStateForJobAndIndependentStages(job)
-                    job.listener.markJobSucceeded()
                     listenerBus.post(
                       SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
+                  }
+
+                  // taskSucceeded runs some user code that might throw an exception. Make sure
+                  // we are resilient against that.
+                  try {
+                    job.listener.taskSucceeded(rt.outputId, event.result)
+                    if (job.numFinished == job.numPartitions) {
+                      job.listener.markJobSucceeded()
+                    }
+                  } catch {
+                    case e: Exception =>
+                      // TODO: Perhaps we want to mark the resultStage as failed?
+                      job.listener.jobFailed(new SparkDriverExecutionException(e))
                   }
                 }
               case None =>
