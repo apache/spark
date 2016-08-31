@@ -39,7 +39,7 @@ setHiveContext <- function(sc) {
     # initialize once and reuse
     ssc <- callJMethod(sc, "sc")
     hiveCtx <- tryCatch({
-      newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
+      newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc, FALSE)
     },
     error = function(err) {
       skip("Hive is not build with SparkSQL, skipped")
