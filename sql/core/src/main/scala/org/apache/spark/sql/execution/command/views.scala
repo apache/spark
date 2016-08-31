@@ -209,7 +209,7 @@ case class CreateViewCommand(
  * @param query the logical plan that represents the view; this is used to generate a canonicalized
  *              version of the SQL that can be saved in the catalog.
  */
-case class AlterViewCommand(
+case class AlterViewAsCommand(
     name: TableIdentifier,
     originalText: String,
     query: LogicalPlan) extends RunnableCommand {
@@ -222,14 +222,7 @@ case class AlterViewCommand(
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
 
-    val tableMeta = session.sessionState.catalog.getTableMetadata(name)
-    if (tableMeta.tableType != CatalogTableType.VIEW) {
-      throw new AnalysisException(s"${tableMeta.identifier} is not a view.")
-    }
-
-    if (name.database.isDefined) {
-      alterPermanentView(session, analyzedPlan)
-    } else if (session.sessionState.catalog.isTemporaryTable(name)) {
+    if (session.sessionState.catalog.isTemporaryTable(name)) {
       session.sessionState.catalog.createTempView(name.table, analyzedPlan, overrideIfExists = true)
     } else {
       alterPermanentView(session, analyzedPlan)
@@ -239,6 +232,11 @@ case class AlterViewCommand(
   }
 
   private def alterPermanentView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
+    val viewMeta = session.sessionState.catalog.getTableMetadata(name)
+    if (viewMeta.tableType != CatalogTableType.VIEW) {
+      throw new AnalysisException(s"${viewMeta.identifier} is not a view.")
+    }
+
     val viewSQL: String = new SQLBuilder(analyzedPlan).toSQL
     // Validate the view SQL - make sure we can parse it and analyze it.
     // If we cannot analyze the generated query, there is probably a bug in SQL generation.
@@ -249,14 +247,11 @@ case class AlterViewCommand(
         throw new RuntimeException(s"Failed to analyze the canonicalized SQL: $viewSQL", e)
     }
 
-    val viewTableMeta = CatalogTable(
-      identifier = name,
-      tableType = CatalogTableType.VIEW,
-      storage = CatalogStorageFormat.empty,
+    val updatedViewMeta = viewMeta.copy(
       schema = analyzedPlan.schema,
       viewOriginalText = Some(originalText),
       viewText = Some(viewSQL))
 
-    session.sessionState.catalog.alterTable(viewTableMeta)
+    session.sessionState.catalog.alterTable(updatedViewMeta)
   }
 }
