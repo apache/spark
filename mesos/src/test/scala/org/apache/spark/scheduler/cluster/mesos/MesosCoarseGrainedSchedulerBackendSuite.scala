@@ -19,6 +19,7 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.Promise
 import scala.reflect.ClassTag
 
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
@@ -511,6 +512,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     when(taskScheduler.sc).thenReturn(sc)
     externalShuffleClient = mock[MesosExternalShuffleClient]
     driverEndpoint = mock[RpcEndpointRef]
+    when(driverEndpoint.ask(any())(any())).thenReturn(Promise().future)
 
     backend = createSchedulerBackend(taskScheduler, driver, externalShuffleClient, driverEndpoint)
   }
