@@ -411,7 +411,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * at once.
    */
   protected def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
-    // Only log the failure since we don't care about the result.
     driverEndpoint.send(RemoveExecutor(executorId, reason))
   }
 
