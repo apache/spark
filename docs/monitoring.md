@@ -114,8 +114,17 @@ The history server can be configured as follows:
     <td>spark.history.retainedApplications</td>
     <td>50</td>
     <td>
-      The number of application UIs to retain. If this cap is exceeded, then the oldest
-      applications will be removed.
+      The number of applications to retain UI data for in the cache. If this cap is exceeded, then
+      the oldest applications will be removed from the cache. If an application is not in the cache,
+      it will have to be loaded from disk if its accessed from the UI.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.ui.maxApplications</td>
+    <td>Int.MaxValue</td>
+    <td>
+      The number of applications to display on the history summary page. Application UIs are still
+      available by accessing their URLs directly even if they are not displayed on the history summary page.
     </td>
   </tr>
   <tr>
@@ -242,7 +251,8 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <br>Examples:
     <br><code>?minDate=2015-02-10</code>
     <br><code>?minDate=2015-02-03T16:42:40.000GMT</code>
-    <br><code>?maxDate=[date]</code> latest date/time to list; uses same format as <code>minDate</code>.</td>
+    <br><code>?maxDate=[date]</code> latest date/time to list; uses same format as <code>minDate</code>.
+    <br><code>?limit=[limit]</code> limits the number of applications listed.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/jobs</code></td>
