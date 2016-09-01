@@ -366,25 +366,10 @@ sparkR.session <- function(
     }
     overrideEnvs(sparkConfigMap, paramMap)
   }
-  # do not download if it is run in the sparkR shell
-  if (!nzchar(master) || is_master_local(master)) {
-    if (!is_sparkR_shell()) {
-      if (is.na(file.info(sparkHome)$isdir)) {
-        msg <- paste0("Spark not found in SPARK_HOME: ",
-                      sparkHome,
-                      " .\nTo search in the cache directory. ",
-                      "Installation will start if not found.")
-        message(msg)
-        packageLocalDir <- install.spark()
-        sparkHome <- packageLocalDir
-      } else {
-        msg <- paste0("Spark package is found in SPARK_HOME: ", sparkHome)
-        message(msg)
-      }
-    }
-  }
 
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
+    retHome <- sparkCheckInstall(sparkHome, master)
+    if (!is.null(retHome)) sparkHome <- retHome
     sparkExecutorEnvMap <- new.env()
     sparkR.sparkContext(master, appName, sparkHome, sparkConfigMap, sparkExecutorEnvMap,
        sparkJars, sparkPackages)
@@ -546,4 +531,36 @@ processSparkPackages <- function(packages) {
     warning("sparkPackages as a comma-separated string is deprecated, use character vector instead")
   }
   splittedPackages
+}
+
+# Utility function that checks and install Spark to local folder if not found
+#
+# Installation will not be triggered if it's called from sparkR shell
+# or if the master url is not local
+#
+# @param sparkHome directory to find Spark package.
+# @param master the Spark master URL, used to check local or remote mode.
+# @return NULL if no need to update sparkHome, and new sparkHome otherwise.
+sparkCheckInstall <- function(sparkHome, master) {
+  if (!isSparkRShell()) {
+    if (!is.na(file.info(sparkHome)$isdir)) {
+      msg <- paste0("Spark package found in SPARK_HOME: ", sparkHome)
+      message(msg)
+      NULL
+    } else {
+      if (!nzchar(master) || isMasterLocal(master)) {
+        msg <- paste0("Spark not found in SPARK_HOME: ",
+                      sparkHome)
+        message(msg)
+        packageLocalDir <- install.spark()
+        packageLocalDir
+      } else {
+        msg <- paste0("Spark not found in SPARK_HOME: ",
+                      sparkHome, "\n", installInstruction("remote"))
+        stop(msg)
+      }
+    }
+  } else {
+    NULL
+  }
 }

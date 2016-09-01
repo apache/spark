@@ -401,7 +401,7 @@ class ReplSuite extends SparkFunSuite {
       """
         |import org.apache.spark.storage.StorageLevel._
         |case class Foo(i: Int)
-        |val ret = sc.parallelize((1 to 100).map(Foo), 10).persist(MEMORY_ONLY_2)
+        |val ret = sc.parallelize((1 to 100).map(Foo), 10).persist(MEMORY_AND_DISK_2)
         |ret.count()
         |sc.getExecutorStorageStatus.map(s => s.rddBlocksById(ret.id).size).sum
       """.stripMargin)
