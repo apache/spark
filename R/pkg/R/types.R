@@ -75,19 +75,15 @@ rToSQLTypes <- as.environment(list(
 # @param A type returned from the JVM backend.
 # @return A type is the key of the PRIMITIVE_TYPES.
 specialtypeshandle <- function(type) {
-  if (!is.null(PRIMITIVE_TYPES[[type]])) {
-    type
-  } else {
-    firstChar <- substr(type, 1, 1)
-    returntype <- NULL
-    switch (firstChar,
-    d = {
-      m <- regexec("^decimal(.+)", type)
-      matchedStrings <- regmatches(type, m)
-      if (length(matchedStrings[[1]]) >= 2) {
-        returntype <- "double"
-      }
-    })
-    returntype
-  }
+  firstChar <- substr(type, 1, 1)
+  returntype <- NULL
+  switch (firstChar,
+  d = {
+    m <- regexec("^decimal(.+)$", type)
+    matchedStrings <- regmatches(type, m)
+    if (length(matchedStrings[[1]]) >= 2) {
+      returntype <- "double"
+    }
+  })
+  returntype
 }
