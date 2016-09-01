@@ -20,6 +20,7 @@ package org.apache.spark
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.ControlThrowable
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
@@ -279,13 +280,17 @@ private[spark] class ExecutorAllocationManager(
 
     updateAndSyncNumExecutorsTarget(now)
 
+    val executorIdsToBeRemoved = new ArrayBuffer[String]
     removeTimes.retain { case (executorId, expireTime) =>
       val expired = now >= expireTime
       if (expired) {
         initializing = false
-        removeExecutor(executorId)
+        executorIdsToBeRemoved += executorId
       }
       !expired
+    }
+    if(executorIdsToBeRemoved.size != 0) {
+      removeExecutors(executorIdsToBeRemoved)
     }
   }
 
@@ -392,10 +397,36 @@ private[spark] class ExecutorAllocationManager(
   }
 
   /**
-   * Request the cluster manager to remove the given executor.
+   * Request the cluster manager to remove the given executors.
    * Return whether the request is received.
    */
-  private def removeExecutor(executorId: String): Boolean = synchronized {
+  private def removeExecutors(executorIds: Seq[String]): Boolean = synchronized {
+
+    val executorIdsToBeRemoved = executorIds.filter(canBeKilled)
+
+    // Send a request to the backend to kill this executor
+    val removeRequestAcknowledged = testing || client.killExecutors(executorIdsToBeRemoved)
+    if (removeRequestAcknowledged) {
+      val numExistingExecutors = allocationManager.executorIds.size - executorsPendingToRemove.size
+      var index = 0
+      for(index <- 0 until executorIdsToBeRemoved.size) {
+        logInfo(s"Removing executor " + executorIdsToBeRemoved(index) + " because it has been " +
+          s"idle for $executorIdleTimeoutS seconds (new desired total will be " +
+          (numExistingExecutors - (index + 1)) + ")")
+        executorsPendingToRemove.add(executorIdsToBeRemoved(index))
+      }
+      true
+    } else {
+      logWarning(s"Unable to reach the cluster manager to kill executor/s " +
+        executorIdsToBeRemoved.mkString(",") + "or no executor eligible to kill!")
+      false
+    }
+  }
+
+  /**
+   * Determine if the given executor can be killed.
+   */
+  private def canBeKilled(executorId: String): Boolean = synchronized {
     // Do not kill the executor if we are not aware of it (should never happen)
     if (!executorIds.contains(executorId)) {
       logWarning(s"Attempted to remove unknown executor $executorId!")
@@ -416,20 +447,10 @@ private[spark] class ExecutorAllocationManager(
         s"$numExistingExecutors executor(s) left (limit $minNumExecutors)")
       return false
     }
-
-    // Send a request to the backend to kill this executor
-    val removeRequestAcknowledged = testing || client.killExecutor(executorId)
-    if (removeRequestAcknowledged) {
-      logInfo(s"Removing executor $executorId because it has been idle for " +
-        s"$executorIdleTimeoutS seconds (new desired total will be ${numExistingExecutors - 1})")
-      executorsPendingToRemove.add(executorId)
-      true
-    } else {
-      logWarning(s"Unable to reach the cluster manager to kill executor $executorId," +
-        s"or no executor eligible to kill!")
-      false
-    }
+    true
   }
+
+
 
   /**
    * Callback invoked when the specified executor has been added.
