@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  * A Decimal that must have fixed precision (the maximum number of digits) and scale (the number
  * of digits on right side of dot).
  *
- * The precision can be up to 38, scale can also be up to 38 (less or equal to precision).
+ * The precision can be up to 38, scale must be less than precision.
  *
  * The default precision and scale is (10, 0).
  *
@@ -40,9 +40,9 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 @DeveloperApi
 case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
-  if (scale > precision) {
+  if (scale >= precision) {
     throw new AnalysisException(
-      s"Decimal scale ($scale) cannot be greater than precision ($precision).")
+      s"Decimal scale ($scale) must be less than precision ($precision).")
   }
 
   if (precision > DecimalType.MAX_PRECISION) {

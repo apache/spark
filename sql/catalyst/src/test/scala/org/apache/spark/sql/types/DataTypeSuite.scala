@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.AnalysisException
 
 class DataTypeSuite extends SparkFunSuite {
 
@@ -215,6 +216,16 @@ class DataTypeSuite extends SparkFunSuite {
     assert(arrayType.existsRecursively(_.isInstanceOf[MapType]))
     assert(arrayType.existsRecursively(_.isInstanceOf[ArrayType]))
     assert(!arrayType.existsRecursively(_.isInstanceOf[IntegerType]))
+  }
+
+  test("decimal: scale < precision <= 38") {
+    intercept[AnalysisException] {
+      new DecimalType(10, 10)
+    }
+    new DecimalType(38, 37)
+    intercept[AnalysisException] {
+      new DecimalType(39, 37)
+    }
   }
 
   def checkDataTypeJsonRepr(dataType: DataType): Unit = {
