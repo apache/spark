@@ -164,7 +164,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         // If an aggregation needs a shuffle and support partial aggregations, a map-side partial
         // aggregation and a shuffle are added as children.
         val (mergeAgg, mapSideAgg) = AggUtils.createMapMergeAggregatePair(operator)
-        (mergeAgg, createShuffleExchange(requiredChildDistributions.head, mapSideAgg) :: Nil)
+        (mergeAgg, createShuffleExchange(
+          requiredChildDistributions.head, ensureDistributionAndOrdering(mapSideAgg)) :: Nil)
       case _ =>
         // Ensure that the operator's children satisfy their output distribution requirements:
         val childrenWithDist = operator.children.zip(requiredChildDistributions)

@@ -44,7 +44,7 @@ import org.apache.spark.network.util.TransportConf;
  * Server for the efficient, low-level streaming service.
  */
 public class TransportServer implements Closeable {
-  private final Logger logger = LoggerFactory.getLogger(TransportServer.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportServer.class);
 
   private final TransportContext context;
   private final TransportConf conf;

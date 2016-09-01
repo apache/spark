@@ -462,6 +462,7 @@ mesos = Module(
     name="mesos",
     dependencies=[],
     source_file_regexes=["mesos/"],
+    build_profile_flags=["-Pmesos"],
     sbt_test_goals=["mesos/test"]
 )
 
