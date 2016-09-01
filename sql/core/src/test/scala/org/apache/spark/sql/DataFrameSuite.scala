@@ -1586,4 +1586,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val d = sampleDf.withColumn("c", monotonically_increasing_id).select($"c").collect
     assert(d.size == d.distinct.size)
   }
+
+  test("SPARK-15392: DataFrame created from RDD should not be broadcasted") {
+    val rdd = sparkContext.range(1, 100).map(i => Row(i, i))
+    val df = spark.createDataFrame(rdd, new StructType().add("a", LongType).add("b", LongType))
+    assert(df.queryExecution.analyzed.statistics.sizeInBytes >
+      spark.wrapped.conf.autoBroadcastJoinThreshold)
+    assert(df.selectExpr("a").queryExecution.analyzed.statistics.sizeInBytes >
+      spark.wrapped.conf.autoBroadcastJoinThreshold)
+  }
 }
