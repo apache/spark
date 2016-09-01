@@ -154,6 +154,19 @@ class TextSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-14343: select partitioning column") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val ds1 = spark.range(1).selectExpr("CONCAT('val_', id)")
+      ds1.write.text(s"$path/part=a")
+      ds1.write.text(s"$path/part=b")
+
+      checkDataset(
+        spark.read.format("text").load(path).select($"part"),
+        Row("a"), Row("b"))
+    }
+  }
+
   private def testFile: String = {
     Thread.currentThread().getContextClassLoader.getResource("test-data/text-suite.txt").toString
   }
