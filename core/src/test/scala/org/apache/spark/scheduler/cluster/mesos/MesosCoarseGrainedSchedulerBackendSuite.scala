@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.util.Collections
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -57,7 +58,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   // All 'requests' to the scheduler run immediately on the same thread, so
   // demand that all futures have their value available immediately.
-  implicit override val patienceConfig = PatienceConfig(timeout = 0.seconds)
+  implicit override val patienceConfig = PatienceConfig(timeout = Duration(0, TimeUnit.SECONDS))
 
   test("mesos supports killing and limiting executors") {
     setBackend()
