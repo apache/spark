@@ -231,6 +231,12 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
+    val autoAggregationDepth =
+      if ($(aggregationDepth) > 0) $(aggregationDepth)
+      else getAggregationDepthByFormula(
+        instances.context.getConf.getSizeAsBytes("spark.driver.memory", "1g"),
+        numFeatures, instances.getNumPartitions
+      )
     val (featuresSummarizer, ySummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
         instance: Instance) =>
@@ -243,7 +249,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
       instances.treeAggregate(
         new MultivariateOnlineSummarizer, new MultivariateOnlineSummarizer
-      )(seqOp, combOp, $(aggregationDepth))
+      )(seqOp, combOp, autoAggregationDepth)
     }
 
     val yMean = ySummarizer.mean(0)
@@ -309,7 +315,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val effectiveL2RegParam = (1.0 - $(elasticNetParam)) * effectiveRegParam
 
     val costFun = new LeastSquaresCostFun(instances, yStd, yMean, $(fitIntercept),
-      $(standardization), bcFeaturesStd, bcFeaturesMean, effectiveL2RegParam, $(aggregationDepth))
+      $(standardization), bcFeaturesStd, bcFeaturesMean, effectiveL2RegParam,
+      autoAggregationDepth)
 
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))

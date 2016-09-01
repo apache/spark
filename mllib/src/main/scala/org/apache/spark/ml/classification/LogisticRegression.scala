@@ -295,6 +295,13 @@ class LogisticRegression @Since("1.2.0") (
     instr.logParams(regParam, elasticNetParam, standardization, threshold,
       maxIter, tol, fitIntercept)
 
+    val autoAggregationDepth =
+      if ($(aggregationDepth) > 0) $(aggregationDepth)
+      else getAggregationDepthByFormula(
+        instances.context.getConf.getSizeAsBytes("spark.driver.memory", "1g"),
+        dataset.select(col($(featuresCol))).first().getAs[Vector](0).size,
+        instances.getNumPartitions
+      )
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
         instance: Instance) =>
@@ -306,7 +313,7 @@ class LogisticRegression @Since("1.2.0") (
 
       instances.treeAggregate(
         new MultivariateOnlineSummarizer, new MultiClassSummarizer
-      )(seqOp, combOp, $(aggregationDepth))
+      )(seqOp, combOp, autoAggregationDepth)
     }
 
     val histogram = labelSummarizer.histogram
@@ -370,7 +377,8 @@ class LogisticRegression @Since("1.2.0") (
 
         val bcFeaturesStd = instances.context.broadcast(featuresStd)
         val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept),
-          $(standardization), bcFeaturesStd, regParamL2, multinomial = false, $(aggregationDepth))
+          $(standardization), bcFeaturesStd, regParamL2, multinomial = false,
+          autoAggregationDepth)
 
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
           new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
