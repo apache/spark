@@ -44,8 +44,7 @@ import org.apache.spark.util.collection.BitSet
 private[impl] case class PartitionInfo(
     columns: Array[FeatureVector],
     nodeOffsets: Array[(Int, Int)],
-    activeNodes: Array[LearningNode],
-    fullImpurityAggs: Array[ImpurityAggregatorSingle]) extends Serializable {
+    activeNodes: Array[LearningNode]) extends Serializable {
 
   // pre-allocated temporary buffers that we use to sort
   // instances in left and right children during update
@@ -88,53 +87,20 @@ private[impl] case class PartitionInfo(
 
     // Create buffers for storing our new arrays of node offsets & impurities
     val newNodeOffsets = new ArrayBuffer[(Int, Int)]()
-    val newFullImpurityAggs = new ArrayBuffer[ImpurityAggregatorSingle]()
 
     // Update first-level (per-node) sorting of each column to account for creation
     // of new nodes
-    val newColumns = columns.zipWithIndex.map { case (col, index) =>
+    columns.zipWithIndex.foreach { case (col, index) =>
       // For the first column, determine the new offsets of active nodes & build
       // new impurity aggregators for each node.
       index match {
         case 0 => first(col, instanceBitVector, metadata, labels,
-          newNodeOffsets, newFullImpurityAggs)
+          newNodeOffsets)
         case _ => rest(col, instanceBitVector, newNodeOffsets, newActiveNodes)
       }
-      col
     }
 
-    PartitionInfo(newColumns, newNodeOffsets.toArray, newActiveNodes, newFullImpurityAggs.toArray)
-  }
-
-  /**
-   * TODO(smurching): Update doc
-   * @param from
-   * @param to
-   * @param instanceBitVector
-   * @param metadata
-   * @param col
-   * @param labels
-   * @return
-   */
-  private def getImpurities(
-      from: Int,
-      to: Int,
-      instanceBitVector: BitSet,
-      metadata: DecisionTreeMetadata,
-      col: FeatureVector,
-      labels: Array[Double]): (ImpurityAggregatorSingle, ImpurityAggregatorSingle) = {
-      val leftImpurity = metadata.createImpurityAggregator()
-      val rightImpurity = metadata.createImpurityAggregator()
-      from.until(to).foreach { idx =>
-        val rowIndex = col.indices(idx)
-        val label = labels(rowIndex)
-        if (instanceBitVector.get(rowIndex)) {
-          rightImpurity.update(label)
-        } else {
-          leftImpurity.update(label)
-        }
-      }
-    (leftImpurity, rightImpurity)
+    PartitionInfo(columns, newNodeOffsets.toArray, newActiveNodes)
   }
 
   /**
@@ -193,8 +159,7 @@ private[impl] case class PartitionInfo(
   /**
    * Sort the very first column in the [[PartitionInfo.columns]]. While
    * we sort the column, we also update [[PartitionInfo.nodeOffsets]]
-   * (by modifying @param newNodeOffsets) and [[PartitionInfo.fullImpurityAggs]]
-   * (by modifying @param newFullImpurityAggs).
+   * (by modifying @param newNodeOffsets)
    *
    * @param col The very first column in [[PartitionInfo.columns]]
    * @param metadata Used to create new [[ImpurityAggregatorSingle]] for a new child
@@ -207,13 +172,9 @@ private[impl] case class PartitionInfo(
       instanceBitVector: BitSet,
       metadata: DecisionTreeMetadata,
       labels: Array[Double],
-      newNodeOffsets: ArrayBuffer[(Int, Int)],
-      newFullImpurityAggs: ArrayBuffer[ImpurityAggregatorSingle]): Unit = {
+      newNodeOffsets: ArrayBuffer[(Int, Int)]): Unit = {
 
     activeNodes.indices.foreach { nodeIdx =>
-      // WHAT TO OPTIMIZE:
-      // - try skipping numBitsSet
-      // - maybe uncompress bitmap
       val (from, to) = nodeOffsets(nodeIdx)
 
       // If this is the very first time we split,
@@ -223,9 +184,9 @@ private[impl] case class PartitionInfo(
       val numBitsSet = if (nodeOffsets.length == 1) {
         instanceBitVector.cardinality()
       } else {
-          from.until(to).foldLeft(0) { case (count, i) =>
-            count + (if (instanceBitVector.get(col.indices(i))) 1 else 0)
-          }
+        from.until(to).foldLeft(0) { case (count, i) =>
+          count + (if (instanceBitVector.get(col.indices(i))) 1 else 0)
+        }
       }
 
       val numBitsNotSet = to - from - numBitsSet // number of instances splitting left
@@ -238,13 +199,6 @@ private[impl] case class PartitionInfo(
         // TODO(smurching): Check that this adds indices in the same order as activeNodes
         // are produced during splitting
         newNodeOffsets ++= Array(leftIndices, rightIndices)
-
-        // Compute impurities for the current node and add them to our buffer of
-        // active node impurities
-        val (leftImpurity, rightImpurity) = getImpurities(from, to,
-          instanceBitVector, metadata, col, labels)
-        newFullImpurityAggs ++= Array(leftImpurity, rightImpurity)
-
         sortCol(from, numBitsNotSet, to, instanceBitVector, col)
       }
     }
@@ -253,9 +207,8 @@ private[impl] case class PartitionInfo(
 
   /**
    * Sort the remaining columns in the [[PartitionInfo.columns]]. Since
-   * we already computed [[PartitionInfo.nodeOffsets]] and
-   * [[PartitionInfo.fullImpurityAggs]] while we sorted the first column,
-   * we skip the computation for those here.
+   * we already computed [[PartitionInfo.nodeOffsets]] while we
+   * sorted the first column, we skip the computation for those here.
    *
    * @param col The very first column in [[PartitionInfo.columns]]
    * @param newNodeOffsets Instead of re-computing number of bits set/not set
@@ -266,12 +219,9 @@ private[impl] case class PartitionInfo(
       instanceBitVector: BitSet,
       newNodeOffsets: ArrayBuffer[(Int, Int)],
       newActiveNodes: Array[LearningNode]): Unit = {
-
-    // TODO(smurching) newOffsets used to determine whether to split...
-    // Can we still do this if you do the (from, to) range thing?
-    // newOffsets(nodeIdx) = Array(left range, right range) if split, else Array(orig range)
-
-    // Iterate over new active nodes in pairs
+    // Iterate over pairs of sibling active nodes (e.g. pairs of nodes with a common
+    // parent). Assumes that sibling active nodes are located at adjacent positions in
+    // the newActiveNodes array
     0.until(newActiveNodes.length, 2).foreach { nodeIdx =>
 
       val (leftFrom, leftTo) = newNodeOffsets(nodeIdx)

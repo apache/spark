@@ -26,7 +26,7 @@ import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.impurity._
-import org.apache.spark.mllib.tree.model.{ImpurityStats, Predict}
+import org.apache.spark.mllib.tree.model.Predict
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -125,6 +125,37 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
   }
 
   /**
+   * For a given feature, for a given node, apply a split and return a bit vector indicating the
+   * outcome of the split for each instance at that node.
+   *
+   * @param col  Column for feature
+   * @param from  Start offset in col for the node
+   * @param to  End offset in col for the node
+   * @param split  Split to apply to instances at this node.
+   * @return  Bits indicating splits for instances at this node.
+   *          These bits are sorted by the row indices, in order to guarantee an ordering
+   *          understood by all workers.
+   *          Thus, the bit indices used are based on 2-level sorting: first by node, and
+   *          second by sorted row indices within the node's rows.
+   *          bit[index in sorted array of row indices] = false for left, true for right
+   */
+  private[impl] def bitVectorFromSplit(
+      col: FeatureVector,
+      from: Int,
+      to: Int,
+      split: Split,
+      allSplits: Array[Array[Split]]): RoaringBitmap = {
+    val bitv = new RoaringBitmap()
+    from.until(to).foreach { i =>
+      val idx = col.indices(i)
+      if (!split.shouldGoLeft(col.values(i), allSplits(col.featureIndex))) {
+        bitv.add(idx)
+      }
+    }
+    bitv
+  }
+
+  /**
    * TODO(smurching): Update doc
    * Compute bit vector (1 bit/instance) indicating whether each instance goes left/right.
    * - For each node that we split during this round, produce a bitmap (one bit per row
@@ -139,14 +170,14 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
    * @param bestSplits  Split for each active node, or None if that node will not be split
    * @return Array of bit vectors, ordered by offset ranges
    */
-  private[impl] def aggregateBitVector(
+  private[impl] def computeBitVector(
       partitionInfo: PartitionInfo,
       numRows: Int,
       allSplits: Array[Array[Split]]): BitSet = {
 
     val bitmap = partitionInfo match {
       case PartitionInfo(oldCols: Array[FeatureVector], oldNodeOffsets: Array[(Int, Int)],
-      oldActiveNodes: Array[LearningNode], _) => {
+      oldActiveNodes: Array[LearningNode]) => {
         // localFeatureIndex[feature index] = index into PartitionInfo.columns
         val localFeatureIndex: Map[Int, Int] = oldCols.map(_.featureIndex).zipWithIndex.toMap
         // Build up a bitmap identifying whether each row splits left or right
@@ -172,37 +203,29 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
   }
 
   /**
-   * For a given feature, for a given node, apply a split and return a bit vector indicating the
-   * outcome of the split for each instance at that node.
-   *
-   * @param col  Column for feature
-   * @param from  Start offset in col for the node
-   * @param to  End offset in col for the node
-   * @param split  Split to apply to instances at this node.
-   * @return  Bits indicating splits for instances at this node.
-   *          These bits are sorted by the row indices, in order to guarantee an ordering
-   *          understood by all workers.
-   *          Thus, the bit indices used are based on 2-level sorting: first by node, and
-   *          second by sorted row indices within the node's rows.
-   *          bit[index in sorted array of row indices] = false for left, true for right
+   * TODO(smurching): Update doc
+   * @param from
+   * @param to
+   * @param instanceBitVector
+   * @param metadata
+   * @param col
+   * @param labels
+   * @return
    */
-  private[impl] def bitVectorFromSplit(
-      col: FeatureVector,
+  private[impl] def getImpurity(
       from: Int,
       to: Int,
-      split: Split,
-      allSplits: Array[Array[Split]]): RoaringBitmap = {
-    val bitv = new RoaringBitmap()
-    var i = from
-    while (i < to) {
-      val value = col.values(i)
-      val idx = col.indices(i)
-      if (!split.shouldGoLeft(value, allSplits(col.featureIndex))) {
-        bitv.add(idx)
-      }
-      i += 1
+      metadata: DecisionTreeMetadata,
+      col: FeatureVector,
+      labels: Array[Double]): ImpurityAggregatorSingle = {
+    val aggregator = metadata.createImpurityAggregator()
+    from.until(to).foreach { idx =>
+      val rowIndex = col.indices(idx)
+      val label = labels(rowIndex)
+      aggregator.update(label)
     }
-    bitv
+    aggregator
   }
 
+  
 }

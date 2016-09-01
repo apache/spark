@@ -17,11 +17,8 @@
 
 package org.apache.spark.ml.tree.impl
 
-import org.roaringbitmap.RoaringBitmap
-
 import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.tree.model.ImpurityStats
-import org.apache.spark.util.collection.BitSet
 
 /** Object exposing methods for local training of decision trees */
 private[ml] object LocalDecisionTree {
@@ -103,45 +100,28 @@ private[ml] object LocalDecisionTree {
     val fullImpurityAgg = metadata.createImpurityAggregator()
     labels.foreach(fullImpurityAgg.update(_))
 
-    // Create a bitset describing the set of active (non-leaf) nodes; initially, only the
-    // root node is active
-    val initActive = new BitSet(1)
-    initActive.set(0)
+    // Create a new PartitionInfo describing the status of our partially-trained subtree
+    // at each iteration of training
     var partitionInfo: PartitionInfo = new PartitionInfo(colStore,
-      Array[(Int, Int)]((0, numRows)), Array(rootNode), Array(fullImpurityAgg))
-
-    // Initialize model.
-    // Note: We do not use node indices.
-    // Active nodes (still being split), updated each iteration
-    var activeNodePeriphery: Array[LearningNode] = Array(rootNode)
-    var numNodeOffsets: Int = 2
+      nodeOffsets = Array[(Int, Int)]((0, numRows)), activeNodes = Array(rootNode))
 
     // Iteratively learn, one level of the tree at a time.
+    // Note: We do not use node IDs.
     var currentLevel = 0
     var doneLearning = false
+
     while (currentLevel < metadata.maxDepth && !doneLearning) {
       // Splits each active node if possible, returning an array of new active nodes
-      // TODO(smurching): Take into account minInfoGain, minInstancesPerNode
       val activeNodes: Array[LearningNode] =
         computeBestSplits(partitionInfo, labels, metadata, splits)
-
-      // We keep all old nodeOffsets and add one for each node split.
-      // Each node split adds 2 nodes to activeNodes.
-      // TODO: Should this be calculated after filtering for impurity??
-      numNodeOffsets = numNodeOffsets + activeNodes.length / 2
-
       // Filter active node periphery by impurity.
       val estimatedRemainingActive = activeNodes.count(_.stats.impurity > 0.0)
-
       // TODO: Check to make sure we split something, and stop otherwise.
       doneLearning = currentLevel + 1 >= metadata.maxDepth || estimatedRemainingActive == 0
-
       if (!doneLearning) {
-        // STASH(smurching): Return here
-        // Aggregate bit vector (1 bit/instance) indicating whether each instance goes left/right
+        // Compute bit vector (1 bit/instance) indicating whether each instance goes left/right
         // Only requires partitionInfo since all active nodes have already been split
-        val bitset = LocalDecisionTreeUtils.aggregateBitVector(partitionInfo, numRows, splits)
-
+        val bitset = LocalDecisionTreeUtils.computeBitVector(partitionInfo, numRows, splits)
         // Obtain a new partitionInfo instance describing our current training status
         partitionInfo = partitionInfo.update(bitset, activeNodes, labels, metadata)
         assert(partitionInfo.nodeOffsets.length == partitionInfo.activeNodes.length)
@@ -174,41 +154,37 @@ private[ml] object LocalDecisionTree {
 
     partitionInfo match {
       case PartitionInfo(columns: Array[FeatureVector], nodeOffsets: Array[(Int, Int)],
-        activeNodes: Array[LearningNode], fullImpurityAggs: Array[ImpurityAggregatorSingle]) => {
+        activeNodes: Array[LearningNode]) => {
 
         // Iterate over the active nodes in the current level.
         activeNodes.zipWithIndex.flatMap { case (node: LearningNode, nodeIndex: Int) =>
 
           // Features for the current node start at fromOffset and end at toOffset
-          val (fromOffset, toOffset) = nodeOffsets(nodeIndex)
+          val (from, to) = nodeOffsets(nodeIndex)
           // Get the impurity aggregator for the current node
-          val fullImpurityAgg = fullImpurityAggs(nodeIndex)
-          // Get the best split for each feature for the current node
-
+          // TODO(smurching): Test on empty data, see if this still works
+          val fullImpurityAgg = LocalDecisionTreeUtils.getImpurity(from, to, metadata, columns(0), labels)
           // TODO(smurching): In PartitionInfo, keep track of which features are associated
-          // with which nodes and subsample here
-          val splitsAndStats =
-            columns.map { col =>
-              chooseSplit(col, labels, fromOffset, toOffset, fullImpurityAgg, metadata, splits)
-            }
+          // with which nodes and subsample here (filter columns)
+          val splitsAndStats = columns.map { col =>
+            chooseSplit(col, labels, from, to, fullImpurityAgg, metadata, splits)
+          }
           // For the current node, we pick the feature whose best split results in maximal gain
           val (bestSplit, bestStats) = splitsAndStats.maxBy(_._2.gain)
-          // Split the next node if needed TODO(smurching) finish
-          splitIfNeeded(node, metadata, bestStats, bestSplit)
+          // Split current node, get an iterator over its children
+          splitIfPossible(node, metadata, bestStats, bestSplit)
         }
       }
     }
   }
 
   /**
-   * TODO(smurching): Update doc
-   * @param node
-   * @param metadata
-   * @param stats
-   * @param split
-   * @return
+   * Splits the passed-in node if permitted by the parameters of the learning algorithm,
+   * returning an iterator over its children. Returns an empty array if node could not be split.
+   * @param metadata Metadata containing parameters of the learning algorithm
+   * @param stats Label impurity stats associated with the current node
    */
-  private[impl] def splitIfNeeded(
+  private[impl] def splitIfPossible(
       node: LearningNode,
       metadata: DecisionTreeMetadata,
       stats: ImpurityStats,
@@ -216,14 +192,15 @@ private[ml] object LocalDecisionTree {
 
     val leftCount = stats.leftImpurityCalculator.count
     val rightCount = stats.rightImpurityCalculator.count
-    if (split.nonEmpty && stats.gain > metadata.minInfoGain &&
-      leftCount >= metadata.minInstancesPerNode && rightCount >= metadata.minInstancesPerNode) {
+    val shouldSplit = split.nonEmpty && stats.gain > metadata.minInfoGain &&
+      leftCount >= metadata.minInstancesPerNode && rightCount >= metadata.minInstancesPerNode
+    if (shouldSplit) {
+      // Split node and return an iterator over its children
       doSplit(node, split, stats)
       Iterator(node.leftChild.get, node.rightChild.get)
     } else {
-      // If we're not considering a node with 0 impurity, set the node's stats to
-      // invalid values to indicate that it could not be split due to parameters of
-      // the learning algorithm
+      // If our node has non-zero impurity, set the node's stats to invalid values to indicate that
+      // it could not be split due to the parameters of the learning algorithms
       if (stats.impurity != 0) {
         node.stats = ImpurityStats.getInvalidImpurityStats(stats.impurityCalculator)
       }
@@ -233,8 +210,10 @@ private[ml] object LocalDecisionTree {
   }
 
   /**
-   * Splits the passed-in node. This method returns nothing, but modifies the passed-in array
-   * TODO(smurching) Update doc
+   * Splits the passed-in node. This method returns nothing, but modifies the passed-in node
+   * by updating its split and stats members.
+   * @param split Split to associate with the passed-in node
+   * @param stats Label impurity statistics to associate with the passed-in node
    */
   private[impl] def doSplit(
       node: LearningNode,
