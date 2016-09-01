@@ -816,10 +816,6 @@ class HiveDDLSuite
       "the created table must be a Hive managed table")
     assert(targetTable.viewText.isEmpty && targetTable.viewOriginalText.isEmpty,
       "the view text and original text in the created table must be empty")
-    // The location of created table should not be empty. Although Spark SQL does not set it,
-    // when creating it, Hive populates it.
-    assert(targetTable.storage.locationUri.nonEmpty,
-      "the location of created table should not be empty")
     assert(targetTable.comment.isEmpty,
       "the comment in the created table must be empty")
     assert(targetTable.unsupportedFeatures.isEmpty,
@@ -855,15 +851,11 @@ class HiveDDLSuite
     }
 
     if (sourceTable.tableType == CatalogTableType.VIEW) {
-      // Source table is a temporary/permanent view, which does not have a provider, serde,
-      // inputFormat, and outputFormat. The created target table uses the default data source format
-      assert(targetTable.storage.serde ==
-        Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
-      assert(targetTable.storage.inputFormat ==
-        Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
-      assert(targetTable.storage.outputFormat ==
-        Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+      // Source table is a temporary/permanent view, which does not have a provider. The created
+      // target table uses the default data source format
       assert(targetTable.provider == Option(spark.sessionState.conf.defaultDataSourceName))
+    } else {
+      assert(targetTable.provider == sourceTable.provider)
     }
 
     val sourceTablePath = getTablePath(sourceTable)
