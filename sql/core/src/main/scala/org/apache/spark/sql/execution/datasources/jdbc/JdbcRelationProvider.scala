@@ -52,12 +52,9 @@ class JdbcRelationProvider
       data: DataFrame): BaseRelation = {
     val jdbcOptions = new JDBCOptions(parameters)
     val parts = buildJDBCPartition(jdbcOptions)
-    val properties = new Properties() // Additional properties that we will pass to getConnection
+    val properties = new Properties()
     parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
-    data.write
-      .mode(mode)
-      .jdbc(jdbcOptions.url, jdbcOptions.table, properties)
-
+    JdbcUtils.saveTable(mode, parameters, data)
     JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties)(sqlContext.sparkSession)
   }
 
@@ -71,8 +68,8 @@ class JdbcRelationProvider
   private def buildJDBCPartition(jdbcOptions: JDBCOptions): Array[Partition] = {
     if (jdbcOptions.partitionColumn != null
       && (jdbcOptions.lowerBound == null
-      || jdbcOptions.upperBound == null
-      || jdbcOptions.numPartitions == null)) {
+        || jdbcOptions.upperBound == null
+        || jdbcOptions.numPartitions == null)) {
       sys.error("Partitioning incompletely specified")
     }
 

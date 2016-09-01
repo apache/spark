@@ -25,7 +25,7 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
 
@@ -370,13 +370,58 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Saves the RDD to the database in a single transaction.
+   * Saves the content of the [[DataFrame]] to an external database table in a single transaction.
+   *
+   * @param mode Specifies the behavior when data or table already exists.
+   * @param parameters Specifies the JDBC database connection arguments
+   * @param df Specifies the dataframe
    */
-  def saveTable(
-      df: DataFrame,
-      url: String,
-      table: String,
-      properties: Properties) {
+  def saveTable(mode: SaveMode, parameters: Map[String, String], df: DataFrame): Unit = {
+    val jdbcOptions = new JDBCOptions(parameters)
+    val url = parameters("url")
+    val table = parameters("dbtable")
+
+    val properties = new Properties()
+    parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
+    val conn = JdbcUtils.createConnectionFactory(url, properties)()
+    try {
+      var tableExists = JdbcUtils.tableExists(conn, url, table)
+
+      if (tableExists) {
+        mode match {
+          case SaveMode.Ignore => return
+          case SaveMode.ErrorIfExists => sys.error(s"Table $table already exists.")
+          case SaveMode.Overwrite =>
+            if (jdbcOptions.isTruncate &&
+              JdbcUtils.isCascadingTruncateTable(url) == Option(false)) {
+              JdbcUtils.truncateTable(conn, table)
+            } else {
+              JdbcUtils.dropTable(conn, table)
+              tableExists = false
+            }
+          case SaveMode.Append =>
+        }
+      }
+
+      // Create the table if the table didn't exist.
+      if (!tableExists) {
+        val schema = JdbcUtils.schemaString(df, url)
+        // To allow certain options to append when create a new table, which can be
+        // table_options or partition_options.
+        // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+        val createtblOptions = jdbcOptions.createTableOptions
+        val sql = s"CREATE TABLE $table ($schema) $createtblOptions"
+        val statement = conn.createStatement
+        try {
+          statement.executeUpdate(sql)
+        } finally {
+          statement.close()
+        }
+      }
+    } finally {
+      conn.close()
+    }
+
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
       getJdbcType(field.dataType, dialect).jdbcNullType
