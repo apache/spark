@@ -98,7 +98,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
     }
   }
 
-  val whitespaceChar: Gen[Char] = Gen.choose(0x00, 0x20).map(_.toChar)
+  val whitespaceChar: Gen[Char] = Gen.const(0x20.toChar)
   val whitespaceString: Gen[String] = Gen.listOf(whitespaceChar).map(_.mkString)
   val randomString: Gen[String] = Arbitrary.arbString.arbitrary
 
@@ -107,7 +107,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
     def lTrim(s: String): String = {
       var st = 0
       val array: Array[Char] = s.toCharArray
-      while ((st < s.length) && (array(st) <= ' ')) {
+      while ((st < s.length) && (array(st) == ' ')) {
         st += 1
       }
       if (st > 0) s.substring(st, s.length) else s
@@ -115,7 +115,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
     def rTrim(s: String): String = {
       var len = s.length
       val array: Array[Char] = s.toCharArray
-      while ((len > 0) && (array(len - 1) <= ' ')) {
+      while ((len > 0) && (array(len - 1) == ' ')) {
         len -= 1
       }
       if (len < s.length) s.substring(0, len) else s
