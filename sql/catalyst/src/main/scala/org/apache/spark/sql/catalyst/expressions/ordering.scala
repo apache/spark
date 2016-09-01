@@ -39,9 +39,9 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow
       if (left == null && right == null) {
         // Both null, continue looking.
       } else if (left == null) {
-        return if (order.direction == Ascending) -1 else 1
+        return if (order.nullOrdering == NullFirst) -1 else 1
       } else if (right == null) {
-        return if (order.direction == Ascending) 1 else -1
+        return if (order.nullOrdering == NullFirst) 1 else -1
       } else {
         val comparison = order.dataType match {
           case dt: AtomicType if order.direction == Ascending =>
@@ -76,7 +76,7 @@ object InterpretedOrdering {
    */
   def forSchema(dataTypes: Seq[DataType]): InterpretedOrdering = {
     new InterpretedOrdering(dataTypes.zipWithIndex.map {
-      case (dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+      case (dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
     })
   }
 }

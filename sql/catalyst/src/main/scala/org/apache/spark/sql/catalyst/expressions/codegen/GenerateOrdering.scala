@@ -63,7 +63,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
    */
   def genComparisons(ctx: CodegenContext, schema: StructType): String = {
     val ordering = schema.fields.map(_.dataType).zipWithIndex.map {
-      case(dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+      case(dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
     }
     genComparisons(ctx, ordering)
   }
@@ -100,15 +100,15 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
             // Nothing
           } else if ($isNullA) {
             return ${
-        order.direction match {
-          case Ascending | DescendingNullFirst => "-1"
-          case Descending | AscendingNullLast => "1"
+        order.nullOrdering match {
+          case NullFirst => "-1"
+          case NullLast => "1"
         }};
           } else if ($isNullB) {
             return ${
-        order.direction match {
-          case Ascending | DescendingNullFirst => "1"
-          case Descending | AscendingNullLast => "-1"
+        order.nullOrdering match {
+          case NullFirst => "1"
+          case NullLast => "-1"
         }};
           } else {
             int comp = ${ctx.genComp(order.child.dataType, primitiveA, primitiveB)};

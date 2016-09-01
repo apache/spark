@@ -130,8 +130,8 @@ case class WindowExec(
           val current = newMutableProjection(expr :: Nil, child.output)
           // Flip the sign of the offset when processing the order is descending
           val boundOffset = sortExpr.direction match {
-            case Descending | DescendingNullFirst => -offset
-            case Ascending | AscendingNullLast => offset
+            case Descending => -offset
+            case Ascending => offset
           }
           // Create the projection which returns the current 'value' modified by adding the offset.
           val boundExpr = Add(expr, Cast(Literal.create(boundOffset, IntegerType), expr.dataType))

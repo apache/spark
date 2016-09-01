@@ -26,31 +26,40 @@ import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.DoublePref
 
 abstract sealed class SortDirection {
   def sql: String
+  def defaultNullOrdering: NullOrdering
 }
 
-// default null order is firt for asc
+abstract sealed class NullOrdering {
+  def sql: String
+}
+
 case object Ascending extends SortDirection {
   override def sql: String = "ASC"
-}
-
-case object AscendingNullLast extends SortDirection {
-  override def sql: String = "ASC NULLS LAST"
+  override def defaultNullOrdering: NullOrdering = NullFirst
 }
 
 // default null order is last for desc
 case object Descending extends SortDirection {
   override def sql: String = "DESC"
+  override def defaultNullOrdering: NullOrdering = NullLast
 }
 
-case object DescendingNullFirst extends SortDirection {
-  override def sql: String = "DESC NULLS FIRST"
+case object NullFirst extends NullOrdering{
+  override def sql: String = "NULLS FIRST"
+}
+
+case object NullLast extends NullOrdering{
+  override def sql: String = "NULLS LAST"
 }
 
 /**
  * An expression that can be used to sort a tuple.  This class extends expression primarily so that
  * transformations over expression will descend into its child.
  */
-case class SortOrder(child: Expression, direction: SortDirection)
+case class SortOrder(
+  child: Expression,
+  direction: SortDirection,
+  nullOrdering: NullOrdering)
   extends UnaryExpression with Unevaluable {
 
   /** Sort order is not foldable because we don't have an eval for it. */
@@ -70,7 +79,13 @@ case class SortOrder(child: Expression, direction: SortDirection)
   override def toString: String = s"$child ${direction.sql}"
   override def sql: String = child.sql + " " + direction.sql
 
-  def isAscending: Boolean = direction == Ascending || direction == AscendingNullLast
+  def isAscending: Boolean = direction == Ascending
+}
+
+object SortOrder {
+  def apply(child: Expression, direction: SortDirection): SortOrder = {
+    new SortOrder(child, direction, direction.defaultNullOrdering)
+  }
 }
 
 /**

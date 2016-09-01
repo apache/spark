@@ -1209,8 +1209,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     if (ctx.DESC != null) {
       if (ctx.nullOrder != null) {
         ctx.nullOrder.getType match {
-          case SqlBaseParser.FIRST => SortOrder(expression(ctx.expression), DescendingNullFirst)
-          case SqlBaseParser.LAST => SortOrder(expression(ctx.expression), Descending)
+          case SqlBaseParser.FIRST =>
+            SortOrder(expression(ctx.expression), Descending, NullFirst)
+          case SqlBaseParser.LAST =>
+            SortOrder(expression(ctx.expression), Descending)
           case _ => throw new ParseException(s"NULL ordering can be only FIRST or LAST", ctx)
         }
       } else {
@@ -1219,8 +1221,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     } else {
       if (ctx.nullOrder != null) {
         ctx.nullOrder.getType match {
-          case SqlBaseParser.FIRST => SortOrder(expression(ctx.expression), Ascending)
-          case SqlBaseParser.LAST => SortOrder(expression(ctx.expression), AscendingNullLast)
+          case SqlBaseParser.FIRST =>
+            SortOrder(expression(ctx.expression), Ascending)
+          case SqlBaseParser.LAST =>
+            SortOrder(expression(ctx.expression), Ascending, NullLast)
           case _ => throw new ParseException(s"NULL ordering can be only FIRST or LAST", ctx)
         }
       } else {
