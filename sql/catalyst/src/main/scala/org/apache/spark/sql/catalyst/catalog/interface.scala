@@ -155,9 +155,9 @@ case class CatalogTable(
       outputFormat: Option[String] = storage.outputFormat,
       compressed: Boolean = false,
       serde: Option[String] = storage.serde,
-      serdeProperties: Map[String, String] = storage.properties): CatalogTable = {
+      properties: Map[String, String] = storage.properties): CatalogTable = {
     copy(storage = CatalogStorageFormat(
-      locationUri, inputFormat, outputFormat, serde, compressed, serdeProperties))
+      locationUri, inputFormat, outputFormat, serde, compressed, properties))
   }
 
   override def toString: String = {

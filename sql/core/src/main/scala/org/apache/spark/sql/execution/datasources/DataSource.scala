@@ -314,12 +314,8 @@ case class DataSource(
   /**
    * Create a resolved [[BaseRelation]] that can be used to read data from or write data into this
    * [[DataSource]]
-   *
-   * @param checkPathExist A flag to indicate whether to check the existence of path or not.
-   *                       This flag will be set to false when we create an empty table (the
-   *                       path of the table does not exist).
    */
-  def resolveRelation(checkPathExist: Boolean = true): BaseRelation = {
+  def resolveRelation(): BaseRelation = {
     val caseInsensitiveOptions = new CaseInsensitiveMap(options)
     val relation = (providingClass.newInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
@@ -367,11 +363,11 @@ case class DataSource(
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
           val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified)
 
-          if (checkPathExist && globPath.isEmpty) {
+          if (globPath.isEmpty) {
             throw new AnalysisException(s"Path does not exist: $qualified")
           }
           // Sufficient to check head of the globPath seq for non-glob scenario
-          if (checkPathExist && !fs.exists(globPath.head)) {
+          if (!fs.exists(globPath.head)) {
             throw new AnalysisException(s"Path does not exist: ${globPath.head}")
           }
           globPath
@@ -391,7 +387,7 @@ case class DataSource(
 
         val fileCatalog =
           new ListingFileCatalog(
-            sparkSession, globbedPaths, options, partitionSchema, !checkPathExist)
+            sparkSession, globbedPaths, options, partitionSchema)
 
         val dataSchema = userSpecifiedSchema.map { schema =>
           val equality = sparkSession.sessionState.conf.resolver

@@ -180,7 +180,7 @@ case class AlterTableRenameCommand(
       if (DDLUtils.isDatasourceTable(table) && table.tableType == CatalogTableType.MANAGED) {
         val newPath = catalog.defaultTablePath(newName)
         val newTable = table.withNewStorage(
-          serdeProperties = table.storage.properties ++ Map("path" -> newPath))
+          properties = table.storage.properties ++ Map("path" -> newPath))
         catalog.alterTable(newTable)
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan

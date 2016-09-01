@@ -305,6 +305,13 @@ class CatalogSuite
     columnFields.foreach { f => assert(columnString.contains(f.toString)) }
   }
 
+  test("createExternalTable should fail if path is not given for file-based data source") {
+    val e = intercept[AnalysisException] {
+      spark.catalog.createExternalTable("tbl", "json", Map.empty[String, String])
+    }
+    assert(e.message.contains("Unable to infer schema"))
+  }
+
   // TODO: add tests for the rest of them
 
 }

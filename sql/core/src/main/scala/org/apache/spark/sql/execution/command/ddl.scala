@@ -318,7 +318,7 @@ case class AlterTableSerDePropertiesCommand(
     if (partSpec.isEmpty) {
       val newTable = table.withNewStorage(
         serde = serdeClassName.orElse(table.storage.serde),
-        serdeProperties = table.storage.properties ++ serdeProperties.getOrElse(Map()))
+        properties = table.storage.properties ++ serdeProperties.getOrElse(Map()))
       catalog.alterTable(newTable)
     } else {
       val spec = partSpec.get
@@ -669,7 +669,7 @@ case class AlterTableSetLocationCommand(
           if (DDLUtils.isDatasourceTable(table)) {
             table.withNewStorage(
               locationUri = Some(location),
-              serdeProperties = table.storage.properties ++ Map("path" -> location))
+              properties = table.storage.properties ++ Map("path" -> location))
           } else {
             table.withNewStorage(locationUri = Some(location))
           }

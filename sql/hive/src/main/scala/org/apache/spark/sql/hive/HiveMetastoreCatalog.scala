@@ -81,7 +81,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             options = table.storage.properties)
 
         LogicalRelation(
-          dataSource.resolveRelation(checkPathExist = true),
+          dataSource.resolveRelation(),
           metastoreTableIdentifier = Some(TableIdentifier(in.name, Some(in.database))))
       }
     }
