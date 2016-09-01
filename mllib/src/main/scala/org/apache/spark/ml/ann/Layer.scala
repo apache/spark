@@ -684,7 +684,7 @@ private[ml] class FeedForwardTrainer(
     val inputSize: Int,
     val outputSize: Int) extends Serializable {
 
-  private var _seed = this.getClass.getName.hashCode.toLong
+  private var _seed = new Random().nextLong()
   private var _weights: Vector = null
   private var _stackSize = 128
   private var dataStacker = new DataStacker(_stackSize, inputSize, outputSize)

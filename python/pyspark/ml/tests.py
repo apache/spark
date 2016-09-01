@@ -375,8 +375,6 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(noSeedSpecd.getSeed(), origSeed)
         # Check that a specified seed is honored
         self.assertEqual(withSeedSpecd.getSeed(), 42)
-        # Check that a different class has a different seed
-        self.assertNotEqual(other.getSeed(), noSeedSpecd.getSeed())
 
     def test_param_property_error(self):
         param_store = HasThrowableProperty()

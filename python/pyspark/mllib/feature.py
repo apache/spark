@@ -675,7 +675,7 @@ class Word2Vec(object):
             raise TypeError("data should be an RDD of list of string")
         jmodel = callMLlibFunc("trainWord2VecModel", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
-                               int(self.numIterations), int(self.seed),
+                               int(self.numIterations), self.seed,
                                int(self.minCount), int(self.windowSize))
         return Word2VecModel(jmodel)
 

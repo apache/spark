@@ -297,7 +297,7 @@ private[ml] trait HasStandardization extends Params {
 }
 
 /**
- * Trait for shared param seed (default: this.getClass.getName.hashCode.toLong).
+ * Trait for shared param seed (default: new java.util.Random().nextLong()).
  */
 private[ml] trait HasSeed extends Params {
 
@@ -307,7 +307,7 @@ private[ml] trait HasSeed extends Params {
    */
   final val seed: LongParam = new LongParam(this, "seed", "random seed")
 
-  setDefault(seed, this.getClass.getName.hashCode.toLong)
+  setDefault(seed, new java.util.Random().nextLong())
 
   /** @group getParam */
   final def getSeed: Long = $(seed)

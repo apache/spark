@@ -140,7 +140,7 @@ class BisectingKMeans(object):
 
     @classmethod
     @since('2.0.0')
-    def train(self, rdd, k=4, maxIterations=20, minDivisibleClusterSize=1.0, seed=-1888008604):
+    def train(self, rdd, k=4, maxIterations=20, minDivisibleClusterSize=1.0, seed=None):
         """
         Runs the bisecting k-means algorithm return the model.
 

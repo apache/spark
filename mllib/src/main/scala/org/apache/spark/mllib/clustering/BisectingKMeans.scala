@@ -45,7 +45,7 @@ import org.apache.spark.storage.StorageLevel
  * @param maxIterations the max number of k-means iterations to split clusters (default: 20)
  * @param minDivisibleClusterSize the minimum number of points (if >= 1.0) or the minimum proportion
  *                                of points (if < 1.0) of a divisible cluster (default: 1)
- * @param seed a random seed (default: hash value of the class name)
+ * @param seed a random seed
  *
  * @see [[http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf
  *     Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
@@ -119,7 +119,7 @@ class BisectingKMeans private (
   def getMinDivisibleClusterSize: Double = minDivisibleClusterSize
 
   /**
-   * Sets the random seed (default: hash value of the class name).
+   * Sets the random seed.
    */
   @Since("1.6.0")
   def setSeed(seed: Long): this.type = {
