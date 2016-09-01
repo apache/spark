@@ -523,10 +523,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         case _: AnalysisException =>
           assert(e.getMessage.contains("infer"))
 
-        case _: java.util.NoSuchElementException if e.getMessage.contains("dataSchema") =>
-          // Ignore error, the source format requires schema to be provided by user
-          // This is needed for SimpleTextHadoopFsRelationSuite as SimpleTextSource needs schema
-
         case _ =>
           fail("Unexpected error trying to infer schema from empty dir", e)
       }
@@ -651,21 +647,27 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       def check(
           path: String,
           expectedResult: Either[DataFrame, String],
-          basePath: Option[String] = None
-        ): Unit = {
+          basePath: Option[String] = None): Unit = {
         try {
           val reader = spark.read
           basePath.foreach(reader.option("basePath", _))
           val testDf = reader
             .format(dataSourceName)
             .load(path)
-          assert(expectedResult.isLeft, s"Error was expected with $path but result found")
-          checkAnswer(testDf, expectedResult.left.get)
-        } catch {
-          case e: java.util.NoSuchElementException if e.getMessage.contains("dataSchema") =>
-            // Ignore error, the source format requires schema to be provided by user
-            // This is needed for SimpleTextHadoopFsRelationSuite as SimpleTextSource needs schema
 
+          assert(expectedResult.isLeft, s"Error was expected with $path but result found")
+          if (dataSourceName == classOf[SimpleTextSource].getCanonicalName) {
+            // Text data source does infers all the types as strings if schema is not given.
+            // So, this is being tested and compared after casting them all to strings.
+            val expectedTextRows = expectedResult.left.get.collect()
+              .map(_.toSeq.map(_.toString))
+            val testTextRows = testDf.collect()
+              .map(_.toSeq.map(_.toString))
+            assert(testTextRows.toSet === expectedTextRows.toSet)
+          } else {
+            checkAnswer(testDf, expectedResult.left.get)
+          }
+        } catch {
           case e: Throwable =>
             assert(expectedResult.isRight, s"Was not expecting error with $path: " + e)
             assert(

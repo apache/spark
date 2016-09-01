@@ -66,6 +66,23 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
     }
   }
 
+  test("Support for the default schema if the schema is not given") {
+    withTempPath { path =>
+      val df = spark.range(10)toDF()
+      df.write
+        .format(dataSourceName)
+        .save(path.getCanonicalPath)
+
+      val copyDf = spark.read
+        .format(dataSourceName)
+        .load(path.getCanonicalPath)
+
+      val expected = StructType(
+        StructField("_c0", StringType, nullable = true) :: Nil)
+      assert(copyDf.schema === expected)
+    }
+  }
+
   test("test hadoop conf option propagation") {
     withTempPath { file =>
       // Test write side

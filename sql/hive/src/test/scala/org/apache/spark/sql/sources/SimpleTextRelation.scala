@@ -21,16 +21,19 @@ import java.text.NumberFormat
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{NullWritable, Text}
+import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
+import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{sources, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GenericInternalRow, InterpretedPredicate, InterpretedProjection, JoinedRow, Literal}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
@@ -40,7 +43,47 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    Some(DataType.fromJson(options("dataSchema")).asInstanceOf[StructType])
+    if (files.isEmpty) {
+      None
+    } else {
+      val schema = if (options.contains("dataSchema")) {
+        DataType.fromJson(options("dataSchema")).asInstanceOf[StructType]
+      } else {
+        val firstRow = baseRDD(sparkSession, files).take(1).headOption.orNull
+        val fields: Seq[StructField] = if (firstRow != null) {
+          firstRow.split(",", -1).zipWithIndex.map { case (_, index) =>
+            StructField(s"_c$index", StringType, nullable = true)
+          }
+        } else {
+          Seq.empty[StructField]
+        }
+        StructType(fields)
+      }
+      Some(schema)
+    }
+  }
+
+  private def baseRDD(
+      sparkSession: SparkSession,
+      files: Seq[FileStatus]): RDD[String] = {
+    val textFiles = files.filterNot { status =>
+      val name = status.getPath.getName
+      name.startsWith("_") || name.startsWith(".")
+    }.toArray
+
+    val job = Job.getInstance(sparkSession.sessionState.newHadoopConf())
+    val conf = job.getConfiguration
+    val paths = textFiles.map(_.getPath)
+
+    if (paths.nonEmpty) {
+      FileInputFormat.setInputPaths(job, paths: _*)
+    }
+
+    sparkSession.sparkContext.hadoopRDD(
+      conf.asInstanceOf[JobConf],
+      classOf[TextInputFormat],
+      classOf[LongWritable],
+      classOf[Text]).map(_._2.toString)
   }
 
   override def prepareWrite(
