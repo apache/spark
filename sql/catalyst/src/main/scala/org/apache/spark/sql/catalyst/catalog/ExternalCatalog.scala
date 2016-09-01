@@ -188,5 +188,13 @@ abstract class ExternalCatalog {
   // Resources
   // --------------------------------------------------------------------------
 
+  /**
+   * Add a JAR resource to the underlying external catalog for DDL (e.g. CREATE TABLE) and DML
+   * (e.g., LOAD TABLE) operations.
+   *
+   * For example, when users create a Hive serde table, they can specify a custom
+   * Serializer-Deserializer (SerDe) class. When Hive metastore is unable to access the custom SerDe
+   * JAR (e.g., not on the Hive classpath), the JAR file must be added at runtime using this API.
+   */
   def addJar(path: String): Unit
 }

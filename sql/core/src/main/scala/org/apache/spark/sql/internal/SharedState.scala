@@ -75,7 +75,10 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    * Add a global-scoped jar
    */
   def addJar(path: String): Unit = {
-    externalCatalog.addJar(path)
+    if (sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive") {
+      // Hive metastore supports custom serde.
+      externalCatalog.addJar(path)
+    }
     // The added jar is shared by all the sessions, because SparkContext does not support sessions
     sparkContext.addJar(path)
 

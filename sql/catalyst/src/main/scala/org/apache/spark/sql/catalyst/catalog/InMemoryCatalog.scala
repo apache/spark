@@ -513,6 +513,8 @@ class InMemoryCatalog(
   // Resources
   // --------------------------------------------------------------------------
 
-  override def addJar(path: String): Unit = { /* no-op */ }
+  override def addJar(path: String): Unit = {
+    throw new UnsupportedOperationException("addJar is not supported")
+  }
 
 }
