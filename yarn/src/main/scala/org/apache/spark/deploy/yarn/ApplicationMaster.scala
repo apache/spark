@@ -27,7 +27,7 @@ import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileContext, FileSystem, Path}
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -40,6 +40,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, ConfigurableCredentialManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -119,8 +120,8 @@ private[spark] class ApplicationMaster(
   // Load the list of localized files set by the client. This is used when launching executors,
   // and is loaded here so that these configs don't pollute the Web UI's environment page in
   // cluster mode.
-  private val localResources = {
-    logInfo("Preparing Local resources")
+  private val executorLocalResources = {
+    logDebug("Preparing Local resources for executor launch context")
     val resources = HashMap[String, LocalResource]()
 
     def setupDistributedCache(
@@ -173,8 +174,65 @@ private[spark] class ApplicationMaster(
       sys.props.remove(e.key)
     }
 
-    logInfo("Prepared Local resources " + resources)
+    if (sparkConf.contains(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH)
+      && sparkConf.get(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH).contains("hdfs://")) {
+      logDebug("Spark hdfs-located executor extra classpath detected")
+      prepareHdfsExtraClasspath(resources)
+    }
+
+    logInfo(s"Prepared Local resources for executor launch context $resources")
     resources.toMap
+  }
+
+  /**
+   *
+   * What this method do:
+   * 1. Iterate over hdfs paths specified by "spark.executor.extraClassPath"
+   * 2. Resolve each path and get information about resource
+   * 3. Create link based on resource URI
+   * 4. Add local resource using link as key to container launch context resources
+   *
+   * The method does not change the "spark.executor.extraClasspath" value,
+   * which then puts to executor CLASSPATH as is, whereas for HDFS-located resources,
+   * it generates links, which used as key for container launch context local resources.
+   *
+   * All generated links puts to executor CLASSPATH {@see ExecutorRunnable.prepareEnvironment}
+   * Then node manager resolve these links and download needed resources to application cache.
+   *
+   * @param localResources container launch context local resources
+   */
+  private def prepareHdfsExtraClasspath (localResources: HashMap[String, LocalResource]): Unit = {
+    try {
+      val hdfs = FileSystem.get( yarnConf )
+
+      def addResource (path: String): Unit = {
+        val qualified = hdfs.makeQualified( new Path( Utils.resolveURI( path.trim ) ) )
+        val fileContext = FileContext.getFileContext( qualified.toUri( ), yarnConf )
+        val resolvedPath = fileContext.resolvePath( qualified )
+        val fileStatus = hdfs.getFileStatus( resolvedPath )
+
+        def buildLink (name: String): String = {
+          "__extra_classpath_link__" + name.replaceAll( "[/\\\\:.-]", "_" ).trim
+        }
+
+        val link: String = buildLink( resolvedPath.toUri.getPath )
+
+        localResources( link ) = LocalResource.newInstance(
+          ConverterUtils.getYarnUrlFromPath( resolvedPath ),
+          LocalResourceType.FILE,
+          LocalResourceVisibility.PRIVATE,
+          fileStatus.getLen,
+          fileStatus.getModificationTime )
+      }
+
+      val extraResources = sparkConf.get( SparkLauncher.EXECUTOR_EXTRA_CLASSPATH ).split( "," )
+      extraResources.filter( _.startsWith( "hdfs://" ) ).foreach( path => addResource( path ) )
+
+    } catch {
+      case err: Throwable =>
+        logError( s"Failed to prepare links for executor extra classpath hdfs:// resources $err" )
+        throw err
+    }
   }
 
   def getAttemptId(): ApplicationAttemptId = {
@@ -345,7 +403,7 @@ private[spark] class ApplicationMaster(
       uiAddress,
       historyAddress,
       securityMgr,
-      localResources)
+      executorLocalResources)
 
     allocator.allocateResources()
     reporterThread = launchReporterThread()

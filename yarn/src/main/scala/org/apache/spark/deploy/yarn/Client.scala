@@ -1322,12 +1322,17 @@ private object Client extends Logging {
       conf: Configuration,
       sparkConf: SparkConf,
       env: HashMap[String, String],
-      extraClassPath: Option[String] = None): Unit = {
+      extraClassPath: Option[String] = None,
+      extraClassPathLinks: Option[Set[String]] = None): Unit = {
     extraClassPath.foreach { cp =>
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
     }
 
     addClasspathEntry(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env)
+
+    if (extraClassPathLinks.isDefined) {
+      extraClassPathLinks.get.foreach { link => addClasspathEntry(link, env) }
+    }
 
     addClasspathEntry(
       YarnSparkHadoopUtil.expandEnvironment(Environment.PWD) + Path.SEPARATOR +

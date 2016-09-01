@@ -40,6 +40,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
@@ -92,6 +93,10 @@ private[yarn] class ExecutorRunnable(
       |YARN executor launch context:
       |  env:
       |${env.map { case (k, v) => s"    $k -> $v\n" }.mkString}
+      |
+      |  local resources:
+      |${localResources.map { case (k, v) => s"    $k -> $v\n" }.mkString}
+      |
       |  command:
       |    ${commands.mkString(" ")}
       |===============================================================================
@@ -232,7 +237,8 @@ private[yarn] class ExecutorRunnable(
 
   private def prepareEnvironment(container: Container): HashMap[String, String] = {
     val env = new HashMap[String, String]()
-    Client.populateClasspath(null, yarnConf, sparkConf, env, sparkConf.get(EXECUTOR_CLASS_PATH))
+    val extraClassPath: Option[String] = sparkConf.get(EXECUTOR_CLASS_PATH)
+    Client.populateClasspath(null, yarnConf, sparkConf, env, extraClassPath, getExtraLinks())
 
     sparkConf.getExecutorEnv.foreach { case (key, value) =>
       // This assumes each executor environment variable set here is a path
@@ -265,5 +271,22 @@ private[yarn] class ExecutorRunnable(
     System.getenv().asScala.filterKeys(_.startsWith("SPARK"))
       .foreach { case (k, v) => env(k) = v }
     env
+  }
+
+  /**
+   *
+   * Get all extra classpath links prepared by {@see org.apache.spark.deploy.yarn.ApplicationMaster}
+   * These links will be added to executor CLASSPATH,
+   * which provides possibility to use hdfs-located resources for executor extra classpath
+   *
+   * @return executor extra classpath links which points to hdfs resources
+   */
+  private def getExtraLinks(): Option[Set[String]] = {
+    if (sparkConf.contains(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH)
+      && sparkConf.get(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH).contains("hdfs://")) {
+      Some(localResources.filterKeys(_.startsWith("__extra_classpath_link__")).keySet)
+    } else {
+      None
+    }
   }
 }
