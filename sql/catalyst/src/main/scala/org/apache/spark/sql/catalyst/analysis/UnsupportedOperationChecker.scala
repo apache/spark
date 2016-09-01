@@ -78,6 +78,41 @@ object UnsupportedOperationChecker {
       !subplan.isStreaming || (aggs.nonEmpty && outputMode == InternalOutputModes.Complete)
     }
 
+    // Disallow multiple streaming aggregations
+    val aggregates = plan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+
+    if (aggregates.size > 1) {
+      throwError(
+        "Multiple streaming aggregations are not supported with " +
+          "streaming DataFrames/Datasets")(plan)
+    }
+
+    // Disallow some output mode
+    outputMode match {
+      case InternalOutputModes.Append if aggregates.nonEmpty =>
+        throwError(
+          s"$outputMode output mode not supported when there are streaming aggregations on " +
+            s"streaming DataFrames/DataSets")(plan)
+
+      case InternalOutputModes.Complete | InternalOutputModes.Update if aggregates.isEmpty =>
+        throwError(
+          s"$outputMode output mode not supported when there are no streaming aggregations on " +
+            s"streaming DataFrames/Datasets")(plan)
+
+      case _ =>
+    }
+
+    /**
+     * Whether the subplan will contain complete data or incremental data in every incremental
+     * execution. Some operations may be allowed only when the child logical plan gives complete
+     * data.
+     */
+    def containsCompleteData(subplan: LogicalPlan): Boolean = {
+      val aggs = plan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+      // Either the subplan has no streaming source, or it has aggregation with Complete mode
+      !subplan.isStreaming || (aggs.nonEmpty && outputMode == InternalOutputModes.Complete)
+    }
+
     plan.foreachUp { implicit subPlan =>
 
       // Operations that cannot exists anywhere in a streaming plan
