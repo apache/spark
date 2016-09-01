@@ -48,12 +48,12 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     if (input.size == 2) {
       val (joinConditions, others) = conditions.partition(
         e => !SubqueryExpression.hasCorrelatedSubquery(e))
-      val innerJoinType = if (input.map(_._2).contains(Cross)) {
-        Cross
-      } else {
-        Inner
+      val ((left, leftJoinType), (right, rightJoinType)) = (input(0), input(1))
+      val innerJoinType = (leftJoinType, rightJoinType) match {
+        case (Inner, Inner) => Inner
+        case (_, _) => Cross
       }
-      val join = Join(input(0)._1, input(1)._1, innerJoinType, joinConditions.reduceLeftOption(And))
+      val join = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And))
       if (others.nonEmpty) {
         Filter(others.reduceLeft(And), join)
       } else {

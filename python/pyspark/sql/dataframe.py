@@ -619,7 +619,7 @@ class DataFrame(object):
             If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
         :param how: str, default 'inner'.
-            One of `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+            One of `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`, `cross`.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
@@ -644,7 +644,7 @@ class DataFrame(object):
             on = [on]
 
         if on is None or len(on) == 0:
-            jdf = self._jdf.join(other._jdf)
+            jdf = self._jdf.crossJoin(other._jdf)
         elif isinstance(on[0], basestring):
             if how is None:
                 jdf = self._jdf.join(other._jdf, self._jseq(on), "inner")
