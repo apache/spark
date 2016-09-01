@@ -377,6 +377,7 @@ set of sinks to which metrics are reported. The following instances are currentl
 * `worker`: A Spark standalone worker process.
 * `executor`: A Spark executor.
 * `driver`: The Spark driver process (the process in which your SparkContext is created).
+* `shuffleService`: The Spark shuffle service
 
 Each instance can report to zero or more _sinks_. Sinks are contained in the
 `org.apache.spark.metrics.sink` package:
