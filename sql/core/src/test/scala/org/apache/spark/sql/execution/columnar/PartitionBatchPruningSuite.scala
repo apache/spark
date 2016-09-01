@@ -142,17 +142,30 @@ class PartitionBatchPruningSuite
 
   // With disable IN_MEMORY_PARTITION_PRUNING option
   test("disable IN_MEMORY_PARTITION_PRUNING") {
-    spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, false)
+    withSQLConf(SQLConf.IN_MEMORY_PARTITION_PRUNING.key -> "false") {
+      val df = sql("SELECT key FROM pruningData WHERE key = 1")
+      val result = df.collect().map(_ (0)).toArray
+      assert(result.length === 1)
 
-    val df = sql("SELECT key FROM pruningData WHERE key = 1")
-    val result = df.collect().map(_(0)).toArray
-    assert(result.length === 1)
-
-    val (readPartitions, readBatches) = df.queryExecution.sparkPlan.collect {
+      val (readPartitions, readBatches) = df.queryExecution.sparkPlan.collect {
         case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
       }.head
-    assert(readPartitions === 5)
-    assert(readBatches === 10)
+      assert(readPartitions === 5)
+      assert(readBatches === 10)
+    }
+  }
+
+  test("illegal values of COLUMN_BATCH_SIZE") {
+    withSQLConf(SQLConf.COLUMN_BATCH_SIZE.key -> "0") {
+      withTempTable("test") {
+        spark.sql("select key from pruningData").createOrReplaceTempView("test")
+        val e = intercept[IllegalArgumentException] {
+          spark.catalog.cacheTable("test")
+        }.getMessage
+        assert(e.contains(
+          "The minimal number of spark.sql.inMemoryColumnarStorage.batchSize is 1, but got 0"))
+      }
+    }
   }
 
   def checkBatchPruning(

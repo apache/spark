@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.CollectionAccumulator
 
@@ -91,6 +92,9 @@ case class InMemoryRelation(
       Statistics(sizeInBytes = sizeInBytes)
     }
   }
+
+  require(batchSize >= 1,
+    s"The minimal number of ${SQLConf.COLUMN_BATCH_SIZE.key} is 1, but got $batchSize")
 
   // If the cached column buffers were not passed in, we calculate them in the constructor.
   // As in Spark, the actual work of caching is lazy.

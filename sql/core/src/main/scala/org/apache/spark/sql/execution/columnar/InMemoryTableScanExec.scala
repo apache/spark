@@ -64,18 +64,31 @@ case class InMemoryTableScanExec(
       statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
     case EqualTo(l: Literal, a: AttributeReference) =>
       statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
+    case EqualTo(a: AttributeReference, b: AttributeReference) =>
+      statsFor(a).lowerBound <= statsFor(b).upperBound &&
+        statsFor(a).upperBound >= statsFor(b).lowerBound
 
-    case LessThan(a: AttributeReference, l: Literal) => statsFor(a).lowerBound < l
-    case LessThan(l: Literal, a: AttributeReference) => l < statsFor(a).upperBound
+    case LessThan(a: AttributeReference, l: Literal) =>
+      statsFor(a).lowerBound < l
+    case LessThan(l: Literal, a: AttributeReference) =>
+      l < statsFor(a).upperBound
+    case LessThan(a: AttributeReference, b: AttributeReference) =>
+      statsFor(a).lowerBound < statsFor(b).upperBound
 
     case LessThanOrEqual(a: AttributeReference, l: Literal) => statsFor(a).lowerBound <= l
     case LessThanOrEqual(l: Literal, a: AttributeReference) => l <= statsFor(a).upperBound
+    case LessThanOrEqual(a: AttributeReference, b: AttributeReference) =>
+      statsFor(a).lowerBound <= statsFor(b).upperBound
 
     case GreaterThan(a: AttributeReference, l: Literal) => l < statsFor(a).upperBound
     case GreaterThan(l: Literal, a: AttributeReference) => statsFor(a).lowerBound < l
+    case GreaterThan(a: AttributeReference, b: AttributeReference) =>
+      statsFor(a).upperBound > statsFor(b).lowerBound
 
     case GreaterThanOrEqual(a: AttributeReference, l: Literal) => l <= statsFor(a).upperBound
     case GreaterThanOrEqual(l: Literal, a: AttributeReference) => statsFor(a).lowerBound <= l
+    case GreaterThanOrEqual(a: AttributeReference, b: AttributeReference) =>
+      statsFor(a).upperBound >= statsFor(b).lowerBound
 
     case IsNull(a: Attribute) => statsFor(a).nullCount > 0
     case IsNotNull(a: Attribute) => statsFor(a).count - statsFor(a).nullCount > 0

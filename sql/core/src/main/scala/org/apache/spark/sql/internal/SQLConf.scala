@@ -80,8 +80,8 @@ object SQLConf {
 
   val COLUMN_BATCH_SIZE = SQLConfigBuilder("spark.sql.inMemoryColumnarStorage.batchSize")
     .internal()
-    .doc("Controls the size of batches for columnar caching.  Larger batch sizes can improve " +
-      "memory utilization and compression, but risk OOMs when caching data.")
+    .doc("Controls the maximal number of rows per batches for columnar caching.  Larger batch " +
+      "sizes can improve memory utilization and compression, but risk OOMs when caching data.")
     .intConf
     .createWithDefault(10000)
 
