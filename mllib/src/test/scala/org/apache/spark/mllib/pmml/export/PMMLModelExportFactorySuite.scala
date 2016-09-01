@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.pmml.export
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.classification.{LogisticRegressionModel, SVMModel}
+import org.apache.spark.mllib.classification.{NaiveBayesModel, NaiveBayes, LogisticRegressionModel, SVMModel}
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.{LassoModel, LinearRegressionModel, RidgeRegressionModel}
@@ -36,6 +36,21 @@ class PMMLModelExportFactorySuite extends SparkFunSuite {
     val modelExport = PMMLModelExportFactory.createPMMLModelExport(kmeansModel)
 
     assert(modelExport.isInstanceOf[KMeansPMMLModelExport])
+  }
+
+  test("PMMLModelExportFactory create NaiveBayesPMMLModelExport when passing a NaiveBayesModel") {
+    val label = Array(0.0, 1.0, 2.0)
+    val pi = Array(0.5, 0.1, 0.4).map(math.log)
+    val theta = Array(
+      Array(0.70, 0.10, 0.10, 0.10), // label 0
+      Array(0.10, 0.70, 0.10, 0.10), // label 1
+      Array(0.10, 0.10, 0.70, 0.10)  // label 2
+    ).map(_.map(math.log))
+
+    val nbModel = new NaiveBayesModel(label, pi, theta, NaiveBayes.Bernoulli)
+    val modelExport = PMMLModelExportFactory.createPMMLModelExport(nbModel)
+
+    assert(modelExport.isInstanceOf[NaiveBayesPMMLModelExport])
   }
 
   test("PMMLModelExportFactory create GeneralizedLinearPMMLModelExport when passing a "
@@ -89,6 +104,23 @@ class PMMLModelExportFactorySuite extends SparkFunSuite {
 
     intercept[IllegalArgumentException] {
       PMMLModelExportFactory.createPMMLModelExport(invalidModel)
+    }
+  }
+
+  test("PMMLModelExportFactory throw IllegalArgumentException "
+    + "when passing a Multinomial Naive Bayes") {
+    val label = Array(0.0, 1.0, 2.0)
+    val pi = Array(0.5, 0.1, 0.4).map(math.log)
+    val theta = Array(
+      Array(0.70, 0.10, 0.10, 0.10), // label 0
+      Array(0.10, 0.70, 0.10, 0.10), // label 1
+      Array(0.10, 0.10, 0.70, 0.10)  // label 2
+    ).map(_.map(math.log))
+
+    val nbModel = new NaiveBayesModel(label, pi, theta, NaiveBayes.Multinomial)
+
+    intercept[IllegalArgumentException] {
+      PMMLModelExportFactory.createPMMLModelExport(nbModel)
     }
   }
 }

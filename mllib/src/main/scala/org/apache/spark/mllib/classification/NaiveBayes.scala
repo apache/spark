@@ -28,6 +28,7 @@ import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, SparseVector, Vector}
+import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -48,7 +49,7 @@ class NaiveBayesModel private[spark] (
     @Since("0.9.0") val pi: Array[Double],
     @Since("0.9.0") val theta: Array[Array[Double]],
     @Since("1.4.0") val modelType: String)
-  extends ClassificationModel with Serializable with Saveable {
+  extends ClassificationModel with Serializable with Saveable with PMMLExportable {
 
   import NaiveBayes.{Bernoulli, Multinomial, supportedModelTypes}
 

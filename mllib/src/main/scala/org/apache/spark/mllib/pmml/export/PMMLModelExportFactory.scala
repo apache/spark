@@ -19,8 +19,7 @@ package org.apache.spark.mllib.pmml.export
 
 import org.dmg.pmml.RegressionNormalizationMethodType
 
-import org.apache.spark.mllib.classification.LogisticRegressionModel
-import org.apache.spark.mllib.classification.SVMModel
+import org.apache.spark.mllib.classification.{NaiveBayesModel, LogisticRegressionModel, SVMModel}
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.regression.LassoModel
 import org.apache.spark.mllib.regression.LinearRegressionModel
@@ -55,6 +54,8 @@ private[mllib] object PMMLModelExportFactory {
           throw new IllegalArgumentException(
             "PMML Export not supported for Multinomial Logistic Regression")
         }
+      case nb: NaiveBayesModel =>
+        new NaiveBayesPMMLModelExport(nb, "naive bayes")
       case _ =>
         throw new IllegalArgumentException(
           "PMML Export not supported for model: " + model.getClass.getName)
