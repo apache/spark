@@ -98,13 +98,13 @@ trait ExtractValue extends Expression
 /**
  * Returns the value of fields in the Struct `child`.
  *
- * No need to do type checking since it is handled by [[ExtractValue]].
- *
  * Note that we can pass in the field name directly to keep case preserving in `toString`.
  * For example, when get field `yEAr` from `<year: int, month: int>`, we should pass in `yEAr`.
  */
 case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
-  extends UnaryExpression with ExtractValue {
+  extends UnaryExpression with ExtractValue with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StructType)
 
   lazy val childSchema = child.dataType.asInstanceOf[StructType]
 
@@ -144,16 +144,15 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 /**
  * For a child whose data type is an array of structs, extracts the `ordinal`-th fields of all array
  * elements, and returns them as a new array.
- *
- * No need to do type checking since it is handled by [[ExtractValue]].
  */
 case class GetArrayStructFields(
     child: Expression,
     field: StructField,
     ordinal: Int,
     numFields: Int,
-    containsNull: Boolean) extends UnaryExpression with ExtractValue {
+    containsNull: Boolean) extends UnaryExpression with ExtractValue with ExpectsInputTypes {
 
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def toString: String = s"$child.${field.name}"
   override def sql: String = s"${child.sql}.${quoteIdentifier(field.name)}"
@@ -215,8 +214,7 @@ case class GetArrayStructFields(
 case class GetArrayItem(child: Expression, ordinal: Expression)
   extends BinaryExpression with ExpectsInputTypes with ExtractValue {
 
-  // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegralType)
 
   override def toString: String = s"$child[$ordinal]"
   override def sql: String = s"${child.sql}[${ordinal.sql}]"
@@ -264,8 +262,7 @@ case class GetMapValue(child: Expression, key: Expression)
 
   private def keyType = child.dataType.asInstanceOf[MapType].keyType
 
-  // We have done type checking for child in `ExtractValue`, so only need to check the `key`.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, keyType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(MapType, keyType)
 
   override def toString: String = s"$child[$key]"
   override def sql: String = s"${child.sql}[${key.sql}]"

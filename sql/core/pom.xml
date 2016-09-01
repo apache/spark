@@ -127,6 +127,18 @@
       <artifactId>xbean-asm5-shaded</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.clapper</groupId>
+      <artifactId>classutil_${scala.binary.version}</artifactId>
+      <version>1.0.6</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.scalaz</groupId>
+      <artifactId>scalaz-core_${scala.binary.version}</artifactId>
+      <version>7.2.3</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>

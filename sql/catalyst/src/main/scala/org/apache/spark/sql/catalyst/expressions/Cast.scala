@@ -209,7 +209,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
-    (d.toBigDecimal * 1000000L).longValue()
+    d.toJavaBigDecimal.multiply(java.math.BigDecimal.valueOf(1000000L)).longValue()
   }
   private[this] def doubleToTimestamp(d: Double): Any = {
     if (d.isNaN || d.isInfinite) null else (d * 1000000L).toLong

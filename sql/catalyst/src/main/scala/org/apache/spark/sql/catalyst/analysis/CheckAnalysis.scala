@@ -245,6 +245,12 @@ trait CheckAnalysis extends PredicateHelper {
             aggregateExprs.foreach(checkValidAggregateExpression)
             groupingExprs.foreach(checkValidGroupingExprs)
 
+          case s @ SetOperation(left, right) if left.output.length != right.output.length =>
+            failAnalysis(
+              s"${s.nodeName} can only be performed on tables with the same number of columns, " +
+               s"but the left table has ${left.output.length} columns and the right has " +
+               s"${right.output.length}")
+
           case Sort(orders, _, _) =>
             orders.foreach { order =>
               if (!RowOrdering.isOrderable(order.dataType)) {
