@@ -148,7 +148,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val ONLINE_TAKE_ENABLED = SQLConfigBuilder("spark.sql.onlineTake.enabled")
+  val ADAPTIVE_TAKE_ENABLED = SQLConfigBuilder("spark.sql.adaptiveTake.enabled")
     .internal()
     .doc("When true, enable an early-stopping optimization in take().")
     .booleanConf
@@ -611,7 +611,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
-  def onlineTakeEnabled: Boolean = getConf(ONLINE_TAKE_ENABLED)
+  def adaptiveTakeEnabled: Boolean = getConf(ADAPTIVE_TAKE_ENABLED)
 
   def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)

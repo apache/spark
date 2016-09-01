@@ -1298,8 +1298,8 @@ abstract class RDD[T: ClassTag](
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
   def take(num: Int): Array[T] = withScope {
-    if (!conf.getBoolean("spark.driver.useOldTakeImplementation", false)) {
-      mapPartitions(_.take(num)).takeOnline[T](num, (x: Array[T]) => x.iterator)
+    if (conf.getBoolean("spark.driver.adaptiveTakeEnabled", true)) {
+      mapPartitions(_.take(num)).adaptiveTake[T](num, (x: Array[T]) => x.iterator)
     } else if (num == 0) {
       new Array[T](0)
     } else {
@@ -1335,7 +1335,20 @@ abstract class RDD[T: ClassTag](
     }
   }
 
-  private[spark] def takeOnline[R: ClassTag](
+  /**
+   * An optimized implementation of `take` which cancels the running Spark job as soon as enough
+   * output has been received (instead of waiting for all tasks to complete).
+   *
+   * This method assumes that per-partition limits have already been performed on the input RDD.
+   * This assumption allows the type of the input RDD to differ from the final output type. This is
+   * used in Spark SQL to allow individual partitions' outputs to be serialized as single objects
+   * which are then unpacked and counted on the driver.
+   *
+   * @param num the number of elements to take.
+   * @param unpackPartition a function for unpacking an individual partition's result into a
+   *                        sequence of elements to be counted.
+   */
+  private[spark] def adaptiveTake[R: ClassTag](
       num: Int,
       unpackPartition: Array[T] => Iterator[R]): Array[R] = withScope {
     require(num >= 0, s"num cannot be negative, but got num=$num")

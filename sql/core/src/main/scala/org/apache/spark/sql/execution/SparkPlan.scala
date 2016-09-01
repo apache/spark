@@ -302,13 +302,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * This is modeled after RDD.take.
    */
   def executeTake(n: Int): Array[InternalRow] = {
-    if (sqlContext.conf.onlineTakeEnabled) {
+    if (sqlContext.conf.adaptiveTakeEnabled) {
       val childRDD = getByteArrayRdd(n)
       def unpackPartition(arr: Array[Array[Byte]]): Iterator[InternalRow] = {
         assert(arr.length == 1)
         decodeUnsafeRows(arr(0))
       }
-      return childRDD.takeOnline[InternalRow](n, unpackPartition)
+      return childRDD.adaptiveTake[InternalRow](n, unpackPartition)
     }
     if (n == 0) {
       return new Array[InternalRow](0)
