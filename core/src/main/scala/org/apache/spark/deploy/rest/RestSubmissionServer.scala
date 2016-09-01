@@ -17,13 +17,14 @@
 
 package org.apache.spark.deploy.rest
 
+import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import org.eclipse.jetty.server.{Server, ServerConnector}
-import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
+import org.eclipse.jetty.servlet.{FilterHolder, ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -94,6 +95,13 @@ private[spark] abstract class RestSubmissionServer(
     contextToServlet.foreach { case (prefix, servlet) =>
       mainHandler.addServlet(new ServletHolder(servlet), prefix)
     }
+    // Add a filter for CSRF protection.
+    val csrfFilterHolder: FilterHolder = new FilterHolder()
+    csrfFilterHolder.setHeldClass(classOf[RestCsrfPreventionFilter])
+    mainHandler.addFilter(csrfFilterHolder, "/*", java.util.EnumSet.of(
+      DispatcherType.ASYNC, DispatcherType.ERROR, DispatcherType.FORWARD,
+      DispatcherType.INCLUDE, DispatcherType.REQUEST))
+
     server.setHandler(mainHandler)
     server.start()
     val boundPort = connector.getLocalPort
