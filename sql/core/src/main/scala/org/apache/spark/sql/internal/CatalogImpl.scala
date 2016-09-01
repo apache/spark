@@ -134,11 +134,26 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Returns a list of columns for the given table in the current database.
+   * Returns a list of columns for the temp view matching the given name, or for the given table in
+   * the current database.
    */
   @throws[AnalysisException]("table does not exist")
   override def listColumns(tableName: String): Dataset[Column] = {
-    listColumns(TableIdentifier(tableName, None))
+    val maybeTempView = sessionCatalog.getTempView(tableName)
+    if (maybeTempView.isDefined) {
+      val columns = maybeTempView.get.schema.map { c =>
+        new Column(
+          name = c.name,
+          description = c.getComment().orNull,
+          dataType = c.dataType.catalogString,
+          nullable = c.nullable,
+          isPartition = false,
+          isBucket = false)
+      }
+      CatalogImpl.makeDataset(columns, sparkSession)
+    } else {
+      listColumns(TableIdentifier(tableName, None))
+    }
   }
 
   /**
@@ -285,7 +300,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropTempView(viewName: String): Unit = {
     sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(viewName))
-    sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true, purge = false)
+    sessionCatalog.dropTempView(viewName)
   }
 
   /**

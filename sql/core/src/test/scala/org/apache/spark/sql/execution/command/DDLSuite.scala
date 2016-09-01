@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempViewAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
@@ -642,7 +642,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           Row("1997", "Ford") :: Nil)
 
       // Fails if creating a new view with the same name
-      intercept[TempTableAlreadyExistsException] {
+      intercept[TempViewAlreadyExistsException] {
         sql(s"CREATE TEMPORARY VIEW testview USING " +
           s"org.apache.spark.sql.execution.datasources.csv.CSVFileFormat OPTIONS (PATH '$csvFile')")
       }
@@ -715,7 +715,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         sql("ALTER TABLE tab1 RENAME TO tab2")
       }
       assert(e.getMessage.contains(
-        "RENAME TEMPORARY TABLE from '`tab1`' to 'tab2': destination table already exists"))
+        "rename temporary view from 'tab1' to 'tab2': destination view already exists"))
 
       val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("tab1"), TableIdentifier("tab2")))
@@ -1597,14 +1597,16 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("truncate table - external table, temporary table, view (not allowed)") {
-    import testImplicits._
-    val path = Utils.createTempDir().getAbsolutePath
-    (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
-    sql(s"CREATE EXTERNAL TABLE my_ext_tab LOCATION '$path'")
-    sql(s"CREATE VIEW my_view AS SELECT 1")
-    assertUnsupported("TRUNCATE TABLE my_temp_tab")
-    assertUnsupported("TRUNCATE TABLE my_ext_tab")
-    assertUnsupported("TRUNCATE TABLE my_view")
+    withTempPath { path =>
+      withTable("my_ext_tab") {
+        withView("my_view") {
+          sql(s"CREATE EXTERNAL TABLE my_ext_tab LOCATION '${path.getAbsolutePath}'")
+          sql(s"CREATE VIEW my_view AS SELECT 1")
+          assertUnsupported("TRUNCATE TABLE my_ext_tab")
+          assertUnsupported("TRUNCATE TABLE my_view")
+        }
+      }
+    }
   }
 
   test("truncate table - non-partitioned table (not allowed)") {

@@ -29,13 +29,12 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
-import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -60,12 +59,25 @@ case class CreateTableLikeCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (!catalog.tableExists(sourceTable)) {
-      throw new AnalysisException(
-        s"Source table in CREATE TABLE LIKE does not exist: '$sourceTable'")
-    }
 
-    val sourceTableDesc = catalog.getTableMetadata(sourceTable)
+    // If the source table name contains database part, it must be a metastore table/view, we should
+    // get its table metadata from metastore directly. Otherwise, try to get a temp view matching
+    // the name first, if that not exists, try metastore table/view.
+    val sourceTableDesc = if (sourceTable.database.isDefined) {
+      catalog.getTableMetadata(sourceTable)
+    } else {
+      val maybeTempView = catalog.getTempView(sourceTable.table)
+      if (maybeTempView.isDefined) {
+        CatalogTable(
+          identifier = sourceTable,
+          tableType = CatalogTableType.VIEW,
+          storage = CatalogStorageFormat.empty,
+          schema = maybeTempView.get.schema
+        )
+      } else {
+        catalog.getTableMetadata(sourceTable)
+      }
+    }
 
     // Storage format
     val newStorage =
@@ -159,12 +171,13 @@ case class AlterTableRenameCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, oldName, isView)
-    // If this is a temp view, just rename the view.
-    // Otherwise, if this is a real table, we also need to uncache and invalidate the table.
-    val isTemporary = catalog.isTemporaryTable(oldName)
-    if (isTemporary) {
-      catalog.renameTable(oldName, newName)
-    } else {
+
+    // If the old table name contains database part, we should rename a metastore table directly,
+    // otherwise, try to rename a temp view first, if that not exists, rename a metastore table.
+    val renameMetastoreTable =
+      oldName.database.isDefined || !catalog.renameTempView(oldName.table, newName)
+
+    if (renameMetastoreTable) {
       val newTblName = TableIdentifier(newName, oldName.database)
       // If an exception is thrown here we can just assume the table is uncached;
       // this can happen with Hive tables when the underlying catalog is in-memory.
@@ -339,10 +352,6 @@ case class TruncateTableCommand(
     if (!catalog.tableExists(tableName)) {
       throw new AnalysisException(s"Table $tableName in TRUNCATE TABLE does not exist.")
     }
-    if (catalog.isTemporaryTable(tableName)) {
-      throw new AnalysisException(
-        s"Operation not allowed: TRUNCATE TABLE on temporary tables: $tableName")
-    }
     val table = catalog.getTableMetadata(tableName)
     if (table.tableType == CatalogTableType.EXTERNAL) {
       throw new AnalysisException(
@@ -424,22 +433,31 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     val result = new ArrayBuffer[Row]
     val catalog = sparkSession.sessionState.catalog
 
-    if (catalog.isTemporaryTable(table)) {
-      describeSchema(catalog.lookupRelation(table).schema, result)
+    if (table.database.isDefined) {
+      describeMetastoreTable(catalog, result)
     } else {
-      val metadata = catalog.getTableMetadata(table)
-      describeSchema(metadata.schema, result)
-
-      if (isExtended) {
-        describeExtended(metadata, result)
-      } else if (isFormatted) {
-        describeFormatted(metadata, result)
+      val maybeTempView = catalog.getTempView(table.table)
+      if (maybeTempView.isDefined) {
+        describeSchema(maybeTempView.get.schema, result)
       } else {
-        describePartitionInfo(metadata, result)
+        describeMetastoreTable(catalog, result)
       }
     }
 
     result
+  }
+
+  private def describeMetastoreTable(catalog: SessionCatalog, result: ArrayBuffer[Row]): Unit = {
+    val metadata = catalog.getTableMetadata(table)
+    describeSchema(metadata.schema, result)
+
+    if (isExtended) {
+      describeExtended(metadata, result)
+    } else if (isFormatted) {
+      describeFormatted(metadata, result)
+    } else {
+      describePartitionInfo(metadata, result)
+    }
   }
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
@@ -517,7 +535,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
 
 /**
- * A command for users to get tables in the given database.
+ * A command for users to get tables in the given database and temporary views in current session.
  * If a databaseName is not given, the current database will be used.
  * The syntax of using this command in SQL is:
  * {{{
@@ -570,29 +588,21 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
-
-    if (catalog.isTemporaryTable(table)) {
-      Seq.empty[Row]
-    } else {
-      val catalogTable = sparkSession.sessionState.catalog.getTableMetadata(table)
-
-      propertyKey match {
-        case Some(p) =>
-          val propValue = catalogTable
-            .properties
-            .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
-          Seq(Row(propValue))
-        case None =>
-          catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
-      }
+    val tableMetadata = sparkSession.sessionState.catalog.getTableMetadata(table)
+    propertyKey match {
+      case Some(p) =>
+        val propValue = tableMetadata
+          .properties
+          .getOrElse(p, s"Table ${tableMetadata.qualifiedName} does not have property: $p")
+        Seq(Row(propValue))
+      case None =>
+        tableMetadata.properties.map(p => Row(p._1, p._2)).toSeq
     }
   }
 }
 
 /**
- * A command to list the column names for a table. This function creates a
- * [[ShowColumnsCommand]] logical plan.
+ * A command to list the column names for a table or temp view.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -605,9 +615,19 @@ case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.catalog.getTableMetadata(table).schema.map { c =>
-      Row(c.name)
+    val catalog = sparkSession.sessionState.catalog
+    val schema = if (table.database.isDefined) {
+      catalog.getTableMetadata(table).schema
+    } else {
+      val maybeTempView = catalog.getTempView(table.table)
+      if (maybeTempView.isDefined) {
+        maybeTempView.get.schema
+      } else {
+        catalog.getTableMetadata(table).schema
+      }
     }
+
+    schema.map { c => Row(c.name) }
   }
 }
 
@@ -641,12 +661,6 @@ case class ShowPartitionsCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-
-    if (catalog.isTemporaryTable(table)) {
-      throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a temporary table: ${table.unquotedString}")
-    }
-
     val tab = catalog.getTableMetadata(table)
 
     /**
@@ -699,12 +713,6 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-
-    if (catalog.isTemporaryTable(table)) {
-      throw new AnalysisException(
-        s"SHOW CREATE TABLE cannot be applied to temporary table")
-    }
-
     if (!catalog.tableExists(table)) {
       throw new AnalysisException(s"Table $table doesn't exist")
     }

@@ -140,19 +140,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"), Row("prop2Val"))
   }
 
-  test("show tblproperties for spark temporary table - empty row") {
-    withTempView("parquet_temp") {
-      sql(
-        """
-          |CREATE TEMPORARY TABLE parquet_temp (c1 INT, c2 STRING)
-          |USING org.apache.spark.sql.parquet.DefaultSource
-        """.stripMargin)
-
-      // An empty sequence of row is returned for session temporary table.
-      checkAnswer(sql("SHOW TBLPROPERTIES parquet_temp"), Nil)
-    }
-  }
-
   test("LOAD DATA") {
     withTable("non_part_table", "part_table") {
       sql(
@@ -353,6 +340,13 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("SHOW COLUMNS IN parquet_tab4 IN default"),
       Row("price") :: Row("qty") :: Row("year") :: Row("month") :: Nil)
 
+    withTempView("tmp_view") {
+      Seq(1 -> "a").toDF("i", "j").createTempView("tmp_view")
+      checkAnswer(
+        sql("SHOW COLUMNS IN tmp_view"),
+        Row("i") :: Row("j") :: Nil)
+    }
+
     val message = intercept[NoSuchTableException] {
       sql("SHOW COLUMNS IN badtable FROM default")
     }.getMessage
@@ -405,11 +399,12 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
           |CREATE TEMPORARY TABLE parquet_temp (c1 INT, c2 STRING)
           |USING org.apache.spark.sql.parquet.DefaultSource
         """.stripMargin)
-      // An empty sequence of row is returned for session temporary table.
+      // SHOW PARTITIONS should ignore temp views entirely and report "table not found" even if a
+      // same-name temp view exists.
       val message1 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_temp")
       }.getMessage
-      assert(message1.contains("is not allowed on a temporary table"))
+      assert(message1.contains("Table or view 'parquet_temp' not found in database 'default'"))
 
       val message2 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_tab3")

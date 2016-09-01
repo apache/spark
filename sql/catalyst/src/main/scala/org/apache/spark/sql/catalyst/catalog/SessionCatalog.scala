@@ -72,9 +72,7 @@ class SessionCatalog(
     this(externalCatalog, new SimpleFunctionRegistry, new SimpleCatalystConf(true))
   }
 
-  /** List of temporary tables, mapping from table name to their logical plan. */
-  @GuardedBy("this")
-  protected val tempTables = new mutable.HashMap[String, LogicalPlan]
+  private val tempViews = new TempViewManager
 
   // Note: we track current database here because certain operations do not explicitly
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
@@ -124,14 +122,14 @@ class SessionCatalog(
 
   private def requireTableExists(name: TableIdentifier): Unit = {
     if (!tableExists(name)) {
-      val db = name.database.getOrElse(currentDb)
+      val db = name.database.getOrElse(getCurrentDatabase)
       throw new NoSuchTableException(db = db, table = name.table)
     }
   }
 
   private def requireTableNotExists(name: TableIdentifier): Unit = {
     if (tableExists(name)) {
-      val db = name.database.getOrElse(currentDb)
+      val db = name.database.getOrElse(getCurrentDatabase)
       throw new TableAlreadyExistsException(db = db, table = name.table)
     }
   }
@@ -201,21 +199,23 @@ class SessionCatalog(
     new Path(new Path(conf.warehousePath), database + ".db").toString
   }
 
-  // ----------------------------------------------------------------------------
-  // Tables
-  // ----------------------------------------------------------------------------
-  // There are two kinds of tables, temporary tables and metastore tables.
-  // Temporary tables are isolated across sessions and do not belong to any
-  // particular database. Metastore tables can be used across multiple
-  // sessions as their metadata is persisted in the underlying catalog.
-  // ----------------------------------------------------------------------------
+  // --------------------------------------------------------------------------------
+  // Tables/Views
+  // --------------------------------------------------------------------------------
+  // There are two kinds of tables/views, temporary views and metastore tables/views.
+  // Temporary views are isolated across sessions and do not belong to any particular
+  // database. Metastore tables/views can be used across multiple sessions as their
+  // metadata is persisted in the underlying catalog.
+  //
+  // Note that, temporary tables are not supported currently.
+  // --------------------------------------------------------------------------------
 
-  // ----------------------------------------------------
-  // | Methods that interact with metastore tables only |
-  // ----------------------------------------------------
+  // ----------------------------------------------------------
+  // | Methods that interact with metastore tables/views only |
+  // ----------------------------------------------------------
 
   /**
-   * Create a metastore table in the database specified in `tableDefinition`.
+   * Create a metastore table/view in the database specified in `tableDefinition`.
    * If no such database is specified, create it in the current database.
    */
   def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
@@ -227,7 +227,7 @@ class SessionCatalog(
   }
 
   /**
-   * Alter the metadata of an existing metastore table identified by `tableDefinition`.
+   * Alter the metadata of an existing metastore table/view identified by `tableDefinition`.
    *
    * If no database is specified in `tableDefinition`, assume the table is in the
    * current database.
@@ -246,39 +246,69 @@ class SessionCatalog(
   }
 
   /**
-   * Retrieve the metadata of an existing metastore table.
-   * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
+   * Retrieve the metadata of an existing metastore table/view.
+   * If no database is specified, assume the table/view is in the current database.
+   * If the specified table/view is not found in the database then a [[NoSuchTableException]] is
+   * thrown.
    */
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
-    val tid = TableIdentifier(table)
-    if (isTemporaryTable(name)) {
-      CatalogTable(
-        identifier = tid,
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = tempTables(table).output.toStructType,
-        properties = Map(),
-        viewText = None)
-    } else {
-      requireDbExists(db)
-      requireTableExists(TableIdentifier(table, Some(db)))
-      externalCatalog.getTable(db, table)
-    }
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Some(db)))
+    externalCatalog.getTable(db, table)
   }
 
   /**
-   * Retrieve the metadata of an existing metastore table.
+   * Retrieve the metadata of an existing metastore table/view.
    * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then return None if it doesn't exist.
+   * If the specified table/view is not found in the database then return None if it doesn't exist.
    */
   def getTableMetadataOption(name: TableIdentifier): Option[CatalogTable] = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     requireDbExists(db)
     externalCatalog.getTableOption(db, table)
+  }
+
+  /**
+   * Return whether a table/view with the specified name exists in metastore.
+   */
+  def tableExists(name: TableIdentifier): Boolean = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(name.table)
+    externalCatalog.tableExists(db, table)
+  }
+
+  /**
+   * Rename a table/view in metastore.
+   */
+  def renameTable(oldName: TableIdentifier, newName: String): Unit = {
+    val db = formatDatabaseName(oldName.database.getOrElse(getCurrentDatabase))
+    requireDbExists(db)
+    val oldTableName = formatTableName(oldName.table)
+    val newTableName = formatTableName(newName)
+    requireTableExists(TableIdentifier(oldTableName, Some(db)))
+    requireTableNotExists(TableIdentifier(newTableName, Some(db)))
+    externalCatalog.renameTable(db, oldTableName, newTableName)
+  }
+
+  /**
+   * Drop a table/view in metastore.
+   */
+  def dropTable(
+      name: TableIdentifier,
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(name.table)
+    requireDbExists(db)
+    // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
+    if (externalCatalog.tableExists(db, table)) {
+      externalCatalog.dropTable(db, table, ignoreIfNotExists = true, purge = purge)
+    } else if (!ignoreIfNotExists) {
+      throw new NoSuchTableException(db = db, table = table)
+    }
   }
 
   /**
@@ -325,150 +355,105 @@ class SessionCatalog(
     new Path(new Path(dbLocation), formatTableName(tableIdent.table)).toString
   }
 
-  // -------------------------------------------------------------
-  // | Methods that interact with temporary and metastore tables |
-  // -------------------------------------------------------------
+  // ----------------------------------------------
+  // | Methods that interact with temporary views |
+  // ----------------------------------------------
 
   /**
-   * Create a temporary table.
+   * Create a temporary view.
    */
   def createTempView(
       name: String,
-      tableDefinition: LogicalPlan,
-      overrideIfExists: Boolean): Unit = synchronized {
+      viewDefinition: LogicalPlan,
+      overrideIfExists: Boolean): Unit = {
     val table = formatTableName(name)
-    if (tempTables.contains(table) && !overrideIfExists) {
-      throw new TempTableAlreadyExistsException(name)
-    }
-    tempTables.put(table, tableDefinition)
+    tempViews.create(table, viewDefinition, overrideIfExists)
   }
 
   /**
-   * Rename a table.
-   *
-   * If a database is specified in `oldName`, this will rename the table in that database.
-   * If no database is specified, this will first attempt to rename a temporary table with
-   * the same name, then, if that does not exist, rename the table in the current database.
+   * Rename a temporary view, and returns true if it succeeds, false otherwise.
    */
-  def renameTable(oldName: TableIdentifier, newName: String): Unit = synchronized {
-    val db = formatDatabaseName(oldName.database.getOrElse(currentDb))
-    requireDbExists(db)
-    val oldTableName = formatTableName(oldName.table)
-    val newTableName = formatTableName(newName)
-    if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
-      requireTableExists(TableIdentifier(oldTableName, Some(db)))
-      requireTableNotExists(TableIdentifier(newTableName, Some(db)))
-      externalCatalog.renameTable(db, oldTableName, newTableName)
-    } else {
-      if (tempTables.contains(newTableName)) {
-        throw new AnalysisException(
-          s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': destination table already exists")
-      }
-      val table = tempTables(oldTableName)
-      tempTables.remove(oldTableName)
-      tempTables.put(newTableName, table)
-    }
+  def renameTempView(oldName: String, newName: String): Boolean = {
+    val oldViewName = formatTableName(oldName)
+    val newViewName = formatTableName(newName)
+    tempViews.rename(oldViewName, newViewName)
   }
 
   /**
-   * Drop a table.
-   *
-   * If a database is specified in `name`, this will drop the table from that database.
-   * If no database is specified, this will first attempt to drop a temporary table with
-   * the same name, then, if that does not exist, drop the table from the current database.
+   * Drop a temporary view, and returns true if it succeeds, false otherwise.
    */
-  def dropTable(
-      name: TableIdentifier,
-      ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = synchronized {
-    val db = formatDatabaseName(name.database.getOrElse(currentDb))
-    val table = formatTableName(name.table)
-    if (name.database.isDefined || !tempTables.contains(table)) {
-      requireDbExists(db)
-      // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
-      // Instead, log it as an error message.
-      if (tableExists(TableIdentifier(table, Option(db)))) {
-        externalCatalog.dropTable(db, table, ignoreIfNotExists = true, purge = purge)
-      } else if (!ignoreIfNotExists) {
-        throw new NoSuchTableException(db = db, table = table)
-      }
-    } else {
-      tempTables.remove(table)
-    }
+  def dropTempView(name: String): Boolean = {
+    tempViews.remove(formatTableName(name))
   }
 
   /**
-   * Return a [[LogicalPlan]] that represents the given table or view.
+   * Alter the definition of an existing temporary view identified by name.
+   * Returns true if the temp view exists and be updated, false otherwise.
+   */
+  def alterTempView(
+      name: String,
+      viewDefinition: LogicalPlan): Boolean = {
+    val viewName = formatTableName(name)
+    tempViews.update(viewName, viewDefinition)
+  }
+
+  // -------------------------------------------------------------------------
+  // | Methods that interact with temporary views and metastore tables/views |
+  // -------------------------------------------------------------------------
+
+  /**
+   * Return a [[LogicalPlan]] that represents the given table/view.
    *
    * If a database is specified in `name`, this will return the table/view from that database.
-   * If no database is specified, this will first attempt to return a temporary table/view with
+   * If no database is specified, this will first attempt to return a temporary view with
    * the same name, then, if that does not exist, return the table/view from the current database.
    *
    * If the relation is a view, the relation will be wrapped in a [[SubqueryAlias]] which will
    * track the name of the view.
    */
   def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
-    synchronized {
-      val db = formatDatabaseName(name.database.getOrElse(currentDb))
-      val table = formatTableName(name.table)
-      val relationAlias = alias.getOrElse(table)
-      if (name.database.isDefined || !tempTables.contains(table)) {
-        val metadata = externalCatalog.getTable(db, table)
-        val view = Option(metadata.tableType).collect {
-          case CatalogTableType.VIEW => name
-        }
-        SubqueryAlias(relationAlias, SimpleCatalogRelation(db, metadata), view)
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(name.table)
+
+    if (name.database.isDefined) {
+      lookupMetastoreRelation(db, table, alias)
+    } else {
+      val maybeTempView = tempViews.get(table)
+      if (maybeTempView.isDefined) {
+        SubqueryAlias(alias.getOrElse(table), maybeTempView.get, Some(name))
       } else {
-        SubqueryAlias(relationAlias, tempTables(table), Option(name))
+        lookupMetastoreRelation(db, table, alias)
       }
     }
   }
 
-  /**
-   * Return whether a table/view with the specified name exists.
-   *
-   * Note: If a database is explicitly specified, then this will return whether the table/view
-   * exists in that particular database instead. In that case, even if there is a temporary
-   * table with the same name, we will return false if the specified database does not
-   * contain the table/view.
-   */
-  def tableExists(name: TableIdentifier): Boolean = synchronized {
-    val db = formatDatabaseName(name.database.getOrElse(currentDb))
-    val table = formatTableName(name.table)
-    if (isTemporaryTable(name)) {
-      true
-    } else {
-      externalCatalog.tableExists(db, table)
+  protected def lookupMetastoreRelation(
+      db: String,
+      table: String,
+      alias: Option[String]): LogicalPlan = {
+    val metadata = externalCatalog.getTable(db, table)
+    val view = Option(metadata.tableType).collect {
+      case CatalogTableType.VIEW => TableIdentifier(table, Some(db))
     }
+    SubqueryAlias(alias.getOrElse(table), SimpleCatalogRelation(db, metadata), view)
   }
 
   /**
-   * Return whether a table with the specified name is a temporary table.
-   *
-   * Note: The temporary table cache is checked only when database is not
-   * explicitly specified.
-   */
-  def isTemporaryTable(name: TableIdentifier): Boolean = synchronized {
-    name.database.isEmpty && tempTables.contains(formatTableName(name.table))
-  }
-
-  /**
-   * List all tables in the specified database, including temporary tables.
+   * List all tables/views in the specified database, including temporary views.
    */
   def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")
 
   /**
-   * List all matching tables in the specified database, including temporary tables.
+   * List all matching tables/views in the specified database, including temporary views.
    */
   def listTables(db: String, pattern: String): Seq[TableIdentifier] = {
     val dbName = formatDatabaseName(db)
     requireDbExists(dbName)
-    val dbTables =
-      externalCatalog.listTables(dbName, pattern).map { t => TableIdentifier(t, Some(dbName)) }
-    synchronized {
-      val _tempTables = StringUtils.filterPattern(tempTables.keys.toSeq, pattern)
-        .map { t => TableIdentifier(t) }
-      dbTables ++ _tempTables
+    val metastoreTables = externalCatalog.listTables(dbName, pattern).map { t =>
+      TableIdentifier(t, Some(dbName))
+    }
+    metastoreTables ++ tempViews.listNames(pattern).map { t =>
+      TableIdentifier(t, None)
     }
   }
 
@@ -476,29 +461,24 @@ class SessionCatalog(
    * Refresh the cache entry for a metastore table, if any.
    */
   def refreshTable(name: TableIdentifier): Unit = {
-    // Go through temporary tables and invalidate them.
-    // If the database is defined, this is definitely not a temp table.
-    // If the database is not defined, there is a good chance this is a temp table.
+    // Go through temporary views and invalidate them.
+    // If the database is defined, this is definitely not a temp view.
+    // If the database is not defined, there is a good chance this is a temp view.
     if (name.database.isEmpty) {
-      tempTables.get(formatTableName(name.table)).foreach(_.refresh())
+      tempViews.get(formatTableName(name.table)).foreach(_.refresh())
     }
   }
 
   /**
-   * Drop all existing temporary tables.
+   * Drop all existing temporary views.
    * For testing only.
    */
-  def clearTempTables(): Unit = synchronized {
-    tempTables.clear()
-  }
+  def clearTempViews(): Unit = tempViews.clear()
 
   /**
-   * Return a temporary table exactly as it was stored.
-   * For testing only.
+   * Return a temporary view exactly as it was stored.
    */
-  private[catalog] def getTempTable(name: String): Option[LogicalPlan] = synchronized {
-    tempTables.get(formatTableName(name))
-  }
+  def getTempView(name: String): Option[LogicalPlan] = tempViews.get(formatTableName(name))
 
   // ----------------------------------------------------------------------------
   // Partitions
@@ -893,7 +873,7 @@ class SessionCatalog(
     listDatabases().filter(_ != DEFAULT_DATABASE).foreach { db =>
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
-    listTables(DEFAULT_DATABASE).foreach { table =>
+    listTables(DEFAULT_DATABASE).filter(_.database.isDefined).foreach { table =>
       dropTable(table, ignoreIfNotExists = false, purge = false)
     }
     listFunctions(DEFAULT_DATABASE).map(_._1).foreach { func =>
@@ -903,7 +883,7 @@ class SessionCatalog(
         dropTempFunction(func.funcName, ignoreIfNotExists = false)
       }
     }
-    tempTables.clear()
+    tempViews.clear()
     functionRegistry.clear()
     // restore built-in functions
     FunctionRegistry.builtin.listFunction().foreach { f =>

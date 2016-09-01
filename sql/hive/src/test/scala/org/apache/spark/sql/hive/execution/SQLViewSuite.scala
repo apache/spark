@@ -62,15 +62,15 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       var e = intercept[AnalysisException] {
         sql("CREATE OR REPLACE VIEW tab1 AS SELECT * FROM jt")
       }.getMessage
-      assert(e.contains("`default`.`tab1` is not a view"))
+      assert(e.contains("`tab1` is not a view"))
       e = intercept[AnalysisException] {
         sql("CREATE VIEW tab1 AS SELECT * FROM jt")
       }.getMessage
-      assert(e.contains("`default`.`tab1` is not a view"))
+      assert(e.contains("`tab1` is not a view"))
       e = intercept[AnalysisException] {
         sql("ALTER VIEW tab1 AS SELECT * FROM jt")
       }.getMessage
-      assert(e.contains("`default`.`tab1` is not a view"))
+      assert(e.contains("`tab1` is not a view"))
     }
   }
 
@@ -95,12 +95,12 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       e = intercept[AnalysisException] {
         sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE $viewName""")
       }.getMessage
-      assert(e.contains(s"Target table in LOAD DATA cannot be temporary: `$viewName`"))
+      assert(e.contains(s"Target table in LOAD DATA does not exist: `$viewName`"))
 
       e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $viewName")
       }.getMessage
-      assert(e.contains(s"Operation not allowed: TRUNCATE TABLE on temporary tables: `$viewName`"))
+      assert(e.contains(s"Table `$viewName` in TRUNCATE TABLE does not exist"))
     }
   }
 
@@ -195,7 +195,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
       }
 
-      assert(e.message.contains("Temporary table") && e.message.contains("already exists"))
+      assert(e.message.contains("Temporary view") && e.message.contains("already exists"))
     }
   }
 
