@@ -96,8 +96,7 @@ object SortPrefixUtils {
   def getPrefixComparator(schema: StructType): PrefixComparator = {
     if (schema.nonEmpty) {
       val field = schema.head
-      getPrefixComparator(
-        SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
+      getPrefixComparator(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
     } else {
       new PrefixComparator {
         override def compare(prefix1: Long, prefix2: Long): Int = 0
@@ -124,8 +123,7 @@ object SortPrefixUtils {
    * Returns whether the fully sorting on the specified key field is possible with radix sort.
    */
   def canSortFullyWithPrefix(field: StructField): Boolean = {
-    canSortFullyWithPrefix(
-      SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
+    canSortFullyWithPrefix(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
   }
 
   /**

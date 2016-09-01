@@ -235,6 +235,16 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSQL("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key, MAX(key)", "agg3")
   }
 
+  test("order by asc nulls last") {
+    checkSQL("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key nulls last, MAX(key)",
+      "sort_asc_nulls_last")
+  }
+
+  test("order by desc nulls first") {
+    checkSQL("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key desc nulls first," +
+      "MAX(key)", "sort_desc_nulls_first")
+  }
+
   test("type widening in union") {
     checkSQL("SELECT id FROM parquet_t0 UNION ALL SELECT CAST(id AS INT) AS id FROM parquet_t0",
       "type_widening")
@@ -697,6 +707,20 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |FROM parquet_t1
       """.stripMargin,
       "window_basic_3")
+
+    checkSQL(
+      """
+        |SELECT key, value, ROUND(AVG(key) OVER (), 2)
+        |FROM parquet_t1 ORDER BY key nulls last
+      """.stripMargin,
+      "window_basic_asc_nulls_last")
+
+    checkSQL(
+      """
+        |SELECT key, value, ROUND(AVG(key) OVER (), 2)
+        |FROM parquet_t1 ORDER BY key desc nulls first
+      """.stripMargin,
+      "window_basic_desc_nulls_first")
   }
 
   test("multiple window functions in one expression") {
