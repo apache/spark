@@ -38,7 +38,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.{AccumulatorV2, SerializableConfiguration, Utils}
 
 
 private[spark] class PythonRDD(
@@ -75,7 +75,7 @@ private[spark] case class PythonFunction(
     pythonExec: String,
     pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
-    accumulator: Accumulator[JList[Array[Byte]]])
+    accumulator: AccumulatorV2[JList[Array[Byte]], JList[Array[Byte]]])
 
 /**
  * A wrapper for chained Python functions (from bottom to top).
@@ -200,7 +200,7 @@ private[spark] class PythonRunner(
                 val updateLen = stream.readInt()
                 val update = new Array[Byte](updateLen)
                 stream.readFully(update)
-                accumulator += Collections.singletonList(update)
+                accumulator.add(Collections.singletonList(update))
               }
               // Check whether the worker is ready to be re-used.
               if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
