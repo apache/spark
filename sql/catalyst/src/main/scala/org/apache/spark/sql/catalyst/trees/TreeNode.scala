@@ -629,9 +629,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       JObject(fields)
     case r: RDD[_] => JNothing
     // if it's a scala object, we can simply keep the full class path.
-    // TODO: currently if the class name ends with "$", we think it's a scala object, there is
-    // probably a better way to check it.
-    case obj if obj.getClass.getName.endsWith("$") => "object" -> obj.getClass.getName
+    case obj: Singleton => "object" -> obj.getClass.getName
     // returns null if the product type doesn't have a primary constructor, e.g. HiveFunctionWrapper
     case p: Product => try {
       val fieldNames = getConstructorParameterNames(p.getClass)
