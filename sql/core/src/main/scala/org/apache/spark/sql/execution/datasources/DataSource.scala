@@ -485,7 +485,7 @@ case class DataSource(
         // because InsertIntoHadoopFsRelationCommand will be optimized first.
         val columns = partitionColumns.map { name =>
           val plan = data.logicalPlan
-          plan.resolveQuoted(name, data.sparkSession.sessionState.analyzer.resolver).getOrElse {
+          plan.resolve(name :: Nil, data.sparkSession.sessionState.analyzer.resolver).getOrElse {
             throw new AnalysisException(
               s"Unable to resolve ${name} given [${plan.output.map(_.name).mkString(", ")}]")
           }.asInstanceOf[Attribute]
