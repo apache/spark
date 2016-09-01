@@ -182,8 +182,7 @@ class FileStreamSinkSuite extends StreamTest {
       // Verify that MetadataLogFileCatalog is being used and the correct partitioning schema has
       // been inferred
       val hadoopdFsRelations = outputDf.queryExecution.analyzed.collect {
-        case LogicalRelation(baseRelation, _, _)
-          if baseRelation.isInstanceOf[HadoopFsRelation] =>
+        case LogicalRelation(baseRelation, _, _) if baseRelation.isInstanceOf[HadoopFsRelation] =>
           baseRelation.asInstanceOf[HadoopFsRelation]
       }
       assert(hadoopdFsRelations.size === 1)
