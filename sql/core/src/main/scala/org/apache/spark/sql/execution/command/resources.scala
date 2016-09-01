@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
- * Adds a jar to the current session so it can be used (for UDFs or serdes).
+ * Adds a cross-session jar so it can be used (for UDFs or serdes). The jar is accessible to
+ * all the sessions.
  */
 case class AddJarCommand(path: String) extends RunnableCommand {
   override val output: Seq[Attribute] = {
@@ -43,7 +44,7 @@ case class AddJarCommand(path: String) extends RunnableCommand {
 }
 
 /**
- * Adds a file to the current session so it can be used.
+ * Adds a cross-session file so it can be used.
  */
 case class AddFileCommand(path: String) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
