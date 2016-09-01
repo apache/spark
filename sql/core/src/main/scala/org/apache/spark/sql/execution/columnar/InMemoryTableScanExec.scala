@@ -65,6 +65,11 @@ case class InMemoryTableScanExec(
     case EqualTo(l: Literal, a: AttributeReference) =>
       statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
 
+    case EqualNullSafe(a: AttributeReference, l: Literal) =>
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
+    case EqualNullSafe(l: Literal, a: AttributeReference) =>
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
+
     case LessThan(a: AttributeReference, l: Literal) => statsFor(a).lowerBound < l
     case LessThan(l: Literal, a: AttributeReference) => l < statsFor(a).upperBound
 
