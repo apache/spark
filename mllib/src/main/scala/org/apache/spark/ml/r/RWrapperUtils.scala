@@ -37,14 +37,14 @@ object RWrapperUtils extends Logging {
     if (data.schema.fieldNames.contains(rFormula.getLabelCol)) {
       val newLabelName = convertToUniqueName(rFormula.getLabelCol, data.schema.fieldNames)
       logWarning(
-        s"data containing ${rFormula.getLabelCol} column, changing its name to $newLabelName")
+        s"data containing ${rFormula.getLabelCol} column, using new name $newLabelName instead")
       rFormula.setLabelCol(newLabelName)
     }
 
     if (data.schema.fieldNames.contains(rFormula.getFeaturesCol)) {
       val newFeaturesName = convertToUniqueName(rFormula.getFeaturesCol, data.schema.fieldNames)
       logWarning(
-        s"data containing ${rFormula.getFeaturesCol} column, changing its name to $newFeaturesName")
+        s"data containing ${rFormula.getFeaturesCol} column, using new name $newFeaturesName")
       rFormula.setFeaturesCol(newFeaturesName)
     }
   }
