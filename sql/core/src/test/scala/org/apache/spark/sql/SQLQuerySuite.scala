@@ -2661,4 +2661,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         data.selectExpr("`part.col1`", "`col.1`"))
     }
   }
+
+  test("current_date and current_timestamp literals") {
+    // NOTE that I am comparing the result of the literal with the result of the function call.
+    // This is done to prevent the test from failing because we are comparing a result to an out
+    // dated timestamp (quite likely) or date (very unlikely - but equally annoying).
+    checkAnswer(
+      sql("select current_date = current_date(), current_timestamp = current_timestamp()"),
+      Seq(Row(true, true)))
+  }
 }
