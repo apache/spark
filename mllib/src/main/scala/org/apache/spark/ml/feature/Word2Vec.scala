@@ -326,6 +326,19 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
+
+    /**
+     * Load Google word2vec model
+     *
+     * @see [[https://code.google.com/p/word2vec/]]
+     * @param file Google word2vec model file
+     * @return a Word2VecModel
+     */
+    def loadGoogleModel(file: String): Word2VecModel = {
+      val oldModel = feature.Word2VecModel.loadGoogleModel(sc, file)
+      val model = new Word2VecModel(Identifiable.randomUID("GoogleWord2vec"), oldModel)
+      model
+    }
   }
 
   @Since("1.6.0")
@@ -333,4 +346,6 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
 
   @Since("1.6.0")
   override def load(path: String): Word2VecModel = super.load(path)
+
+  def loadGoogleModel(file: String): Word2VecModel = new Word2VecModelReader().loadGoogleModel(file)
 }

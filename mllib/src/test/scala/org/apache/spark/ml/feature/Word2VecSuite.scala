@@ -17,6 +17,10 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.File
+import java.io.FileOutputStream
+import java.nio.ByteBuffer
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
@@ -25,6 +29,7 @@ import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.feature.{Word2VecModel => OldWord2VecModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
+import org.apache.spark.util.Utils
 
 class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -206,6 +211,80 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val instance = new Word2VecModel("myWord2VecModel", oldModel)
     val newInstance = testDefaultReadWrite(instance)
     assert(newInstance.getVectors.collect() === instance.getVectors.collect())
+  }
+
+  test("load Google word2vec model") {
+    val tempDir = Utils.createTempDir()
+    val modelFile = new File(tempDir, "google-word2vec-ml-00000.bin")
+
+    // This byte array is pre-trained model by Google word2vec.
+    // training text:
+    //   "a a a a a b b b b b b c c c c c c c"
+    // Parameters for training:
+    //   -cbow 1 -size 5 -window 5 -negative 0 -hs 0 -sample 1e-4 -threads 4 -binary 1 -iter 3
+    val testModelBytes = Array[Byte](52, 32, 53, 10, 60, 47, 115, 62, 32, 51, -13, -93, 61, -51,
+      4, -75, 61, 51, -29, -100, -67, -51, 68, -122, -67, 102, -26, -33, 60, 10, 99, 32, -51, 124,
+      119, 61, 102, 38, -102, 60, 0, -128, -118, 59, -102, -103, -109, -67, -51, -68, 53, 61, 10,
+      98, 32, 0, 112, -78, -67, -102, -71, -52, 60, 51, 51, 118, -68, 51, -45, -100, -68, 0, -48,
+      -121, -67, 10, 97, 32, 0, 48, 26, -67, -51, 76, 83, 61, 102, -42, 119, 61, -102, 57, 115,
+      61, -51, -36, 2, 61, 10)
+
+    val bbuf = ByteBuffer.wrap(testModelBytes)
+    // write model to file
+    val file = new FileOutputStream(modelFile)
+    val channel = file.getChannel
+    channel.write(bbuf)
+    channel.close()
+    file.close()
+
+    try {
+      val model = Word2VecModel.loadGoogleModel(modelFile.getAbsolutePath)
+
+      val expectedSimilarity = Array(0.031741, -0.333541)
+      val (synonyms, similarity) = model.findSynonyms("a", 2).rdd.map {
+        case Row(w: String, sim: Double) => (w, sim)
+      }.collect().unzip
+
+      assert(synonyms.toArray === Array("b", "c"))
+      expectedSimilarity.zip(similarity).foreach {
+        case (expected, actual) => assert(actual ~== expected absTol 1E-5)
+      }
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
+  test("load Google word2vec model and write") {
+    val tempDir = Utils.createTempDir()
+    val modelFile = new File(tempDir, "google-word2vec-ml-00000.bin")
+
+    // This byte array is pre-trained model by Google word2vec.
+    // training text:
+    //   "a a a a a b b b b b b c c c c c c c"
+    // Parameters for training:
+    //   -cbow 1 -size 5 -window 5 -negative 0 -hs 0 -sample 1e-4 -threads 4 -binary 1 -iter 3
+    val testModelBytes = Array[Byte](52, 32, 53, 10, 60, 47, 115, 62, 32, 51, -13, -93, 61, -51,
+      4, -75, 61, 51, -29, -100, -67, -51, 68, -122, -67, 102, -26, -33, 60, 10, 99, 32, -51, 124,
+      119, 61, 102, 38, -102, 60, 0, -128, -118, 59, -102, -103, -109, -67, -51, -68, 53, 61, 10,
+      98, 32, 0, 112, -78, -67, -102, -71, -52, 60, 51, 51, 118, -68, 51, -45, -100, -68, 0, -48,
+      -121, -67, 10, 97, 32, 0, 48, 26, -67, -51, 76, 83, 61, 102, -42, 119, 61, -102, 57, 115,
+      61, -51, -36, 2, 61, 10)
+
+    val bbuf = ByteBuffer.wrap(testModelBytes)
+    // write model to file
+    val file = new FileOutputStream(modelFile)
+    val channel = file.getChannel
+    channel.write(bbuf)
+    channel.close()
+    file.close()
+
+    try {
+      val model = Word2VecModel.loadGoogleModel(modelFile.getAbsolutePath)
+      val newInstance = testDefaultReadWrite(model)
+      assert(newInstance.getVectors.collect() === model.getVectors.collect())
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 }
 
