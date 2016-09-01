@@ -25,6 +25,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
+import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 import scala.language.existentials
@@ -71,6 +72,35 @@ case class SubExprEliminationState(isNull: String, value: String)
  *               the state to use.
  */
 case class SubExprCodes(codes: Seq[String], states: Map[Expression, SubExprEliminationState])
+
+
+object CodegenContext {
+
+  /**
+   * Ideally, we would wish codegen methods to be less than 8KB for bytecode size. Beyond 8K JIT
+   * won't compile and can cause performance degradation.
+   *
+   * This defines what behavior is expected when the methods exceed 8KB for bytecode size.
+   */
+  sealed trait FunctionSizeHint
+
+  /** No-op when the method exceeds 8K size. */
+  case object NO_OP extends FunctionSizeHint
+
+  /** Log a warning when the method exceeds 8K size. */
+  case object WARN_IF_EXCEEDS_JIT_LIMIT extends FunctionSizeHint
+
+  /**
+   * Throw a compilation exception when the method exceeds 8K size.
+   * Fail fast so that we can catch it asap; this is useful in testing corner/edge cases.
+   */
+  case object ERROR_IF_EXCEEDS_JIT_LIMIT extends FunctionSizeHint
+
+  /**
+   * See http://hg.openjdk.java.net/jdk8u/jdk8u/hotspot/file/tip/src/share/vm/runtime/globals.hpp
+   */
+  private[codegen] val JIT_HUGE_METHOD_LIMIT = 8000
+}
 
 /**
  * A context for codegen, tracking a list of objects that could be passed into generated Java
@@ -168,11 +198,18 @@ class CodegenContext {
   /**
    * Holding all the functions those will be added into generated class.
    */
-  val addedFunctions: mutable.Map[String, String] =
-    mutable.Map.empty[String, String]
+  val addedFunctions: mutable.Map[String, (String, CodegenContext.FunctionSizeHint)] =
+    mutable.Map.empty[String, (String, CodegenContext.FunctionSizeHint)]
 
-  def addNewFunction(funcName: String, funcCode: String): Unit = {
-    addedFunctions += ((funcName, funcCode))
+  def addNewFunction(
+      funcName: String,
+      funcCode: String,
+      sizeHint: CodegenContext.FunctionSizeHint = CodegenContext.NO_OP): Unit = {
+    addedFunctions += ((funcName, (funcCode, sizeHint)))
+  }
+
+  def getFuncToSizeHintMap: mutable.Map[String, CodegenContext.FunctionSizeHint] = {
+    addedFunctions.map { case (funcName, (funcCode, sizeHint)) => (funcName, sizeHint) }
   }
 
   /**
@@ -197,7 +234,7 @@ class CodegenContext {
   val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
   def declareAddedFunctions(): String = {
-    addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
+    addedFunctions.map { case (funcName, (funcCode, sizeHint)) => funcCode }.mkString("\n")
   }
 
   final val JAVA_BOOLEAN = "boolean"
@@ -782,7 +819,10 @@ abstract class GeneratedClass {
 /**
  * A wrapper for the source code to be compiled by [[CodeGenerator]].
  */
-class CodeAndComment(val body: String, val comment: collection.Map[String, String])
+class CodeAndComment(
+    val body: String,
+    val comment: collection.Map[String, String],
+    val funcSizeHints: collection.Map[String, CodegenContext.FunctionSizeHint] = Map())
   extends Serializable {
   override def equals(that: Any): Boolean = that match {
     case t: CodeAndComment if t.body == body => true
@@ -884,7 +924,7 @@ object CodeGenerator extends Logging {
 
     try {
       evaluator.cook("generated.java", code.body)
-      recordCompilationStats(evaluator)
+      recordCompilationStats(evaluator, code.funcSizeHints)
     } catch {
       case e: Exception =>
         val msg = s"failed to compile: $e\n$formatted"
@@ -897,7 +937,9 @@ object CodeGenerator extends Logging {
   /**
    * Records the generated class and method bytecode sizes by inspecting janino private fields.
    */
-  private def recordCompilationStats(evaluator: ClassBodyEvaluator): Unit = {
+  private def recordCompilationStats(
+      evaluator: ClassBodyEvaluator,
+      functionSizeHints: collection.Map[String, CodegenContext.FunctionSizeHint]): Unit = {
     // First retrieve the generated classes.
     val classes = {
       val resultField = classOf[SimpleCompiler].getDeclaredField("result")
@@ -918,8 +960,21 @@ object CodeGenerator extends Logging {
       cf.methodInfos.asScala.foreach { method =>
         method.getAttributes().foreach { a =>
           if (a.getClass.getName == codeAttr.getName) {
-            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(
-              codeAttrField.get(a).asInstanceOf[Array[Byte]].length)
+            val funcSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
+            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(funcSize)
+            if (funcSize > CodegenContext.JIT_HUGE_METHOD_LIMIT) {
+              lazy val ce = new CompileException(
+                s"Method ${cf.getThisClassName}.${method.getName} should not exceed 8K size " +
+                  s"limit -- observed size is $funcSize.", null)
+              functionSizeHints.getOrElse(method.getName, CodegenContext.NO_OP) match {
+                case CodegenContext.NO_OP => // do nothing
+                case CodegenContext.WARN_IF_EXCEEDS_JIT_LIMIT =>
+                  logWarning("You hit a code-gen compilation issue. Please report this warning " +
+                             "to Spark dev mailing list.", ce)
+                case CodegenContext.ERROR_IF_EXCEEDS_JIT_LIMIT =>
+                  throw ce
+              }
+            }
           }
         }
       }

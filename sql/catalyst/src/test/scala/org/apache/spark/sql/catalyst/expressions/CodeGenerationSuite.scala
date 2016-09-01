@@ -58,8 +58,51 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateOrdering.generate(Add(Literal(123), Literal(1)).asc :: Nil)
     assert(CodegenMetrics.METRIC_COMPILATION_TIME.getCount() == startCount1 + 1)
     assert(CodegenMetrics.METRIC_SOURCE_CODE_SIZE.getCount() == startCount2 + 1)
-    assert(CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.getCount() > startCount1)
-    assert(CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.getCount() > startCount1)
+    assert(CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.getCount() > startCount3)
+    assert(CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.getCount() > startCount4)
+  }
+
+  test("compilation should respect func size hints") {
+    def genCode(loc: Int): String =
+      s"""
+        public Object generate(Object[] references) { return null; }
+        public static void inc() {
+          int i = 0;
+          ${(1 to loc).map(_ => "i ++; ").mkString}
+        }
+      """
+
+    val emptyComments = Map[String, String]()
+    val funcSizeHints = Map("inc" -> CodegenContext.ERROR_IF_EXCEEDS_JIT_LIMIT)
+
+    // compilation should pass against default empty funcSizeHints
+    val code1 = new CodeAndComment(genCode(20000), emptyComments)
+    CodeGenerator.compile(code1)
+
+    // compilation should pass because 1000 loc would be compiled to ~3K bytes
+    val code2 = new CodeAndComment(genCode(1000), emptyComments, funcSizeHints)
+    CodeGenerator.compile(code2)
+
+    // compilation should fail because 10000 loc would be compiled to ~30K bytes
+    val code3 = new CodeAndComment(genCode(10000), emptyComments, funcSizeHints)
+    val e1 = intercept[Exception] { CodeGenerator.compile(code3) }
+    Seq("failed to compile", "Method org.apache.spark.sql.catalyst.expressions.GeneratedClass.inc",
+      "should not exceed 8K size limit", "observed size is 30003").foreach { msg =>
+      assert(e1.getMessage.contains(msg))
+    }
+
+    // test CodegenContext.addNewFunction() and CodegenContext.getFuncToSizeHintMap()
+    // compilation should fail because 15000 loc would be compiled to ~45K bytes
+    val ctx = new CodegenContext()
+    ctx.addNewFunction("inc", genCode(15000), CodegenContext.ERROR_IF_EXCEEDS_JIT_LIMIT)
+    val e2 = intercept[Exception] {
+      CodeGenerator.compile(
+        new CodeAndComment(ctx.declareAddedFunctions(), emptyComments, ctx.getFuncToSizeHintMap))
+    }
+    Seq("failed to compile", "Method org.apache.spark.sql.catalyst.expressions.GeneratedClass.inc",
+      "should not exceed 8K size limit", "observed size is 45003").foreach { msg =>
+      assert(e2.getMessage.contains(msg))
+    }
   }
 
   test("SPARK-8443: split wide projections into blocks due to JVM code size limit") {
