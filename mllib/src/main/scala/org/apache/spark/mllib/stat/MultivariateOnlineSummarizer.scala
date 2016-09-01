@@ -231,7 +231,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   override def numNonzeros: Vector = {
-    require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+    require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
     Vectors.dense(nnz.map(_.asInstanceOf[Double]))
   }
