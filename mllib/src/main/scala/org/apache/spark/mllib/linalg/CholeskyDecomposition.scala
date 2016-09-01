@@ -33,12 +33,14 @@ private[spark] object CholeskyDecomposition {
    * @return the solution array
    */
   def solve(A: Array[Double], bx: Array[Double]): Array[Double] = {
+    val tmpA = A.clone()
+    val tmpbx = bx.clone()
     val k = bx.length
     val info = new intW(0)
-    lapack.dppsv("U", k, 1, A, bx, k, info)
+    lapack.dppsv("U", k, 1, tmpA, tmpbx, k, info)
     val code = info.`val`
     assert(code == 0, s"lapack.dppsv returned $code.")
-    bx
+    tmpbx
   }
 
   /**
@@ -50,10 +52,11 @@ private[spark] object CholeskyDecomposition {
    * @return the upper triangle of the (symmetric) inverse of A
    */
   def inverse(UAi: Array[Double], k: Int): Array[Double] = {
+    val tmpUAi = UAi.clone()
     val info = new intW(0)
-    lapack.dpptri("U", k, UAi, info)
+    lapack.dpptri("U", k, tmpUAi, info)
     val code = info.`val`
     assert(code == 0, s"lapack.dpptri returned $code.")
-    UAi
+    tmpUAi
   }
 }
