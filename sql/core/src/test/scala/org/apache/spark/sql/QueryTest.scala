@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.streaming.MemoryPlan
-import org.apache.spark.sql.types.ObjectType
+import org.apache.spark.sql.types.{Metadata, ObjectType}
 
 
 abstract class QueryTest extends PlanTest {
@@ -274,6 +274,13 @@ abstract class QueryTest extends PlanTest {
     val normalized1 = logicalPlan.transformAllExpressions {
       case udf: ScalaUDF => udf.copy(function = null)
       case gen: UserDefinedGenerator => gen.copy(function = null)
+      // SPARK-17356: In usage of mllib, Metadata may store a huge vector of data, transforming
+      // it to JSON may trigger OutOfMemoryError.
+      case a @ Alias(child, name) if a.explicitMetadata.isDefined =>
+        Alias(child, name)(a.exprId, a.qualifier, Some(Metadata.empty), a.isGenerated)
+      case a: AttributeReference if a.metadata != Metadata.empty =>
+        AttributeReference(a.name, a.dataType, a.nullable, Metadata.empty)(a.exprId, a.qualifier,
+          a.isGenerated)
     }
 
     // RDDs/data are not serializable to JSON, so we need to collect LogicalPlans that contains

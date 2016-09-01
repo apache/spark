@@ -604,6 +604,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }.toList
   }
 
+  // TODO: Fix toJSON so that we can more safely handle Map and Seq with loop.
   private def parseToJson(obj: Any): JValue = obj match {
     case b: Boolean => JBool(b)
     case b: Byte => JInt(b.toInt)
@@ -617,7 +618,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case s: String => JString(s)
     case u: UUID => JString(u.toString)
     case dt: DataType => dt.jsonValue
-    case m: Metadata => m.jsonValue
+    // SPARK-17356: In usage of mllib, Metadata may store a huge vector of data, transforming
+    // it to JSON may trigger OutOfMemoryError.
+    case m: Metadata => Metadata.empty.jsonValue
     case s: StorageLevel =>
       ("useDisk" -> s.useDisk) ~ ("useMemory" -> s.useMemory) ~ ("useOffHeap" -> s.useOffHeap) ~
         ("deserialized" -> s.deserialized) ~ ("replication" -> s.replication)
