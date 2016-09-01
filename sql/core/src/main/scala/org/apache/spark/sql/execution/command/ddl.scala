@@ -190,7 +190,8 @@ case class DropTableCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (!catalog.tableExists(tableName)) {
-      if (!ifExists) {
+      if (!ifExists &&
+          sparkSession.conf.get("hive.exec.drop.ignorenonexistent", "false").equals("false")) {
         val objectName = if (isView) "View" else "Table"
         throw new AnalysisException(s"$objectName to drop '$tableName' does not exist")
       }

@@ -126,6 +126,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-17053: Support `hive.exec.drop.ignorenonexistent`") {
+    withSQLConf("hive.exec.drop.ignorenonexistent" -> "false") {
+      val m = intercept[AnalysisException] {
+        sql("drop table non_exist_table")
+      }.getMessage
+      assert(m.contains("Table to drop '`non_exist_table`' does not exist"))
+    }
+    withSQLConf("hive.exec.drop.ignorenonexistent" -> "true") {
+      sql("drop table non_exist_table")
+    }
+  }
+
   test("self join with aliases") {
     Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str").createOrReplaceTempView("df")
 
