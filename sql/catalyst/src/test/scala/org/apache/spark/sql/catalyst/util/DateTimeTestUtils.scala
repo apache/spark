@@ -15,11 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.master
+package org.apache.spark.sql.catalyst.util
 
-private[master] object ApplicationState extends Enumeration {
+import java.util.TimeZone
 
-  type ApplicationState = Value
+/**
+ * Helper functions for testing date and time functionality.
+ */
+object DateTimeTestUtils {
 
-  val WAITING, RUNNING, FINISHED, FAILED, KILLED, UNKNOWN = Value
+  val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)
+
+  def withDefaultTimeZone[T](newDefaultTimeZone: TimeZone)(block: => T): T = {
+    val originalDefaultTimeZone = TimeZone.getDefault
+    try {
+      DateTimeUtils.resetThreadLocals()
+      TimeZone.setDefault(newDefaultTimeZone)
+      block
+    } finally {
+      TimeZone.setDefault(originalDefaultTimeZone)
+      DateTimeUtils.resetThreadLocals()
+    }
+  }
 }

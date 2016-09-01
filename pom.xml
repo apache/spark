@@ -140,7 +140,7 @@
     <hive.version>1.2.1.spark</hive.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
-    <derby.version>10.10.1.1</derby.version>
+    <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.7.0</parquet.version>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jblas.version>1.2.4</jblas.version>

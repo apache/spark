@@ -201,7 +201,8 @@ abstract class QueryTest extends PlanTest {
       case _: CoGroup[_, _, _, _] => return
       case _: LogicalRelation => return
     }.transformAllExpressions {
-      case a: ImperativeAggregate => return
+      case _: ImperativeAggregate => return
+      case _: UserDefinedGenerator => return
     }
 
     // bypass hive tests before we fix all corner cases in hive module.
