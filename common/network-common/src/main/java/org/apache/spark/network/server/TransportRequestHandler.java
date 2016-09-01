@@ -53,7 +53,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * The messages should have been processed by the pipeline setup by {@link TransportServer}.
  */
 public class TransportRequestHandler extends MessageHandler<RequestMessage> {
-  private final Logger logger = LoggerFactory.getLogger(TransportRequestHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportRequestHandler.class);
 
   /** The Netty channel that this handler is associated with. */
   private final Channel channel;

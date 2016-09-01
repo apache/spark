@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, HadoopFsRelation}
+import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, CreateTable, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.StructType
 
@@ -368,9 +368,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
       case _ =>
+        val tableType = if (new CaseInsensitiveMap(extraOptions.toMap).contains("path")) {
+          CatalogTableType.EXTERNAL
+        } else {
+          CatalogTableType.MANAGED
+        }
+
         val tableDesc = CatalogTable(
           identifier = tableIdent,
-          tableType = CatalogTableType.EXTERNAL,
+          tableType = tableType,
           storage = CatalogStorageFormat.empty.copy(properties = extraOptions.toMap),
           schema = new StructType,
           provider = Some(source),
