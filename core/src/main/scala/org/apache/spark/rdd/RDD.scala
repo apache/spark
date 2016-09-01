@@ -1418,6 +1418,12 @@ abstract class RDD[T: ClassTag](
       // scalastyle:off awaitresult
       Await.result(jobFuture, Duration.Inf)
       // scalastyle:on awaitresult
+
+      // Remove the console progress bar. submitJob (and AsyncRDDActions, more generally) lack
+      // task completion callbacks to remove the progress bar and it may not be a good idea to put
+      // this logic into submitJob / JobWaiter itself because that might introduce the potential for
+      // races between output being printed after the take() returns and the progress bar removal's
+      // backspace sequences being sent.
       sparkContext.progressBar.foreach(_.finishAll())
 
       partitionsScanned += numPartitionsToCompute
