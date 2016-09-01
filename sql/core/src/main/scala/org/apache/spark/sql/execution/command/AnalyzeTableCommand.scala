@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, SimpleCatalogRelation}
 
 
 /**
@@ -41,7 +41,7 @@ case class AnalyzeTableCommand(tableName: String) extends RunnableCommand {
     val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
 
     relation match {
-      case relation: CatalogRelation =>
+      case relation: CatalogRelation if !relation.isInstanceOf[SimpleCatalogRelation] =>
         val catalogTable: CatalogTable = relation.catalogTable
         // This method is mainly based on
         // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)

@@ -660,6 +660,21 @@ class HiveDDLSuite
     }
   }
 
+  test("Analyze data source tables(LogicalRelation)") {
+    withTable("t1") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1).write.format("parquet").save(path)
+        sql(s"CREATE TABLE t1 USING parquet OPTIONS (PATH '$path')")
+        val e = intercept[AnalysisException] {
+          sql("ANALYZE TABLE t1 COMPUTE STATISTICS")
+        }.getMessage
+        assert(e.contains("ANALYZE TABLE is only supported for Hive tables, " +
+          "but 't1' is a LogicalRelation"))
+      }
+    }
+  }
+
   test("desc table for data source table") {
     withTable("tab1") {
       val tabName = "tab1"
