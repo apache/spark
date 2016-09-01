@@ -2419,16 +2419,19 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  def setCallerContext(context: String): Unit = {
+  def setCallerContext(context: String): Boolean = {
+    var succeed = false
     try {
       val Builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
       val builderInst = Builder.getConstructor(classOf[String]).newInstance(context)
       val ret = Builder.getMethod("build").invoke(builderInst)
       val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
       callerContext.getMethod("setCurrent", callerContext).invoke(null, ret)
+      succeed = true
     } catch {
-      case NonFatal(e) => logDebug(s"${e.getMessage}")
+      case NonFatal(e) => logDebug(s"$e", e)
     }
+    succeed
   }
 }
 

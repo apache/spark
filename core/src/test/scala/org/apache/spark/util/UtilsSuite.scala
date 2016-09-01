@@ -787,6 +787,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         .set("spark.executor.instances", "1")) === 3)
   }
 
+  test("setCallerContext") {
+    try {
+      Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+      assert(Utils.setCallerContext("sparkCallerContext"))
+    } catch {
+      case e: ClassNotFoundException => assert(!Utils.setCallerContext("sparkCallerContext"))
+    }
+  }
 
   test("encodeFileNameToURIRawPath") {
     assert(Utils.encodeFileNameToURIRawPath("abc") === "abc")
