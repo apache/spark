@@ -123,6 +123,10 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   File registeredExecutorFile;
 
+  // Where to store & reload application secrets for recovering state after an NM restart
+  @VisibleForTesting
+  File secretsFile;
+
   private DB db;
 
   public YarnShuffleService() {
@@ -192,7 +196,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
   private void createSecretManager() throws IOException {
     secretManager = new ShuffleSecretManager();
-    File secretsFile = new File(getRecoveryPath().toUri().getPath(), SECRETS_RECOVERY_FILE_NAME);
+    secretsFile = new File(getRecoveryPath().toUri().getPath(), SECRETS_RECOVERY_FILE_NAME);
  
     // Make sure this is protected in case its not in the NM recovery dir
     FileSystem fs = FileSystem.getLocal(_conf);
