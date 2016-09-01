@@ -218,6 +218,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
         holdDDLTime = false)
     }
 
+    test(s"$version: tableExists") {
+      // No exception should be thrown
+      assert(client.tableExists("default", "src"))
+      assert(!client.tableExists("default", "nonexistent"))
+    }
+
     test(s"$version: getTable") {
       // No exception should be thrown
       client.getTable("default", "src")
