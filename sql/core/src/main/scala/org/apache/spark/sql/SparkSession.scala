@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
-import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.rdd.RDD
@@ -117,6 +117,14 @@ class SparkSession private(
    */
   @transient
   val sqlContext: SQLContext = new SQLContext(this)
+
+  /**
+   * This is the interface through which the user can get [[JavaSparkContext]]
+   *
+   * @since 2.0.0
+   */
+  @transient
+  val javaSparkContext: JavaSparkContext = new JavaSparkContext(sparkContext)
 
   /**
    * Runtime configuration interface for Spark.

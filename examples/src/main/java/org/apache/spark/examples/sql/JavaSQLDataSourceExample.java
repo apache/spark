@@ -231,6 +231,13 @@ public class JavaSQLDataSourceExample {
     // |[Columbus,Ohio]| Yin|
     // +---------------+----+
     // $example off:json_dataset$
+
+    // Alternatively, a Dataset can be created for a JSON dataset represented by
+    // an RDD[String] storing one JSON object per string.
+    List<String> jsonData = Arrays.asList(
+            "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
+    JavaRDD<String> anotherPeopleRDD = new JavaSparkContext(spark.sparkContext()).parallelize(jsonData);
+    Dataset anotherPeople = spark.read().json(anotherPeopleRDD);
   }
 
   private static void runJdbcDatasetExample(SparkSession spark) {
@@ -245,3 +252,4 @@ public class JavaSQLDataSourceExample {
     // $example off:jdbc_dataset$
   }
 }
+
