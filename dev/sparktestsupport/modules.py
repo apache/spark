@@ -449,6 +449,7 @@ yarn = Module(
         "yarn/",
         "common/network-yarn/",
     ],
+    build_profile_flags=["-Pyarn"],
     sbt_test_goals=[
         "yarn/test",
         "network-yarn/test",

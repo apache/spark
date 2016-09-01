@@ -906,7 +906,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val e = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendOrcToParquet")
       }
-      assert(e.getMessage.contains("The file format of the existing table `appendOrcToParquet` " +
+      assert(e.getMessage.contains("The file format of the existing table appendOrcToParquet " +
         "is `org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat`. " +
         "It doesn't match the specified format `orc`"))
     }
@@ -917,7 +917,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         createDF(10, 19).write.mode(SaveMode.Append).format("parquet")
           .saveAsTable("appendParquetToJson")
       }
-      assert(e.getMessage.contains("The file format of the existing table `appendParquetToJson` " +
+      assert(e.getMessage.contains("The file format of the existing table appendParquetToJson " +
         "is `org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
         "It doesn't match the specified format `parquet`"))
     }
@@ -928,7 +928,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         createDF(10, 19).write.mode(SaveMode.Append).format("text")
           .saveAsTable("appendTextToJson")
       }
-      assert(e.getMessage.contains("The file format of the existing table `appendTextToJson` is " +
+      assert(e.getMessage.contains("The file format of the existing table appendTextToJson is " +
         "`org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
         "It doesn't match the specified format `text`"))
     }
