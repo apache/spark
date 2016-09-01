@@ -656,11 +656,11 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       assert(pushdownFilter.length == 1)
       val intConditions = pushdownFilter(0).asInstanceOf[FilterExec].condition.collect {
         case EqualTo(a: AttributeReference, Literal(i, IntegerType)) => (a.name, i)
-      }
+      }.distinct
       assert(intConditions.length == 1 && intConditions(0)._1 == "a" && intConditions(0)._2 == 1)
       val doubleConditions = pushdownFilter(0).asInstanceOf[FilterExec].condition.collect {
         case EqualTo(a: AttributeReference, Literal(d, DoubleType)) => (a.name, d)
-      }
+      }.distinct
       assert(doubleConditions.length == 1 &&
         doubleConditions(0)._1 == "b" && doubleConditions(0)._2 == 1.0)
 
@@ -680,12 +680,12 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       assert(pushdownFilter2.length == 1)
       val intConditions2 = pushdownFilter2(0).asInstanceOf[FilterExec].condition.collect {
         case EqualTo(a: AttributeReference, Literal(i, IntegerType)) => (a.name, i)
-      }
+      }.distinct
       assert(intConditions2.length == 1 &&
         intConditions2(0)._1 == "a" && intConditions2(0)._2 == 1)
       val doubleConditions2 = pushdownFilter2(0).asInstanceOf[FilterExec].condition.collect {
         case EqualTo(a: AttributeReference, Literal(d, DoubleType)) => (a.name, d)
-      }
+      }.distinct
       assert(doubleConditions2.length == 1 &&
         doubleConditions2(0)._1 == "b" && doubleConditions2(0)._2 == 2.0)
 
@@ -706,7 +706,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       assert(pushdownFilter3.length == 3)
       val intConditions3 = pushdownFilter3(1).asInstanceOf[FilterExec].condition.collect {
         case GreaterThan(a: AttributeReference, Literal(i, IntegerType)) => (a.name, i)
-      }
+      }.distinct
       assert(intConditions3.length == 2)
       assert(intConditions3(0)._2 == 5 && intConditions3(1)._2 == 10)
     }
