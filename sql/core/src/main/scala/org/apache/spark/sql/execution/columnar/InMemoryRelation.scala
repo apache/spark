@@ -34,6 +34,31 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.LongAccumulator
 
 
+/**
+ * An abstract representation of a cached batch of rows.
+ */
+private[columnar] trait CachedBatch
+
+
+/**
+ * A cached batch of rows stored as a list of byte arrays, one for each column.
+ *
+ * @param numRows The total number of rows in this batch
+ * @param buffers The serialized buffers for serialized columns
+ * @param stats The stat of columns
+ */
+private[columnar] case class CachedBatchBytes(
+    numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
+  extends CachedBatch
+
+
+/**
+ * A cached batch of rows stored as a [[ColumnarBatch]].
+ */
+private[columnar] case class CachedColumnarBatch(columnarBatch: ColumnarBatch)
+  extends CachedBatch
+
+
 object InMemoryRelation {
   def apply(
       useCompression: Boolean,
@@ -51,9 +76,6 @@ object InMemoryRelation {
  * This batches the rows from that plan into [[CachedBatch]]es that are later consumed by
  * [[InMemoryTableScanExec]].
  */
-private[columnar]
-case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
-
 case class InMemoryRelation(
     output: Seq[Attribute],
     useCompression: Boolean,
