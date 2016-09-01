@@ -556,6 +556,24 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     sql("DROP TABLE IF EXISTS createdJsonTable")
   }
 
+  test("case insensitive option - path") {
+    val tableName = "createdJsonTable"
+    withTable(tableName) {
+      withTempPath { tempPath =>
+        val path = tempPath.getCanonicalPath
+        val df = spark.range(10).toDF()
+        df.write.format("json").save(path)
+        sparkSession.catalog.createExternalTable(
+          tableName,
+          "org.apache.spark.sql.json",
+          Map("PATH" -> path))
+        checkAnswer(
+          table("createdJsonTable"),
+          df)
+      }
+    }
+  }
+
   test("scan a parquet table created through a CTAS statement") {
     withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
       withTempView("jt") {
@@ -1177,8 +1195,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         checkAnswer(table("t"), Seq(Row(1, 2, 3), Row(2, 3, 4)))
         val catalogTable = hiveClient.getTable("default", "t")
         // there should not be a lowercase key 'path' now
-        assert(catalogTable.storage.properties.get("path").isEmpty)
-        assert(catalogTable.storage.properties.get("PATH").isDefined)
+        assert(catalogTable.storage.properties.get("path").isDefined)
+        assert(catalogTable.storage.properties.get("PATH").isEmpty)
       }
     }
   }

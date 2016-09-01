@@ -261,12 +261,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     if (source == "hive") {
       throw new AnalysisException("Cannot create hive serde table with createExternalTable API.")
     }
+    val normalizedOptions =
+      options.map(kv => if (kv._1.toLowerCase == "path") kv.copy(_1 = "path") else kv)
 
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     val tableDesc = CatalogTable(
       identifier = tableIdent,
       tableType = CatalogTableType.EXTERNAL,
-      storage = CatalogStorageFormat.empty.copy(properties = options),
+      storage = CatalogStorageFormat.empty.copy(properties = normalizedOptions),
       schema = schema,
       provider = Some(source)
     )

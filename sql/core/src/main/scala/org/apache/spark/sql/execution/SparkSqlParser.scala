@@ -316,7 +316,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (external) {
       operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
     }
-    val options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val options =
+      Option(ctx.tablePropertyList)
+        .map(visitPropertyKeyValues)
+        .map(normalizePath)
+        .getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
     val schema = Option(ctx.colTypeList()).map(createStructType)
     val partitionColumnNames =
@@ -441,6 +445,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     // Check for duplicate property names.
     checkDuplicateKeys(properties, ctx)
     properties.toMap
+  }
+
+  /**
+   * Converts the storage property `PATH` to lowercase letters, if existed
+   */
+  private def normalizePath (properties: Map[String, String]): Map[String, String] = {
+    properties.map(kv => if (kv._1.toLowerCase == "path") kv.copy(_1 = "path") else kv)
   }
 
   /**

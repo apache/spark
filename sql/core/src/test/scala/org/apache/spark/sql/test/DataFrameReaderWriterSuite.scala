@@ -170,11 +170,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         .option("opt1", "1")
         .options(Map("opt2" -> "2"))
         .options(map)
+        .option("PaTh", "/test")
         .load()
 
     assert(LastOptions.parameters("opt1") == "1")
     assert(LastOptions.parameters("opt2") == "2")
     assert(LastOptions.parameters("opt3") == "3")
+    assert(LastOptions.parameters("path") == "/test")
 
     LastOptions.clear()
 

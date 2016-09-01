@@ -834,7 +834,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       case (key, value) =>
         // If it's a managed table, omit PATH option. Spark SQL always creates external table
         // when the table creation DDL contains the PATH option.
-        key.toLowerCase == "path" && metadata.tableType == MANAGED
+        key == "path" && metadata.tableType == MANAGED
     }.map {
       case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
     }
