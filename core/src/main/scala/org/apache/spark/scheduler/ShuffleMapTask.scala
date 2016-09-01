@@ -51,8 +51,9 @@ private[spark] class ShuffleMapTask(
     partition: Partition,
     @transient private var locs: Seq[TaskLocation],
     metrics: TaskMetrics,
-    localProperties: Properties)
-  extends Task[MapStatus](stageId, stageAttemptId, partition.index, metrics, localProperties)
+    localProperties: Properties,
+    jobId: Option[Int] = None)
+  extends Task[MapStatus](stageId, stageAttemptId, partition.index, metrics, localProperties, jobId)
   with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */

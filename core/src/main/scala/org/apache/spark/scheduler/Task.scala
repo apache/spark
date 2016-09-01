@@ -54,7 +54,8 @@ private[spark] abstract class Task[T](
     val partitionId: Int,
     // The default value is only used in tests.
     val metrics: TaskMetrics = TaskMetrics.registered,
-    @transient var localProperties: Properties = new Properties) extends Serializable {
+    @transient var localProperties: Properties = new Properties,
+    val jobId: Option[Int] = None) extends Serializable {
 
   /**
    * Called by [[org.apache.spark.executor.Executor]] to run this task.
@@ -79,6 +80,12 @@ private[spark] abstract class Task[T](
       metrics)
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
+
+    val callerContext =
+      s"JobId_${jobId.get}_StageID_${stageId}_stageAttemptId_${stageAttemptId}" +
+        s"_taskID_${taskAttemptId}_attemptNumber_${attemptNumber} on Spark".stripMargin
+    Utils.setCallerContext(callerContext)
+
     if (_killed) {
       kill(interruptThread = false)
     }

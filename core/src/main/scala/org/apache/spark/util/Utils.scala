@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.management.ManagementFactory
+import java.lang.reflect.InvocationTargetException
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
@@ -2416,6 +2417,25 @@ private[spark] object Utils extends Logging {
       unionFileLists(sparkJars, yarnJars).toSeq
     } else {
       sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
+    }
+  }
+
+  def setCallerContext(context: String): Unit = {
+    try {
+      val Builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
+      val builderInst = Builder.getConstructor(classOf[String]).newInstance(context)
+      val ret = Builder.getMethod("build").invoke(builderInst)
+      val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+      callerContext.getMethod("setCurrent", callerContext).invoke(null, ret)
+    }
+    catch {
+      case e: ClassNotFoundException => logDebug(s"ClassNotFoundException: ${e.getMessage}")
+      case e: IllegalAccessException => logDebug(s"IllegalAccessException: ${e.getMessage}")
+      case e: InstantiationException => logDebug(s"InstantiationException: ${e.getMessage}")
+      case e: SecurityException => logDebug(s"SecurityException: ${e.getMessage}")
+      case e: IllegalArgumentException => logDebug(s"IllegalArgumentException: ${e.getMessage}")
+      case e: InvocationTargetException => logDebug(s"InvocationTargetException: ${e.getMessage}")
+      case e: NoSuchMethodException => logDebug(s"NoSuchMethodException: ${e.getMessage}")
     }
   }
 }
