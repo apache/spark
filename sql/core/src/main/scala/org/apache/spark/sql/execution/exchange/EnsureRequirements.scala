@@ -47,10 +47,11 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
    */
   private def createPartitioning(
       requiredDistribution: Distribution,
-      numPartitions: Int): Partitioning = {
+      numPartitions: Int, numBuckets: Int = 0): Partitioning = {
     requiredDistribution match {
       case AllTuples => SinglePartition
-      case ClusteredDistribution(clustering) => HashPartitioning(clustering, numPartitions)
+      case ClusteredDistribution(clustering) =>
+        HashPartitioning(clustering, numPartitions, numBuckets)
       case OrderedDistribution(ordering) => RangePartitioning(ordering, numPartitions)
       case dist => sys.error(s"Do not know how to satisfy distribution $dist")
     }
@@ -180,10 +181,20 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       // partitioned by the same partitioning into the same number of partitions. In that case,
       // don't try to make them match `defaultPartitions`, just use the existing partitioning.
       val maxChildrenNumPartitions = children.map(_.outputPartitioning.numPartitions).max
+      val numBuckets = {
+        children.map(child => {
+          if (child.outputPartitioning.isInstanceOf[OrderlessHashPartitioning]) {
+            child.outputPartitioning.asInstanceOf[OrderlessHashPartitioning].numBuckets
+          }
+          else {
+            0
+          }
+        }).reduceLeft(_ max _)
+      }
       val useExistingPartitioning = children.zip(requiredChildDistributions).forall {
         case (child, distribution) =>
           child.outputPartitioning.guarantees(
-            createPartitioning(distribution, maxChildrenNumPartitions))
+            createPartitioning(distribution, maxChildrenNumPartitions, numBuckets))
       }
 
       children = if (useExistingPartitioning) {
@@ -205,10 +216,20 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
           // number of partitions. Otherwise, we use maxChildrenNumPartitions.
           if (shufflesAllChildren) defaultNumPreShufflePartitions else maxChildrenNumPartitions
         }
-
+        val numBuckets = {
+          children.map(child => {
+            if (child.outputPartitioning.isInstanceOf[OrderlessHashPartitioning]) {
+              child.outputPartitioning.asInstanceOf[OrderlessHashPartitioning].numBuckets
+            }
+            else {
+              0
+            }
+          }).reduceLeft(_ max _)
+        }
         children.zip(requiredChildDistributions).map {
           case (child, distribution) =>
-            val targetPartitioning = createPartitioning(distribution, numPartitions)
+            val targetPartitioning = createPartitioning(distribution,
+              numPartitions, numBuckets)
             if (child.outputPartitioning.guarantees(targetPartitioning)) {
               child
             } else {

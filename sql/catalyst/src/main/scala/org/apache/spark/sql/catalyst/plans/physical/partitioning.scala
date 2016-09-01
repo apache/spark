@@ -253,9 +253,9 @@ case object SinglePartition extends Partitioning {
  * in the same partition. Moreover while evaluating expressions if they are given in different order
  * than this partitioning then also it is considered equal.
  */
-case class OrderlessHashPartitioning(expressions: Seq[Expression], numPartitions: Int)
+case class OrderlessHashPartitioning(expressions: Seq[Expression],
+    numPartitions: Int, numBuckets: Int)
     extends Expression with Partitioning with Unevaluable {
-
 
   override def children: Seq[Expression] = expressions
   override def nullable: Boolean = false
@@ -274,6 +274,7 @@ case class OrderlessHashPartitioning(expressions: Seq[Expression], numPartitions
   }
 
   private def anyOrderEquals(other: HashPartitioning) : Boolean = {
+    other.numBuckets == this.numBuckets &&
     other.numPartitions == this.numPartitions &&
         matchExpressions(other.expressions)
   }
@@ -284,7 +285,7 @@ case class OrderlessHashPartitioning(expressions: Seq[Expression], numPartitions
   }
 
   override def guarantees(other: Partitioning): Boolean = other match {
-    case o: HashPartitioning => anyOrderEquals(o)
+    case p: HashPartitioning => anyOrderEquals(p)
     case _ => false
   }
 
@@ -295,8 +296,8 @@ case class OrderlessHashPartitioning(expressions: Seq[Expression], numPartitions
  * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
  * in the same partition.
  */
-case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
-  extends Expression with Partitioning with Unevaluable {
+case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int,
+    numBuckets : Int = 0 ) extends Expression with Partitioning with Unevaluable {
 
   override def children: Seq[Expression] = expressions
   override def nullable: Boolean = false
