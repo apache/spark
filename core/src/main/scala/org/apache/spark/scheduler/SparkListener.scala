@@ -87,6 +87,10 @@ case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(S
   extends SparkListenerEvent
 
 @DeveloperApi
+case class SparkListenerSessionUpdate(sessionDetails: Map[String, String])
+  extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerBlockManagerAdded(time: Long, blockManagerId: BlockManagerId, maxMem: Long)
   extends SparkListenerEvent
 
@@ -199,6 +203,11 @@ private[spark] trait SparkListenerInterface {
   def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate): Unit
 
   /**
+   * Called when session properties have been updated
+   */
+  def onSessionUpdate(sessionUpdate: SparkListenerSessionUpdate): Unit
+
+  /**
    * Called when a new block manager has joined
    */
   def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded): Unit
@@ -274,6 +283,8 @@ abstract class SparkListener extends SparkListenerInterface {
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = { }
 
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate): Unit = { }
+
+  override def onSessionUpdate(sessionUpdate: SparkListenerSessionUpdate): Unit = { }
 
   override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded): Unit = { }
 

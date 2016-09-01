@@ -127,7 +127,8 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
+  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf,
+    Some(sparkContext.listenerBus))
 
   /**
    * :: Experimental ::
@@ -791,7 +792,7 @@ object SparkSession {
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
-        options.foreach { case (k, v) => session.conf.set(k, v) }
+        session.conf.setBatch(options)
         if (options.nonEmpty) {
           logWarning("Use an existing SparkSession, some configuration may not take effect.")
         }
@@ -803,7 +804,7 @@ object SparkSession {
         // If the current thread does not have an active session, get it from the global session.
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
-          options.foreach { case (k, v) => session.conf.set(k, v) }
+          session.conf.setBatch(options)
           if (options.nonEmpty) {
             logWarning("Use an existing SparkSession, some configuration may not take effect.")
           }
@@ -829,7 +830,7 @@ object SparkSession {
           sc
         }
         session = new SparkSession(sparkContext)
-        options.foreach { case (k, v) => session.conf.set(k, v) }
+        session.conf.setBatch(options)
         defaultSession.set(session)
 
         // Register a successfully instantiated context to the singleton. This should be at the

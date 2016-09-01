@@ -45,6 +45,8 @@ private[spark] trait SparkListenerBus
         listener.onTaskEnd(taskEnd)
       case environmentUpdate: SparkListenerEnvironmentUpdate =>
         listener.onEnvironmentUpdate(environmentUpdate)
+      case sessionUpdate: SparkListenerSessionUpdate =>
+        listener.onSessionUpdate(sessionUpdate)
       case blockManagerAdded: SparkListenerBlockManagerAdded =>
         listener.onBlockManagerAdded(blockManagerAdded)
       case blockManagerRemoved: SparkListenerBlockManagerRemoved =>

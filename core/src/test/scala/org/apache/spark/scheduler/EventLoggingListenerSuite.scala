@@ -209,6 +209,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       SparkListenerBlockManagerAdded,
       SparkListenerExecutorAdded,
       SparkListenerEnvironmentUpdate,
+      SparkListenerSessionUpdate,
       SparkListenerJobStart,
       SparkListenerJobEnd,
       SparkListenerStageSubmitted,
