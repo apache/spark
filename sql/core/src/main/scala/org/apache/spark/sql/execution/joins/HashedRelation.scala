@@ -448,7 +448,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   private def nextSlot(pos: Int): Int = (pos + 2) & mask
 
   private def getRow(address: Long, resultRow: UnsafeRow): UnsafeRow = {
-    val offset = address >>> SIZE_BITS
+    val offset = (address >>> SIZE_BITS) + Platform.LONG_ARRAY_OFFSET
     val size = address & SIZE_MASK
     resultRow.pointTo(page, offset, size.toInt)
     resultRow
@@ -485,7 +485,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       var addr = address
       override def hasNext: Boolean = addr != 0
       override def next(): UnsafeRow = {
-        val offset = addr >>> SIZE_BITS
+        val offset = (addr >>> SIZE_BITS) + Platform.LONG_ARRAY_OFFSET
         val size = addr & SIZE_MASK
         resultRow.pointTo(page, offset, size.toInt)
         addr = Platform.getLong(page, offset + size)
@@ -554,7 +554,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     Platform.putLong(page, cursor, 0)
     cursor += 8
     numValues += 1
-    updateIndex(key, (offset.toLong << SIZE_BITS) | row.getSizeInBytes)
+    updateIndex(key, ((offset - Platform.LONG_ARRAY_OFFSET) << SIZE_BITS) | row.getSizeInBytes)
   }
 
   /**
@@ -562,6 +562,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    */
   private def updateIndex(key: Long, address: Long): Unit = {
     var pos = firstSlot(key)
+    assert(numKeys < array.length / 2)
     while (array(pos) != key && array(pos + 1) != 0) {
       pos = nextSlot(pos)
     }
@@ -582,7 +583,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       }
     } else {
       // there are some values for this key, put the address in the front of them.
-      val pointer = (address >>> SIZE_BITS) + (address & SIZE_MASK)
+      val pointer = (address >>> SIZE_BITS) + (address & SIZE_MASK) + Platform.LONG_ARRAY_OFFSET
       Platform.putLong(page, pointer, array(pos + 1))
       array(pos + 1) = address
     }
