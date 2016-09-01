@@ -18,6 +18,8 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -171,6 +173,75 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         // make sure the view has been changed.
         checkAnswer(sql("SELECT * FROM testView ORDER BY i"), (1 to 9).map(i => Row(i, i)))
       }
+    }
+  }
+
+  test("should not allow ALTER VIEW AS when the view does not exist") {
+    intercept[NoSuchTableException](
+      sql("ALTER VIEW testView AS SELECT 1, 2")
+    )
+
+    intercept[NoSuchTableException](
+      sql("ALTER VIEW default.testView AS SELECT 1, 2")
+    )
+  }
+
+  test("ALTER VIEW AS should try to alter temp view first if view name has no database part") {
+    withView("test_view") {
+      withTempView("test_view") {
+        sql("CREATE VIEW test_view AS SELECT 1 AS a, 2 AS b")
+        sql("CREATE TEMP VIEW test_view AS SELECT 1 AS a, 2 AS b")
+
+        sql("ALTER VIEW test_view AS SELECT 3 AS i, 4 AS j")
+
+        // The temporary view should be updated.
+        checkAnswer(spark.table("test_view"), Row(3, 4))
+
+        // The permanent view should stay same.
+        checkAnswer(spark.table("default.test_view"), Row(1, 2))
+      }
+    }
+  }
+
+  test("ALTER VIEW AS should alter permanent view if view name has database part") {
+    withView("test_view") {
+      withTempView("test_view") {
+        sql("CREATE VIEW test_view AS SELECT 1 AS a, 2 AS b")
+        sql("CREATE TEMP VIEW test_view AS SELECT 1 AS a, 2 AS b")
+
+        sql("ALTER VIEW default.test_view AS SELECT 3 AS i, 4 AS j")
+
+        // The temporary view should stay same.
+        checkAnswer(spark.table("test_view"), Row(1, 2))
+
+        // The permanent view should be updated.
+        checkAnswer(spark.table("default.test_view"), Row(3, 4))
+      }
+    }
+  }
+
+  test("ALTER VIEW AS should keep the previous table properties, comment, create_time, etc.") {
+    withView("test_view") {
+      sql(
+        """
+          |CREATE VIEW test_view
+          |COMMENT 'test'
+          |TBLPROPERTIES ('key' = 'a')
+          |AS SELECT 1 AS a, 2 AS b
+        """.stripMargin)
+
+      val catalog = spark.sessionState.catalog
+      val viewMeta = catalog.getTableMetadata(TableIdentifier("test_view"))
+      assert(viewMeta.properties("comment") == "test")
+      assert(viewMeta.properties("key") == "a")
+
+      sql("ALTER VIEW test_view AS SELECT 3 AS i, 4 AS j")
+      val updatedViewMeta = catalog.getTableMetadata(TableIdentifier("test_view"))
+      assert(updatedViewMeta.properties("comment") == "test")
+      assert(updatedViewMeta.properties("key") == "a")
+      assert(updatedViewMeta.createTime == viewMeta.createTime)
+      // The view should be updated.
+      checkAnswer(spark.table("test_view"), Row(3, 4))
     }
   }
 

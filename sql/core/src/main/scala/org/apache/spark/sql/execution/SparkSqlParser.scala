@@ -1250,60 +1250,44 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       val schema = identifiers.map { ic =>
         CatalogColumn(ic.identifier.getText, null, nullable = true, Option(ic.STRING).map(string))
       }
-      createView(
-        ctx,
-        ctx.tableIdentifier,
-        comment = Option(ctx.STRING).map(string),
-        schema,
-        ctx.query,
-        Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty),
-        ctx.EXISTS != null,
-        ctx.REPLACE != null,
-        ctx.TEMPORARY != null
-      )
+
+      val sql = Option(source(ctx.query))
+      val tableDesc = CatalogTable(
+        identifier = visitTableIdentifier(ctx.tableIdentifier),
+        tableType = CatalogTableType.VIEW,
+        schema = schema,
+        storage = CatalogStorageFormat.empty,
+        properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty),
+        viewOriginalText = sql,
+        viewText = sql,
+        comment = Option(ctx.STRING).map(string))
+
+      CreateViewCommand(
+        tableDesc,
+        plan(ctx.query),
+        allowExisting = ctx.EXISTS != null,
+        replace = ctx.REPLACE != null,
+        isTemporary = ctx.TEMPORARY != null)
     }
   }
 
   /**
-   * Alter the query of a view. This creates a [[CreateViewCommand]] command.
+   * Alter the query of a view. This creates a [[AlterViewAsCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER VIEW [db_name.]view_name AS SELECT ...;
+   * }}}
    */
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
-    createView(
-      ctx,
-      ctx.tableIdentifier,
-      comment = None,
-      Seq.empty,
-      ctx.query,
-      Map.empty,
-      allowExist = false,
-      replace = true,
-      isTemporary = false)
-  }
-
-  /**
-   * Create a [[CreateViewCommand]] command.
-   */
-  private def createView(
-      ctx: ParserRuleContext,
-      name: TableIdentifierContext,
-      comment: Option[String],
-      schema: Seq[CatalogColumn],
-      query: QueryContext,
-      properties: Map[String, String],
-      allowExist: Boolean,
-      replace: Boolean,
-      isTemporary: Boolean): LogicalPlan = {
-    val sql = Option(source(query))
     val tableDesc = CatalogTable(
-      identifier = visitTableIdentifier(name),
+      identifier = visitTableIdentifier(ctx.tableIdentifier),
       tableType = CatalogTableType.VIEW,
-      schema = schema,
       storage = CatalogStorageFormat.empty,
-      properties = properties,
-      viewOriginalText = sql,
-      viewText = sql,
-      comment = comment)
-    CreateViewCommand(tableDesc, plan(query), allowExist, replace, isTemporary)
+      schema = Nil,
+      viewOriginalText = Option(source(ctx.query)))
+
+    AlterViewAsCommand(tableDesc, plan(ctx.query))
   }
 
   /**

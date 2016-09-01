@@ -22,7 +22,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLBuilder, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
@@ -55,8 +55,6 @@ case class CreateViewCommand(
 
   // TODO: Note that this class can NOT canonicalize the view SQL string entirely, which is
   // different from Hive and may not work for some cases like create view on self join.
-
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
 
   require(tableDesc.tableType == CatalogTableType.VIEW,
     "The type of the table to created with CREATE VIEW must be 'CatalogTableType.VIEW'.")
@@ -191,7 +189,7 @@ case class CreateViewCommand(
       sparkSession.sql(viewSQL).queryExecution.assertAnalyzed()
     } catch {
       case NonFatal(e) =>
-        throw new RuntimeException(s"Failed to analyze the canonicalized SQL: ${viewSQL}", e)
+        throw new RuntimeException(s"Failed to analyze the canonicalized SQL: $viewSQL", e)
     }
 
     val viewSchema: Seq[CatalogColumn] = {
@@ -211,4 +209,69 @@ case class CreateViewCommand(
 
   /** Escape backtick with double-backtick in column name and wrap it with backtick. */
   private def quote(name: String) = s"`${name.replaceAll("`", "``")}`"
+}
+
+/**
+ * Alter a view with given query plan. If the view name contains database prefix, this command will
+ * alter a permanent view matching the given name, or throw an exception if view not exist. Else,
+ * this command will try to alter a temporary view first, if view not exist, try permanent view
+ * next, if still not exist, throw an exception.
+ *
+ * @param tableDesc the catalog table
+ * @param query the logical plan that represents the view; this is used to generate a canonicalized
+ *              version of the SQL that can be saved in the catalog.
+ */
+case class AlterViewAsCommand(
+    tableDesc: CatalogTable,
+    query: LogicalPlan) extends RunnableCommand {
+
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+
+  override def run(session: SparkSession): Seq[Row] = {
+    // If the plan cannot be analyzed, throw an exception and don't proceed.
+    val qe = session.sessionState.executePlan(query)
+    qe.assertAnalyzed()
+    val analyzedPlan = qe.analyzed
+
+    if (session.sessionState.catalog.isTemporaryTable(tableDesc.identifier)) {
+      session.sessionState.catalog.createTempView(
+        tableDesc.identifier.table,
+        analyzedPlan,
+        overrideIfExists = true)
+    } else {
+      alterPermanentView(session, analyzedPlan)
+    }
+
+    Seq.empty[Row]
+  }
+
+  private def alterPermanentView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
+    val viewMeta = session.sessionState.catalog.getTableMetadata(tableDesc.identifier)
+    if (viewMeta.tableType != CatalogTableType.VIEW) {
+      throw new AnalysisException(s"${viewMeta.identifier} is not a view.")
+    }
+
+    val viewSQL: String = new SQLBuilder(analyzedPlan).toSQL
+    // Validate the view SQL - make sure we can parse it and analyze it.
+    // If we cannot analyze the generated query, there is probably a bug in SQL generation.
+    try {
+      session.sql(viewSQL).queryExecution.assertAnalyzed()
+    } catch {
+      case NonFatal(e) =>
+        throw new RuntimeException(s"Failed to analyze the canonicalized SQL: $viewSQL", e)
+    }
+
+    val viewSchema: Seq[CatalogColumn] = {
+      analyzedPlan.output.map { a =>
+        CatalogColumn(a.name, a.dataType.catalogString)
+      }
+    }
+
+    val updatedViewMeta = viewMeta.copy(
+      schema = viewSchema,
+      viewOriginalText = tableDesc.viewOriginalText,
+      viewText = Some(viewSQL))
+
+    session.sessionState.catalog.alterTable(updatedViewMeta)
+  }
 }
