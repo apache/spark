@@ -701,6 +701,7 @@ private[spark] object RandomForest extends Logging {
           featureIndexIdx
         }
         val numSplits = binAggregates.metadata.numSplits(featureIndex)
+        // TODO(smurching): Integrate continuous features
         if (binAggregates.metadata.isContinuous(featureIndex)) {
           // Cumulative sum (scanLeft) of bin statistics.
           // Afterwards, binAggregates for a bin is the sum of aggregates for
@@ -714,15 +715,22 @@ private[spark] object RandomForest extends Logging {
           // Find best split.
           val (bestFeatureSplitIndex, bestFeatureGainStats) =
             Range(0, numSplits).map { case splitIdx =>
+              // Impurity calculators for rows on left & right sides of split
+              // Get ImpurityCalculator containing an array of stats for all nodes on left
+              // side of split
               val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
+              // Impurity of rows on right side of split is given by total impurity - impurity of
+              // nodes on left side of split
               val rightChildStats =
                 binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
               rightChildStats.subtract(leftChildStats)
+              // Calculate gain
               gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
                 leftChildStats, rightChildStats, binAggregates.metadata)
               (splitIdx, gainAndImpurityStats)
             }.maxBy(_._2.gain)
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
+        // TODO(smurching): Integrate unordered categoricals
         } else if (binAggregates.metadata.isUnordered(featureIndex)) {
           // Unordered categorical feature
           val leftChildOffset = binAggregates.getFeatureOffset(featureIndexIdx)
@@ -736,6 +744,7 @@ private[spark] object RandomForest extends Logging {
               (splitIndex, gainAndImpurityStats)
             }.maxBy(_._2.gain)
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
+        // TODO(smurching): Integrate ordered categoricals
         } else {
           // Ordered categorical feature
           val nodeFeatureOffset = binAggregates.getFeatureOffset(featureIndexIdx)

@@ -67,7 +67,7 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
   private[impl] def rowToColumnStoreDense(rowStore: Array[Array[Int]]): Array[Array[Int]] = {
     // Compute the number of rows in the data
     val numRows = {
-      val longNumRows: Long = rowStore.size
+      val longNumRows: Long = rowStore.length
       require(longNumRows < Int.MaxValue, s"rowToColumnStore given RDD with $longNumRows rows," +
         s" but can handle at most ${Int.MaxValue} rows")
       longNumRows.toInt
@@ -75,10 +75,10 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
 
     // Return an empty array for a dataset with zero rows or columns, otherwise
     // return the transpose of the rowStore matrix
-    if (numRows == 0 || rowStore(0).size == 0) {
+    if (numRows == 0 || rowStore(0).length == 0) {
       Array.empty
     } else {
-      val numCols = rowStore(0).size
+      val numCols = rowStore(0).length
       0.until(numCols).map { colIdx =>
         rowStore.map(row => row(colIdx))
       }.toArray
@@ -213,10 +213,10 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
    * @return
    */
   private[impl] def getImpurity(
+      col: FeatureVector,
       from: Int,
       to: Int,
       metadata: DecisionTreeMetadata,
-      col: FeatureVector,
       labels: Array[Double]): ImpurityAggregatorSingle = {
     val aggregator = metadata.createImpurityAggregator()
     from.until(to).foreach { idx =>
@@ -225,6 +225,61 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
       aggregator.update(label)
     }
     aggregator
+  }
+
+  /**
+   * TODO(smurching): Update doc
+   * @param from
+   * @param numLeftBits
+   * @param to
+   * @param instanceBitVector
+   * @param col
+   */
+  private[ml] def sortCol(
+      col: FeatureVector,
+      from: Int,
+      to: Int,
+      numLeftBits: Int,
+      tempVals: Array[Int],
+      tempIndices: Array[Int],
+      instanceBitVector: BitSet): Unit = {
+
+    // BEGIN SORTING
+    // We sort the [from, to) slice of col based on instance bit, then
+    // instance value. This is required to match the bit vector across all
+    // workers. All instances going "left" in the split (which are false)
+    // should be ordered before the instances going "right". The instanceBitVector
+    // gives us the bit value for each instance based on the instance's index.
+    // Then both [from, numBitsNotSet) and [numBitsNotSet, to) need to be sorted
+    // by value.
+    // Since the column is already sorted by value, we can compute
+    // this sort in a single pass over the data. We iterate from start to finish
+    // (which preserves the sorted order), and then copy the values
+    // into @tempVals and @tempIndices either:
+    // 1) in the [from, numBitsNotSet) range if the bit is false, or
+    // 2) in the [numBitsNotSet, to) range if the bit is true.
+    var (leftInstanceIdx, rightInstanceIdx) = (from, from + numLeftBits)
+    var idx = from
+    while (idx < to) {
+      val indexForVal = col.indices(idx)
+      val bit = instanceBitVector.get(indexForVal)
+      if (bit) {
+        tempVals(rightInstanceIdx) = col.values(idx)
+        tempIndices(rightInstanceIdx) = indexForVal
+        rightInstanceIdx += 1
+      } else {
+        tempVals(leftInstanceIdx) = col.values(idx)
+        tempIndices(leftInstanceIdx) = indexForVal
+        leftInstanceIdx += 1
+      }
+      idx += 1
+    }
+    // END SORTING
+    // update the column values and indices
+    // with the corresponding indices
+    System.arraycopy(tempVals, from, col.values, from, to - from)
+    System.arraycopy(tempIndices, from, col.indices, from, to - from)
+
   }
 
   

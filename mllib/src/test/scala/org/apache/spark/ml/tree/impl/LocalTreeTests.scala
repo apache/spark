@@ -56,7 +56,6 @@ private[tree] object LocalTreeTests extends Logging {
     // For normal RF training, withReplacement is set to 1 iff numTrees > 1, which is not the
     // case here (we're training a single tree)
     val withReplacement = false
-
     val baggedInput: Array[BaggedPoint[TreePoint]] = BaggedPoint
       .convertToBaggedRDD(treeInput, strategy.subsamplingRate, numSubsamples = 1,
         withReplacement, seed)

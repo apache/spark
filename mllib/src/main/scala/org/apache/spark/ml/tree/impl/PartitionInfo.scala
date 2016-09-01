@@ -86,6 +86,7 @@ private[impl] case class PartitionInfo(
       metadata: DecisionTreeMetadata): PartitionInfo = {
 
     // Create buffers for storing our new arrays of node offsets & impurities
+    // TODO(smurching): Binary search for these offsets?
     val newNodeOffsets = new ArrayBuffer[(Int, Int)]()
 
     // Update first-level (per-node) sorting of each column to account for creation
@@ -101,59 +102,6 @@ private[impl] case class PartitionInfo(
     }
 
     PartitionInfo(columns, newNodeOffsets.toArray, newActiveNodes)
-  }
-
-  /**
-   * TODO(smurching): Update doc
-   * @param from
-   * @param numLeftBits
-   * @param to
-   * @param instanceBitVector
-   * @param col
-   */
-  private def sortCol(
-      from: Int,
-      numLeftBits: Int,
-      to: Int,
-      instanceBitVector: BitSet,
-      col: FeatureVector): Unit = {
-
-    // BEGIN SORTING
-    // We sort the [from, to) slice of col based on instance bit, then
-    // instance value. This is required to match the bit vector across all
-    // workers. All instances going "left" in the split (which are false)
-    // should be ordered before the instances going "right". The instanceBitVector
-    // gives us the bit value for each instance based on the instance's index.
-    // Then both [from, numBitsNotSet) and [numBitsNotSet, to) need to be sorted
-    // by value.
-    // Since the column is already sorted by value, we can compute
-    // this sort in a single pass over the data. We iterate from start to finish
-    // (which preserves the sorted order), and then copy the values
-    // into @tempVals and @tempIndices either:
-    // 1) in the [from, numBitsNotSet) range if the bit is false, or
-    // 2) in the [numBitsNotSet, to) range if the bit is true.
-    var (leftInstanceIdx, rightInstanceIdx) = (from, from + numLeftBits)
-    var idx = from
-    while (idx < to) {
-      val indexForVal = col.indices(idx)
-      val bit = instanceBitVector.get(indexForVal)
-      if (bit) {
-        tempVals(rightInstanceIdx) = col.values(idx)
-        tempIndices(rightInstanceIdx) = indexForVal
-        rightInstanceIdx += 1
-      } else {
-        tempVals(leftInstanceIdx) = col.values(idx)
-        tempIndices(leftInstanceIdx) = indexForVal
-        leftInstanceIdx += 1
-      }
-      idx += 1
-    }
-    // END SORTING
-    // update the column values and indices
-    // with the corresponding indices
-    System.arraycopy(tempVals, from, col.values, from, to - from)
-    System.arraycopy(tempIndices, from, col.indices, from, to - from)
-
   }
 
   /**
@@ -199,7 +147,8 @@ private[impl] case class PartitionInfo(
         // TODO(smurching): Check that this adds indices in the same order as activeNodes
         // are produced during splitting
         newNodeOffsets ++= Array(leftIndices, rightIndices)
-        sortCol(from, numBitsNotSet, to, instanceBitVector, col)
+        LocalDecisionTreeUtils.sortCol(col, from, to, numBitsNotSet,
+          tempVals, tempIndices, instanceBitVector)
       }
     }
 
@@ -230,7 +179,8 @@ private[impl] case class PartitionInfo(
       // TODO(smurching): Rework this somehow, this pairwise-iteration thing is sketchy
       // Number of rows on the left side of the split
       val numBitsNotSet = leftTo - leftFrom
-      sortCol(leftFrom, numBitsNotSet, rightTo, instanceBitVector, col)
+      LocalDecisionTreeUtils.sortCol(col, leftFrom, rightTo, numBitsNotSet,
+        tempVals, tempIndices, instanceBitVector)
     }
 
   }

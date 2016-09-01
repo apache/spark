@@ -93,12 +93,8 @@ private[ml] object LocalDecisionTree {
 
     val numRows = colStore.headOption match {
       case None => 0
-      case Some(column) => column.values.size
+      case Some(column) => column.values.length
     }
-
-    // Create an impurityAggregator object containing info for 1 node (the root node).
-    val fullImpurityAgg = metadata.createImpurityAggregator()
-    labels.foreach(fullImpurityAgg.update(_))
 
     // Create a new PartitionInfo describing the status of our partially-trained subtree
     // at each iteration of training
@@ -133,7 +129,6 @@ private[ml] object LocalDecisionTree {
     rootNode.toNode
   }
 
-
   /**
    * Find the best splits for all active nodes.
    *  - For each feature, select the best split for each node.
@@ -145,25 +140,18 @@ private[ml] object LocalDecisionTree {
       labels: Array[Double],
       metadata: DecisionTreeMetadata,
       splits: Array[Array[Split]]): Array[LearningNode] = {
-    // For each feature, select the best split for each node.
-    // This will use:
-    //  - labels (the labels column)
-    // Returns:
-    //   for each active node, best split + info gain,
-    //     where the best split is None if no useful split exists
-
+    // For each node, select the best split across all features
     partitionInfo match {
       case PartitionInfo(columns: Array[FeatureVector], nodeOffsets: Array[(Int, Int)],
         activeNodes: Array[LearningNode]) => {
 
         // Iterate over the active nodes in the current level.
         activeNodes.zipWithIndex.flatMap { case (node: LearningNode, nodeIndex: Int) =>
-
           // Features for the current node start at fromOffset and end at toOffset
           val (from, to) = nodeOffsets(nodeIndex)
           // Get the impurity aggregator for the current node
           // TODO(smurching): Test on empty data, see if this still works
-          val fullImpurityAgg = LocalDecisionTreeUtils.getImpurity(from, to, metadata, columns(0), labels)
+          val fullImpurityAgg = LocalDecisionTreeUtils.getImpurity(columns(0), from, to, metadata, labels)
           // TODO(smurching): In PartitionInfo, keep track of which features are associated
           // with which nodes and subsample here (filter columns)
           val splitsAndStats = columns.map { col =>
@@ -219,7 +207,7 @@ private[ml] object LocalDecisionTree {
       node: LearningNode,
       split: Option[Split],
       stats: ImpurityStats): Unit = {
-    // TODO(smurching): Find cleaner way to not use IDs, add test for deep trees
+    // TODO(smurching): Find cleaner way to not use IDs, add integration test for deep trees
     node.leftChild = Some(LearningNode(id = -1, isLeaf = false,
       ImpurityStats.getEmptyImpurityStats(stats.leftImpurityCalculator)))
     node.rightChild = Some(LearningNode(id = -1, isLeaf = false,
@@ -250,17 +238,46 @@ private[ml] object LocalDecisionTree {
         val catSplits: Array[CategoricalSplit] = splits(col.featureIndex)
           .map(_.asInstanceOf[CategoricalSplit])
         chooseUnorderedCategoricalSplit(col.featureIndex, col.values, col.indices, labels,
-          fromOffset, toOffset, metadata, col.featureArity, catSplits)
+          fromOffset, toOffset, col.featureArity, metadata, catSplits, fullImpurityAgg)
       } else {
         chooseOrderedCategoricalSplit(col.featureIndex, col.values, col.indices,
-          labels, fromOffset, toOffset, metadata, col.featureArity)
+          labels, fromOffset, toOffset, col.featureArity, metadata, fullImpurityAgg)
       }
     } else {
       chooseContinuousSplit(col.featureIndex, col.values, col.indices, labels, fromOffset, toOffset,
-        fullImpurityAgg, metadata, splits)
+        metadata, splits, fullImpurityAgg)
     }
   }
 
+  /**
+   * Given integers (from, to) describing the starting/ending indices of feature values for
+   * an active node, returns an array of impurity aggregators containing label statistics
+   * for each bin/category for the current (node, feature).
+   *
+   * @param metadata Metadata object containing parameters of the learning algorithm
+   * @param values Array of values for the current feature
+   * @param labels Array of labels
+   * @param indices indices(i) = row index of value at values(i)
+   */
+  private[impl] def getAggStats(
+      metadata: DecisionTreeMetadata,
+      featureIndex: Int,
+      from: Int,
+      to: Int,
+      values: Array[Int],
+      labels: Array[Double],
+      indices: Array[Int]): Array[ImpurityAggregatorSingle] = {
+    // Build an array of ImpurityAggregators for each bin of the current feature
+    val aggStats = Array.tabulate[ImpurityAggregatorSingle](metadata.numBins(featureIndex))(
+      _ => metadata.createImpurityAggregator())
+    from.until(to).foreach { i =>
+      val cat = values(i)
+      val label = labels(indices(i))
+      aggStats(cat).update(label)
+    }
+    aggStats
+  }
+  
   /**
    * Find the best split for an ordered categorical feature at a single node.
    *
@@ -285,21 +302,12 @@ private[ml] object LocalDecisionTree {
       labels: Array[Double],
       from: Int,
       to: Int,
+      featureArity: Int,
       metadata: DecisionTreeMetadata,
-      featureArity: Int): (Option[Split], ImpurityStats) = {
+      fullImpurityAgg: ImpurityAggregatorSingle): (Option[Split], ImpurityStats) = {
     // TODO: Support high-arity features by using a single array to hold the stats.
-
     // aggStats(category) = label statistics for category
-    // aggStats(i) = label statistics for bin i
-    val aggStats = Array.tabulate[ImpurityAggregatorSingle](metadata.numBins(featureIndex))(
-      _ => metadata.createImpurityAggregator())
-    var i = from
-    while (i < to) {
-      val cat = values(i)
-      val label = labels(indices(i))
-      aggStats(cat).update(label)
-      i += 1
-    }
+    val aggStats = getAggStats(metadata, featureIndex, from, to, values, labels, indices)
 
     // Compute centroids.  centroidsForCategories is a list: (category, centroid)
     val centroidsForCategories: Seq[(Int, Double)] = if (metadata.isMulticlass) {
@@ -423,26 +431,16 @@ private[ml] object LocalDecisionTree {
       labels: Array[Double],
       from: Int,
       to: Int,
-      metadata: DecisionTreeMetadata,
       featureArity: Int,
-      splits: Array[CategoricalSplit]): (Option[Split], ImpurityStats) = {
+      metadata: DecisionTreeMetadata,
+      splits: Array[CategoricalSplit],
+      fullImpurityAgg: ImpurityAggregatorSingle): (Option[Split], ImpurityStats) = {
 
     // Label stats for each category
-    val aggStats = Array.tabulate[ImpurityAggregatorSingle](featureArity)(
-      _ => metadata.createImpurityAggregator())
-    var i = from
-    while (i < to) {
-      val cat = values(i)
-      val label = labels(indices(i))
-      // NOTE: we assume the values for categorical features are Ints in [0,featureArity)
-      aggStats(cat).update(label)
-      i += 1
-    }
+    val aggStats = getAggStats(metadata, featureIndex, from, to, values, labels, indices)
 
     // Aggregated statistics for left part of split and entire split.
     val leftImpurityAgg = metadata.createImpurityAggregator()
-    val fullImpurityAgg = metadata.createImpurityAggregator()
-    aggStats.foreach(fullImpurityAgg.add)
     val fullImpurity = fullImpurityAgg.getCalculator.calculate()
 
     if (featureArity == 1) {
@@ -511,9 +509,9 @@ private[ml] object LocalDecisionTree {
       labels: Array[Double],
       from: Int,
       to: Int,
-      fullImpurityAgg: ImpurityAggregatorSingle,
       metadata: DecisionTreeMetadata,
-      splits: Array[Array[Split]]): (Option[Split], ImpurityStats) = {
+      splits: Array[Array[Split]],
+      fullImpurityAgg: ImpurityAggregatorSingle): (Option[Split], ImpurityStats) = {
 
     val leftImpurityAgg = metadata.createImpurityAggregator()
     val rightImpurityAgg = fullImpurityAgg.deepCopy()

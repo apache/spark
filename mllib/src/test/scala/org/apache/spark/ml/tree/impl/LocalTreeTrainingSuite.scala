@@ -92,7 +92,7 @@ class LocalTreeTrainingSuite
     import sqlContext.implicits._
     // Use maxDepth = 5 and default params
     val params = Map[String, Any]("maxDepth" -> 5)
-    testEquivalence(TreeTests.varianceData(sc).toDF, params)
+    testEquivalence(TreeTests.varianceData(sc).toDF(), params)
   }
 
 }
