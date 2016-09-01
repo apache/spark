@@ -39,7 +39,7 @@ private[security] class HiveCredentialProvider extends ServiceCredentialProvider
 
   private def hiveConf(hadoopConf: Configuration): Configuration = {
     try {
-      val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
+      val mirror = universe.runtimeMirror(Utils.getSparkClassLoader)
       // the hive configuration class is a subclass of Hadoop Configuration, so can be cast down
       // to a Configuration and used without reflection
       val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
@@ -76,7 +76,7 @@ private[security] class HiveCredentialProvider extends ServiceCredentialProvider
     logDebug(s"Getting Hive delegation token for ${currentUser.getUserName()} against " +
       s"$principal at $metastoreUri")
 
-    val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
+    val mirror = universe.runtimeMirror(Utils.getSparkClassLoader)
     val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
     val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
     val closeCurrent = hiveClass.getMethod("closeCurrent")

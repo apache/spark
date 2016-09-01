@@ -35,7 +35,7 @@ object DriverRegistry extends Logging {
   private val wrapperMap: mutable.Map[String, DriverWrapper] = mutable.Map.empty
 
   def register(className: String): Unit = {
-    val cls = Utils.getContextOrSparkClassLoader.loadClass(className)
+    val cls = Utils.getSparkClassLoader.loadClass(className)
     if (cls.getClassLoader == null) {
       logTrace(s"$className has been loaded with bootstrap ClassLoader, wrapper is not required")
     } else if (wrapperMap.get(className).isDefined) {

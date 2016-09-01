@@ -121,7 +121,7 @@ case class DataSource(
   private def lookupDataSource(provider0: String): Class[_] = {
     val provider = backwardCompatibilityMap.getOrElse(provider0, provider0)
     val provider2 = s"$provider.DefaultSource"
-    val loader = Utils.getContextOrSparkClassLoader
+    val loader = Utils.getSparkClassLoader
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
 
     try {

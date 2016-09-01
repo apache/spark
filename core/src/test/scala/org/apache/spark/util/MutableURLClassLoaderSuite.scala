@@ -114,7 +114,7 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
 
     val className = "ClassForDriverTest"
     val jar = TestUtils.createJarWithClasses(Seq(className))
-    val contextLoader = new URLClassLoader(Array(jar), Utils.getContextOrSparkClassLoader)
+    val contextLoader = new MutableURLClassLoader(Array(jar), Utils.getSparkClassLoader)
     Thread.currentThread().setContextClassLoader(contextLoader)
 
     val sc = new SparkContext("local", "driverLoaderTest")

@@ -43,7 +43,7 @@ object ScalaReflection extends ScalaReflection {
   // class loader of the current thread.
   // SPARK-13640: Synchronize this because universe.runtimeMirror is not thread-safe in Scala 2.10.
   override def mirror: universe.Mirror = ScalaReflectionLock.synchronized {
-    universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
+    universe.runtimeMirror(getClass.getClassLoader)
   }
 
   import universe._

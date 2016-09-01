@@ -122,7 +122,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     try {
       getTaskResultExecutor.execute(new Runnable {
         override def run(): Unit = Utils.logUncaughtExceptions {
-          val loader = Utils.getContextOrSparkClassLoader
+          val loader = Utils.getSparkClassLoader
           try {
             if (serializedData != null && serializedData.limit() > 0) {
               reason = serializer.get().deserialize[TaskEndReason](

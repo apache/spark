@@ -854,7 +854,7 @@ object CodeGenerator extends Logging {
     // find other possible classes (see org.codehaus.janinoClassLoaderIClassLoader's
     // findIClass method). Please also see https://issues.apache.org/jira/browse/SPARK-15622 and
     // https://issues.apache.org/jira/browse/SPARK-11636.
-    val parentClassLoader = new ParentClassLoader(Utils.getContextOrSparkClassLoader)
+    val parentClassLoader = new ParentClassLoader(Utils.getSparkClassLoader)
     evaluator.setParentClassLoader(parentClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")

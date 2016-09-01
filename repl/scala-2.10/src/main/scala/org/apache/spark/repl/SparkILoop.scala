@@ -140,7 +140,7 @@ class SparkILoop(
   private def history = in.history
 
   /** The context class loader at the time this object was created */
-  protected val originalClassLoader = Utils.getContextOrSparkClassLoader
+  protected val originalClassLoader = Utils.getSparkClassLoader
 
   // classpath entries added via :cp
   private var addedClasspath: String = ""

@@ -596,9 +596,9 @@ private[spark] class ApplicationMaster(
     }
     val userClassLoader =
       if (Client.isUserClassPathFirst(sparkConf, isDriver = true)) {
-        new ChildFirstURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
+        new ChildFirstURLClassLoader(urls, Utils.getSparkClassLoader)
       } else {
-        new MutableURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
+        new MutableURLClassLoader(urls, Utils.getSparkClassLoader)
       }
 
     var userArgs = args.userArgs

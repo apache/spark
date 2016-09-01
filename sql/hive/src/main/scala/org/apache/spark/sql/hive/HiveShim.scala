@@ -208,7 +208,7 @@ private[hive] object HiveShim {
 
         // deserialize the function object via Hive Utilities
         instance = deserializePlan[AnyRef](new java.io.ByteArrayInputStream(functionInBytes),
-          Utils.getContextOrSparkClassLoader.loadClass(functionClassName))
+          Utils.getSparkClassLoader.loadClass(functionClassName))
       }
     }
 
@@ -216,7 +216,7 @@ private[hive] object HiveShim {
       if (instance != null) {
         instance.asInstanceOf[UDFType]
       } else {
-        val func = Utils.getContextOrSparkClassLoader
+        val func = Utils.getSparkClassLoader
           .loadClass(functionClassName).newInstance.asInstanceOf[UDFType]
         if (!func.isInstanceOf[UDF]) {
           // We cache the function if it's no the Simple UDF,

@@ -427,7 +427,7 @@ private[spark] class Executor(
       currentJars(url.getPath().split("/").last) = now
     }
 
-    val currentLoader = Utils.getContextOrSparkClassLoader
+    val currentLoader = Utils.getSparkClassLoader
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.

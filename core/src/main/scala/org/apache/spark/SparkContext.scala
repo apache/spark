@@ -1215,7 +1215,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       minPartitions: Int = defaultMinPartitions): RDD[T] = withScope {
     assertNotStopped()
     sequenceFile(path, classOf[NullWritable], classOf[BytesWritable], minPartitions)
-      .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes, Utils.getContextOrSparkClassLoader))
+      .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes, Utils.getSparkClassLoader))
   }
 
   protected[spark] def checkpointFile[T: ClassTag](path: String): RDD[T] = withScope {
@@ -2534,7 +2534,7 @@ object SparkContext extends Logging {
   }
 
   private def getClusterManager(url: String): Option[ExternalClusterManager] = {
-    val loader = Utils.getContextOrSparkClassLoader
+    val loader = Utils.getSparkClassLoader
     val serviceLoaders =
       ServiceLoader.load(classOf[ExternalClusterManager], loader).asScala.filter(_.canCreate(url))
     if (serviceLoaders.size > 1) {

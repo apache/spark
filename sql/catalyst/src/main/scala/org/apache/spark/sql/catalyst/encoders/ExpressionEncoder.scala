@@ -108,7 +108,7 @@ object ExpressionEncoder {
         StructField(s"_${i + 1}", dataType, nullable)
     })
 
-    val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
+    val cls = Utils.getSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
 
     val serializer = encoders.zipWithIndex.map { case (enc, index) =>
       val originalInputObject = enc.serializer.head.collect { case b: BoundReference => b }.head
