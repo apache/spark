@@ -1329,11 +1329,6 @@ setMethod("write.ml", signature(object = "ALSModel", path = "character"),
 #' Users can call \code{summary} to obtain a summary of the test, and \code{print.summary.KSTest}
 #' to print out a summary result.
 #'
-#' @details
-#' For more details, see
-#' \href{http://spark.apache.org/docs/latest/mllib-statistics.html#hypothesis-testing}{
-#' MLlib: Hypothesis Testing}.
-#'
 #' @param data a SparkDataFrame of user data.
 #' @param testCol column name where the test data is from. It should be a column of double type.
 #' @param nullHypothesis name of the theoretical distribution tested against. Currently only
@@ -1347,6 +1342,8 @@ setMethod("write.ml", signature(object = "ALSModel", path = "character"),
 #' @rdname spark.kstest
 #' @aliases spark.kstest,SparkDataFrame-method
 #' @name spark.kstest
+#' @seealso \href{http://spark.apache.org/docs/latest/mllib-statistics.html#hypothesis-testing}{
+#'          MLlib: Hypothesis Testing}
 #' @export
 #' @examples
 #' \dontrun{
@@ -1404,10 +1401,10 @@ setMethod("summary", signature(object = "KSTest"),
                  degreesOfFreedom = degreesOfFreedom)
           })
 
-#  Prints the summary of GeneralizedLinearRegressionModel
+#  Prints the summary of KSTest
 
 #' @rdname spark.kstest
-#' @param x test result object of KS.
+#' @param x test result object of \code{spark.kstest}.
 #' @export
 #' @note print.summary.KSTest since 2.1.0
 print.summary.KSTest <- function(x, ...) {
