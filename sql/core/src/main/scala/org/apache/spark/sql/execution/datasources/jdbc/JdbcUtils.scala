@@ -242,7 +242,16 @@ object JdbcUtils extends Logging {
       val typeName = rsmd.getColumnTypeName(i + 1)
       val fieldSize = rsmd.getPrecision(i + 1)
       val fieldScale = rsmd.getScale(i + 1)
-      val isSigned = rsmd.isSigned(i + 1)
+      val isSigned = {
+        try {
+          rsmd.isSigned(i + 1)
+        } catch {
+          // Workaround for HIVE-14684:
+          case e: SQLException if
+          e.getMessage == "Method not supported" &&
+            rsmd.getClass.getName == "org.apache.hive.jdbc.HiveResultSetMetaData" => true
+        }
+      }
       val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       val metadata = new MetadataBuilder()
         .putString("name", columnName)
