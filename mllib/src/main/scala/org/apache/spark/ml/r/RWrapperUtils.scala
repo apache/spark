@@ -50,14 +50,14 @@ object RWrapperUtils extends Logging {
   }
 
   /**
-    * Convert conflicting name to be an unique name.
-    * Appending a sequence number, like originalName_output1
-    * and incrementing until it is not already there
-    *
-    * @param originalName Original name
-    * @param fieldNames Array of field names in existing schema
-    * @return String
-    */
+   * Convert conflicting name to be an unique name.
+   * Appending a sequence number, like originalName_output1
+   * and incrementing until it is not already there
+   *
+   * @param originalName Original name
+   * @param fieldNames Array of field names in existing schema
+   * @return String
+   */
   def convertToUniqueName(originalName: String, fieldNames: Array[String]): String = {
     var counter = 1
     var newName = originalName + "_output"
