@@ -65,6 +65,24 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(filteredData == preFilteredData)
   }
 
+  test("PercentileChiSqSelector transform test (sparse & dense vector)") {
+    val labeledDiscreteData = sc.parallelize(
+      Seq(LabeledPoint(0.0, Vectors.sparse(3, Array((0, 8.0), (1, 7.0)))),
+        LabeledPoint(1.0, Vectors.sparse(3, Array((1, 9.0), (2, 6.0)))),
+        LabeledPoint(1.0, Vectors.dense(Array(0.0, 9.0, 8.0))),
+        LabeledPoint(2.0, Vectors.dense(Array(8.0, 9.0, 5.0)))), 2)
+    val preFilteredData =
+      Set(LabeledPoint(0.0, Vectors.dense(Array(0.0))),
+        LabeledPoint(1.0, Vectors.dense(Array(6.0))),
+        LabeledPoint(1.0, Vectors.dense(Array(8.0))),
+        LabeledPoint(2.0, Vectors.dense(Array(5.0))))
+    val model = new PercentileChiSqSelector(25).fit(labeledDiscreteData)
+    val filteredData = labeledDiscreteData.map { lp =>
+      LabeledPoint(lp.label, model.transform(lp.features))
+    }.collect().toSet
+    assert(filteredData == preFilteredData)
+  }
+
   test("model load / save") {
     val model = ChiSqSelectorSuite.createModel()
     val tempDir = Utils.createTempDir()
