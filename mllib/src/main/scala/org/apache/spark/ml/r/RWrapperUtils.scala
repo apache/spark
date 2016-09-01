@@ -43,8 +43,8 @@ object RWrapperUtils extends Logging {
 
     if (data.schema.fieldNames.contains(rFormula.getFeaturesCol)) {
       val newFeaturesName = convertToUniqueName(rFormula.getFeaturesCol, data.schema.fieldNames)
-      logWarning(
-        s"data containing ${rFormula.getFeaturesCol} column, using new name $newFeaturesName")
+      logWarning(s"data containing ${rFormula.getFeaturesCol} column, " +
+        s"using new name $newFeaturesName instead")
       rFormula.setFeaturesCol(newFeaturesName)
     }
   }
