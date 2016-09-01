@@ -110,7 +110,6 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 case class CreateDataSourceTableAsSelectCommand(
     table: CatalogTable,
     mode: SaveMode,
-    options: Map[String, String],
     query: LogicalPlan)
   extends RunnableCommand {
 

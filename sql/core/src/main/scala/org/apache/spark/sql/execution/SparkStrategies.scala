@@ -428,7 +428,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           CreateDataSourceTableAsSelectCommand(
             tableDesc,
             mode,
-            tableDesc.storage.properties,
             query)
         ExecutedCommandExec(cmd) :: Nil
 
