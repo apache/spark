@@ -164,7 +164,7 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
         case Row(feature: Int) => (feature)
       }.collect()
 
-      return new ChiSqSelectorModel(features)
+      new ChiSqSelectorModel(features)
     }
   }
 }
@@ -173,8 +173,8 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
  * Creates a ChiSquared feature selector.
  * @param numTopFeatures number of features that selector will select
  *                       (ordered by statistic value descending)
- *                       Note that if the number of features is < numTopFeatures, then this will
- *                       select all features.
+ *                       Note that if the number of features is less than numTopFeatures,
+ *                       then this will select all features.
  */
 @Since("1.3.0")
 class ChiSqSelector @Since("1.3.0") (

@@ -49,8 +49,9 @@ object OneHotEncoderExample {
     val encoder = new OneHotEncoder()
       .setInputCol("categoryIndex")
       .setOutputCol("categoryVec")
+
     val encoded = encoder.transform(indexed)
-    encoded.select("id", "categoryVec").show()
+    encoded.show()
     // $example off$
 
     spark.stop()

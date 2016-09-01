@@ -55,7 +55,7 @@ public final class Platform {
       // We at least know x86 and x64 support unaligned access.
       String arch = System.getProperty("os.arch", "");
       //noinspection DynamicRegexReplaceableByCompiledPattern
-      _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64)$");
+      _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64|aarch64)$");
     }
     unaligned = _unaligned;
   }
@@ -174,6 +174,10 @@ public final class Platform {
       throwException(e);
     }
     throw new IllegalStateException("unreachable");
+  }
+
+  public static void setMemory(Object object, long offset, long size, byte value) {
+    _UNSAFE.setMemory(object, offset, size, value);
   }
 
   public static void setMemory(long address, byte value, long size) {

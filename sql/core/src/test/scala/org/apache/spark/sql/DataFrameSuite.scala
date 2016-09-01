@@ -21,7 +21,6 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.scalatest.Matchers._
@@ -651,44 +650,44 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       ("Amy", 24, 180)).toDF("name", "age", "height")
 
     val describeResult = Seq(
-      Row("count", "4", "4"),
-      Row("mean", "33.0", "178.0"),
-      Row("stddev", "19.148542155126762", "11.547005383792516"),
-      Row("min", "16", "164"),
-      Row("max", "60", "192"))
+      Row("count", "4", "4", "4"),
+      Row("mean", null, "33.0", "178.0"),
+      Row("stddev", null, "19.148542155126762", "11.547005383792516"),
+      Row("min", "Alice", "16", "164"),
+      Row("max", "David", "60", "192"))
 
     val emptyDescribeResult = Seq(
-      Row("count", "0", "0"),
-      Row("mean", null, null),
-      Row("stddev", null, null),
-      Row("min", null, null),
-      Row("max", null, null))
+      Row("count", "0", "0", "0"),
+      Row("mean", null, null, null),
+      Row("stddev", null, null, null),
+      Row("min", null, null, null),
+      Row("max", null, null, null))
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
-    val describeTwoCols = describeTestData.describe("age", "height")
-    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
+    val describeTwoCols = describeTestData.describe("name", "age", "height")
+    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "name", "age", "height"))
     checkAnswer(describeTwoCols, describeResult)
     // All aggregate value should have been cast to string
     describeTwoCols.collect().foreach { row =>
-      assert(row.get(1).isInstanceOf[String], "expected string but found " + row.get(1).getClass)
       assert(row.get(2).isInstanceOf[String], "expected string but found " + row.get(2).getClass)
+      assert(row.get(3).isInstanceOf[String], "expected string but found " + row.get(3).getClass)
     }
 
     val describeAllCols = describeTestData.describe()
-    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
+    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height"))
     checkAnswer(describeAllCols, describeResult)
 
     val describeOneCol = describeTestData.describe("age")
     assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
-    checkAnswer(describeOneCol, describeResult.map { case Row(s, d, _) => Row(s, d)} )
+    checkAnswer(describeOneCol, describeResult.map { case Row(s, _, d, _) => Row(s, d)} )
 
     val describeNoCol = describeTestData.select("name").describe()
-    assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
-    checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _) => Row(s)} )
+    assert(getSchemaAsSeq(describeNoCol) === Seq("summary", "name"))
+    checkAnswer(describeNoCol, describeResult.map { case Row(s, n, _, _) => Row(s, n)} )
 
     val emptyDescription = describeTestData.limit(0).describe()
-    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "age", "height"))
+    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
     checkAnswer(emptyDescription, emptyDescribeResult)
   }
 
@@ -1249,17 +1248,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   /**
-   * Verifies that there is no Exchange between the Aggregations for `df`
+   * Verifies that there is a single Aggregation for `df`
    */
-  private def verifyNonExchangingAgg(df: DataFrame) = {
+  private def verifyNonExchangingSingleAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
       case agg: HashAggregateExec =>
-        atFirstAgg = !atFirstAgg
-      case _ =>
         if (atFirstAgg) {
-          fail("Should not have operators between the two aggregations")
+          fail("Should not have back to back Aggregates")
         }
+        atFirstAgg = true
+      case _ =>
     }
   }
 
@@ -1293,9 +1292,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     // Group by the column we are distributed by. This should generate a plan with no exchange
     // between the aggregates
     val df3 = testData.repartition($"key").groupBy("key").count()
-    verifyNonExchangingAgg(df3)
-    verifyNonExchangingAgg(testData.repartition($"key", $"value")
+    verifyNonExchangingSingleAgg(df3)
+    verifyNonExchangingSingleAgg(testData.repartition($"key", $"value")
       .groupBy("key", "value").count())
+    verifyNonExchangingSingleAgg(testData.repartition($"key").groupBy("key", "value").count())
 
     // Grouping by just the first distributeBy expr, need to exchange.
     verifyExchangingAgg(testData.repartition($"key", $"value")
@@ -1570,5 +1570,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(joined, Row("x", null, null))
     checkAnswer(joined.filter($"new".isNull), Row("x", null, null))
+  }
+
+  test("SPARK-16664: persist with more than 200 columns") {
+    val size = 201L
+    val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(Seq.range(0, size))))
+    val schemas = List.range(0, size).map(a => StructField("name" + a, LongType, true))
+    val df = spark.createDataFrame(rdd, StructType(schemas), false)
+    assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
+  }
+
+  test("copy results for sampling with replacement") {
+    val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
+    val sampleDf = df.sample(true, 2.00)
+    val d = sampleDf.withColumn("c", monotonically_increasing_id).select($"c").collect
+    assert(d.size == d.distinct.size)
   }
 }

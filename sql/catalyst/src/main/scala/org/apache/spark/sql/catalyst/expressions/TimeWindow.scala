@@ -45,12 +45,12 @@ case class TimeWindow(
       slideDuration: Expression,
       startTime: Expression) = {
     this(timeColumn, TimeWindow.parseExpression(windowDuration),
-      TimeWindow.parseExpression(windowDuration), TimeWindow.parseExpression(startTime))
+      TimeWindow.parseExpression(slideDuration), TimeWindow.parseExpression(startTime))
   }
 
   def this(timeColumn: Expression, windowDuration: Expression, slideDuration: Expression) = {
     this(timeColumn, TimeWindow.parseExpression(windowDuration),
-      TimeWindow.parseExpression(windowDuration), 0)
+      TimeWindow.parseExpression(slideDuration), 0)
   }
 
   def this(timeColumn: Expression, windowDuration: Expression) = {

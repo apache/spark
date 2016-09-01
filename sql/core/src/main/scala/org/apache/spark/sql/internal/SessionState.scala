@@ -24,13 +24,13 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, _}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.AnalyzeTableCommand
-import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, FindDataSourceTable, PreprocessTableInsertion, ResolveDataSource}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryManager}
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -111,12 +111,14 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val analyzer: Analyzer = {
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
+        PreprocessDDL(conf) ::
         PreprocessTableInsertion(conf) ::
         new FindDataSourceTable(sparkSession) ::
         DataSourceAnalysis(conf) ::
         (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
+      override val extendedCheckRules =
+        Seq(PreWriteCheck(conf, catalog), HiveOnlyCheck)
     }
   }
 
@@ -162,12 +164,10 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
 
-  def executeSql(sql: String): QueryExecution = executePlan(sqlParser.parsePlan(sql))
-
   def executePlan(plan: LogicalPlan): QueryExecution = new QueryExecution(sparkSession, plan)
 
-  def invalidateTable(tableName: String): Unit = {
-    catalog.invalidateTable(sqlParser.parseTableIdentifier(tableName))
+  def refreshTable(tableName: String): Unit = {
+    catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
   }
 
   def addJar(path: String): Unit = {

@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
@@ -59,7 +59,6 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
 }
 
 /**
- * :: Experimental ::
  * Class for indexing categorical feature columns in a dataset of [[Vector]].
  *
  * This has 2 usage modes:
@@ -93,7 +92,6 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *  - Add warning if a categorical feature has only 1 category.
  *  - Add option for allowing unknown categories.
  */
-@Experimental
 @Since("1.4.0")
 class VectorIndexer @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
@@ -247,7 +245,6 @@ object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[VectorIndexer]]. Transform categorical features to use 0-based indices
  * instead of their original values.
  *  - Categorical features are mapped to indices.
@@ -263,7 +260,6 @@ object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
  *                      Values are maps from original features values to 0-based category indices.
  *                      If a feature is not in this map, it is treated as continuous.
  */
-@Experimental
 @Since("1.4.0")
 class VectorIndexerModel private[ml] (
     @Since("1.4.0") override val uid: String,

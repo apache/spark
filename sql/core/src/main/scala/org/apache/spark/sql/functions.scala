@@ -820,7 +820,7 @@ object functions {
 
   /**
    * Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
-   * partition. Fow example, if `n` is 4, the first quarter of the rows will get value 1, the second
+   * partition. For example, if `n` is 4, the first quarter of the rows will get value 1, the second
    * quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
    *
    * This is equivalent to the NTILE function in SQL.
@@ -978,6 +978,7 @@ object functions {
    * @group normal_funcs
    * @since 1.4.0
    */
+  @deprecated("Use monotonically_increasing_id()", "2.0.0")
   def monotonicallyIncreasingId(): Column = monotonically_increasing_id()
 
   /**
@@ -2174,7 +2175,8 @@ object functions {
   def ltrim(e: Column): Column = withExpr {StringTrimLeft(e.expr) }
 
   /**
-   * Extract a specific(idx) group identified by a java regex, from the specified string column.
+   * Extract a specific group matched by a Java regex, from the specified string column.
+   * If the regex did not match, or the specified group did not match, an empty string is returned.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2191,6 +2193,16 @@ object functions {
    */
   def regexp_replace(e: Column, pattern: String, replacement: String): Column = withExpr {
     RegExpReplace(e.expr, lit(pattern).expr, lit(replacement).expr)
+  }
+
+  /**
+   * Replace all substrings of the specified string value that match regexp with rep.
+   *
+   * @group string_funcs
+   * @since 2.1.0
+   */
+  def regexp_replace(e: Column, pattern: Column, replacement: Column): Column = withExpr {
+    RegExpReplace(e.expr, pattern.expr, replacement.expr)
   }
 
   /**

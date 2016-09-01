@@ -223,22 +223,18 @@ case class InsertIntoHiveTable(
         jobConf,
         fileSinkConf,
         dynamicPartColNames,
-        child.output,
-        table)
+        child.output)
     } else {
       new SparkHiveWriterContainer(
         jobConf,
         fileSinkConf,
-        child.output,
-        table)
+        child.output)
     }
 
     @transient val outputClass = writerContainer.newSerializer(table.tableDesc).getSerializedClass
     saveAsHiveFile(child.execute(), outputClass, fileSinkConf, jobConfSer, writerContainer)
 
     val outputPath = FileOutputFormat.getOutputPath(jobConf)
-    // Have to construct the format of dbname.tablename.
-    val qualifiedTableName = s"${table.databaseName}.${table.tableName}"
     // TODO: Correctly set holdDDLTime.
     // In most of the time, we should have holdDDLTime = false.
     // holdDDLTime will be true when TOK_HOLD_DDLTIME presents in the query as a hint.
@@ -260,7 +256,7 @@ case class InsertIntoHiveTable(
         client.synchronized {
           client.loadDynamicPartitions(
             outputPath.toString,
-            qualifiedTableName,
+            table.catalogTable.qualifiedName,
             orderedPartitionSpec,
             overwrite,
             numDynamicPartitions,
@@ -274,13 +270,13 @@ case class InsertIntoHiveTable(
         // scalastyle:on
         val oldPart =
           client.getPartitionOption(
-            client.getTable(table.databaseName, table.tableName),
+            table.catalogTable,
             partitionSpec)
 
         if (oldPart.isEmpty || !ifNotExists) {
             client.loadPartition(
               outputPath.toString,
-              qualifiedTableName,
+              table.catalogTable.qualifiedName,
               orderedPartitionSpec,
               overwrite,
               holdDDLTime,
@@ -291,14 +287,14 @@ case class InsertIntoHiveTable(
     } else {
       client.loadTable(
         outputPath.toString, // TODO: URI
-        qualifiedTableName,
+        table.catalogTable.qualifiedName,
         overwrite,
         holdDDLTime)
     }
 
     // Invalidate the cache.
     sqlContext.sharedState.cacheManager.invalidateCache(table)
-    sqlContext.sessionState.catalog.invalidateTable(table.catalogTable.identifier)
+    sqlContext.sessionState.catalog.refreshTable(table.catalogTable.identifier)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

@@ -213,15 +213,35 @@ test_that("read csv as DataFrame", {
   mockLinesCsv <- c("year,make,model,comment,blank",
                    "\"2012\",\"Tesla\",\"S\",\"No comment\",",
                    "1997,Ford,E350,\"Go get one now they are going fast\",",
-                   "2015,Chevy,Volt")
+                   "2015,Chevy,Volt",
+                   "NA,Dummy,Placeholder")
   writeLines(mockLinesCsv, csvPath)
 
-  # default "header" is false
-  df <- read.df(csvPath, "csv", header = "true")
-  expect_equal(count(df), 3)
+  # default "header" is false, inferSchema to handle "year" as "int"
+  df <- read.df(csvPath, "csv", header = "true", inferSchema = "true")
+  expect_equal(count(df), 4)
   expect_equal(columns(df), c("year", "make", "model", "comment", "blank"))
-  expect_equal(sort(unlist(collect(where(df, df$year == "2015")))),
-               sort(unlist(list(year = "2015", make = "Chevy", model = "Volt"))))
+  expect_equal(sort(unlist(collect(where(df, df$year == 2015)))),
+               sort(unlist(list(year = 2015, make = "Chevy", model = "Volt"))))
+
+  # since "year" is "int", let's skip the NA values
+  withoutna <- na.omit(df, how = "any", cols = "year")
+  expect_equal(count(withoutna), 3)
+
+  unlink(csvPath)
+  csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
+  mockLinesCsv <- c("year,make,model,comment,blank",
+                   "\"2012\",\"Tesla\",\"S\",\"No comment\",",
+                   "1997,Ford,E350,\"Go get one now they are going fast\",",
+                   "2015,Chevy,Volt",
+                   "Empty,Dummy,Placeholder")
+  writeLines(mockLinesCsv, csvPath)
+
+  df2 <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.strings = "Empty")
+  expect_equal(count(df2), 4)
+  withoutna2 <- na.omit(df2, how = "any", cols = "year")
+  expect_equal(count(withoutna2), 3)
+  expect_equal(count(where(withoutna2, withoutna2$make == "Dummy")), 0)
 
   unlink(csvPath)
 })
@@ -470,7 +490,7 @@ test_that("read/write json files", {
 test_that("jsonRDD() on a RDD with json string", {
   sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   rdd <- parallelize(sc, mockLines)
-  expect_equal(count(rdd), 3)
+  expect_equal(countRDD(rdd), 3)
   df <- suppressWarnings(jsonRDD(sqlContext, rdd))
   expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
@@ -562,7 +582,7 @@ test_that("toRDD() returns an RRDD", {
   df <- read.json(jsonPath)
   testRDD <- toRDD(df)
   expect_is(testRDD, "RDD")
-  expect_equal(count(testRDD), 3)
+  expect_equal(countRDD(testRDD), 3)
 })
 
 test_that("union on two RDDs created from DataFrames returns an RRDD", {
@@ -572,7 +592,7 @@ test_that("union on two RDDs created from DataFrames returns an RRDD", {
   unioned <- unionRDD(RDD1, RDD2)
   expect_is(unioned, "RDD")
   expect_equal(getSerializedMode(unioned), "byte")
-  expect_equal(collect(unioned)[[2]]$name, "Andy")
+  expect_equal(collectRDD(unioned)[[2]]$name, "Andy")
 })
 
 test_that("union on mixed serialization types correctly returns a byte RRDD", {
@@ -594,14 +614,14 @@ test_that("union on mixed serialization types correctly returns a byte RRDD", {
   unionByte <- unionRDD(rdd, dfRDD)
   expect_is(unionByte, "RDD")
   expect_equal(getSerializedMode(unionByte), "byte")
-  expect_equal(collect(unionByte)[[1]], 1)
-  expect_equal(collect(unionByte)[[12]]$name, "Andy")
+  expect_equal(collectRDD(unionByte)[[1]], 1)
+  expect_equal(collectRDD(unionByte)[[12]]$name, "Andy")
 
   unionString <- unionRDD(textRDD, dfRDD)
   expect_is(unionString, "RDD")
   expect_equal(getSerializedMode(unionString), "byte")
-  expect_equal(collect(unionString)[[1]], "Michael")
-  expect_equal(collect(unionString)[[5]]$name, "Andy")
+  expect_equal(collectRDD(unionString)[[1]], "Michael")
+  expect_equal(collectRDD(unionString)[[5]]$name, "Andy")
 })
 
 test_that("objectFile() works with row serialization", {
@@ -613,7 +633,7 @@ test_that("objectFile() works with row serialization", {
 
   expect_is(objectIn, "RDD")
   expect_equal(getSerializedMode(objectIn), "byte")
-  expect_equal(collect(objectIn)[[2]]$age, 30)
+  expect_equal(collectRDD(objectIn)[[2]]$age, 30)
 })
 
 test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
@@ -623,7 +643,7 @@ test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
     row
     })
   expect_is(testRDD, "RDD")
-  collected <- collect(testRDD)
+  collected <- collectRDD(testRDD)
   expect_equal(collected[[1]]$name, "Michael")
   expect_equal(collected[[2]]$newCol, 35)
 })
@@ -695,10 +715,10 @@ test_that("multiple pipeline transformations result in an RDD with the correct v
     row
   })
   expect_is(second, "RDD")
-  expect_equal(count(second), 3)
-  expect_equal(collect(second)[[2]]$age, 35)
-  expect_true(collect(second)[[2]]$testCol)
-  expect_false(collect(second)[[3]]$testCol)
+  expect_equal(countRDD(second), 3)
+  expect_equal(collectRDD(second)[[2]]$age, 35)
+  expect_true(collectRDD(second)[[2]]$testCol)
+  expect_false(collectRDD(second)[[3]]$testCol)
 })
 
 test_that("cache(), persist(), and unpersist() on a DataFrame", {
@@ -1588,7 +1608,7 @@ test_that("toJSON() returns an RDD of the correct values", {
   testRDD <- toJSON(df)
   expect_is(testRDD, "RDD")
   expect_equal(getSerializedMode(testRDD), "string")
-  expect_equal(collect(testRDD)[[1]], mockLines[1])
+  expect_equal(collectRDD(testRDD)[[1]], mockLines[1])
 })
 
 test_that("showDF()", {
@@ -1804,12 +1824,16 @@ test_that("describe() and summarize() on a DataFrame", {
   expect_equal(collect(stats)[2, "age"], "24.5")
   expect_equal(collect(stats)[3, "age"], "7.7781745930520225")
   stats <- describe(df)
-  expect_equal(collect(stats)[4, "name"], "Andy")
+  expect_equal(collect(stats)[4, "summary"], "min")
   expect_equal(collect(stats)[5, "age"], "30")
 
   stats2 <- summary(df)
-  expect_equal(collect(stats2)[4, "name"], "Andy")
+  expect_equal(collect(stats2)[4, "summary"], "min")
   expect_equal(collect(stats2)[5, "age"], "30")
+
+  # SPARK-16425: SparkR summary() fails on column of type logical
+  df <- withColumn(df, "boolean", df$age == 30)
+  summary(df)
 
   # Test base::summary is working
   expect_equal(length(summary(attenu, digits = 4)), 35)
@@ -2352,7 +2376,7 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
 test_that("Window functions on a DataFrame", {
   df <- createDataFrame(list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
                         schema = c("key", "value"))
-  ws <- orderBy(window.partitionBy("key"), "value")
+  ws <- orderBy(windowPartitionBy("key"), "value")
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expected <- data.frame(key = c(1L, NA, 2L, NA),
@@ -2360,17 +2384,17 @@ test_that("Window functions on a DataFrame", {
                        stringsAsFactors = FALSE)
   expect_equal(result, expected)
 
-  ws <- orderBy(window.partitionBy(df$key), df$value)
+  ws <- orderBy(windowPartitionBy(df$key), df$value)
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expect_equal(result, expected)
 
-  ws <- partitionBy(window.orderBy("value"), "key")
+  ws <- partitionBy(windowOrderBy("value"), "key")
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expect_equal(result, expected)
 
-  ws <- partitionBy(window.orderBy(df$value), df$key)
+  ws <- partitionBy(windowOrderBy(df$value), df$key)
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expect_equal(result, expected)
@@ -2381,7 +2405,8 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
   a <- 1:3
   b <- c("a", "b", "c")
   ldf <- data.frame(a, b)
-  df <- suppressWarnings(createDataFrame(sqlContext, ldf))
+  # Call function with namespace :: operator - SPARK-16538
+  df <- suppressWarnings(SparkR::createDataFrame(sqlContext, ldf))
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
   expect_equal(count(df), 3)
@@ -2399,6 +2424,13 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
   before <- suppressWarnings(createDataFrame(sqlContext, iris))
   after <- suppressWarnings(createDataFrame(iris))
   expect_equal(collect(before), collect(after))
+
+  # more tests for SPARK-16538
+  createOrReplaceTempView(df, "table")
+  SparkR::tables()
+  SparkR::sql("SELECT 1")
+  suppressWarnings(SparkR::sql(sqlContext, "SELECT * FROM table"))
+  suppressWarnings(SparkR::dropTempTable(sqlContext, "table"))
 })
 
 test_that("randomSplit", {
@@ -2457,3 +2489,5 @@ unlink(parquetPath)
 unlink(orcPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
+
+sparkR.session.stop()

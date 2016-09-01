@@ -56,9 +56,9 @@ object BuildCommons {
     "tags", "sketch"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
-  val optionallyEnabledProjects@Seq(yarn, java8Tests, sparkGangliaLgpl,
+  val optionallyEnabledProjects@Seq(mesos, yarn, java8Tests, sparkGangliaLgpl,
     streamingKinesisAsl, dockerIntegrationTests) =
-    Seq("yarn", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
+    Seq("mesos", "yarn", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =
@@ -701,15 +701,29 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive/test")))
   }
 
+  private def ignoreClasspaths(classpaths: Seq[Classpath]): Seq[Classpath] = {
+    classpaths
+      .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka-clients-0\.10.*""")))
+      .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka_2\..*-0\.10.*""")))
+  }
+
   val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
 
   lazy val settings = scalaJavaUnidocSettings ++ Seq (
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, tags),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, tags, streamingKafka010),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, tags),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, tags, streamingKafka010),
+
+    unidocAllClasspaths in (ScalaUnidoc, unidoc) := {
+      ignoreClasspaths((unidocAllClasspaths in (ScalaUnidoc, unidoc)).value)
+    },
+
+    unidocAllClasspaths in (JavaUnidoc, unidoc) := {
+      ignoreClasspaths((unidocAllClasspaths in (JavaUnidoc, unidoc)).value)
+    },
 
     // Skip actual catalyst, but include the subproject.
     // Catalyst is not public API and contains quasiquotes which break scaladoc.
@@ -811,6 +825,7 @@ object TestSettings {
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dspark.port.maxRetries=100",
     javaOptions in Test += "-Dspark.master.rest.enabled=false",
+    javaOptions in Test += "-Dspark.memory.debugFill=true",
     javaOptions in Test += "-Dspark.ui.enabled=false",
     javaOptions in Test += "-Dspark.ui.showConsoleProgress=false",
     javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",

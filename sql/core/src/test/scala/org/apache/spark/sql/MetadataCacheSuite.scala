@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.File
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 /**
@@ -59,8 +60,8 @@ class MetadataCacheSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  ignore("SPARK-16337 temporary view refresh") {
-    withTempPath { (location: File) =>
+  test("SPARK-16337 temporary view refresh") {
+    withTempView("view_refresh") { withTempPath { (location: File) =>
       // Create a Parquet directory
       spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
         .write.parquet(location.getAbsolutePath)
@@ -77,12 +78,36 @@ class MetadataCacheSuite extends QueryTest with SharedSQLContext {
         sql("select count(*) from view_refresh").first()
       }
       assert(e.getMessage.contains("FileNotFoundException"))
-      assert(e.getMessage.contains("refresh()"))
+      assert(e.getMessage.contains("REFRESH"))
 
       // Refresh and we should be able to read it again.
       spark.catalog.refreshTable("view_refresh")
       val newCount = sql("select count(*) from view_refresh").first().getLong(0)
       assert(newCount > 0 && newCount < 100)
+    }}
+  }
+
+  test("case sensitivity support in temporary view refresh") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTempView("view_refresh") {
+        withTempPath { (location: File) =>
+          // Create a Parquet directory
+          spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
+            .write.parquet(location.getAbsolutePath)
+
+          // Read the directory in
+          spark.read.parquet(location.getAbsolutePath).createOrReplaceTempView("view_refresh")
+
+          // Delete a file
+          deleteOneFileInDirectory(location)
+          intercept[SparkException](sql("select count(*) from view_refresh").first())
+
+          // Refresh and we should be able to read it again.
+          spark.catalog.refreshTable("vIeW_reFrEsH")
+          val newCount = sql("select count(*) from view_refresh").first().getLong(0)
+          assert(newCount > 0 && newCount < 100)
+        }
+      }
     }
   }
 }

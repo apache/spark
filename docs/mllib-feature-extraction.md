@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Feature Extraction and Transformation - spark.mllib
-displayTitle: Feature Extraction and Transformation - spark.mllib
+title: Feature Extraction and Transformation - RDD-based API
+displayTitle: Feature Extraction and Transformation - RDD-based API
 ---
 
 * Table of contents
@@ -148,7 +148,7 @@ against features with very large variances exerting an overly large influence du
 following parameters in the constructor:
 
 * `withMean` False by default. Centers the data with mean before scaling. It will build a dense
-output, so this does not work on sparse input and will raise an exception.
+output, so take care when applying to sparse input.
 * `withStd` True by default. Scales the data to unit standard deviation.
 
 We provide a [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) method in

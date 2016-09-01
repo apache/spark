@@ -100,7 +100,7 @@ private[classification] trait MultilayerPerceptronParams extends PredictorParams
   @Since("2.0.0")
   final def getInitialWeights: Vector = $(initialWeights)
 
-  setDefault(maxIter -> 100, tol -> 1e-4, blockSize -> 128,
+  setDefault(maxIter -> 100, tol -> 1e-6, blockSize -> 128,
     solver -> MultilayerPerceptronClassifier.LBFGS, stepSize -> 0.03)
 }
 
@@ -190,7 +190,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   /**
    * Set the convergence tolerance of iterations.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
-   * Default is 1E-4.
+   * Default is 1E-6.
    *
    * @group setParam
    */

@@ -47,6 +47,8 @@ groupedData <- function(sgd) {
 
 
 #' @rdname show
+#' @aliases show,GroupedData-method
+#' @export
 #' @note show(GroupedData) since 1.4.0
 setMethod("show", "GroupedData",
           function(object) {
@@ -58,9 +60,9 @@ setMethod("show", "GroupedData",
 #' Count the number of rows for each group.
 #' The resulting SparkDataFrame will also contain the grouping columns.
 #'
-#' @param x a GroupedData
-#' @return a SparkDataFrame
+#' @return A SparkDataFrame.
 #' @rdname count
+#' @aliases count,GroupedData-method
 #' @export
 #' @examples
 #' \dontrun{
@@ -81,9 +83,8 @@ setMethod("count",
 #' df2 <- agg(df, <column> = <aggFunction>)
 #' df2 <- agg(df, newColName = aggFunction(column))
 #'
-#' @param x a GroupedData
-#' @return a SparkDataFrame
 #' @rdname summarize
+#' @aliases agg,GroupedData-method
 #' @name agg
 #' @family agg_funcs
 #' @export
@@ -121,6 +122,7 @@ setMethod("agg",
 
 #' @rdname summarize
 #' @name summarize
+#' @aliases summarize,GroupedData-method
 #' @note summarize since 1.4.0
 setMethod("summarize",
           signature(x = "GroupedData"),
@@ -146,6 +148,7 @@ methods <- c("avg", "max", "mean", "min", "sum")
 #' @param values A value or a list/vector of distinct values for the output columns.
 #' @return GroupedData object
 #' @rdname pivot
+#' @aliases pivot,GroupedData,character-method
 #' @name pivot
 #' @export
 #' @examples
@@ -196,8 +199,8 @@ createMethods()
 
 #' gapply
 #'
-#' @param x A GroupedData
 #' @rdname gapply
+#' @aliases gapply,GroupedData-method
 #' @name gapply
 #' @export
 #' @note gapply(GroupedData) since 2.0.0
@@ -210,8 +213,8 @@ setMethod("gapply",
 
 #' gapplyCollect
 #'
-#' @param x A GroupedData
 #' @rdname gapplyCollect
+#' @aliases gapplyCollect,GroupedData-method
 #' @name gapplyCollect
 #' @export
 #' @note gapplyCollect(GroupedData) since 2.0.0

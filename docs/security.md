@@ -27,7 +27,8 @@ If your applications are using event logging, the directory where the event logs
 
 ## Encryption
 
-Spark supports SSL for HTTP protocols. SASL encryption is supported for the block transfer service.
+Spark supports SSL for HTTP protocols. SASL encryption is supported for the block transfer service
+and the RPC endpoints.
 
 Encryption is not yet supported for data stored by Spark in temporary local storage, such as shuffle
 files, cached data, and other application files. If encrypting this data is desired, a workaround is

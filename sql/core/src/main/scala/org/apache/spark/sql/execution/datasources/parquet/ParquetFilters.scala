@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.Serializable
-
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.io.api.Binary
@@ -26,18 +24,10 @@ import org.apache.parquet.io.api.Binary
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 
-private[sql] object ParquetFilters {
-  case class SetInFilter[T <: Comparable[T]](
-    valueSet: Set[T]) extends UserDefinedPredicate[T] with Serializable {
-
-    override def keep(value: T): Boolean = {
-      value != null && valueSet.contains(value)
-    }
-
-    override def canDrop(statistics: Statistics[T]): Boolean = false
-
-    override def inverseCanDrop(statistics: Statistics[T]): Boolean = false
-  }
+/**
+ * Some utility function to convert Spark data source filters to Parquet filters.
+ */
+private[parquet] object ParquetFilters {
 
   private val makeEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
     case BooleanType =>
@@ -154,49 +144,32 @@ private[sql] object ParquetFilters {
         FilterApi.gtEq(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
   }
 
-  private val makeInSet: PartialFunction[DataType, (String, Set[Any]) => FilterPredicate] = {
-    case IntegerType =>
-      (n: String, v: Set[Any]) =>
-        FilterApi.userDefined(intColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Integer]]))
-    case LongType =>
-      (n: String, v: Set[Any]) =>
-        FilterApi.userDefined(longColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Long]]))
-    case FloatType =>
-      (n: String, v: Set[Any]) =>
-        FilterApi.userDefined(floatColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Float]]))
-    case DoubleType =>
-      (n: String, v: Set[Any]) =>
-        FilterApi.userDefined(doubleColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Double]]))
-    case StringType =>
-      (n: String, v: Set[Any]) =>
-        FilterApi.userDefined(binaryColumn(n),
-          SetInFilter(v.map(s => Binary.fromString(s.asInstanceOf[String]))))
-    case BinaryType =>
-      (n: String, v: Set[Any]) =>
-        FilterApi.userDefined(binaryColumn(n),
-          SetInFilter(v.map(e => Binary.fromReusedByteArray(e.asInstanceOf[Array[Byte]]))))
-  }
-
   /**
+   * Returns a map from name of the column to the data type, if predicate push down applies
+   * (i.e. not an optional field).
+   *
    * SPARK-11955: The optional fields will have metadata StructType.metadataKeyForOptionalField.
    * These fields only exist in one side of merged schemas. Due to that, we can't push down filters
-   * using such fields, otherwise Parquet library will throw exception. Here we filter out such
-   * fields.
+   * using such fields, otherwise Parquet library will throw exception (PARQUET-389).
+   * Here we filter out such fields.
    */
-  private def getFieldMap(dataType: DataType): Array[(String, DataType)] = dataType match {
+  private def getFieldMap(dataType: DataType): Map[String, DataType] = dataType match {
     case StructType(fields) =>
+      // Here we don't flatten the fields in the nested schema but just look up through
+      // root fields. Currently, accessing to nested fields does not push down filters
+      // and it does not support to create filters for them.
       fields.filter { f =>
         !f.metadata.contains(StructType.metadataKeyForOptionalField) ||
           !f.metadata.getBoolean(StructType.metadataKeyForOptionalField)
-      }.map(f => f.name -> f.dataType) ++ fields.flatMap { f => getFieldMap(f.dataType) }
-    case _ => Array.empty[(String, DataType)]
+      }.map(f => f.name -> f.dataType).toMap
+    case _ => Map.empty[String, DataType]
   }
 
   /**
    * Converts data sources filters to Parquet filter predicates.
    */
   def createFilter(schema: StructType, predicate: sources.Filter): Option[FilterPredicate] = {
-    val dataTypeOf = getFieldMap(schema).toMap
+    val dataTypeOf = getFieldMap(schema)
 
     // NOTE:
     //
@@ -238,9 +211,6 @@ private[sql] object ParquetFilters {
         makeGt.lift(dataTypeOf(name)).map(_(name, value))
       case sources.GreaterThanOrEqual(name, value) if dataTypeOf.contains(name) =>
         makeGtEq.lift(dataTypeOf(name)).map(_(name, value))
-
-      case sources.In(name, valueSet) =>
-        makeInSet.lift(dataTypeOf(name)).map(_(name, valueSet.toSet))
 
       case sources.And(lhs, rhs) =>
         // At here, it is not safe to just convert one side if we do not understand the

@@ -396,6 +396,20 @@ class ReplSuite extends SparkFunSuite {
     assertContains("ret: Array[(Int, Iterable[Foo])] = Array((1,", output)
   }
 
+  test("replicating blocks of object with class defined in repl") {
+    val output = runInterpreter("local-cluster[2,1,1024]",
+      """
+        |import org.apache.spark.storage.StorageLevel._
+        |case class Foo(i: Int)
+        |val ret = sc.parallelize((1 to 100).map(Foo), 10).persist(MEMORY_AND_DISK_2)
+        |ret.count()
+        |sc.getExecutorStorageStatus.map(s => s.rddBlocksById(ret.id).size).sum
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+    assertContains(": Int = 20", output)
+  }
+
   test("line wrapper only initialized once when used as encoder outer scope") {
     val output = runInterpreter("local",
       """

@@ -119,7 +119,7 @@ object GraphGenerators extends Logging {
    * A random graph generator using the R-MAT model, proposed in
    * "R-MAT: A Recursive Model for Graph Mining" by Chakrabarti et al.
    *
-   * See [[http://www.cs.cmu.edu/~christos/PUBLICATIONS/siam04.pdf]].
+   * See http://www.cs.cmu.edu/~christos/PUBLICATIONS/siam04.pdf.
    */
   def rmatGraph(sc: SparkContext, requestedNumVertices: Int, numEdges: Int): Graph[Int, Int] = {
     // let N = requestedNumVertices

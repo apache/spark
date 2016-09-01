@@ -487,7 +487,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     checkCached(tableIdentifier)
     // For insert into non-partitioned table, we will do the conversion,
     // so the converted test_insert_parquet should be cached.
-    sessionState.invalidateTable("test_insert_parquet")
+    sessionState.refreshTable("test_insert_parquet")
     assert(sessionState.catalog.getCachedDataSourceTable(tableIdentifier) === null)
     sql(
       """
@@ -500,7 +500,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       sql("select * from test_insert_parquet"),
       sql("select a, b from jt").collect())
     // Invalidate the cache.
-    sessionState.invalidateTable("test_insert_parquet")
+    sessionState.refreshTable("test_insert_parquet")
     assert(sessionState.catalog.getCachedDataSourceTable(tableIdentifier) === null)
 
     // Create a partitioned table.
@@ -550,7 +550,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
           |select b, '2015-04-02', a FROM jt
         """.stripMargin).collect())
 
-    sessionState.invalidateTable("test_parquet_partitioned_cache_test")
+    sessionState.refreshTable("test_parquet_partitioned_cache_test")
     assert(sessionState.catalog.getCachedDataSourceTable(tableIdentifier) === null)
 
     dropTables("test_insert_parquet", "test_parquet_partitioned_cache_test")
@@ -588,6 +588,13 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
           Seq(("foo", 0), ("bar", 0), ("baz", 1)).toDF("a", "b"))
       }
     }
+  }
+
+  test("self-join") {
+    val table = spark.table("normal_parquet")
+    val selfJoin = table.as("t1").join(table.as("t2"))
+    checkAnswer(selfJoin,
+      sql("SELECT * FROM normal_parquet x JOIN normal_parquet y"))
   }
 }
 
@@ -702,7 +709,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
   }
 
   test("Verify the PARQUET conversion parameter: CONVERT_METASTORE_PARQUET") {
-    withTempTable("single") {
+    withTempView("single") {
       val singleRowDF = Seq((0, "foo")).toDF("key", "value")
       singleRowDF.createOrReplaceTempView("single")
 

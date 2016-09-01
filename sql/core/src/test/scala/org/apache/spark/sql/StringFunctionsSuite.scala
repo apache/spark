@@ -77,8 +77,10 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(
         regexp_replace($"a", "(\\d+)", "num"),
+        regexp_replace($"a", $"b", $"c"),
         regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
-      Row("num-num", "100") :: Row("num-num", "100") :: Row("num-num", "100") :: Nil)
+      Row("num-num", "300", "100") :: Row("num-num", "400", "100") ::
+        Row("num-num", "400-400", "100") :: Nil)
 
     // for testing the mutable state of the expression in code gen.
     // This is a hack way to enable the codegen, thus the codegen is enable by default,
@@ -90,6 +92,18 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
         "regexp_replace(a, b, c)",
         "regexp_extract(a, b, 1)"),
       Row("300", "100") :: Row("400", "100") :: Row("400-400", "100") :: Nil)
+  }
+
+  test("non-matching optional group") {
+    val df = Seq(Tuple1("aaaac")).toDF("s")
+    checkAnswer(
+      df.select(regexp_extract($"s", "(foo)", 1)),
+      Row("")
+    )
+    checkAnswer(
+      df.select(regexp_extract($"s", "(a+)(b)?(c)", 2)),
+      Row("")
+    )
   }
 
   test("string ascii function") {
@@ -226,6 +240,51 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("???hi", "hi???", "h", "h"))
   }
 
+  test("string parse_url function") {
+
+    def testUrl(url: String, expected: Row) {
+      checkAnswer(Seq[String]((url)).toDF("url").selectExpr(
+        "parse_url(url, 'HOST')", "parse_url(url, 'PATH')",
+        "parse_url(url, 'QUERY')", "parse_url(url, 'REF')",
+        "parse_url(url, 'PROTOCOL')", "parse_url(url, 'FILE')",
+        "parse_url(url, 'AUTHORITY')", "parse_url(url, 'USERINFO')",
+        "parse_url(url, 'QUERY', 'query')"), expected)
+    }
+
+    testUrl(
+      "http://userinfo@spark.apache.org/path?query=1#Ref",
+      Row("spark.apache.org", "/path", "query=1", "Ref",
+        "http", "/path?query=1", "userinfo@spark.apache.org", "userinfo", "1"))
+
+    testUrl(
+      "https://use%20r:pas%20s@example.com/dir%20/pa%20th.HTML?query=x%20y&q2=2#Ref%20two",
+      Row("example.com", "/dir%20/pa%20th.HTML", "query=x%20y&q2=2", "Ref%20two",
+        "https", "/dir%20/pa%20th.HTML?query=x%20y&q2=2", "use%20r:pas%20s@example.com",
+        "use%20r:pas%20s", "x%20y"))
+
+    testUrl(
+      "http://user:pass@host",
+      Row("host", "", null, null, "http", "", "user:pass@host", "user:pass", null))
+
+    testUrl(
+      "http://user:pass@host/",
+      Row("host", "/", null, null, "http", "/", "user:pass@host", "user:pass", null))
+
+    testUrl(
+      "http://user:pass@host/?#",
+      Row("host", "/", "", "", "http", "/?", "user:pass@host", "user:pass", null))
+
+    testUrl(
+      "http://user:pass@host/file;param?query;p2",
+      Row("host", "/file;param", "query;p2", null, "http", "/file;param?query;p2",
+        "user:pass@host", "user:pass", null))
+
+    testUrl(
+      "inva lid://user:pass@host/file;param?query;p2",
+      Row(null, null, null, null, null, null, null, null, null))
+
+  }
+
   test("string repeat function") {
     val df = Seq(("hi", 2)).toDF("a", "b")
 
@@ -346,5 +405,48 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df2.filter("b>0").selectExpr("format_number(a, b)"),
       Row("5.0000") :: Row("4.000") :: Row("4.000") :: Row("4.000") :: Row("3.00") :: Nil)
+  }
+
+  test("string sentences function") {
+    val df = Seq(("Hi there! The price was $1,234.56.... But, not now.", "en", "US"))
+      .toDF("str", "language", "country")
+
+    checkAnswer(
+      df.selectExpr("sentences(str, language, country)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    // Type coercion
+    checkAnswer(
+      df.selectExpr("sentences(null)", "sentences(10)", "sentences(3.14)"),
+      Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
+
+    // Argument number exception
+    val m = intercept[AnalysisException] {
+      df.selectExpr("sentences()")
+    }.getMessage
+    assert(m.contains("Invalid number of arguments for function sentences"))
+  }
+
+  test("str_to_map function") {
+    val df1 = Seq(
+      ("a=1,b=2", "y"),
+      ("a=1,b=2,c=3", "y")
+    ).toDF("a", "b")
+
+    checkAnswer(
+      df1.selectExpr("str_to_map(a,',','=')"),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("a" -> "1", "b" -> "2", "c" -> "3"))
+      )
+    )
+
+    val df2 = Seq(("a:1,b:2,c:3", "y")).toDF("a", "b")
+
+    checkAnswer(
+      df2.selectExpr("str_to_map(a)"),
+      Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
+    )
+
   }
 }
