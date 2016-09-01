@@ -149,6 +149,15 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       assert(math.abs(s2 - q2 * n) < error_single)
       assert(math.abs(d1 - 2 * q1 * n) < error_double)
       assert(math.abs(d2 - 2 * q2 * n) < error_double)
+
+      // Multiple columns
+      val Array(Array(ms1, ms2), Array(md1, md2)) =
+        df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), epsilon)
+
+      assert(math.abs(ms1 - q1 * n) < error_single)
+      assert(math.abs(ms2 - q2 * n) < error_single)
+      assert(math.abs(md1 - 2 * q1 * n) < error_double)
+      assert(math.abs(md2 - 2 * q2 * n) < error_double)
     }
   }
 

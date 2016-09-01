@@ -52,14 +52,14 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670 Space-efficient
    * Online Computation of Quantile Summaries]] by Greenwald and Khanna.
    *
-   * @param col the name of the numerical column
+   * @param col the name of the numerical column.
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
    *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
    * @param relativeError The relative target precision to achieve (>= 0).
    *   If set to zero, the exact quantiles are computed, which could be very expensive.
    *   Note that values greater than 1 are accepted but give the same result as 1.
-   * @return the approximate quantiles at the given probabilities
+   * @return the approximate quantiles at the given probabilities.
    *
    * @since 2.0.0
    */
@@ -71,6 +71,29 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
+   * Calculates the approximate quantiles of numerical columns of a DataFrame.
+   * @see #approxQuantile(String, Array[Double], Double) for detailed description.
+   *
+   * @param cols the names of the numerical columns.
+   * @param probabilities a list of quantile probabilities
+   *   Each number must belong to [0, 1].
+   *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+   * @param relativeError The relative target precision to achieve (>= 0).
+   *   If set to zero, the exact quantiles are computed, which could be very expensive.
+   *   Note that values greater than 1 are accepted but give the same result as 1.
+   * @return the approximate quantiles at the given probabilities for given columns.
+   *
+   * @since 2.0.0
+   */
+  def approxQuantile(
+      cols: Array[String],
+      probabilities: Array[Double],
+      relativeError: Double): Array[Array[Double]] = {
+    StatFunctions.multipleApproxQuantiles(df, cols, probabilities, relativeError)
+      .map(_.toArray).toArray
+  }
+
+  /**
    * Python-friendly version of [[approxQuantile()]]
    */
   private[spark] def approxQuantile(
@@ -78,6 +101,18 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       probabilities: List[Double],
       relativeError: Double): java.util.List[Double] = {
     approxQuantile(col, probabilities.toArray, relativeError).toList.asJava
+  }
+
+  /**
+   * Python-friendly version of [[approxQuantile()]] that computes approximate quantiles
+   * for multiple columns.
+   */
+  private[spark] def approxQuantile(
+      cols: List[String],
+      probabilities: List[Double],
+      relativeError: Double): java.util.List[java.util.List[Double]] = {
+    approxQuantile(cols.toArray, probabilities.toArray, relativeError)
+      .map(_.toList.asJava).toList.asJava
   }
 
   /**
