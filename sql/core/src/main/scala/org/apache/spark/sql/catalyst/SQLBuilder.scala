@@ -591,7 +591,7 @@ class SQLBuilder private (
   object ExtractSQLTable {
     def unapply(plan: LogicalPlan): Option[SQLTable] = plan match {
       case l @ LogicalRelation(_, _, Some(catalogTable))
-        if catalogTable.identifier.database.isDefined =>
+          if catalogTable.identifier.database.isDefined =>
         Some(SQLTable(
           catalogTable.identifier.database.get,
           catalogTable.identifier.table,

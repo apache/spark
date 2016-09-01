@@ -93,10 +93,11 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
 
       // data source tables have been converted into LogicalRelations
       case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
+        val table = logicalRel.catalogTable.get
         updateTableStats(
-          logicalRel.catalogTable.get,
-          oldTotalSize = logicalRel.statistics.sizeInBytes.toLong,
-          oldRowCount = logicalRel.statistics.rowCount.map(_.toLong).getOrElse(-1L),
+          table,
+          oldTotalSize = table.stats.map(_.sizeInBytes.toLong).getOrElse(0L),
+          oldRowCount = table.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L),
           newTotalSize = logicalRel.relation.sizeInBytes)
 
       case otherRelation =>

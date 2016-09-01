@@ -52,8 +52,7 @@ case class LogicalRelation(
 
   // Logical Relations are distinct if they have different output for the sake of transformations.
   override def equals(other: Any): Boolean = other match {
-    case l @ LogicalRelation(otherRelation, _, _) =>
-      relation == otherRelation && output == l.output
+    case l @ LogicalRelation(otherRelation, _, _) => relation == otherRelation && output == l.output
     case _ => false
   }
 
@@ -73,7 +72,6 @@ case class LogicalRelation(
   // expId can be different but the relation is still the same.
   override lazy val cleanArgs: Seq[Any] = Seq(relation)
 
-  // inheritedStats is inherited from a CatalogRelation
   @transient override lazy val statistics: Statistics = {
     catalogTable.flatMap(_.stats.map(_.copy(sizeInBytes = relation.sizeInBytes))).getOrElse(
       Statistics(sizeInBytes = relation.sizeInBytes))

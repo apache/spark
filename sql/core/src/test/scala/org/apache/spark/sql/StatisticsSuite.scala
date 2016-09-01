@@ -77,11 +77,11 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("test table-level statistics for data source table created in InMemoryCatalog") {
-    def checkTableStats(tableName: String, rowCount: Option[BigInt]): Unit = {
+    def checkTableStats(tableName: String, expectedRowCount: Option[BigInt]): Unit = {
       val df = sql(s"SELECT * FROM $tableName")
       val relations = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
-        assert(rel.statistics.sizeInBytes === rel.relation.sizeInBytes)
-        assert(rel.statistics.rowCount === rowCount)
+        assert(rel.catalogTable.isDefined)
+        assert(rel.catalogTable.get.stats.flatMap(_.rowCount) === expectedRowCount)
         rel
       }
       assert(relations.size === 1)
@@ -94,11 +94,11 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
-      checkTableStats(tableName, None)
+      checkTableStats(tableName, expectedRowCount = None)
 
       // without noscan, we count the number of rows
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
-      checkTableStats(tableName, Some(2))
+      checkTableStats(tableName, expectedRowCount = Some(2))
     }
   }
 }
