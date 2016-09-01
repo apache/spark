@@ -227,7 +227,7 @@ private[hive] case class MetastoreRelation(
 
   override def inputFiles: Array[String] = {
     val partLocations = client
-      .getPartitionsByFilter(catalogTable, Nil)
+      .getPartitions(catalogTable)
       .flatMap(_.storage.locationUri)
       .toArray
     if (partLocations.nonEmpty) {
