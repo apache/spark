@@ -59,7 +59,7 @@ private[hive] case class MetastoreRelation(
     Objects.hashCode(databaseName, tableName, output)
   }
 
-  override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
+  override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: client :: sparkSession :: Nil
 
   private def toHiveColumn(c: StructField): FieldSchema = {
     new FieldSchema(c.name, c.dataType.catalogString, c.getComment.orNull)
