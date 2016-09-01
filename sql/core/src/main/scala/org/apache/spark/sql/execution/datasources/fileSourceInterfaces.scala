@@ -169,6 +169,13 @@ case class HadoopFsRelation(
     location.allFiles().map(_.getPath.toUri.toString).toArray
 
   override def sizeInBytes: Long = location.allFiles().map(_.getLen).sum
+
+  override def equals(other: Any): Boolean = other match {
+    case r: HadoopFsRelation => location == r.location
+    case _ => false
+  }
+
+  override def hashCode(): Int = location.hashCode()
 }
 
 /**
