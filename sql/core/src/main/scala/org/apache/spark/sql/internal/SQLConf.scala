@@ -509,14 +509,15 @@ object SQLConf {
       .intConf
       .createWithDefault(40)
 
-  val VECTORIZED_AGG_MAP_MAX_COLUMNS =
-    SQLConfigBuilder("spark.sql.codegen.aggregate.map.columns.max")
+  val ENABLE_TWOLEVEL_AGG_MAP =
+    SQLConfigBuilder("spark.sql.codegen.aggregate.map.twolevel.enable")
       .internal()
-      .doc("Sets the maximum width of schema (aggregate keys + values) for which aggregate with" +
-        "keys uses an in-memory columnar map to speed up execution. Setting this to 0 effectively" +
-        "disables the columnar map")
-      .intConf
-      .createWithDefault(3)
+      .doc("Enable two-level aggregate hash map. When enabled, records will first be " +
+        "inserted/looked-up at a 1st-level, small, fast map, and then fallback to a " +
+        "2nd-level, larger, slower map when 1st level is full or keys cannot be found. " +
+        "When disabled, records go directly to the 2nd level. Defaults to true.")
+      .booleanConf
+      .createWithDefault(true)
 
   val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -687,7 +688,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   override def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
-  def vectorizedAggregateMapMaxColumns: Int = getConf(VECTORIZED_AGG_MAP_MAX_COLUMNS)
+  def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
 
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
 
