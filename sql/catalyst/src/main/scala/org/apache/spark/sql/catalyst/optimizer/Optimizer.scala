@@ -89,6 +89,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       CombineFilters,
       CombineLimits,
       CombineUnions,
+      // Push down Filters again after combination
+      PushDownPredicate,
       // Constant folding and strength reduction
       NullPropagation,
       FoldablePropagation,
