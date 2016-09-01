@@ -186,7 +186,7 @@ abstract class ProbabilisticClassificationModel[
    *
    * @return Estimated class conditional probabilities
    */
-  protected def predictProbability(features: FeaturesType): Vector = {
+  def predictProbability(features: FeaturesType): Vector = {
     val rawPreds = predictRaw(features)
     raw2probabilityInPlace(rawPreds)
   }

@@ -107,7 +107,7 @@ class GaussianMixtureModel private[ml] (
     validateAndTransformSchema(schema)
   }
 
-  private[clustering] def predict(features: Vector): Int = {
+  def predict(features: Vector): Int = {
     val r = predictProbability(features)
     r.argmax
   }
