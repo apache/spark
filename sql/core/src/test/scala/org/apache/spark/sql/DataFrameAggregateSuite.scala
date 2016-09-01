@@ -477,6 +477,36 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(error.message.contains("collect_set() cannot have map type data"))
   }
 
+  test("percentileApprox functions") {
+    val df = (1 to 100).toDF("num")
+
+    // with B specified
+    checkAnswer(
+      df.select(
+        percentileApprox($"num", 0.1d, B = 10),
+        percentileApprox("num", 0.2d, B = 10),
+        percentileApprox($"num", Seq(0.3d, 0.4d, 0.5d), B = 10),
+        percentileApprox("num", Seq(0.6d, 0.7d, 0.8d), B = 10)
+      ),
+      Seq(Row(1.0, 12.0, Seq(26.0, 38.0, 48.0), Seq(56.0, 63.0, 74.0))) // results are stable
+    )
+
+    // with default B
+    checkAnswer(
+      df.select(
+        percentileApprox($"num", 0.1d),
+        percentileApprox("num", 0.2d),
+        percentileApprox($"num", Seq(0.3d, 0.4d, 0.5d)),
+        percentileApprox("num", Seq(0.6d, 0.7d, 0.8d))
+      ),
+      Seq(Row(10.0, 20.0, Seq(30.0, 40.0, 50.0), Seq(60.0, 70.0, 80.0))) // results are stable
+    )
+  }
+
+  test("percentileApprox functions with empty inputs") {
+    // todo
+  }
+
   test("SPARK-14664: Decimal sum/avg over window should work.") {
     checkAnswer(
       spark.sql("select sum(a) over () from values 1.0, 2.0, 3.0 T(a)"),

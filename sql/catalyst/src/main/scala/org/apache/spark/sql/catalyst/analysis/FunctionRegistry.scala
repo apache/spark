@@ -249,6 +249,7 @@ object FunctionRegistry {
     expression[Max]("max"),
     expression[Average]("mean"),
     expression[Min]("min"),
+    expression[PercentileApprox]("percentile_approx"),
     expression[Skewness]("skewness"),
     expression[StddevSamp]("std"),
     expression[StddevSamp]("stddev"),
