@@ -399,6 +399,15 @@ class ReplSuite extends SparkFunSuite {
   test("replicating blocks of object with class defined in repl") {
     val output = runInterpreter("local-cluster[2,1,1024]",
       """
+        |val timeout = 60000 // 60 seconds
+        |val start = System.currentTimeMillis
+        |while(sc.getExecutorStorageStatus.size != 3 &&
+        |    (System.currentTimeMillis - start) < timeout) {
+        |  Thread.sleep(10)
+        |}
+        |if (System.currentTimeMillis - start >= timeout) {
+        |  throw new java.util.concurrent.TimeoutException("Executors were not up in 60 seconds")
+        |}
         |import org.apache.spark.storage.StorageLevel._
         |case class Foo(i: Int)
         |val ret = sc.parallelize((1 to 100).map(Foo), 10).persist(MEMORY_AND_DISK_2)
