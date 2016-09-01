@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.config._
@@ -846,7 +845,8 @@ class HiveDDLSuite
     assert(targetTable.properties.filterKeys(!metastoreGeneratedProperties.contains(_)).isEmpty,
       "the table properties of source tables should not be copied in the created table")
 
-    if (DDLUtils.isDatasourceTable(sourceTable)) {
+    if (DDLUtils.isDatasourceTable(sourceTable) ||
+        sourceTable.tableType == CatalogTableType.VIEW) {
       assert(DDLUtils.isDatasourceTable(targetTable),
         "the target table should be a data source table")
     } else {
@@ -855,15 +855,15 @@ class HiveDDLSuite
     }
 
     if (sourceTable.tableType == CatalogTableType.VIEW) {
-      // Source table is a temporary/permanent view, which does not have a serde, inputFormat and
-      // outputFormat. The created target table uses the default storage formats and serde.
-      assert(targetTable.storage.serde == Option(classOf[LazySimpleSerDe].getCanonicalName))
-      assert(targetTable.storage.inputFormat == Option("org.apache.hadoop.mapred.TextInputFormat"))
+      // Source table is a temporary/permanent view, which does not have a provider, serde,
+      // inputFormat, and outputFormat. The created target table uses the default data source format
+      assert(targetTable.storage.serde ==
+        Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+      assert(targetTable.storage.inputFormat ==
+        Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
       assert(targetTable.storage.outputFormat ==
-        Option("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
-      // The source temporary/permanent view does not have provider values. `hive` is used in the
-      // created table.
-      assert(targetTable.provider == Option("hive"))
+        Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+      assert(targetTable.provider == Option(spark.sessionState.conf.defaultDataSourceName))
     }
 
     val sourceTablePath = getTablePath(sourceTable)

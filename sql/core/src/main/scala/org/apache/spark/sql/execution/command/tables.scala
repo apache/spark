@@ -66,39 +66,31 @@ case class CreateTableLikeCommand(
     }
 
     val sourceTableDesc = catalog.getTableMetadata(sourceTable)
-    val sourceTableType = sourceTableDesc.tableType
-
-    val newSerdeProp =
-      if (DDLUtils.isDatasourceTable(sourceTableDesc)) {
-        val newPath = catalog.defaultTablePath(targetTable)
-        sourceTableDesc.storage.properties.filterKeys(_.toLowerCase != "path") ++
-          Map("path" -> newPath)
-      } else {
-        sourceTableDesc.storage.properties
-      }
 
     // Storage format
     val newStorage =
-      if (sourceTableType == CatalogTableType.VIEW) {
-        val defaultStorageType = sparkSession.conf.get("hive.default.fileformat", "textfile")
-        val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType)
-        CatalogStorageFormat(
-          locationUri = None,
-          inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
-            .orElse(Some("org.apache.hadoop.mapred.TextInputFormat")),
-          outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
-            .orElse(Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
-          serde = None,
-          compressed = false,
-          properties = Map())
-      } else {
+      if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+        val newPath = catalog.defaultTablePath(targetTable)
+        CatalogStorageFormat.empty.copy(properties = Map("path" -> newPath))
+      } else if (DDLUtils.isDatasourceTable(sourceTableDesc)) {
+        val newPath = catalog.defaultTablePath(targetTable)
+        val newSerdeProp =
+          sourceTableDesc.storage.properties.filterKeys(_.toLowerCase != "path") ++
+            Map("path" -> newPath)
         sourceTableDesc.storage.copy(
           locationUri = None,
           properties = newSerdeProp)
+      } else {
+        sourceTableDesc.storage.copy(
+          locationUri = None,
+          properties = sourceTableDesc.storage.properties)
       }
 
-    val newProvider =
-      if (sourceTableType == CatalogTableType.VIEW) Some("hive") else sourceTableDesc.provider
+    val newProvider = if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+      Some(sparkSession.sessionState.conf.defaultDataSourceName)
+    } else {
+      sourceTableDesc.provider
+    }
 
     val newTableDesc =
       CatalogTable(
