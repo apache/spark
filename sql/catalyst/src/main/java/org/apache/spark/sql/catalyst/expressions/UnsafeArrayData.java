@@ -342,9 +342,10 @@ public final class UnsafeArrayData extends ArrayData {
   }
 
   public static UnsafeArrayData fromPrimitiveArray(int[] arr) {
-    if (arr.length > (Integer.MAX_VALUE - 4) / 8) {
+    int limit = (Integer.MAX_VALUE - 4) / 8;
+    if (arr.length > limit) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
-        "it's too big.");
+        "its length (" + arr.length + ") exceeds " + limit + ".");
     }
 
     final int offsetRegionSize = 4 * arr.length;
@@ -371,9 +372,10 @@ public final class UnsafeArrayData extends ArrayData {
   }
 
   public static UnsafeArrayData fromPrimitiveArray(double[] arr) {
-    if (arr.length > (Integer.MAX_VALUE - 4) / 12) {
+    int limit = (Integer.MAX_VALUE - 4) / 12;
+    if (arr.length > limit) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
-        "it's too big.");
+        "its length (" + arr.length + ") exceeds " + limit + ".");
     }
 
     final int offsetRegionSize = 4 * arr.length;
