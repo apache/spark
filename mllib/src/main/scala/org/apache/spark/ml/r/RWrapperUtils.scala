@@ -35,13 +35,37 @@ object RWrapperUtils extends Logging {
    */
   def checkDataColumns(rFormula: RFormula, data: Dataset[_]): Unit = {
     if (data.schema.fieldNames.contains(rFormula.getLabelCol)) {
-      logWarning("data containing 'label' column, so change its name to avoid conflict")
-      rFormula.setLabelCol(rFormula.getLabelCol + "_output")
+      val newLabelName = convertToUniqueName(rFormula.getLabelCol, data.schema.fieldNames)
+      logWarning(
+        s"data containing ${rFormula.getLabelCol} column, changing its name to $newLabelName")
+      rFormula.setLabelCol(newLabelName)
     }
 
     if (data.schema.fieldNames.contains(rFormula.getFeaturesCol)) {
-      logWarning("data containing 'features' column, so change its name to avoid conflict")
-      rFormula.setFeaturesCol(rFormula.getFeaturesCol + "_output")
+      val newFeaturesName = convertToUniqueName(rFormula.getFeaturesCol, data.schema.fieldNames)
+      logWarning(
+        s"data containing ${rFormula.getFeaturesCol} column, changing its name to $newFeaturesName")
+      rFormula.setFeaturesCol(newFeaturesName)
     }
+  }
+
+  /**
+    * Convert conflicting name to be an unique name.
+    * Appending a sequence number, like originalName_output1
+    * and incrementing until it is not already there
+    *
+    * @param originalName Original name
+    * @param fieldNames Array of field names in existing schema
+    * @return String
+    */
+  def convertToUniqueName(originalName: String, fieldNames: Array[String]): String = {
+    var counter = 1
+    var newName = originalName + "_output"
+
+    while (fieldNames.contains(newName)) {
+      newName = originalName + "_output" + counter
+      counter += 1
+    }
+    newName
   }
 }

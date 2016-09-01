@@ -23,7 +23,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class RWrapperUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  test("avoid column name conflicting") {
+  test("avoid libsvm data column name conflicting") {
     val rFormula = new RFormula().setFormula("label ~ features")
     val data = spark.read.format("libsvm").load("../data/mllib/sample_libsvm_data.txt")
 
@@ -44,4 +44,13 @@ class RWrapperUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.getLabelCol == "label_output")
     assert(model.getFeaturesCol == "features_output")
   }
+
+  test("generate unique name by appending a sequence number") {
+    val originalName = "label"
+    val fieldNames = Array("label_output", "label_output1", "label_output2")
+    val newName = RWrapperUtils.convertToUniqueName(originalName, fieldNames)
+
+    assert(newName === "label_output3")
+  }
+
 }
