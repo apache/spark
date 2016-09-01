@@ -449,6 +449,20 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
+  test("pmod with partitionBy") {
+    val spark = this.spark
+    import spark.implicits._
+
+    case class Test(a: Int, b: String)
+    val data = Seq((0, "a"), (1, "b"), (1, "a"))
+    spark.createDataset(data).createOrReplaceTempView("test")
+    sql("select * from test distribute by pmod(_1, 2)")
+      .write
+      .partitionBy("_2")
+      .mode("overwrite")
+      .parquet(dir)
+  }
+
   private def testRead(
       df: => DataFrame,
       expectedResult: Seq[String],
