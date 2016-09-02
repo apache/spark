@@ -378,8 +378,8 @@ relation
     ;
 
 joinRelation
-    : joinType JOIN right=relationPrimary joinCriteria?
-    | (NATURAL joinType | CROSS) JOIN right=relationPrimary
+    : (CROSS | joinType) JOIN right=relationPrimary joinCriteria?
+    | NATURAL joinType JOIN right=relationPrimary
     ;
 
 joinType
