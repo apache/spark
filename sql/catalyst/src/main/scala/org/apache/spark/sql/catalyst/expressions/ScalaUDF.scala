@@ -1058,7 +1058,7 @@ case class ScalaUDF(
 
   private[this] val converter = CatalystTypeConverters.createToCatalystConverter(dataType)
 
-  val udfErrorMessage = {
+  lazy val udfErrorMessage = {
     val funcCls = function.getClass.getSimpleName
     val inputTypes = children.map(_.dataType.simpleString).mkString(", ")
     s"Failed to execute user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
