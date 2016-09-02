@@ -597,6 +597,7 @@ class SparkSession(object):
         """Stop the underlying :class:`SparkContext`.
         """
         self._sc.stop()
+        SparkSession._instantiatedContext = None
 
     @since(2.0)
     def __enter__(self):
