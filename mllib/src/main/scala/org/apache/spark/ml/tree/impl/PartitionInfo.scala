@@ -24,7 +24,6 @@ import org.apache.spark.util.collection.BitSet
 
 /**
  * Intermediate data stored during learning.
- * TODO(smurching): Rename; maybe TrainingInfo?
  *
  * Node indexing for nodeOffsets, activeNodes:
  * Nodes are indexed left-to-right along the periphery of the tree, with 0-based indices.
@@ -86,7 +85,6 @@ private[impl] case class PartitionInfo(
       metadata: DecisionTreeMetadata): PartitionInfo = {
 
     // Create buffers for storing our new arrays of node offsets & impurities
-    // TODO(smurching): Binary search for these offsets?
     val newNodeOffsets = new ArrayBuffer[(Int, Int)]()
 
     // Update first-level (per-node) sorting of each column to account for creation

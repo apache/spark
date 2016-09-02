@@ -25,10 +25,13 @@ import org.apache.spark.mllib.tree.model.ImpurityStats
 private[ml] object LocalDecisionTree {
 
   /**
-   * Fully splits the passed-in node on the provided local dataset.
-   * TODO(smurching): Accept a seed for feature subsampling
+   * Fully splits the passed-in node on the provided local dataset, returning
+   * an InternalNode/LeafNode corresponding to the root of the resulting tree.
+   * TODO(smurching): Accept a seed for feature subsampling at each node
    *
-   * @param node LearningNode to split
+   * @param node LearningNode to use as the root of the subtree fit on the passed-in dataset
+   * @param metadata learning and dataset metadata for DecisionTree
+   * @param splits splits(i) = array of splits for feature i
    */
   def fitNode(
       input: Array[BaggedPoint[TreePoint]],
@@ -73,11 +76,11 @@ private[ml] object LocalDecisionTree {
    * TODO(smurching): Logic for fitting a classifier & regressor seems the same; only difference
    * is impurity metric. Use the same logic for fitting a classifier?
    *
-   * @param rootNode Node to fit on the passed-in dataset
+   * @param rootNode Node to use as root of the tree fit on the passed-in dataset
    * @param colStoreInit Array of columns of training data
-   * @param metadata Metadata object
+   * @param metadata learning and dataset metadata for DecisionTree
    * @param splits splits(i) = Array of possible splits for feature i
-   * @return
+   * @return LeafNode or InternalNode representation of rootNode
    */
   def trainRegressor(
       rootNode: LearningNode,
@@ -151,7 +154,7 @@ private[ml] object LocalDecisionTree {
           // Features for the current node start at fromOffset and end at toOffset
           val (from, to) = nodeOffsets(nodeIndex)
           // Get the impurity aggregator for the current node
-          // TODO(smurching): Test on empty data, see if this still works
+          // TODO(smurching): Throw an exception if data is featureless (no columns)?
           val fullImpurityAgg = LocalDecisionTreeUtils.getImpurity(columns(0), from, to, metadata, labels)
           // TODO(smurching): In PartitionInfo, keep track of which features are associated
           // with which nodes and subsample here (filter columns)
@@ -171,7 +174,7 @@ private[ml] object LocalDecisionTree {
    * Splits the passed-in node if permitted by the parameters of the learning algorithm,
    * returning an iterator over its children. Returns an empty array if node could not be split.
    *
-   * @param metadata Metadata containing parameters of the learning algorithm
+   * @param metadata learning and dataset metadata for DecisionTree
    * @param stats Label impurity stats associated with the current node
    */
   private[impl] def splitIfPossible(
@@ -182,9 +185,7 @@ private[ml] object LocalDecisionTree {
 
     val leftCount = stats.leftImpurityCalculator.count
     val rightCount = stats.rightImpurityCalculator.count
-    val shouldSplit = split.nonEmpty && stats.gain > metadata.minInfoGain &&
-      leftCount >= metadata.minInstancesPerNode && rightCount >= metadata.minInstancesPerNode
-    if (shouldSplit) {
+    if (split.nonEmpty) {
       // Split node and return an iterator over its children
       doSplit(node, split, stats)
       Iterator(node.leftChild.get, node.rightChild.get)
@@ -192,13 +193,6 @@ private[ml] object LocalDecisionTree {
       // If our node has non-zero impurity, set the node's stats to invalid values to indicate that
       // it could not be split due to the parameters of the learning algorithms
       if (stats.impurity != 0) {
-        println(s"Not splitting node ${node.toNode.toString}")
-        if (split.nonEmpty) {
-          println(s"split: feature ${split.get.featureIndex}, ${split.get.asInstanceOf[ContinuousSplit].threshold}")
-        }
-        println(s"gain: ${stats.gain}")
-        println(s"leftCount: ${leftCount}, rightCount: ${rightCount}")
-
         node.stats = ImpurityStats.getInvalidImpurityStats(stats.impurityCalculator)
       }
       node.isLeaf = true
@@ -263,7 +257,7 @@ private[ml] object LocalDecisionTree {
    * an active node, returns an array of impurity aggregators containing label statistics
    * for each bin/category for the current (node, feature).
    *
-   * @param metadata Metadata object containing parameters of the learning algorithm
+   * @param metadata learning and dataset metadata for DecisionTree
    * @param values Array of values for the current feature
    * @param labels Array of labels
    * @param indices indices(i) = row index of value at values(i)
@@ -288,32 +282,31 @@ private[ml] object LocalDecisionTree {
   }
 
   /**
-   * TODO(smurching): update doc, also share this between RF code and local code
+   * Given an impurity aggregator containing label statistics for a given (node, feature, bin),
+   * returns the corresponding "centroid", used to order bins while computing best splits.
    *
-   * @param metadata
-   * @param categoryStats
-   * @return
+   * @param metadata learning and dataset metadata for DecisionTree
    */
   private[impl] def getCentroid(
       metadata: DecisionTreeMetadata,
-      categoryStats: ImpurityAggregatorSingle): Double = {
+      binStats: ImpurityAggregatorSingle): Double = {
 
-    if (categoryStats.getCount != 0) {
+    if (binStats.getCount != 0) {
       if (metadata.isMulticlass) {
         // multiclass classification
-        // For categorical variables in multiclass classification,
+        // For categorical features in multiclass classification,
         // the bins are ordered by the impurity of their corresponding labels.
-        categoryStats.getCalculator.calculate()
+        binStats.getCalculator.calculate()
       } else if (metadata.isClassification) {
         // binary classification
-        // For categorical variables in binary classification,
+        // For categorical features in binary classification,
         // the bins are ordered by the count of class 1.
-        categoryStats.stats(1)
+        binStats.stats(1)
       } else {
         // regression
-        // For categorical variables in regression and binary classification,
+        // For categorical features in regression and binary classification,
         // the bins are ordered by the prediction.
-        categoryStats.getCalculator.predict
+        binStats.getCalculator.predict
       }
     } else {
       Double.MaxValue
@@ -321,9 +314,14 @@ private[ml] object LocalDecisionTree {
   }
 
   /**
-   * TODO(smurching): Update doc
    * Calculate the impurity statistics for a given (feature, split) based upon left/right
    * aggregates.
+   * @param fullImpurityAgg impurity aggregator for both sides of this (feature, split)
+   * @param leftAgg left node aggregates for this (feature, split)
+   * @param rightAgg right node aggregate for this (feature, split)
+   * @param metadata learning and dataset metadata for DecisionTree
+   * @return Impurity statistics for this (feature, split)
+
    */
   private def calculateImpurityStats(
       fullImpurityAgg: ImpurityAggregatorSingle,
@@ -338,14 +336,13 @@ private[ml] object LocalDecisionTree {
   }
 
   /**
-   * TODO(smurching): Update doc
+   * TODO(smurching): Consolidate this with equivalently-named method in RandomForest.scala
    * Calculate the impurity statistics for a given (feature, split) based upon left/right
    * aggregates.
    *
-   * @param stats the recycle impurity statistics for this feature's all splits,
-   *              only 'impurity' and 'impurityCalculator' are valid between each iteration
-   * @param leftCalc left node aggregates for this (feature, split)
-   * @param rightCalc right node aggregate for this (feature, split)
+   * @param fullCalc impurity calculator for both sides of this (feature, split)
+   * @param leftCalc left node calculator for this (feature, split)
+   * @param rightCalc right node calculator for this (feature, split)
    * @param metadata learning and dataset metadata for DecisionTree
    * @return Impurity statistics for this (feature, split)
    */
@@ -360,28 +357,38 @@ private[ml] object LocalDecisionTree {
     val leftCount = leftCalc.count
     val rightCount = rightCalc.count
     val totalCount = leftCount + rightCount
-
-    // If left child or right child doesn't satisfy minimum instances per node,
-    // then this split is invalid, return invalid information gain stats.
-    if ((leftCount < metadata.minInstancesPerNode) ||
-      (rightCount < metadata.minInstancesPerNode)) {
-      return ImpurityStats.getInvalidImpurityStats(fullCalc)
-    }
-
     val leftImpurity = leftCalc.calculate() // Note: This equals 0 if count = 0
     val rightImpurity = rightCalc.calculate()
 
-    val leftWeight = leftCount / totalCount.toDouble
-    val rightWeight = rightCount / totalCount.toDouble
+    val leftWeight = if (totalCount == 0) 0 else leftCount / totalCount.toDouble
+    val rightWeight = if (totalCount == 0) 0 else rightCount / totalCount.toDouble
     val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
 
-    // if information gain doesn't satisfy minimum information gain,
-    // then this split is invalid, return invalid information gain stats.
-    if (gain < metadata.minInfoGain) {
-      return ImpurityStats.getInvalidImpurityStats(fullCalc)
+    // If the the current split is valid, return its impurity statistics; otherwise,
+    // return an invalid impurity stats object
+    if (isValidSplit(gain, leftCount, rightCount, metadata)) {
+      new ImpurityStats(gain, impurity, fullCalc, leftCalc, rightCalc)
+    } else {
+      ImpurityStats.getInvalidImpurityStats(fullCalc)
     }
+  }
 
-    new ImpurityStats(gain, impurity, fullCalc, leftCalc, rightCalc)
+  /**
+   * Helper function for determining whether a split is valid
+   *
+   * @param gain Gain achieved by performing split
+   * @param leftCount Instance-weighted count of rows on left side of split
+   * @param rightCount Instance-weighted count of rows on right side of split
+   * @param metadata learning and datsaet metadata for DecisionTree
+   * @return True if split isvalid, false otherwise
+   */
+  private[impl] def isValidSplit(
+      gain: Double,
+      leftCount: Double,
+      rightCount: Double,
+      metadata: DecisionTreeMetadata): Boolean = {
+    val minCount = metadata.minInstancesPerNode
+    leftCount >= minCount && rightCount >= minCount && gain > metadata.minInfoGain
   }
 
   /**
@@ -427,13 +434,10 @@ private[ml] object LocalDecisionTree {
     val rightImpurityAgg = metadata.createImpurityAggregator()
     aggStats.foreach(rightImpurityAgg.add(_))
 
-
     val fullImpurity = rightImpurityAgg.getCalculator.calculate()
-
     // Consider all splits. These only cover valid splits, with at least one category on each side.
     val numSplits = categoriesSortedByCentroid.length - 1
 
-    // TODO(smurching): Just compute best split & its stats outright in this section?
     // Compute the index & gain of the best split, along with an impurity aggregator containing
     // stats for the left side of the best split.
     // Initial values: bestSplitIdx = -1, bestGain = 0.0, bestImpurityAgg = an empty impurity
@@ -446,7 +450,6 @@ private[ml] object LocalDecisionTree {
         val catStats = aggStats(cat)
         leftImpurityAgg.add(catStats)
         rightImpurityAgg.subtract(catStats)
-
         val stats = calculateImpurityStats(fullImpurityAgg,
           leftImpurityAgg, rightImpurityAgg, metadata)
 
@@ -522,25 +525,19 @@ private[ml] object LocalDecisionTree {
       //  TODO: Use more efficient encoding such as gray codes
       var bestSplit: Option[CategoricalSplit] = None
       val bestLeftImpurityAgg = leftImpurityAgg.deepCopy()
-      var bestGain: Double = -1.0
+      var bestStats = ImpurityStats.getInvalidImpurityStats(fullImpurityAgg.getCalculator)
       val fullCount: Double = to - from
       for (split <- splits) {
         // Update left, right impurity stats
         split.leftCategories.foreach(c => leftImpurityAgg.add(aggStats(c.toInt)))
         val rightImpurityAgg = fullImpurityAgg.deepCopy().subtract(leftImpurityAgg)
-        val leftCount = leftImpurityAgg.getCount
-        val rightCount = rightImpurityAgg.getCount
-        // Compute impurity
-        val leftWeight = leftCount / fullCount
-        val rightWeight = rightCount / fullCount
-        val leftImpurity = leftImpurityAgg.getCalculator.calculate()
-        val rightImpurity = rightImpurityAgg.getCalculator.calculate()
-        val gain = fullImpurity - leftWeight * leftImpurity - rightWeight * rightImpurity
-        if (leftCount != 0 && rightCount != 0 && gain > bestGain && gain > metadata.minInfoGain) {
+        val stats = calculateImpurityStats(fullImpurityAgg,
+          leftImpurityAgg, rightImpurityAgg, metadata)
+        if (stats.valid && stats.gain > bestStats.gain) {
           bestSplit = Some(split)
           System.arraycopy(leftImpurityAgg.stats, 0, bestLeftImpurityAgg.stats,
             0, leftImpurityAgg.stats.length)
-          bestGain = gain
+          bestStats = stats
         }
         // Reset left impurity stats
         leftImpurityAgg.clear()
@@ -553,10 +550,7 @@ private[ml] object LocalDecisionTree {
 
       }
       val bestRightImpurityAgg = fullImpurityAgg.deepCopy().subtract(bestLeftImpurityAgg)
-      val bestImpurityStats = new ImpurityStats(bestGain, fullImpurity,
-        fullImpurityAgg.getCalculator, bestLeftImpurityAgg.getCalculator,
-        bestRightImpurityAgg.getCalculator)
-      (bestFeatureSplit, bestImpurityStats)
+      (bestFeatureSplit, bestStats)
     }
   }
 
@@ -597,7 +591,6 @@ private[ml] object LocalDecisionTree {
     }
     var j = from
     val numSplits = metadata.numBins(featureIndex) - 1
-    println("==============")
     while (j < to) {
       // Look up the least upper bound on the feature values in the current bin
       // TODO(smurching): When using continuous feature values (as opposed to binned values),
@@ -615,9 +608,8 @@ private[ml] object LocalDecisionTree {
         val leftImpurity = leftImpurityAgg.getCalculator.calculate()
         val rightImpurity = rightImpurityAgg.getCalculator.calculate()
         val gain = fullImpurity - leftWeight * leftImpurity - rightWeight * rightImpurity
-        if (leftCount != 0 && rightCount != 0 && gain > bestGain && gain > metadata.minInfoGain) {
-          println(s"Splitting on feature ${featureIndex}, threshold: ${currentThreshold}, gain: ${gain}, bestGain: ${bestGain}")
-          println(s"LeftCount: ${leftImpurityAgg.getCalculator.count}, rightCount: ${rightImpurityAgg.getCalculator.count}")
+        val isBestSplit = isValidSplit(gain, leftCount, rightCount, metadata) && gain > bestGain
+        if (isBestSplit) {
           bestThreshold = currentThreshold
           System.arraycopy(leftImpurityAgg.stats, 0,
             bestLeftImpurityAgg.stats, 0, leftImpurityAgg.stats.length)
