@@ -1298,6 +1298,7 @@ abstract class RDD[T: ClassTag](
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
   def take(num: Int): Array[T] = withScope {
+    val scaleUpFactor = Math.max(conf.getInt("spark.rdd.limit.scaleUpFactor", 4), 2)
     if (conf.getBoolean("spark.driver.adaptiveTakeEnabled", true)) {
       mapPartitions(_.take(num)).adaptiveTake[T](num, (x: Array[T]) => x.iterator)
     } else if (num == 0) {
@@ -1314,12 +1315,12 @@ abstract class RDD[T: ClassTag](
           // If we didn't find any rows after the previous iteration, quadruple and retry.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate
           // it by 50%. We also cap the estimation in the end.
-          if (buf.size == 0) {
-            numPartsToTry = partsScanned * 4
+          if (buf.isEmpty) {
+            numPartsToTry = partsScanned * scaleUpFactor
           } else {
             // the left side of max is >=1 whenever partsScanned >= 2
             numPartsToTry = Math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)
-            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4)
+            numPartsToTry = Math.min(numPartsToTry, partsScanned * scaleUpFactor)
           }
         }
 
@@ -1352,6 +1353,7 @@ abstract class RDD[T: ClassTag](
       num: Int,
       unpackPartition: Array[T] => Iterator[R]): Array[R] = withScope {
     require(num >= 0, s"num cannot be negative, but got num=$num")
+    val scaleUpFactor = Math.max(conf.getInt("spark.rdd.limit.scaleUpFactor", 4), 2)
     val lock = new Object()
     val totalPartitions = partitions.length
     var partitionsScanned = 0
@@ -1405,16 +1407,18 @@ abstract class RDD[T: ClassTag](
         // greater than totalParts because we actually cap it at totalParts in runJob.
         var numPartsToTry = 1L
         if (partitionsScanned > 0) {
-          // If we didn't find any rows after the first iteration, just try all partitions next.
-          // Otherwise, interpolate the number of partitions we need to try, but overestimate it
-          // by 50%.
+          // If we didn't find any rows after the previous iteration, quadruple and retry.
+          // Otherwise, interpolate the number of partitions we need to try, but overestimate
+          // it by 50%. We also cap the estimation in the end.
           if (resultToReturn.isEmpty) {
-            numPartsToTry = totalPartitions - 1
+            numPartsToTry = partitionsScanned * scaleUpFactor
           } else {
-            numPartsToTry = (1.5 * num * partitionsScanned / resultToReturn.size).toInt
+            // the left side of max is >=1 whenever partitionsScanned >= 2
+            numPartsToTry = Math.max(
+              (1.5 * num * partitionsScanned / resultToReturn.size).toInt - partitionsScanned, 1)
+            numPartsToTry = Math.min(numPartsToTry, partitionsScanned * scaleUpFactor)
           }
         }
-        numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
 
         val partitionsToCompute = partitionsScanned.until(
           math.min(partitionsScanned + numPartsToTry, totalPartitions).toInt)
