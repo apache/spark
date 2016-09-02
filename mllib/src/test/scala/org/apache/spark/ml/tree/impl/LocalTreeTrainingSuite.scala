@@ -18,7 +18,7 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.Estimator
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.regression.DecisionTreeRegressor
