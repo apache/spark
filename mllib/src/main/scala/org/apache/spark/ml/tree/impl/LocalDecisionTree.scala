@@ -192,6 +192,13 @@ private[ml] object LocalDecisionTree {
       // If our node has non-zero impurity, set the node's stats to invalid values to indicate that
       // it could not be split due to the parameters of the learning algorithms
       if (stats.impurity != 0) {
+        println(s"Not splitting node ${node.toNode.toString}")
+        if (split.nonEmpty) {
+          println(s"split: feature ${split.get.featureIndex}, ${split.get.asInstanceOf[ContinuousSplit].threshold}")
+        }
+        println(s"gain: ${stats.gain}")
+        println(s"leftCount: ${leftCount}, rightCount: ${rightCount}")
+
         node.stats = ImpurityStats.getInvalidImpurityStats(stats.impurityCalculator)
       }
       node.isLeaf = true
@@ -282,6 +289,7 @@ private[ml] object LocalDecisionTree {
 
   /**
    * TODO(smurching): update doc, also share this between RF code and local code
+   *
    * @param metadata
    * @param categoryStats
    * @return
@@ -589,6 +597,7 @@ private[ml] object LocalDecisionTree {
     }
     var j = from
     val numSplits = metadata.numBins(featureIndex) - 1
+    println("==============")
     while (j < to) {
       // Look up the least upper bound on the feature values in the current bin
       // TODO(smurching): When using continuous feature values (as opposed to binned values),
@@ -607,6 +616,8 @@ private[ml] object LocalDecisionTree {
         val rightImpurity = rightImpurityAgg.getCalculator.calculate()
         val gain = fullImpurity - leftWeight * leftImpurity - rightWeight * rightImpurity
         if (leftCount != 0 && rightCount != 0 && gain > bestGain && gain > metadata.minInfoGain) {
+          println(s"Splitting on feature ${featureIndex}, threshold: ${currentThreshold}, gain: ${gain}, bestGain: ${bestGain}")
+          println(s"LeftCount: ${leftImpurityAgg.getCalculator.count}, rightCount: ${rightImpurityAgg.getCalculator.count}")
           bestThreshold = currentThreshold
           System.arraycopy(leftImpurityAgg.stats, 0,
             bestLeftImpurityAgg.stats, 0, leftImpurityAgg.stats.length)
