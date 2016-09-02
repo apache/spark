@@ -30,6 +30,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
@@ -171,9 +172,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       ignoreIfExists: Boolean): Unit = withClient {
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
+    val table = tableDefinition.identifier.table
     requireDbExists(db)
     verifyTableProperties(tableDefinition)
 
+    if (tableExists(db, table) && !ignoreIfExists) {
+      throw new TableAlreadyExistsException(db = db, table = table)
+    }
     // Before saving data source table metadata into Hive metastore, we should:
     //  1. Put table schema, partition column names and bucket specification in table properties.
     //  2. Check if this table is hive compatible
@@ -450,7 +455,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   override def tableExists(db: String, table: String): Boolean = withClient {
-    client.getTableOption(db, table).isDefined
+    client.tableExists(db, table)
   }
 
   override def listTables(db: String): Seq[String] = withClient {

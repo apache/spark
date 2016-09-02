@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
+import javax.xml.bind.DatatypeConverter
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -1199,19 +1200,27 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * {{{
    *   [TYPE] '[VALUE]'
    * }}}
-   * Currently Date and Timestamp typed literals are supported.
-   *
-   * TODO what the added value of this over casting?
+   * Currently Date, Timestamp and Binary typed literals are supported.
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
-    ctx.identifier.getText.toUpperCase match {
-      case "DATE" =>
-        Literal(Date.valueOf(value))
-      case "TIMESTAMP" =>
-        Literal(Timestamp.valueOf(value))
-      case other =>
-        throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
+    val valueType = ctx.identifier.getText.toUpperCase
+    try {
+      valueType match {
+        case "DATE" =>
+          Literal(Date.valueOf(value))
+        case "TIMESTAMP" =>
+          Literal(Timestamp.valueOf(value))
+        case "X" =>
+          val padding = if (value.length % 2 == 1) "0" else ""
+          Literal(DatatypeConverter.parseHexBinary(padding + value))
+        case other =>
+          throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
+      }
+    } catch {
+      case e: IllegalArgumentException =>
+        val message = Option(e.getMessage).getOrElse(s"Exception parsing $valueType")
+        throw new ParseException(message, ctx)
     }
   }
 

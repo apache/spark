@@ -138,10 +138,11 @@ predict_internal <- function(object, newData) {
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
-#' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
-#'                  weights as 1.0.
 #' @param tol positive convergence tolerance of iterations.
 #' @param maxIter integer giving the maximal number of IRLS iterations.
+#' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
+#'                  weights as 1.0.
+#' @param regParam regularization parameter for L2 regularization.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model
@@ -171,7 +172,8 @@ predict_internal <- function(object, newData) {
 #' @note spark.glm since 2.0.0
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL) {
+          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
+                   regParam = 0.0) {
             if (is.character(family)) {
               family <- get(family, mode = "function", envir = parent.frame())
             }
@@ -190,7 +192,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, family$family, family$link,
-                                tol, as.integer(maxIter), as.character(weightCol))
+                                tol, as.integer(maxIter), as.character(weightCol), regParam)
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
