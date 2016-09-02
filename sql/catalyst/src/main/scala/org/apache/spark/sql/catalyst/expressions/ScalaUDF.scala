@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types.DataType
@@ -1033,17 +1034,17 @@ case class ScalaUDF(
     }.unzip
 
     val getFuncResult = s"$funcTerm.apply(${funcArguments.mkString(", ")})"
+    val rethrowException = "throw new org.apache.spark.SparkException" +
+      """("Exception happens when execute user code in Scala UDF.", e);"""
     val callFunc =
       s"""
          ${ctx.boxedType(dataType)} $resultTerm = null;
          try {
            $resultTerm = (${ctx.boxedType(dataType)})$catalystConverterTerm.apply($getFuncResult);
-         } catch (NullPointerException e) {
-           NullPointerException npe = new NullPointerException($scalaUDF.npeErrorMessage());
-           npe.setStackTrace(e.getStackTrace());
-           throw npe;
+         } catch (Exception e) {
+           $rethrowException
          }
-       """.stripMargin
+       """
 
     ev.copy(code = s"""
       $evalCode
@@ -1059,17 +1060,12 @@ case class ScalaUDF(
 
   private[this] val converter = CatalystTypeConverters.createToCatalystConverter(dataType)
 
-  val npeErrorMessage = "Given UDF throws NPE during execution, please check the UDF " +
-    "to make sure it handles null parameters correctly."
-
   override def eval(input: InternalRow): Any = {
     val result = try {
       f(input)
     } catch {
-      case e: NullPointerException =>
-        val npe = new NullPointerException(npeErrorMessage)
-        npe.setStackTrace(e.getStackTrace)
-        throw npe
+      case e: Exception =>
+        throw new SparkException("Exception happens when execute user code in Scala UDF.", e)
     }
 
     converter(result)

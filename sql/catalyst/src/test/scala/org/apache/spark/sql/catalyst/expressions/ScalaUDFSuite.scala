@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -36,13 +36,13 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringType,
       Literal.create(null, StringType) :: Nil)
 
-    val e1 = intercept[NullPointerException](udf.eval())
-    assert(e1.getMessage.contains("Given UDF throws NPE during execution"))
+    val e1 = intercept[SparkException](udf.eval())
+    assert(e1.getMessage.contains("Exception happens when execute user code in Scala UDF"))
 
-    val e2 = intercept[NullPointerException] {
+    val e2 = intercept[SparkException] {
       checkEvalutionWithUnsafeProjection(udf, null)
     }
-    assert(e2.getMessage.contains("Given UDF throws NPE during execution"))
+    assert(e2.getMessage.contains("Exception happens when execute user code in Scala UDF"))
   }
 
 }
