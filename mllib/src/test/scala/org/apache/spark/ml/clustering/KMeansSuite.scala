@@ -160,7 +160,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
   test("Initialize using wrong model") {
     val kmeans = new KMeans().setK(k).setSeed(1).setMaxIter(10)
     val wrongTypeModel = new KMeansSuite.MockModel()
-    assert(!kmeans.isSet(kmeans.initialModel))
+    assert(!kmeans.setInitialModel(wrongTypeModel).isSet(kmeans.initialModel))
 
     val wrongKModel = KMeansSuite.generateKMeansModel(3, k + 1)
     intercept[IllegalArgumentException] {
