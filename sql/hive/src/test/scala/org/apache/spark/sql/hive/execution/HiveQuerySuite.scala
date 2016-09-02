@@ -318,10 +318,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("trivial join ON clause",
     "SELECT * FROM src a JOIN src b ON a.key = b.key")
 
-  createQueryTest("small.cartesian",
-    "SELECT a.key, b.key FROM (SELECT key FROM src WHERE key < 1) a JOIN " +
-      "(SELECT key FROM src WHERE key = 2) b")
-
   createQueryTest("length.udf",
     "SELECT length(\"test\") FROM src LIMIT 1")
 

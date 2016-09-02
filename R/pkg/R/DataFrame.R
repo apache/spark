@@ -2276,7 +2276,7 @@ setMethod("join",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y, joinExpr = NULL, joinType = NULL) {
             if (is.null(joinExpr)) {
-              sdf <- callJMethod(x@sdf, "join", y@sdf)
+              sdf <- callJMethod(x@sdf, "crossJoin", y@sdf)
             } else {
               if (class(joinExpr) != "Column") stop("joinExpr must be a Column")
               if (is.null(joinType)) {

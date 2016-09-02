@@ -378,12 +378,13 @@ relation
     ;
 
 joinRelation
-    : (CROSS | joinType) JOIN right=relationPrimary joinCriteria?
+    : (joinType) JOIN right=relationPrimary joinCriteria?
     | NATURAL joinType JOIN right=relationPrimary
     ;
 
 joinType
     : INNER?
+    | CROSS
     | LEFT OUTER?
     | LEFT SEMI
     | RIGHT OUTER?

@@ -570,31 +570,39 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def createFunction(
       db: String,
       funcDefinition: CatalogFunction): Unit = withClient {
+    requireDbExists(db)
     // Hive's metastore is case insensitive. However, Hive's createFunction does
     // not normalize the function name (unlike the getFunction part). So,
     // we are normalizing the function name.
     val functionName = funcDefinition.identifier.funcName.toLowerCase
+    requireFunctionNotExists(db, functionName)
     val functionIdentifier = funcDefinition.identifier.copy(funcName = functionName)
     client.createFunction(db, funcDefinition.copy(identifier = functionIdentifier))
   }
 
   override def dropFunction(db: String, name: String): Unit = withClient {
+    requireFunctionExists(db, name)
     client.dropFunction(db, name)
   }
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = withClient {
+    requireFunctionExists(db, oldName)
+    requireFunctionNotExists(db, newName)
     client.renameFunction(db, oldName, newName)
   }
 
   override def getFunction(db: String, funcName: String): CatalogFunction = withClient {
+    requireFunctionExists(db, funcName)
     client.getFunction(db, funcName)
   }
 
   override def functionExists(db: String, funcName: String): Boolean = withClient {
+    requireDbExists(db)
     client.functionExists(db, funcName)
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = withClient {
+    requireDbExists(db)
     client.listFunctions(db, pattern)
   }
 

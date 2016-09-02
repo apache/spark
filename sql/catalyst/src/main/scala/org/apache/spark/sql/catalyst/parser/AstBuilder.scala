@@ -539,6 +539,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         withOrigin(join) {
           val baseJoinType = join.joinType match {
             case null => Inner
+            case jt if jt.CROSS != null => Cross
             case jt if jt.FULL != null => FullOuter
             case jt if jt.SEMI != null => LeftSemi
             case jt if jt.ANTI != null => LeftAnti
@@ -557,6 +558,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
             case Some(c) if c.booleanExpression != null =>
               (baseJoinType, Option(expression(c.booleanExpression)))
             case None if join.NATURAL != null =>
+              if (baseJoinType == Cross) {
+                throw new ParseException("NATURAL CROSS JOIN is not supported", join)
+              }
               (NaturalJoin(baseJoinType), None)
             case None =>
               (baseJoinType, None)

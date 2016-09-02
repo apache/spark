@@ -156,6 +156,25 @@ sparkR.conf <- function(key, defaultValue) {
   }
 }
 
+#' Get version of Spark on which this application is running
+#'
+#' Get version of Spark on which this application is running.
+#'
+#' @return a character string of the Spark version
+#' @rdname sparkR.version
+#' @name sparkR.version
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' version <- sparkR.version()
+#' }
+#' @note sparkR.version since 2.0.1
+sparkR.version <- function() {
+  sparkSession <- getSparkSession()
+  callJMethod(sparkSession, "version")
+}
+
 getDefaultSqlSource <- function() {
   l <- sparkR.conf("spark.sql.sources.default", "org.apache.spark.sql.parquet")
   l[["spark.sql.sources.default"]]
