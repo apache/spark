@@ -203,6 +203,18 @@ setMethod("rangeBetween",
 #' @aliases over,Column,WindowSpec-method
 #' @family colum_func
 #' @export
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'
+#'   # Rank on hp within each partition
+#'   out <- select(df, over(rank(), ws), df$hp, df$am)
+#'
+#'   # Lag mpg values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lead(df$mpg), ws), df$mpg, df$hp, df$am)
+#' }
 #' @note over since 2.0.0
 setMethod("over",
           signature(x = "Column", window = "WindowSpec"),

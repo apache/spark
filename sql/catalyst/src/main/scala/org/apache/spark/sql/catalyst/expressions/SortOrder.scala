@@ -61,6 +61,9 @@ case class SortOrder(child: Expression, direction: SortDirection)
   override def sql: String = child.sql + " " + direction.sql
 
   def isAscending: Boolean = direction == Ascending
+
+  def semanticEquals(other: SortOrder): Boolean =
+    (direction == other.direction) && child.semanticEquals(other.child)
 }
 
 /**

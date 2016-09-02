@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionIn
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
-import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
 import org.apache.spark.util.Utils
@@ -42,7 +41,6 @@ import org.apache.spark.util.Utils
 
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
-    client: HiveClient,
     sparkSession: SparkSession,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
@@ -54,11 +52,6 @@ private[sql] class HiveSessionCatalog(
     functionRegistry,
     conf,
     hadoopConf) {
-
-  override def setCurrentDatabase(db: String): Unit = {
-    super.setCurrentDatabase(db)
-    client.setCurrentDatabase(db)
-  }
 
   override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
     val table = formatTableName(name.table)
@@ -87,7 +80,6 @@ private[sql] class HiveSessionCatalog(
 
   val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
   val OrcConversions: Rule[LogicalPlan] = metastoreCatalog.OrcConversions
-  val CreateTables: Rule[LogicalPlan] = metastoreCatalog.CreateTables
 
   override def refreshTable(name: TableIdentifier): Unit = {
     super.refreshTable(name)
@@ -230,10 +222,8 @@ private[sql] class HiveSessionCatalog(
   // List of functions we are explicitly not supporting are:
   // compute_stats, context_ngrams, create_union,
   // current_user, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
-  // in_file, index, java_method,
-  // matchpath, ngrams, noop, noopstreaming, noopwithmap, noopwithmapstreaming,
-  // parse_url_tuple, posexplode, reflect2,
-  // str_to_map, windowingtablefunction.
+  // in_file, index, matchpath, ngrams, noop, noopstreaming, noopwithmap,
+  // noopwithmapstreaming, parse_url_tuple, reflect2, windowingtablefunction.
   private val hiveFunctions = Seq(
     "hash",
     "histogram_numeric",

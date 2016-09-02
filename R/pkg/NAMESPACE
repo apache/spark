@@ -27,6 +27,7 @@ exportMethods("glm",
               "summary",
               "spark.kmeans",
               "fitted",
+              "spark.mlp",
               "spark.naiveBayes",
               "spark.survreg",
               "spark.lda",
@@ -362,5 +363,9 @@ S3method(structField, character)
 S3method(structField, jobj)
 S3method(structType, jobj)
 S3method(structType, structField)
+
+export("sparkR.newJObject")
+export("sparkR.callJMethod")
+export("sparkR.callJStatic")
 
 export("install.spark")

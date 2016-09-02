@@ -26,19 +26,21 @@ import scala.util.control.NonFatal
 
 import com.google.common.base.Splitter
 import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDriver}
-import org.apache.mesos.Protos._
+import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.protobuf.{ByteString, GeneratedMessage}
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.TaskState
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
+
 
 
 /**
  * Shared trait for implementing a Mesos Scheduler. This holds common state and helper
  * methods and Mesos scheduler will use.
  */
-private[mesos] trait MesosSchedulerUtils extends Logging {
+trait MesosSchedulerUtils extends Logging {
   // Lock used to wait for scheduler to be registered
   private final val registerLatch = new CountDownLatch(1)
 
@@ -490,5 +492,23 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   def unsetFrameworkID(sc: SparkContext) {
     sc.conf.remove("spark.mesos.driver.frameworkId")
     System.clearProperty("spark.mesos.driver.frameworkId")
+  }
+
+  def mesosToTaskState(state: MesosTaskState): TaskState.TaskState = state match {
+    case MesosTaskState.TASK_STAGING | MesosTaskState.TASK_STARTING => TaskState.LAUNCHING
+    case MesosTaskState.TASK_RUNNING | MesosTaskState.TASK_KILLING => TaskState.RUNNING
+    case MesosTaskState.TASK_FINISHED => TaskState.FINISHED
+    case MesosTaskState.TASK_FAILED => TaskState.FAILED
+    case MesosTaskState.TASK_KILLED => TaskState.KILLED
+    case MesosTaskState.TASK_LOST | MesosTaskState.TASK_ERROR => TaskState.LOST
+  }
+
+  def taskStateToMesos(state: TaskState.TaskState): MesosTaskState = state match {
+    case TaskState.LAUNCHING => MesosTaskState.TASK_STARTING
+    case TaskState.RUNNING => MesosTaskState.TASK_RUNNING
+    case TaskState.FINISHED => MesosTaskState.TASK_FINISHED
+    case TaskState.FAILED => MesosTaskState.TASK_FAILED
+    case TaskState.KILLED => MesosTaskState.TASK_KILLED
+    case TaskState.LOST => MesosTaskState.TASK_LOST
   }
 }

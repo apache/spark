@@ -136,7 +136,7 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
         case _: VectorUDT =>
           val attrs = AttributeGroup.fromStructField(f).attributes.getOrElse(
             throw new SparkException("Vector attributes must be defined for interaction."))
-          attrs.map(getNumFeatures).toArray
+          attrs.map(getNumFeatures)
       }
       new FeatureEncoder(numFeatures)
     }.toArray
