@@ -473,6 +473,7 @@ object MLUtils extends Logging {
    * @param norm1 the norm of the first vector, non-negative
    * @param v2 the second vector
    * @param norm2 the norm of the second vector, non-negative
+   * @param dotProduct the dot product between the vectors if applicable
    * @param precision desired relative precision for the squared distance
    * @return squared distance between v1 and v2 within the specified precision
    */
@@ -481,12 +482,14 @@ object MLUtils extends Logging {
       norm1: Double,
       v2: Vector,
       norm2: Double,
+      dotProduct: Double = Double.NaN,
       precision: Double = 1e-6): Double = {
     val n = v1.size
     require(v2.size == n)
     require(norm1 >= 0.0 && norm2 >= 0.0)
     val sumSquaredNorm = norm1 * norm1 + norm2 * norm2
     val normDiff = norm1 - norm2
+    val dotValue = if (dotProduct.isNaN) dot(v1, v2) else dotProduct
     var sqDist = 0.0
     /*
      * The relative error is
@@ -502,9 +505,8 @@ object MLUtils extends Logging {
      */
     val precisionBound1 = 2.0 * EPSILON * sumSquaredNorm / (normDiff * normDiff + EPSILON)
     if (precisionBound1 < precision) {
-      sqDist = sumSquaredNorm - 2.0 * dot(v1, v2)
+      sqDist = sumSquaredNorm - 2.0 * dotValue
     } else if (v1.isInstanceOf[SparseVector] || v2.isInstanceOf[SparseVector]) {
-      val dotValue = dot(v1, v2)
       sqDist = math.max(sumSquaredNorm - 2.0 * dotValue, 0.0)
       val precisionBound2 = EPSILON * (sumSquaredNorm + 2.0 * math.abs(dotValue)) /
         (sqDist + EPSILON)

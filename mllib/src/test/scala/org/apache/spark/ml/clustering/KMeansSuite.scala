@@ -47,6 +47,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getInitMode === MLlibKMeans.K_MEANS_PARALLEL)
     assert(kmeans.getInitSteps === 5)
     assert(kmeans.getTol === 1e-4)
+    assert(kmeans.getBlockSize === 4096)
   }
 
   test("set parameters") {
@@ -59,6 +60,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       .setInitSteps(3)
       .setSeed(123)
       .setTol(1e-3)
+      .setBlockSize(64)
 
     assert(kmeans.getK === 9)
     assert(kmeans.getFeaturesCol === "test_feature")
@@ -68,6 +70,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getInitSteps === 3)
     assert(kmeans.getSeed === 123)
     assert(kmeans.getTol === 1e-3)
+    assert(kmeans.getBlockSize === 64)
   }
 
   test("parameters validation") {

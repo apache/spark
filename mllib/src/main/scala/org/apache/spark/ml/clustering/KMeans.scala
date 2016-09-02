@@ -81,6 +81,25 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   def getInitSteps: Int = $(initSteps)
 
   /**
+   * Block size for stacking input data in matrices to speed up the computation.
+   * Data is stacked within partitions. If block size is more than remaining data in
+   * a partition then it is adjusted to the size of this data.
+   * Recommended size is between 4096 and 8192.
+   * Default: 4096
+   * @group expertParam
+   */
+  @Since("2.1.0")
+  final val blockSize: IntParam = new IntParam(this, "blockSize",
+    "Block size for stacking input data in matrices. Data is stacked within partitions." +
+      " If block size is more than remaining data in a partition then " +
+      "it is adjusted to the size of this data. Recommended size is between 4096 and 8192",
+    ParamValidators.gt(0))
+
+  /** @group expertGetParam */
+  @Since("2.1.0")
+  final def getBlockSize: Int = $(blockSize)
+
+  /**
    * Validates and transforms the input schema.
    * @param schema input schema
    * @return output schema
@@ -263,7 +282,8 @@ class KMeans @Since("1.5.0") (
     maxIter -> 20,
     initMode -> MLlibKMeans.K_MEANS_PARALLEL,
     initSteps -> 5,
-    tol -> 1e-4)
+    tol -> 1e-4,
+    blockSize -> 4096)
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeans = defaultCopy(extra)
@@ -290,6 +310,10 @@ class KMeans @Since("1.5.0") (
   /** @group expertSetParam */
   @Since("1.5.0")
   def setInitSteps(value: Int): this.type = set(initSteps, value)
+
+  /** @group expertSetParam */
+  @Since("2.1.0")
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
 
   /** @group setParam */
   @Since("1.5.0")
@@ -320,6 +344,7 @@ class KMeans @Since("1.5.0") (
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
       .setEpsilon($(tol))
+      .setBlockSize($(blockSize))
     val parentModel = algo.run(rdd, Option(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
