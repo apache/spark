@@ -2876,7 +2876,8 @@ setMethod("randn", signature(seed = "numeric"),
 
 #' regexp_extract
 #'
-#' Extract a specific(idx) group identified by a java regex, from the specified string column.
+#' Extract a specific \code{idx} group identified by a Java regex, from the specified string column.
+#' If the regex did not match, or the specified group did not match, an empty string is returned.
 #'
 #' @param x a string Column.
 #' @param pattern a regular expression.
