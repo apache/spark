@@ -1034,15 +1034,13 @@ case class ScalaUDF(
     }.unzip
 
     val getFuncResult = s"$funcTerm.apply(${funcArguments.mkString(", ")})"
-    val rethrowException = "throw new org.apache.spark.SparkException" +
-      """("Exception happens when execute user code in Scala UDF.", e);"""
     val callFunc =
       s"""
          ${ctx.boxedType(dataType)} $resultTerm = null;
          try {
            $resultTerm = (${ctx.boxedType(dataType)})$catalystConverterTerm.apply($getFuncResult);
          } catch (Exception e) {
-           $rethrowException
+           throw new org.apache.spark.SparkException($scalaUDF.udfErrorMessage(), e);
          }
        """
 
@@ -1060,12 +1058,18 @@ case class ScalaUDF(
 
   private[this] val converter = CatalystTypeConverters.createToCatalystConverter(dataType)
 
+  val udfErrorMessage = {
+    val funcCls = function.getClass.getSimpleName
+    val inputTypes = children.map(_.dataType.simpleString).mkString(", ")
+    s"Failed to execute user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
+  }
+
   override def eval(input: InternalRow): Any = {
     val result = try {
       f(input)
     } catch {
       case e: Exception =>
-        throw new SparkException("Exception happens when execute user code in Scala UDF.", e)
+        throw new SparkException(udfErrorMessage, e)
     }
 
     converter(result)
