@@ -379,6 +379,9 @@ class PlanParserSuite extends PlanTest {
         .join(table("t3"), Inner, Option(Symbol("t3.id") === Symbol("t1.id")))
         .join(table("t4"), Inner, Option(Symbol("t4.id") === Symbol("t1.id")))
         .select(star()))
+
+    // Test multiple on clauses.
+    intercept("select * from t1 inner join t2 inner join t3 on col3 = col2 on col3 = col1")
   }
 
   test("sampled relations") {
