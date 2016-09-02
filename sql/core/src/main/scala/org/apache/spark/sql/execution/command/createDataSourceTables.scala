@@ -55,38 +55,37 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       }
     }
 
-    val newTable = if (table.tableType == CatalogTableType.MANAGED) {
-      // For managed table, we should add path to storage properties/data source options.
-      val optionsWithPath = table.storage.properties +
-        ("path" -> sessionState.catalog.defaultTablePath(table.identifier))
-      table.withNewStorage(properties = optionsWithPath)
-    } else {
-      // For external table, we need to resolve the data source relation to validate the arguments,
-      // e.g. path, and infer the table schema and partition if users didn't specify schema in
-      // CREATE TABLE.
-      val dataSource: BaseRelation = DataSource(
+    // Create the relation to validate the arguments before writing the metadata to the metastore,
+    // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
+    val dataSource: BaseRelation =
+      DataSource(
         sparkSession = sparkSession,
         userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
         className = table.provider.get,
         bucketSpec = table.bucketSpec,
         options = table.storage.properties).resolveRelation()
 
-      val partitionColumnNames = if (table.schema.nonEmpty) {
-        table.partitionColumnNames
-      } else {
-        // This is guaranteed in `PreprocessDDL`.
-        assert(table.partitionColumnNames.isEmpty)
-        dataSource match {
-          case r: HadoopFsRelation => r.partitionSchema.fieldNames.toSeq
-          case _ => Nil
-        }
+    val partitionColumnNames = if (table.schema.nonEmpty) {
+      table.partitionColumnNames
+    } else {
+      // This is guaranteed in `PreprocessDDL`.
+      assert(table.partitionColumnNames.isEmpty)
+      dataSource match {
+        case r: HadoopFsRelation => r.partitionSchema.fieldNames.toSeq
+        case _ => Nil
       }
-
-      table.copy(
-        schema = dataSource.schema,
-        partitionColumnNames = partitionColumnNames)
     }
 
+    val optionsWithPath = if (table.tableType == CatalogTableType.MANAGED) {
+      table.storage.properties + ("path" -> sessionState.catalog.defaultTablePath(table.identifier))
+    } else {
+      table.storage.properties
+    }
+
+    val newTable = table.copy(
+      storage = table.storage.copy(properties = optionsWithPath),
+      schema = dataSource.schema,
+      partitionColumnNames = partitionColumnNames)
     // We will return Nil or throw exception at the beginning if the table already exists, so when
     // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
     sessionState.catalog.createTable(newTable, ignoreIfExists = false)
