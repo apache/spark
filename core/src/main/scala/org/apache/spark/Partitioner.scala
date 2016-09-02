@@ -80,7 +80,7 @@ class HashPartitioner(partitions: Int, buckets: Int = 0) extends Partitioner {
   require(buckets >= 0, s"Number of buckets ($buckets) cannot be negative.")
 
   def this(partitions: Int) {
-    this(partitions , 0)
+    this(partitions, 0)
   }
 
   def numPartitions: Int = partitions
