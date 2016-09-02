@@ -238,8 +238,10 @@ public class UTF8StringSuite {
     String stringStartingWithSpace =
       new String(charsLessThan0x20) + "hello" + new String(charsLessThan0x20);
     assertEquals(fromString(stringStartingWithSpace), fromString(stringStartingWithSpace).trim());
-    assertEquals(fromString(stringStartingWithSpace), fromString(stringStartingWithSpace).trimLeft());
-    assertEquals(fromString(stringStartingWithSpace), fromString(stringStartingWithSpace).trimRight());
+    assertEquals(fromString(stringStartingWithSpace),
+      fromString(stringStartingWithSpace).trimLeft());
+    assertEquals(fromString(stringStartingWithSpace),
+      fromString(stringStartingWithSpace).trimRight());
   }
 
   @Test
