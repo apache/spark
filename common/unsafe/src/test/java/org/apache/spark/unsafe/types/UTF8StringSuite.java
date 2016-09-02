@@ -232,6 +232,14 @@ public class UTF8StringSuite {
     assertEquals(fromString("数据砖头"), fromString("数据砖头").trim());
     assertEquals(fromString("数据砖头"), fromString("数据砖头").trimLeft());
     assertEquals(fromString("数据砖头"), fromString("数据砖头").trimRight());
+
+    char[] charsLessThan0x20 = new char[10];
+    Arrays.fill(charsLessThan0x20, (char)(' ' - 1));
+    String stringStartingWithSpace =
+      new String(charsLessThan0x20) + "hello" + new String(charsLessThan0x20);
+    assertEquals(fromString(stringStartingWithSpace), fromString(stringStartingWithSpace).trim());
+    assertEquals(fromString(stringStartingWithSpace), fromString(stringStartingWithSpace).trimLeft());
+    assertEquals(fromString(stringStartingWithSpace), fromString(stringStartingWithSpace).trimRight());
   }
 
   @Test
