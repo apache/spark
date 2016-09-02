@@ -27,7 +27,6 @@ object StringKeyHashMap {
   } else {
     new StringKeyHashMap[T](_.toLowerCase)
   }
-
 }
 
 
