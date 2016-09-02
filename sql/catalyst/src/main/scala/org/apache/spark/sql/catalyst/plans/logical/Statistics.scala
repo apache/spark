@@ -37,4 +37,13 @@ package org.apache.spark.sql.catalyst.plans.logical
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
-    isBroadcastable: Boolean = false)
+    isBroadcastable: Boolean = false) {
+  override def toString: String = {
+    val output =
+      Seq(s"sizeInBytes=$sizeInBytes",
+        if (rowCount.isDefined) s"rowCount=${rowCount.get}" else "",
+        s"isBroadcastable=$isBroadcastable"
+      )
+    output.filter(_.nonEmpty).mkString("Statistics(", ", ", ")")
+  }
+}

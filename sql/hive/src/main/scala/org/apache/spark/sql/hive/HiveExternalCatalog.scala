@@ -102,11 +102,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * metastore.
    */
   private def verifyTableProperties(table: CatalogTable): Unit = {
-    val datasourceKeys = table.properties.keys.filter(_.startsWith(DATASOURCE_PREFIX))
-    if (datasourceKeys.nonEmpty) {
+    val invalidKeys = table.properties.keys.filter { key =>
+      key.startsWith(DATASOURCE_PREFIX) || key.startsWith(STATISTICS_PREFIX)
+    }
+    if (invalidKeys.nonEmpty) {
       throw new AnalysisException(s"Cannot persistent ${table.qualifiedName} into hive metastore " +
-        s"as table property keys may not start with '$DATASOURCE_PREFIX': " +
-        datasourceKeys.mkString("[", ", ", "]"))
+        s"as table property keys may not start with '$DATASOURCE_PREFIX' or '$STATISTICS_PREFIX':" +
+        s" ${invalidKeys.mkString("[", ", ", "]")}")
     }
   }
 
@@ -385,7 +387,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     verifyTableProperties(tableDefinition)
 
     // convert table statistics to properties so that we can persist them through hive api
-    val catalogTable = if (tableDefinition.stats.isDefined) {
+    val withStatsProps = if (tableDefinition.stats.isDefined) {
       val stats = tableDefinition.stats.get
       var statsProperties: Map[String, String] =
         Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
@@ -397,21 +399,21 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       tableDefinition
     }
 
-    if (DDLUtils.isDatasourceTable(catalogTable)) {
-      val oldDef = client.getTable(db, catalogTable.identifier.table)
+    if (DDLUtils.isDatasourceTable(withStatsProps)) {
+      val oldDef = client.getTable(db, withStatsProps.identifier.table)
       // Sets the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
       // to retain the spark specific format if it is. Also add old data source properties to table
       // properties, to retain the data source table format.
       val oldDataSourceProps = oldDef.properties.filter(_._1.startsWith(DATASOURCE_PREFIX))
-      val newDef = catalogTable.copy(
+      val newDef = withStatsProps.copy(
         schema = oldDef.schema,
         partitionColumnNames = oldDef.partitionColumnNames,
         bucketSpec = oldDef.bucketSpec,
-        properties = oldDataSourceProps ++ catalogTable.properties)
+        properties = oldDataSourceProps ++ withStatsProps.properties)
 
       client.alterTable(newDef)
     } else {
-      client.alterTable(catalogTable)
+      client.alterTable(withStatsProps)
     }
   }
 

@@ -85,35 +85,27 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
             }
           }.getOrElse(0L)
 
-        updateTableStats(
-          catalogTable,
-          oldTotalSize = catalogTable.stats.map(_.sizeInBytes.toLong).getOrElse(0L),
-          oldRowCount = catalogTable.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L),
-          newTotalSize = newTotalSize)
+        updateTableStats(catalogTable, newTotalSize)
 
       // data source tables have been converted into LogicalRelations
       case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
-        val table = logicalRel.catalogTable.get
-        updateTableStats(
-          table,
-          oldTotalSize = table.stats.map(_.sizeInBytes.toLong).getOrElse(0L),
-          oldRowCount = table.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L),
-          newTotalSize = logicalRel.relation.sizeInBytes)
+        updateTableStats(logicalRel.catalogTable.get, logicalRel.relation.sizeInBytes)
 
       case otherRelation =>
         throw new AnalysisException(s"ANALYZE TABLE is not supported for " +
           s"${otherRelation.nodeName}.")
     }
 
-    def updateTableStats(
-        catalogTable: CatalogTable,
-        oldTotalSize: Long,
-        oldRowCount: Long,
-        newTotalSize: Long): Unit = {
+    def updateTableStats(catalogTable: CatalogTable, newTotalSize: Long): Unit = {
+      val oldTotalSize = catalogTable.stats.map(_.sizeInBytes.toLong).getOrElse(0L)
+      val oldRowCount = catalogTable.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
       var newStats: Option[Statistics] = None
       if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
         newStats = Some(Statistics(sizeInBytes = newTotalSize))
       }
+      // We only set rowCount when noscan is false, because otherwise we can't know whether the
+      // row count we get (`oldRowCount`) is valid or not.
+      // This is to make sure that we only record the right statistics.
       if (!noscan) {
         val newRowCount = Dataset.ofRows(sparkSession, relation).count()
         if (newRowCount >= 0 && newRowCount != oldRowCount) {
