@@ -274,8 +274,9 @@ abstract class QueryTest extends PlanTest {
     val normalized1 = logicalPlan.transformAllExpressions {
       case udf: ScalaUDF => udf.copy(function = null)
       case gen: UserDefinedGenerator => gen.copy(function = null)
-      // SPARK-17356: In usage of mllib, Metadata may store a huge vector of data, transforming
-      // it to JSON may trigger OutOfMemoryError.
+      // After SPARK-17356: the JSON representation no longer has the Metadata. We need to remove
+      // the Metadata from the normalized plan so that we can compare this plan with the
+      // JSON-deserialzed plan.
       case a @ Alias(child, name) if a.explicitMetadata.isDefined =>
         Alias(child, name)(a.exprId, a.qualifier, Some(Metadata.empty), a.isGenerated)
       case a: AttributeReference if a.metadata != Metadata.empty =>
