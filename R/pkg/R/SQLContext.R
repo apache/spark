@@ -169,7 +169,7 @@ sparkR.conf <- function(key, defaultValue) {
 #' sparkR.session()
 #' version <- sparkR.version()
 #' }
-#' @note sparkR.version since 2.1.0
+#' @note sparkR.version since 2.0.1
 sparkR.version <- function() {
   sparkSession <- getSparkSession()
   callJMethod(sparkSession, "version")
