@@ -92,13 +92,5 @@ class LocalTreeUnitSuite
     assert(col.values.sameElements(expected))
   }
 
-//  test("Choose splits for a dataset consisting of a single label") {
-//    val constLabel = 1
-//    val data = sc.parallelize(Range(0, 8).map(x => LabeledPoint(constLabel, Vectors.dense(x))))
-//    val df = spark.sqlContext.createDataFrame(data)
-//
-//    LocalDecisionTree.chooseSplit(col, labels, from, to, fullImpurityAgg, metadata, splits)
-//
-//  }
 
 }

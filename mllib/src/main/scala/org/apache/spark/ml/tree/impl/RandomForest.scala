@@ -701,7 +701,6 @@ private[spark] object RandomForest extends Logging {
           featureIndexIdx
         }
         val numSplits = binAggregates.metadata.numSplits(featureIndex)
-        // TODO(smurching): Integrate continuous features
         if (binAggregates.metadata.isContinuous(featureIndex)) {
           // Cumulative sum (scanLeft) of bin statistics.
           // Afterwards, binAggregates for a bin is the sum of aggregates for
@@ -730,7 +729,6 @@ private[spark] object RandomForest extends Logging {
               (splitIdx, gainAndImpurityStats)
             }.maxBy(_._2.gain)
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
-        // TODO(smurching): Integrate unordered categoricals
         } else if (binAggregates.metadata.isUnordered(featureIndex)) {
           // Unordered categorical feature
           val leftChildOffset = binAggregates.getFeatureOffset(featureIndexIdx)
@@ -744,7 +742,6 @@ private[spark] object RandomForest extends Logging {
               (splitIndex, gainAndImpurityStats)
             }.maxBy(_._2.gain)
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
-        // TODO(smurching): Integrate ordered categoricals
         } else {
           // Ordered categorical feature
           val nodeFeatureOffset = binAggregates.getFeatureOffset(featureIndexIdx)

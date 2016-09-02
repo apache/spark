@@ -97,7 +97,7 @@ private[impl] case class PartitionInfo(
       index match {
         case 0 => first(col, instanceBitVector, metadata, labels,
           newNodeOffsets)
-        case _ => rest(col, instanceBitVector, newNodeOffsets, newActiveNodes)
+        case _ => rest(col, instanceBitVector, newNodeOffsets)
       }
     }
 
@@ -166,17 +166,15 @@ private[impl] case class PartitionInfo(
   private def rest(
       col: FeatureVector,
       instanceBitVector: BitSet,
-      newNodeOffsets: ArrayBuffer[(Int, Int)],
-      newActiveNodes: Array[LearningNode]): Unit = {
-    // Iterate over pairs of sibling active nodes (e.g. pairs of nodes with a common
-    // parent). Assumes that sibling active nodes are located at adjacent positions in
-    // the newActiveNodes array
-    0.until(newActiveNodes.length, 2).foreach { nodeIdx =>
+      newNodeOffsets: ArrayBuffer[(Int, Int)]): Unit = {
+    // Iterate over row offsets of pairs of sibling active nodes (e.g. pairs of nodes with a common
+    // parent). Assumes that sibling active nodes' row offsets are located at adjacent positions in
+    // the newNodeOffsets array
+    0.until(newNodeOffsets.length, 2).foreach { nodeIdx =>
 
       val (leftFrom, leftTo) = newNodeOffsets(nodeIdx)
       val (rightFrom, rightTo) = newNodeOffsets(nodeIdx + 1)
 
-      // TODO(smurching): Rework this somehow, this pairwise-iteration thing is sketchy
       // Number of rows on the left side of the split
       val numBitsNotSet = leftTo - leftFrom
       LocalDecisionTreeUtils.sortCol(col, leftFrom, rightTo, numBitsNotSet,

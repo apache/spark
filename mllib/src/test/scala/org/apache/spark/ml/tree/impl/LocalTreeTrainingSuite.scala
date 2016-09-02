@@ -24,12 +24,16 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.regression.DecisionTreeRegressor
 import org.apache.spark.ml.tree.InternalNode
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.{LogisticRegressionDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.sql.DataFrame
 
 /** Tests for equivalence/performance of local tree training vs distributed training. */
 class LocalTreeTrainingSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  val medDepthTreeSettings = TreeTests.allParamSettings ++ Map[String, Any]("maxDepth" -> 5)
+  // TODO(smurching): Add test for deep trees
+  val deepTreeSettings = TreeTests.allParamSettings ++ Map[String, Any]("maxDepth" -> 40)
 
   /**
    * For each (paramName, paramVal) pair in the passed-in map, set the corresponding
@@ -48,22 +52,21 @@ class LocalTreeTrainingSuite
    * when fit on the same dataset with the same set of params.
    */
   private def testEquivalence(train: DataFrame, testParams: Map[String, Any]): Unit = {
-    val localTree = setParams(new LocalDecisionTreeRegressor(), testParams)
     val sparkTree = setParams(new DecisionTreeRegressor(), testParams)
+    val localTree = setParams(new LocalDecisionTreeRegressor(), testParams)
 
-    val localModel = localTree.fit(train)
     val model = sparkTree.fit(train)
+    val localModel = localTree.fit(train)
     TreeTests.checkEqual(localModel, model)
   }
 
   test("Fit a single decision tree regressor on some continuous features") {
     val data = sc.parallelize(Range(0, 8).map(x => LabeledPoint(x, Vectors.dense(x))))
     val df = spark.sqlContext.createDataFrame(data)
-
     val dt = new LocalDecisionTreeRegressor()
       .setFeaturesCol("features") // indexedFeatures
       .setLabelCol("label")
-      .setMaxDepth(10)
+      .setMaxDepth(3)
     val model = dt.fit(df)
     assert(model.rootNode.isInstanceOf[InternalNode])
     val root = model.rootNode.asInstanceOf[InternalNode]
@@ -80,6 +83,14 @@ class LocalTreeTrainingSuite
     testEquivalence(df, TreeTests.allParamSettings)
   }
 
+//
+//  test("Local & distributed training produce the same tree on a featureless dataset") {
+//    val featureVals: Array[Double] = Array.empty
+//    val data = sc.parallelize(Range(0, 8).map(x => LabeledPoint(x, Vectors.dense(featureVals))))
+//    val df = spark.sqlContext.createDataFrame(data)
+//    testEquivalence(df, TreeTests.allParamSettings)
+//  }
+
   test("Local & distributed training produce the same tree on a dataset of categorical features") {
     val (train, test) = TreeTests.buildCategoricalData(seed = 42, sqlContext = spark.sqlContext,
       nexamples = 1000, nfeatures = 5, nclasses = 4, trainFraction = 1.0)
@@ -91,8 +102,11 @@ class LocalTreeTrainingSuite
     val sqlContext = spark.sqlContext
     import sqlContext.implicits._
     // Use maxDepth = 5 and default params
-    val params = Map[String, Any]("maxDepth" -> 5)
-    testEquivalence(TreeTests.varianceData(sc).toDF(), params)
+    val params = medDepthTreeSettings
+    val data = LogisticRegressionDataGenerator.generateLogisticRDD(spark.sparkContext,
+      nexamples = 1000, nfeatures = 5, eps = 2.0, nparts = 1, probOne = 0.5)
+      .map(_.asML).toDF().cache()
+    testEquivalence(data, params)
   }
 
 }

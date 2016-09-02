@@ -210,7 +210,6 @@ private[ml] object LocalDecisionTree {
       node: LearningNode,
       split: Option[Split],
       stats: ImpurityStats): Unit = {
-    // TODO(smurching): Find cleaner way to not use IDs, add integration test for deep trees
     node.leftChild = Some(LearningNode(id = -1, isLeaf = false,
       ImpurityStats.getEmptyImpurityStats(stats.leftImpurityCalculator)))
     node.rightChild = Some(LearningNode(id = -1, isLeaf = false,
@@ -317,13 +316,6 @@ private[ml] object LocalDecisionTree {
    * TODO(smurching): Update doc
    * Calculate the impurity statistics for a given (feature, split) based upon left/right
    * aggregates.
-   *
-   * @param stats the recycle impurity statistics for this feature's all splits,
-   *              only 'impurity' and 'impurityCalculator' are valid between each iteration
-   * @param leftImpurityCalculator left node aggregates for this (feature, split)
-   * @param rightImpurityCalculator right node aggregate for this (feature, split)
-   * @param metadata learning and dataset metadata for DecisionTree
-   * @return Impurity statistics for this (feature, split)
    */
   private def calculateImpurityStats(
       fullImpurityAgg: ImpurityAggregatorSingle,
@@ -334,6 +326,26 @@ private[ml] object LocalDecisionTree {
     val fullCalc = fullImpurityAgg.getCalculator
     val leftCalc = leftAgg.getCalculator
     val rightCalc = rightAgg.getCalculator
+    calculateImpurityStats(fullCalc, leftCalc, rightCalc, metadata)
+  }
+
+  /**
+   * TODO(smurching): Update doc
+   * Calculate the impurity statistics for a given (feature, split) based upon left/right
+   * aggregates.
+   *
+   * @param stats the recycle impurity statistics for this feature's all splits,
+   *              only 'impurity' and 'impurityCalculator' are valid between each iteration
+   * @param leftCalc left node aggregates for this (feature, split)
+   * @param rightCalc right node aggregate for this (feature, split)
+   * @param metadata learning and dataset metadata for DecisionTree
+   * @return Impurity statistics for this (feature, split)
+   */
+  private def calculateImpurityStats(
+      fullCalc: ImpurityCalculator,
+      leftCalc: ImpurityCalculator,
+      rightCalc: ImpurityCalculator,
+      metadata: DecisionTreeMetadata): ImpurityStats = {
 
     val impurity: Double = fullCalc.calculate()
 
@@ -413,8 +425,9 @@ private[ml] object LocalDecisionTree {
     // Consider all splits. These only cover valid splits, with at least one category on each side.
     val numSplits = categoriesSortedByCentroid.length - 1
 
-    // Compute the index & gain of the best split, along with an impurity aggregator for the
-    // best left split
+    // TODO(smurching): Just compute best split & its stats outright in this section?
+    // Compute the index & gain of the best split, along with an impurity aggregator containing
+    // stats for the left side of the best split.
     // Initial values: bestSplitIdx = -1, bestGain = 0.0, bestImpurityAgg = an empty impurity
     // aggregator
     val (bestSplitIndex, bestGain, bestLeftAgg)
@@ -436,7 +449,8 @@ private[ml] object LocalDecisionTree {
         }
     }
 
-
+    // Given the index of the best split, create a corresponding split object and return
+    // the best split & its impurity statistics
     val categoriesForSplit =
       categoriesSortedByCentroid.slice(0, bestSplitIndex + 1).map(_.toDouble)
     val bestFeatureSplit =
@@ -450,7 +464,9 @@ private[ml] object LocalDecisionTree {
     } else {
       (Some(bestFeatureSplit), bestImpurityStats)
     }
+
   }
+
 
   /**
    * Find the best split for an unordered categorical feature at a single node.
