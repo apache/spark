@@ -539,6 +539,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     def join(ctx: JoinRelationContext, left: LogicalPlan, right: LogicalPlan): Join = {
       val baseJoinType = ctx.joinType match {
         case null => Inner
+        case jt if jt.CROSS != null => Cross
         case jt if jt.FULL != null => FullOuter
         case jt if jt.SEMI != null => LeftSemi
         case jt if jt.ANTI != null => LeftAnti

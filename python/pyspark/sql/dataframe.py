@@ -644,7 +644,7 @@ class DataFrame(object):
             on = [on]
 
         if on is None or len(on) == 0:
-            jdf = self._jdf.join(other._jdf)
+            jdf = self._jdf.crossJoin(other._jdf)
         elif isinstance(on[0], basestring):
             if how is None:
                 jdf = self._jdf.join(other._jdf, self._jseq(on), "inner")
