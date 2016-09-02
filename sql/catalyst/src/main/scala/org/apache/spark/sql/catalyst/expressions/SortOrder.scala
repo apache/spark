@@ -96,11 +96,26 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   val nullValue = child.child.dataType match {
     case BooleanType | DateType | TimestampType | _: IntegralType =>
-      Long.MinValue
+      if ((child.isAscending && child.nullOrdering == NullFirst) ||
+        (!child.isAscending && child.nullOrdering == NullLast)) {
+          Long.MinValue
+      } else {
+        Long.MaxValue
+      }
     case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-      Long.MinValue
+      if ((child.isAscending && child.nullOrdering == NullFirst) ||
+        (!child.isAscending && child.nullOrdering == NullLast)) {
+        Long.MinValue
+      } else {
+        Long.MaxValue
+      }
     case _: DecimalType =>
-      DoublePrefixComparator.computePrefix(Double.NegativeInfinity)
+      if ((child.isAscending && child.nullOrdering == NullFirst) ||
+        (!child.isAscending && child.nullOrdering == NullLast)) {
+        DoublePrefixComparator.computePrefix(Double.NegativeInfinity)
+      } else {
+        DoublePrefixComparator.computePrefix(Double.PositiveInfinity)
+      }
     case _ => 0L
   }
 

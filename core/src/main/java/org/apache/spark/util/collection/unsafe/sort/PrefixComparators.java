@@ -108,7 +108,7 @@ public class PrefixComparators {
     public abstract boolean sortSigned();
 
     /** @return Whether the sort should put null first or last. */
-    public abstract NullOrder nullOrder();
+    public abstract boolean nullFirst();
   }
 
   //
@@ -119,16 +119,8 @@ public class PrefixComparators {
   public static final class UnsignedPrefixComparator extends RadixSortSupport {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return false; }
-    @Override public NullOrder nullOrder() { return NullOrder.FIRST; }
+    @Override public boolean nullFirst() { return true; }
     public int compare(long aPrefix, long bPrefix) {
-      if (aPrefix == 0L && bPrefix == 0L) {
-        return 0;
-      }
-      if (aPrefix == 0L) {
-        return -1;
-      } else if (bPrefix == 0L) {
-        return 1;
-      }
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
   }
@@ -137,16 +129,8 @@ public class PrefixComparators {
   public static final class UnsignedPrefixComparatorNullLast extends RadixSortSupport {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return false; }
-    @Override public NullOrder nullOrder() { return NullOrder.LAST; }
+    @Override public boolean nullFirst() { return false; }
     public int compare(long aPrefix, long bPrefix) {
-      if (aPrefix == 0L && bPrefix == 0L) {
-        return 0;
-      }
-      if (aPrefix == 0L) {
-        return 1;
-      } else if (bPrefix == 0L) {
-        return -1;
-      }
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
   }
@@ -155,16 +139,8 @@ public class PrefixComparators {
   public static final class UnsignedPrefixComparatorDescNullFirst extends RadixSortSupport {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return false; }
-    @Override public NullOrder nullOrder() { return NullOrder.FIRST; }
+    @Override public boolean nullFirst() {return true;}
     public int compare(long bPrefix, long aPrefix) {
-      if (aPrefix == 0L && bPrefix == 0L) {
-        return 0;
-      }
-      if (bPrefix == 0L) {
-        return -1;
-      } else if (aPrefix == 0L) {
-        return 1;
-      }
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
   }
@@ -173,16 +149,8 @@ public class PrefixComparators {
   public static final class UnsignedPrefixComparatorDesc extends RadixSortSupport {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return false; }
-    @Override public NullOrder nullOrder() { return NullOrder.LAST; }
+    @Override public boolean nullFirst() { return false; }
     public int compare(long bPrefix, long aPrefix) {
-      if (aPrefix == 0L && bPrefix == 0L) {
-        return 0;
-      }
-      if (bPrefix == 0L) {
-        return 1;
-      } else if (aPrefix == 0L) {
-        return -1;
-      }
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
   }
@@ -191,16 +159,8 @@ public class PrefixComparators {
   public static final class SignedPrefixComparator extends RadixSortSupport {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return true; }
-    @Override public NullOrder nullOrder() { return NullOrder.FIRST; }
+    @Override public boolean nullFirst() { return true; }
     public int compare(long a, long b) {
-        if (a == Long.MIN_VALUE && b == Long.MIN_VALUE) {
-          return 0;
-        }
-        if (a == Long.MIN_VALUE) {
-          return -1;
-        } else if (b == Long.MIN_VALUE) {
-          return 1;
-        }
       return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
   }
@@ -209,16 +169,8 @@ public class PrefixComparators {
   public static final class SignedPrefixComparatorNullLast extends RadixSortSupport {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return true; }
-    @Override public NullOrder nullOrder() { return NullOrder.LAST; }
+    @Override public boolean nullFirst() { return false; }
     public int compare(long a, long b) {
-      if (a == Long.MIN_VALUE && b == Long.MIN_VALUE) {
-        return 0;
-      }
-      if (a == Long.MIN_VALUE) {
-        return 1;
-      } else if (b == Long.MIN_VALUE) {
-        return -1;
-      }
       return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
   }
@@ -227,16 +179,8 @@ public class PrefixComparators {
   public static final class SignedPrefixComparatorDescNullFirst extends RadixSortSupport {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return true; }
-    @Override public NullOrder nullOrder() { return NullOrder.FIRST; }
+    @Override public boolean nullFirst() { return true; }
     public int compare(long b, long a) {
-        if (a == Long.MIN_VALUE && b == Long.MIN_VALUE) {
-          return 0;
-        }
-        if (b == Long.MIN_VALUE) {
-          return -1;
-        } else if (a == Long.MIN_VALUE) {
-          return 1;
-        }
       return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
   }
@@ -245,16 +189,8 @@ public class PrefixComparators {
   public static final class SignedPrefixComparatorDesc extends RadixSortSupport {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return true; }
-    @Override public NullOrder nullOrder() { return NullOrder.LAST; }
+    @Override public boolean nullFirst() { return false; }
     public int compare(long b, long a) {
-      if (a == Long.MIN_VALUE && b == Long.MIN_VALUE) {
-        return 0;
-      }
-      if (b == Long.MIN_VALUE) {
-        return 1;
-      } else if (a == Long.MIN_VALUE) {
-        return -1;
-      }
       return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
   }

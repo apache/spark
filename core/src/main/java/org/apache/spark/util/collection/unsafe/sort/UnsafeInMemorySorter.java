@@ -335,12 +335,12 @@ public final class UnsafeInMemorySorter {
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
 
       // The null order is either LAST or FIRST, regardless of sorting direction (ASC|DESC)
-      if (radixSortSupport.nullOrder() == PrefixComparator.NullOrder.LAST) {
-        queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
-        queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
-      } else if (radixSortSupport.nullOrder() == PrefixComparator.NullOrder.FIRST) {
+      if (radixSortSupport.nullFirst()) {
         queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
         queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
+      } else {
+        queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
+        queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
       }
       return new UnsafeExternalSorter.ChainedIterator(queue);
     } else {

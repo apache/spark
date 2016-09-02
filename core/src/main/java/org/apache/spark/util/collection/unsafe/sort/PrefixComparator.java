@@ -25,6 +25,5 @@ import org.apache.spark.annotation.Private;
  */
 @Private
 public abstract class PrefixComparator {
-  public enum NullOrder {FIRST, LAST}
   public abstract int compare(long prefix1, long prefix2);
 }

@@ -27,7 +27,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.util.collection.Sorter
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparator.NullOrder
 import org.apache.spark.util.random.XORShiftRandom
 
 class RadixSortSuite extends SparkFunSuite with Logging {
@@ -66,7 +65,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
       new PrefixComparators.RadixSortSupport {
         override def sortDescending = false
         override def sortSigned = false
-        override def nullOrder = NullOrder.FIRST
+        override def nullFirst = true
         override def compare(a: Long, b: Long): Int = {
           return PrefixComparators.BINARY.compare(a & 0xffffff0000L, b & 0xffffff0000L)
         }
