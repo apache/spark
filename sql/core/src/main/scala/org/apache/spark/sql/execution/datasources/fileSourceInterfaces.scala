@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
 
+import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
@@ -171,11 +172,15 @@ case class HadoopFsRelation(
   override def sizeInBytes: Long = location.allFiles().map(_.getLen).sum
 
   override def equals(other: Any): Boolean = other match {
-    case r: HadoopFsRelation => location == r.location
+    case r: HadoopFsRelation => location == r.location && partitionSchema == r.partitionSchema &&
+      dataSchema == r.dataSchema && bucketSpec == r.bucketSpec && fileFormat == r.fileFormat &&
+        options == r.options
     case _ => false
   }
 
-  override def hashCode(): Int = location.hashCode()
+  override def hashCode(): Int = {
+    Objects.hashCode(location, partitionSchema, dataSchema, bucketSpec, fileFormat, options)
+  }
 }
 
 /**
