@@ -26,7 +26,8 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -97,7 +98,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       }
       // Check for duplicate names.
       checkDuplicateKeys(ctes, ctx)
-      With(query, ctes.toMap)
+      With(query, ctes)
     }
   }
 
@@ -107,7 +108,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * This is only used for Common Table Expressions.
    */
   override def visitNamedQuery(ctx: NamedQueryContext): SubqueryAlias = withOrigin(ctx) {
-    SubqueryAlias(ctx.name.getText, plan(ctx.queryNoWith))
+    SubqueryAlias(ctx.name.getText, plan(ctx.queryNoWith), None)
   }
 
   /**
@@ -132,7 +133,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // Build the insert clauses.
     val inserts = ctx.multiInsertQueryBody.asScala.map {
       body =>
-        assert(body.querySpecification.fromClause == null,
+        validate(body.querySpecification.fromClause == null,
           "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements",
           body)
 
@@ -410,6 +411,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * - UNION [DISTINCT]
    * - UNION ALL
    * - EXCEPT [DISTINCT]
+   * - MINUS [DISTINCT]
    * - INTERSECT [DISTINCT]
    */
   override def visitSetOperation(ctx: SetOperationContext): LogicalPlan = withOrigin(ctx) {
@@ -428,6 +430,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.EXCEPT if all =>
         throw new ParseException("EXCEPT ALL is not supported.", ctx)
       case SqlBaseParser.EXCEPT =>
+        Except(left, right)
+      case SqlBaseParser.SETMINUS if all =>
+        throw new ParseException("MINUS ALL is not supported.", ctx)
+      case SqlBaseParser.SETMINUS =>
         Except(left, right)
     }
   }
@@ -591,7 +597,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       // function takes X PERCENT as the input and the range of X is [0, 100], we need to
       // adjust the fraction.
       val eps = RandomSampler.roundingEpsilon
-      assert(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
+      validate(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
         s"Sampling fraction ($fraction) must be on interval [0, 1]",
         ctx)
       Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, query)(true)
@@ -653,43 +659,36 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
+   * Create a table-valued function call with arguments, e.g. range(1000)
+   */
+  override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
+      : LogicalPlan = withOrigin(ctx) {
+    UnresolvedTableValuedFunction(ctx.identifier.getText, ctx.expression.asScala.map(expression))
+  }
+
+  /**
    * Create an inline table (a virtual table in Hive parlance).
    */
   override def visitInlineTable(ctx: InlineTableContext): LogicalPlan = withOrigin(ctx) {
     // Get the backing expressions.
-    val expressions = ctx.expression.asScala.map { eCtx =>
-      val e = expression(eCtx)
-      assert(e.foldable, "All expressions in an inline table must be constants.", eCtx)
-      e
+    val rows = ctx.expression.asScala.map { e =>
+      expression(e) match {
+        // inline table comes in two styles:
+        // style 1: values (1), (2), (3)  -- multiple columns are supported
+        // style 2: values 1, 2, 3  -- only a single column is supported here
+        case CreateStruct(children) => children  // style 1
+        case child => Seq(child)  // style 2
+      }
     }
 
-    // Validate and evaluate the rows.
-    val (structType, structConstructor) = expressions.head.dataType match {
-      case st: StructType =>
-        (st, (e: Expression) => e)
-      case dt =>
-        val st = CreateStruct(Seq(expressions.head)).dataType
-        (st, (e: Expression) => CreateStruct(Seq(e)))
-    }
-    val rows = expressions.map {
-      case expression =>
-        val safe = Cast(structConstructor(expression), structType)
-        safe.eval().asInstanceOf[InternalRow]
-    }
-
-    // Construct attributes.
-    val baseAttributes = structType.toAttributes.map(_.withNullability(true))
-    val attributes = if (ctx.identifierList != null) {
-      val aliases = visitIdentifierList(ctx.identifierList)
-      assert(aliases.size == baseAttributes.size,
-        "Number of aliases must match the number of fields in an inline table.", ctx)
-      baseAttributes.zip(aliases).map(p => p._1.withName(p._2))
+    val aliases = if (ctx.identifierList != null) {
+      visitIdentifierList(ctx.identifierList)
     } else {
-      baseAttributes
+      Seq.tabulate(rows.head.size)(i => s"col${i + 1}")
     }
 
-    // Create plan and add an alias if a name has been defined.
-    LocalRelation(attributes, rows).optionalMap(ctx.identifier)(aliasPlan)
+    val table = UnresolvedInlineTable(aliases, rows)
+    table.optionalMap(ctx.identifier)(aliasPlan)
   }
 
   /**
@@ -718,7 +717,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create an alias (SubqueryAlias) for a LogicalPlan.
    */
   private def aliasPlan(alias: ParserRuleContext, plan: LogicalPlan): LogicalPlan = {
-    SubqueryAlias(alias.getText, plan)
+    SubqueryAlias(alias.getText, plan, None)
   }
 
   /**
@@ -1089,7 +1088,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // We currently only allow foldable integers.
     def value: Int = {
       val e = expression(ctx.expression)
-      assert(e.resolved && e.foldable && e.dataType == IntegerType,
+      validate(e.resolved && e.foldable && e.dataType == IntegerType,
         "Frame bound value must be a constant integer.",
         ctx)
       e.eval().asInstanceOf[Int]
@@ -1280,10 +1279,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /** Create a numeric literal expression. */
-  private def numericLiteral(ctx: NumberContext)(f: String => Any): Literal = withOrigin(ctx) {
-    val raw = ctx.getText
+  private def numericLiteral
+      (ctx: NumberContext, minValue: BigDecimal, maxValue: BigDecimal, typeName: String)
+      (converter: String => Any): Literal = withOrigin(ctx) {
+    val rawStrippedQualifier = ctx.getText.substring(0, ctx.getText.length - 1)
     try {
-      Literal(f(raw.substring(0, raw.length - 1)))
+      val rawBigDecimal = BigDecimal(rawStrippedQualifier)
+      if (rawBigDecimal < minValue || rawBigDecimal > maxValue) {
+        throw new ParseException(s"Numeric literal ${rawStrippedQualifier} does not " +
+          s"fit in range [${minValue}, ${maxValue}] for type ${typeName}", ctx)
+      }
+      Literal(converter(rawStrippedQualifier))
     } catch {
       case e: NumberFormatException =>
         throw new ParseException(e.getMessage, ctx)
@@ -1293,29 +1299,42 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   /**
    * Create a Byte Literal expression.
    */
-  override def visitTinyIntLiteral(ctx: TinyIntLiteralContext): Literal = numericLiteral(ctx) {
-    _.toByte
+  override def visitTinyIntLiteral(ctx: TinyIntLiteralContext): Literal = {
+    numericLiteral(ctx, Byte.MinValue, Byte.MaxValue, ByteType.simpleString)(_.toByte)
   }
 
   /**
    * Create a Short Literal expression.
    */
-  override def visitSmallIntLiteral(ctx: SmallIntLiteralContext): Literal = numericLiteral(ctx) {
-    _.toShort
+  override def visitSmallIntLiteral(ctx: SmallIntLiteralContext): Literal = {
+    numericLiteral(ctx, Short.MinValue, Short.MaxValue, ShortType.simpleString)(_.toShort)
   }
 
   /**
    * Create a Long Literal expression.
    */
-  override def visitBigIntLiteral(ctx: BigIntLiteralContext): Literal = numericLiteral(ctx) {
-    _.toLong
+  override def visitBigIntLiteral(ctx: BigIntLiteralContext): Literal = {
+    numericLiteral(ctx, Long.MinValue, Long.MaxValue, LongType.simpleString)(_.toLong)
   }
 
   /**
    * Create a Double Literal expression.
    */
-  override def visitDoubleLiteral(ctx: DoubleLiteralContext): Literal = numericLiteral(ctx) {
-    _.toDouble
+  override def visitDoubleLiteral(ctx: DoubleLiteralContext): Literal = {
+    numericLiteral(ctx, Double.MinValue, Double.MaxValue, DoubleType.simpleString)(_.toDouble)
+  }
+
+  /**
+   * Create a BigDecimal Literal expression.
+   */
+  override def visitBigDecimalLiteral(ctx: BigDecimalLiteralContext): Literal = {
+    val raw = ctx.getText.substring(0, ctx.getText.length - 2)
+    try {
+      Literal(BigDecimal(raw).underlying())
+    } catch {
+      case e: AnalysisException =>
+        throw new ParseException(e.message, ctx)
+    }
   }
 
   /**
@@ -1342,7 +1361,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
     val intervals = ctx.intervalField.asScala.map(visitIntervalField)
-    assert(intervals.nonEmpty, "at least one time unit should be given for interval literal", ctx)
+    validate(intervals.nonEmpty, "at least one time unit should be given for interval literal", ctx)
     Literal(intervals.reduce(_.add(_)))
   }
 
@@ -1369,7 +1388,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         case (from, Some(t)) =>
           throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
       }
-      assert(interval != null, "No interval can be constructed", ctx)
+      validate(interval != null, "No interval can be constructed", ctx)
       interval
     } catch {
       // Handle Exceptions thrown by CalendarInterval

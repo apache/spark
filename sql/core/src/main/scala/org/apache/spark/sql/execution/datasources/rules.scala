@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{AtomicType, StructType}
 /**
  * Try to replaces [[UnresolvedRelation]]s with [[ResolveDataSource]].
  */
-private[sql] class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedRelation if u.tableIdentifier.database.isDefined =>
       try {
@@ -55,7 +55,7 @@ private[sql] class ResolveDataSource(sparkSession: SparkSession) extends Rule[Lo
             s"${u.tableIdentifier.database.get}")
         }
         val plan = LogicalRelation(dataSource.resolveRelation())
-        u.alias.map(a => SubqueryAlias(u.alias.get, plan)).getOrElse(plan)
+        u.alias.map(a => SubqueryAlias(u.alias.get, plan, None)).getOrElse(plan)
       } catch {
         case e: ClassNotFoundException => u
         case e: Exception =>
@@ -72,29 +72,20 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
-    // bucketing information is specified, as we can't infer bucketing from data files currently,
-    // and we should ignore the partition columns if it's specified, as we will infer it later, at
-    // runtime.
+    // bucketing information is specified, as we can't infer bucketing from data files currently.
+    // Since the runtime inferred partition columns could be different from what user specified,
+    // we fail the query if the partitioning information is specified.
     case c @ CreateTable(tableDesc, _, None) if tableDesc.schema.isEmpty =>
       if (tableDesc.bucketSpec.isDefined) {
         failAnalysis("Cannot specify bucketing information if the table schema is not specified " +
           "when creating and will be inferred at runtime")
       }
-
-      val partitionColumnNames = tableDesc.partitionColumnNames
-      if (partitionColumnNames.nonEmpty) {
-        // The table does not have a specified schema, which means that the schema will be inferred
-        // at runtime. So, we are not expecting partition columns and we will discover partitions
-        // at runtime. However, if there are specified partition columns, we simply ignore them and
-        // provide a warning message.
-        logWarning(
-          s"Specified partition columns (${partitionColumnNames.mkString(",")}) will be " +
-            s"ignored. The schema and partition columns of table ${tableDesc.identifier} will " +
-            "be inferred.")
-        c.copy(tableDesc = tableDesc.copy(partitionColumnNames = Nil))
-      } else {
-        c
+      if (tableDesc.partitionColumnNames.nonEmpty) {
+        failAnalysis("It is not allowed to specify partition columns when the table schema is " +
+          "not defined. When the table schema is not provided, schema and partition columns " +
+          "will be inferred.")
       }
+      c
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
     // config, and do various checks:
@@ -195,7 +186,7 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-private[sql] case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
+case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   private def preprocess(
       insert: InsertIntoTable,
       tblName: String,
@@ -273,9 +264,24 @@ private[sql] case class PreprocessTableInsertion(conf: SQLConf) extends Rule[Log
 }
 
 /**
+ * A rule to check whether the functions are supported only when Hive support is enabled
+ */
+object HiveOnlyCheck extends (LogicalPlan => Unit) {
+  def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case CreateTable(tableDesc, _, Some(_))
+          if tableDesc.provider.get == "hive" =>
+        throw new AnalysisException("Hive support is required to use CREATE Hive TABLE AS SELECT")
+
+      case _ => // OK
+    }
+  }
+}
+
+/**
  * A rule to do various checks before inserting into or writing to a data source table.
  */
-private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
+case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
   extends (LogicalPlan => Unit) {
 
   def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }

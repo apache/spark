@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, SaveMode, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -43,13 +42,12 @@ import org.apache.spark.sql.streaming.StreamingQuery
  * writing libraries should instead consider using the stable APIs provided in
  * [[org.apache.spark.sql.sources]]
  */
-@DeveloperApi
 abstract class SparkStrategy extends GenericStrategy[SparkPlan] {
 
   override protected def planLater(plan: LogicalPlan): SparkPlan = PlanLater(plan)
 }
 
-private[sql] case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
+case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
 
   override def output: Seq[Attribute] = plan.output
 
@@ -58,7 +56,7 @@ private[sql] case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
   }
 }
 
-private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
+abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
 
   /**
@@ -261,24 +259,17 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         val aggregateOperator =
-          if (aggregateExpressions.map(_.aggregateFunction).exists(!_.supportsPartial)) {
-            if (functionsWithDistinct.nonEmpty) {
-              sys.error("Distinct columns cannot exist in Aggregate operator containing " +
-                "aggregate functions which don't support partial aggregation.")
-            } else {
-              aggregate.AggUtils.planAggregateWithoutPartial(
-                groupingExpressions,
-                aggregateExpressions,
-                resultExpressions,
-                planLater(child))
-            }
-          } else if (functionsWithDistinct.isEmpty) {
+          if (functionsWithDistinct.isEmpty) {
             aggregate.AggUtils.planAggregateWithoutDistinct(
               groupingExpressions,
               aggregateExpressions,
               resultExpressions,
               planLater(child))
           } else {
+            if (aggregateExpressions.map(_.aggregateFunction).exists(!_.supportsPartial)) {
+              sys.error("Distinct columns cannot exist in Aggregate operator containing " +
+                "aggregate functions which don't support partial aggregation.")
+            }
             aggregate.AggUtils.planAggregateWithOneDistinct(
               groupingExpressions,
               functionsWithDistinct,
@@ -356,9 +347,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.FlatMapGroupsInR(f, p, b, is, os, key, value, grouping, data, objAttr, child) =>
         execution.FlatMapGroupsInRExec(f, p, b, is, os, key, value, grouping,
           data, objAttr, planLater(child)) :: Nil
-      case logical.MapElements(f, objAttr, child) =>
+      case logical.MapElements(f, _, _, objAttr, child) =>
         execution.MapElementsExec(f, objAttr, planLater(child)) :: Nil
-      case logical.AppendColumns(f, in, out, child) =>
+      case logical.AppendColumns(f, _, _, in, out, child) =>
         execution.AppendColumnsExec(f, in, out, planLater(child)) :: Nil
       case logical.AppendColumnsWithObject(f, childSer, newSer, child) =>
         execution.AppendColumnsWithObjectExec(f, childSer, newSer, planLater(child)) :: Nil

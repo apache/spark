@@ -245,27 +245,47 @@ case class NewInstance(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
-    val argGen = arguments.map(_.genCode(ctx))
-    val argString = argGen.map(_.value).mkString(", ")
+    val argIsNulls = ctx.freshName("argIsNulls")
+    ctx.addMutableState("boolean[]", argIsNulls,
+      s"$argIsNulls = new boolean[${arguments.size}];")
+    val argValues = arguments.zipWithIndex.map { case (e, i) =>
+      val argValue = ctx.freshName("argValue")
+      ctx.addMutableState(ctx.javaType(e.dataType), argValue, "")
+      argValue
+    }
+
+    val argCodes = arguments.zipWithIndex.map { case (e, i) =>
+      val expr = e.genCode(ctx)
+      expr.code + s"""
+       $argIsNulls[$i] = ${expr.isNull};
+       ${argValues(i)} = ${expr.value};
+     """
+    }
+    val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
 
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
     var isNull = ev.isNull
     val setIsNull = if (propagateNull && arguments.nonEmpty) {
-      s"final boolean $isNull = ${argGen.map(_.isNull).mkString(" || ")};"
+      s"""
+       boolean $isNull = false;
+       for (int idx = 0; idx < ${arguments.length}; idx++) {
+         if ($argIsNulls[idx]) { $isNull = true; break; }
+       }
+     """
     } else {
       isNull = "false"
       ""
     }
 
     val constructorCall = outer.map { gen =>
-      s"""${gen.value}.new ${cls.getSimpleName}($argString)"""
+      s"""${gen.value}.new ${cls.getSimpleName}(${argValues.mkString(", ")})"""
     }.getOrElse {
-      s"new $className($argString)"
+      s"new $className(${argValues.mkString(", ")})"
     }
 
     val code = s"""
-      ${argGen.map(_.code).mkString("\n")}
+      $argCode
       ${outer.map(_.code).getOrElse("")}
       $setIsNull
       final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;
@@ -474,6 +494,16 @@ case class MapObjects private(
           s"$seq == null ? $array[$loopIndex] : $seq.apply($loopIndex)"
     }
 
+    // Make a copy of the data if it's unsafe-backed
+    def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
+      s"$value instanceof ${clazz.getSimpleName}? ${value}.copy() : $value"
+    val genFunctionValue = lambdaFunction.dataType match {
+      case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
+      case ArrayType(_, _) => makeCopyIfInstanceOf(classOf[UnsafeArrayData], genFunction.value)
+      case MapType(_, _, _) => makeCopyIfInstanceOf(classOf[UnsafeMapData], genFunction.value)
+      case _ => genFunction.value
+    }
+
     val loopNullCheck = inputDataType match {
       case _: ArrayType => s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
       // The element of primitive array will never be null.
@@ -501,7 +531,7 @@ case class MapObjects private(
           if (${genFunction.isNull}) {
             $convertedArray[$loopIndex] = null;
           } else {
-            $convertedArray[$loopIndex] = ${genFunction.value};
+            $convertedArray[$loopIndex] = $genFunctionValue;
           }
 
           $loopIndex += 1;

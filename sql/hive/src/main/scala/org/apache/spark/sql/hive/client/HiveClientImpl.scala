@@ -45,7 +45,6 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.{CircularBuffer, Utils}
 
@@ -348,6 +347,10 @@ private[hive] class HiveClientImpl(
     client.getDatabasesByPattern(pattern).asScala
   }
 
+  override def tableExists(dbName: String, tableName: String): Boolean = withHiveState {
+    Option(client.getTable(dbName, tableName, false /* do not throw exception */)).nonEmpty
+  }
+
   override def getTableOption(
       dbName: String,
       tableName: String): Option[CatalogTable] = withHiveState {
@@ -380,8 +383,9 @@ private[hive] class HiveClientImpl(
         tableType = h.getTableType match {
           case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL
           case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED
-          case HiveTableType.INDEX_TABLE => CatalogTableType.INDEX
           case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
+          case HiveTableType.INDEX_TABLE =>
+            throw new AnalysisException("Hive index table is not supported.")
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
@@ -392,20 +396,7 @@ private[hive] class HiveClientImpl(
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
         storage = CatalogStorageFormat(
-          locationUri = shim.getDataLocation(h).filterNot { _ =>
-            // SPARK-15269: Persisted data source tables always store the location URI as a SerDe
-            // property named "path" instead of standard Hive `dataLocation`, because Hive only
-            // allows directory paths as location URIs while Spark SQL data source tables also
-            // allows file paths. So the standard Hive `dataLocation` is meaningless for Spark SQL
-            // data source tables.
-            DDLUtils.isDatasourceTable(properties) &&
-              h.getTableType == HiveTableType.EXTERNAL_TABLE &&
-              // Spark SQL may also save external data source in Hive compatible format when
-              // possible, so that these tables can be directly accessed by Hive. For these tables,
-              // `dataLocation` is still necessary. Here we also check for input format class
-              // because only these Hive compatible tables set this field.
-              h.getInputFormatClass == null
-          },
+          locationUri = shim.getDataLocation(h),
           inputFormat = Option(h.getInputFormatClass).map(_.getName),
           outputFormat = Option(h.getOutputFormatClass).map(_.getName),
           serde = Option(h.getSerializationLib),
@@ -413,7 +404,8 @@ private[hive] class HiveClientImpl(
           properties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)
             .map(_.asScala.toMap).orNull
         ),
-        properties = properties,
+        properties = properties.filter(kv => kv._1 != "comment"),
+        comment = properties.get("comment"),
         viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
         unsupportedFeatures = unsupportedFeatures)
@@ -770,7 +762,6 @@ private[hive] class HiveClientImpl(
         HiveTableType.EXTERNAL_TABLE
       case CatalogTableType.MANAGED =>
         HiveTableType.MANAGED_TABLE
-      case CatalogTableType.INDEX => HiveTableType.INDEX_TABLE
       case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
     })
     // Note: In Hive the schema and partition columns must be disjoint sets
@@ -842,6 +833,8 @@ private[hive] class HiveClientImpl(
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
         compressed = apiPartition.getSd.isCompressed,
         properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
-          .map(_.asScala.toMap).orNull))
+          .map(_.asScala.toMap).orNull),
+        parameters =
+          if (hp.getParameters() != null) hp.getParameters().asScala.toMap else Map.empty)
   }
 }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
 
-private[sql] object FrequentItems extends Logging {
+object FrequentItems extends Logging {
 
   /** A helper class wrapping `MutableMap[Any, Long]` for simplicity. */
   private class FreqItemCounter(size: Int) extends Serializable {
@@ -79,7 +79,7 @@ private[sql] object FrequentItems extends Logging {
    *                than 1e-4.
    * @return A Local DataFrame with the Array of frequent items for each column.
    */
-  private[sql] def singlePassFreqItems(
+  def singlePassFreqItems(
       df: DataFrame,
       cols: Seq[String],
       support: Double): DataFrame = {

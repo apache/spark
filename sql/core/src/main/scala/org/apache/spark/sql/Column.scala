@@ -69,12 +69,15 @@ class TypedColumn[-T, U](
    * on a decoded object.
    */
   private[sql] def withInputType(
-      inputDeserializer: Expression,
+      inputEncoder: ExpressionEncoder[_],
       inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
-    val unresolvedDeserializer = UnresolvedDeserializer(inputDeserializer, inputAttributes)
+    val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
     val newExpr = expr transform {
       case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
-        ta.copy(inputDeserializer = Some(unresolvedDeserializer))
+        ta.copy(
+          inputDeserializer = Some(unresolvedDeserializer),
+          inputClass = Some(inputEncoder.clsTag.runtimeClass),
+          inputSchema = Some(inputEncoder.schema))
     }
     new TypedColumn[T, U](newExpr, encoder)
   }

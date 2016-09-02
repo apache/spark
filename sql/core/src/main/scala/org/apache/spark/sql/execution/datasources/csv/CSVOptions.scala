@@ -18,12 +18,13 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.StandardCharsets
-import java.text.SimpleDateFormat
+
+import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
 
-private[sql] class CSVOptions(@transient private val parameters: Map[String, String])
+private[csv] class CSVOptions(@transient private val parameters: Map[String, String])
   extends Logging with Serializable {
 
   private def getChar(paramName: String, default: Char): Char = {
@@ -101,11 +102,13 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
     name.map(CompressionCodecs.getCodecClassName)
   }
 
-  // Share date format object as it is expensive to parse date pattern.
-  val dateFormat: SimpleDateFormat = {
-    val dateFormat = parameters.get("dateFormat")
-    dateFormat.map(new SimpleDateFormat(_)).orNull
-  }
+  // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
+  val dateFormat: FastDateFormat =
+    FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"))
+
+  val timestampFormat: FastDateFormat =
+    FastDateFormat.getInstance(
+      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"))
 
   val maxColumns = getInt("maxColumns", 20480)
 

@@ -243,7 +243,7 @@ class DDLCommandSuite extends PlanTest {
     allSources.foreach { s =>
       val query = s"CREATE TABLE my_tab STORED AS $s"
       val ct = parseAs[CreateTable](query)
-      val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+      val hiveSerde = HiveSerDe.sourceToSerDe(s)
       assert(hiveSerde.isDefined)
       assert(ct.tableDesc.storage.serde == hiveSerde.get.serde)
       assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
@@ -276,7 +276,7 @@ class DDLCommandSuite extends PlanTest {
       val query = s"CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS $s"
       if (supportedSources.contains(s)) {
         val ct = parseAs[CreateTable](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+        val hiveSerde = HiveSerDe.sourceToSerDe(s)
         assert(hiveSerde.isDefined)
         assert(ct.tableDesc.storage.serde == Some("anything"))
         assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
@@ -295,7 +295,7 @@ class DDLCommandSuite extends PlanTest {
       val query = s"CREATE TABLE my_tab ROW FORMAT DELIMITED FIELDS TERMINATED BY ' ' STORED AS $s"
       if (supportedSources.contains(s)) {
         val ct = parseAs[CreateTable](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+        val hiveSerde = HiveSerDe.sourceToSerDe(s)
         assert(hiveSerde.isDefined)
         assert(ct.tableDesc.storage.serde == hiveSerde.get.serde)
         assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
@@ -538,6 +538,14 @@ class DDLCommandSuite extends PlanTest {
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
+  }
+
+  test("alter table: recover partitions") {
+    val sql = "ALTER TABLE table_name RECOVER PARTITIONS"
+    val parsed = parser.parsePlan(sql)
+    val expected = AlterTableRecoverPartitionsCommand(
+      TableIdentifier("table_name", None))
+    comparePlans(parsed, expected)
   }
 
   test("alter view: add partition (not supported)") {

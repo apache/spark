@@ -221,7 +221,8 @@ public class JavaSQLDataSourceExample {
     // an RDD[String] storing one JSON object per string.
     List<String> jsonData = Arrays.asList(
             "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
-    JavaRDD<String> anotherPeopleRDD = new JavaSparkContext(spark.sparkContext()).parallelize(jsonData);
+    JavaRDD<String> anotherPeopleRDD =
+            new JavaSparkContext(spark.sparkContext()).parallelize(jsonData);
     Dataset anotherPeople = spark.read().json(anotherPeopleRDD);
     anotherPeople.show();
     // +---------------+----+

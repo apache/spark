@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.server;
 
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 
 import com.google.common.base.Throwables;
@@ -42,7 +43,7 @@ import org.apache.spark.network.protocol.RpcResponse;
 import org.apache.spark.network.protocol.StreamFailure;
 import org.apache.spark.network.protocol.StreamRequest;
 import org.apache.spark.network.protocol.StreamResponse;
-import org.apache.spark.network.util.NettyUtils;
+import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
  * A handler that processes requests from clients and writes chunk data back. Each handler is
@@ -114,9 +115,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   }
 
   private void processFetchRequest(final ChunkFetchRequest req) {
-    final String client = NettyUtils.getRemoteAddress(channel);
-
-    logger.trace("Received req from {} to fetch block {}", client, req.streamChunkId);
+    if (logger.isTraceEnabled()) {
+      logger.trace("Received req from {} to fetch block {}", getRemoteAddress(channel), req.streamChunkId);
+    }
 
     ManagedBuffer buf;
     try {
@@ -125,7 +126,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       buf = streamManager.getChunk(req.streamChunkId.streamId, req.streamChunkId.chunkIndex);
     } catch (Exception e) {
       logger.error(String.format(
-        "Error opening block %s for request from %s", req.streamChunkId, client), e);
+        "Error opening block %s for request from %s", req.streamChunkId, getRemoteAddress(channel)), e);
       respond(new ChunkFetchFailure(req.streamChunkId, Throwables.getStackTraceAsString(e)));
       return;
     }
@@ -134,13 +135,12 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   }
 
   private void processStreamRequest(final StreamRequest req) {
-    final String client = NettyUtils.getRemoteAddress(channel);
     ManagedBuffer buf;
     try {
       buf = streamManager.openStream(req.streamId);
     } catch (Exception e) {
       logger.error(String.format(
-        "Error opening stream %s for request from %s", req.streamId, client), e);
+        "Error opening stream %s for request from %s", req.streamId, getRemoteAddress(channel)), e);
       respond(new StreamFailure(req.streamId, Throwables.getStackTraceAsString(e)));
       return;
     }
@@ -189,13 +189,13 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
    * it will be logged and the channel closed.
    */
   private void respond(final Encodable result) {
-    final String remoteAddress = channel.remoteAddress().toString();
+    final SocketAddress remoteAddress = channel.remoteAddress();
     channel.writeAndFlush(result).addListener(
       new ChannelFutureListener() {
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
           if (future.isSuccess()) {
-            logger.trace(String.format("Sent result %s to client %s", result, remoteAddress));
+            logger.trace("Sent result {} to client {}", result, remoteAddress);
           } else {
             logger.error(String.format("Error sending result %s to %s; closing connection",
               result, remoteAddress), future.cause());
