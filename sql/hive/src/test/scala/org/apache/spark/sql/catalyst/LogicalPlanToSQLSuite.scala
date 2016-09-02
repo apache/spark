@@ -642,7 +642,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkColumnNames(
       """SELECT x.a, y.a, x.b, y.b
         |FROM (SELECT 1 AS a, 2 AS b) x
-        |INNER JOIN (SELECT 1 AS a, 2 AS b) y
+        |CROSS JOIN (SELECT 1 AS a, 2 AS b) y
         |ON x.a = y.a
       """.stripMargin,
       "a", "a", "b", "b"
@@ -810,7 +810,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSQL(
       """
         |SELECT COUNT(a.value), b.KEY, a.KEY
-        |FROM parquet_t1 a, parquet_t1 b
+        |FROM parquet_t1 a CROSS JOIN parquet_t1 b
         |GROUP BY a.KEY, b.KEY
         |HAVING MAX(a.KEY) > 0
       """.stripMargin,
