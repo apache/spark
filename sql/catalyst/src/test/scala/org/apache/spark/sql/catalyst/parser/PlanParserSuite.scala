@@ -375,13 +375,31 @@ class PlanParserSuite extends PlanTest {
     assertEqual(
       "select * from t1 cross join t2 join t3 on t3.id = t1.id join t4 on t4.id = t1.id",
       table("t1")
-        .join(table("t2"))
+        .join(table("t2"), Cross)
         .join(table("t3"), Inner, Option(Symbol("t3.id") === Symbol("t1.id")))
         .join(table("t4"), Inner, Option(Symbol("t4.id") === Symbol("t1.id")))
         .select(star()))
 
     // Test multiple on clauses.
     intercept("select * from t1 inner join t2 inner join t3 on col3 = col2 on col3 = col1")
+
+    // Parenthesis
+    assertEqual(
+      "select * from t1 inner join (t2 inner join t3 on col3 = col2) on col3 = col1",
+      table("t1")
+        .join(table("t2")
+          .join(table("t3"), Inner, Option('col3 === 'col2)), Inner, Option('col3 === 'col1))
+        .select(star()))
+    assertEqual(
+      "select * from t1 inner join (t2 inner join t3) on col3 = col2",
+      table("t1")
+        .join(table("t2").join(table("t3"), Inner, None), Inner, Option('col3 === 'col2))
+        .select(star()))
+    assertEqual(
+      "select * from t1 inner join (t2 inner join t3 on col3 = col2)",
+      table("t1")
+        .join(table("t2").join(table("t3"), Inner, Option('col3 === 'col2)), Inner, None)
+        .select(star()))
   }
 
   test("sampled relations") {
