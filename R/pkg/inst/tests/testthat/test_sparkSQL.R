@@ -2485,6 +2485,12 @@ test_that("enableHiveSupport on SparkSession", {
   expect_equal(value, "hive")
 })
 
+test_that("Spark version from SparkSession", {
+  ver <- callJMethod(sc, "version")
+  version <- sparkR.version()
+  expect_equal(ver, version)
+})
+
 unlink(parquetPath)
 unlink(orcPath)
 unlink(jsonPath)
