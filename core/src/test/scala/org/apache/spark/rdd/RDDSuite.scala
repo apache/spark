@@ -556,7 +556,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(sc.makeRDD(0 until 10, 1000).repartition(2001).collect().toSet === (0 until 10).toSet)
   }
 
-  test("take") {
+  private def testTake(): Unit = {
     var nums = sc.makeRDD(Range(1, 1000), 1)
     assert(nums.take(0).size === 0)
     assert(nums.take(1) === Array(1))
@@ -596,6 +596,24 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     nums = sc.parallelize(1 to 2, 2)
     assert(nums.take(2147483638).size === 2)
     assert(nums.takeAsync(2147483638).get.size === 2)
+  }
+
+  test("take (old implementation)") {
+    try {
+      sc.conf.set("spark.driver.adaptiveTakeEnabled", "false")
+      testTake()
+    } finally {
+      sc.conf.remove("spark.driver.adaptiveTakeEnabled")
+    }
+  }
+
+  test("take (adaptive implementation)") {
+    try {
+      sc.conf.set("spark.driver.adaptiveTakeEnabled", "true")
+      testTake()
+    } finally {
+      sc.conf.remove("spark.driver.adaptiveTakeEnabled")
+    }
   }
 
   test("top with predefined ordering") {
