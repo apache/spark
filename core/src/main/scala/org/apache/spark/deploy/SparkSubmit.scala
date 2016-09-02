@@ -111,7 +111,6 @@ object SparkSubmit {
     printStream.println("Type --help for more information.")
     exitFn(0)
   }
-  private[deploy] var rShell: Boolean = false
   // scalastyle:on println
 
   def main(args: Array[String]): Unit = {
@@ -228,7 +227,6 @@ object SparkSubmit {
     val childClasspath = new ArrayBuffer[String]()
     val sysProps = new HashMap[String, String]()
     var childMainClass = ""
-    initRShell(args.primaryResource)
 
     // Set the cluster manager
     val clusterManager: Int = args.master match {
@@ -801,17 +799,6 @@ object SparkSubmit {
   private[deploy] def isInternal(res: String): Boolean = {
     res == SparkLauncher.NO_RESOURCE
   }
-
-  /**
-   * Initialize whether it is a R shell when launching the application
-   * Default: false
-   */
-  private[deploy] def initRShell(res: String): Unit = {
-    require(res != null)
-    if (res == SPARKR_SHELL) rShell = true
-  }
-
-  private[spark] def isRShell: Boolean = rShell
 
   /**
    * Merge a sequence of comma-separated file lists, some of which may be null to indicate
