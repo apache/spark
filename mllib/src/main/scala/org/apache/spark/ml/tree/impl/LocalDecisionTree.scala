@@ -155,7 +155,8 @@ private[ml] object LocalDecisionTree {
           val (from, to) = nodeOffsets(nodeIndex)
           // Get the impurity aggregator for the current node
           // TODO(smurching): Throw an exception if data is featureless (no columns)?
-          val fullImpurityAgg = LocalDecisionTreeUtils.getImpurity(columns(0), from, to, metadata, labels)
+          val fullImpurityAgg = LocalDecisionTreeUtils.getImpurity(columns(0),
+            from, to, metadata, labels)
           // TODO(smurching): In PartitionInfo, keep track of which features are associated
           // with which nodes and subsample here (filter columns)
           val splitsAndStats = columns.map { col =>

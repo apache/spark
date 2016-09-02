@@ -27,7 +27,10 @@ import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.{LogisticRegressionDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.sql.DataFrame
 
-/** Tests for equivalence/performance of local tree training vs distributed training. */
+/**
+ * Integration tests for equivalence/performance of local tree training vs distributed
+ * training.
+ */
 class LocalTreeTrainingSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 

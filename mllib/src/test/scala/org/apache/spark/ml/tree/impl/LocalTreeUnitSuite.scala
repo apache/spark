@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tree.impl
 
 import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.tree.{CategoricalSplit, ContinuousSplit, LearningNode, Split}
 import org.apache.spark.ml.util.DefaultReadWriteTest
@@ -25,9 +26,62 @@ import org.apache.spark.mllib.tree.impurity.Entropy
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.collection.BitSet
 
-/** Tests for equivalence/performance of local tree training vs distributed training. */
+/** Unit tests for helper classes/methods specific to local tree training */
 class LocalTreeUnitSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  private def getDummyActiveNodes(numNodes: Int): Array[LearningNode] = {
+    0.until(numNodes).toArray.map(_ => LearningNode.emptyNode(nodeIndex = -1))
+  }
+
+  /** Returns a DecisionTreeMetadata instance with hard-coded values for use in tests */
+  private def getMetadata(
+      numExamples: Int,
+      numFeatures: Int,
+      numClasses: Int,
+      featureArity: Map[Int, Int]): DecisionTreeMetadata = {
+    // Assume all categorical features within tests
+    // have small enough arity to be treated as unordered
+    val unordered = featureArity.keys.toSet
+    val maxBins = 4
+    val numBins = 0.until(numFeatures).toArray.map(_ => maxBins)
+    new DecisionTreeMetadata(numFeatures = numFeatures, numExamples = numExamples,
+      numClasses = numClasses, maxBins = maxBins, minInfoGain = 0.0, featureArity = featureArity,
+      unorderedFeatures = unordered, numBins = numBins, impurity = Entropy,
+      quantileStrategy = null, maxDepth = 5, minInstancesPerNode = 1, numTrees = 1,
+      numFeaturesPerNode = 2)
+  }
+
+  private def getUnorderedSplits(
+      values: Array[Int],
+      featureIndex: Int): Array[CategoricalSplit] = {
+    val uniqueVals = values.map(_.toDouble).distinct.toList
+    def recurse(vals: List[Double]): List[List[Double]] = {
+      vals match {
+        case Nil => List(List.empty)
+        case a :: rest =>
+          val remainder = recurse(rest)
+          remainder.map(lst => a :: lst) ++ remainder
+      }
+    }
+    recurse(uniqueVals).toArray.map { leftCats =>
+      new CategoricalSplit(featureIndex, leftCats.toArray, uniqueVals.length)
+    }
+  }
+
+  /**
+   * Returns an array containing a single element; an array of continuous splits for
+   * the feature with index featureIndex and the passed-in set of values. Creates one
+   * continuous split per value in the array.
+   */
+  private def getContinuousSplits(
+      values: Array[Int],
+      featureIndex: Int): Array[Array[Split]] = {
+    val splits = values.map {
+      new ContinuousSplit(featureIndex, _).asInstanceOf[Split]
+    }
+    Array(splits)
+  }
 
   test("Transform row-major training data into a column-major representation") {
     // Transform an empty training dataset
@@ -91,59 +145,6 @@ class LocalTreeUnitSuite
       tempIndices, instanceBitVector)
 
     assert(col.values.sameElements(expected))
-  }
-
-  private def getDummyActiveNodes(numNodes: Int): Array[LearningNode] = {
-    0.until(numNodes).toArray.map(_ => LearningNode.emptyNode(nodeIndex = -1))
-  }
-
-  /** Returns a DecisionTreeMetadata instance with hard-coded values for use in tests */
-  private def getMetadata(
-                           numExamples: Int,
-                           numFeatures: Int,
-                           numClasses: Int,
-                           featureArity: Map[Int, Int]): DecisionTreeMetadata = {
-    // Assume all categorical features within tests
-    // have small enough arity to be treated as unordered
-    val unordered = featureArity.keys.toSet
-    val maxBins = 4
-    val numBins = 0.until(numFeatures).toArray.map(_ => maxBins)
-    new DecisionTreeMetadata(numFeatures = numFeatures, numExamples = numExamples,
-      numClasses = numClasses, maxBins = maxBins, minInfoGain = 0.0, featureArity = featureArity,
-      unorderedFeatures = unordered, numBins = numBins, impurity = Entropy,
-      quantileStrategy = null, maxDepth = 5, minInstancesPerNode = 1, numTrees = 1,
-      numFeaturesPerNode = 2)
-  }
-
-  private def getUnorderedSplits(
-                                  values: Array[Int],
-                                  featureIndex: Int): Array[CategoricalSplit] = {
-    val uniqueVals = values.map(_.toDouble).distinct.toList
-    def recurse(vals: List[Double]): List[List[Double]] = {
-      vals match {
-        case Nil => List(List.empty)
-        case a :: rest =>
-          val remainder = recurse(rest)
-          remainder.map(lst => a :: lst) ++ remainder
-      }
-    }
-    recurse(uniqueVals).toArray.map { leftCats =>
-      new CategoricalSplit(featureIndex, leftCats.toArray, uniqueVals.length)
-    }
-  }
-
-  /**
-   * Returns an array containing a single element; an array of continuous splits for
-   * the feature with index featureIndex and the passed-in set of values. Creates one
-   * continuous split per value in the array.
-   */
-  private def getContinuousSplits(
-                                   values: Array[Int],
-                                   featureIndex: Int): Array[Array[Split]] = {
-    val splits = values.map {
-      new ContinuousSplit(featureIndex, _).asInstanceOf[Split]
-    }
-    Array(splits)
   }
 
   /* Check that FeatureVector methods produce expected results */
@@ -277,10 +278,10 @@ class LocalTreeUnitSuite
     val arityMap = Map[Int, Int](featureIndex -> featureArity)
 
     def testHelper(
-                    labels: Array[Double],
-                    expectedLeftCategories: Array[Double],
-                    expectedLeftStats: Array[Double],
-                    expectedRightStats: Array[Double]): Unit = {
+        labels: Array[Double],
+        expectedLeftCategories: Array[Double],
+        expectedLeftStats: Array[Double],
+        expectedRightStats: Array[Double]): Unit = {
 
       val expectedRightCategories = Range(0, featureArity)
         .filter(c => !expectedLeftCategories.contains(c)).map(_.toDouble).toArray
@@ -478,20 +479,24 @@ class LocalTreeUnitSuite
   }
 
   test("bitSubvectorFromSplit: 2 nodes") {
-    // Initially, 1 split: (0, 2, 4) | (1, 3)
+    // Initially, 1 split, rows: (0, 2, 4) | (1, 3)
     val thresholds = Array(1, 2, 4, 6, 7)
     val values = thresholds.indices.toArray
     val splits = getContinuousSplits(thresholds, featureIndex = 0)
     val col = new FeatureVector(0, 0, values,
       Array(4, 2, 0, 1, 3))
 
-    def checkSplit(fromOffset: Int, toOffset: Int, threshold: Double,
-                   expectedRight: Set[Int]): Unit = {
+    def checkSplit(
+        fromOffset: Int,
+        toOffset: Int,
+        threshold: Double,
+        expectedRight: Set[Int]): Unit = {
       val split = new ContinuousSplit(0, threshold)
       val numRows = col.values.length
       val bitv = LocalDecisionTreeUtils.bitVectorFromSplit(col, fromOffset, toOffset, split, splits)
       assert(bitv.toArray.toSet === expectedRight)
     }
+
     // Left child node
     checkSplit(0, 3, 0.5, Set(0, 2, 4))
     checkSplit(0, 3, 1.5, Set(0, 2))
