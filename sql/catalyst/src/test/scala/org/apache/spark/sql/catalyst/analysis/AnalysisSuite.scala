@@ -129,7 +129,7 @@ class AnalysisSuite extends AnalysisTest {
     val b = testRelation2.output(1)
     val c = testRelation2.output(2)
     val alias_a3 = count(a).as("a3")
-    val alias_b = b.as("aggOrder")
+    val alias_b = b.as("aggOrder0")
 
     // Case 1: when the child of Sort is not Aggregate,
     //   the sort reference is handled by the rule ResolveSortReferences

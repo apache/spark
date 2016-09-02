@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, NonSQLPlan, Statistics}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.util.Utils
 
@@ -98,4 +98,6 @@ case class LogicalRelation(
   }
 
   override def simpleString: String = s"Relation[${Utils.truncatedString(output, ",")}] $relation"
+
+  override def sql: String = metastoreTableIdentifier.get.identifier
 }

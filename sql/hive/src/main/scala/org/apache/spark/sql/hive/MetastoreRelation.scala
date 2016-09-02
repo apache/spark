@@ -248,4 +248,8 @@ private[hive] case class MetastoreRelation(
   override def newInstance(): MetastoreRelation = {
     MetastoreRelation(databaseName, tableName)(catalogTable, client, sparkSession)
   }
+
+  override def sql: String = {
+    catalogTable.identifier.quotedString
+  }
 }

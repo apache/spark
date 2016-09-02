@@ -34,6 +34,23 @@ case class ScriptTransformation(
     child: LogicalPlan,
     ioschema: ScriptInputOutputSchema) extends UnaryNode {
   override def references: AttributeSet = AttributeSet(input.flatMap(_.references))
+
+  override def sql: String = {
+    val inputRowFormatSQL = ioschema.inputRowFormatSQL.getOrElse(
+      throw new UnsupportedOperationException(
+        s"unsupported row format ${ioschema.inputRowFormat}"))
+    val outputRowFormatSQL = ioschema.outputRowFormatSQL.getOrElse(
+      throw new UnsupportedOperationException(
+        s"unsupported row format ${ioschema.outputRowFormat}"))
+
+    val outputSchema = output.map { attr =>
+      s"${attr.sql} ${attr.dataType.simpleString}"
+    }.mkString(", ")
+
+    s"SELECT TRANSFORM (${input.map(_.sql).mkString(", ")}) $inputRowFormatSQL " +
+      s"USING \'${script}\' AS ($outputSchema) $outputRowFormatSQL " +
+      (if (child == OneRowRelation) "" else s"FROM ${child.sql}")
+  }
 }
 
 /**

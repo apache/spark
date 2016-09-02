@@ -262,4 +262,6 @@ case class SimpleCatalogRelation(
   require(
     metadata.identifier.database == Some(databaseName),
     "provided database does not match the one specified in the table definition")
+
+  override def sql: String = catalogTable.identifier.quotedString
 }

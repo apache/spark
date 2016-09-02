@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, NonSQLPlan}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -47,6 +47,8 @@ case class UnresolvedRelation(
   override def output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
+
+  override def sql: String = tableName
 }
 
 /**
@@ -59,7 +61,7 @@ case class UnresolvedRelation(
 case class UnresolvedInlineTable(
     names: Seq[String],
     rows: Seq[Seq[Expression]])
-  extends LeafNode {
+  extends LeafNode with NonSQLPlan {
 
   lazy val expressionsResolved: Boolean = rows.forall(_.forall(_.resolved))
   override lazy val resolved = false
@@ -73,7 +75,7 @@ case class UnresolvedInlineTable(
  * }}}
  */
 case class UnresolvedTableValuedFunction(functionName: String, functionArgs: Seq[Expression])
-  extends LeafNode {
+  extends LeafNode with NonSQLPlan {
 
   override def output: Seq[Attribute] = Nil
 

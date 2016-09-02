@@ -270,6 +270,12 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * Refreshes (or invalidates) any metadata/data cached in the plan recursively.
    */
   def refresh(): Unit = children.foreach(_.refresh())
+
+  /**
+   * Returns SQL representation of this plan. For the plans extending [[NonSQLPlan]],
+   * this method may return an arbitrary user facing string.
+   */
+  def sql: String
 }
 
 /**
@@ -331,4 +337,12 @@ abstract class BinaryNode extends LogicalPlan {
   def right: LogicalPlan
 
   override def children: Seq[LogicalPlan] = Seq(left, right)
+}
+
+/**
+ * LogicalPlan that don't have SQL representation should extend this trait.
+ * For example, `ReturnAnswer` and `Range`.
+ */
+trait NonSQLPlan extends LogicalPlan {
+  final override def sql: String = throw new UnsupportedOperationException(this.getClass.getName())
 }

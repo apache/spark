@@ -86,7 +86,7 @@ case class TestFunction(
   override def dataType: DataType = StringType
 }
 
-case class UnresolvedTestPlan() extends LeafNode {
+case class UnresolvedTestPlan() extends LeafNode with NonSQLPlan {
   override lazy val resolved = false
   override def output: Seq[Attribute] = Nil
 }

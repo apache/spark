@@ -31,7 +31,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.IntegerType
 
 /** A dummy command for testing unsupported operations. */
-case class DummyCommand() extends LogicalPlan with Command {
+case class DummyCommand() extends LogicalPlan with Command with NonSQLPlan {
   override def output: Seq[Attribute] = Nil
   override def children: Seq[LogicalPlan] = Nil
 }
@@ -420,12 +420,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     new StreamingPlanWrapper(plan)
   }
 
-  case class StreamingPlanWrapper(child: LogicalPlan) extends UnaryNode {
+  case class StreamingPlanWrapper(child: LogicalPlan) extends UnaryNode with NonSQLPlan {
     override def output: Seq[Attribute] = child.output
     override def isStreaming: Boolean = true
   }
 
-  case class TestStreamingRelation(output: Seq[Attribute]) extends LeafNode {
+  case class TestStreamingRelation(output: Seq[Attribute]) extends LeafNode with NonSQLPlan {
     def this(attribute: Attribute) = this(Seq(attribute))
     override def isStreaming: Boolean = true
   }

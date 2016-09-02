@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types._
  * Rules can pattern-match on this node in order to apply transformations that only take effect
  * at the top of the logical query plan.
  */
-case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
+case class ReturnAnswer(child: LogicalPlan) extends UnaryNode with NonSQLPlan {
   override def output: Seq[Attribute] = child.output
 }
 
@@ -54,6 +54,40 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
 
   override def validConstraints: Set[Expression] =
     child.constraints.union(getAliasedConstraints(projectList))
+
+  override def sql: String = {
+    if (projectList.exists(_.find(_.isInstanceOf[NonSQLExpression]).isDefined)) {
+      throw new UnsupportedOperationException("NonSQLExpression")
+    }
+    child match {
+      case OneRowRelation =>
+        s"SELECT ${projectList.map(_.sql).mkString(", ")}"
+
+      case g @ Generate(_, _, _, _, _, grandChild) => grandChild match {
+        case OneRowRelation =>
+          s"SELECT ${g.generator.sql} AS ${g.generatorOutput.map(_.sql).mkString(", ")}"
+
+        case f @ Filter(condition, grandGrandChild) =>
+          s"SELECT ${projectList.map(_.sql).mkString(", ")} " +
+            s"FROM ${grandGrandChild.sql} " +
+            s"LATERAL VIEW ${if (g.outer) "OUTER " else ""}${g.generator.sql} " +
+            s"${g.qualifier.map(_ + " ").getOrElse("")}" +
+            s"AS ${g.generatorOutput.map(_.sql).mkString(", ")} " +
+            s"WHERE ${condition.sql}"
+
+        case _ =>
+          s"SELECT ${projectList.map(_.sql).mkString(", ")} " +
+            s"FROM ${grandChild.sql} " +
+            s"LATERAL VIEW ${if (g.outer) "OUTER " else ""}${g.generator.sql} " +
+            s"${g.qualifier.map(_ + " ").getOrElse("")}" +
+            s"AS ${g.generatorOutput.map(_.sql).mkString(", ")}"
+      }
+      case _ =>
+        val subquery = child.sql
+        val childSQL = s" FROM ${if (subquery.startsWith("SELECT")) s"($subquery)" else subquery}"
+        s"SELECT ${projectList.map(_.sql).mkString(", ")}${childSQL}"
+    }
+  }
 }
 
 /**
@@ -100,6 +134,13 @@ case class Generate(
 
     if (join) child.output ++ qualified else qualified
   }
+
+  override def sql: String = {
+    val columnAliases = generatorOutput.map(_.sql).mkString(", ")
+    val outerStr = if (outer) "OUTER " else ""
+    s"${child.sql} LATERAL VIEW $outerStr" +
+      s"${generator.sql} ${qualifier.map(_ + " ").getOrElse("")}AS $columnAliases"
+  }
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)
@@ -112,6 +153,11 @@ case class Filter(condition: Expression, child: LogicalPlan)
     val predicates = splitConjunctivePredicates(condition)
       .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(predicates.toSet)
+  }
+
+  override def sql: String = child match {
+    case _: Aggregate => s"${child.sql} HAVING ${condition.sql}"
+    case _ => s"${child.sql} WHERE ${condition.sql}"
   }
 }
 
@@ -168,6 +214,8 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
 
     Statistics(sizeInBytes = sizeInBytes, isBroadcastable = isBroadcastable)
   }
+
+  override def sql: String = s"(${left.sql}) INTERSECT (${right.sql})"
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
@@ -188,6 +236,8 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
   override lazy val statistics: Statistics = {
     left.statistics.copy()
   }
+
+  override def sql: String = s"(${left.sql}) EXCEPT (${right.sql})"
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -264,6 +314,15 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     children
       .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
       .reduce(merge(_, _))
+  }
+
+  override def sql: String = {
+    if (children.length > 1) {
+      val childrenSql = children.map(c => s"(${c.sql})")
+      childrenSql.mkString(" UNION ALL ")
+    } else {
+      children.head.sql
+    }
   }
 }
 
@@ -343,6 +402,10 @@ case class Join(
       // they could explode the size.
       super.statistics.copy(isBroadcastable = false)
   }
+
+  override def sql: String = {
+    s"${left.sql} ${joinType.sql} JOIN ${right.sql}${condition.map(" ON " + _.sql).getOrElse("")}"
+  }
 }
 
 /**
@@ -353,6 +416,8 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
 
   // set isBroadcastable to true so the child will be broadcasted
   override lazy val statistics: Statistics = super.statistics.copy(isBroadcastable = true)
+
+  override def sql: String = s"/*+ BROADCAST */ ${child.sql}"
 }
 
 case class InsertIntoTable(
@@ -361,7 +426,7 @@ case class InsertIntoTable(
     child: LogicalPlan,
     overwrite: Boolean,
     ifNotExists: Boolean)
-  extends LogicalPlan {
+  extends LogicalPlan with NonSQLPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty
@@ -396,13 +461,14 @@ case class InsertIntoTable(
  * @param cteRelations A sequence of pair (alias, the CTE definition) that this CTE defined
  *                     Each CTE can see the base tables and the previously defined CTEs only.
  */
-case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
+case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)])
+  extends UnaryNode with NonSQLPlan {
   override def output: Seq[Attribute] = child.output
 }
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode with NonSQLPlan {
   override def output: Seq[Attribute] = child.output
 }
 
@@ -418,6 +484,19 @@ case class Sort(
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
+  override def sql: String = {
+    if (order.isEmpty) {
+      child.sql
+    } else {
+      child match {
+        case r @ RepartitionByExpression(partitionExprs, grandChild, _)
+            if order.map(_.child) == partitionExprs =>
+          s"${grandChild.sql} CLUSTER BY ${partitionExprs.map(_.sql).mkString(", ")}"
+        case _ =>
+          s"${child.sql} ${if (global) "ORDER" else "SORT"} BY ${order.map(_.sql).mkString(", ")}"
+      }
+    }
+  }
 }
 
 /** Factory for constructing new `Range` nodes. */
@@ -457,6 +536,14 @@ case class Range(
       s"SELECT id AS `${output.head.name}` FROM range($start, $end, $step, ${numSlices.get})"
     } else {
       s"SELECT id AS `${output.head.name}` FROM range($start, $end, $step)"
+    }
+  }
+
+  override def sql: String = {
+    if (numSlices.isDefined) {
+      s"range($start, $end, $step, ${numSlices.get})"
+    } else {
+      s"range($start, $end, $step)"
     }
   }
 
@@ -502,6 +589,93 @@ case class Aggregate(
       super.statistics
     }
   }
+
+  private def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean = {
+    output1.size == output2.size &&
+      output1.zip(output2).forall{ case (left, right) => left.semanticEquals(right) }
+  }
+
+  private def isGroupingSet(e: Expand, p: Project) = {
+    groupingExpressions.forall(_.isInstanceOf[Attribute]) && sameOutput(
+      e.output.drop(p.child.output.length),
+      groupingExpressions.map(_.asInstanceOf[Attribute]))
+  }
+
+  override def sql: String = child match {
+    case OneRowRelation =>
+      s"SELECT ${aggregateExpressions.map(_.sql).mkString(", ")}"
+
+    case e @ Expand(_, _, p @ Project(_, _)) if isGroupingSet(e, p) =>
+      // The last column of Expand is always grouping ID
+      val gid = e.output.last
+
+      val numOriginalOutput = p.child.output.length
+      // Assumption: Aggregate's groupingExpressions is composed of
+      // 1) the grouping attributes
+      // 2) gid, which is always the last one
+      val groupByAttributes = groupingExpressions.dropRight(1).map(_.asInstanceOf[Attribute])
+      // Assumption: Project's projectList is composed of
+      // 1) the original output (Project's child.output),
+      // 2) the aliased group by expressions.
+      val expandedAttributes = p.output.drop(numOriginalOutput)
+      val groupByExprs = p.projectList.drop(numOriginalOutput).map(_.asInstanceOf[Alias].child)
+      val groupingSQL = groupByExprs.map(_.sql).mkString(", ")
+
+      // a map from group by attributes to the original group by expressions.
+      val groupByAttrMap = AttributeMap(groupByAttributes.zip(groupByExprs))
+      // a map from expanded attributes to the original group by expressions.
+      val expandedAttrMap = AttributeMap(expandedAttributes.zip(groupByExprs))
+
+      val groupingSet: Seq[Seq[Expression]] = e.projections.map { project =>
+        // Assumption: expand.projections is composed of
+        // 1) the original output (Project's child.output),
+        // 2) expanded attributes(or null literal)
+        // 3) gid, which is always the last one in each project in Expand
+        project.drop(numOriginalOutput).dropRight(1).collect {
+          case attr: Attribute if expandedAttrMap.contains(attr) => expandedAttrMap(attr)
+        }
+      }
+      val groupingSetSQL = "GROUPING SETS(" +
+        groupingSet.map(e => s"(${e.map(_.sql).mkString(", ")})").mkString(", ") + ")"
+
+      val aggExprs = aggregateExpressions.map { case aggExpr =>
+        val originalAggExpr = aggExpr.transformDown {
+          // grouping_id() is converted to VirtualColumn.groupingIdName by Analyzer. Revert it back.
+          case ar: AttributeReference if ar == gid => GroupingID(Nil)
+          case ar: AttributeReference if groupByAttrMap.contains(ar) => groupByAttrMap(ar)
+          case a @ Cast(BitwiseAnd(
+          ShiftRight(ar: AttributeReference, Literal(value: Any, IntegerType)),
+          Literal(1, IntegerType)), ByteType) if ar == gid =>
+            // for converting an expression to its original SQL format grouping(col)
+            val idx = groupByExprs.length - 1 - value.asInstanceOf[Int]
+            groupByExprs.lift(idx).map(Grouping).getOrElse(a)
+        }
+
+        originalAggExpr match {
+          // Ancestor operators may reference the output of this grouping set, and we use exprId to
+          // generate a unique name for each attribute, so we should make sure the transformed
+          // aggregate expression won't change the output, i.e. exprId and alias name should remain
+          // the same.
+          case ne: NamedExpression if ne.exprId == aggExpr.exprId => ne
+          case e => Alias(e, aggExpr.name)(exprId = aggExpr.exprId)
+        }
+      }
+
+      s"SELECT ${aggExprs.map(_.sql).mkString(", ")} " +
+        s"FROM ${if (p.sql.startsWith("SELECT")) s"(${p.sql})" else p.sql} " +
+        s"GROUP BY ${groupingSQL} " +
+        groupingSetSQL
+
+    case _ =>
+      val groupingSQL = if (groupingExpressions.isEmpty) {
+        ""
+      } else {
+        " GROUP BY " + groupingExpressions.map(_.sql).mkString(", ")
+      }
+      s"SELECT ${aggregateExpressions.map(_.sql).distinct.mkString(", ")} " +
+        s"FROM ${if (child.sql.startsWith("SELECT")) s"(${child.sql})" else child.sql}" +
+        groupingSQL
+  }
 }
 
 case class Window(
@@ -514,6 +688,10 @@ case class Window(
     child.output ++ windowExpressions.map(_.toAttribute)
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
+
+  override def sql: String = {
+    s"SELECT ${(child.output ++ windowExpressions).map(_.sql).mkString(", ")} FROM (${child.sql})"
+  }
 }
 
 object Expand {
@@ -591,7 +769,7 @@ object Expand {
 case class Expand(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode with NonSQLPlan {
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
@@ -623,7 +801,7 @@ case class GroupingSets(
     bitmasks: Seq[Int],
     groupByExprs: Seq[Expression],
     child: LogicalPlan,
-    aggregations: Seq[NamedExpression]) extends UnaryNode {
+    aggregations: Seq[NamedExpression]) extends UnaryNode with NonSQLPlan {
 
   override def output: Seq[Attribute] = aggregations.map(_.toAttribute)
 
@@ -637,7 +815,7 @@ case class Pivot(
     pivotColumn: Expression,
     pivotValues: Seq[Literal],
     aggregates: Seq[Expression],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode with NonSQLPlan {
   override def output: Seq[Attribute] = groupByExprs.map(_.toAttribute) ++ aggregates match {
     case agg :: Nil => pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
     case _ => pivotValues.flatMap{ value =>
@@ -678,6 +856,10 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
     }
     child.statistics.copy(sizeInBytes = sizeInBytes)
   }
+
+  override def sql: String = {
+    s"${child.sql} LIMIT ${limitExpr.sql}"
+  }
 }
 
 case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
@@ -699,6 +881,8 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
     }
     child.statistics.copy(sizeInBytes = sizeInBytes)
   }
+
+  override def sql: String = child.sql
 }
 
 case class SubqueryAlias(
@@ -708,6 +892,12 @@ case class SubqueryAlias(
   extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
+
+  override def sql: String = child match {
+    case LocalRelation(output, _) =>
+      s"${child.sql} AS $alias${output.map(_.name).mkString("(", ", ", ")")}"
+    case _ => if (child.sql.equals(alias)) child.sql else s"(${child.sql}) AS $alias"
+  }
 }
 
 /**
@@ -742,6 +932,20 @@ case class Sample(
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil
+
+  override def sql: String = {
+    val repeatable = if (withReplacement) s" REPEATABLE ($seed)" else ""
+    child match {
+      case SubqueryAlias(alias, _: NonSQLPlan, _) =>
+        s"$alias TABLESAMPLE(${upperBound * 100} PERCENT)$repeatable"
+
+      case SubqueryAlias(alias, grandChild, _) =>
+        s"${grandChild.sql} TABLESAMPLE(${upperBound * 100} PERCENT)$repeatable $alias"
+
+      case _ =>
+        s"${child.sql} TABLESAMPLE(${upperBound * 100} PERCENT)$repeatable"
+    }
+  }
 }
 
 /**
@@ -750,6 +954,15 @@ case class Sample(
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+
+  override def sql: String = child match {
+    case Union(children) =>
+      val childrenSql = children.map(c => s"(${c.sql})")
+      childrenSql.mkString(" UNION DISTINCT ")
+
+    case p: Project =>
+      "SELECT DISTINCT " + p.sql.substring("SELECT ".length)
+  }
 }
 
 /**
@@ -759,7 +972,7 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
  * of the output requires some specific ordering or distribution of the data.
  */
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
-  extends UnaryNode {
+  extends UnaryNode with NonSQLPlan {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
   override def output: Seq[Attribute] = child.output
 }
@@ -767,7 +980,7 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 /**
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */
-case object OneRowRelation extends LeafNode {
+case object OneRowRelation extends LeafNode with NonSQLPlan {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
 

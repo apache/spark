@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, NonSQLPlan}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -170,6 +170,6 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
 /**
  * Used to query the data that has been written into a [[MemorySink]].
  */
-case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode {
+case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode with NonSQLPlan {
   def this(sink: MemorySink) = this(sink, sink.schema.toAttributes)
 }

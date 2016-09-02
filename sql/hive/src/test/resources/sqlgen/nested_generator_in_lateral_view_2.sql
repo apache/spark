@@ -4,4 +4,4 @@ FROM parquet_t3
 LATERAL VIEW EXPLODE(arr2) exp1 AS nested_array
 LATERAL VIEW OUTER EXPLODE(nested_array) exp1 AS val
 --------------------------------------------------------------------------------
-SELECT `gen_attr_0` AS `val`, `gen_attr_1` AS `id` FROM (SELECT `gen_attr_0`, `gen_attr_1` FROM (SELECT `arr` AS `gen_attr_4`, `arr2` AS `gen_attr_3`, `json` AS `gen_attr_5`, `id` AS `gen_attr_1` FROM `default`.`parquet_t3`) AS gen_subquery_0 LATERAL VIEW explode(`gen_attr_3`) gen_subquery_2 AS `gen_attr_2` LATERAL VIEW OUTER explode(`gen_attr_2`) gen_subquery_3 AS `gen_attr_0`) AS gen_subquery_1
+SELECT exp1.`val`, parquet_t3.`id` FROM parquet_t3 LATERAL VIEW explode(parquet_t3.`arr2`) exp1 AS `nested_array` LATERAL VIEW OUTER explode(exp1.`nested_array`) exp1 AS `val`

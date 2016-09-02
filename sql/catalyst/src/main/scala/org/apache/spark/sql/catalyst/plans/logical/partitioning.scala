@@ -28,7 +28,7 @@ abstract class RedistributeData extends UnaryNode {
 }
 
 case class SortPartitions(sortExpressions: Seq[SortOrder], child: LogicalPlan)
-  extends RedistributeData
+  extends RedistributeData with NonSQLPlan
 
 /**
  * This method repartitions data using [[Expression]]s into `numPartitions`, and receives
@@ -45,5 +45,9 @@ case class RepartitionByExpression(
   numPartitions match {
     case Some(n) => require(n > 0, s"Number of partitions ($n) must be positive.")
     case None => // Ok
+  }
+
+  override def sql: String = {
+    s"${child.sql} DISTRIBUTE BY ${partitionExpressions.map(_.sql).mkString(", ")}"
   }
 }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, NonSQLPlan}
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
 
@@ -39,7 +39,7 @@ object StreamingRelation {
  * passing to [[StreamExecution]] to run a query.
  */
 case class StreamingRelation(dataSource: DataSource, sourceName: String, output: Seq[Attribute])
-  extends LeafNode {
+  extends LeafNode with NonSQLPlan {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
 }
@@ -48,7 +48,8 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
  * Used to link a streaming [[Source]] of data into a
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
  */
-case class StreamingExecutionRelation(source: Source, output: Seq[Attribute]) extends LeafNode {
+case class StreamingExecutionRelation(source: Source, output: Seq[Attribute])
+  extends LeafNode with NonSQLPlan {
   override def isStreaming: Boolean = true
   override def toString: String = source.toString
 }

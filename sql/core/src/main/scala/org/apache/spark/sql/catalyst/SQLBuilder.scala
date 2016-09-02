@@ -583,7 +583,7 @@ class SQLBuilder private (
       database: String,
       table: String,
       output: Seq[Attribute],
-      sample: Option[(Double, Double)] = None) extends LeafNode {
+      sample: Option[(Double, Double)] = None) extends LeafNode with NonSQLPlan {
     def withSample(lowerBound: Double, upperBound: Double): SQLTable =
       this.copy(sample = Some(lowerBound -> upperBound))
   }
