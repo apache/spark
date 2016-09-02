@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.ml.tree._
+import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
 
 /** Object exposing methods for local training of decision trees */
@@ -169,6 +170,7 @@ private[ml] object LocalDecisionTree {
   /**
    * Splits the passed-in node if permitted by the parameters of the learning algorithm,
    * returning an iterator over its children. Returns an empty array if node could not be split.
+   *
    * @param metadata Metadata containing parameters of the learning algorithm
    * @param stats Label impurity stats associated with the current node
    */
@@ -200,6 +202,7 @@ private[ml] object LocalDecisionTree {
   /**
    * Splits the passed-in node. This method returns nothing, but modifies the passed-in node
    * by updating its split and stats members.
+   *
    * @param split Split to associate with the passed-in node
    * @param stats Label impurity statistics to associate with the passed-in node
    */
@@ -277,7 +280,90 @@ private[ml] object LocalDecisionTree {
     }
     aggStats
   }
-  
+
+  /**
+   * TODO(smurching): update doc, also share this between RF code and local code
+   * @param metadata
+   * @param categoryStats
+   * @return
+   */
+  private[impl] def getCentroid(
+      metadata: DecisionTreeMetadata,
+      categoryStats: ImpurityAggregatorSingle): Double = {
+
+    if (categoryStats.getCount != 0) {
+      if (metadata.isMulticlass) {
+        // multiclass classification
+        // For categorical variables in multiclass classification,
+        // the bins are ordered by the impurity of their corresponding labels.
+        categoryStats.getCalculator.calculate()
+      } else if (metadata.isClassification) {
+        // binary classification
+        // For categorical variables in binary classification,
+        // the bins are ordered by the count of class 1.
+        categoryStats.stats(1)
+      } else {
+        // regression
+        // For categorical variables in regression and binary classification,
+        // the bins are ordered by the prediction.
+        categoryStats.getCalculator.predict
+      }
+    } else {
+      Double.MaxValue
+    }
+  }
+
+  /**
+   * TODO(smurching): Update doc
+   * Calculate the impurity statistics for a given (feature, split) based upon left/right
+   * aggregates.
+   *
+   * @param stats the recycle impurity statistics for this feature's all splits,
+   *              only 'impurity' and 'impurityCalculator' are valid between each iteration
+   * @param leftImpurityCalculator left node aggregates for this (feature, split)
+   * @param rightImpurityCalculator right node aggregate for this (feature, split)
+   * @param metadata learning and dataset metadata for DecisionTree
+   * @return Impurity statistics for this (feature, split)
+   */
+  private def calculateImpurityStats(
+      fullImpurityAgg: ImpurityAggregatorSingle,
+      leftAgg: ImpurityAggregatorSingle,
+      rightAgg: ImpurityAggregatorSingle,
+      metadata: DecisionTreeMetadata): ImpurityStats = {
+
+    val fullCalc = fullImpurityAgg.getCalculator
+    val leftCalc = leftAgg.getCalculator
+    val rightCalc = rightAgg.getCalculator
+
+    val impurity: Double = fullCalc.calculate()
+
+    val leftCount = leftCalc.count
+    val rightCount = rightCalc.count
+    val totalCount = leftCount + rightCount
+
+    // If left child or right child doesn't satisfy minimum instances per node,
+    // then this split is invalid, return invalid information gain stats.
+    if ((leftCount < metadata.minInstancesPerNode) ||
+      (rightCount < metadata.minInstancesPerNode)) {
+      return ImpurityStats.getInvalidImpurityStats(fullCalc)
+    }
+
+    val leftImpurity = leftCalc.calculate() // Note: This equals 0 if count = 0
+    val rightImpurity = rightCalc.calculate()
+
+    val leftWeight = leftCount / totalCount.toDouble
+    val rightWeight = rightCount / totalCount.toDouble
+    val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
+
+    // if information gain doesn't satisfy minimum information gain,
+    // then this split is invalid, return invalid information gain stats.
+    if (gain < metadata.minInfoGain) {
+      return ImpurityStats.getInvalidImpurityStats(fullCalc)
+    }
+
+    new ImpurityStats(gain, impurity, fullCalc, leftCalc, rightCalc)
+  }
+
   /**
    * Find the best split for an ordered categorical feature at a single node.
    *
@@ -309,44 +395,9 @@ private[ml] object LocalDecisionTree {
     // aggStats(category) = label statistics for category
     val aggStats = getAggStats(metadata, featureIndex, from, to, values, labels, indices)
 
-    // Compute centroids.  centroidsForCategories is a list: (category, centroid)
-    val centroidsForCategories: Seq[(Int, Double)] = if (metadata.isMulticlass) {
-      // For categorical variables in multiclass classification,
-      // the bins are ordered by the impurity of their corresponding labels.
-      Range(0, featureArity).map { case featureValue =>
-        val categoryStats = aggStats(featureValue)
-        val centroid = if (categoryStats.getCount != 0) {
-          categoryStats.getCalculator.calculate()
-        } else {
-          Double.MaxValue
-        }
-        (featureValue, centroid)
-      }
-    } else if (metadata.isClassification) { // binary classification
-      // For categorical variables in binary classification,
-      // the bins are ordered by the centroid of their corresponding labels.
-      Range(0, featureArity).map { case featureValue =>
-        val categoryStats = aggStats(featureValue)
-        val centroid = if (categoryStats.getCount != 0) {
-          assert(categoryStats.stats.length == 2)
-          (categoryStats.stats(1) - categoryStats.stats(0)) / categoryStats.getCount
-        } else {
-          Double.MaxValue
-        }
-        (featureValue, centroid)
-      }
-    } else { // regression
-      // For categorical variables in regression,
-      // the bins are ordered by the centroid of their corresponding labels.
-      Range(0, featureArity).map { case featureValue =>
-        val categoryStats = aggStats(featureValue)
-        val centroid = if (categoryStats.getCount != 0) {
-          categoryStats.getCalculator.predict
-        } else {
-          Double.MaxValue
-        }
-        (featureValue, centroid)
-      }
+    // Compute centroids.  centroidsForCategories is a sequence of pairs: (category, centroid)
+    val centroidsForCategories = 0.until(featureArity).map { cat =>
+      (cat, getCentroid(metadata, aggStats(cat)))
     }
 
     val categoriesSortedByCentroid: List[Int] = centroidsForCategories.toList.sortBy(_._2).map(_._1)
@@ -354,55 +405,45 @@ private[ml] object LocalDecisionTree {
     // Cumulative sums of bin statistics for left, right parts of split.
     val leftImpurityAgg = metadata.createImpurityAggregator()
     val rightImpurityAgg = metadata.createImpurityAggregator()
-    var j = 0
-    val length = aggStats.length
-    while (j < length) {
-      rightImpurityAgg.add(aggStats(j))
-      j += 1
-    }
+    aggStats.foreach(rightImpurityAgg.add(_))
 
-    var bestSplitIndex: Int = -1  // index into categoriesSortedByCentroid
-    val bestLeftImpurityAgg = leftImpurityAgg.deepCopy()
-    var bestGain: Double = 0.0
+
     val fullImpurity = rightImpurityAgg.getCalculator.calculate()
-    var leftCount: Double = 0.0
-    var rightCount: Double = rightImpurityAgg.getCount
-    val fullCount: Double = rightCount
 
     // Consider all splits. These only cover valid splits, with at least one category on each side.
     val numSplits = categoriesSortedByCentroid.length - 1
-    var sortedCatIndex = 0
-    while (sortedCatIndex < numSplits) {
-      val cat = categoriesSortedByCentroid(sortedCatIndex)
-      // Update left, right stats
-      val catStats = aggStats(cat)
-      leftImpurityAgg.add(catStats)
-      rightImpurityAgg.subtract(catStats)
-      leftCount += catStats.getCount
-      rightCount -= catStats.getCount
-      // Compute impurity
-      val leftWeight = leftCount / fullCount
-      val rightWeight = rightCount / fullCount
-      val leftImpurity = leftImpurityAgg.getCalculator.calculate()
-      val rightImpurity = rightImpurityAgg.getCalculator.calculate()
-      val gain = fullImpurity - leftWeight * leftImpurity - rightWeight * rightImpurity
-      if (leftCount != 0 && rightCount != 0 && gain > bestGain && gain > metadata.minInfoGain) {
-        bestSplitIndex = sortedCatIndex
-        System.arraycopy(leftImpurityAgg.stats, 0, bestLeftImpurityAgg.stats,
-          0, leftImpurityAgg.stats.length)
-        bestGain = gain
-      }
-      sortedCatIndex += 1
+
+    // Compute the index & gain of the best split, along with an impurity aggregator for the
+    // best left split
+    // Initial values: bestSplitIdx = -1, bestGain = 0.0, bestImpurityAgg = an empty impurity
+    // aggregator
+    val (bestSplitIndex, bestGain, bestLeftAgg)
+    = 0.until(numSplits).foldLeft((-1, 0.0, leftImpurityAgg.deepCopy())) {
+      case ((splitIdx, gain, currBestLeftAgg), sortedCatIndex) =>
+        val cat = categoriesSortedByCentroid(sortedCatIndex)
+        // Update left, right stats
+        val catStats = aggStats(cat)
+        leftImpurityAgg.add(catStats)
+        rightImpurityAgg.subtract(catStats)
+
+        val stats = calculateImpurityStats(fullImpurityAgg,
+          leftImpurityAgg, rightImpurityAgg, metadata)
+
+        if (stats.valid && stats.gain > gain) {
+          (sortedCatIndex, stats.gain, leftImpurityAgg.deepCopy())
+        } else {
+          (splitIdx, gain, currBestLeftAgg)
+        }
     }
+
 
     val categoriesForSplit =
       categoriesSortedByCentroid.slice(0, bestSplitIndex + 1).map(_.toDouble)
     val bestFeatureSplit =
       new CategoricalSplit(featureIndex, categoriesForSplit.toArray, featureArity)
-    val fullImpurityAgg = leftImpurityAgg.deepCopy().add(rightImpurityAgg)
-    val bestRightImpurityAgg = fullImpurityAgg.deepCopy().subtract(bestLeftImpurityAgg)
+    val bestRightImpurityAgg = fullImpurityAgg.deepCopy().subtract(bestLeftAgg)
     val bestImpurityStats = new ImpurityStats(bestGain, fullImpurity, fullImpurityAgg.getCalculator,
-      bestLeftImpurityAgg.getCalculator, bestRightImpurityAgg.getCalculator)
+      bestLeftAgg.getCalculator, bestRightImpurityAgg.getCalculator)
 
     if (bestSplitIndex == -1 || bestGain == 0.0) {
       (None, bestImpurityStats)
