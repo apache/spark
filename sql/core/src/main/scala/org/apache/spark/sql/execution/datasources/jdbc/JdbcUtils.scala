@@ -322,6 +322,7 @@ object JdbcUtils extends Logging {
         conn.commit()
       }
       committed = true
+      Iterator.empty
     } catch {
       case e: SQLException =>
         val cause = e.getNextException
@@ -351,7 +352,6 @@ object JdbcUtils extends Logging {
         }
       }
     }
-    Array[Byte]().iterator
   }
 
   /**
