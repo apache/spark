@@ -314,8 +314,10 @@ sparkRHive.init <- function(jsc = NULL) {
 
 #' Get the existing SparkSession or initialize a new SparkSession.
 #'
-#' Additional Spark properties can be set (...), and these named parameters take priority over
-#' over values in master, appName, named lists of sparkConfig.
+#' SparkSession is the entry point into SparkR. \code{sparkR.session} gets the existing
+#' SparkSession or initialize a new SparkSession.
+#' Additional Spark properties can be set in \code{...}, and these named parameters take priority
+#' over values in \code{master}, \code{appName}, named lists of \code{sparkConfig}.
 #'
 #' For details on how to initialize and use SparkR, refer to SparkR programming guide at
 #' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
