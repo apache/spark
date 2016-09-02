@@ -29,17 +29,23 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
- * A command to create a table with the same definition of the given existing table.
+ * A command to create a MANAGED table with the same definition of the given existing table.
+ * In the target table definition, the table comment is always empty but the column comments
+ * are identical to the ones defined in the source table.
+ *
+ * The CatalogTable attributes copied from the source table are storage(inputFormat, outputFormat,
+ * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -58,18 +64,45 @@ case class CreateTableLikeCommand(
       throw new AnalysisException(
         s"Source table in CREATE TABLE LIKE does not exist: '$sourceTable'")
     }
-    if (catalog.isTemporaryTable(sourceTable)) {
-      throw new AnalysisException(
-        s"Source table in CREATE TABLE LIKE cannot be temporary: '$sourceTable'")
+
+    val sourceTableDesc = catalog.getTableMetadata(sourceTable)
+
+    // Storage format
+    val newStorage =
+      if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+        val newPath = catalog.defaultTablePath(targetTable)
+        CatalogStorageFormat.empty.copy(properties = Map("path" -> newPath))
+      } else if (DDLUtils.isDatasourceTable(sourceTableDesc)) {
+        val newPath = catalog.defaultTablePath(targetTable)
+        val newSerdeProp =
+          sourceTableDesc.storage.properties.filterKeys(_.toLowerCase != "path") ++
+            Map("path" -> newPath)
+        sourceTableDesc.storage.copy(
+          locationUri = None,
+          properties = newSerdeProp)
+      } else {
+        sourceTableDesc.storage.copy(
+          locationUri = None,
+          properties = sourceTableDesc.storage.properties)
+      }
+
+    val newProvider = if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+      Some(sparkSession.sessionState.conf.defaultDataSourceName)
+    } else {
+      sourceTableDesc.provider
     }
 
-    val tableToCreate = catalog.getTableMetadata(sourceTable).copy(
-      identifier = targetTable,
-      tableType = CatalogTableType.MANAGED,
-      createTime = System.currentTimeMillis,
-      lastAccessTime = -1).withNewStorage(locationUri = None)
+    val newTableDesc =
+      CatalogTable(
+        identifier = targetTable,
+        tableType = CatalogTableType.MANAGED,
+        storage = newStorage,
+        schema = sourceTableDesc.schema,
+        provider = newProvider,
+        partitionColumnNames = sourceTableDesc.partitionColumnNames,
+        bucketSpec = sourceTableDesc.bucketSpec)
 
-    catalog.createTable(tableToCreate, ifNotExists)
+    catalog.createTable(newTableDesc, ifNotExists)
     Seq.empty[Row]
   }
 }
@@ -517,7 +550,7 @@ case class ShowTablesCommand(
 
 
 /**
- * A command for users to list the properties for a table If propertyKey is specified, the value
+ * A command for users to list the properties for a table. If propertyKey is specified, the value
  * for the propertyKey is returned. If propertyKey is not specified, all the keys and their
  * corresponding values are returned.
  * The syntax of using this command in SQL is:

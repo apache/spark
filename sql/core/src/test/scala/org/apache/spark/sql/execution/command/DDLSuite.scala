@@ -265,7 +265,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         userSpecifiedPartitionCols.map(p => s"PARTITIONED BY ($p)").getOrElse("")
       val schemaClause = userSpecifiedSchema.map(s => s"($s)").getOrElse("")
       val uri = path.toURI
-      sql(
+      val sqlCreateTable =
         s"""
            |CREATE TABLE $tabName $schemaClause
            |USING parquet
@@ -273,11 +273,18 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
            |  path '$uri'
            |)
            |$partitionClause
-         """.stripMargin)
-      val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName))
+         """.stripMargin
+      if (userSpecifiedSchema.isEmpty && userSpecifiedPartitionCols.nonEmpty) {
+        val e = intercept[AnalysisException](sql(sqlCreateTable)).getMessage
+        assert(e.contains(
+          "not allowed to specify partition columns when the table schema is not defined"))
+      } else {
+        sql(sqlCreateTable)
+        val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName))
 
-      assert(expectedSchema == tableMetadata.schema)
-      assert(expectedPartitionCols == tableMetadata.partitionColumnNames)
+        assert(expectedSchema == tableMetadata.schema)
+        assert(expectedPartitionCols == tableMetadata.partitionColumnNames)
+      }
     }
   }
 
@@ -817,13 +824,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("alter table: recover partitions (sequential)") {
-    withSQLConf("spark.rdd.parallelListingThreshold" -> "1") {
+    withSQLConf("spark.rdd.parallelListingThreshold" -> "10") {
       testRecoverPartitions()
     }
   }
 
   test("alter table: recover partition (parallel)") {
-    withSQLConf("spark.rdd.parallelListingThreshold" -> "10") {
+    withSQLConf("spark.rdd.parallelListingThreshold" -> "1") {
       testRecoverPartitions()
     }
   }
@@ -846,7 +853,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
     // valid
     fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
+    fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "a.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "_SUCCESS"))  // file
     fs.mkdirs(new Path(new Path(root, "A=2"), "B=6"))
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), "b.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), "c.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), ".hiddenFile"))  // file
+    fs.mkdirs(new Path(new Path(root, "A=2/B=6"), "_temporary"))
+
     // invalid
     fs.mkdirs(new Path(new Path(root, "a"), "b"))  // bad name
     fs.mkdirs(new Path(new Path(root, "b=1"), "a=1"))  // wrong order
@@ -860,6 +874,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("ALTER TABLE tab1 RECOVER PARTITIONS")
       assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
         Set(part1, part2))
+      assert(catalog.getPartition(tableIdent, part1).parameters("numFiles") == "1")
+      assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")
     } finally {
       fs.delete(root, true)
     }

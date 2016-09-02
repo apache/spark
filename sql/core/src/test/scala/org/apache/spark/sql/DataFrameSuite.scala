@@ -1248,17 +1248,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   /**
-   * Verifies that there is a single Aggregation for `df`
+   * Verifies that there is no Exchange between the Aggregations for `df`
    */
-  private def verifyNonExchangingSingleAgg(df: DataFrame) = {
+  private def verifyNonExchangingAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
       case agg: HashAggregateExec =>
-        if (atFirstAgg) {
-          fail("Should not have back to back Aggregates")
-        }
-        atFirstAgg = true
+        atFirstAgg = !atFirstAgg
       case _ =>
+        if (atFirstAgg) {
+          fail("Should not have operators between the two aggregations")
+        }
     }
   }
 
@@ -1292,10 +1292,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     // Group by the column we are distributed by. This should generate a plan with no exchange
     // between the aggregates
     val df3 = testData.repartition($"key").groupBy("key").count()
-    verifyNonExchangingSingleAgg(df3)
-    verifyNonExchangingSingleAgg(testData.repartition($"key", $"value")
+    verifyNonExchangingAgg(df3)
+    verifyNonExchangingAgg(testData.repartition($"key", $"value")
       .groupBy("key", "value").count())
-    verifyNonExchangingSingleAgg(testData.repartition($"key").groupBy("key", "value").count())
 
     // Grouping by just the first distributeBy expr, need to exchange.
     verifyExchangingAgg(testData.repartition($"key", $"value")
@@ -1578,5 +1577,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val schemas = List.range(0, size).map(a => StructField("name" + a, LongType, true))
     val df = spark.createDataFrame(rdd, StructType(schemas), false)
     assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
+  }
+
+  test("copy results for sampling with replacement") {
+    val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
+    val sampleDf = df.sample(true, 2.00)
+    val d = sampleDf.withColumn("c", monotonically_increasing_id).select($"c").collect
+    assert(d.size == d.distinct.size)
   }
 }

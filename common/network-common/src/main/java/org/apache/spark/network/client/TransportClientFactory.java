@@ -73,7 +73,7 @@ public class TransportClientFactory implements Closeable {
     }
   }
 
-  private final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
 
   private final TransportContext context;
   private final TransportConf conf;
