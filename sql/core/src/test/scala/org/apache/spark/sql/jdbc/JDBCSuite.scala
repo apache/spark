@@ -370,6 +370,18 @@ class JDBCSuite extends SparkFunSuite
     }
   }
 
+  test("load API") {
+    val dfUsingOption =
+      spark.read
+        .option("url", url)
+        .option("dbtable", "(SELECT * FROM TEST.PEOPLE)")
+        .option("user", "testUser")
+        .option("password", "testPass")
+        .format("jdbc")
+        .load()
+    assert(dfUsingOption.count == 3)
+  }
+
   test("Partitioning via JDBCPartitioningInfo API") {
     assert(
       spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties())

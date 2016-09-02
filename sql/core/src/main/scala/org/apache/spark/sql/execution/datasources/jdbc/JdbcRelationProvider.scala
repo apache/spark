@@ -19,10 +19,13 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.util.Properties
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, RelationProvider}
+import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 
-class JdbcRelationProvider extends RelationProvider with DataSourceRegister {
+class JdbcRelationProvider
+  extends RelationProvider
+  with CreatableRelationProvider
+  with DataSourceRegister {
 
   override def shortName(): String = "jdbc"
 
@@ -52,4 +55,18 @@ class JdbcRelationProvider extends RelationProvider with DataSourceRegister {
     parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
     JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties)(sqlContext.sparkSession)
   }
+
+  /**
+   * Save the DataFrame to the destination and return a relation with the given parameters based on
+   * the contents of the given DataFrame.
+   */
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    JdbcUtils.saveTable(mode, parameters, data)
+    createRelation(sqlContext, parameters)
+  }
+
 }
