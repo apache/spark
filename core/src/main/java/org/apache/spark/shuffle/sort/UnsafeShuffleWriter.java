@@ -465,8 +465,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           }
           return Option.apply(mapStatus);
         } else {
-          // The map task failed, so delete our output data.
-          shuffleBlockResolver.removeDataByMap(shuffleId, mapId);
           return Option.apply(null);
         }
       }
