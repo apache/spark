@@ -259,7 +259,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
       }
       val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
       DefaultParamsReader.getAndSetParams(model, metadata)
-      DefaultParamsReader.loadInitialModel[KMeansModel](model, path, sc)
+      DefaultParamsReader.loadAndSetInitialModel[KMeansModel](model, metadata, path, sc)
       model
     }
   }
@@ -323,11 +323,11 @@ class KMeans @Since("1.5.0") (
   def setSeed(value: Long): this.type = set(seed, value)
 
   /** @group setParam */
-  @Since("2.0.0")
+  @Since("2.1.0")
   def setInitialModel(value: KMeansModel): this.type = set(initialModel, value)
 
   /** @group setParam */
-  @Since("2.0.0")
+  @Since("2.1.0")
   def setInitialModel(value: Model[_]): this.type = {
     value match {
       case m: KMeansModel => setInitialModel(m)
@@ -338,7 +338,7 @@ class KMeans @Since("1.5.0") (
   }
 
   /** @group setParam */
-  @Since("2.0.0")
+  @Since("2.1.0")
   def setInitialModel(clusterCenters: Array[Vector]): this.type = {
     setInitialModel(
       new KMeansModel("initial model",
@@ -385,7 +385,7 @@ class KMeans @Since("1.5.0") (
     validateAndTransformSchema(schema)
   }
 
-  @Since("2.0.0")
+  @Since("2.1.0")
   override def write: MLWriter = new KMeans.KMeansWriter(this)
 }
 
@@ -395,13 +395,11 @@ object KMeans extends DefaultParamsReadable[KMeans] {
   @Since("1.6.0")
   override def load(path: String): KMeans = super.load(path)
 
-  @Since("2.0.0")
+  @Since("2.1.0")
   override def read: MLReader[KMeans] = new KMeansReader
 
   /** [[MLWriter]] instance for [[KMeans]] */
   private[KMeans] class KMeansWriter(instance: KMeans) extends MLWriter {
-    import org.json4s.JsonDSL._
-
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveInitialModel(instance, path)
       DefaultParamsWriter.saveMetadata(instance, path, sc)
@@ -418,7 +416,7 @@ object KMeans extends DefaultParamsReadable[KMeans] {
       val instance = new KMeans(metadata.uid)
 
       DefaultParamsReader.getAndSetParams(instance, metadata)
-      DefaultParamsReader.loadInitialModel[KMeansModel](instance, path, sc)
+      DefaultParamsReader.loadAndSetInitialModel[KMeansModel](instance, metadata, path, sc)
       instance
     }
   }

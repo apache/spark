@@ -32,6 +32,7 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.param.{ParamPair, Params}
+import org.apache.spark.ml.param.shared.HasInitialModel
 import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.util.Utils
@@ -314,7 +315,9 @@ private[ml] object DefaultParamsWriter {
       ("sparkVersion" -> sc.version) ~
       ("uid" -> uid) ~
       ("paramMap" -> jsonParams) ~
+      // TODO: Figure out more robust way to detect the existing of the initialModel.
       ("initialModel" -> initialModelFlag)
+
     val metadata = extraMetadata match {
       case Some(jObject) =>
         basicMetadata ~ jObject
@@ -325,13 +328,10 @@ private[ml] object DefaultParamsWriter {
     metadataJson
   }
 
-  def saveInitialModel(instance: Params, path: String): Unit = {
-    val initialModelFlag =
-      instance.hasParam("initialModel") && instance.isDefined(instance.getParam("initialModel"))
-    if (initialModelFlag) {
+  def saveInitialModel[T <: HasInitialModel[_ <: MLWritable]](instance: T, path: String): Unit = {
+    if (instance.isDefined(instance.getParam("initialModel"))) {
       val initialModelPath = new Path(path, "initialModel").toString
       val initialModel = instance.getOrDefault(instance.getParam("initialModel"))
-      assert(initialModel.isInstanceOf[MLWritable])
       initialModel.asInstanceOf[MLWritable].save(initialModelPath)
     }
   }
@@ -464,11 +464,11 @@ private[ml] object DefaultParamsReader {
     cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]].load(path)
   }
 
-  def loadInitialModel[M <: Model[M]](instance: Params, path: String, sc: SparkContext): Unit = {
+  def loadAndSetInitialModel[M <: Model[M]](
+      instance: HasInitialModel[M], metadata: Metadata, path: String, sc: SparkContext): Unit = {
     implicit val format = DefaultFormats
-    val metadata = DefaultParamsReader.loadMetadata(path, sc)
-    // Try to load initial model after version 2.0.0.
-    if (metadata.sparkVersion.split("\\.").head.toInt >= 2) {
+    // Try to load the initial model
+    if (metadata.metadata \ "initialModel" != JNothing) {
       val hasInitialModel = (metadata.metadata \ "initialModel").extract[Boolean]
       if (hasInitialModel) {
         val initialModelPath = new Path(path, "initialModel").toString

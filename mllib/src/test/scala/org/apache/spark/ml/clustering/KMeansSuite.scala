@@ -20,21 +20,22 @@ package org.apache.spark.ml.clustering
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.Model
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.types.StructType
 
 private[clustering] case class TestRow(features: Vector)
 
 class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   final val k = 5
-  final val initialModel = KMeansSuite.generateKMeansModel(3, k, seed = 14)
   @transient var dataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
@@ -155,9 +156,37 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     twoIterModel.clusterCenters.zip(oneMoreIterModel.clusterCenters)
       .foreach { case (center1, center2) => assert(center1 ~== center2 absTol 1E-8) }
   }
+
+  test("Initialize using wrong model") {
+    val kmeans = new KMeans().setK(k).setSeed(1).setMaxIter(10)
+    val wrongTypeModel = new KMeansSuite.MockModel()
+    assert(!kmeans.isSet(kmeans.initialModel))
+
+    val wrongKModel = KMeansSuite.generateKMeansModel(3, k + 1)
+    intercept[IllegalArgumentException] {
+      kmeans.setInitialModel(wrongKModel).fit(dataset)
+    }
+
+    val wrongDimModel = KMeansSuite.generateKMeansModel(4, k)
+    intercept[IllegalArgumentException] {
+      kmeans.setInitialModel(wrongDimModel).fit(dataset)
+    }
+  }
 }
 
 object KMeansSuite {
+
+  class MockModel(override val uid: String) extends Model[MockModel] {
+
+    def this() = this(Identifiable.randomUID("mockModel"))
+
+    override def copy(extra: ParamMap): MockModel = throw new NotImplementedError()
+
+    override def transform(dataset: Dataset[_]): DataFrame = throw new NotImplementedError()
+
+    override def transformSchema(schema: StructType): StructType = throw new NotImplementedError()
+  }
+
   def generateKMeansData(spark: SparkSession, rows: Int, dim: Int, k: Int): DataFrame = {
     val sc = spark.sparkContext
     val rdd = sc.parallelize(1 to rows).map(i => Vectors.dense(Array.fill(dim)((i % k).toDouble)))
@@ -166,8 +195,9 @@ object KMeansSuite {
   }
 
   def generateKMeansModel(dim: Int, k: Int, seed: Int = 42): KMeansModel = {
+    val rng = new Random(seed)
     val clusterCenters = (1 to k)
-      .map(i => MLlibVectors.dense(Array.fill(dim)(new Random(seed).nextDouble)))
+      .map(i => MLlibVectors.dense(Array.fill(dim)(rng.nextDouble)))
     new KMeansModel("test model", new MLlibKMeansModel(clusterCenters.toArray))
   }
 
