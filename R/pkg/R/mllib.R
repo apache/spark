@@ -1378,7 +1378,7 @@ setMethod("spark.kstest", signature(data = "SparkDataFrame"),
 })
 
 #  Get the summary of Kolmogorov-Smirnov (KS) Test.
-#' @param object test result object of KSTest.
+#' @param object test result object of KSTest by \code{spark.kstest}.
 #' @return \code{summary} returns a list containing the p-value, test statistic computed for the
 #'         test, the null hypothesis with its parameters tested against
 #'         and degrees of freedom of the test.
@@ -1404,7 +1404,7 @@ setMethod("summary", signature(object = "KSTest"),
 #  Prints the summary of KSTest
 
 #' @rdname spark.kstest
-#' @param x test result object of KSTest.
+#' @param x test result object of KSTest by \code{spark.kstest}.
 #' @export
 #' @note print.summary.KSTest since 2.1.0
 print.summary.KSTest <- function(x, ...) {
