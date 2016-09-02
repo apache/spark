@@ -401,4 +401,50 @@ class MesosFineGrainedSchedulerBackendSuite
       r.getName.equals("cpus") && r.getScalar.getValue.equals(1.0) && r.getRole.equals("prod")
     })
   }
+
+  private def testFailoverTimeout(
+      confValue: Option[String],
+      expectedTimeout: Option[Double]): Unit = {
+    val schedulerAppName = "testApp"
+    val master = "mesos://localhost:5050"
+    val sparkConf = new SparkConf()
+      .setMaster(master)
+      .setAppName(schedulerAppName)
+      .set("spark.mesos.driver.webui.url", "http://webui")
+    confValue.foreach(sparkConf.set("spark.mesos.failoverTimeout", _))
+
+    val sc = mock[SparkContext]
+    when(sc.conf).thenReturn(sparkConf)
+
+    val taskScheduler = mock[TaskSchedulerImpl]
+    val driver = mock[SchedulerDriver]
+    when(driver.run()).thenReturn(Protos.Status.DRIVER_RUNNING)
+    val clusterScheduler = new MesosFineGrainedSchedulerBackend(
+      taskScheduler, sc, master) {
+      override protected def createSchedulerDriver(
+          masterUrl: String,
+          scheduler: Scheduler,
+          sparkUser: String,
+          appName: String,
+          conf: SparkConf,
+          webuiUrl: Option[String],
+          checkpoint: Option[Boolean],
+          failoverTimeout: Option[Double],
+          frameworkId: Option[String]): SchedulerDriver = {
+        markRegistered()
+
+        assert(failoverTimeout == expectedTimeout)
+
+        driver
+      }
+    }
+
+    clusterScheduler.start()
+  }
+
+  test("supports spark.mesos.failoverTimeout") {
+    testFailoverTimeout(None, None)
+    testFailoverTimeout(Some("3"), Some(3.0))
+    testFailoverTimeout(Some("5.8"), Some(5.8))
+  }
 }

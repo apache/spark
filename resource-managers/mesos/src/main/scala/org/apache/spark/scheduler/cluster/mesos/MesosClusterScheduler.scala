@@ -313,7 +313,7 @@ private[spark] class MesosClusterScheduler(
       conf,
       Some(frameworkUrl),
       Some(true),
-      Some(Integer.MAX_VALUE),
+      conf.getOption("spark.mesos.failoverTimeout").map(_.toDouble).orElse(Some(Integer.MAX_VALUE)),
       fwId)
 
     startScheduler(driver)

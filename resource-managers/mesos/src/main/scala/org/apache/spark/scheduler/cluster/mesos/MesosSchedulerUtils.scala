@@ -56,7 +56,8 @@ trait MesosSchedulerUtils extends Logging {
    * @param conf Spark configuration
    * @param webuiUrl The WebUI url to link from Mesos UI
    * @param checkpoint Option to checkpoint tasks for failover
-   * @param failoverTimeout Duration Mesos master expect scheduler to reconnect on disconnect
+   * @param failoverTimeout Duration Mesos master expect scheduler to reconnect on disconnect in
+   *                        seconds
    * @param frameworkId The id of the new framework
    */
   protected def createSchedulerDriver(

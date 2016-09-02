@@ -594,4 +594,50 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     backend = createSchedulerBackend(taskScheduler, driver, externalShuffleClient)
   }
+
+  private def testFailoverTimeout(
+      confValue: Option[String],
+      expectedTimeout: Option[Double]): Unit = {
+    val master = "local[*]"
+    val sparkConf = new SparkConf()
+      .setMaster(master)
+      .setAppName("testApp")
+    confValue.foreach(sparkConf.set("spark.mesos.failoverTimeout", _))
+
+    resetSparkContext()
+    sc = new SparkContext(sparkConf)
+
+    val taskScheduler = mock[TaskSchedulerImpl]
+    when(taskScheduler.sc).thenReturn(sc)
+    val securityManager = mock[SecurityManager]
+    val driver = mock[SchedulerDriver]
+    when(driver.run()).thenReturn(Protos.Status.DRIVER_RUNNING)
+    val clusterScheduler = new MesosCoarseGrainedSchedulerBackend(
+      taskScheduler, sc, master, securityManager) {
+      override protected def createSchedulerDriver(
+          masterUrl: String,
+          scheduler: Scheduler,
+          sparkUser: String,
+          appName: String,
+          conf: SparkConf,
+          webuiUrl: Option[String],
+          checkpoint: Option[Boolean],
+          failoverTimeout: Option[Double],
+          frameworkId: Option[String]): SchedulerDriver = {
+        markRegistered()
+
+        assert(failoverTimeout == expectedTimeout)
+
+        driver
+      }
+    }
+
+    clusterScheduler.start()
+  }
+
+  test("supports spark.mesos.failoverTimeout") {
+    testFailoverTimeout(None, None)
+    testFailoverTimeout(Some("3"), Some(3.0))
+    testFailoverTimeout(Some("5.8"), Some(5.8))
+  }
 }

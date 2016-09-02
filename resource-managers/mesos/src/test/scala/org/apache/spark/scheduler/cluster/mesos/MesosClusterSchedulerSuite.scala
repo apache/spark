@@ -21,9 +21,9 @@ import java.util.{Collection, Collections, Date}
 
 import scala.collection.JavaConverters._
 
+import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Value.{Scalar, Type}
-import org.apache.mesos.SchedulerDriver
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Mockito._
 import org.scalatest.mock.MockitoSugar
@@ -67,6 +67,45 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       Map[String, String](),
       submissionId,
       new Date())
+  }
+
+  private def testFailoverTimeout(
+      confValue: Option[String],
+      expectedTimeout: Option[Double]): Unit = {
+    val schedulerAppName = "testApp"
+    val master = "mesos://localhost:5050"
+    val sparkConf = new SparkConf()
+    sparkConf.setMaster(master)
+    sparkConf.setAppName(schedulerAppName)
+    confValue.foreach(sparkConf.set("spark.mesos.failoverTimeout", _))
+
+    val driver = mock[SchedulerDriver]
+    when(driver.run()).thenReturn(Protos.Status.DRIVER_RUNNING)
+    val clusterScheduler = new MesosClusterScheduler(
+      new BlackHoleMesosClusterPersistenceEngineFactory, sparkConf) {
+      override protected def createSchedulerDriver(
+          masterUrl: String,
+          scheduler: Scheduler,
+          sparkUser: String,
+          appName: String,
+          conf: SparkConf,
+          webuiUrl: Option[String],
+          checkpoint: Option[Boolean],
+          failoverTimeout: Option[Double],
+          frameworkId: Option[String]): SchedulerDriver = {
+        markRegistered()
+
+        assert(masterUrl == master)
+        assert(appName == schedulerAppName)
+        assert(conf == sparkConf)
+        assert(checkpoint.contains(true))
+        assert(failoverTimeout == expectedTimeout)
+
+        driver
+      }
+    }
+
+    clusterScheduler.start()
   }
 
   test("can queue drivers") {
@@ -305,5 +344,11 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     scheduler.resourceOffers(driver, Collections.singletonList(offer))
 
     verify(driver, times(1)).declineOffer(offerId, filter)
+  }
+
+  test("supports spark.mesos.failoverTimeout") {
+    testFailoverTimeout(None, Some(Integer.MAX_VALUE))
+    testFailoverTimeout(Some("3"), Some(3.0))
+    testFailoverTimeout(Some("5.8"), Some(5.8))
   }
 }

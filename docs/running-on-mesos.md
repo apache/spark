@@ -418,6 +418,15 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.failoverTimeout</code></td>
+  <td><code>Integer.MAX</code> for cluster scheduler, <code>0.0</code> for Spark jobs</td>
+  <td>
+    The Mesos framework failover timeout in seconds. This acts as a threshold for Mesos masters.
+    Exceeding the timeout, when the Spark driver looses the connection to the Mesos master without reconnecting,
+    will cause the Mesos master to remove the associated executors.
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.constraints</code></td>
   <td>(none)</td>
   <td>
