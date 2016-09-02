@@ -148,6 +148,12 @@ test_that("spark.glm summary", {
   baseModel <- stats::glm(Sepal.Width ~ Sepal.Length + Species, data = iris)
   baseSummary <- summary(baseModel)
   expect_true(abs(baseSummary$deviance - 12.19313) < 1e-4)
+
+  # Test spark.glm works with regularization parameter
+  data <- as.data.frame(cbind(a1, a2, b))
+  df <- suppressWarnings(createDataFrame(data))
+  regStats <- summary(spark.glm(df, b ~ a1 + a2, regParam = 1.0))
+  expect_equal(regStats$aic, 13.32836, tolerance = 1e-4) # 13.32836 is from summary() result
 })
 
 test_that("spark.glm save/load", {
@@ -345,6 +351,38 @@ test_that("spark.kmeans", {
   expect_true(summary2$is.loaded)
 
   unlink(modelPath)
+})
+
+test_that("spark.mlp", {
+  df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
+  model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs", maxIter = 100,
+                     tol = 0.5, stepSize = 1, seed = 1)
+
+  # Test summary method
+  summary <- summary(model)
+  expect_equal(summary$labelCount, 3)
+  expect_equal(summary$layers, c(4, 5, 4, 3))
+  expect_equal(length(summary$weights), 64)
+
+  # Test predict method
+  mlpTestDF <- df
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 6), c(0, 1, 1, 1, 1, 1))
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-mlp", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  summary2 <- summary(model2)
+
+  expect_equal(summary2$labelCount, 3)
+  expect_equal(summary2$layers, c(4, 5, 4, 3))
+  expect_equal(length(summary2$weights), 64)
+
+  unlink(modelPath)
+
 })
 
 test_that("spark.naiveBayes", {

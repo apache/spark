@@ -1,5 +1,9 @@
 # Imports from base R
-importFrom(methods, setGeneric, setMethod, setOldClass)
+# Do not include stats:: "rpois", "runif" - causes error at runtime
+importFrom("methods", "setGeneric", "setMethod", "setOldClass")
+importFrom("methods", "is", "new", "signature", "show")
+importFrom("stats", "gaussian", "setNames")
+importFrom("utils", "download.file", "packageVersion", "untar")
 
 # Disable native libraries till we figure out how to package it
 # See SPARKR-7839
@@ -23,6 +27,7 @@ exportMethods("glm",
               "summary",
               "spark.kmeans",
               "fitted",
+              "spark.mlp",
               "spark.naiveBayes",
               "spark.survreg",
               "spark.lda",
@@ -358,5 +363,9 @@ S3method(structField, character)
 S3method(structField, jobj)
 S3method(structType, jobj)
 S3method(structType, structField)
+
+export("sparkR.newJObject")
+export("sparkR.callJMethod")
+export("sparkR.callJStatic")
 
 export("install.spark")

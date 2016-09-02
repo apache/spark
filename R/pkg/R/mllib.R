@@ -60,6 +60,13 @@ setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 #' @note KMeansModel since 2.0.0
 setClass("KMeansModel", representation(jobj = "jobj"))
 
+#' S4 class that represents a MultilayerPerceptronClassificationModel
+#'
+#' @param jobj a Java object reference to the backing Scala MultilayerPerceptronClassifierWrapper
+#' @export
+#' @note MultilayerPerceptronClassificationModel since 2.1.0
+setClass("MultilayerPerceptronClassificationModel", representation(jobj = "jobj"))
+
 #' S4 class that represents an IsotonicRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala IsotonicRegressionModel
@@ -90,7 +97,7 @@ setClass("ALSModel", representation(jobj = "jobj"))
 #' @export
 #' @seealso \link{spark.glm}, \link{glm},
 #' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
-#' @seealso \link{spark.lda}, \link{spark.naiveBayes}, \link{spark.survreg},
+#' @seealso \link{spark.lda}, \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
 #' @seealso \link{read.ml}
 NULL
 
@@ -103,7 +110,7 @@ NULL
 #' @export
 #' @seealso \link{spark.glm}, \link{glm},
 #' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
-#' @seealso \link{spark.naiveBayes}, \link{spark.survreg},
+#' @seealso \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
 NULL
 
 write_internal <- function(object, path, overwrite = FALSE) {
@@ -131,10 +138,11 @@ predict_internal <- function(object, newData) {
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
-#' @param weightCol the weight column name. If this is not set or NULL, we treat all instance
-#'                  weights as 1.0.
 #' @param tol positive convergence tolerance of iterations.
 #' @param maxIter integer giving the maximal number of IRLS iterations.
+#' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
+#'                  weights as 1.0.
+#' @param regParam regularization parameter for L2 regularization.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model
@@ -164,7 +172,8 @@ predict_internal <- function(object, newData) {
 #' @note spark.glm since 2.0.0
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL) {
+          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
+                   regParam = 0.0) {
             if (is.character(family)) {
               family <- get(family, mode = "function", envir = parent.frame())
             }
@@ -183,7 +192,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, family$family, family$link,
-                                tol, as.integer(maxIter), as.character(weightCol))
+                                tol, as.integer(maxIter), as.character(weightCol), regParam)
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
@@ -197,7 +206,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
-#' @param weightCol the weight column name. If this is not set or NULL, we treat all instance
+#' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
 #' @param epsilon positive convergence tolerance of iterations.
 #' @param maxit integer giving the maximal number of IRLS iterations.
@@ -434,9 +443,10 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param isotonic Whether the output sequence should be isotonic/increasing (TRUE) or
 #'                 antitonic/decreasing (FALSE)
-#' @param featureIndex The index of the feature if \code{featuresCol} is a vector column (default: `0`),
-#'                     no effect otherwise
+#' @param featureIndex The index of the feature if \code{featuresCol} is a vector column
+#'                     (default: 0), no effect otherwise
 #' @param weightCol The weight column name.
+#' @param ... additional arguments passed to the method.
 #' @return \code{spark.isoreg} returns a fitted Isotonic Regression model
 #' @rdname spark.isoreg
 #' @aliases spark.isoreg,SparkDataFrame,formula-method
@@ -497,7 +507,6 @@ setMethod("predict", signature(object = "IsotonicRegressionModel"),
 
 #  Get the summary of an IsotonicRegressionModel model
 
-#' @param ... Other optional arguments to summary of an IsotonicRegressionModel
 #' @return \code{summary} returns the model's boundaries and prediction as lists
 #' @rdname spark.isoreg
 #' @aliases summary,IsotonicRegressionModel-method
@@ -631,6 +640,95 @@ setMethod("predict", signature(object = "KMeansModel"),
             predict_internal(object, newData)
           })
 
+#' Multilayer Perceptron Classification Model
+#'
+#' \code{spark.mlp} fits a multi-layer perceptron neural network model against a SparkDataFrame.
+#' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
+#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
+#' Only categorical data is supported.
+#' For more details, see
+#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html}{
+#'   Multilayer Perceptron}
+#'
+#' @param data a \code{SparkDataFrame} of observations and labels for model fitting.
+#' @param blockSize blockSize parameter.
+#' @param layers integer vector containing the number of nodes for each layer
+#' @param solver solver parameter, supported options: "gd" (minibatch gradient descent) or "l-bfgs".
+#' @param maxIter maximum iteration number.
+#' @param tol convergence tolerance of iterations.
+#' @param stepSize stepSize parameter.
+#' @param seed seed parameter for weights initialization.
+#' @param ... additional arguments passed to the method.
+#' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model.
+#' @rdname spark.mlp
+#' @aliases spark.mlp,SparkDataFrame-method
+#' @name spark.mlp
+#' @seealso \link{read.ml}
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
+#'
+#' # fit a Multilayer Perceptron Classification Model
+#' model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs",
+#'                    maxIter = 100, tol = 0.5, stepSize = 1, seed = 1)
+#'
+#' # get the summary of the model
+#' summary(model)
+#'
+#' # make predictions
+#' predictions <- predict(model, df)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
+#' @note spark.mlp since 2.1.0
+setMethod("spark.mlp", signature(data = "SparkDataFrame"),
+          function(data, blockSize = 128, layers = c(3, 5, 2), solver = "l-bfgs", maxIter = 100,
+                   tol = 0.5, stepSize = 1, seed = 1) {
+            jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
+                                "fit", data@sdf, as.integer(blockSize), as.array(layers),
+                                as.character(solver), as.integer(maxIter), as.numeric(tol),
+                                as.numeric(stepSize), as.integer(seed))
+            new("MultilayerPerceptronClassificationModel", jobj = jobj)
+          })
+
+# Makes predictions from a model produced by spark.mlp().
+
+#' @param newData a SparkDataFrame for testing.
+#' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
+#' "prediction".
+#' @rdname spark.mlp
+#' @aliases predict,MultilayerPerceptronClassificationModel-method
+#' @export
+#' @note predict(MultilayerPerceptronClassificationModel) since 2.1.0
+setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel"),
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
+
+# Returns the summary of a Multilayer Perceptron Classification Model produced by \code{spark.mlp}
+
+#' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
+#' @return \code{summary} returns a list containing \code{layers}, the label distribution, and
+#'         \code{tables}, conditional probabilities given the target label.
+#' @rdname spark.mlp
+#' @export
+#' @aliases summary,MultilayerPerceptronClassificationModel-method
+#' @note summary(MultilayerPerceptronClassificationModel) since 2.1.0
+setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
+          function(object) {
+            jobj <- object@jobj
+            labelCount <- callJMethod(jobj, "labelCount")
+            layers <- unlist(callJMethod(jobj, "layers"))
+            weights <- callJMethod(jobj, "weights")
+            weights <- matrix(weights, nrow = length(weights))
+            list(labelCount = labelCount, layers = layers, weights = weights)
+          })
+
 #' Naive Bayes Models
 #'
 #' \code{spark.naiveBayes} fits a Bernoulli naive Bayes model against a SparkDataFrame.
@@ -647,14 +745,15 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @rdname spark.naiveBayes
 #' @aliases spark.naiveBayes,SparkDataFrame,formula-method
 #' @name spark.naiveBayes
-#' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
+#' @seealso e1071: \url{https://cran.r-project.org/package=e1071}
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- createDataFrame(infert)
+#' data <- as.data.frame(UCBAdmissions)
+#' df <- createDataFrame(data)
 #'
 #' # fit a Bernoulli naive Bayes model
-#' model <- spark.naiveBayes(df, education ~ ., smoothing = 0)
+#' model <- spark.naiveBayes(df, Admit ~ Gender + Dept, smoothing = 0)
 #'
 #' # get the summary of the model
 #' summary(model)
@@ -685,7 +784,7 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 #'
 #' @rdname spark.naiveBayes
 #' @export
-#' @seealso \link{read.ml}
+#' @seealso \link{write.ml}
 #' @note write.ml(NaiveBayesModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -700,7 +799,7 @@ setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
 #' @rdname spark.survreg
 #' @export
 #' @note write.ml(AFTSurvivalRegressionModel, character) since 2.0.0
-#' @seealso \link{read.ml}
+#' @seealso \link{write.ml}
 setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             write_internal(object, path, overwrite)
@@ -730,6 +829,23 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 #' @export
 #' @note write.ml(KMeansModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
+# Saves the Multilayer Perceptron Classification Model to the input path.
+
+#' @param path the directory where the model is saved.
+#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.mlp
+#' @aliases write.ml,MultilayerPerceptronClassificationModel,character-method
+#' @export
+#' @seealso \link{write.ml}
+#' @note write.ml(MultilayerPerceptronClassificationModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationModel",
+          path = "character"),
           function(object, path, overwrite = FALSE) {
             write_internal(object, path, overwrite)
           })
@@ -791,6 +907,8 @@ read.ml <- function(path) {
     new("KMeansModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.LDAWrapper")) {
     new("LDAModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper")) {
+    new("MultilayerPerceptronClassificationModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.IsotonicRegressionWrapper")) {
     new("IsotonicRegressionModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GaussianMixtureWrapper")) {
@@ -798,7 +916,7 @@ read.ml <- function(path) {
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.ALSWrapper")) {
     new("ALSModel", jobj = jobj)
   } else {
-    stop(paste("Unsupported model: ", jobj))
+    stop("Unsupported model: ", jobj)
   }
 }
 
@@ -815,7 +933,7 @@ read.ml <- function(path) {
 #'                Note that operator '.' is not supported currently.
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model.
 #' @rdname spark.survreg
-#' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/}
+#' @seealso survival: \url{https://cran.r-project.org/package=survival}
 #' @export
 #' @examples
 #' \dontrun{
@@ -870,25 +988,30 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @param customizedStopWords stopwords that need to be removed from the given corpus. Ignore the
 #'        parameter if libSVM-format column is used as the features column.
 #' @param maxVocabSize maximum vocabulary size, default 1 << 18
+#' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model
 #' @rdname spark.lda
 #' @aliases spark.lda,SparkDataFrame-method
-#' @seealso topicmodels: \url{https://cran.r-project.org/web/packages/topicmodels/}
+#' @seealso topicmodels: \url{https://cran.r-project.org/package=topicmodels}
 #' @export
 #' @examples
 #' \dontrun{
-#' text <- read.df("path/to/data", source = "libsvm")
+#' # nolint start
+#' # An example "path/to/file" can be
+#' # paste0(Sys.getenv("SPARK_HOME"), "/data/mllib/sample_lda_libsvm_data.txt")
+#' # nolint end
+#' text <- read.df("path/to/file", source = "libsvm")
 #' model <- spark.lda(data = text, optimizer = "em")
 #'
 #' # get a summary of the model
 #' summary(model)
 #'
 #' # compute posterior probabilities
-#' posterior <- spark.posterior(model, df)
+#' posterior <- spark.posterior(model, text)
 #' showDF(posterior)
 #'
 #' # compute perplexity
-#' perplexity <- spark.perplexity(model, df)
+#' perplexity <- spark.perplexity(model, text)
 #'
 #' # save and load the model
 #' path <- "path/to/model"
@@ -958,11 +1081,12 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' @param k number of independent Gaussians in the mixture model.
 #' @param maxIter maximum iteration number.
 #' @param tol the convergence tolerance.
+#' @param ... additional arguments passed to the method.
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @return \code{spark.gaussianMixture} returns a fitted multivariate gaussian mixture model.
 #' @rdname spark.gaussianMixture
 #' @name spark.gaussianMixture
-#' @seealso mixtools: \url{https://cran.r-project.org/web/packages/mixtools/}
+#' @seealso mixtools: \url{https://cran.r-project.org/package=mixtools}
 #' @export
 #' @examples
 #' \dontrun{
@@ -1001,7 +1125,6 @@ setMethod("spark.gaussianMixture", signature(data = "SparkDataFrame", formula = 
 #  Get the summary of a multivariate gaussian mixture model
 
 #' @param object a fitted gaussian mixture model.
-#' @param ... currently not used argument(s) passed to the method.
 #' @return \code{summary} returns the model's lambda, mu, sigma and posterior.
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @rdname spark.gaussianMixture
@@ -1075,7 +1198,7 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @param numUserBlocks number of user blocks used to parallelize computation (> 0).
 #' @param numItemBlocks number of item blocks used to parallelize computation (> 0).
 #' @param checkpointInterval number of checkpoint intervals (>= 1) or disable checkpoint (-1).
-#'
+#' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.als} returns a fitted ALS model
 #' @rdname spark.als
 #' @aliases spark.als,SparkDataFrame-method

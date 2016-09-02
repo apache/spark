@@ -61,7 +61,7 @@ import org.apache.spark.util.Utils
  *              qualified. This option only works when reading from a [[FileFormat]].
  * @param userSpecifiedSchema An optional specification of the schema of the data. When present
  *                            we skip attempting to infer the schema.
- * @param partitionColumns A list of column names that the relation is partitioned by.  When this
+ * @param partitionColumns A list of column names that the relation is partitioned by. When this
  *                         list is empty, the relation is unpartitioned.
  * @param bucketSpec An optional specification for bucketing (hash-partitioning) of the data.
  */
@@ -394,13 +394,7 @@ case class DataSource(
             sparkSession, globbedPaths, options, partitionSchema, !checkPathExist)
 
         val dataSchema = userSpecifiedSchema.map { schema =>
-          val equality =
-            if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-              org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
-            } else {
-              org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
-            }
-
+          val equality = sparkSession.sessionState.conf.resolver
           StructType(schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
         }.orElse {
           format.inferSchema(
@@ -430,7 +424,7 @@ case class DataSource(
     relation
   }
 
-  /** Writes the give [[DataFrame]] out to this [[DataSource]]. */
+  /** Writes the given [[DataFrame]] out to this [[DataSource]]. */
   def write(
       mode: SaveMode,
       data: DataFrame): BaseRelation = {

@@ -81,10 +81,12 @@ object CatalogStorageFormat {
  *
  * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
+ * @param parameters some parameters for the partition, for example, stats.
  */
 case class CatalogTablePartition(
     spec: CatalogTypes.TablePartitionSpec,
-    storage: CatalogStorageFormat)
+    storage: CatalogStorageFormat,
+    parameters: Map[String, String] = Map.empty)
 
 
 /**
@@ -200,7 +202,6 @@ case class CatalogTableType private(name: String)
 object CatalogTableType {
   val EXTERNAL = new CatalogTableType("EXTERNAL")
   val MANAGED = new CatalogTableType("MANAGED")
-  val INDEX = new CatalogTableType("INDEX")
   val VIEW = new CatalogTableType("VIEW")
 }
 
