@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.lang.{Double => JDouble, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
+import java.sql.{Date => JDate, Timestamp => JTimestamp}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -314,13 +315,30 @@ object PartitioningUtils {
       raw: String,
       defaultPartitionName: String,
       typeInference: Boolean): Literal = {
+    val decimalTry = Try {
+      // `BigDecimal` conversion can fail when the `field` is not a form of number.
+      val bigDecimal = new JBigDecimal(raw)
+      // It reduces the cases for decimals by disallowing values having scale (eg. `1.1`).
+      if (bigDecimal.scale <= 0) {
+        // `DecimalType` conversion can fail when
+        //   1. The precision is bigger than 38.
+        //   2. scale is bigger than precision.
+        Literal(bigDecimal)
+      } else {
+        throw new RuntimeException
+      }
+    }
+
     if (typeInference) {
       // First tries integral types
       Try(Literal.create(Integer.parseInt(raw), IntegerType))
         .orElse(Try(Literal.create(JLong.parseLong(raw), LongType)))
+        .orElse(decimalTry)
         // Then falls back to fractional types
         .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
-        .orElse(Try(Literal(new JBigDecimal(raw))))
+        // Then falls back to date/timestamp types
+        .orElse(Try(Literal(JDate.valueOf(raw))))
+        .orElse(Try(Literal(JTimestamp.valueOf(raw))))
         // Then falls back to string
         .getOrElse {
           if (raw == defaultPartitionName) {
