@@ -988,22 +988,22 @@ class MultinomialLogisticRegressionSuite
     val basePredictions = model.transform(dataset).select("prediction").collect()
 
     // should predict all zeros
-    model.setThresholds(Array(1, 1000, 1000))
+    model.setThresholds(Array(0, 1, 1))
     val zeroPredictions = model.transform(dataset).select("prediction").collect()
     assert(zeroPredictions.forall(_.getDouble(0) === 0.0))
 
     // should predict all ones
-    model.setThresholds(Array(1000, 1, 1000))
+    model.setThresholds(Array(1, 0, 1))
     val onePredictions = model.transform(dataset).select("prediction").collect()
     assert(onePredictions.forall(_.getDouble(0) === 1.0))
 
     // should predict all twos
-    model.setThresholds(Array(1000, 1000, 1))
+    model.setThresholds(Array(1, 1, 0))
     val twoPredictions = model.transform(dataset).select("prediction").collect()
     assert(twoPredictions.forall(_.getDouble(0) === 2.0))
 
     // constant threshold scaling is the same as no thresholds
-    model.setThresholds(Array(1000, 1000, 1000))
+    model.setThresholds(Array(0.1, 0.1, 0.1))
     val scaledPredictions = model.transform(dataset).select("prediction").collect()
     assert(scaledPredictions.zip(basePredictions).forall { case (scaled, base) =>
       scaled.getDouble(0) === base.getDouble(0)
