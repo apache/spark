@@ -56,7 +56,7 @@ select 1E309, -1E309;
 -- decimal parsing
 select 0.3, -0.8, .5, -.18, 0.1111, .1111;
 
--- super large scientific notation numbers should still be valid doubles
+-- super large scientific notation double literals should still be valid doubles
 select 123456789012345678901234567890123456789e10d, 123456789012345678901234567890123456789.1e10d;
 
 -- string
