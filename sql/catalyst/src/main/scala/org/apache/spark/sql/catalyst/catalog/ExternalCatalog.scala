@@ -109,8 +109,7 @@ abstract class ExternalCatalog {
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit
+      inheritTableSpecs: Boolean): Unit
 
   def loadDynamicPartitions(
       db: String,
@@ -119,8 +118,7 @@ abstract class ExternalCatalog {
       partition: TablePartitionSpec,
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
-      listBucketingEnabled: Boolean): Unit
+      holdDDLTime: Boolean): Unit
 
   // --------------------------------------------------------------------------
   // Partitions

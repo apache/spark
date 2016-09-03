@@ -248,8 +248,7 @@ case class InsertIntoHiveTable(
           partitionSpec,
           overwrite,
           numDynamicPartitions,
-          holdDDLTime = holdDDLTime,
-          listBucketingEnabled = false)
+          holdDDLTime = holdDDLTime)
       } else {
         // scalastyle:off
         // ifNotExists is only valid with static partition, refer to
@@ -262,8 +261,6 @@ case class InsertIntoHiveTable(
             partitionSpec)
 
         if (oldPart.isEmpty || !ifNotExists) {
-          // TODO: Correctly set isSkewedStoreAsSubdir.
-          val isSkewedStoreAsSubdir = false
           // inheritTableSpecs is set to true. It should be set to false for an IMPORT query
           // which is currently considered as a Hive native command.
           val inheritTableSpecs = true
@@ -274,8 +271,7 @@ case class InsertIntoHiveTable(
             partitionSpec,
             isOverwrite = overwrite,
             holdDDLTime = holdDDLTime,
-            inheritTableSpecs = inheritTableSpecs,
-            isSkewedStoreAsSubdir = isSkewedStoreAsSubdir)
+            inheritTableSpecs = inheritTableSpecs)
         }
       }
     } else {

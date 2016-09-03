@@ -317,8 +317,7 @@ class InMemoryCatalog(
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit = {
+      inheritTableSpecs: Boolean): Unit = {
     throw new UnsupportedOperationException("loadPartition is not implemented.")
   }
 
@@ -329,8 +328,7 @@ class InMemoryCatalog(
       partition: TablePartitionSpec,
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
-      listBucketingEnabled: Boolean): Unit = {
+      holdDDLTime: Boolean): Unit = {
     throw new UnsupportedOperationException("loadDynamicPartitions is not implemented.")
   }
 

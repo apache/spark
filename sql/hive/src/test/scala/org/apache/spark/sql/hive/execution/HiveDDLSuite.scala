@@ -708,6 +708,44 @@ class HiveDDLSuite
     }
   }
 
+  test("insert skewed table") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      // Spark SQL does not support creating skewed table. Thus, we have to use Hive client.
+      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      client.runSqlHive(
+        s"""
+           |CREATE Table $tabName(col1 int, col2 int)
+           |PARTITIONED BY (part1 string, part2 string)
+           |SKEWED BY (col1) ON (3, 4) STORED AS DIRECTORIES
+         """.stripMargin)
+      val hiveTable =
+        spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+
+      assert(hiveTable.unsupportedFeatures.contains("skewed columns"))
+
+      // Call loadDynamicPartitions against a skewed table with enabling list bucketing
+      sql(
+        s"""
+           |INSERT OVERWRITE TABLE $tabName
+           |PARTITION (part1='a', part2)
+           |SELECT 3, 4, 'b'
+         """.stripMargin)
+
+      // Call loadPartitions against a skewed table with enabling list bucketing
+      sql(
+        s"""
+           |INSERT INTO TABLE $tabName
+           |PARTITION (part1='a', part2='b')
+           |SELECT 1, 2
+         """.stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * from $tabName"),
+        Row(3, 4, "a", "b") :: Row(1, 2, "a", "b") :: Nil)
+    }
+  }
+
   test("desc table for data source table - no user-defined schema") {
     Seq("parquet", "json", "orc").foreach { fileFormat =>
       withTable("t1") {

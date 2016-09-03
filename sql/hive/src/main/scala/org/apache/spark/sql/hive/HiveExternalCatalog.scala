@@ -489,8 +489,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit = withClient {
+      inheritTableSpecs: Boolean): Unit = withClient {
     requireTableExists(db, table)
 
     val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
@@ -500,12 +499,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     client.loadPartition(
       loadPath,
-      s"$db.$table",
+      db,
+      table,
       orderedPartitionSpec,
       isOverwrite,
       holdDDLTime,
-      inheritTableSpecs,
-      isSkewedStoreAsSubdir)
+      inheritTableSpecs)
   }
 
   override def loadDynamicPartitions(
@@ -515,8 +514,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       partition: TablePartitionSpec,
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
-      listBucketingEnabled: Boolean): Unit = withClient {
+      holdDDLTime: Boolean): Unit = withClient {
     requireTableExists(db, table)
 
     val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
@@ -526,12 +524,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     client.loadDynamicPartitions(
       loadPath,
-      s"$db.$table",
+      db,
+      table,
       orderedPartitionSpec,
       replace,
       numDP,
-      holdDDLTime,
-      listBucketingEnabled)
+      holdDDLTime)
   }
 
   // --------------------------------------------------------------------------
