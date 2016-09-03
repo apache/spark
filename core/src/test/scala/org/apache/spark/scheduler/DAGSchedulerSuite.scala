@@ -627,8 +627,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   private val shuffleFileLossTests = Seq(
-    ("slave lost with shuffle service", SlaveLost(), true, true),
-    ("slave lost without shuffle service", SlaveLost(), false, true),
+    ("slave lost with shuffle service", SlaveLost("", false), true, false),
+    ("worker lost with shuffle service", SlaveLost("", true), true, true),
+    ("worker lost without shuffle service", SlaveLost("", true), false, true),
     ("executor failure with shuffle service", ExecutorKilled, true, false),
     ("executor failure without shuffle service", ExecutorKilled, false, true))
 

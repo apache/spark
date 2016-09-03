@@ -153,7 +153,7 @@ private[spark] class StandaloneSchedulerBackend(
   override def executorRemoved(fullId: String, message: String, exitStatus: Option[Int]) {
     val reason: ExecutorLossReason = exitStatus match {
       case Some(code) => ExecutorExited(code, exitCausedByApp = true, message)
-      case None => SlaveLost(message)
+      case None => SlaveLost(message, workerLost = true /* worker loss event from master */)
     }
     logInfo("Executor %s removed: %s".format(fullId, message))
     removeExecutor(fullId.split("/")(1), reason)

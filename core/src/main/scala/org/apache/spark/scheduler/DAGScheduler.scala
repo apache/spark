@@ -1627,7 +1627,11 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
       dagScheduler.handleExecutorAdded(execId, host)
 
     case ExecutorLost(execId, reason) =>
-      dagScheduler.handleExecutorLost(execId, filesLost = reason.isInstanceOf[SlaveLost])
+      val filesLost = reason match {
+        case SlaveLost(_, true) => true
+        case _ => false
+      }
+      dagScheduler.handleExecutorLost(execId, filesLost)
 
     case BeginEvent(task, taskInfo) =>
       dagScheduler.handleBeginEvent(task, taskInfo)
