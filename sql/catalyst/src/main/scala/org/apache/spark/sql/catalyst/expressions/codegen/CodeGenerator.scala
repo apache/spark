@@ -662,10 +662,6 @@ class CodegenContext {
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
     val codes = commonExprs.map { e =>
       val expr = e.head
-      val fnName = freshName("evalExpr")
-      val isNull = s"${fnName}IsNull"
-      val value = s"${fnName}Value"
-
       // Generate the code for this expression tree.
       val code = expr.genCode(this)
       val state = SubExprEliminationState(code.isNull, code.value)

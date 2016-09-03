@@ -15,7 +15,14 @@ export("sparkR.init")
 export("sparkR.stop")
 export("sparkR.session.stop")
 export("sparkR.conf")
+export("sparkR.version")
 export("print.jobj")
+
+export("sparkR.newJObject")
+export("sparkR.callJMethod")
+export("sparkR.callJStatic")
+
+export("install.spark")
 
 export("sparkRSQL.init",
        "sparkRHive.init")
@@ -363,5 +370,3 @@ S3method(structField, character)
 S3method(structField, jobj)
 S3method(structType, jobj)
 S3method(structType, structField)
-
-export("install.spark")

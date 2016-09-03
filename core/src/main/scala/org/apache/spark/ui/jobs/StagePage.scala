@@ -651,9 +651,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         }
         val executorComputingTime = executorRunTime - shuffleReadTime - shuffleWriteTime
         val executorComputingTimeProportion =
-          (100 - schedulerDelayProportion - shuffleReadTimeProportion -
+          math.max(100 - schedulerDelayProportion - shuffleReadTimeProportion -
             shuffleWriteTimeProportion - serializationTimeProportion -
-            deserializationTimeProportion - gettingResultTimeProportion)
+            deserializationTimeProportion - gettingResultTimeProportion, 0)
 
         val schedulerDelayProportionPos = 0
         val deserializationTimeProportionPos =

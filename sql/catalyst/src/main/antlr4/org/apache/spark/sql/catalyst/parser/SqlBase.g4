@@ -375,7 +375,7 @@ setQuantifier
 
 relation
     : left=relation
-      ((CROSS | joinType) JOIN right=relation joinCriteria?
+      (joinType JOIN right=relation joinCriteria?
       | NATURAL joinType JOIN right=relation
       )                                           #joinRelation
     | relationPrimary                             #relationDefault
@@ -383,6 +383,7 @@ relation
 
 joinType
     : INNER?
+    | CROSS
     | LEFT OUTER?
     | LEFT SEMI
     | RIGHT OUTER?
