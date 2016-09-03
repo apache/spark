@@ -19,33 +19,36 @@ package org.apache.spark.sql.execution.subquery
 
 import org.apache.spark.sql.{Dataset, QueryTest}
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SubqueryDedupSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("Create common subquery") {
-    val subqueryDedup = new SubqueryDedup()
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val subqueryDedup = new SubqueryDedup()
 
-    spark.range(10).createOrReplaceTempView("t1")
-    val df = sql("SELECT 1 FROM t1")
-    val project = df.queryExecution.analyzed.collect {
-      case p: Project => p
-    }.head
+      spark.range(10).createOrReplaceTempView("t1")
+      val df = sql("SELECT 1 FROM t1")
+      val project = df.queryExecution.analyzed.collect {
+        case p: Project => p
+      }.head
 
-    val commonSubqueryAlias = subqueryDedup.createCommonSubquery(spark, project)
-    assert(commonSubqueryAlias.output === project.output)
-    assert(Dataset.ofRows(spark, commonSubqueryAlias).collect() === df.collect())
+      val commonSubqueryAlias = subqueryDedup.createCommonSubquery(spark, project)
+      assert(commonSubqueryAlias.output === project.output)
+      assert(Dataset.ofRows(spark, commonSubqueryAlias).collect() === df.collect())
 
-    spark.range(10).createOrReplaceTempView("t2")
+      spark.range(10).createOrReplaceTempView("t2")
 
-    val df2 = sql("SELECT * FROM t1 join t2")
-    val project2 = df2.queryExecution.analyzed.collect {
-      case p: Project => p
-    }.head
+      val df2 = sql("SELECT * FROM t1 join t2")
+      val project2 = df2.queryExecution.analyzed.collect {
+        case p: Project => p
+      }.head
 
-    val commonSubqueryAlias2 = subqueryDedup.createCommonSubquery(spark, project2)
-    assert(commonSubqueryAlias2.output === project2.output)
-    assert(Dataset.ofRows(spark, commonSubqueryAlias2).collect() === df2.collect())
+      val commonSubqueryAlias2 = subqueryDedup.createCommonSubquery(spark, project2)
+      assert(commonSubqueryAlias2.output === project2.output)
+      assert(Dataset.ofRows(spark, commonSubqueryAlias2).collect() === df2.collect())
+    }
   }
 }

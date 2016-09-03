@@ -596,50 +596,52 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("Dedup subqueries") {
-    withTempView("dedup") {
-      spark.range(10).createOrReplaceTempView("dedup")
-      val df = sql("WITH s AS (SELECT 1 FROM dedup) SELECT * FROM s s1 join s s2")
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      withTempView("dedup") {
+        spark.range(10).createOrReplaceTempView("dedup")
+        val df = sql("WITH s AS (SELECT 1 FROM dedup) SELECT * FROM s s1 join s s2")
 
-      val commonSubqueries = df.queryExecution.sparkPlan.collect {
+        val commonSubqueries = df.queryExecution.sparkPlan.collect {
+          case c: CommonSubqueryExec => c.subquery.child
+        }.distinct
+        assert(commonSubqueries.length == 1)
+
+        val df2 = sql("WITH s1 AS (SELECT 1 FROM dedup), s2 AS (SELECT 1 FROM dedup) " +
+          "SELECT * FROM s1 JOIN (SELECT * FROM s1, s2)")
+
+        val commonSubqueries2 = df2.queryExecution.sparkPlan.collect {
+          case c: CommonSubqueryExec => c.subquery.child
+        }.distinct
+        assert(commonSubqueries2.length == 1)
+
+        val df3 = sql("WITH t1 AS (SELECT 1 AS id FROM dedup) SELECT * FROM t1 a, t1 b " +
+          "WHERE a.id = 1 AND b.id > 0")
+
+        val commonSubqueries3 = df3.queryExecution.sparkPlan.collect {
+          case c: CommonSubqueryExec => c.subquery.child
+        }.distinct
+        assert(commonSubqueries3.length == 1)
+      }
+
+      // Using a self-join as CTE to test if de-duplicated attributes work for this.
+      val df4 = sql("WITH j AS (SELECT * FROM (SELECT * FROM l JOIN l)) SELECT * FROM j j1, j j2")
+      val commonSubqueries4 = df4.queryExecution.sparkPlan.collect {
         case c: CommonSubqueryExec => c.subquery.child
       }.distinct
-      assert(commonSubqueries.length == 1)
+      assert(commonSubqueries4.length == 1)
 
-      val df2 = sql("WITH s1 AS (SELECT 1 FROM dedup), s2 AS (SELECT 1 FROM dedup) " +
-        "SELECT * FROM s1 JOIN (SELECT * FROM s1, s2)")
+      val df4WithoutCTE = sql("SELECT * FROM (SELECT * FROM (SELECT * FROM l JOIN l)) j1, " +
+        "(SELECT * FROM (SELECT * FROM l JOIN l)) j2")
+      assert(df4.collect() === df4WithoutCTE.collect())
 
-      val commonSubqueries2 = df2.queryExecution.sparkPlan.collect {
+      // CTE subquery refers to previous CTE subquery.
+      val df5 = sql("WITH cte AS (SELECT * FROM l a, l b), cte2 AS (SELECT * FROM cte j1, cte) " +
+        "SELECT * FROM cte2 j3, cte j4")
+      val commonSubqueries5 = df5.queryExecution.sparkPlan.collect {
         case c: CommonSubqueryExec => c.subquery.child
       }.distinct
-      assert(commonSubqueries2.length == 1)
-
-      val df3 = sql("WITH t1 AS (SELECT 1 AS id FROM dedup) SELECT * FROM t1 a, t1 b " +
-        "WHERE a.id = 1 AND b.id > 0")
-
-      val commonSubqueries3 = df3.queryExecution.sparkPlan.collect {
-        case c: CommonSubqueryExec => c.subquery.child
-      }.distinct
-      assert(commonSubqueries3.length == 1)
+      assert(commonSubqueries5.length == 1)
     }
-
-    // Using a self-join as CTE to test if de-duplicated attributes work for this.
-    val df4 = sql("WITH j AS (SELECT * FROM (SELECT * FROM l JOIN l)) SELECT * FROM j j1, j j2")
-    val commonSubqueries4 = df4.queryExecution.sparkPlan.collect {
-      case c: CommonSubqueryExec => c.subquery.child
-    }.distinct
-    assert(commonSubqueries4.length == 1)
-
-    val df4WithoutCTE = sql("SELECT * FROM (SELECT * FROM (SELECT * FROM l JOIN l)) j1, " +
-      "(SELECT * FROM (SELECT * FROM l JOIN l)) j2")
-    assert(df4.collect() === df4WithoutCTE.collect())
-
-    // CTE subquery refers to previous CTE subquery.
-    val df5 = sql("WITH cte AS (SELECT * FROM l a, l b), cte2 AS (SELECT * FROM cte j1, cte) " +
-      "SELECT * FROM cte2 j3, cte j4")
-    val commonSubqueries5 = df5.queryExecution.sparkPlan.collect {
-      case c: CommonSubqueryExec => c.subquery.child
-    }.distinct
-    assert(commonSubqueries5.length == 1)
   }
 
   test("Dedup subqueries with optimization: Filter pushdown") {

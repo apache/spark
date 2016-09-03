@@ -26,12 +26,23 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.util.Utils
 
+private[sql] case class SubqueryExecHelper(executedPlan: SparkPlan) {
+  private var _computedOutput: RDD[InternalRow] = null
+
+  def computeOrGetResult(): RDD[InternalRow] = this.synchronized {
+    if (_computedOutput == null) {
+      _computedOutput = executedPlan.execute()
+    }
+    _computedOutput
+  }
+}
+
 private[sql] case class CommonSubquery(
     output: Seq[Attribute],
     @transient child: SparkPlan)(
     @transient val logicalChild: LogicalPlan,
     private[sql] val _statistics: Statistics,
-    @transient private[sql] var _computedOutput: RDD[InternalRow] = null)
+    @transient private val execHelper: SubqueryExecHelper)
   extends logical.LeafNode {
 
   override def argString: String = Utils.truncatedString(output, "[", ", ", "]")
@@ -45,16 +56,11 @@ private[sql] case class CommonSubquery(
   lazy val numRows: Long = computedOutput.count
 
   def withOutput(newOutput: Seq[Attribute]): CommonSubquery = {
-    CommonSubquery(newOutput, child)(logicalChild, _statistics, _computedOutput)
+    CommonSubquery(newOutput, child)(logicalChild, _statistics, execHelper)
   }
 
-  def computedOutput: RDD[InternalRow] = this.synchronized {
-    if (_computedOutput == null) {
-      _computedOutput = child.execute()
-    }
-    _computedOutput
-  }
+  def computedOutput: RDD[InternalRow] = execHelper.computeOrGetResult()
 
   override protected def otherCopyArgs: Seq[AnyRef] =
-    Seq(logicalChild, _statistics, _computedOutput)
+    Seq(logicalChild, _statistics, execHelper)
 }

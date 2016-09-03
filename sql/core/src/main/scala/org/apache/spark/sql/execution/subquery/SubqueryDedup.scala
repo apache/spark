@@ -53,7 +53,8 @@ private[sql] class SubqueryDedup {
           CommonSubquery(planToDedup.output,
             execution.executedPlan)
             (execution.optimizedPlan,
-            planToDedup.statistics))
+            planToDedup.statistics,
+            SubqueryExecHelper(execution.executedPlan)))
       subqueryData += common
       common.subquery
     }.withOutput(planToDedup.output)
