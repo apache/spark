@@ -444,7 +444,8 @@ setMethod("cosh",
 
 #' Returns the number of items in a group
 #'
-#' Returns the number of items in a group. This is a column aggregate function.
+#' This can be used as a column aggregate function with \code{Column} as input,
+#' and returns the number of items in a group.
 #'
 #' @rdname count
 #' @name count
