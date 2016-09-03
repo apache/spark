@@ -49,9 +49,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    sql("DROP TABLE IF EXISTS parquet_t0")
-    sql("DROP TABLE IF EXISTS parquet_t1")
-    sql("DROP TABLE IF EXISTS parquet_t2")
+    (0 to 3).foreach { i =>
+      sql(s"DROP TABLE IF EXISTS parquet_t$i")
+    }
     sql("DROP TABLE IF EXISTS t0")
 
     spark.range(10).write.saveAsTable("parquet_t0")
@@ -87,10 +87,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   override protected def afterAll(): Unit = {
     try {
-      sql("DROP TABLE IF EXISTS parquet_t0")
-      sql("DROP TABLE IF EXISTS parquet_t1")
-      sql("DROP TABLE IF EXISTS parquet_t2")
-      sql("DROP TABLE IF EXISTS parquet_t3")
+      (0 to 3).foreach { i =>
+        sql(s"DROP TABLE IF EXISTS parquet_t$i")
+      }
       sql("DROP TABLE IF EXISTS t0")
     } finally {
       super.afterAll()
