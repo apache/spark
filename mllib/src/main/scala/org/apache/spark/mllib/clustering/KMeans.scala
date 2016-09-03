@@ -392,7 +392,7 @@ class KMeans private (
 
     bcCenters.destroy(blocking = false)
 
-    val myWeights = centers.indices.map(countMap(_).toDouble).toArray
+    val myWeights = centers.indices.map(countMap.getOrElse(_, 0L).toDouble).toArray
     LocalKMeans.kMeansPlusPlus(0, centers.toArray, myWeights, k, 30)
   }
 }
