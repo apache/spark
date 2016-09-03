@@ -23,12 +23,11 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
@@ -156,6 +155,8 @@ case class FileSourceScanExec(
     false
   }
 
+  @transient private lazy val selectedPartitions = relation.location.listFiles(partitionFilters)
+
   override val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
       relation.bucketSpec
@@ -165,9 +166,15 @@ case class FileSourceScanExec(
     bucketSpec match {
       case Some(spec) =>
         val numBuckets = spec.numBuckets
-        val bucketColumns = spec.bucketColumnNames.flatMap { n =>
-          output.find(_.name == n)
-        }
+
+        def toAttribute(colName: String, columnType: String): Attribute =
+          output.find(_.name == colName).getOrElse {
+            throw new AnalysisException(s"Could not find $columnType column $colName for " +
+              s"relation ${metastoreTableIdentifier.get.toString} in its existing " +
+              s"columns : (${output.map(_.name).mkString(", ")})")
+          }
+
+        val bucketColumns = spec.bucketColumnNames.flatMap(n => Some(toAttribute(n, "bucketing")))
         if (bucketColumns.size == spec.bucketColumnNames.size) {
           val partitioning = HashPartitioning(bucketColumns, numBuckets)
 
@@ -178,22 +185,15 @@ case class FileSourceScanExec(
             // the RDD partition will not be sorted even if the relation has sort columns set
             // Current solution is to check if all the buckets have a single file in it
 
-            val files =
-              relation.location.listFiles(partitionFilters).flatMap(partition => partition.files)
+            val files = selectedPartitions.flatMap(partition => partition.files)
             val bucketToFilesGrouping =
               files.map(_.getPath.getName).groupBy(file => BucketingUtils.getBucketId(file))
             val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
 
             if (singleFilePartitions) {
-              def toAttribute(colName: String): Attribute =
-                output.find(_.name == colName).getOrElse {
-                  throw new AnalysisException(s"Could not find sort column $colName for " +
-                    s"relation ${metastoreTableIdentifier.get.toString} in its existing " +
-                    s"columns : (${output.map(_.name).mkString(", ")})")
-              }
               // TODO Currently Spark does not support writing columns sorting in descending order
               // so using Ascending order. This can be fixed in future
-              spec.sortColumnNames.map(c => SortOrder(toAttribute(c), Ascending))
+              spec.sortColumnNames.map(c => SortOrder(toAttribute(c, "sort"), Ascending))
             } else {
               Nil
             }
@@ -219,8 +219,6 @@ case class FileSourceScanExec(
     "InputPaths" -> relation.location.paths.mkString(", "))
 
   private lazy val inputRDD: RDD[InternalRow] = {
-    val selectedPartitions = relation.location.listFiles(partitionFilters)
-
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
         sparkSession = relation.sparkSession,
