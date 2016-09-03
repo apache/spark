@@ -473,8 +473,8 @@ object MLUtils extends Logging {
    * @param norm1 the norm of the first vector, non-negative
    * @param v2 the second vector
    * @param norm2 the norm of the second vector, non-negative
-   * @param dotProduct the dot product between the vectors if applicable
    * @param precision desired relative precision for the squared distance
+   * @param dotProduct the dot product between the vectors if applicable
    * @return squared distance between v1 and v2 within the specified precision
    */
   private[mllib] def fastSquaredDistance(
@@ -482,8 +482,8 @@ object MLUtils extends Logging {
       norm1: Double,
       v2: Vector,
       norm2: Double,
-      dotProduct: Double = Double.NaN,
-      precision: Double = 1e-6): Double = {
+      precision: Double = 1e-6,
+      dotProduct: Double = Double.NaN): Double = {
     val n = v1.size
     require(v2.size == n)
     require(norm1 >= 0.0 && norm2 >= 0.0)

@@ -347,7 +347,7 @@ class KMeans private (
             val center = Vectors.dense(thisCenterArray.slice(j * dim, (j + 1) * dim))
             val centerNorm = thisCenterNormArray(j)
             val squaredDistance = MLUtils.fastSquaredDistance(point, pointNorm, center, centerNorm,
-              dotProductMatrix.values(i + j * numRows))
+              1E-6, dotProductMatrix.values(i + j * numRows))
 
             if (squaredDistance < minCost) {
               minCost = squaredDistance
