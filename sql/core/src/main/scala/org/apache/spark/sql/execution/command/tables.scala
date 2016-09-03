@@ -33,8 +33,10 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, Catal
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -56,7 +58,12 @@ case class CreateHiveTableAsSelectLogicalPlan(
 }
 
 /**
- * A command to create a table with the same definition of the given existing table.
+ * A command to create a MANAGED table with the same definition of the given existing table.
+ * In the target table definition, the table comment is always empty but the column comments
+ * are identical to the ones defined in the source table.
+ *
+ * The CatalogTable attributes copied from the source table are storage(inputFormat, outputFormat,
+ * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -75,18 +82,57 @@ case class CreateTableLikeCommand(
       throw new AnalysisException(
         s"Source table in CREATE TABLE LIKE does not exist: '$sourceTable'")
     }
-    if (catalog.isTemporaryTable(sourceTable)) {
-      throw new AnalysisException(
-        s"Source table in CREATE TABLE LIKE cannot be temporary: '$sourceTable'")
+
+    val sourceTableDesc = catalog.getTableMetadata(sourceTable)
+
+    if (sourceTableDesc.tableType == CatalogTableType.VIEW ||
+      DDLUtils.isDatasourceTable(sourceTableDesc)) {
+      val newPath = catalog.defaultTablePath(targetTable)
+      val sourceMetastoreSchema =
+        StructType(sourceTableDesc.schema.map { c =>
+          val builder = new MetadataBuilder
+          c.comment.map(comment => builder.putString("comment", comment))
+          StructField(
+            c.name, CatalystSqlParser.parseDataType(c.dataType), c.nullable, builder.build())
+        })
+      val schema = if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+        sourceMetastoreSchema
+      } else {
+        DDLUtils.getSchemaFromTableProperties(sourceTableDesc).getOrElse(sourceMetastoreSchema)
+      }
+      val provider = if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+        sparkSession.sessionState.conf.defaultDataSourceName
+      } else {
+        sourceTableDesc.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER)
+      }
+      createDataSourceTable(
+        sparkSession = sparkSession,
+        tableIdent = targetTable,
+        userSpecifiedSchema = Some(schema),
+        partitionColumns = Array.empty[String],
+        bucketSpec = None,
+        provider = provider,
+        options = Map("path" -> newPath),
+        isExternal = false)
+    } else {
+      val newStorage =
+        sourceTableDesc.storage.copy(
+          locationUri = None,
+          serdeProperties = sourceTableDesc.storage.serdeProperties)
+      val newTableDesc =
+        CatalogTable(
+          identifier = targetTable,
+          tableType = CatalogTableType.MANAGED,
+          storage = newStorage,
+          schema = sourceTableDesc.schema,
+          partitionColumnNames = sourceTableDesc.partitionColumnNames,
+          sortColumnNames = sourceTableDesc.sortColumnNames,
+          bucketColumnNames = sourceTableDesc.bucketColumnNames,
+          numBuckets = sourceTableDesc.numBuckets)
+
+      catalog.createTable(newTableDesc, ifNotExists)
     }
 
-    val tableToCreate = catalog.getTableMetadata(sourceTable).copy(
-      identifier = targetTable,
-      tableType = CatalogTableType.MANAGED,
-      createTime = System.currentTimeMillis,
-      lastAccessTime = -1).withNewStorage(locationUri = None)
-
-    catalog.createTable(tableToCreate, ifNotExists)
     Seq.empty[Row]
   }
 }
