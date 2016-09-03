@@ -82,37 +82,48 @@ case class CreateTableLikeCommand(
       throw new AnalysisException(
         s"Source table in CREATE TABLE LIKE does not exist: '$sourceTable'")
     }
-
     val sourceTableDesc = catalog.getTableMetadata(sourceTable)
 
-    if (sourceTableDesc.tableType == CatalogTableType.VIEW ||
-      DDLUtils.isDatasourceTable(sourceTableDesc)) {
-      val newPath = catalog.defaultTablePath(targetTable)
-      val sourceMetastoreSchema =
+    if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+      val isTemp = catalog.isTemporaryTable(sourceTable)
+      val schema =
         StructType(sourceTableDesc.schema.map { c =>
-          val builder = new MetadataBuilder
-          c.comment.map(comment => builder.putString("comment", comment))
-          StructField(
-            c.name, CatalystSqlParser.parseDataType(c.dataType), c.nullable, builder.build())
+          val comment = if (isTemp) {
+            Metadata.empty
+          } else {
+            val builder = new MetadataBuilder
+            c.comment.map(comment => builder.putString("comment", comment))
+            builder.build()
+          }
+          StructField(c.name, CatalystSqlParser.parseDataType(c.dataType), c.nullable, comment)
         })
-      val schema = if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
-        sourceMetastoreSchema
-      } else {
-        DDLUtils.getSchemaFromTableProperties(sourceTableDesc).getOrElse(sourceMetastoreSchema)
-      }
-      val provider = if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
-        sparkSession.sessionState.conf.defaultDataSourceName
-      } else {
-        sourceTableDesc.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER)
-      }
       createDataSourceTable(
         sparkSession = sparkSession,
         tableIdent = targetTable,
         userSpecifiedSchema = Some(schema),
         partitionColumns = Array.empty[String],
         bucketSpec = None,
-        provider = provider,
-        options = Map("path" -> newPath),
+        provider = sparkSession.sessionState.conf.defaultDataSourceName,
+        options = Map("path" -> catalog.defaultTablePath(targetTable)),
+        isExternal = false)
+    } else if (DDLUtils.isDatasourceTable(sourceTableDesc)) {
+      val schema =
+        DDLUtils.getSchemaFromTableProperties(sourceTableDesc).getOrElse {
+          StructType(sourceTableDesc.schema.map { c =>
+            val builder = new MetadataBuilder
+            c.comment.map(comment => builder.putString("comment", comment))
+            StructField(
+              c.name, CatalystSqlParser.parseDataType(c.dataType), c.nullable, builder.build())
+          })
+        }
+      createDataSourceTable(
+        sparkSession = sparkSession,
+        tableIdent = targetTable,
+        userSpecifiedSchema = Some(schema),
+        partitionColumns = Array.empty[String],
+        bucketSpec = None,
+        provider = sourceTableDesc.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER),
+        options = Map("path" -> catalog.defaultTablePath(targetTable)),
         isExternal = false)
     } else {
       val newStorage =
