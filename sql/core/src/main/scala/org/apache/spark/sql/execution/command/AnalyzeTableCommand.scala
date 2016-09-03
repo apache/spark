@@ -103,8 +103,9 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
       if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
         newStats = Some(Statistics(sizeInBytes = newTotalSize))
       }
-      // We only set rowCount when noscan is false, because otherwise we can't know whether the
-      // row count we get (`oldRowCount`) is valid or not.
+      // We only set rowCount when noscan is false, because otherwise:
+      // 1. when total size is not changed, we don't need to alter the table;
+      // 2. when total size is changed, `oldRowCount` becomes invalid.
       // This is to make sure that we only record the right statistics.
       if (!noscan) {
         val newRowCount = Dataset.ofRows(sparkSession, relation).count()

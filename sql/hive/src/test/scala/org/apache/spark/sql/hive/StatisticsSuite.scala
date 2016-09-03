@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.StructType
 
 class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
@@ -220,6 +221,11 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       checkMetastoreRelationStats(textTable, expectedStats =
         Some(Statistics(sizeInBytes = 5812, rowCount = Some(500))))
 
+      sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
+      // when the total size is not changed, the old row count is kept
+      checkMetastoreRelationStats(textTable, expectedStats =
+        Some(Statistics(sizeInBytes = 5812, rowCount = Some(500))))
+
       sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
       // update total size and remove the old and invalid row count
@@ -298,6 +304,18 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
       checkLogicalRelationStats(parquetTable, expectedStats =
         Some(Statistics(sizeInBytes = 8472, rowCount = Some(1000))))
+    }
+  }
+
+  test("statistics collection of a table with zero column") {
+    val table_no_cols = "table_no_cols"
+    withTable(table_no_cols) {
+      val rddNoCols = sparkContext.parallelize(1 to 10).map(_ => Row.empty)
+      val dfNoCols = spark.createDataFrame(rddNoCols, StructType(Seq.empty))
+      dfNoCols.write.format("json").saveAsTable(table_no_cols)
+      sql(s"ANALYZE TABLE $table_no_cols COMPUTE STATISTICS")
+      checkLogicalRelationStats(table_no_cols, expectedStats =
+        Some(Statistics(sizeInBytes = 30, rowCount = Some(10))))
     }
   }
 
