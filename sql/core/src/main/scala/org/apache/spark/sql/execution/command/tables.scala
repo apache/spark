@@ -309,8 +309,7 @@ case class LoadDataCommand(
         partition.get,
         isOverwrite,
         holdDDLTime = false,
-        inheritTableSpecs = true,
-        isSkewedStoreAsSubdir = false)
+        inheritTableSpecs = true)
     } else {
       catalog.loadTable(
         targetTable.identifier,

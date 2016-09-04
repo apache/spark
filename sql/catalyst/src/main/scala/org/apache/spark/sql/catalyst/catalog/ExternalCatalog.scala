@@ -121,8 +121,16 @@ abstract class ExternalCatalog {
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit
+      inheritTableSpecs: Boolean): Unit
+
+  def loadDynamicPartitions(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      replace: Boolean,
+      numDP: Int,
+      holdDDLTime: Boolean): Unit
 
   // --------------------------------------------------------------------------
   // Partitions
@@ -164,6 +172,14 @@ abstract class ExternalCatalog {
       parts: Seq[CatalogTablePartition]): Unit
 
   def getPartition(db: String, table: String, spec: TablePartitionSpec): CatalogTablePartition
+
+  /**
+   * Returns the specified partition or None if it does not exist.
+   */
+  def getPartitionOption(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec): Option[CatalogTablePartition]
 
   /**
    * List the metadata of all partitions that belong to the specified table, assuming it exists.

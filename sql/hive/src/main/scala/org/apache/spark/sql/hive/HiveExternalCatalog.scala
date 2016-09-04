@@ -489,8 +489,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit = withClient {
+      inheritTableSpecs: Boolean): Unit = withClient {
     requireTableExists(db, table)
 
     val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
@@ -500,12 +499,37 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     client.loadPartition(
       loadPath,
-      s"$db.$table",
+      db,
+      table,
       orderedPartitionSpec,
       isOverwrite,
       holdDDLTime,
-      inheritTableSpecs,
-      isSkewedStoreAsSubdir)
+      inheritTableSpecs)
+  }
+
+  override def loadDynamicPartitions(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      replace: Boolean,
+      numDP: Int,
+      holdDDLTime: Boolean): Unit = withClient {
+    requireTableExists(db, table)
+
+    val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
+    getTable(db, table).partitionColumnNames.foreach { colName =>
+      orderedPartitionSpec.put(colName, partition(colName))
+    }
+
+    client.loadDynamicPartitions(
+      loadPath,
+      db,
+      table,
+      orderedPartitionSpec,
+      replace,
+      numDP,
+      holdDDLTime)
   }
 
   // --------------------------------------------------------------------------
@@ -551,6 +575,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       spec: TablePartitionSpec): CatalogTablePartition = withClient {
     client.getPartition(db, table, spec)
+  }
+
+  /**
+   * Returns the specified partition or None if it does not exist.
+   */
+  override def getPartitionOption(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec): Option[CatalogTablePartition] = withClient {
+    client.getPartitionOption(db, table, spec)
   }
 
   /**
