@@ -5,7 +5,7 @@ Currently, SparkR on Windows is being tested with [Appveyor](https://ci.appveyor
 
 ### Setting up Appveyor
 
-##### Sign up Appveyor.
+#### Sign up Appveyor.
     
 <img width="196" alt="2016-09-04 11 07 48" src="https://cloud.githubusercontent.com/assets/6477701/18228809/2c923aa4-7299-11e6-91b4-f39eff5727ba.png">
 
@@ -20,7 +20,7 @@ As Apache Spark is one of open source projects, click "FREE - for open-source pr
 Click "Github".
 
 
-##### After signing up, go to profile to link Github and Appveyor.
+#### After signing up, go to profile to link Github and Appveyor.
 
 <img width="204" alt="2016-09-04 11 09 43" src="https://cloud.githubusercontent.com/assets/6477701/18228803/12a4b810-7299-11e6-9140-5cfc277297b1.png">
 
@@ -35,7 +35,7 @@ Enable the link with GitHub via clicking "Link Github account".
 Click "Authorize application" in Github site.
 
 
-##### Add a project, Spark to enable the builds.
+#### Add a project, Spark to enable the builds.
 
 <img width="97" alt="2016-08-30 12 16 31" src="https://cloud.githubusercontent.com/assets/6477701/18075017/2e572ffc-6eac-11e6-8e72-1531c81717a0.png">
 
@@ -58,7 +58,7 @@ Click "Authorize application" from Github (the above step will pop up this page.
 Come back to https://ci.appveyor.com/projects/new and then adds "spark".
 
 
-##### Check if any event supposed to run the build actually triggers the build. 
+#### Check if any event supposed to run the build actually triggers the build. 
 
 <img width="97" alt="2016-08-30 12 16 31" src="https://cloud.githubusercontent.com/assets/6477701/18075017/2e572ffc-6eac-11e6-8e72-1531c81717a0.png">
 
