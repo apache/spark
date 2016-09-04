@@ -175,7 +175,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
       assert(deserialized === (1 to 100).toList)
     }
     // This will exercise the getRemoteBytes / getRemoteValues code paths:
-    assert(blockManager.get[Int](blockId).get.data.toSet === (1 to 1000).toSet)
+    assert(blockIds.flatMap(id => blockManager.get[Int](id).get.data).toSet === (1 to 1000).toSet)
   }
 
   Seq(
