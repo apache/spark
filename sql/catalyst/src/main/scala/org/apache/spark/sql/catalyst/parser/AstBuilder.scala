@@ -400,7 +400,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * separated) relations here, these get converted into a single plan by condition-less inner join.
    */
   override def visitFromClause(ctx: FromClauseContext): LogicalPlan = withOrigin(ctx) {
-    val from = ctx.relation.asScala.map(plan).reduceLeft(Join(_, _, Inner, None))
+    val from = ctx.relation.asScala.foldLeft(null: LogicalPlan) { (left, relation) =>
+      val right = plan(relation.relationPrimary)
+      val join = right.optionalMap(left)(Join(_, _, Inner, None))
+      withJoinRelations(join, relation)
+    }
     ctx.lateralView.asScala.foldLeft(from)(withGenerate)
   }
 
@@ -531,42 +535,52 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a relation including its joins.
+   * Create a single relation referenced in a FROM claused. This method is used when a part of the
+   * join condition is nested, for example:
+   * {{{
+   *   select * from t1 join (t2 cross join t3) on col1 = col2
+   * }}}
    */
   override def visitRelation(ctx: RelationContext): LogicalPlan = withOrigin(ctx) {
-    ctx.joinRelation.asScala.foldLeft(plan(ctx.relationPrimary)) {
-      case (left, join) =>
-        withOrigin(join) {
-          val baseJoinType = join.joinType match {
-            case null => Inner
-            case jt if jt.CROSS != null => Cross
-            case jt if jt.FULL != null => FullOuter
-            case jt if jt.SEMI != null => LeftSemi
-            case jt if jt.ANTI != null => LeftAnti
-            case jt if jt.LEFT != null => LeftOuter
-            case jt if jt.RIGHT != null => RightOuter
-            case _ => Inner
-          }
+    withJoinRelations(plan(ctx.relationPrimary), ctx)
+  }
 
-          // Resolve the join type and join condition
-          val (joinType, condition) = Option(join.joinCriteria) match {
-            case Some(c) if c.USING != null =>
-              val columns = c.identifier.asScala.map { column =>
-                UnresolvedAttribute.quoted(column.getText)
-              }
-              (UsingJoin(baseJoinType, columns), None)
-            case Some(c) if c.booleanExpression != null =>
-              (baseJoinType, Option(expression(c.booleanExpression)))
-            case None if join.NATURAL != null =>
-              if (baseJoinType == Cross) {
-                throw new ParseException("NATURAL CROSS JOIN is not supported", join)
-              }
-              (NaturalJoin(baseJoinType), None)
-            case None =>
-              (baseJoinType, None)
-          }
-          Join(left, plan(join.right), joinType, condition)
+  /**
+   * Join one more [[LogicalPlan]]s to the current logical plan.
+   */
+  private def withJoinRelations(base: LogicalPlan, ctx: RelationContext): LogicalPlan = {
+    ctx.joinRelation.asScala.foldLeft(base) { (left, join) =>
+      withOrigin(join) {
+        val baseJoinType = join.joinType match {
+          case null => Inner
+          case jt if jt.CROSS != null => Cross
+          case jt if jt.FULL != null => FullOuter
+          case jt if jt.SEMI != null => LeftSemi
+          case jt if jt.ANTI != null => LeftAnti
+          case jt if jt.LEFT != null => LeftOuter
+          case jt if jt.RIGHT != null => RightOuter
+          case _ => Inner
         }
+
+        // Resolve the join type and join condition
+        val (joinType, condition) = Option(join.joinCriteria) match {
+          case Some(c) if c.USING != null =>
+            val columns = c.identifier.asScala.map { column =>
+              UnresolvedAttribute.quoted(column.getText)
+            }
+            (UsingJoin(baseJoinType, columns), None)
+          case Some(c) if c.booleanExpression != null =>
+            (baseJoinType, Option(expression(c.booleanExpression)))
+          case None if join.NATURAL != null =>
+            if (baseJoinType == Cross) {
+              throw new ParseException("NATURAL CROSS JOIN is not supported", ctx)
+            }
+            (NaturalJoin(baseJoinType), None)
+          case None =>
+            (baseJoinType, None)
+        }
+        Join(left, plan(join.right), joinType, condition)
+      }
     }
   }
 

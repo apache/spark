@@ -400,6 +400,14 @@ class PlanParserSuite extends PlanTest {
       table("t1")
         .join(table("t2").join(table("t3"), Inner, Option('col3 === 'col2)), Inner, None)
         .select(star()))
+
+    // Implicit joins.
+    assertEqual(
+      "select * from t1, t3 join t2 on t1.col1 = t2.col2",
+      table("t1")
+        .join(table("t3"))
+        .join(table("t2"), Inner, Option(Symbol("t1.col1") === Symbol("t2.col2")))
+        .select(star()))
   }
 
   test("sampled relations") {
