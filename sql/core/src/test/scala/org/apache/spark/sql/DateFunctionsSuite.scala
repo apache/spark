@@ -227,7 +227,9 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
     checkAnswer(
       df.select(date_add(col("t"), 3)),
-      Seq(Row(Date.valueOf("2015-06-04")), Row(Date.valueOf("2015-06-05"))))
+      Seq(
+        Row(Timestamp.valueOf("2015-06-04 12:34:56")),
+        Row(Timestamp.valueOf("2015-06-05 12:34:56"))))
     checkAnswer(
       df.select(date_add(col("s"), 5)),
       Seq(Row(Date.valueOf("2015-06-06")), Row(Date.valueOf("2015-06-07"))))
@@ -256,7 +258,9 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
     checkAnswer(
       df.select(date_sub(col("t"), 1)),
-      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+      Seq(
+        Row(Timestamp.valueOf("2015-05-31 12:34:56")),
+        Row(Timestamp.valueOf("2015-06-01 12:34:56"))))
     checkAnswer(
       df.select(date_sub(col("s"), 1)),
       Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
