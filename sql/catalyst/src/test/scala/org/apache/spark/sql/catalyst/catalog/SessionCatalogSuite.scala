@@ -273,37 +273,27 @@ class SessionCatalogSuite extends SparkFunSuite {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
-    sessionCatalog.renameTable(
-      TableIdentifier("tbl1", Some("db2")), TableIdentifier("tblone", Some("db2")))
+    sessionCatalog.renameTable(TableIdentifier("tbl1", Some("db2")), "tblone")
     assert(externalCatalog.listTables("db2").toSet == Set("tblone", "tbl2"))
-    sessionCatalog.renameTable(
-      TableIdentifier("tbl2", Some("db2")), TableIdentifier("tbltwo", Some("db2")))
+    sessionCatalog.renameTable(TableIdentifier("tbl2", Some("db2")), "tbltwo")
     assert(externalCatalog.listTables("db2").toSet == Set("tblone", "tbltwo"))
     // Rename table without explicitly specifying database
     sessionCatalog.setCurrentDatabase("db2")
-    sessionCatalog.renameTable(TableIdentifier("tbltwo"), TableIdentifier("table_two"))
+    sessionCatalog.renameTable(TableIdentifier("tbltwo"), "table_two")
     assert(externalCatalog.listTables("db2").toSet == Set("tblone", "table_two"))
-    // Renaming "db2.tblone" to "db1.tblones" should fail because databases don't match
-    intercept[AnalysisException] {
-      sessionCatalog.renameTable(
-        TableIdentifier("tblone", Some("db2")), TableIdentifier("tblones", Some("db1")))
-    }
     // The new table already exists
     intercept[TableAlreadyExistsException] {
-      sessionCatalog.renameTable(
-        TableIdentifier("tblone", Some("db2")), TableIdentifier("table_two", Some("db2")))
+      sessionCatalog.renameTable(TableIdentifier("tblone", Some("db2")), "table_two")
     }
   }
 
   test("rename table when database/table does not exist") {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[NoSuchDatabaseException] {
-      catalog.renameTable(
-        TableIdentifier("tbl1", Some("unknown_db")), TableIdentifier("tbl2", Some("unknown_db")))
+      catalog.renameTable(TableIdentifier("tbl1", Some("unknown_db")), "tbl2")
     }
     intercept[NoSuchTableException] {
-      catalog.renameTable(
-        TableIdentifier("unknown_table", Some("db2")), TableIdentifier("tbl2", Some("db2")))
+      catalog.renameTable(TableIdentifier("unknown_table", Some("db2")), "tbl2")
     }
   }
 
@@ -316,13 +306,12 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(sessionCatalog.getTempTable("tbl1") == Option(tempTable))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
     // If database is not specified, temp table should be renamed first
-    sessionCatalog.renameTable(TableIdentifier("tbl1"), TableIdentifier("tbl3"))
+    sessionCatalog.renameTable(TableIdentifier("tbl1"), "tbl3")
     assert(sessionCatalog.getTempTable("tbl1").isEmpty)
     assert(sessionCatalog.getTempTable("tbl3") == Option(tempTable))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
     // If database is specified, temp tables are never renamed
-    sessionCatalog.renameTable(
-      TableIdentifier("tbl2", Some("db2")), TableIdentifier("tbl4", Some("db2")))
+    sessionCatalog.renameTable(TableIdentifier("tbl2", Some("db2")), "tbl4")
     assert(sessionCatalog.getTempTable("tbl3") == Option(tempTable))
     assert(sessionCatalog.getTempTable("tbl4").isEmpty)
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl4"))
