@@ -602,25 +602,20 @@ case class FromUnixTime(sec: Expression, format: Expression)
 }
 
 /**
- * Returns the last day of the month which the date/timestamp belongs to.
+ * Returns the last day of the month which the date belongs to.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(instant) - Returns the last day of the month which the date/timestamp belongs to.",
+  usage = "_FUNC_(date) - Returns the last day of the month which the date belongs to.",
   extended = "> SELECT _FUNC_('2009-01-12');\n '2009-01-31'")
-// scalastyle:on line.size.limit
-case class LastDay(instant: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-  override def child: Expression = instant
+case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  override def child: Expression = startDate
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(DateType, TimestampType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
-  override def dataType: DataType = instant.dataType
+  override def dataType: DataType = DateType
 
-  override def nullSafeEval(value: Any): Any = {
-    (instant.dataType, value) match {
-      case (_: DateType, date: Int) => DateTimeUtils.getLastDayOfMonth(date)
-      case (_: TimestampType, timestamp: Long) => DateTimeUtils.getLastDayOfMonth(timestamp)
-    }
+  override def nullSafeEval(date: Any): Any = {
+    DateTimeUtils.getLastDayOfMonth(date.asInstanceOf[Int])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -632,7 +627,7 @@ case class LastDay(instant: Expression) extends UnaryExpression with ImplicitCas
 }
 
 /**
- * Returns the first date/timestamp which is later than instant and named as dayOfWeek.
+ * Returns the first date which is later than startDate and named as dayOfWeek.
  * For example, NextDay(2015-07-27, Sunday) would return 2015-08-02, which is the first
  * Sunday later than 2015-07-27.
  *
@@ -640,18 +635,18 @@ case class LastDay(instant: Expression) extends UnaryExpression with ImplicitCas
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(instant, day_of_week) - Returns the first date/timestamp which is later than instant and named as indicated.",
+  usage = "_FUNC_(start_date, day_of_week) - Returns the first date which is later than start_date and named as indicated.",
   extended = "> SELECT _FUNC_('2015-01-14', 'TU');\n '2015-01-20'")
 // scalastyle:on line.size.limit
-case class NextDay(instant: Expression, dayOfWeek: Expression)
+case class NextDay(startDate: Expression, dayOfWeek: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
-  override def left: Expression = instant
+  override def left: Expression = startDate
   override def right: Expression = dayOfWeek
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(DateType, TimestampType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
 
-  override def dataType: DataType = instant.dataType
+  override def dataType: DataType = DateType
   override def nullable: Boolean = true
 
   override def nullSafeEval(start: Any, dayOfW: Any): Any = {
@@ -659,12 +654,8 @@ case class NextDay(instant: Expression, dayOfWeek: Expression)
     if (dow == -1) {
       null
     } else {
-      (instant.dataType, start) match {
-        case (_: DateType, startDate: Int) =>
-          DateTimeUtils.getNextDateForDayOfWeek(startDate, dow)
-        case (_: TimestampType, startTimestamp: Long) =>
-          DateTimeUtils.getNextDateForDayOfWeek(startTimestamp, dow)
-      }
+      val sd = start.asInstanceOf[Int]
+      DateTimeUtils.getNextDateForDayOfWeek(sd, dow)
     }
   }
 
@@ -953,23 +944,22 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
 }
 
 /**
- * Returns date/timestamp truncated to the unit specified by the format.
+ * Returns timestamp truncated to the unit specified by the format.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(instant, fmt) - Returns returns date/timestamp with the time portion truncated to the unit specified by the format model fmt.",
-  extended = "> SELECT _FUNC_('2009-02-12', 'MM')\n '2009-02-01'\n> SELECT _FUNC_('2015-10-27', 'YEAR');\n '2015-01-01'")
+  usage = "_FUNC_(timestamp, fmt) - Returns returns timestamp with the time portion truncated to the unit specified by the format model fmt.",
+  extended = "> SELECT _FUNC_('2009-02-12', 'MM')\n '2009-02-01 00:00:00'\n> SELECT _FUNC_('2015-10-27', 'YEAR');\n '2015-01-01 00:00:00'")
 // scalastyle:on line.size.limit
-case class TruncDate(instant: Expression, format: Expression)
+case class TruncDate(timestamp: Expression, format: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
-  override def left: Expression = instant
+  override def left: Expression = timestamp
   override def right: Expression = format
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DateType, TimestampType), StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
 
-  override def dataType: DataType = instant.dataType
+  override def dataType: DataType = TimestampType
 
   override def nullable: Boolean = true
 
@@ -984,16 +974,15 @@ case class TruncDate(instant: Expression, format: Expression)
     } else {
       DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
     }
+    val ts = timestamp.eval(input)
     if (level == -1) {
       // unknown format
       null
     } else {
-      (instant.dataType, instant.eval(input)) match {
-        case (_: DateType, date: Int) =>
-          DateTimeUtils.truncDate(date, level)
-        case (_: TimestampType, timestamp: Long) =>
-          DateTimeUtils.truncDate(timestamp, level)
-        case (_, null) => null
+      if (ts == null) {
+        null
+      } else {
+        DateTimeUtils.truncDate(ts.asInstanceOf[Long], level)
       }
     }
   }
@@ -1007,13 +996,13 @@ case class TruncDate(instant: Expression, format: Expression)
           boolean ${ev.isNull} = true;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
       } else {
-        val d = instant.genCode(ctx)
+        val ts = timestamp.genCode(ctx)
         ev.copy(code = s"""
-          ${d.code}
-          boolean ${ev.isNull} = ${d.isNull};
+          ${ts.code}
+          boolean ${ev.isNull} = ${ts.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $dtu.truncDate(${d.value}, $truncLevel);
+            ${ev.value} = $dtu.truncDate(${ts.value}, $truncLevel);
           }""")
       }
     } else {

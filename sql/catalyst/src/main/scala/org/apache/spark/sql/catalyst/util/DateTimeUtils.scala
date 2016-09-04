@@ -768,7 +768,7 @@ object DateTimeUtils {
    * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
    */
   def timestampAddDays(start: SQLTimestamp, days: Int): SQLTimestamp = {
-    timestampAddInterval(start, 0, days * MICROS_PER_DAY)
+    start + days * MICROS_PER_DAY
   }
 
   /**
@@ -831,28 +831,12 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the first timestamps which is later than startTimestamp and is of the given dayOfWeek.
-   * dayOfWeek is an integer ranges in [0, 6], and 0 is Thu, 1 is Fri, etc,.
-   */
-  def getNextDateForDayOfWeek(startTimestamp: SQLTimestamp, dayOfWeek: Int): SQLTimestamp = {
-    dateFuncToTimestampFunc(startTimestamp, getNextDateForDayOfWeek(_: SQLDate, dayOfWeek))
-  }
-
-  /**
    * Returns last day of the month for the given date. The date is expressed in days
    * since 1.1.1970.
    */
   def getLastDayOfMonth(date: SQLDate): SQLDate = {
     val (_, _, _, daysToMonthEnd) = splitDate(date)
     date + daysToMonthEnd
-  }
-
-  /**
-   * Returns last day of the month for the given timestamp. The timestamp is expressed
-   * in milliseconds since 1970-01-01 00:00:00.
-   */
-  def getLastDayOfMonth(timestamp: SQLTimestamp): SQLTimestamp = {
-    dateFuncToTimestampFunc(timestamp, getLastDayOfMonth(_: SQLDate))
   }
 
   private val TRUNC_TO_YEAR = 1
@@ -864,21 +848,6 @@ object DateTimeUtils {
   private val TRUNC_INVALID = -1
 
   /**
-   * Returns the trunc date from original date and trunc level.
-   * Trunc level should be generated using `parseTruncLevel()`, should only be 1 or 2.
-   */
-  def truncDate(d: SQLDate, level: Int): SQLDate = {
-    if (level == TRUNC_TO_YEAR) {
-      d - DateTimeUtils.getDayInYear(d) + 1
-    } else if (level == TRUNC_TO_MONTH) {
-      d - DateTimeUtils.getDayOfMonth(d) + 1
-    } else {
-      // caller make sure that this should never be reached
-      sys.error(s"Invalid trunc level: $level")
-    }
-  }
-
-  /**
    * Returns the trunc timestamp from original timestamp and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should only be 1 - 6.
    */
@@ -887,6 +856,21 @@ object DateTimeUtils {
       dateFuncToTimestampFunc(ts, truncDate(_: SQLDate, level))
     } else {
       truncTime(ts, level)
+    }
+  }
+
+  /**
+   * Returns the trunc date from original date and trunc level.
+   * Trunc level should be generated using `parseTruncLevel()`, should only be 1 or 2.
+   */
+  private def truncDate(d: SQLDate, level: Int): SQLDate = {
+    if (level == TRUNC_TO_YEAR) {
+      d - DateTimeUtils.getDayInYear(d) + 1
+    } else if (level == TRUNC_TO_MONTH) {
+      d - DateTimeUtils.getDayOfMonth(d) + 1
+    } else {
+      // caller make sure that this should never be reached
+      sys.error(s"Invalid trunc level: $level")
     }
   }
 
