@@ -692,35 +692,33 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("VectorizedParquetRecordReader - partition column types") {
-    val dataTypes =
-      Seq(
-        StringType, BooleanType, ByteType, ShortType, IntegerType, LongType,
-        FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
-        DateType, TimestampType)
+    withTempPath { dir =>
+      Seq(1).toDF().repartition(1).write.parquet(dir.getCanonicalPath)
 
-    val constantValues =
-      Seq(
-        UTF8String.fromString("a string"),
-        true,
-        1.toByte,
-        2.toShort,
-        3,
-        Long.MaxValue,
-        0.25.toFloat,
-        0.75D,
-        Decimal("1234.23456"),
-        Decimal("1.23456"),
-        DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("2015-01-01")),
-        DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("2015-01-01 23:50:59.123")))
+      val dataTypes =
+        Seq(StringType, BooleanType, ByteType, ShortType, IntegerType, LongType,
+          FloatType, DoubleType, DecimalType(25, 5), DateType, TimestampType)
 
-    dataTypes.zip(constantValues).foreach { case (dt, v) =>
-      val schema = StructType(StructField("pcol", dt) :: Nil)
-      val vectorizedReader = new VectorizedParquetRecordReader
-      val partitionValues = new GenericMutableRow(Array(v))
+      val constantValues =
+        Seq(
+          UTF8String.fromString("a string"),
+          true,
+          1.toByte,
+          2.toShort,
+          3,
+          Long.MaxValue,
+          0.25.toFloat,
+          0.75D,
+          Decimal("1234.23456"),
+          DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("2015-01-01")),
+          DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("2015-01-01 23:50:59.123")))
 
-      withTempPath { dir =>
-        Seq(1).toDF().repartition(1).write.parquet(dir.getCanonicalPath)
+      dataTypes.zip(constantValues).foreach { case (dt, v) =>
+        val schema = StructType(StructField("pcol", dt) :: Nil)
+        val vectorizedReader = new VectorizedParquetRecordReader
+        val partitionValues = new GenericMutableRow(Array(v))
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+
         try {
           vectorizedReader.initialize(file, null)
           vectorizedReader.initBatch(schema, partitionValues)
