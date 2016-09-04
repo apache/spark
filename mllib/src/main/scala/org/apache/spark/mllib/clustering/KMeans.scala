@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
@@ -225,7 +225,7 @@ class KMeans private (
 
     val centers = initialModel match {
       case Some(kMeansCenters) =>
-        kMeansCenters.clusterCenters.map(s => new VectorWithNorm(s))
+        kMeansCenters.clusterCenters.map(new VectorWithNorm(_))
       case None =>
         if (initializationMode == KMeans.RANDOM) {
           initRandom(zippedData)
@@ -240,7 +240,8 @@ class KMeans private (
 
     val samplePoint = data.first()
     val dim = samplePoint.size
-    if (samplePoint.isInstanceOf[SparseVector]) {
+    val isSparse = samplePoint.isInstanceOf[SparseVector]
+    if (isSparse) {
       logWarning("KMeans will be less efficient if the input data is Sparse Vector.")
     }
 
@@ -248,16 +249,37 @@ class KMeans private (
     val blockData = zippedData.mapPartitions { iter =>
       iter.grouped(blockSize).map { points =>
         val realSize = points.size
-        val pointArray = new Array[Double](realSize * dim)
         val pointNormArray = new Array[Double](realSize)
         var numRows = 0
 
-        points.foreach { point =>
-          System.arraycopy(point.vector.toArray, 0, pointArray, numRows * dim, dim)
-          pointNormArray(numRows) = point.norm
-          numRows += 1
+        val pointMatrix = if (isSparse) {
+          val colPtrs = new Array[Int](realSize + 1)
+          val rowIndices = mutable.ArrayBuilder.make[Int]
+          val values = mutable.ArrayBuilder.make[Double]
+          var nnz = 0
+
+          points.foreach { point =>
+            val sv = point.vector.asInstanceOf[SparseVector]
+            sv.foreachActive { (index, value) =>
+              rowIndices += index
+              values += value
+              nnz += 1
+            }
+
+            pointNormArray(numRows) = point.norm
+            numRows += 1
+            colPtrs(numRows) = nnz
+          }
+          new SparseMatrix(numRows, dim, colPtrs, rowIndices.result(), values.result(), true)
+        } else {
+          val pointArray = new Array[Double](realSize * dim)
+          points.foreach { point =>
+            System.arraycopy(point.vector.toArray, 0, pointArray, numRows * dim, dim)
+            pointNormArray(numRows) = point.norm
+            numRows += 1
+          }
+          new DenseMatrix(numRows, dim, pointArray, true)
         }
-        val pointMatrix = new DenseMatrix(numRows, dim, pointArray, true)
 
         (pointMatrix, pointNormArray)
       }
@@ -280,7 +302,7 @@ class KMeans private (
    * Implementation of K-Means algorithm.
    */
   private def runAlgorithm(
-      data: RDD[(DenseMatrix, Array[Double])],
+      data: RDD[(Matrix, Array[Double])],
       centers: Array[VectorWithNorm],
       instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
 
@@ -340,7 +362,17 @@ class KMeans private (
           var min = -1
           var j = 0
 
-          val point = Vectors.dense(pointMatrix.values.slice(i * dim, (i + 1) * dim))
+          val start = System.nanoTime()
+          val point = pointMatrix match {
+            case dm: DenseMatrix =>
+              Vectors.dense(dm.values.slice(i * dim, (i + 1) * dim))
+            case sm: SparseMatrix =>
+              val start = sm.colPtrs(i)
+              val end = sm.colPtrs(i + 1)
+              val indices = sm.rowIndices.slice(start, end)
+              val values = sm.values.slice(start, end)
+              Vectors.sparse(dim, indices, values)
+          }
           val pointNorm = pointNormArray(i)
 
           while (j < k) {
@@ -428,12 +460,12 @@ class KMeans private (
    */
   private def initKMeansParallel(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {
     // Initialize empty centers and point costs.
-    val centers = ArrayBuffer.empty[VectorWithNorm]
+    val centers = mutable.ArrayBuffer.empty[VectorWithNorm]
     var costs = data.map(_ => Double.PositiveInfinity)
 
     // Initialize first center to a random point.
     val sample = data.takeSample(true, 1, new XORShiftRandom(this.seed).nextLong())(0)
-    val newCenters = ArrayBuffer(sample.toDense)
+    val newCenters = mutable.ArrayBuffer(sample.toDense)
 
     /** Merges new centers to centers. */
     def mergeNewCenters(): Unit = {
