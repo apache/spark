@@ -20,6 +20,10 @@ shallow_clone: true
 platform: x64
 configuration: Debug
 
+only_commits:
+  files:
+    - R/
+
 cache:
   - C:\Users\appveyor\.m2
 
