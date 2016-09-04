@@ -95,6 +95,9 @@ Currently, SparkR on Windows is being tested with [Appveyor](https://ci.appveyor
 
 ### Specifying the branch for building and setting the build schedule
 
+Note: It seems Web UI configurations and `appveyor.yml` are  mutually exclusive according to the [documentation](https://www.appveyor.com/docs/build-configuration/#configuring-build).
+
+
 - Click the settings button on the right.
 
   <img width="1010" alt="2016-08-30 1 19 12" src="https://cloud.githubusercontent.com/assets/6477701/18075954/65d1aefa-6eb4-11e6-9a45-b9a9295f5085.png">
