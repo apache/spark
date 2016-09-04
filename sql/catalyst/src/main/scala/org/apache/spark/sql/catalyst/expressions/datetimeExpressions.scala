@@ -974,11 +974,11 @@ case class TruncDate(timestamp: Expression, format: Expression)
     } else {
       DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
     }
-    val ts = timestamp.eval(input)
     if (level == -1) {
       // unknown format
       null
     } else {
+      val ts = timestamp.eval(input)
       if (ts == null) {
         null
       } else {
