@@ -1,11 +1,11 @@
-# Appveyor Guides
+# AppVeyor Guides
 
-Currently, SparkR on Windows is being tested with [Appveyor](https://ci.appveyor.com). This page describes how to set up Appveyor with Spark, how to run the build, check the status and stop the build via this tool. There is the documenation for Appveyor [here](https://www.appveyor.com/docs). Please refer this for full details.
+Currently, SparkR on Windows is being tested with [AppVeyor](https://ci.appveyor.com). This page describes how to set up AppVeyor with Spark, how to run the build, check the status and stop the build via this tool. There is the documenation for AppVeyor [here](https://www.appveyor.com/docs). Please refer this for full details.
 
 
-### Setting up Appveyor
+### Setting up AppVeyor
 
-#### Sign up Appveyor.
+#### Sign up AppVeyor.
 
 - Go to https://ci.appveyor.com, and then click "SIGN UP FOR FREE".
     
@@ -20,7 +20,7 @@ Currently, SparkR on Windows is being tested with [Appveyor](https://ci.appveyor
   <img width="360" alt="2016-09-04 11 08 10" src="https://cloud.githubusercontent.com/assets/6477701/18228811/344263a0-7299-11e6-90b7-9b1c7b6b8b01.png">
 
 
-#### After signing up, go to profile to link Github and Appveyor.
+#### After signing up, go to profile to link Github and AppVeyor.
 
 - Click your account and then click "Profile".
 
@@ -45,7 +45,7 @@ Currently, SparkR on Windows is being tested with [Appveyor](https://ci.appveyor
   
   <img width="144" alt="2016-08-30 12 16 35" src="https://cloud.githubusercontent.com/assets/6477701/18075026/3ee57bc6-6eac-11e6-826e-5dd09aeb0e7c.png">
 
-- Since we will use Github here, click the "GITHUB" button and then click "Authorize Github" so that Appveyor can access to the Github logs (e.g. commits).
+- Since we will use Github here, click the "GITHUB" button and then click "Authorize Github" so that AppVeyor can access to the Github logs (e.g. commits).
     
   <img width="517" alt="2016-09-04 11 10 22" src="https://cloud.githubusercontent.com/assets/6477701/18228819/9a4d5722-7299-11e6-900c-c5ff6b0450b1.png">
 
@@ -110,7 +110,7 @@ Note: It seems Web UI configurations and `appveyor.yml` are  mutually exclusive 
 
   <img width="358" alt="2016-08-30 12 42 33" src="https://cloud.githubusercontent.com/assets/6477701/18075421/97b17734-6eaf-11e6-8b19-bc1dca840c96.png">
 
-- Set the Crontab expression to regularly start the build. Appveyor uses Crontab expression, [atifaziz/NCrontab](https://github.com/atifaziz/NCrontab/wiki/Crontab-Expression). Please refer the examples [here](https://github.com/atifaziz/NCrontab/wiki/Crontab-Examples).
+- Set the Crontab expression to regularly start the build. AppVeyor uses Crontab expression, [atifaziz/NCrontab](https://github.com/atifaziz/NCrontab/wiki/Crontab-Expression). Please refer the examples [here](https://github.com/atifaziz/NCrontab/wiki/Crontab-Examples).
 
 
   <img width="471" alt="2016-08-30 12 42 43" src="https://cloud.githubusercontent.com/assets/6477701/18075450/d4ef256a-6eaf-11e6-8e41-74e38dac8ca0.png">
@@ -120,7 +120,7 @@ Note: It seems Web UI configurations and `appveyor.yml` are  mutually exclusive 
 
 ### Filtering commits and Pull Requests
 
-Currently, Appveyor is only used for SparkR. So, the build is only triggered when R codes are changed.
+Currently, AppVeyor is only used for SparkR. So, the build is only triggered when R codes are changed.
 
 This is specified in `.appveyor.yml` as below:
 
