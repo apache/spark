@@ -103,9 +103,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Find the first [[TreeNode]] that satisfies the condition specified by `f`.
    * The condition is recursively applied to this node and all of its children (pre-order).
    */
-  def find(f: BaseType => Boolean): Option[BaseType] = f(this) match {
-    case true => Some(this)
-    case false => children.foldLeft(Option.empty[BaseType]) { (l, r) => l.orElse(r.find(f)) }
+  def find(f: BaseType => Boolean): Option[BaseType] = if (f(this)) {
+    Some(this)
+  } else {
+    children.foldLeft(Option.empty[BaseType]) { (l, r) => l.orElse(r.find(f)) }
   }
 
   /**

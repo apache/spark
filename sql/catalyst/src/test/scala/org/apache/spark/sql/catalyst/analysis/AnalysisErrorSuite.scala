@@ -414,11 +414,10 @@ class AnalysisErrorSuite extends AnalysisTest {
             AttributeReference("a", dataType)(exprId = ExprId(2)),
             AttributeReference("b", IntegerType)(exprId = ExprId(1))))
 
-      shouldSuccess match {
-        case true =>
-          assertAnalysisSuccess(plan, true)
-        case false =>
-          assertAnalysisError(plan, "expression `a` cannot be used as a grouping expression" :: Nil)
+      if (shouldSuccess) {
+        assertAnalysisSuccess(plan, true)
+      } else {
+        assertAnalysisError(plan, "expression `a` cannot be used as a grouping expression" :: Nil)
       }
     }
 
