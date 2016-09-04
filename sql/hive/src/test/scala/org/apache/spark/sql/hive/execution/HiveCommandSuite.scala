@@ -424,7 +424,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       val message4 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_view1")
       }.getMessage
-      assert(message4.contains("is not allowed on a view or index table"))
+      assert(message4.contains("is not allowed on a view"))
     }
   }
 

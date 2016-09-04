@@ -26,9 +26,11 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.thrift.TException
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
@@ -41,12 +43,19 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * A persistent implementation of the system catalog using Hive.
  * All public methods must be synchronized for thread-safety.
  */
-private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configuration)
+private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configuration)
   extends ExternalCatalog with Logging {
 
   import CatalogTypes.TablePartitionSpec
   import HiveExternalCatalog._
   import CatalogTableType._
+
+  /**
+   * A Hive client used to interact with the metastore.
+   */
+  val client: HiveClient = {
+    HiveUtils.newClientForMetadata(conf, hadoopConf)
+  }
 
   // Exceptions thrown by the hive client that we would like to wrap
   private val clientExceptions = Set(
@@ -163,9 +172,13 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
       ignoreIfExists: Boolean): Unit = withClient {
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
+    val table = tableDefinition.identifier.table
     requireDbExists(db)
     verifyTableProperties(tableDefinition)
 
+    if (tableExists(db, table) && !ignoreIfExists) {
+      throw new TableAlreadyExistsException(db = db, table = table)
+    }
     // Before saving data source table metadata into Hive metastore, we should:
     //  1. Put table schema, partition column names and bucket specification in table properties.
     //  2. Check if this table is hive compatible
@@ -442,7 +455,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
   }
 
   override def tableExists(db: String, table: String): Boolean = withClient {
-    client.getTableOption(db, table).isDefined
+    client.tableExists(db, table)
   }
 
   override def listTables(db: String): Seq[String] = withClient {
@@ -476,8 +489,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit = withClient {
+      inheritTableSpecs: Boolean): Unit = withClient {
     requireTableExists(db, table)
 
     val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
@@ -487,12 +499,37 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
 
     client.loadPartition(
       loadPath,
-      s"$db.$table",
+      db,
+      table,
       orderedPartitionSpec,
       isOverwrite,
       holdDDLTime,
-      inheritTableSpecs,
-      isSkewedStoreAsSubdir)
+      inheritTableSpecs)
+  }
+
+  override def loadDynamicPartitions(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      replace: Boolean,
+      numDP: Int,
+      holdDDLTime: Boolean): Unit = withClient {
+    requireTableExists(db, table)
+
+    val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
+    getTable(db, table).partitionColumnNames.foreach { colName =>
+      orderedPartitionSpec.put(colName, partition(colName))
+    }
+
+    client.loadDynamicPartitions(
+      loadPath,
+      db,
+      table,
+      orderedPartitionSpec,
+      replace,
+      numDP,
+      holdDDLTime)
   }
 
   // --------------------------------------------------------------------------
@@ -541,6 +578,16 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
   }
 
   /**
+   * Returns the specified partition or None if it does not exist.
+   */
+  override def getPartitionOption(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec): Option[CatalogTablePartition] = withClient {
+    client.getPartitionOption(db, table, spec)
+  }
+
+  /**
    * Returns the partition names from hive metastore for a given table in a database.
    */
   override def listPartitions(
@@ -557,31 +604,39 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
   override def createFunction(
       db: String,
       funcDefinition: CatalogFunction): Unit = withClient {
+    requireDbExists(db)
     // Hive's metastore is case insensitive. However, Hive's createFunction does
     // not normalize the function name (unlike the getFunction part). So,
     // we are normalizing the function name.
     val functionName = funcDefinition.identifier.funcName.toLowerCase
+    requireFunctionNotExists(db, functionName)
     val functionIdentifier = funcDefinition.identifier.copy(funcName = functionName)
     client.createFunction(db, funcDefinition.copy(identifier = functionIdentifier))
   }
 
   override def dropFunction(db: String, name: String): Unit = withClient {
+    requireFunctionExists(db, name)
     client.dropFunction(db, name)
   }
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = withClient {
+    requireFunctionExists(db, oldName)
+    requireFunctionNotExists(db, newName)
     client.renameFunction(db, oldName, newName)
   }
 
   override def getFunction(db: String, funcName: String): CatalogFunction = withClient {
+    requireFunctionExists(db, funcName)
     client.getFunction(db, funcName)
   }
 
   override def functionExists(db: String, funcName: String): Boolean = withClient {
+    requireDbExists(db)
     client.functionExists(db, funcName)
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = withClient {
+    requireDbExists(db)
     client.listFunctions(db, pattern)
   }
 
@@ -614,24 +669,26 @@ object HiveExternalCatalog {
   def getSchemaFromTableProperties(metadata: CatalogTable): StructType = {
     val errorMessage = "Could not read schema from the hive metastore because it is corrupted."
     val props = metadata.properties
-    props.get(DATASOURCE_SCHEMA).map { schema =>
+    val schema = props.get(DATASOURCE_SCHEMA)
+    if (schema.isDefined) {
       // Originally, we used `spark.sql.sources.schema` to store the schema of a data source table.
       // After SPARK-6024, we removed this flag.
       // Although we are not using `spark.sql.sources.schema` any more, we need to still support.
-      DataType.fromJson(schema).asInstanceOf[StructType]
-    } getOrElse {
-      props.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
-        val parts = (0 until numParts.toInt).map { index =>
+      DataType.fromJson(schema.get).asInstanceOf[StructType]
+    } else {
+      val numSchemaParts = props.get(DATASOURCE_SCHEMA_NUMPARTS)
+      if (numSchemaParts.isDefined) {
+        val parts = (0 until numSchemaParts.get.toInt).map { index =>
           val part = metadata.properties.get(s"$DATASOURCE_SCHEMA_PART_PREFIX$index").orNull
           if (part == null) {
             throw new AnalysisException(errorMessage +
-              s" (missing part $index of the schema, $numParts parts are expected).")
+              s" (missing part $index of the schema, ${numSchemaParts.get} parts are expected).")
           }
           part
         }
         // Stick all parts back to a single schema string.
         DataType.fromJson(parts.mkString).asInstanceOf[StructType]
-      } getOrElse {
+      } else {
         throw new AnalysisException(errorMessage)
       }
     }

@@ -444,7 +444,8 @@ setMethod("cosh",
 
 #' Returns the number of items in a group
 #'
-#' Returns the number of items in a group. This is a column aggregate function.
+#' This can be used as a column aggregate function with \code{Column} as input,
+#' and returns the number of items in a group.
 #'
 #' @rdname count
 #' @name count
@@ -2876,7 +2877,8 @@ setMethod("randn", signature(seed = "numeric"),
 
 #' regexp_extract
 #'
-#' Extract a specific(idx) group identified by a java regex, from the specified string column.
+#' Extract a specific \code{idx} group identified by a Java regex, from the specified string column.
+#' If the regex did not match, or the specified group did not match, an empty string is returned.
 #'
 #' @param x a string Column.
 #' @param pattern a regular expression.
@@ -3121,9 +3123,9 @@ setMethod("ifelse",
 #' @aliases cume_dist,missing-method
 #' @export
 #' @examples \dontrun{
-#'   df <- createDataFrame(iris)
-#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
-#'   out <- select(df, over(cume_dist(), ws), df$Sepal_Length, df$Species)
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(cume_dist(), ws), df$hp, df$am)
 #' }
 #' @note cume_dist since 1.6.0
 setMethod("cume_dist",
@@ -3148,7 +3150,11 @@ setMethod("cume_dist",
 #' @family window_funcs
 #' @aliases dense_rank,missing-method
 #' @export
-#' @examples \dontrun{dense_rank()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(dense_rank(), ws), df$hp, df$am)
+#' }
 #' @note dense_rank since 1.6.0
 setMethod("dense_rank",
           signature("missing"),
@@ -3168,18 +3174,26 @@ setMethod("dense_rank",
 #' @param x the column as a character string or a Column to compute on.
 #' @param offset the number of rows back from the current row from which to obtain a value.
 #'               If not specified, the default is 1.
-#' @param defaultValue default to use when the offset row does not exist.
+#' @param defaultValue (optional) default to use when the offset row does not exist.
 #' @param ... further arguments to be passed to or from other methods.
 #' @rdname lag
 #' @name lag
 #' @aliases lag,characterOrColumn-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{lag(df$c)}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'
+#'   # Lag mpg values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lag(df$mpg), ws), df$mpg, df$hp, df$am)
+#' }
 #' @note lag since 1.6.0
 setMethod("lag",
           signature(x = "characterOrColumn"),
-          function(x, offset, defaultValue = NULL) {
+          function(x, offset = 1, defaultValue = NULL) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
@@ -3194,25 +3208,35 @@ setMethod("lag",
 #' lead
 #'
 #' Window function: returns the value that is \code{offset} rows after the current row, and
-#' NULL if there is less than \code{offset} rows after the current row. For example,
-#' an \code{offset} of one will return the next row at any given point in the window partition.
+#' \code{defaultValue} if there is less than \code{offset} rows after the current row.
+#' For example, an \code{offset} of one will return the next row at any given point
+#' in the window partition.
 #'
 #' This is equivalent to the \code{LEAD} function in SQL.
 #'
-#' @param x Column to compute on
-#' @param offset Number of rows to offset
-#' @param defaultValue (Optional) default value to use
+#' @param x the column as a character string or a Column to compute on.
+#' @param offset the number of rows after the current row from which to obtain a value.
+#'               If not specified, the default is 1.
+#' @param defaultValue (optional) default to use when the offset row does not exist.
 #'
 #' @rdname lead
 #' @name lead
 #' @family window_funcs
 #' @aliases lead,characterOrColumn,numeric-method
 #' @export
-#' @examples \dontrun{lead(df$c)}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'
+#'   # Lead mpg values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lead(df$mpg), ws), df$mpg, df$hp, df$am)
+#' }
 #' @note lead since 1.6.0
 setMethod("lead",
           signature(x = "characterOrColumn", offset = "numeric", defaultValue = "ANY"),
-          function(x, offset, defaultValue = NULL) {
+          function(x, offset = 1, defaultValue = NULL) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
@@ -3239,7 +3263,15 @@ setMethod("lead",
 #' @aliases ntile,numeric-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{ntile(1)}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'
+#'   # Get ntile group id (1-4) for hp
+#'   out <- select(df, over(ntile(4), ws), df$hp, df$am)
+#' }
 #' @note ntile since 1.6.0
 setMethod("ntile",
           signature(x = "numeric"),
@@ -3263,7 +3295,11 @@ setMethod("ntile",
 #' @family window_funcs
 #' @aliases percent_rank,missing-method
 #' @export
-#' @examples \dontrun{percent_rank()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(percent_rank(), ws), df$hp, df$am)
+#' }
 #' @note percent_rank since 1.6.0
 setMethod("percent_rank",
           signature("missing"),
@@ -3288,7 +3324,11 @@ setMethod("percent_rank",
 #' @family window_funcs
 #' @aliases rank,missing-method
 #' @export
-#' @examples \dontrun{rank()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(rank(), ws), df$hp, df$am)
+#' }
 #' @note rank since 1.6.0
 setMethod("rank",
           signature(x = "missing"),
@@ -3321,7 +3361,11 @@ setMethod("rank",
 #' @aliases row_number,missing-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{row_number()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'   out <- select(df, over(row_number(), ws), df$hp, df$am)
+#' }
 #' @note row_number since 1.6.0
 setMethod("row_number",
           signature("missing"),

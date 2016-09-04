@@ -1330,6 +1330,10 @@ setGeneric("spark.kmeans", function(data, formula, ...) { standardGeneric("spark
 #' @export
 setGeneric("fitted")
 
+#' @rdname spark.mlp
+#' @export
+setGeneric("spark.mlp", function(data, ...) { standardGeneric("spark.mlp") })
+
 #' @rdname spark.naiveBayes
 #' @export
 setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("spark.naiveBayes") })
@@ -1371,3 +1375,7 @@ setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml")
 #' @rdname spark.als
 #' @export
 setGeneric("spark.als", function(data, ...) { standardGeneric("spark.als") })
+
+#' @rdname spark.kstest
+#' @export
+setGeneric("spark.kstest", function(data, ...) { standardGeneric("spark.kstest") })

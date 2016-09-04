@@ -363,7 +363,7 @@ class MultinomialLogisticRegression @Since("2.1.0") (
             rawCoefficients(coefIndex)
           }
         } else {
-          Array[Double]()
+          Array.empty
         }
 
         val coefficientArray: Array[Double] = Array.tabulate(numClasses * numFeatures) { i =>

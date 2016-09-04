@@ -389,3 +389,165 @@ abstract class DeclarativeAggregate
     def right: AttributeReference = inputAggBufferAttributes(aggBufferAttributes.indexOf(a))
   }
 }
+
+
+/**
+ * Aggregation function which allows **arbitrary** user-defined java object to be used as internal
+ * aggregation buffer.
+ *
+ * {{{
+ *  aggregation buffer for normal aggregation function `avg`            aggregate buffer for `sum`
+ *            |                                                                  |
+ *            v                                                                  v
+ *          +--------------+---------------+-----------------------------------+-------------+
+ *          |  sum1 (Long) | count1 (Long) | generic user-defined java objects | sum2 (Long) |
+ *          +--------------+---------------+-----------------------------------+-------------+
+ *                                           ^
+ *                                           |
+ *            aggregation buffer object for `TypedImperativeAggregate` aggregation function
+ * }}}
+ *
+ * General work flow:
+ *
+ * Stage 1: initialize aggregate buffer object.
+ *
+ *   1. The framework calls `initialize(buffer: MutableRow)` to set up the empty aggregate buffer.
+ *   2. In `initialize`, we call `createAggregationBuffer(): T` to get the initial buffer object,
+ *      and set it to the global buffer row.
+ *
+ *
+ * Stage 2: process input rows.
+ *
+ *   If the aggregate mode is `Partial` or `Complete`:
+ *     1. The framework calls `update(buffer: MutableRow, input: InternalRow)` to process the input
+ *        row.
+ *     2. In `update`, we get the buffer object from the global buffer row and call
+ *        `update(buffer: T, input: InternalRow): Unit`.
+ *
+ *   If the aggregate mode is `PartialMerge` or `Final`:
+ *     1. The framework call `merge(buffer: MutableRow, inputBuffer: InternalRow)` to process the
+ *        input row, which are serialized buffer objects shuffled from other nodes.
+ *     2. In `merge`, we get the buffer object from the global buffer row, and get the binary data
+ *        from input row and deserialize it to buffer object, then we call
+ *        `merge(buffer: T, input: T): Unit` to merge these 2 buffer objects.
+ *
+ *
+ * Stage 3: output results.
+ *
+ *   If the aggregate mode is `Partial` or `PartialMerge`:
+ *     1. The framework calls `serializeAggregateBufferInPlace` to replace the buffer object in the
+ *        global buffer row with binary data.
+ *     2. In `serializeAggregateBufferInPlace`, we get the buffer object from the global buffer row
+ *        and call `serialize(buffer: T): Array[Byte]` to serialize the buffer object to binary.
+ *     3. The framework outputs buffer attributes and shuffle them to other nodes.
+ *
+ *   If the aggregate mode is `Final` or `Complete`:
+ *     1. The framework calls `eval(buffer: InternalRow)` to calculate the final result.
+ *     2. In `eval`, we get the buffer object from the global buffer row and call
+ *        `eval(buffer: T): Any` to get the final result.
+ *     3. The framework outputs these final results.
+ *
+ *
+ * Window function work flow:
+ *   The framework calls `update(buffer: MutableRow, input: InternalRow)` several times and then
+ *   call `eval(buffer: InternalRow)`, so there is no need for window operator to call
+ *   `serializeAggregateBufferInPlace`.
+ *
+ *
+ * NOTE: SQL with TypedImperativeAggregate functions is planned in sort based aggregation,
+ * instead of hash based aggregation, as TypedImperativeAggregate use BinaryType as aggregation
+ * buffer's storage format, which is not supported by hash based aggregation. Hash based
+ * aggregation only support aggregation buffer of mutable types (like LongType, IntType that have
+ * fixed length and can be mutated in place in UnsafeRow)
+ */
+abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
+
+  /**
+   * Creates an empty aggregation buffer object. This is called before processing each key group
+   * (group by key).
+   *
+   * @return an aggregation buffer object
+   */
+  def createAggregationBuffer(): T
+
+  /**
+   * In-place updates the aggregation buffer object with an input row. buffer = buffer + input.
+   * This is typically called when doing Partial or Complete mode aggregation.
+   *
+   * @param buffer The aggregation buffer object.
+   * @param input an input row
+   */
+  def update(buffer: T, input: InternalRow): Unit
+
+  /**
+   * Merges an input aggregation object into aggregation buffer object. buffer = buffer + input.
+   * This is typically called when doing PartialMerge or Final mode aggregation.
+   *
+   * @param buffer the aggregation buffer object used to store the aggregation result.
+   * @param input an input aggregation object. Input aggregation object can be produced by
+   *              de-serializing the partial aggregate's output from Mapper side.
+   */
+  def merge(buffer: T, input: T): Unit
+
+  /**
+   * Generates the final aggregation result value for current key group with the aggregation buffer
+   * object.
+   *
+   * @param buffer aggregation buffer object.
+   * @return The aggregation result of current key group
+   */
+  def eval(buffer: T): Any
+
+  /** Serializes the aggregation buffer object T to Array[Byte] */
+  def serialize(buffer: T): Array[Byte]
+
+  /** De-serializes the serialized format Array[Byte], and produces aggregation buffer object T */
+  def deserialize(storageFormat: Array[Byte]): T
+
+  final override def initialize(buffer: MutableRow): Unit = {
+    val bufferObject = createAggregationBuffer()
+    buffer.update(mutableAggBufferOffset, bufferObject)
+  }
+
+  final override def update(buffer: MutableRow, input: InternalRow): Unit = {
+    update(getBufferObject(buffer), input)
+  }
+
+  final override def merge(buffer: MutableRow, inputBuffer: InternalRow): Unit = {
+    val bufferObject = getBufferObject(buffer)
+    // The inputBuffer stores serialized aggregation buffer object produced by partial aggregate
+    val inputObject = deserialize(inputBuffer.getBinary(inputAggBufferOffset))
+    merge(bufferObject, inputObject)
+  }
+
+  final override def eval(buffer: InternalRow): Any = {
+    eval(getBufferObject(buffer))
+  }
+
+  private[this] val anyObjectType = ObjectType(classOf[AnyRef])
+  private def getBufferObject(bufferRow: InternalRow): T = {
+    bufferRow.get(mutableAggBufferOffset, anyObjectType).asInstanceOf[T]
+  }
+
+  final override lazy val aggBufferAttributes: Seq[AttributeReference] = {
+    // Underlying storage type for the aggregation buffer object
+    Seq(AttributeReference("buf", BinaryType)())
+  }
+
+  final override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
+
+  final override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+
+  /**
+   * In-place replaces the aggregation buffer object stored at buffer's index
+   * `mutableAggBufferOffset`, with SparkSQL internally supported underlying storage format
+   * (BinaryType).
+   *
+   * This is only called when doing Partial or PartialMerge mode aggregation, before the framework
+   * shuffle out aggregate buffers.
+   */
+  final def serializeAggregateBufferInPlace(buffer: MutableRow): Unit = {
+    buffer(mutableAggBufferOffset) = serialize(getBufferObject(buffer))
+  }
+}

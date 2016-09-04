@@ -212,9 +212,9 @@ setMethod("showDF",
 
 #' show
 #'
-#' Print the SparkDataFrame column names and types
+#' Print class and type information of a Spark object.
 #'
-#' @param object a SparkDataFrame.
+#' @param object a Spark object. Can be a SparkDataFrame, Column, GroupedData, WindowSpec.
 #'
 #' @family SparkDataFrame functions
 #' @rdname show
@@ -397,7 +397,11 @@ setMethod("coltypes",
                 }
 
                 if (is.null(type)) {
-                  stop(paste("Unsupported data type: ", x))
+                  specialtype <- specialtypeshandle(x)
+                  if (is.null(specialtype)) {
+                    stop(paste("Unsupported data type: ", x))
+                  }
+                  type <- PRIMITIVE_TYPES[[specialtype]]
                 }
               }
               type
@@ -1063,6 +1067,13 @@ setMethod("collect",
                   df[[colIndex]] <- col
                 } else {
                   colType <- dtypes[[colIndex]][[2]]
+                  if (is.null(PRIMITIVE_TYPES[[colType]])) {
+                    specialtype <- specialtypeshandle(colType)
+                    if (!is.null(specialtype)) {
+                      colType <- specialtype
+                    }
+                  }
+
                   # Note that "binary" columns behave like complex types.
                   if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
                     vec <- do.call(c, col)
@@ -2265,7 +2276,7 @@ setMethod("join",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y, joinExpr = NULL, joinType = NULL) {
             if (is.null(joinExpr)) {
-              sdf <- callJMethod(x@sdf, "join", y@sdf)
+              sdf <- callJMethod(x@sdf, "crossJoin", y@sdf)
             } else {
               if (class(joinExpr) != "Column") stop("joinExpr must be a Column")
               if (is.null(joinType)) {

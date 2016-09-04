@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count, Max}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
@@ -396,7 +396,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("error test for self-join") {
-    val join = Join(testRelation, testRelation, Inner, None)
+    val join = Join(testRelation, testRelation, Cross, None)
     val error = intercept[AnalysisException] {
       SimpleAnalyzer.checkAnalysis(join)
     }
@@ -475,7 +475,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         LocalRelation(
           AttributeReference("c", BinaryType)(exprId = ExprId(4)),
           AttributeReference("d", IntegerType)(exprId = ExprId(3))),
-        Inner,
+        Cross,
         Some(EqualTo(AttributeReference("a", BinaryType)(exprId = ExprId(2)),
           AttributeReference("c", BinaryType)(exprId = ExprId(4)))))
 
@@ -489,7 +489,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         LocalRelation(
           AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)),
           AttributeReference("d", IntegerType)(exprId = ExprId(3))),
-        Inner,
+        Cross,
         Some(EqualTo(AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
           AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)))))
 

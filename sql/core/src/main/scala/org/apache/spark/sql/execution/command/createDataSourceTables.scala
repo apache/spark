@@ -40,71 +40,56 @@ import org.apache.spark.sql.types._
  *   USING format OPTIONS ([option1_name "option1_value", option2_name "option2_value", ...])
  * }}}
  */
-case class CreateDataSourceTableCommand(
-    tableIdent: TableIdentifier,
-    userSpecifiedSchema: Option[StructType],
-    provider: String,
-    options: Map[String, String],
-    userSpecifiedPartitionColumns: Array[String],
-    bucketSpec: Option[BucketSpec],
-    ignoreIfExists: Boolean,
-    managedIfNoPath: Boolean)
+case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boolean)
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val tableName = tableIdent.unquotedString
-    val sessionState = sparkSession.sessionState
+    assert(table.tableType != CatalogTableType.VIEW)
+    assert(table.provider.isDefined)
 
-    if (sessionState.catalog.tableExists(tableIdent)) {
+    val sessionState = sparkSession.sessionState
+    if (sessionState.catalog.tableExists(table.identifier)) {
       if (ignoreIfExists) {
         return Seq.empty[Row]
       } else {
-        throw new AnalysisException(s"Table $tableName already exists.")
+        throw new AnalysisException(s"Table ${table.identifier.unquotedString} already exists.")
       }
     }
 
-    var isExternal = true
-    val optionsWithPath =
-      if (!new CaseInsensitiveMap(options).contains("path") && managedIfNoPath) {
-        isExternal = false
-        options + ("path" -> sessionState.catalog.defaultTablePath(tableIdent))
-      } else {
-        options
-      }
+    val optionsWithPath = if (table.tableType == CatalogTableType.MANAGED) {
+      table.storage.properties + ("path" -> sessionState.catalog.defaultTablePath(table.identifier))
+    } else {
+      table.storage.properties
+    }
 
-    // Create the relation to validate the arguments before writing the metadata to the metastore.
+    // Create the relation to validate the arguments before writing the metadata to the metastore,
+    // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
     val dataSource: BaseRelation =
       DataSource(
         sparkSession = sparkSession,
-        userSpecifiedSchema = userSpecifiedSchema,
-        className = provider,
-        bucketSpec = None,
+        userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
+        className = table.provider.get,
+        bucketSpec = table.bucketSpec,
         options = optionsWithPath).resolveRelation(checkPathExist = false)
 
-    val partitionColumns = if (userSpecifiedSchema.nonEmpty) {
-      userSpecifiedPartitionColumns
+    val partitionColumnNames = if (table.schema.nonEmpty) {
+      table.partitionColumnNames
     } else {
       // This is guaranteed in `PreprocessDDL`.
-      assert(userSpecifiedPartitionColumns.isEmpty)
+      assert(table.partitionColumnNames.isEmpty)
       dataSource match {
-        case r: HadoopFsRelation => r.partitionSchema.fieldNames
-        case _ => Array.empty[String]
+        case r: HadoopFsRelation => r.partitionSchema.fieldNames.toSeq
+        case _ => Nil
       }
     }
 
-    val table = CatalogTable(
-      identifier = tableIdent,
-      tableType = if (isExternal) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty.copy(properties = optionsWithPath),
+    val newTable = table.copy(
+      storage = table.storage.copy(properties = optionsWithPath),
       schema = dataSource.schema,
-      provider = Some(provider),
-      partitionColumnNames = partitionColumns,
-      bucketSpec = bucketSpec
-    )
-
+      partitionColumnNames = partitionColumnNames)
     // We will return Nil or throw exception at the beginning if the table already exists, so when
     // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
-    sessionState.catalog.createTable(table, ignoreIfExists = false)
+    sessionState.catalog.createTable(newTable, ignoreIfExists = false)
     Seq.empty[Row]
   }
 }
@@ -112,7 +97,7 @@ case class CreateDataSourceTableCommand(
 /**
  * A command used to create a data source table using the result of a query.
  *
- * Note: This is different from [[CreateTableAsSelectLogicalPlan]]. Please check the syntax for
+ * Note: This is different from `CreateHiveTableAsSelectCommand`. Please check the syntax for
  * difference. This is not intended for temporary tables.
  *
  * The syntax of using this command in SQL is:
@@ -123,32 +108,31 @@ case class CreateDataSourceTableCommand(
  * }}}
  */
 case class CreateDataSourceTableAsSelectCommand(
-    tableIdent: TableIdentifier,
-    provider: String,
-    partitionColumns: Array[String],
-    bucketSpec: Option[BucketSpec],
+    table: CatalogTable,
     mode: SaveMode,
-    options: Map[String, String],
     query: LogicalPlan)
   extends RunnableCommand {
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+  override protected def innerChildren: Seq[LogicalPlan] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val tableName = tableIdent.unquotedString
-    val sessionState = sparkSession.sessionState
-    var createMetastoreTable = false
-    var isExternal = true
-    val optionsWithPath =
-      if (!new CaseInsensitiveMap(options).contains("path")) {
-        isExternal = false
-        options + ("path" -> sessionState.catalog.defaultTablePath(tableIdent))
-      } else {
-        options
-      }
+    assert(table.tableType != CatalogTableType.VIEW)
+    assert(table.provider.isDefined)
+    assert(table.schema.isEmpty)
 
+    val tableName = table.identifier.unquotedString
+    val provider = table.provider.get
+    val sessionState = sparkSession.sessionState
+
+    val optionsWithPath = if (table.tableType == CatalogTableType.MANAGED) {
+      table.storage.properties + ("path" -> sessionState.catalog.defaultTablePath(table.identifier))
+    } else {
+      table.storage.properties
+    }
+
+    var createMetastoreTable = false
     var existingSchema = Option.empty[StructType]
-    if (sparkSession.sessionState.catalog.tableExists(tableIdent)) {
+    if (sparkSession.sessionState.catalog.tableExists(table.identifier)) {
       // Check if we need to throw an exception or just return.
       mode match {
         case SaveMode.ErrorIfExists =>
@@ -165,21 +149,21 @@ case class CreateDataSourceTableAsSelectCommand(
           val dataSource = DataSource(
             sparkSession = sparkSession,
             userSpecifiedSchema = Some(query.schema.asNullable),
-            partitionColumns = partitionColumns,
-            bucketSpec = bucketSpec,
+            partitionColumns = table.partitionColumnNames,
+            bucketSpec = table.bucketSpec,
             className = provider,
             options = optionsWithPath)
           // TODO: Check that options from the resolved relation match the relation that we are
           // inserting into (i.e. using the same compression).
 
           EliminateSubqueryAliases(
-            sessionState.catalog.lookupRelation(tableIdent)) match {
+            sessionState.catalog.lookupRelation(table.identifier)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
               // check if the file formats match
               l.relation match {
                 case r: HadoopFsRelation if r.fileFormat.getClass != dataSource.providingClass =>
                   throw new AnalysisException(
-                    s"The file format of the existing table $tableIdent is " +
+                    s"The file format of the existing table $tableName is " +
                       s"`${r.fileFormat.getClass.getName}`. It doesn't match the specified " +
                       s"format `$provider`")
                 case _ =>
@@ -216,36 +200,29 @@ case class CreateDataSourceTableAsSelectCommand(
     val dataSource = DataSource(
       sparkSession,
       className = provider,
-      partitionColumns = partitionColumns,
-      bucketSpec = bucketSpec,
+      partitionColumns = table.partitionColumnNames,
+      bucketSpec = table.bucketSpec,
       options = optionsWithPath)
 
     val result = try {
       dataSource.write(mode, df)
     } catch {
       case ex: AnalysisException =>
-        logError(s"Failed to write to table ${tableIdent.identifier} in $mode mode", ex)
+        logError(s"Failed to write to table $tableName in $mode mode", ex)
         throw ex
     }
     if (createMetastoreTable) {
-      // We will use the schema of resolved.relation as the schema of the table (instead of
-      // the schema of df). It is important since the nullability may be changed by the relation
-      // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
-      val schema = result.schema
-      val table = CatalogTable(
-        identifier = tableIdent,
-        tableType = if (isExternal) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED,
-        storage = CatalogStorageFormat.empty.copy(properties = optionsWithPath),
-        schema = schema,
-        provider = Some(provider),
-        partitionColumnNames = partitionColumns,
-        bucketSpec = bucketSpec
-      )
-      sessionState.catalog.createTable(table, ignoreIfExists = false)
+      val newTable = table.copy(
+        storage = table.storage.copy(properties = optionsWithPath),
+        // We will use the schema of resolved.relation as the schema of the table (instead of
+        // the schema of df). It is important since the nullability may be changed by the relation
+        // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
+        schema = result.schema)
+      sessionState.catalog.createTable(newTable, ignoreIfExists = false)
     }
 
     // Refresh the cache of the table in the catalog.
-    sessionState.catalog.refreshTable(tableIdent)
+    sessionState.catalog.refreshTable(table.identifier)
     Seq.empty[Row]
   }
 }

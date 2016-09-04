@@ -15,7 +15,14 @@ export("sparkR.init")
 export("sparkR.stop")
 export("sparkR.session.stop")
 export("sparkR.conf")
+export("sparkR.version")
 export("print.jobj")
+
+export("sparkR.newJObject")
+export("sparkR.callJMethod")
+export("sparkR.callJStatic")
+
+export("install.spark")
 
 export("sparkRSQL.init",
        "sparkRHive.init")
@@ -27,6 +34,7 @@ exportMethods("glm",
               "summary",
               "spark.kmeans",
               "fitted",
+              "spark.mlp",
               "spark.naiveBayes",
               "spark.survreg",
               "spark.lda",
@@ -34,7 +42,8 @@ exportMethods("glm",
               "spark.perplexity",
               "spark.isoreg",
               "spark.gaussianMixture",
-              "spark.als")
+              "spark.als",
+              "spark.kstest")
 
 # Job group lifecycle management methods
 export("setJobGroup",
@@ -334,7 +343,8 @@ export("as.DataFrame",
        "tables",
        "uncacheTable",
        "print.summary.GeneralizedLinearRegressionModel",
-       "read.ml")
+       "read.ml",
+       "print.summary.KSTest")
 
 export("structField",
        "structField.jobj",
@@ -358,9 +368,8 @@ S3method(print, jobj)
 S3method(print, structField)
 S3method(print, structType)
 S3method(print, summary.GeneralizedLinearRegressionModel)
+S3method(print, summary.KSTest)
 S3method(structField, character)
 S3method(structField, jobj)
 S3method(structType, jobj)
 S3method(structType, structField)
-
-export("install.spark")

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, HadoopFsRelation}
+import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, CreateTable, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.StructType
 
@@ -368,9 +368,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
       case _ =>
+        val tableType = if (new CaseInsensitiveMap(extraOptions.toMap).contains("path")) {
+          CatalogTableType.EXTERNAL
+        } else {
+          CatalogTableType.MANAGED
+        }
+
         val tableDesc = CatalogTable(
           identifier = tableIdent,
-          tableType = CatalogTableType.EXTERNAL,
+          tableType = tableType,
           storage = CatalogStorageFormat.empty.copy(properties = extraOptions.toMap),
           schema = new StructType,
           provider = Some(source),
@@ -483,6 +489,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
+   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
+   * date type.</li>
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * indicates a timestamp format. Custom date formats follow the formats at
+   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    *
    * @since 1.4.0
    */
@@ -575,6 +587,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
+   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
+   * date type.</li>
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * indicates a timestamp format. Custom date formats follow the formats at
+   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    *
    * @since 2.0.0
    */
