@@ -24,6 +24,15 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
+
+/**
+ * A helper trait to create [[org.apache.spark.sql.catalyst.encoders.ExpressionEncoder]]s
+ * for classes whose fields are entirely defined by constructor params but should not be
+ * case classes.
+ */
+trait DefinedByConstructorParams
+
+
 /**
  * A default version of ScalaReflection that uses the runtime universe.
  */
@@ -330,7 +339,7 @@ object ScalaReflection extends ScalaReflection {
           "toScalaMap",
           keyData :: valueData :: Nil)
 
-      case t if t <:< localTypeOf[Product] =>
+      case t if definedByConstructorParams(t) =>
         val params = getConstructorParameters(t)
 
         val cls = getClassFromType(tpe)
@@ -485,7 +494,7 @@ object ScalaReflection extends ScalaReflection {
                 extractorFor(unwrapped, optType, newPath))
           }
 
-        case t if t <:< localTypeOf[Product] =>
+        case t if definedByConstructorParams(t) =>
           val params = getConstructorParameters(t)
           val nonNullOutput = CreateNamedStruct(params.flatMap { case (fieldName, fieldType) =>
             val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType))
@@ -683,7 +692,7 @@ trait ScalaReflection {
         val Schema(valueDataType, valueNullable) = schemaFor(valueType)
         Schema(MapType(schemaFor(keyType).dataType,
           valueDataType, valueContainsNull = valueNullable), nullable = true)
-      case t if t <:< localTypeOf[Product] =>
+      case t if definedByConstructorParams(t) =>
         val params = getConstructorParameters(t)
         Schema(StructType(
           params.map { case (fieldName, fieldType) =>
@@ -768,5 +777,12 @@ trait ScalaReflection {
     params.flatten.map { p =>
       p.name.toString -> p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
     }
+  }
+
+  /**
+   * Whether the fields of the given type is defined entirely by its constructor parameters.
+   */
+  private[sql] def definedByConstructorParams(tpe: Type): Boolean = {
+    tpe <:< localTypeOf[Product] || tpe <:< localTypeOf[DefinedByConstructorParams]
   }
 }
