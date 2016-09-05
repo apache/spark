@@ -91,14 +91,13 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   private val hierarchy = conf.getOption("spark.diskStore.hierarchy")
   private class HierarchyAllocator extends FileAllocationStrategy {
     case class Level(key: String, threshold: Long, dirs: Array[File])
-    val hsDescs: Array[(String, Long)] =
-      // e.g.: hierarchy = "ram_disk 1GB, ssd 20GB"
-      hierarchy.get.trim.split(",").map {
-        s => val x = s.trim.split(" +")
-          val storage = x(0).toLowerCase
-          val threshold = s.replaceFirst(x(0), "").trim
-          (storage, Utils.byteStringAsBytes(threshold))
-      }
+    // e.g.: hierarchy = "ram_disk 1GB, ssd 20GB"
+    val hsDescs: Array[(String, Long)] = hierarchy.get.trim.split(",").map {
+      s => val x = s.trim.split(" +")
+        val storage = x(0).toLowerCase
+        val threshold = s.replaceFirst(x(0), "").trim
+        (storage, Utils.byteStringAsBytes(threshold))
+    }
     val hsLevels: Array[Level] = hsDescs.map(
       s => Level(s._1, s._2, localDirs.filter(_.getPath.toLowerCase.containsSlice(s._1)))
     )
