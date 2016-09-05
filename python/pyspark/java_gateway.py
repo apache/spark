@@ -32,7 +32,7 @@ from py4j.java_gateway import java_import, JavaGateway, GatewayClient
 from pyspark.serializers import read_int
 
 
-def launch_gateway(conf = None):
+def launch_gateway(conf=None):
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
     else:
@@ -43,7 +43,7 @@ def launch_gateway(conf = None):
         script = "./bin/spark-submit.cmd" if on_windows else "./bin/spark-submit"
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
         if conf and conf.getAll():
-            submit_args = ' '.join([ '--conf %s="%s"' % (k, v) for k, v in conf.getAll()]) \
+            submit_args = ' '.join(['--conf %s="%s"' % (k, v) for k, v in conf.getAll()]) \
                 + ' ' + submit_args
         if os.environ.get("SPARK_TESTING"):
             submit_args = ' '.join([

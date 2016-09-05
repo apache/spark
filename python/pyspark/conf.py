@@ -178,7 +178,7 @@ class SparkConf(object):
                     return None
                 return self._jconf.get(key)
             else:
-                if not key in self._conf:
+                if key not in self._conf:
                     return None
                 return self._conf[key]
         else:
@@ -194,7 +194,7 @@ class SparkConf(object):
             for elem in self._jconf.getAll():
                 pairs.append((elem._1(), elem._2()))
         else:
-            for k,v in self._conf.items():
+            for k, v in self._conf.items():
                 pairs.append((k, v))
         return pairs
 
@@ -213,7 +213,7 @@ class SparkConf(object):
         if self._jconf:
             return self._jconf.toDebugString()
         else:
-            return '\n'.join('%s=%s' % (k,v) for k,v in self._conf.items())
+            return '\n'.join('%s=%s' % (k, v) for k, v in self._conf.items())
 
 
 def _test():

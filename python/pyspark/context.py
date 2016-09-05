@@ -109,7 +109,7 @@ class SparkContext(object):
         ValueError:...
         """
         self._callsite = first_spark_call() or CallSite(None, None, None)
-        SparkContext._ensure_initialized(self, gateway=gateway, conf = conf)
+        SparkContext._ensure_initialized(self, gateway=gateway, conf=conf)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
                           conf, jsc, profiler_cls)
@@ -237,7 +237,7 @@ class SparkContext(object):
         return self._jvm.JavaSparkContext(jconf)
 
     @classmethod
-    def _ensure_initialized(cls, instance=None, gateway=None, conf = None):
+    def _ensure_initialized(cls, instance=None, gateway=None, conf=None):
         """
         Checks whether a SparkContext is initialized or not.
         Throws error if a SparkContext is already running.
