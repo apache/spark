@@ -362,7 +362,6 @@ class KMeans private (
           var min = -1
           var j = 0
 
-          val start = System.nanoTime()
           val point = pointMatrix match {
             case dm: DenseMatrix =>
               Vectors.dense(dm.values.slice(i * dim, (i + 1) * dim))
@@ -464,14 +463,11 @@ class KMeans private (
     var costs = data.map(_ => Double.PositiveInfinity)
 
     // Initialize first center to a random point.
-    val sample = data.takeSample(true, 1, new XORShiftRandom(this.seed).nextLong())(0)
-    val newCenters = mutable.ArrayBuffer(sample.toDense)
-
-    /** Merges new centers to centers. */
-    def mergeNewCenters(): Unit = {
-      centers ++= newCenters
-      newCenters.clear()
-    }
+    val samples = data.takeSample(true, 1, new XORShiftRandom(this.seed).nextLong())
+    // Could be empty if data is empty, fail with a better message early.
+    require(samples.nonEmpty, s"No samples available from $data")
+    var newCenters = Seq(samples.head.toDense)
+    centers ++= newCenters
 
     // On each step, sample 2 * k points on average with probability proportional
     // to their squared distance from the centers. Note that only distances between points
@@ -483,41 +479,36 @@ class KMeans private (
       costs = data.zip(preCosts).map { case (point, cost) =>
         math.min(KMeans.pointCost(bcNewCenters.value, point), cost)
         }.persist(StorageLevel.MEMORY_AND_DISK)
-      bcNewCenters.unpersist(blocking = false)
-      val sumCosts = costs.aggregate(0.0)(_ + _, _ + _)
+      val sumCosts = costs.sum()
 
+      bcNewCenters.unpersist(blocking = false)
       preCosts.unpersist(blocking = false)
 
       val chosen = data.zip(costs).mapPartitionsWithIndex { (index, pointsWithCosts) =>
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
-        pointsWithCosts.flatMap { case (p, c) =>
-          val rs = rand.nextDouble() < 2.0 * c * k / sumCosts
-          if (rs) Some(p) else None
-        }
+        pointsWithCosts.filter { case (_, c) =>
+          rand.nextDouble() < 2.0 * c * k / sumCosts
+        }.map(_._1)
       }.collect()
-      mergeNewCenters()
-      chosen.foreach { p => newCenters += p.toDense }
+      newCenters = chosen.map(_.toDense)
+      centers ++= newCenters
       step += 1
     }
 
-    mergeNewCenters()
     costs.unpersist(blocking = false)
 
     // Finally, we might have a set of more than k candidate centers; weigh each
     // candidate by the number of points in the dataset mapping to it and run a local k-means++
     // on the weighted centers to pick just k of them
     val bcCenters = data.context.broadcast(centers)
-    val weightMap = data.map { p =>
-      (KMeans.findClosest(bcCenters.value, p)._1, 1.0)
-    }.reduceByKey(_ + _).collectAsMap()
+    val countMap = data.map { p =>
+      KMeans.findClosest(bcCenters.value, p)._1
+    }.countByValue()
 
     bcCenters.destroy(blocking = false)
 
-    val myCenters = centers.toArray
-    val myWeights = myCenters.indices.map(i => weightMap.getOrElse(i, 0.0)).toArray
-    val finalCenters = LocalKMeans.kMeansPlusPlus(0, myCenters, myWeights, k, 30)
-
-    finalCenters
+    val myWeights = centers.indices.map(countMap.getOrElse(_, 0L).toDouble).toArray
+    LocalKMeans.kMeansPlusPlus(0, centers.toArray, myWeights, k, 30)
   }
 }
 
