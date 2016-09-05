@@ -294,20 +294,6 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
 }
 
 /**
- * Returns a Row containing the evaluation of all children expressions. This is a variant that
- * returns UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
- * this expression automatically at runtime.
- */
-object CreateStructUnsafe {
-  @ExpressionDescription(
-    usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
-  def apply(children: Seq[Expression]) : CreateNamedStructUnsafe = {
-    val CreateNamedStruct(namedStructArgs) = CreateStruct(children)
-    CreateNamedStructUnsafe(namedStructArgs)
-  }
-}
-
-/**
  * Creates a struct with the given field names and values. This is a variant that returns
  * UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
  * this expression automatically at runtime.
