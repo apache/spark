@@ -666,9 +666,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
+    val fromName = visitTableIdentifier(ctx.from)
+    val toName = visitTableIdentifier(ctx.to)
+    if (toName.database.isDefined) {
+      operationNotAllowed("Can not specify database in table/view name after RENAME TO", ctx)
+    }
+
     AlterTableRenameCommand(
-      visitTableIdentifier(ctx.from),
-      visitTableIdentifier(ctx.to),
+      fromName,
+      toName.table,
       ctx.VIEW != null)
   }
 
