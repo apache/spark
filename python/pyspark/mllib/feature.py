@@ -271,6 +271,11 @@ class ChiSqSelectorModel(JavaVectorTransformer):
         """
         return JavaVectorTransformer.transform(self, vector)
 
+class ChiSqSelectorType:
+    """
+    This class defines the selector types of Chi Square Selector.
+    """
+    KBest, Percentile, FPR = range(3)
 
 class ChiSqSelector(object):
     """
@@ -305,34 +310,34 @@ class ChiSqSelector(object):
     .. versionadded:: 1.4.0
     """
     def __init__(self):
-        self.param = 50
-        self.fitFunc = "fitChiSqSelectorKBest"
+        self.numTopFeatures = 50
+        self.selectorType = ChiSqSelectorType.KBest
 
     @since('2.1.0')
     def setNumTopFeatures(self, numTopFeatures):
         """
         set numTopFeature for feature selection by number of top features
         """
-        self.param = int(numTopFeatures)
-        self.fitFunc = "fitChiSqSelectorKBest"
+        self.numTopFeatures = int(numTopFeatures)
+        self.selectorType = ChiSqSelectorType.KBest
         return self
 
     @since('2.1.0')
     def setPercentile(self, percentile):
         """
-        set Percentile [0.0, 1.0] for feature selection by percentile
+        set percentile [0.0, 1.0] for feature selection by percentile
         """
-        self.param = float(percentile)
-        self.fitFunc = "fitChiSqSelectorPercentile"
+        self.percentile = float(percentile)
+        self.selectorType = ChiSqSelectorType.Percentile
         return self
 
     @since('2.1.0')
     def setAlpha(self, alpha):
         """
-        set Alpha [0.0, 1.0] for feature selection by FPR
+        set alpha [0.0, 1.0] for feature selection by FPR
         """
-        self.param = float(alpha)
-        self.fitFunc = "fitChiSqSelectorFPR"
+        self.alpha = float(alpha)
+        self.selectorType = ChiSqSelectorType.FPR
         return self
 
     @since('1.4.0')
@@ -345,7 +350,12 @@ class ChiSqSelector(object):
                      treated as categorical for each distinct value.
                      Apply feature discretizer before using this function.
         """
-        jmodel = callMLlibFunc(self.fitFunc, self.param, data)
+        if self.selectorType == ChiSqSelectorType.KBest:
+            jmodel = callMLlibFunc("fitChiSqSelectorKBest", self.numTopFeatures, data)
+        elif self.selectorType == ChiSqSelectorType.Percentile:
+            jmodel = callMLlibFunc("fitChiSqSelectorPercentile", self.percentile, data)
+        elif self.selectorType == ChiSqSelectorType.FPR:
+            jmodel = callMLlibFunc("fitChiSqSelectorFPR", self.alpha, data)
         return ChiSqSelectorModel(jmodel)
 
 
