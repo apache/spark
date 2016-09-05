@@ -212,6 +212,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_NEST_COLUMN_PRUNING = SQLConfigBuilder("spark.sql.parquet.nestColumnPruning")
+    .doc("When set this to true, we will tell parquet only read the nest column`s leaf fields ")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_CACHE_METADATA = SQLConfigBuilder("spark.sql.parquet.cacheMetadata")
     .doc("Turns on caching of Parquet schema metadata. Can speed up querying of static data.")
     .booleanConf
@@ -660,6 +665,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def isParquetBinaryAsString: Boolean = getConf(PARQUET_BINARY_AS_STRING)
 
   def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
+
+  def isParquetNestColumnPruning: Boolean = getConf(PARQUET_NEST_COLUMN_PRUNING)
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 

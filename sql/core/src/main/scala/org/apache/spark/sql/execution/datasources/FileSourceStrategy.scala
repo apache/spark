@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.types.StructType
 
 /**
  * A strategy for planning scans over collections of files that might be partitioned or bucketed
@@ -97,7 +98,15 @@ object FileSourceStrategy extends Strategy with Logging {
         dataColumns
           .filter(requiredAttributes.contains)
           .filterNot(partitionColumns.contains)
-      val outputSchema = readDataColumns.toStructType
+      val outputSchema = if (fsRelation.sqlContext.conf.isParquetNestColumnPruning) {
+        val requiredColumnsWithNesting = generateRequiredColumnsContainsNesting(
+          projects, readDataColumns.attrs.map(_.name).toArray)
+        val totalSchema = readDataColumns.toStructType
+        val prunedSchema = StructType(requiredColumnsWithNesting.map(totalSchema(_)))
+        // Merge schema in same StructType and merge with filterAttributes
+        prunedSchema.fields.map(f => StructType(Array(f))).reduceLeft(_ merge _)
+          .merge(filterAttributes.toSeq.toStructType)
+      } else readDataColumns.toStructType
       logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
 
       val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
@@ -126,4 +135,56 @@ object FileSourceStrategy extends Strategy with Logging {
 
     case _ => Nil
   }
+
+  private def generateRequiredColumnsContainsNesting(projects: Seq[Expression],
+                                      columns: Array[String]) : Array[String] = {
+    def generateAttributeMap(nestFieldMap: scala.collection.mutable.Map[String, Seq[String]],
+                             isNestField: Boolean, curString: Option[String],
+                             node: Expression) {
+      node match {
+        case ai: GetArrayItem =>
+          // Here we drop the curString for simplify array and map support.
+          // Same strategy in GetArrayStructFields and GetMapValue
+          generateAttributeMap(nestFieldMap, isNestField = true, None, ai.child)
+
+        case asf: GetArrayStructFields =>
+          generateAttributeMap(nestFieldMap, isNestField = true, None, asf.child)
+
+        case mv: GetMapValue =>
+          generateAttributeMap(nestFieldMap, isNestField = true, None, mv.child)
+
+        case attr: AttributeReference =>
+          if (isNestField && curString.isDefined) {
+            val attrStr = attr.name
+            if (nestFieldMap.contains(attrStr)) {
+              nestFieldMap(attrStr) = nestFieldMap(attrStr) ++ Seq(attrStr + "." + curString.get)
+            } else {
+              nestFieldMap += (attrStr -> Seq(attrStr + "." + curString.get))
+            }
+          }
+        case sf: GetStructField =>
+          val str = if (curString.isDefined) {
+            sf.name.get + "." + curString.get
+          } else sf.name.get
+          generateAttributeMap(nestFieldMap, isNestField = true, Option(str), sf.child)
+        case _ =>
+          if (node.children.nonEmpty) {
+            node.children.foreach(child => generateAttributeMap(nestFieldMap,
+              isNestField, curString, child))
+          }
+      }
+    }
+
+    val nestFieldMap = scala.collection.mutable.Map.empty[String, Seq[String]]
+    projects.foreach(p => generateAttributeMap(nestFieldMap, isNestField = false, None, p))
+    val col_list = columns.toList.flatMap(col => {
+      if (nestFieldMap.contains(col)) {
+        nestFieldMap.get(col).get.toList
+      } else {
+        List(col)
+      }
+    })
+    col_list.toArray
+  }
+
 }

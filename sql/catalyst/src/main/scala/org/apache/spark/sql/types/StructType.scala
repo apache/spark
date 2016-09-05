@@ -259,8 +259,23 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * @throws IllegalArgumentException if a field with the given name does not exist
    */
   def apply(name: String): StructField = {
-    nameToField.getOrElse(name,
-      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
+    if (name.contains('.')) {
+      val curFieldStr = name.split("\\.", 2)(0)
+      val nextFieldStr = name.split("\\.", 2)(1)
+      val curField = nameToField.getOrElse(curFieldStr,
+        throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
+      curField.dataType match {
+        case st: StructType =>
+          val newField = StructType(st.fields).apply(nextFieldStr)
+          StructField(curField.name, StructType(Seq(newField)),
+            curField.nullable, curField.metadata)
+        case _ =>
+          throw new IllegalArgumentException(s"""Field "$curFieldStr" is not struct field.""")
+      }
+    } else {
+      nameToField.getOrElse(name,
+        throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
+    }
   }
 
   /**

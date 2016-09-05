@@ -571,6 +571,44 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
   }
 
+  test("SPARK-4502 parquet nested fields pruning") {
+    // Schema of "test-data/nested-array-struct.parquet":
+    //    root
+    //    |-- primitive: integer (nullable = true)
+    //    |-- myComplex: array (nullable = true)
+    //    |    |-- element: struct (containsNull = true)
+    //    |    |    |-- id: integer (nullable = true)
+    //    |    |    |-- repeatedMessage: array (nullable = true)
+    //    |    |    |    |-- element: struct (containsNull = true)
+    //    |    |    |    |    |-- someId: integer (nullable = true)
+    val df = readResourceParquetFile("test-data/nested-array-struct.parquet")
+    df.createOrReplaceTempView("tmp_table")
+    // normal test
+    val query1 = "select primitive,myComplex[0].id from tmp_table"
+    val result1 = sql(query1)
+    withSQLConf(SQLConf.PARQUET_NEST_COLUMN_PRUNING.key -> "true") {
+      checkAnswer(sql(query1), result1)
+    }
+    // test for array in struct
+    val query2 = "select primitive,myComplex[0].repeatedMessage[0].someId from tmp_table"
+    val result2 = sql(query2)
+    withSQLConf(SQLConf.PARQUET_NEST_COLUMN_PRUNING.key -> "true") {
+      checkAnswer(sql(query2), result2)
+    }
+    // test for same struct meta merge
+    // myComplex.id and myComplex.repeatedMessage.someId should merge
+    // like myComplex.[id, repeatedMessage.someId] before pass to parquet
+    val query3 = "select myComplex[0].id, myComplex[0].repeatedMessage[0].someId" +
+      " from tmp_table"
+    val result3 = sql(query3)
+    withSQLConf(SQLConf.PARQUET_NEST_COLUMN_PRUNING.key -> "true") {
+      checkAnswer(sql(query3), result3)
+    }
+
+    spark.sessionState.catalog.dropTable(
+      TableIdentifier("tmp_table"), ignoreIfNotExists = true, purge = false)
+  }
+
   test("expand UDT in StructType") {
     val schema = new StructType().add("n", new NestedStructUDT, nullable = true)
     val expected = new StructType().add("n", new NestedStructUDT().sqlType, nullable = true)
