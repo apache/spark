@@ -1088,15 +1088,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.storage.hierarchyStore</code></td>
+  <td><code>spark.diskStore.hierarchy</code></td>
   <td>(none)</td>
   <td>
      Store blocks in different speed storage devices by hierarchy way.<br />
      For example:<br />
-     <code>nvm 40GB, ssd 20GB</code><br />
-     It means the fastest is nvm(threshold 40GB), lower layer is ssd(threshold 20GB), all the rest are the final layer.
-     The threshold means when the device's usable space is less than it, dropping into the next layer.<br />
-     And then, You need configure "nvm" and "ssd" location in local dirs.<br />
+     <code>RAM_DISK 40GB, SSD 20GB</code><br />
+     It means the fastest storage is RAM_DISK(threshold 40GB), the next level is SSD(threshold 20GB), all the rest are
+     the last level storage. The threshold means when the device's usable space is less than it, falling into the next
+     level storage.<br />
+     And also, pleaes configure RAM_DISK and SSD location in the local dirs. It is easy, just put "RAM_DISK" and
+     "SSD" into the dir string.<br />
      For example in Standalone, Mesos: <br />
      <code>spark.local.dir=/mnt/nvm1,/mnt/ssd1,/mnt/ssd2,/mnt/others</code><br />
      In Yarn, refer to the its document to configure yarn.nodemanager.local-dirs<br />
