@@ -172,39 +172,34 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 }
 
 /**
-* a helper mixin to encapsulate [[CreateStruct]] => [[CreateNamedStruct]] transformation.
-*/
-sealed trait CreateStructLikeFactory[T <: Expression] extends (Seq[Expression] => T) {
-  protected def mkNamedStructArgs( children : Seq[Expression] ) = {
-    val attNames = for {
-      (child, idx) <- children.zipWithIndex
-    } yield {
-      child match {
-        case ne: NamedExpression => ne.name
-        case _ => s"col${idx + 1}"
-      }
-    }
-    attNames.zip(children).flatMap {
-      case (name, expression) => Seq(Literal(name), expression)
-    }
-  }
-}
-
-/**
  * Returns a Row containing the evaluation of all children expressions.
  */
-object CreateStruct extends CreateStructLikeFactory[CreateNamedStruct]{
+object CreateStruct extends (Seq[Expression] => CreateNamedStruct) {
   @ExpressionDescription(
     usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
-  def apply(children: Seq[Expression]) : CreateNamedStruct =
-    CreateNamedStruct(mkNamedStructArgs(children))
+  def apply(children: Seq[Expression]) : CreateNamedStruct = {
+    val namedStructArgs = {
+      val attNames = for {
+        (child, idx) <- children.zipWithIndex
+      } yield {
+        child match {
+          case ne: NamedExpression => ne.name
+          case _ => s"col${idx + 1}"
+        }
+      }
+      attNames.zip(children).flatMap {
+        case (name, expression) => Seq(Literal(name), expression)
+      }
+    }
+    CreateNamedStruct(namedStructArgs)
+  }
 
   private def expressionInfo: ExpressionInfo = new ExpressionInfo( "CreateStruct",
     "struct",
     "_FUNC_(col1, col2, col3, ...)",
     "Creates a struct with the given field values.")
   def registryEntry: (String, (ExpressionInfo, CreateStruct.type)) =
-    "struct" -> (expressionInfo -> this)
+    "struct" -> (expressionInfo -> this )
 }
 
 /**
@@ -303,11 +298,13 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
  * returns UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
  * this expression automatically at runtime.
  */
-object CreateStructUnsafe extends CreateStructLikeFactory[CreateNamedStructUnsafe]{
+object CreateStructUnsafe {
   @ExpressionDescription(
     usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
-  def apply(children: Seq[Expression]) : CreateNamedStructUnsafe =
-    CreateNamedStructUnsafe(mkNamedStructArgs(children))
+  def apply(children: Seq[Expression]) : CreateNamedStructUnsafe = {
+    val CreateNamedStruct(namedStructArgs) = CreateStruct(children)
+    CreateNamedStructUnsafe(namedStructArgs)
+  }
 }
 
 /**

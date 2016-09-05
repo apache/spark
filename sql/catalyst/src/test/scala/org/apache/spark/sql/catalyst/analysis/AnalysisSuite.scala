@@ -223,7 +223,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     plan = testRelation.select(CreateStruct(Seq(a, (a + 1).as("a+1"))).as("col"))
     expected = testRelation.select(CreateNamedStruct(Seq(
       Literal(a.name), a,
-      Literal("a+1"),(a + 1))).as("col"))
+      Literal("a+1"), (a + 1))).as("col"))
     checkAnalysis(plan, expected)
     plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
     expected = testRelation.select(CreateNamedStructUnsafe(Seq(
@@ -240,25 +240,22 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     )
     val prevPlan = getAnalyzer(true).execute(plan)
     plan = prevPlan.select(CreateArray(Seq(
-      CreateStructUnsafe(Seq(att1, (att1 + 1).as("a_plus_1"))),
+      CreateStructUnsafe(Seq(att1, (att1 + 1).as("a_plus_1"))) as "col1",
       /** alias should be eliminated by [[CleanupAliases]] */
       "col".attr as "col2"
     )) as "arr")
     plan = getAnalyzer(true).execute(plan)
 
-    plan should be (a[Project])
-    val Project(projectExpressions, _) = plan
-    projectExpressions should have (size(1))
-    val Seq(expr1) = projectExpressions
-    expr1 should be (a[Alias])
-    val Alias(expr2, arrAlias) = expr1
-    arrAlias shouldBe "arr"
-    expr2 should be (a[CreateArray])
-    val CreateArray(arrElements) = expr2
-    arrElements should have (size(2))
-    val Seq(el1, el2) = arrElements
-    el1 should not be a[Alias]
-    el2 should not be a[Alias]
+    val expectedPlan = prevPlan.select(
+      CreateArray(Seq(
+        CreateNamedStructUnsafe(Seq(
+          Literal(att1.name), att1,
+          Literal("a_plus_1"), (att1 + 1))),
+          'col.struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
+      )) as "arr"
+    )
+
+    checkAnalysis(plan, expectedPlan)
   }
 
   test("SPARK-10534: resolve attribute references in order by clause") {
