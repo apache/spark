@@ -41,17 +41,17 @@ def launch_gateway(conf=None):
         # proper classpath and settings from spark-env.sh
         on_windows = platform.system() == "Windows"
         script = "./bin/spark-submit.cmd" if on_windows else "./bin/spark-submit"
+        command = [os.path.join(SPARK_HOME, script)]
+        for k,v in conf.getAll():
+            command += ['--conf', '%s=%s' % (k, v)]
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
-        if conf and conf.getAll():
-            submit_args = ' '.join(['--conf %s="%s"' % (k, v) for k, v in conf.getAll()]) \
-                + ' ' + submit_args
         if os.environ.get("SPARK_TESTING"):
             submit_args = ' '.join([
                 "--conf spark.ui.enabled=false",
                 submit_args
             ])
+        command = command + shlex.split(submit_args)
 
-        command = [os.path.join(SPARK_HOME, script)] + shlex.split(submit_args)
         # Start a socket that will be used by PythonGatewayServer to communicate its port to us
         callback_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         callback_socket.bind(('127.0.0.1', 0))

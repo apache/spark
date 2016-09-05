@@ -121,11 +121,7 @@ class SparkContext(object):
     def _do_init(self, master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
                  conf, jsc, profiler_cls):
         self.environment = environment or {}
-        if conf and not conf._jconf:
-            self._conf = conf
-            self._conf._set_jvm(self._jvm)
-        else:
-            self._conf = SparkConf(_jvm=self._jvm)
+        self._conf = SparkConf(_jvm=self._jvm)
 
         self._batchSize = batchSize  # -1 represents an unlimited batch size
         self._unbatched_serializer = serializer

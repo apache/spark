@@ -106,21 +106,16 @@ class SparkConf(object):
             if _jvm:
                 # JVM is created, so create self._jconf directly through JVM
                 self._jconf = _jvm.SparkConf(loadDefaults)
+                self._conf = None
             else:
                 # JVM is not created, so store data in self._conf first
                 self._jconf = None
                 self._conf = {}
                 self.loadDefaults = loadDefaults
 
-    def _set_jvm(self, _jvm):
-        # JVM is created so we switch from self._conf to self._jconf
-        # Because self._conf has already been pass to JVM so self._jconf will be created properly.
-        self._jconf = _jvm.SparkConf(self.loadDefaults)
-        self._conf.clear()
-
     def set(self, key, value):
         """Set a configuration property."""
-        # Try to set self._jconf first if JVM is created, set self._conf is JVM is not created yet.
+        # Try to set self._jconf first if JVM is created, set self._conf if JVM is not created yet.
         if self._jconf:
             self._jconf.set(key, unicode(value))
         else:
