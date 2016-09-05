@@ -15,7 +15,7 @@ SparkR is an R package that provides a light-weight frontend to use Apache Spark
 
 ## Getting Started
 
-We begin with an example running on the local machine, trying to provide an overview of the use of SparkR: data ingestion, data processing and machine learning. 
+We begin with an example running on the local machine and provide an overview of the use of SparkR: data ingestion, data processing and machine learning.
 
 First, let's load and attach the package.
 ```{r, message=FALSE}
@@ -23,32 +23,27 @@ library(SparkR)
 ```
 
 
-To use SparkR, you need an Apache Spark package where backend codes to be called are compiled and packaged. 
+To use SparkR, you need an Apache Spark installation which will execute SparkR programs.
 
-If you don't have a Spark package on the computer, you may download it from [Apache Spark Website](http://spark.apache.org/downloads.html). Alternatively, we provide an easy-to-use function `install.spark` to complete this process.
+If you don't have Spark installed on the computer, you may download it from [Apache Spark Website](http://spark.apache.org/downloads.html). Alternatively, we provide an easy-to-use function `install.spark` to complete this process.
 
 ```{r, eval=FALSE}
 install.spark()
 ```
 
-If you have a Spark package, you don't have to install again, but make sure to set `SPARK_HOME` environment variable to let SparkR know where the main Spark package is. 
-
-```{r, eval=FALSE}
-Sys.setenv(SPARK_HOME = "/HOME/spark")
-```
-
-```{r, echo=FALSE}
-# Set to your own spark folder if you want to knit this Rmd.
-Sys.setenv(SPARK_HOME = "/Users/junyangq/spark/")
-```
-
-`SparkSession` is the entry point into SparkR which connects your R program to a Spark cluster. You can create a `SparkSession` using `sparkR.session` and pass in options such as the application name, any spark packages depended on, etc. We use default settings. It runs in local mode.
+`SparkSession` is the entry point into SparkR which connects your R program to a Spark cluster. You can create a `SparkSession` using `sparkR.session` and pass in options such as the application name, any Spark packages depended on, etc. We use default settings in which it runs in local mode.
 
 ```{r, message=FALSE, warning=FALSE}
 sparkR.session()
 ```
 
-The operations in SparkR are centered around an R object class called `SparkDataFrame`. It is a distributed collection of data organized into named columns, which is conceptually equivalent to a table in a relational database or a data frame in R, but with richer optimizations under the hood. 
+If you already have Spark installed, you don't have to install again and can pass the `sparkHome` argument to `sparkR.session` to let SparkR know where the Spark installation is.
+
+```{r, eval=FALSE}
+sparkR.session(sparkHome = "/HOME/spark")
+```
+
+The operations in SparkR are centered around an R class called `SparkDataFrame`. It is a distributed collection of data organized into named columns, which is conceptually equivalent to a table in a relational database or a data frame in R, but with richer optimizations under the hood.
 
 `SparkDataFrame` can be constructed from a wide array of sources such as: structured data files, tables in Hive, external databases, or existing local R data frames. For example, we create a `SparkDataFrame` from a local R data frame,
 
@@ -82,7 +77,7 @@ carsGP <- collect(carsGPDF)
 class(carsGP)
 ```
 
-SparkR supports a number of commonly used machine learning algorithms. Under the hood, SparkR uses MLlib to train the model. Users can call `summary` to print a summary of the fitted model, `predict` to make predictions on new data, and `write.ml`/`read.ml` to save/load fitted models. 
+SparkR supports a number of commonly used machine learning algorithms. Under the hood, SparkR uses MLlib to train the model. Users can call `summary` to print a summary of the fitted model, `predict` to make predictions on new data, and `write.ml`/`read.ml` to save/load fitted models.
 
 SparkR supports a subset of R formula operators for model fitting, including ‘~’, ‘.’, ‘:’, ‘+’, and ‘-‘. We use linear regression as an example.
 ```{r}
@@ -125,14 +120,14 @@ paste("Spark", packageVersion("SparkR"))
 ```
 It should be used both on the local computer and on the remote cluster.
 
-To connect, pass the URL of the master node to `sparkR.session`. A complete list can be seen in [Spark Master URLs](http://spark.apache.org/docs/latest/submitting-applications.html#master-urls). 
-For example, to connect to a local cluster master, we can call
+To connect, pass the URL of the master node to `sparkR.session`. A complete list can be seen in [Spark Master URLs](http://spark.apache.org/docs/latest/submitting-applications.html#master-urls).
+For example, to connect to a standalone Spark master, we can call
 
 ```{r, eval=FALSE}
 sparkR.session(master = "spark://local:7077")
 ```
 
-For YARN cluster, SparkR only supports the client mode.
+For YARN cluster, SparkR supports the client mode with the master set as "yarn".
 ```{r, eval=FALSE}
 sparkR.session(master = "yarn")
 ```
@@ -159,7 +154,7 @@ sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
 We can see how to use data sources using an example JSON input file. Note that the file that is used here is not a typical JSON file. Each line in the file must contain a separate, self-contained valid JSON object. As a consequence, a regular multi-line JSON file will most often fail.
 
 ```{r}
-people <- read.df(paste0(Sys.getenv("SPARK_HOME"), 
+people <- read.df(paste0(sparkR.conf("spark.home"),
                          "/examples/src/main/resources/people.json"), "json")
 count(people)
 head(people)
@@ -192,7 +187,7 @@ You can also create SparkDataFrames from Hive tables. To do this we will need to
 ```{r, eval=FALSE}
 sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 
-txtPath <- paste0(Sys.getenv("SPARK_HOME"), "/examples/src/main/resources/kv1.txt")
+txtPath <- paste0(sparkR.conf("spark.home"), "/examples/src/main/resources/kv1.txt")
 sqlCMD <- sprintf("LOAD DATA LOCAL INPATH '%s' INTO TABLE src", txtPath)
 sql(sqlCMD)
 
@@ -215,7 +210,7 @@ Here are more concrete examples.
 
 dplyr | SparkR
 -------- | ---------
-`select(mtcars, mpg, hp)` | `select(carsDF, "mpg", "hp")` 
+`select(mtcars, mpg, hp)` | `select(carsDF, "mpg", "hp")`
 `filter(mtcars, mpg > 20, hp > 100)` | `filter(carsDF, carsDF$mpg > 20, carsDF$hp > 100)`
 
 Other differences will be mentioned in the specific methods.
@@ -281,11 +276,11 @@ A window function is a variation of aggregation function. In simple words,
 
 * window function: `n` to `n` mapping - returns one value for each entry in the group, but the value may depend on all the entries of the *group*. Examples include `rank`, `lead`, `lag`.
 
-Formally, the *group* we mentioned is called the Frame. Every input row can have a unique frame associated with it and the output of the window function on that row is based on the rows confined in that frame.
+Formally, the *group* mentioned above is called the *frame*. Every input row can have a unique frame associated with it and the output of the window function on that row is based on the rows confined in that frame.
 
-Window functions are often used in conjunction with the following functions: `windowPartitionBy`, `windowOrderBy`, `partitionBy`, `orderBy`, `over`. It would be easier to look at an example.
+Window functions are often used in conjunction with the following functions: `windowPartitionBy`, `windowOrderBy`, `partitionBy`, `orderBy`, `over`. To illustrate this we next look at an example.
 
-We still use the `mtcars` dataset. The corresponding `SparkDataFrame` is `carsDF`. Suppose for each number of cylinders, we want to calculate the rank of each car in `mpg` within the group. 
+We still use the `mtcars` dataset. The corresponding `SparkDataFrame` is `carsDF`. Suppose for each number of cylinders, we want to calculate the rank of each car in `mpg` within the group.
 ```{r}
 carsSubDF <- select(carsDF, "model", "mpg", "cyl")
 ws <- orderBy(windowPartitionBy("cyl"), "mpg")
@@ -295,15 +290,15 @@ showDF(carsRank)
 
 We explain in detail the above steps.
 
-* `windowPartitionBy` creates a Window Specification object `WindowSpec` that defines the partition. It controls which rows will be in the same partition as the given row. In this case, rows with the same value in `cyl` will be put in the same partition. `orderBy` further defines the ordering - the position a given row is in the partition. The resulting `WindowSpec` is returned as `ws`.
+* `windowPartitionBy` creates a window specification object `WindowSpec` that defines the partition. It controls which rows will be in the same partition as the given row. In this case, rows with the same value in `cyl` will be put in the same partition. `orderBy` further defines the ordering - the position a given row is in the partition. The resulting `WindowSpec` is returned as `ws`.
 
-More Window Specification methods include `rangeBetween`, which can define boundaries of the frame by value, and `rowsBetween`, which can define the boundaries by row indices.
+More window specification methods include `rangeBetween`, which can define boundaries of the frame by value, and `rowsBetween`, which can define the boundaries by row indices.
 
 * `withColumn` appends a Column called `"rank"` to the `SparkDataFrame`. `over` returns a windowing column. The first argument is usually a Column returned by window function(s) such as `rank()`, `lead(carsDF$wt)`. That calculates the corresponding values according to the partitioned-and-ordered table.
 
 ### User-Defined Function
 
-In SparkR, we support several kinds of User-Defined Functions.
+In SparkR, we support several kinds of user-defined functions (UDFs).
 
 #### Apply by Partition
 
@@ -319,7 +314,7 @@ out <- dapply(carsSubDF, function(x) { x <- cbind(x, x$mpg * 1.61) }, schema)
 head(collect(out))
 ```
 
-Like `dapply`, apply a function to each partition of a `SparkDataFrame` and collect the result back. The output of function should be a `data.frame`. But, Schema is not required to be passed. Note that `dapplyCollect` can fail if the output of UDF run on all the partition cannot be pulled to the driver and fit in driver memory.
+Like `dapply`, apply a function to each partition of a `SparkDataFrame` and collect the result back. The output of function should be a `data.frame`, but no schema is required in this case. Note that `dapplyCollect` can fail if the output of UDF run on all the partition cannot be pulled to the driver and fit in driver memory.
 
 ```{r}
 out <- dapplyCollect(
@@ -345,7 +340,7 @@ result <- gapply(
 head(arrange(result, "max_mpg", decreasing = TRUE))
 ```
 
-Like gapply, `gapplyCollect` applies a function to each partition of a `SparkDataFrame` and collect the result back to R `data.frame`. The output of the function should be a `data.frame`. But, the schema is not required to be passed. Note that `gapplyCollect` can fail if the output of UDF run on all the partition cannot be pulled to the driver and fit in driver memory.
+Like gapply, `gapplyCollect` applies a function to each partition of a `SparkDataFrame` and collect the result back to R `data.frame`. The output of the function should be a `data.frame` but no schema is required in this case. Note that `gapplyCollect` can fail if the output of UDF run on all the partition cannot be pulled to the driver and fit in driver memory.
 
 ```{r}
 result <- gapplyCollect(
@@ -361,7 +356,7 @@ head(result[order(result$max_mpg, decreasing = TRUE), ])
 
 #### Distribute Local Functions
 
-Similar to `lapply` in native R, `spark.lapply` runs a function over a list of elements and distributes the computations with Spark. Applies a function in a manner that is similar to `doParallel` or `lapply` to elements of a list. The results of all the computations should fit in a single machine. If that is not the case they can do something like `df <- createDataFrame(list)` and then use `dapply`.
+Similar to `lapply` in native R, `spark.lapply` runs a function over a list of elements and distributes the computations with Spark. `spark.lapply` works in a manner that is similar to `doParallel` or `lapply` to elements of a list. The results of all the computations should fit in a single machine. If that is not the case you can do something like `df <- createDataFrame(list)` and then use `dapply`.
 
 ```{r}
 families <- c("gaussian", "poisson")
@@ -386,7 +381,7 @@ print(model.summaries)
 A `SparkDataFrame` can also be registered as a temporary view in Spark SQL and that allows you to run SQL queries over its data. The sql function enables applications to run SQL queries programmatically and returns the result as a `SparkDataFrame`.
 
 ```{r}
-people <- read.df(paste0(Sys.getenv("SPARK_HOME"), 
+people <- read.df(paste0(sparkR.conf("spark.home"),
                          "/examples/src/main/resources/people.json"), "json")
 ```
 
@@ -433,7 +428,7 @@ For most above, SparkR supports **R formula operators**, including `~`, `.`, `:`
 
 ### Training and Test Sets
 
-We can easily split `SparkDataFrame` into random training and test sets by the `randomSplit` function. It returns a list of split `SparkDataFrames` with provided `weights`. We use `carsDF` as an example and want to have about $70%$ training data and $30%$ test data. 
+We can easily split `SparkDataFrame` into random training and test sets by the `randomSplit` function. It returns a list of split `SparkDataFrames` with provided `weights`. We use `carsDF` as an example and want to have about $70%$ training data and $30%$ test data.
 ```{r}
 splitDF_list <- randomSplit(carsDF, c(0.7, 0.3), seed = 0)
 carsDF_train <- splitDF_list[[1]]
@@ -474,7 +469,7 @@ There are three ways to specify the `family` argument.
 
 For more information regarding the families and their link functions, see the Wikipedia page [Generalized Linear Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
 
-We use the `mtcars` dataset as an illustration. The corresponding `SparkDataFrame` is `carsDF`. After fitting the model, we print out a summary and see the fitted values by making predictions on the original dataset. We can also pass into a new `SparkDataFrame` of same schema to predict on new data. 
+We use the `mtcars` dataset as an illustration. The corresponding `SparkDataFrame` is `carsDF`. After fitting the model, we print out a summary and see the fitted values by making predictions on the original dataset. We can also pass into a new `SparkDataFrame` of same schema to predict on new data.
 
 ```{r}
 gaussianGLM <- spark.glm(carsDF, mpg ~ wt + hp)
@@ -546,7 +541,7 @@ showDF(select(gmmFitted, "V1", "V2", "prediction"))
 
 * Topics and documents both exist in a feature space, where feature vectors are vectors of word counts (bag of words).
 
-* Rather than estimating a clustering using a traditional distance, LDA uses a function based on a statistical model of how text documents are generated. 
+* Rather than estimating a clustering using a traditional distance, LDA uses a function based on a statistical model of how text documents are generated.
 
 To use LDA, we need to specify a `features` column in `data` where each entry represents a document. There are two type options for the column:
 
@@ -742,15 +737,15 @@ unlink(modelPath)
 
 There are three main object classes in SparkR you may be working with.
 
-* `SparkDataFrame`: the central component of SparkR. It is an S4 class representing distributed collection of data organized into named columns, which is conceptually equivalent to a table in a relational database or a data frame in R. It has two slots `sdf` and `env`. 
+* `SparkDataFrame`: the central component of SparkR. It is an S4 class representing distributed collection of data organized into named columns, which is conceptually equivalent to a table in a relational database or a data frame in R. It has two slots `sdf` and `env`.
     + `sdf` stores a reference to the corresponding Spark Dataset in the Spark JVM backend.
     + `env` saves the meta-information of the object such as `isCached`.
-    
+
 It can be created by data import methods or by transforming an existing `SparkDataFrame`. We can manipulate `SparkDataFrame` by numerous data processing functions and feed that into machine learning algorithms.
 
 * `Column`: an S4 class representing column of `SparkDataFrame`. The slot `jc` saves a reference to the corresponding Column object in the Spark JVM backend.
 
-It can be obtained from a `SparkDataFrame` by `$` operator, `df$col`. More often, it is used together with other functions, for example, with `select` to select particular columns, with `filter` and constructed conditions to select rows, with aggregation functions to compute aggregate statistics for each group. 
+It can be obtained from a `SparkDataFrame` by `$` operator, `df$col`. More often, it is used together with other functions, for example, with `select` to select particular columns, with `filter` and constructed conditions to select rows, with aggregation functions to compute aggregate statistics for each group.
 
 * `GroupedData`: an S4 class representing grouped data created by `groupBy` or by transforming other `GroupedData`. Its `sgd` slot saves a reference to a RelationalGroupedDataset object in the backend.
 
@@ -762,7 +757,7 @@ A complete description of architecture can be seen in paper [SparkR: Scaling R P
 
 Under the hood of SparkR is Spark SQL engine. This avoids the overheads of running interpreted R code, and the optimized SQL execution engine in Spark uses structural information about data and computation flow to perform a bunch of optimizations to speed up the computation.
 
-The main method calls of actual computation happen in the Spark JVM of the driver. We have a socket-based SparkR API that allows us to invoke functions on the JVM from R. We use a SparkR JVM backend that listens on a Netty-based socket server. 
+The main method calls of actual computation happen in the Spark JVM of the driver. We have a socket-based SparkR API that allows us to invoke functions on the JVM from R. We use a SparkR JVM backend that listens on a Netty-based socket server.
 
 Two kinds of RPCs are supported in the SparkR JVM backend: method invocation and creating new objects. Method invocation can be done in two ways.
 
@@ -770,9 +765,9 @@ Two kinds of RPCs are supported in the SparkR JVM backend: method invocation and
 
 * `invokeJStatic` takes a class name for static method and a list of arguments to be passed on to the method.
 
-The arguments are serialized using our custom wire format which is then deserialized on the JVM side. We then use Java reflection to invoke the appropriate method. 
+The arguments are serialized using our custom wire format which is then deserialized on the JVM side. We then use Java reflection to invoke the appropriate method.
 
-To create objects, a special method name `init` is used and then similarly the appropriate constructor is invoked with provided arguments. 
+To create objects, a special method name `init` is used and then similarly the appropriate constructor is invoked with provided arguments.
 
 Finally, we use a new R class `jobj` that refers to a Java object existing in the backend. These references are tracked on the Java side and are automatically garbage collected when they go out of scope on the R side.
 
@@ -807,7 +802,7 @@ env | map
 
 * [Machine Learning Library Guide (MLlib)](http://spark.apache.org/docs/latest/ml-guide.html)
 
-* [SparkR: Scaling R Programs with Spark](SparkR: Scaling R Programs with Spark), Shivaram Venkataraman, Zongheng Yang, Davies Liu, Eric Liang, Hossein Falaki, Xiangrui Meng, Reynold Xin, Ali Ghodsi, Michael Franklin, Ion Stoica, and Matei Zaharia. SIGMOD 2016. June 2016.
+* [SparkR: Scaling R Programs with Spark](https://people.csail.mit.edu/matei/papers/2016/sigmod_sparkr.pdf), Shivaram Venkataraman, Zongheng Yang, Davies Liu, Eric Liang, Hossein Falaki, Xiangrui Meng, Reynold Xin, Ali Ghodsi, Michael Franklin, Ion Stoica, and Matei Zaharia. SIGMOD 2016. June 2016.
 
 
 
