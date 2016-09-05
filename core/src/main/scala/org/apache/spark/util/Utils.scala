@@ -1900,20 +1900,7 @@ private[spark] object Utils extends Logging {
    */
   def resolveURI(path: String): URI = {
     try {
-      val osSafePath = if (Path.isWindowsAbsolutePath(path, false)) {
-        // Make sure C:/ part becomes /C/.
-        val windowsUri = new URI(path)
-        val driveLetter = windowsUri.getScheme
-        s"/$driveLetter/${windowsUri.getSchemeSpecificPart()}"
-      } else if (Path.isWindowsAbsolutePath(path, true)) {
-        // Make sure /C:/ part becomes /C/.
-        val windowsUri = new URI(path.substring(1))
-        val driveLetter = windowsUri.getScheme
-        s"/$driveLetter/${windowsUri.getSchemeSpecificPart()}"
-      } else {
-        path
-      }
-      val uri = new URI(osSafePath)
+      val uri = new URI(path)
       if (uri.getScheme() != null) {
         return uri
       }
