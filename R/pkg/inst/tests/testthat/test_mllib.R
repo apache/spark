@@ -323,7 +323,7 @@ test_that("spark.kmeans", {
   model <- spark.kmeans(data = training, ~ ., k = 2, maxIter = 10, initMode = "random")
   sample <- take(select(predict(model, training), "prediction"), 1)
   expect_equal(typeof(sample$prediction), "integer")
-  expect_equal(sample$prediction, 1)
+  expect_equal(sample$prediction, 0)
 
   # Test stats::kmeans is working
   statsModel <- kmeans(x = newIris, centers = 2)
