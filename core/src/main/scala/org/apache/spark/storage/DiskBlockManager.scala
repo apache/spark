@@ -92,7 +92,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   private class HierarchyAllocator extends FileAllocationStrategy {
     case class Level(key: String, threshold: Long, dirs: Array[File])
     val hsDescs: Array[(String, Long)] =
-      // e.g.: hierarchy = "ssd 20GB, hdd 30GB"
+      // e.g.: hierarchy = "ram_disk 1GB, ssd 20GB"
       hierarchy.get.trim.split(",").map {
         s => val x = s.trim.split(" +")
           val storage = x(0).toLowerCase
@@ -143,7 +143,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   def getFile(filename: String): File = fileAllocator(filename)
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
-  
+
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
     getFile(blockId.name).exists()
