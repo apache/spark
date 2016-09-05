@@ -232,12 +232,12 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
       val catalog = spark.sessionState.catalog
       val viewMeta = catalog.getTableMetadata(TableIdentifier("test_view"))
-      assert(viewMeta.properties("comment") == "test")
+      assert(viewMeta.comment == Some("test"))
       assert(viewMeta.properties("key") == "a")
 
       sql("ALTER VIEW test_view AS SELECT 3 AS i, 4 AS j")
       val updatedViewMeta = catalog.getTableMetadata(TableIdentifier("test_view"))
-      assert(updatedViewMeta.properties("comment") == "test")
+      assert(updatedViewMeta.comment == Some("test"))
       assert(updatedViewMeta.properties("key") == "a")
       assert(updatedViewMeta.createTime == viewMeta.createTime)
       // The view should be updated.
