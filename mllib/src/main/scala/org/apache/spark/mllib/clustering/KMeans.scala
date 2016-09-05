@@ -42,7 +42,6 @@ import org.apache.spark.util.random.XORShiftRandom
 class KMeans private (
     private var k: Int,
     private var maxIterations: Int,
-    private var runs: Int,
     private var initializationMode: String,
     private var initializationSteps: Int,
     private var epsilon: Double,
@@ -50,12 +49,12 @@ class KMeans private (
     private var blockSize: Int) extends Serializable with Logging {
 
   /**
-   * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
+   * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20,
    * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4, seed: random,
    * blockSize: 4096}.
    */
   @Since("0.8.0")
-  def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, Utils.random.nextLong(), 4096)
+  def this() = this(2, 20, KMeans.K_MEANS_PARALLEL, 5, 1e-4, Utils.random.nextLong(), 4096)
 
   /**
    * Number of clusters to create (k).
@@ -113,15 +112,17 @@ class KMeans private (
    * This function has no effect since Spark 2.0.0.
    */
   @Since("1.4.0")
+  @deprecated("This has no effect and always returns 1", "2.1.0")
   def getRuns: Int = {
     logWarning("Getting number of runs has no effect since Spark 2.0.0.")
-    runs
+    1
   }
 
   /**
    * This function has no effect since Spark 2.0.0.
    */
   @Since("0.8.0")
+  @deprecated("This has no effect", "2.1.0")
   def setRuns(runs: Int): this.type = {
     logWarning("Setting number of runs has no effect since Spark 2.0.0.")
     this
