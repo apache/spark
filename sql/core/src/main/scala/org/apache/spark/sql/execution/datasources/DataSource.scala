@@ -350,13 +350,12 @@ case class DataSource(
         }
 
         HadoopFsRelation(
-          sparkSession,
           fileCatalog,
           partitionSchema = fileCatalog.partitionSpec().partitionColumns,
           dataSchema = dataSchema,
           bucketSpec = None,
           format,
-          options)
+          options)(sparkSession)
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
@@ -408,13 +407,12 @@ case class DataSource(
         }
 
         HadoopFsRelation(
-          sparkSession,
           fileCatalog,
           partitionSchema = fileCatalog.partitionSpec().partitionColumns,
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
-          caseInsensitiveOptions)
+          caseInsensitiveOptions)(sparkSession)
 
       case _ =>
         throw new AnalysisException(

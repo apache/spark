@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
 
-import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
@@ -135,13 +134,13 @@ abstract class OutputWriter {
  * @param options Configuration used when reading / writing data.
  */
 case class HadoopFsRelation(
-    sparkSession: SparkSession,
     location: FileCatalog,
     partitionSchema: StructType,
     dataSchema: StructType,
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
-    options: Map[String, String]) extends BaseRelation with FileRelation {
+    options: Map[String, String])(val sparkSession: SparkSession)
+  extends BaseRelation with FileRelation {
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
@@ -170,17 +169,6 @@ case class HadoopFsRelation(
     location.allFiles().map(_.getPath.toUri.toString).toArray
 
   override def sizeInBytes: Long = location.allFiles().map(_.getLen).sum
-
-  override def equals(other: Any): Boolean = other match {
-    case r: HadoopFsRelation => location == r.location && partitionSchema == r.partitionSchema &&
-      dataSchema == r.dataSchema && bucketSpec == r.bucketSpec && fileFormat == r.fileFormat &&
-        options == r.options
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    Objects.hashCode(location, partitionSchema, dataSchema, bucketSpec, fileFormat, options)
-  }
 }
 
 /**
