@@ -356,6 +356,8 @@ class ChiSqSelector(object):
             jmodel = callMLlibFunc("fitChiSqSelectorPercentile", self.percentile, data)
         elif self.selectorType == ChiSqSelectorType.FPR:
             jmodel = callMLlibFunc("fitChiSqSelectorFPR", self.alpha, data)
+        else:
+            raise TypeError("Chi Square selector only supports: KBest, Percentile, and FPR.")
         return ChiSqSelectorModel(jmodel)
 
 
