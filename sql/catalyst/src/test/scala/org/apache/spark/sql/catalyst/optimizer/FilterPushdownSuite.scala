@@ -36,7 +36,6 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Filter Pushdown", FixedPoint(10),
         PushDownPredicate,
         CombineFilters,
-        PushDownPredicate,
         BooleanSimplification,
         PushPredicateThroughJoin,
         CollapseProject) :: Nil
@@ -181,6 +180,26 @@ class FilterPushdownSuite extends PlanTest {
       .groupBy('a)('a, count('cc) as 'c)
       .where('c > 10) // this predicate can't be pushed down.
       .where(('a === 2 || 'a === 3) && ('c > 10 || 'a === 2))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where('a === 2 || 'a === 3)
+        .select('a, 'b, ('c + 1) as 'cc)
+        .groupBy('a)('a, count('cc) as 'c)
+        .where('c > 10).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("disjunctive predicates which are able to pushdown should be pushed down after converted") {
+    // (('a === 2) || ('c > 10 || 'a === 3)) can't be pushdown due to the disjunctive form.
+    // However, its conjunctive normal form can be pushdown.
+    val originalQuery = testRelation
+      .select('a, 'b, ('c + 1) as 'cc)
+      .groupBy('a)('a, count('cc) as 'c)
+      .where('c > 10)
+      .where(('a === 2) || ('c > 10 && 'a === 3))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =

@@ -89,8 +89,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       CombineFilters,
       CombineLimits,
       CombineUnions,
-      // Push down Filters again after combination
-      PushDownPredicate,
       // Constant folding and strength reduction
       NullPropagation,
       FoldablePropagation,
@@ -588,15 +586,33 @@ object CombineUnions extends Rule[LogicalPlan] {
  * one conjunctive predicate.
  */
 object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
+  private def toCNF(predicate: Expression): Expression = {
+    val disjunctives = splitDisjunctivePredicates(predicate)
+    var finalPredicates = splitConjunctivePredicates(disjunctives.head)
+    disjunctives.tail.foreach { cond =>
+      val predicates = new ArrayBuffer[Expression]()
+      splitConjunctivePredicates(cond).map { p =>
+        predicates ++= finalPredicates.map(Or(_, p))
+      }
+      finalPredicates = predicates.toSeq
+    }
+    finalPredicates.reduce(And)
+  }
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Filter(fc, nf @ Filter(nc, grandChild)) =>
-      (ExpressionSet(splitConjunctivePredicates(fc)) --
-        ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
+      val fcCNF = toCNF(fc)
+      val ncCNF = toCNF(nc)
+      val combinedFilter = (ExpressionSet(splitConjunctivePredicates(fcCNF)) --
+        ExpressionSet(splitConjunctivePredicates(ncCNF))).reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
         case None =>
           nf
       }
+      // [[Filter]] can't pushdown through another [[Filter]]. Once they are combined,
+      // [[BooleanSimplification]] rule will possibly simplify the predicate to the form that
+      // will not be able to pushdown. So we pushdown the combined [[Filter]] immediately.
+      PushDownPredicate(combinedFilter)
   }
 }
 
