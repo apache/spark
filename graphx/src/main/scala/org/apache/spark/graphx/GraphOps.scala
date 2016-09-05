@@ -26,6 +26,8 @@ import org.apache.spark.rdd.RDD
 
 import org.apache.spark.ml.linalg.Vector
 
+import breeze.linalg.{SparseVector => BSV}
+
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the
  * efficient GraphX API. This class is implicitly constructed for each Graph object.

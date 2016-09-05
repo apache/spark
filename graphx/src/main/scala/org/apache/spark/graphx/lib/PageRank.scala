@@ -26,6 +26,8 @@ import org.apache.spark.ml.linalg.{Vectors, Vector}
 
 import breeze.linalg.{Vector => BV}
 
+import breeze.linalg.{SparseVector => BSV}
+
 /**
  * PageRank algorithm implementation. There are two implementations of PageRank implemented.
  *
