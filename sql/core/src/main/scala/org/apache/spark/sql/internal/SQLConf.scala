@@ -131,6 +131,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ENABLE_PRUNED_PARTITION_STATS =
+    SQLConfigBuilder("spark.sql.statistics.prunedPartitionStats")
+      .doc("When enabled, spark-sql would try and calculate stats based on size of partitions" +
+        " specified in your filter condition. i.e. if you run a query like " +
+        "`select * from src s , dest d where s.partition = 'partition1' and s.key = d.key`" +
+        " instead of using the entire table's totalSize, rawSize stats, spark will consider only " +
+        " the size of partition 1 for table src. Currently the optimization is only available for" +
+        " equality check and won't be applied if partition column is specified in any other check" +
+        " or if partition column is used in operators other than And and OR. In those events stat" +
+        " calculation falls back to totalSize/rawSize.")
+      .booleanConf
+      .createWithDefault(false)
+
   val DEFAULT_SIZE_IN_BYTES = SQLConfigBuilder("spark.sql.defaultSizeInBytes")
     .internal()
     .doc("The default table size used in query planning. By default, it is set to Long.MaxValue " +
@@ -650,6 +663,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
+
+  def prunedPartitionStatsEnabled: Boolean = getConf(ENABLE_PRUNED_PARTITION_STATS)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
