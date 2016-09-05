@@ -604,7 +604,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }.toList
   }
 
-  // TODO: Fix toJSON so that we can more safely handle Map and Seq with loop.
   private def parseToJson(obj: Any): JValue = obj match {
     case b: Boolean => JBool(b)
     case b: Byte => JInt(b.toInt)
