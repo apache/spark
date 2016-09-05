@@ -1026,26 +1026,29 @@ class HiveDDLSuite
     }
   }
 
-  test("datasource table property keys are not allowed") {
+  test("datasource and statistics table property keys are not allowed") {
     import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_PREFIX
+    import org.apache.spark.sql.hive.HiveExternalCatalog.STATISTICS_PREFIX
 
     withTable("tbl") {
       sql("CREATE TABLE tbl(a INT) STORED AS parquet")
 
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE tbl SET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo' = 'loser')")
-      }
-      assert(e.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+      Seq(DATASOURCE_PREFIX, STATISTICS_PREFIX).foreach { forbiddenPrefix =>
+        val e = intercept[AnalysisException] {
+          sql(s"ALTER TABLE tbl SET TBLPROPERTIES ('${forbiddenPrefix}foo' = 'loser')")
+        }
+        assert(e.getMessage.contains(forbiddenPrefix + "foo"))
 
-      val e2 = intercept[AnalysisException] {
-        sql(s"ALTER TABLE tbl UNSET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo')")
-      }
-      assert(e2.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+        val e2 = intercept[AnalysisException] {
+          sql(s"ALTER TABLE tbl UNSET TBLPROPERTIES ('${forbiddenPrefix}foo')")
+        }
+        assert(e2.getMessage.contains(forbiddenPrefix + "foo"))
 
-      val e3 = intercept[AnalysisException] {
-        sql(s"CREATE TABLE tbl TBLPROPERTIES ('${DATASOURCE_PREFIX}foo'='anything')")
+        val e3 = intercept[AnalysisException] {
+          sql(s"CREATE TABLE tbl TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')")
+        }
+        assert(e3.getMessage.contains(forbiddenPrefix + "foo"))
       }
-      assert(e3.getMessage.contains(DATASOURCE_PREFIX + "foo"))
     }
   }
 }
