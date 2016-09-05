@@ -56,7 +56,7 @@ class JacksonParser(
   private val emptyRow: Seq[InternalRow] = Seq(new GenericInternalRow(schema.length))
 
   @transient
-  private var isWarningPrintedForMalformedRecord: Boolean = false
+  private[this] var isWarningPrintedForMalformedRecord: Boolean = false
 
   /**
    * This function deals with the cases it fails to parse. This function will be called
