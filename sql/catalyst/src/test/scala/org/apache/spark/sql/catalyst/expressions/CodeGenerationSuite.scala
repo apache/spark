@@ -124,9 +124,6 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  /**
-  *  [[CreateStruct]] is now a constructor of [[CreateNamedStruct]]
-  */
   test("SPARK-14793: split wide struct creation into blocks due to JVM code size limit") {
     val length = 5000
     val expressions = Seq(CreateStruct(List.fill(length)(EqualTo(Literal(1), Literal(1)))))
