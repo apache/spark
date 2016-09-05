@@ -1182,8 +1182,7 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer)
       plan: LogicalPlan,
       keyPlan: LogicalPlan,
       subqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
-    val pushdownConds = new ArrayBuffer[Expression]()
-    var firstConds = splitConjunctivePredicates(subqueries(0).asInstanceOf[Filter].condition)
+    var pushdownConds = splitConjunctivePredicates(subqueries(0).asInstanceOf[Filter].condition)
     subqueries.tail.foreach {
       case Filter(otherCond, child) =>
         val rewrites = buildRewrites(child, subqueries(0).asInstanceOf[Filter].child)
@@ -1192,17 +1191,19 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer)
         // through intermediate operators, it makes all concatenated conditions not pushed doen.
         // E.g., first condition is [a && b] and second condition is [c]. If b can't be pushed
         // down, the final condition [[a && b] || c] can't be pushed down too.
+        val pushdowns = new ArrayBuffer[Expression]()
         splitConjunctivePredicates(otherCond).foreach { cond =>
           val rewritten = pushToOtherPlan(cond, rewrites)
-          pushdownConds ++= firstConds.map { pushdown =>
+          pushdowns ++= pushdownConds.map { pushdown =>
             Or(pushdown, rewritten)
           }
         }
+        pushdownConds = pushdowns.toSeq
     }
-    val firstPushdownCondition: Expression = pushdownConds.reduce(And)
+    val finalPushdownCondition: Expression = pushdownConds.reduce(And)
     plan transformDown {
       case f @ Filter(cond, s @ SubqueryAlias(alias, subquery, v, true)) if s.sameResult(keyPlan) =>
-        val pushdownCond: Expression = subqueries.foldLeft(firstPushdownCondition) {
+        val pushdownCond: Expression = subqueries.foldLeft(finalPushdownCondition) {
           case (currentCond, sub) =>
             val rewrites = buildRewrites(sub.asInstanceOf[Filter].child, subquery)
             pushToOtherPlan(currentCond, rewrites)
