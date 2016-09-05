@@ -22,7 +22,9 @@ import scala.reflect.ClassTag
 import org.apache.spark.graphx._
 import org.apache.spark.internal.Logging
 
-import breeze.linalg.{SparseVector => BSV}
+import org.apache.spark.ml.linalg.{Vectors, Vector}
+
+import breeze.linalg.{Vector => BV}
 
 /**
  * PageRank algorithm implementation. There are two implementations of PageRank implemented.
@@ -183,12 +185,12 @@ object PageRank extends Logging {
    */
   def runParallelPersonalizedPageRank[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED],
     numIter: Int, resetProb: Double = 0.15,
-    sources: Array[VertexId]): Graph[BSV[Double], Double] = {
+    sources: Array[VertexId]): Graph[Vector, Double] = {
     // TODO if one sources vertex id is outside of the int range
     // we won't be able to store its activations in a sparse vector
-    val zero = new BSV[Double](Array(), Array(), sources.size)
+    val zero = Vectors.sparse(sources.size, List()).asBreeze
     val sourcesInitMap = sources.zipWithIndex.map { case (vid, i) =>
-      val v = new BSV[Double](Array(i), Array(resetProb), sources.size)
+      val v = Vectors.sparse(sources.size, Array(i), Array(resetProb)).asBreeze
       (vid, v)
     }.toMap
     val sc = graph.vertices.sparkContext
@@ -213,13 +215,13 @@ object PageRank extends Logging {
       val prevRankGraph = rankGraph
       // Propagates the message along outbound edges
       // and adding start nodes back in with activation resetProb
-      val rankUpdates = rankGraph.aggregateMessages[BSV[Double]](
+      val rankUpdates = rankGraph.aggregateMessages[BV[Double]](
         ctx => ctx.sendToDst(ctx.srcAttr :* ctx.attr),
-        (a: BSV[Double], b: BSV[Double]) => a :+ b, TripletFields.Src)
+        (a : BV[Double], b : BV[Double]) => a :+ b, TripletFields.Src)
 
       rankGraph = rankGraph.joinVertices(rankUpdates) {
         (vid, oldRank, msgSum) =>
-          val popActivations: BSV[Double] = msgSum :* (1.0 - resetProb)
+          val popActivations: BV[Double] = msgSum :* (1.0 - resetProb)
           val resetActivations = if (sourcesInitMapBC.value contains vid) {
             sourcesInitMapBC.value(vid)
           } else {
@@ -238,6 +240,9 @@ object PageRank extends Logging {
     }
 
     rankGraph
+      .mapVertices { (vid, attr)  =>
+        Vectors.fromBreeze(attr)
+      }
   }
 
   /**
