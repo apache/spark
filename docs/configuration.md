@@ -1097,7 +1097,7 @@ Apart from these, the following properties are also available, and may be useful
      It means the fastest storage is RAM_DISK(threshold 40GB), the next level is SSD(threshold 20GB), all the rest are
      the last level storage. The threshold means when the device's usable space is less than it, falling into the next
      level storage.<br />
-     And also, pleaes configure RAM_DISK and SSD location in the local dirs. It is easy, just put "RAM_DISK" and
+     And also, please configure RAM_DISK and SSD location in the local dirs. It is easy, just put "RAM_DISK" and
      "SSD" into the dir string.<br />
      For example in Standalone, Mesos: <br />
      <code>spark.local.dir=/mnt/nvm1,/mnt/ssd1,/mnt/ssd2,/mnt/others</code><br />
