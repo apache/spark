@@ -17,7 +17,7 @@
 
 package org.apache.spark.io
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InputStream}
 
 import com.google.common.io.ByteStreams
 
@@ -130,4 +130,58 @@ class CompressionCodecSuite extends SparkFunSuite {
     ByteStreams.readFully(concatenatedBytes, decompressed)
     assert(decompressed.toSeq === (0 to 127))
   }
+
+  // Based on https://github.com/xerial/snappy-java/blob/60cc0c2e1d1a76ae2981d0572a5164fcfdfba5f1/src/test/java/org/xerial/snappy/SnappyInputStreamTest.java
+  test("SPARK 17378: snappy-java should handle magic header when reading stream") {
+    val b = new ByteArrayOutputStream()
+    // Write uncompressed length beginning with -126 (the same with magicheader[0])
+    b.write(-126) // Can't access magic header[0] as it isn't public, so access this way
+    b.write(0x01)
+    // uncompressed data length = 130
+
+    var data = new ByteArrayOutputStream()
+
+    for (i <- 0 until 130) {
+      data.write('A')
+    }
+
+    var dataMoreThan8Len = data.toByteArray()
+
+    // write literal (lower 2-bit of the first tag byte is 00, upper 6-bits represents data size)
+    b.write(60<<2) // 1-byte data length follows
+    b.write(dataMoreThan8Len.length-1) // subsequent data length
+    b.write(dataMoreThan8Len)
+
+    var compressed = b.toByteArray()
+
+    // This should succeed
+    assert(dataMoreThan8Len === org.xerial.snappy.Snappy.uncompress(compressed))
+
+    // Reproduce error in #142
+    val in = new org.xerial.snappy.SnappyInputStream(new ByteArrayInputStream(b.toByteArray()))
+
+    var uncompressed = readFully(in)
+    assert(dataMoreThan8Len === uncompressed) // this fails as uncompressed is empty
+  }
+
+  private def readFully(input: InputStream): Array[Byte] = {
+    try {
+      val out = new ByteArrayOutputStream()
+      var buf = new Array[Byte](4096)
+
+      var readBytes = 0
+      while (readBytes != -1) {
+        readBytes = input.read(buf)
+        if (readBytes != -1) {
+          out.write(buf, 0, readBytes)
+        }
+      }
+      out.flush()
+      return out.toByteArray()
+    }
+    finally {
+     input.close();
+    }
+  }
+
 }
