@@ -26,13 +26,14 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 
 private case class ReviveOffers()
 
-private case class StatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
+private case class StatusUpdate(taskId: Long, state: TaskState, serializedData: ChunkedByteBuffer)
 
 private case class KillTask(taskId: Long, interruptThread: Boolean)
 
@@ -148,7 +149,7 @@ private[spark] class LocalSchedulerBackend(
     localEndpoint.send(KillTask(taskId, interruptThread))
   }
 
-  override def statusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer) {
+  override def statusUpdate(taskId: Long, state: TaskState, serializedData: ChunkedByteBuffer) {
     localEndpoint.send(StatusUpdate(taskId, state, serializedData))
   }
 

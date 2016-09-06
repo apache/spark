@@ -17,8 +17,11 @@
 
 package org.apache.spark.network.protocol;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
 
 /** Response to {@link RpcRequest} for a failed RPC. */
 public final class RpcFailure extends AbstractMessage implements ResponseMessage {
@@ -34,19 +37,19 @@ public final class RpcFailure extends AbstractMessage implements ResponseMessage
   public Type type() { return Type.RpcFailure; }
 
   @Override
-  public int encodedLength() {
+  public long encodedLength() {
     return 8 + Encoders.Strings.encodedLength(errorString);
   }
 
   @Override
-  public void encode(ByteBuf buf) {
-    buf.writeLong(requestId);
-    Encoders.Strings.encode(buf, errorString);
+  public void encode(OutputStream out) throws IOException {
+    Encoders.Longs.encode(out, requestId);
+    Encoders.Strings.encode(out, errorString);
   }
 
-  public static RpcFailure decode(ByteBuf buf) {
-    long requestId = buf.readLong();
-    String errorString = Encoders.Strings.decode(buf);
+  public static RpcFailure decode(InputStream in) throws IOException {
+    long requestId = Encoders.Longs.decode(in);
+    String errorString = Encoders.Strings.decode(in);
     return new RpcFailure(requestId, errorString);
   }
 

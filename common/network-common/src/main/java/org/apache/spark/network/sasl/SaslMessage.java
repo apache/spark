@@ -17,10 +17,14 @@
 
 package org.apache.spark.network.sasl;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
-import org.apache.spark.network.buffer.NettyManagedBuffer;
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil;
+import org.apache.spark.network.buffer.InputStreamManagedBuffer;
+import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.protocol.Encoders;
 import org.apache.spark.network.protocol.AbstractMessage;
 
@@ -37,11 +41,11 @@ class SaslMessage extends AbstractMessage {
   public final String appId;
 
   SaslMessage(String appId, byte[] message) {
-    this(appId, Unpooled.wrappedBuffer(message));
+    this(appId, new NioManagedBuffer(ChunkedByteBufferUtil.wrap(message)));
   }
 
-  SaslMessage(String appId, ByteBuf message) {
-    super(new NettyManagedBuffer(message), true);
+  SaslMessage(String appId, ManagedBuffer message) {
+    super(message, true);
     this.appId = appId;
   }
 
@@ -49,30 +53,28 @@ class SaslMessage extends AbstractMessage {
   public Type type() { return Type.User; }
 
   @Override
-  public int encodedLength() {
+  public long encodedLength() {
     // The integer (a.k.a. the body size) is not really used, since that information is already
     // encoded in the frame length. But this maintains backwards compatibility with versions of
     // RpcRequest that use Encoders.ByteArrays.
-    return 1 + Encoders.Strings.encodedLength(appId) + 4;
+    return 1 + Encoders.Strings.encodedLength(appId) + 8;
   }
 
   @Override
-  public void encode(ByteBuf buf) {
-    buf.writeByte(TAG_BYTE);
-    Encoders.Strings.encode(buf, appId);
-    // See comment in encodedLength().
-    buf.writeInt((int) body().size());
+  public void encode(OutputStream out) throws IOException {
+    Encoders.Bytes.encode(out, TAG_BYTE);
+    Encoders.Strings.encode(out, appId);
+    Encoders.Longs.encode(out, body().size());
   }
 
-  public static SaslMessage decode(ByteBuf buf) {
-    if (buf.readByte() != TAG_BYTE) {
+  public static SaslMessage decode(InputStream in) throws IOException {
+    if (Encoders.Bytes.decode(in) != TAG_BYTE) {
       throw new IllegalStateException("Expected SaslMessage, received something else"
-        + " (maybe your client does not have SASL enabled?)");
+          + " (maybe your client does not have SASL enabled?)");
     }
-
-    String appId = Encoders.Strings.decode(buf);
-    // See comment in encodedLength().
-    buf.readInt();
-    return new SaslMessage(appId, buf.retain());
+    String appId = Encoders.Strings.decode(in);
+    long limit = Encoders.Longs.decode(in);
+    ManagedBuffer managedBuf = new InputStreamManagedBuffer(in, limit);
+    return new SaslMessage(appId, managedBuf);
   }
 }

@@ -17,12 +17,14 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Arrays;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.protocol.Encoders;
@@ -72,23 +74,23 @@ public class ExecutorShuffleInfo implements Encodable {
   }
 
   @Override
-  public int encodedLength() {
+  public long encodedLength() {
     return Encoders.StringArrays.encodedLength(localDirs)
         + 4 // int
         + Encoders.Strings.encodedLength(shuffleManager);
   }
 
   @Override
-  public void encode(ByteBuf buf) {
-    Encoders.StringArrays.encode(buf, localDirs);
-    buf.writeInt(subDirsPerLocalDir);
-    Encoders.Strings.encode(buf, shuffleManager);
+  public void encode(OutputStream out) throws IOException {
+    Encoders.StringArrays.encode(out, localDirs);
+    Encoders.Ints.encode(out, subDirsPerLocalDir);
+    Encoders.Strings.encode(out, shuffleManager);
   }
 
-  public static ExecutorShuffleInfo decode(ByteBuf buf) {
-    String[] localDirs = Encoders.StringArrays.decode(buf);
-    int subDirsPerLocalDir = buf.readInt();
-    String shuffleManager = Encoders.Strings.decode(buf);
+  public static ExecutorShuffleInfo decode(InputStream in) throws IOException {
+    String[] localDirs = Encoders.StringArrays.decode(in);
+    int subDirsPerLocalDir = Encoders.Ints.decode(in);
+    String shuffleManager = Encoders.Strings.decode(in);
     return new ExecutorShuffleInfo(localDirs, subDirsPerLocalDir, shuffleManager);
   }
 }

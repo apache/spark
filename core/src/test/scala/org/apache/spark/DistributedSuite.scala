@@ -21,8 +21,8 @@ import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
-import org.apache.spark.util.io.ChunkedByteBuffer
 
 class NotSerializableClass
 class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
@@ -171,7 +171,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
         blockId.toString)
       val deserialized = serializerManager.dataDeserializeStream[Int](blockId,
-        new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream()).toList
+        bytes.nioByteBuffer().toInputStream()).toList
       assert(deserialized === (1 to 100).toList)
     }
   }

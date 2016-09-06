@@ -17,11 +17,15 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
+import com.google.common.base.Objects;
+
+import org.apache.spark.network.buffer.InputStreamManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NettyManagedBuffer;
+
 
 /**
  * Response to {@link ChunkFetchRequest} when a chunk exists and has been successfully fetched.
@@ -32,24 +36,31 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
  */
 public final class ChunkFetchSuccess extends AbstractResponseMessage {
   public final StreamChunkId streamChunkId;
+  public final long byteCount;
 
   public ChunkFetchSuccess(StreamChunkId streamChunkId, ManagedBuffer buffer) {
+    this(streamChunkId, buffer.size(), buffer);
+  }
+
+  public ChunkFetchSuccess(StreamChunkId streamChunkId, long byteCount, ManagedBuffer buffer) {
     super(buffer, true);
     this.streamChunkId = streamChunkId;
+    this.byteCount = byteCount;
   }
 
   @Override
   public Type type() { return Type.ChunkFetchSuccess; }
 
   @Override
-  public int encodedLength() {
-    return streamChunkId.encodedLength();
+  public long encodedLength() {
+    return streamChunkId.encodedLength() + 8;
   }
 
   /** Encoding does NOT include 'buffer' itself. See {@link MessageEncoder}. */
   @Override
-  public void encode(ByteBuf buf) {
-    streamChunkId.encode(buf);
+  public void encode(OutputStream out) throws IOException {
+    streamChunkId.encode(out);
+    Encoders.Longs.encode(out, body().size());
   }
 
   @Override
@@ -58,11 +69,11 @@ public final class ChunkFetchSuccess extends AbstractResponseMessage {
   }
 
   /** Decoding uses the given ByteBuf as our data, and will retain() it. */
-  public static ChunkFetchSuccess decode(ByteBuf buf) {
-    StreamChunkId streamChunkId = StreamChunkId.decode(buf);
-    buf.retain();
-    NettyManagedBuffer managedBuf = new NettyManagedBuffer(buf.duplicate());
-    return new ChunkFetchSuccess(streamChunkId, managedBuf);
+  public static ChunkFetchSuccess decode(InputStream in) throws IOException {
+    StreamChunkId streamChunkId = StreamChunkId.decode(in);
+    long byteCount =  Encoders.Longs.decode(in);
+    ManagedBuffer managedBuf = new InputStreamManagedBuffer(in, byteCount);
+    return new ChunkFetchSuccess(streamChunkId, byteCount, managedBuf);
   }
 
   @Override

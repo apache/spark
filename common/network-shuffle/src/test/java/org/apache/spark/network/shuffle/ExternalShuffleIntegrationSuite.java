@@ -256,8 +256,8 @@ public class ExternalShuffleIntegrationSuite {
   }
 
   private void assertBuffersEqual(ManagedBuffer buffer0, ManagedBuffer buffer1) throws Exception {
-    ByteBuffer nio0 = buffer0.nioByteBuffer();
-    ByteBuffer nio1 = buffer1.nioByteBuffer();
+    ByteBuffer nio0 = buffer0.nioByteBuffer().toByteBuffer();
+    ByteBuffer nio1 = buffer1.nioByteBuffer().toByteBuffer();
 
     int len = nio0.remaining();
     assertEquals(nio0.remaining(), nio1.remaining());

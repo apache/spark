@@ -46,7 +46,6 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
 
   public static final String HANDLER_NAME = "frameDecoder";
   private static final int LENGTH_SIZE = 8;
-  private static final int MAX_FRAME_SIZE = Integer.MAX_VALUE;
   private static final int UNKNOWN_FRAME_SIZE = -1;
 
   private final LinkedList<ByteBuf> buffers = new LinkedList<>();
@@ -78,7 +77,7 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
         totalSize -= read;
       } else {
         // Interceptor is not active, so try to decode one frame.
-        ByteBuf frame = decodeNext();
+        LinkedList<ByteBuf> frame = decodeNext();
         if (frame == null) {
           break;
         }
@@ -121,7 +120,7 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     return nextFrameSize;
   }
 
-  private ByteBuf decodeNext() throws Exception {
+  private LinkedList<ByteBuf> decodeNext() throws Exception {
     long frameSize = decodeFrameSize();
     if (frameSize == UNKNOWN_FRAME_SIZE || totalSize < frameSize) {
       return null;
@@ -130,21 +129,20 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     // Reset size for next frame.
     nextFrameSize = UNKNOWN_FRAME_SIZE;
 
-    Preconditions.checkArgument(frameSize < MAX_FRAME_SIZE, "Too large frame: %s", frameSize);
     Preconditions.checkArgument(frameSize > 0, "Frame length should be positive: %s", frameSize);
 
+    LinkedList<ByteBuf> frame = new LinkedList<>();
     // If the first buffer holds the entire frame, return it.
-    int remaining = (int) frameSize;
+    long remaining = frameSize;
     if (buffers.getFirst().readableBytes() >= remaining) {
-      return nextBufferForFrame(remaining);
+      frame.add(nextBufferForFrame(remaining));
+      return frame;
     }
 
-    // Otherwise, create a composite buffer.
-    CompositeByteBuf frame = buffers.getFirst().alloc().compositeBuffer(Integer.MAX_VALUE);
     while (remaining > 0) {
       ByteBuf next = nextBufferForFrame(remaining);
+      frame.add(next);
       remaining -= next.readableBytes();
-      frame.addComponent(next).writerIndex(frame.writerIndex() + next.readableBytes());
     }
     assert remaining == 0;
     return frame;
@@ -154,12 +152,13 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
    * Takes the first buffer in the internal list, and either adjust it to fit in the frame
    * (by taking a slice out of it) or remove it from the internal list.
    */
-  private ByteBuf nextBufferForFrame(int bytesToRead) {
+  private ByteBuf nextBufferForFrame(long bytesToRead) {
     ByteBuf buf = buffers.getFirst();
     ByteBuf frame;
 
     if (buf.readableBytes() > bytesToRead) {
-      frame = buf.retain().readSlice(bytesToRead);
+      // buf.readableBytes() less than Integer.MAX_VALUE
+      frame = buf.retain().readSlice((int) bytesToRead);
       totalSize -= bytesToRead;
     } else {
       frame = buf;

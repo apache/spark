@@ -19,7 +19,9 @@ package org.apache.spark.network.buffer;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This interface provides an immutable view for data in the form of bytes. The implementation
@@ -34,8 +36,9 @@ import java.nio.ByteBuffer;
  * In that case, if the buffer is going to be passed around to a different thread, retain/release
  * should be called.
  */
-public abstract class ManagedBuffer {
+public abstract class ManagedBuffer extends AbstractReferenceCounted {
 
+  private static final Logger logger = LoggerFactory.getLogger(ManagedBuffer.class);
   /** Number of bytes of the data. */
   public abstract long size();
 
@@ -44,7 +47,7 @@ public abstract class ManagedBuffer {
    * returned ByteBuffer should not affect the content of this buffer.
    */
   // TODO: Deprecate this, usage may require expensive memory mapping or allocation.
-  public abstract ByteBuffer nioByteBuffer() throws IOException;
+  public abstract ChunkedByteBuffer nioByteBuffer() throws IOException;
 
   /**
    * Exposes this buffer's data as an InputStream. The underlying implementation does not
@@ -56,14 +59,25 @@ public abstract class ManagedBuffer {
   /**
    * Increment the reference count by one if applicable.
    */
-  public abstract ManagedBuffer retain();
+  @Override
+  public ManagedBuffer retain() {
+    super.retain();
+    return this;
+  }
 
-  /**
-   * If applicable, decrement the reference count by one and deallocates the buffer if the
-   * reference count reaches zero.
-   */
-  public abstract ManagedBuffer release();
+  @Override
+  public ManagedBuffer retain(int increment) {
+    if (increment <= 0) {
+      throw new IllegalArgumentException("increment: " + increment + " (expected: > 0)");
+    }
+    for (int i = 0; i < increment; i++) {
+      retain();
+    }
+    return this;
+  }
 
+  @Override
+  protected void deallocate() {}
   /**
    * Convert the buffer into an Netty object, used to write the data out. The return value is either
    * a {@link io.netty.buffer.ByteBuf} or a {@link io.netty.channel.FileRegion}.

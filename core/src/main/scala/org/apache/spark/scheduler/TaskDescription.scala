@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.util.SerializableBuffer
 
 /**
@@ -31,13 +32,8 @@ private[spark] class TaskDescription(
     val executorId: String,
     val name: String,
     val index: Int,    // Index within this task's TaskSet
-    _serializedTask: ByteBuffer)
+    val serializedTask: ChunkedByteBuffer)
   extends Serializable {
-
-  // Because ByteBuffers are not serializable, wrap the task in a SerializableBuffer
-  private val buffer = new SerializableBuffer(_serializedTask)
-
-  def serializedTask: ByteBuffer = buffer.value
 
   override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
 }

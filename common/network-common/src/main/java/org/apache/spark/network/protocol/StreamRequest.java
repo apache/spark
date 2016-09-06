@@ -17,8 +17,11 @@
 
 package org.apache.spark.network.protocol;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
 
 /**
  * Request to stream data from the remote end.
@@ -37,17 +40,17 @@ public final class StreamRequest extends AbstractMessage implements RequestMessa
   public Type type() { return Type.StreamRequest; }
 
   @Override
-  public int encodedLength() {
+  public long encodedLength() {
     return Encoders.Strings.encodedLength(streamId);
   }
 
   @Override
-  public void encode(ByteBuf buf) {
-    Encoders.Strings.encode(buf, streamId);
+  public void encode(OutputStream out) throws IOException {
+    Encoders.Strings.encode(out, streamId);
   }
 
-  public static StreamRequest decode(ByteBuf buf) {
-    String streamId = Encoders.Strings.decode(buf);
+  public static StreamRequest decode(InputStream in) throws IOException {
+    String streamId = Encoders.Strings.decode(in);
     return new StreamRequest(streamId);
   }
 

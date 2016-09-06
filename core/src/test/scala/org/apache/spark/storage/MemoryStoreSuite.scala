@@ -27,10 +27,11 @@ import org.scalatest._
 
 import org.apache.spark._
 import org.apache.spark.memory.{MemoryMode, StaticMemoryManager}
+import org.apache.spark.network.buffer.ChunkedByteBuffer
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator}
 import org.apache.spark.util._
-import org.apache.spark.util.io.ChunkedByteBuffer
 
 class MemoryStoreSuite
   extends SparkFunSuite
@@ -404,7 +405,7 @@ class MemoryStoreSuite
     val blockId = BlockId("rdd_3_10")
     var bytes: ChunkedByteBuffer = null
     memoryStore.putBytes(blockId, 10000, MemoryMode.ON_HEAP, () => {
-      bytes = new ChunkedByteBuffer(ByteBuffer.allocate(10000))
+      bytes = ChunkedByteBufferUtil.wrap(ByteBuffer.allocate(10000))
       bytes
     })
     assert(memoryStore.getSize(blockId) === 10000)

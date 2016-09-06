@@ -28,6 +28,8 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.*;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
@@ -103,7 +105,7 @@ public class TransportResponseHandlerSuite {
 
     ByteBuffer resp = ByteBuffer.allocate(10);
     handler.handle(new RpcResponse(12345, new NioManagedBuffer(resp)));
-    verify(callback, times(1)).onSuccess(eq(ByteBuffer.allocate(10)));
+    verify(callback, times(1)).onSuccess(eq(ChunkedByteBufferUtil.wrap(ByteBuffer.allocate(10))));
     assertEquals(0, handler.numOutstandingRequests());
   }
 

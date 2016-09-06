@@ -780,7 +780,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
     // Code to serialize.
     val input = child.genCode(ctx)
     val javaType = ctx.javaType(dataType)
-    val serialize = s"$serializer.serialize(${input.value}, null).array()"
+    val serialize = s"$serializer.serialize(${input.value}, null).toArray()"
 
     val code = s"""
       ${input.code}
@@ -825,9 +825,10 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
 
     // Code to deserialize.
     val input = child.genCode(ctx)
+    val byteBuffer = s"org.apache.spark.network.buffer.ChunkedByteBufferUtil.wrap(${input.value})"
     val javaType = ctx.javaType(dataType)
     val deserialize =
-      s"($javaType) $serializer.deserialize(java.nio.ByteBuffer.wrap(${input.value}), null)"
+      s"($javaType) $serializer.deserialize($byteBuffer, null)"
 
     val code = s"""
       ${input.code}

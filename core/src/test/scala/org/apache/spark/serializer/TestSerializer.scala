@@ -22,6 +22,8 @@ import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer
+
 /**
  * A serializer implementation that always returns two elements in a deserialization stream.
  */
@@ -31,7 +33,8 @@ class TestSerializer extends Serializer {
 
 
 class TestSerializerInstance extends SerializerInstance {
-  override def serialize[T: ClassTag](t: T): ByteBuffer = throw new UnsupportedOperationException
+  override def serialize[T: ClassTag](t: T): ChunkedByteBuffer =
+    throw new UnsupportedOperationException
 
   override def serializeStream(s: OutputStream): SerializationStream =
     throw new UnsupportedOperationException
@@ -39,10 +42,10 @@ class TestSerializerInstance extends SerializerInstance {
   override def deserializeStream(s: InputStream): TestDeserializationStream =
     new TestDeserializationStream
 
-  override def deserialize[T: ClassTag](bytes: ByteBuffer): T =
+  override def deserialize[T: ClassTag](bytes: InputStream): T =
     throw new UnsupportedOperationException
 
-  override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T =
+  override def deserialize[T: ClassTag](bytes: InputStream, loader: ClassLoader): T =
     throw new UnsupportedOperationException
 }
 

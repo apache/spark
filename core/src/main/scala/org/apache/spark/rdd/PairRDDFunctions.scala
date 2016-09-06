@@ -42,6 +42,8 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.OutputMetrics
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.buffer.ChunkedByteBuffer
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -162,12 +164,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def aggregateByKey[U: ClassTag](zeroValue: U, partitioner: Partitioner)(seqOp: (U, V) => U,
       combOp: (U, U) => U): RDD[(K, U)] = self.withScope {
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
-    val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
-    val zeroArray = new Array[Byte](zeroBuffer.limit)
-    zeroBuffer.get(zeroArray)
+    val zeroArray = SparkEnv.get.serializer.newInstance().serialize(zeroValue).toArray
 
     lazy val cachedSerializer = SparkEnv.get.serializer.newInstance()
-    val createZero = () => cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray))
+    val createZero = () => cachedSerializer.deserialize[U](ChunkedByteBufferUtil.wrap(zeroArray))
 
     // We will clean the combiner closure later in `combineByKey`
     val cleanedSeqOp = self.context.clean(seqOp)
@@ -212,13 +212,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       zeroValue: V,
       partitioner: Partitioner)(func: (V, V) => V): RDD[(K, V)] = self.withScope {
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
-    val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
-    val zeroArray = new Array[Byte](zeroBuffer.limit)
-    zeroBuffer.get(zeroArray)
+    val zeroArray = SparkEnv.get.serializer.newInstance().serialize(zeroValue).toArray
 
     // When deserializing, use a lazy val to create just one instance of the serializer per task
     lazy val cachedSerializer = SparkEnv.get.serializer.newInstance()
-    val createZero = () => cachedSerializer.deserialize[V](ByteBuffer.wrap(zeroArray))
+    val createZero = () => cachedSerializer.deserialize[V](ChunkedByteBufferUtil.wrap(zeroArray))
 
     val cleanedFunc = self.context.clean(func)
     combineByKeyWithClassTag[V]((v: V) => cleanedFunc(createZero(), v),

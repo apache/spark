@@ -35,6 +35,7 @@ import org.roaringbitmap.RoaringBitmap
 import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
@@ -80,6 +81,8 @@ class KryoSerializer(conf: SparkConf)
   private val avroSchemas = conf.getAvroSchema
 
   def newKryoOutput(): KryoOutput = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
+
+  def newKryoInput(): KryoInput = new KryoInput(bufferSize)
 
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator
@@ -288,10 +291,12 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
 
   // Make these lazy vals to avoid creating a buffer unless we use them.
   private lazy val output = ks.newKryoOutput()
-  private lazy val input = new KryoInput()
+  private lazy val input = ks.newKryoInput()
 
-  override def serialize[T: ClassTag](t: T): ByteBuffer = {
+  override def serialize[T: ClassTag](t: T): ChunkedByteBuffer = {
     output.clear()
+    val out = ChunkedByteBufferOutputStream.newInstance()
+    output.setOutputStream(out)
     val kryo = borrowKryo()
     try {
       kryo.writeClassAndObject(output, t)
@@ -300,29 +305,51 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
         throw new SparkException(s"Kryo serialization failed: ${e.getMessage}. To avoid this, " +
           "increase spark.kryoserializer.buffer.max value.")
     } finally {
+      output.close()
+      output.setOutputStream(null)
       releaseKryo(kryo)
     }
-    ByteBuffer.wrap(output.toBytes)
+    out.toChunkedByteBuffer
   }
 
-  override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
+  override def deserialize[T: ClassTag](in: InputStream): T = {
     val kryo = borrowKryo()
     try {
-      input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      input.setInputStream(in)
+      // input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
+      input.close()
+      input.setInputStream(null)
       releaseKryo(kryo)
     }
   }
 
-  override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
+  override def deserialize[T: ClassTag](bytes: ChunkedByteBuffer, loader: ClassLoader): T = {
     val kryo = borrowKryo()
     val oldClassLoader = kryo.getClassLoader
     try {
       kryo.setClassLoader(loader)
-      input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      input.setInputStream(bytes.toInputStream())
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
+      input.close()
+      input.setInputStream(null)
+      kryo.setClassLoader(oldClassLoader)
+      releaseKryo(kryo)
+    }
+  }
+
+  override def deserialize[T: ClassTag](bytes: InputStream, loader: ClassLoader): T = {
+    val kryo = borrowKryo()
+    val oldClassLoader = kryo.getClassLoader
+    try {
+      kryo.setClassLoader(loader)
+      input.setInputStream(bytes)
+      kryo.readClassAndObject(input).asInstanceOf[T]
+    } finally {
+      input.close()
+      input.setInputStream(null)
       kryo.setClassLoader(oldClassLoader)
       releaseKryo(kryo)
     }

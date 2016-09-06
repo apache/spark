@@ -22,10 +22,11 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 import com.google.common.base.Preconditions;
-import io.netty.buffer.Unpooled;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil;
 import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NettyManagedBuffer;
+import org.apache.spark.network.buffer.NioManagedBuffer;
 
 /**
  * A ManagedBuffer implementation that contains 0, 1, 2, 3, ..., (len-1).
@@ -35,7 +36,7 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
 public class TestManagedBuffer extends ManagedBuffer {
 
   private final int len;
-  private NettyManagedBuffer underlying;
+  private NioManagedBuffer underlying;
 
   public TestManagedBuffer(int len) {
     Preconditions.checkArgument(len <= Byte.MAX_VALUE);
@@ -44,7 +45,7 @@ public class TestManagedBuffer extends ManagedBuffer {
     for (int i = 0; i < len; i ++) {
       byteArray[i] = (byte) i;
     }
-    this.underlying = new NettyManagedBuffer(Unpooled.wrappedBuffer(byteArray));
+    this.underlying = new NioManagedBuffer(ChunkedByteBufferUtil.wrap(byteArray));
   }
 
 
@@ -54,7 +55,7 @@ public class TestManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public ByteBuffer nioByteBuffer() throws IOException {
+  public ChunkedByteBuffer nioByteBuffer() throws IOException {
     return underlying.nioByteBuffer();
   }
 
@@ -64,15 +65,19 @@ public class TestManagedBuffer extends ManagedBuffer {
   }
 
   @Override
+  public int refCnt() {
+    return underlying.refCnt();
+  }
+
+  @Override
   public ManagedBuffer retain() {
     underlying.retain();
     return this;
   }
 
   @Override
-  public ManagedBuffer release() {
-    underlying.release();
-    return this;
+  public boolean release() {
+    return underlying.release();
   }
 
   @Override
@@ -89,7 +94,7 @@ public class TestManagedBuffer extends ManagedBuffer {
   public boolean equals(Object other) {
     if (other instanceof ManagedBuffer) {
       try {
-        ByteBuffer nioBuf = ((ManagedBuffer) other).nioByteBuffer();
+        ByteBuffer nioBuf = ((ManagedBuffer) other).nioByteBuffer().toByteBuffer();
         if (nioBuf.remaining() != len) {
           return false;
         } else {

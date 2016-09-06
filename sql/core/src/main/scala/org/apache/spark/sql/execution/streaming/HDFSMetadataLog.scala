@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io.{FileNotFoundException, IOException}
-import java.nio.ByteBuffer
 import java.util.{ConcurrentModificationException, EnumSet, UUID}
 
 import scala.reflect.ClassTag
@@ -29,7 +28,7 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.UninterruptibleThread
@@ -85,11 +84,11 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
   }
 
   protected def serialize(metadata: T): Array[Byte] = {
-    JavaUtils.bufferToArray(serializer.serialize(metadata))
+    serializer.serialize(metadata).toArray
   }
 
   protected def deserialize(bytes: Array[Byte]): T = {
-    serializer.deserialize[T](ByteBuffer.wrap(bytes))
+    serializer.deserialize[T](ChunkedByteBufferUtil.wrap(bytes))
   }
 
   /**
