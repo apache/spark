@@ -56,7 +56,6 @@ private[spark] object MLSerDe extends SerDeBase with Serializable {
     }
 
     def construct(args: Array[Object]): Object = {
-      require(args.length == 1)
       if (args.length != 1) {
         throw new PickleException("should be 1")
       }
