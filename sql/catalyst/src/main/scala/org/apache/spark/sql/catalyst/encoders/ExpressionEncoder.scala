@@ -47,8 +47,9 @@ object ExpressionEncoder {
   def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
     val mirror = typeTag[T].mirror
-    val cls = mirror.runtimeClass(typeTag[T].tpe)
-    val flat = !classOf[Product].isAssignableFrom(cls)
+    val tpe = typeTag[T].tpe
+    val cls = mirror.runtimeClass(tpe)
+    val flat = !ScalaReflection.definedByConstructorParams(tpe)
 
     val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = true)
     val toRowExpression = ScalaReflection.extractorsFor[T](inputObject)
