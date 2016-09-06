@@ -263,8 +263,7 @@ class SessionCatalog(
           CatalogColumn(
             name = c.name,
             dataType = c.dataType.catalogString,
-            nullable = c.nullable,
-            comment = Option(c.name)
+            nullable = c.nullable
           )
         },
         properties = Map(),
