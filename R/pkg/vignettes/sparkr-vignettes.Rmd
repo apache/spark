@@ -23,7 +23,7 @@ library(SparkR)
 ```
 
 
-To use SparkR, you need an Apache Spark installation which will execute SparkR programs.
+To use SparkR, you need an Apache Spark installation. The Spark installation will be used to run a backend process that will compile and execute SparkR programs.
 
 If you don't have Spark installed on the computer, you may download it from [Apache Spark Website](http://spark.apache.org/downloads.html). Alternatively, we provide an easy-to-use function `install.spark` to complete this process.
 
@@ -121,7 +121,7 @@ paste("Spark", packageVersion("SparkR"))
 It should be used both on the local computer and on the remote cluster.
 
 To connect, pass the URL of the master node to `sparkR.session`. A complete list can be seen in [Spark Master URLs](http://spark.apache.org/docs/latest/submitting-applications.html#master-urls).
-For example, to connect to a standalone Spark master, we can call
+For example, to connect to a local standalone Spark master, we can call
 
 ```{r, eval=FALSE}
 sparkR.session(master = "spark://local:7077")
