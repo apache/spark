@@ -17,11 +17,13 @@
 # limitations under the License.
 #
 
-# Script to create API docs for SparkR
-# This requires `devtools` and `knitr` to be installed on the machine.
+# Script to create API docs and vignettes for SparkR
+# This requires `devtools`, `knitr` and `rmarkdown` to be installed on the machine.
 
 # After running this script the html docs can be found in 
 # $SPARK_HOME/R/pkg/html
+# The vignettes can be found in
+# $SPARK_HOME/R/pkg/vignettes/sparkr_vignettes.html
 
 set -o pipefail
 set -e
@@ -42,5 +44,8 @@ pushd pkg/html
 Rscript -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); library(knitr); knit_rd("SparkR", links = tools::findHTMLlinks(paste(libDir, "SparkR", sep="/")))'
 
 popd
+
+# render creates SparkR vignettes
+Rscript -e 'library(rmarkdown); Sys.setenv(SPARK_HOME=tools::file_path_as_absolute("..")); render("pkg/vignettes/sparkr-vignettes.Rmd")'
 
 popd
