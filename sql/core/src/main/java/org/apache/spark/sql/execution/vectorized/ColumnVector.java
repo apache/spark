@@ -963,13 +963,8 @@ public abstract class ColumnVector implements AutoCloseable {
    * Reserve a integer column for ids of dictionary.
    */
   public ColumnVector reserveDictionaryIds(int capacity) {
-    if (dictionaryIds == null) {
-      dictionaryIds = allocate(capacity, DataTypes.IntegerType,
+    dictionaryIds = allocate(capacity, DataTypes.IntegerType,
         this instanceof OnHeapColumnVector ? MemoryMode.ON_HEAP : MemoryMode.OFF_HEAP);
-    } else {
-      dictionaryIds.reset();
-      dictionaryIds.reserve(capacity);
-    }
     return dictionaryIds;
   }
 
