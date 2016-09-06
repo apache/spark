@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui.exec
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{ExceptionFailure, Resubmitted, SparkConf, SparkContext}
@@ -24,7 +25,6 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
 import org.apache.spark.ui.{SparkUI, SparkUITab}
-import org.apache.spark.ui.jobs.UIData.ExecutorUIData
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
   val listener = parent.executorsListener
@@ -59,7 +59,9 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
   val executorToShuffleRead = HashMap[String, Long]()
   val executorToShuffleWrite = HashMap[String, Long]()
   val executorToLogUrls = HashMap[String, Map[String, String]]()
-  val executorIdToData = HashMap[String, ExecutorUIData]()
+  var executorEvents = new mutable.ListBuffer[SparkListenerEvent]()
+
+  val MAX_EXECUTOR_LIMIT = conf.getInt("spark.ui.timeline.executors.maximum", 1000)
 
   def activeStorageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
 
@@ -70,15 +72,33 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
     executorToTotalCores(eid) = executorAdded.executorInfo.totalCores
     executorToTasksMax(eid) = executorToTotalCores(eid) / conf.getInt("spark.task.cpus", 1)
-    executorIdToData(eid) = new ExecutorUIData(executorAdded.time)
+    executorEvents += executorAdded
+    if (executorEvents.size > MAX_EXECUTOR_LIMIT) {
+      executorEvents = executorEvents.drop(1)
+    }
   }
 
   override def onExecutorRemoved(
       executorRemoved: SparkListenerExecutorRemoved): Unit = synchronized {
+    executorEvents += executorRemoved
+    if (executorEvents.size > MAX_EXECUTOR_LIMIT) {
+      executorEvents = executorEvents.drop(1)
+    }
     val eid = executorRemoved.executorId
-    val uiData = executorIdToData(eid)
-    uiData.finishTime = Some(executorRemoved.time)
-    uiData.finishReason = Some(executorRemoved.reason)
+    executorToTotalCores.remove(eid)
+    executorToTasksMax.remove(eid)
+    executorToTasksActive.remove(eid)
+    executorToTasksComplete.remove(eid)
+    executorToTasksFailed.remove(eid)
+    executorToDuration.remove(eid)
+    executorToJvmGCTime.remove(eid)
+    executorToInputBytes.remove(eid)
+    executorToInputRecords.remove(eid)
+    executorToOutputBytes.remove(eid)
+    executorToOutputRecords.remove(eid)
+    executorToShuffleRead.remove(eid)
+    executorToShuffleWrite.remove(eid)
+    executorToLogUrls.remove(eid)
   }
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
