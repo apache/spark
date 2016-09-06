@@ -1151,6 +1151,58 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
+  test("saveAsTable - source and target are the same table") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable(tableName)
+
+      table(tableName).write.mode(SaveMode.Append).saveAsTable(tableName)
+      checkAnswer(table(tableName),
+        Seq(Row(1, 2), Row(1, 2)))
+
+      table(tableName).write.mode(SaveMode.Ignore).saveAsTable(tableName)
+      checkAnswer(table(tableName),
+        Seq(Row(1, 2), Row(1, 2)))
+
+      var e = intercept[AnalysisException] {
+        table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
+      }.getMessage
+      assert(e.contains(s"Cannot overwrite table `$tableName` that is also being read from"))
+
+      e = intercept[AnalysisException] {
+        table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
+      }.getMessage
+      assert(e.contains(s"Table `$tableName` already exists"))
+    }
+  }
+
+  test("insertInto - source and target are the same table") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable(tableName)
+
+      table(tableName).write.mode(SaveMode.Append).insertInto(tableName)
+      checkAnswer(
+        table(tableName),
+        Seq(Row(1, 2), Row(1, 2)))
+
+      table(tableName).write.mode(SaveMode.Ignore).insertInto(tableName)
+      checkAnswer(
+        table(tableName),
+        Seq(Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2)))
+
+      table(tableName).write.mode(SaveMode.ErrorIfExists).insertInto(tableName)
+      checkAnswer(
+        table(tableName),
+        Seq(Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2)))
+
+      val e = intercept[AnalysisException] {
+        table(tableName).write.mode(SaveMode.Overwrite).insertInto(tableName)
+      }.getMessage
+      assert(e.contains(s"Cannot overwrite a path that is also being read from"))
+    }
+  }
+
   test("saveAsTable[append]: less columns") {
     withTable("saveAsTable_less_columns") {
       Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_less_columns")

@@ -485,4 +485,12 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       spark.sql("select avg(a) over () from values 1.0, 2.0, 3.0 T(a)"),
       Row(2.0) :: Row(2.0) :: Row(2.0) :: Nil)
   }
+
+  test("SQL decimal test (used for catching certain demical handling bugs in aggregates)") {
+    checkAnswer(
+      decimalData.groupBy('a cast DecimalType(10, 2)).agg(avg('b cast DecimalType(10, 2))),
+      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(1.5)),
+        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(1.5)),
+        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(1.5))))
+  }
 }

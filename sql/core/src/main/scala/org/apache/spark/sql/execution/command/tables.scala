@@ -152,7 +152,7 @@ case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends
  */
 case class AlterTableRenameCommand(
     oldName: TableIdentifier,
-    newName: TableIdentifier,
+    newName: String,
     isView: Boolean)
   extends RunnableCommand {
 
@@ -165,6 +165,7 @@ case class AlterTableRenameCommand(
     if (isTemporary) {
       catalog.renameTable(oldName, newName)
     } else {
+      val newTblName = TableIdentifier(newName, oldName.database)
       // If an exception is thrown here we can just assume the table is uncached;
       // this can happen with Hive tables when the underlying catalog is in-memory.
       val wasCached = Try(sparkSession.catalog.isCached(oldName.unquotedString)).getOrElse(false)
@@ -178,7 +179,7 @@ case class AlterTableRenameCommand(
       // For datasource tables, we also need to update the "path" serde property
       val table = catalog.getTableMetadata(oldName)
       if (DDLUtils.isDatasourceTable(table) && table.tableType == CatalogTableType.MANAGED) {
-        val newPath = catalog.defaultTablePath(newName)
+        val newPath = catalog.defaultTablePath(newTblName)
         val newTable = table.withNewStorage(
           properties = table.storage.properties ++ Map("path" -> newPath))
         catalog.alterTable(newTable)
@@ -188,7 +189,7 @@ case class AlterTableRenameCommand(
       catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
       if (wasCached) {
-        sparkSession.catalog.cacheTable(newName.unquotedString)
+        sparkSession.catalog.cacheTable(newTblName.unquotedString)
       }
     }
     Seq.empty[Row]
@@ -309,8 +310,7 @@ case class LoadDataCommand(
         partition.get,
         isOverwrite,
         holdDDLTime = false,
-        inheritTableSpecs = true,
-        isSkewedStoreAsSubdir = false)
+        inheritTableSpecs = true)
     } else {
       catalog.loadTable(
         targetTable.identifier,
