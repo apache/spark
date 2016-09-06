@@ -22,47 +22,43 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 import com.google.common.base.Objects;
-import io.netty.buffer.ByteBufInputStream;
-import io.netty.buffer.Unpooled;
 
 /**
  * A {@link ManagedBuffer} backed by {@link ByteBuffer}.
  */
 public class NioManagedBuffer extends ManagedBuffer {
-  private final ByteBuffer buf;
+  private final ChunkedByteBuffer buf;
+
+  public NioManagedBuffer(ChunkedByteBuffer buf) {
+    this.buf = buf;
+  }
 
   public NioManagedBuffer(ByteBuffer buf) {
-    this.buf = buf;
+    this(ChunkedByteBufferUtil.wrap(buf));
   }
 
   @Override
   public long size() {
-    return buf.remaining();
+    return buf.size();
   }
 
   @Override
-  public ByteBuffer nioByteBuffer() throws IOException {
-    return buf.duplicate();
+  public ChunkedByteBuffer nioByteBuffer() throws IOException {
+    return buf.retain();
   }
 
   @Override
   public InputStream createInputStream() throws IOException {
-    return new ByteBufInputStream(Unpooled.wrappedBuffer(buf));
-  }
-
-  @Override
-  public ManagedBuffer retain() {
-    return this;
-  }
-
-  @Override
-  public ManagedBuffer release() {
-    return this;
+    return buf.toInputStream();
   }
 
   @Override
   public Object convertToNetty() throws IOException {
-    return Unpooled.wrappedBuffer(buf);
+    if (size() > Integer.MAX_VALUE - 1024 * 1024) {
+      return buf.toInputStream();
+    } else {
+      return buf.toNetty();
+    }
   }
 
   @Override
@@ -70,6 +66,11 @@ public class NioManagedBuffer extends ManagedBuffer {
     return Objects.toStringHelper(this)
       .add("buf", buf)
       .toString();
+  }
+
+  @Override
+  protected void deallocate() {
+    buf.release();
   }
 }
 

@@ -21,8 +21,8 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 import java.io.File;
+import java.io.InputStream;
 import java.lang.reflect.Method;
-import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
@@ -47,6 +47,8 @@ import org.mockito.stubbing.Answer;
 
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil;
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
@@ -138,22 +140,23 @@ public class SparkSaslSuite {
     RpcHandler rpcHandler = mock(RpcHandler.class);
     doAnswer(new Answer<Void>() {
         @Override
-        public Void answer(InvocationOnMock invocation) {
-          ByteBuffer message = (ByteBuffer) invocation.getArguments()[1];
+        public Void answer(InvocationOnMock invocation) throws Throwable {
+          InputStream message = (InputStream) invocation.getArguments()[1];
           RpcResponseCallback cb = (RpcResponseCallback) invocation.getArguments()[2];
-          assertEquals("Ping", JavaUtils.bytesToString(message));
-          cb.onSuccess(JavaUtils.stringToBytes("Pong"));
+          assertEquals("Ping", JavaUtils.bytesToString(ChunkedByteBufferUtil.wrap(message).toByteBuffer()));
+          cb.onSuccess(ChunkedByteBufferUtil.wrap(JavaUtils.stringToBytes("Pong")));
           return null;
         }
       })
       .when(rpcHandler)
-      .receive(any(TransportClient.class), any(ByteBuffer.class), any(RpcResponseCallback.class));
+      .receive(any(TransportClient.class), any(InputStream.class), any(RpcResponseCallback.class));
 
     SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false);
     try {
-      ByteBuffer response = ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
-        TimeUnit.SECONDS.toMillis(10));
-      assertEquals("Pong", JavaUtils.bytesToString(response));
+      ChunkedByteBuffer response = ctx.client.sendRpcSync(
+          ChunkedByteBufferUtil.wrap(JavaUtils.stringToBytes("Ping")),
+          TimeUnit.SECONDS.toMillis(10));
+      assertEquals("Pong", JavaUtils.bytesToString(response.toByteBuffer()));
     } finally {
       ctx.close();
       // There should be 2 terminated events; one for the client, one for the server.
@@ -337,7 +340,7 @@ public class SparkSaslSuite {
     SaslTestCtx ctx = null;
     try {
       ctx = new SaslTestCtx(mock(RpcHandler.class), true, true);
-      ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
+      ctx.client.sendRpcSync(ChunkedByteBufferUtil.wrap(JavaUtils.stringToBytes("Ping")),
         TimeUnit.SECONDS.toMillis(10));
       fail("Should have failed to send RPC to server.");
     } catch (Exception e) {

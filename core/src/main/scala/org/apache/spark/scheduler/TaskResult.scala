@@ -23,6 +23,8 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.network.buffer.ChunkedByteBuffer
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.{AccumulatorV2, Utils}
 
@@ -35,28 +37,24 @@ private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Int)
 
 /** A TaskResult that contains the task's return value and accumulator updates. */
 private[spark] class DirectTaskResult[T](
-    var valueBytes: ByteBuffer,
+    var valueBytes: ChunkedByteBuffer,
     var accumUpdates: Seq[AccumulatorV2[_, _]])
   extends TaskResult[T] with Externalizable {
 
   private var valueObjectDeserialized = false
   private var valueObject: T = _
 
-  def this() = this(null.asInstanceOf[ByteBuffer], null)
+  def this() = this(null.asInstanceOf[ChunkedByteBuffer], null)
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-    out.writeInt(valueBytes.remaining)
-    Utils.writeByteBuffer(valueBytes, out)
+    valueBytes.writeExternal(out)
     out.writeInt(accumUpdates.size)
     accumUpdates.foreach(out.writeObject)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    val blen = in.readInt()
-    val byteVal = new Array[Byte](blen)
-    in.readFully(byteVal)
-    valueBytes = ByteBuffer.wrap(byteVal)
-
+    valueBytes = ChunkedByteBufferUtil.wrap()
+    valueBytes.readExternal(in)
     val numUpdates = in.readInt
     if (numUpdates == 0) {
       accumUpdates = Seq()

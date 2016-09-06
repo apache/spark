@@ -17,10 +17,12 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Arrays;
 
 import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Encoders;
 
@@ -68,23 +70,23 @@ public class OpenBlocks extends BlockTransferMessage {
   }
 
   @Override
-  public int encodedLength() {
+  public long encodedLength() {
     return Encoders.Strings.encodedLength(appId)
       + Encoders.Strings.encodedLength(execId)
       + Encoders.StringArrays.encodedLength(blockIds);
   }
 
   @Override
-  public void encode(ByteBuf buf) {
-    Encoders.Strings.encode(buf, appId);
-    Encoders.Strings.encode(buf, execId);
-    Encoders.StringArrays.encode(buf, blockIds);
+  public void encode(OutputStream out) throws IOException {
+    Encoders.Strings.encode(out, appId);
+    Encoders.Strings.encode(out, execId);
+    Encoders.StringArrays.encode(out, blockIds);
   }
 
-  public static OpenBlocks decode(ByteBuf buf) {
-    String appId = Encoders.Strings.decode(buf);
-    String execId = Encoders.Strings.decode(buf);
-    String[] blockIds = Encoders.StringArrays.decode(buf);
+  public static OpenBlocks decode(InputStream in) throws IOException {
+    String appId = Encoders.Strings.decode(in);
+    String execId = Encoders.Strings.decode(in);
+    String[] blockIds = Encoders.StringArrays.decode(in);
     return new OpenBlocks(appId, execId, blockIds);
   }
 }

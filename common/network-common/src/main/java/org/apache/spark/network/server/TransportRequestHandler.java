@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.server;
 
+import java.io.InputStream;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 
@@ -27,6 +28,7 @@ import io.netty.channel.ChannelFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -43,6 +45,8 @@ import org.apache.spark.network.protocol.RpcResponse;
 import org.apache.spark.network.protocol.StreamFailure;
 import org.apache.spark.network.protocol.StreamRequest;
 import org.apache.spark.network.protocol.StreamResponse;
+import org.apache.spark.network.client.InputStreamInterceptor;
+import org.apache.spark.network.util.TransportFrameDecoder;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
@@ -155,9 +159,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   private void processRpcRequest(final RpcRequest req) {
     try {
-      rpcHandler.receive(reverseClient, req.body().nioByteBuffer(), new RpcResponseCallback() {
+      rpcHandler.receive(reverseClient, req.body().createInputStream(), new RpcResponseCallback() {
         @Override
-        public void onSuccess(ByteBuffer response) {
+        public void onSuccess(ChunkedByteBuffer response) {
           respond(new RpcResponse(req.requestId, new NioManagedBuffer(response)));
         }
 
@@ -176,7 +180,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   private void processOneWayMessage(OneWayMessage req) {
     try {
-      rpcHandler.receive(reverseClient, req.body().nioByteBuffer());
+      rpcHandler.receive(reverseClient, req.body().createInputStream());
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() for one-way message.", e);
     } finally {
@@ -190,19 +194,20 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
    */
   private void respond(final Encodable result) {
     final SocketAddress remoteAddress = channel.remoteAddress();
+    final String msg = result.toString();
     channel.writeAndFlush(result).addListener(
-      new ChannelFutureListener() {
-        @Override
-        public void operationComplete(ChannelFuture future) throws Exception {
-          if (future.isSuccess()) {
-            logger.trace("Sent result {} to client {}", result, remoteAddress);
-          } else {
-            logger.error(String.format("Error sending result %s to %s; closing connection",
-              result, remoteAddress), future.cause());
-            channel.close();
+        new ChannelFutureListener() {
+          @Override
+          public void operationComplete(ChannelFuture future) throws Exception {
+            if (future.isSuccess()) {
+              logger.trace("Sent result {} to client {}", msg, remoteAddress);
+            } else {
+              logger.error(String.format("Error sending result %s to %s; closing connection",
+                  msg, remoteAddress), future.cause());
+              channel.close();
+            }
           }
         }
-      }
     );
   }
 }

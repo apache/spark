@@ -32,6 +32,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
 
 /**
@@ -454,7 +455,7 @@ private[spark] class TaskSetManager(
           }
           // Serialize and return the task
           val startTime = clock.getTimeMillis()
-          val serializedTask: ByteBuffer = try {
+          val serializedTask: ChunkedByteBuffer = try {
             Task.serializeWithDependencies(task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           } catch {
             // If the task cannot be serialized, then there's no point to re-attempt the task,
@@ -465,11 +466,11 @@ private[spark] class TaskSetManager(
               abort(s"$msg Exception during serialization: $e")
               throw new TaskNotSerializableException(e)
           }
-          if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
+          if (serializedTask.size() > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
               !emittedTaskSizeWarning) {
             emittedTaskSizeWarning = true
             logWarning(s"Stage ${task.stageId} contains a task of very large size " +
-              s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
+              s"(${serializedTask.size() / 1024} KB). The maximum recommended task size is " +
               s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
           }
           addRunningTask(taskId)
@@ -479,7 +480,7 @@ private[spark] class TaskSetManager(
           // val timeTaken = clock.getTime() - startTime
           val taskName = s"task ${info.id} in stage ${taskSet.id}"
           logInfo(s"Starting $taskName (TID $taskId, $host, partition ${task.partitionId}," +
-            s" $taskLocality, ${serializedTask.limit} bytes)")
+            s" $taskLocality, ${serializedTask.size()} bytes)")
 
           sched.dagScheduler.taskStarted(task, info)
           return Some(new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,

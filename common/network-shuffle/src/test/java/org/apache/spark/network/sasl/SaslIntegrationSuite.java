@@ -18,6 +18,7 @@
 package org.apache.spark.network.sasl;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
@@ -34,6 +35,8 @@ import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -110,8 +113,9 @@ public class SaslIntegrationSuite {
 
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     String msg = "Hello, World!";
-    ByteBuffer resp = client.sendRpcSync(JavaUtils.stringToBytes(msg), TIMEOUT_MS);
-    assertEquals(msg, JavaUtils.bytesToString(resp));
+    ChunkedByteBuffer resp = client.sendRpcSync(ChunkedByteBufferUtil.wrap(JavaUtils.stringToBytes(msg)),
+        TIMEOUT_MS);
+    assertEquals(msg, JavaUtils.bytesToString(resp.toByteBuffer()));
   }
 
   @Test
@@ -137,9 +141,10 @@ public class SaslIntegrationSuite {
     clientFactory = context.createClientFactory(
       Lists.<TransportClientBootstrap>newArrayList());
 
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(),
+        server.getPort());
     try {
-      client.sendRpcSync(ByteBuffer.allocate(13), TIMEOUT_MS);
+      client.sendRpcSync(ChunkedByteBufferUtil.wrap(ByteBuffer.allocate(13)), TIMEOUT_MS);
       fail("Should have failed");
     } catch (Exception e) {
       assertTrue(e.getMessage(), e.getMessage().contains("Expected SaslMessage"));
@@ -147,7 +152,8 @@ public class SaslIntegrationSuite {
 
     try {
       // Guessing the right tag byte doesn't magically get you in...
-      client.sendRpcSync(ByteBuffer.wrap(new byte[] { (byte) 0xEA }), TIMEOUT_MS);
+      client.sendRpcSync(ChunkedByteBufferUtil.wrap(new byte[] { (byte) 0xEA }),
+          TIMEOUT_MS);
       fail("Should have failed");
     } catch (Exception e) {
       assertTrue(e.getMessage(), e.getMessage().contains("java.lang.IndexOutOfBoundsException"));
@@ -228,7 +234,8 @@ public class SaslIntegrationSuite {
       // Make a successful request to fetch blocks, which creates a new stream. But do not actually
       // fetch any blocks, to keep the stream open.
       OpenBlocks openMessage = new OpenBlocks("app-1", "0", blockIds);
-      ByteBuffer response = client1.sendRpcSync(openMessage.toByteBuffer(), TIMEOUT_MS);
+      ChunkedByteBuffer response = client1.sendRpcSync(openMessage.toByteBuffer(),
+          TIMEOUT_MS);
       StreamHandle stream = (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response);
       long streamId = stream.streamId;
 
@@ -274,8 +281,10 @@ public class SaslIntegrationSuite {
   /** RPC handler which simply responds with the message it received. */
   public static class TestRpcHandler extends RpcHandler {
     @Override
-    public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
-      callback.onSuccess(message);
+    public void receive(
+        TransportClient client, InputStream message, RpcResponseCallback callback)
+        throws Exception {
+      callback.onSuccess(ChunkedByteBufferUtil.wrap(message, 32 * 1024));
     }
 
     @Override

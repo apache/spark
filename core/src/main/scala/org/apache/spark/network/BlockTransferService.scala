@@ -28,7 +28,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.storage.{BlockId, StorageLevel}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.SparkException
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark]
 abstract class BlockTransferService extends ShuffleClient with Closeable with Logging {
@@ -95,10 +96,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
           result.failure(exception)
         }
         override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-          val ret = ByteBuffer.allocate(data.size.toInt)
-          ret.put(data.nioByteBuffer())
-          ret.flip()
-          result.success(new NioManagedBuffer(ret))
+          result.success(data.retain())
         }
       })
     ThreadUtils.awaitResult(result.future, Duration.Inf)

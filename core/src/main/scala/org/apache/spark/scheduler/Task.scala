@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler
 
 import java.io.{DataInputStream, DataOutputStream}
-import java.nio.ByteBuffer
 import java.util.Properties
 
 import scala.collection.mutable
@@ -28,8 +27,9 @@ import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, ChunkedByteBufferOutputStream, ChunkedByteBufferUtil}
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{AccumulatorV2, ByteBufferInputStream, ByteBufferOutputStream, Utils}
+import org.apache.spark.util.{AccumulatorV2, Utils}
 
 /**
  * A unit of execution. We have two kinds of Task's in Spark:
@@ -202,9 +202,9 @@ private[spark] object Task {
       currentFiles: mutable.Map[String, Long],
       currentJars: mutable.Map[String, Long],
       serializer: SerializerInstance)
-    : ByteBuffer = {
+    : ChunkedByteBuffer = {
 
-    val out = new ByteBufferOutputStream(4096)
+    val out = ChunkedByteBufferOutputStream.newInstance()
     val dataOut = new DataOutputStream(out)
 
     // Write currentFiles
@@ -228,9 +228,9 @@ private[spark] object Task {
 
     // Write the task itself and finish
     dataOut.flush()
-    val taskBytes = serializer.serialize(task)
-    Utils.writeByteBuffer(taskBytes, out)
-    out.toByteBuffer
+    val taskBytes = serializer.serialize(task).toInputStream
+    Utils.copyStream(taskBytes, out)
+    out.toChunkedByteBuffer
   }
 
   /**
@@ -240,10 +240,10 @@ private[spark] object Task {
    *
    * @return (taskFiles, taskJars, taskBytes)
    */
-  def deserializeWithDependencies(serializedTask: ByteBuffer)
-    : (HashMap[String, Long], HashMap[String, Long], Properties, ByteBuffer) = {
+  def deserializeWithDependencies(serializedTask: ChunkedByteBuffer)
+    : (HashMap[String, Long], HashMap[String, Long], Properties, ChunkedByteBuffer) = {
 
-    val in = new ByteBufferInputStream(serializedTask)
+    val in = serializedTask.toInputStream
     val dataIn = new DataInputStream(in)
 
     // Read task's files
@@ -266,7 +266,7 @@ private[spark] object Task {
     val taskProps = Utils.deserialize[Properties](propBytes)
 
     // Create a sub-buffer for the rest of the data, which is the serialized Task object
-    val subBuffer = serializedTask.slice()  // ByteBufferInputStream will have read just up to task
+    val subBuffer = ChunkedByteBufferUtil.wrap(in)
     (taskFiles, taskJars, taskProps, subBuffer)
   }
 }

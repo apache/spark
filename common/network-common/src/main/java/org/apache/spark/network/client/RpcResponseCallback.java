@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.client;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
+
 import java.nio.ByteBuffer;
 
 /**
@@ -30,7 +32,7 @@ public interface RpcResponseCallback {
    * After `onSuccess` returns, `response` will be recycled and its content will become invalid.
    * Please copy the content of `response` if you want to use it after `onSuccess` returns.
    */
-  void onSuccess(ByteBuffer response);
+  void onSuccess(ChunkedByteBuffer response);
 
   /** Exception either propagated from server or raised on client side. */
   void onFailure(Throwable e);

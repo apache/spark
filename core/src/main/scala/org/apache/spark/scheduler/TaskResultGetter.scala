@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{LongAccumulator, ThreadUtils, Utils}
 
@@ -51,20 +52,20 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   def enqueueSuccessfulTask(
       taskSetManager: TaskSetManager,
       tid: Long,
-      serializedData: ByteBuffer): Unit = {
+      serializedData: ChunkedByteBuffer): Unit = {
     getTaskResultExecutor.execute(new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions {
         try {
           val (result, size) = serializer.get().deserialize[TaskResult[_]](serializedData) match {
             case directResult: DirectTaskResult[_] =>
-              if (!taskSetManager.canFetchMoreResults(serializedData.limit())) {
+              if (!taskSetManager.canFetchMoreResults(serializedData.size())) {
                 return
               }
               // deserialize "value" without holding any lock so that it won't block other threads.
               // We should call it here, so that when it's called again in
               // "TaskSetManager.handleSuccessfulTask", it does not need to deserialize the value.
               directResult.value()
-              (directResult, serializedData.limit())
+              (directResult, serializedData.size())
             case IndirectTaskResult(blockId, size) =>
               if (!taskSetManager.canFetchMoreResults(size)) {
                 // dropped by executor if size is larger than maxResultSize
@@ -83,9 +84,10 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
                 return
               }
               val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
-                serializedTaskResult.get.toByteBuffer)
+                serializedTaskResult.get.createInputStream())
+              serializedTaskResult.get.release()
               sparkEnv.blockManager.master.removeBlock(blockId)
-              (deserializedResult, size)
+              (deserializedResult, size.toLong)
           }
 
           // Set the task result size in the accumulator updates received from the executors.
@@ -95,7 +97,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
             if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
               val acc = a.asInstanceOf[LongAccumulator]
               assert(acc.sum == 0L, "task result size should not have been set on the executors")
-              acc.setValue(size.toLong)
+              acc.setValue(size)
               acc
             } else {
               a
@@ -117,16 +119,15 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   }
 
   def enqueueFailedTask(taskSetManager: TaskSetManager, tid: Long, taskState: TaskState,
-    serializedData: ByteBuffer) {
+    serializedData: ChunkedByteBuffer) {
     var reason : TaskEndReason = UnknownReason
     try {
       getTaskResultExecutor.execute(new Runnable {
         override def run(): Unit = Utils.logUncaughtExceptions {
           val loader = Utils.getContextOrSparkClassLoader
           try {
-            if (serializedData != null && serializedData.limit() > 0) {
-              reason = serializer.get().deserialize[TaskEndReason](
-                serializedData, loader)
+            if (serializedData != null && serializedData.size() > 0) {
+              reason = serializer.get().deserialize[TaskEndReason](serializedData, loader)
             }
           } catch {
             case cnd: ClassNotFoundException =>

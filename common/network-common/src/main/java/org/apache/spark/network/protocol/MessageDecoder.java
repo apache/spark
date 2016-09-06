@@ -17,6 +17,9 @@
 
 package org.apache.spark.network.protocol;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.LinkedList;
 import java.util.List;
 
 import io.netty.buffer.ByteBuf;
@@ -31,12 +34,13 @@ import org.slf4j.LoggerFactory;
  * This encoder is stateless so it is safe to be shared by multiple threads.
  */
 @ChannelHandler.Sharable
-public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
+public final class MessageDecoder extends MessageToMessageDecoder<LinkedList<ByteBuf>> {
 
   private static final Logger logger = LoggerFactory.getLogger(MessageDecoder.class);
 
   @Override
-  public void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
+  public void decode(ChannelHandlerContext ctx, LinkedList<ByteBuf> buf, List<Object> out) throws IOException {
+    InputStream in = new ByteBufInputStream(buf);
     Message.Type msgType = Message.Type.decode(in);
     Message decoded = decode(msgType, in);
     assert decoded.type() == msgType;
@@ -44,7 +48,7 @@ public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
     out.add(decoded);
   }
 
-  private Message decode(Message.Type msgType, ByteBuf in) {
+  private Message decode(Message.Type msgType, InputStream in) throws IOException {
     switch (msgType) {
       case ChunkFetchRequest:
         return ChunkFetchRequest.decode(in);

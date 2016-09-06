@@ -17,12 +17,13 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import java.nio.ByteBuffer;
+import java.io.IOException;
+import java.io.InputStream;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
+import org.apache.spark.network.buffer.ChunkedByteBufferOutputStream;
 import org.apache.spark.network.protocol.Encodable;
+import org.apache.spark.network.protocol.Encoders;
 import org.apache.spark.network.shuffle.protocol.mesos.RegisterDriver;
 import org.apache.spark.network.shuffle.protocol.mesos.ShuffleServiceHeartbeat;
 
@@ -56,29 +57,37 @@ public abstract class BlockTransferMessage implements Encodable {
 
   // NB: Java does not support static methods in interfaces, so we must put this in a static class.
   public static class Decoder {
+
     /** Deserializes the 'type' byte followed by the message itself. */
-    public static BlockTransferMessage fromByteBuffer(ByteBuffer msg) {
-      ByteBuf buf = Unpooled.wrappedBuffer(msg);
-      byte type = buf.readByte();
+    public static BlockTransferMessage fromByteBuffer(ChunkedByteBuffer buf) throws IOException {
+      return fromDataInputStream(buf.toInputStream());
+    }
+
+    public static BlockTransferMessage fromDataInputStream(InputStream in) throws IOException {
+      byte type = Encoders.Bytes.decode(in);
       switch (type) {
-        case 0: return OpenBlocks.decode(buf);
-        case 1: return UploadBlock.decode(buf);
-        case 2: return RegisterExecutor.decode(buf);
-        case 3: return StreamHandle.decode(buf);
-        case 4: return RegisterDriver.decode(buf);
-        case 5: return ShuffleServiceHeartbeat.decode(buf);
+        case 0: return OpenBlocks.decode(in);
+        case 1: return UploadBlock.decode(in);
+        case 2: return RegisterExecutor.decode(in);
+        case 3: return StreamHandle.decode(in);
+        case 4: return RegisterDriver.decode(in);
+        case 5: return ShuffleServiceHeartbeat.decode(in);
         default: throw new IllegalArgumentException("Unknown message type: " + type);
       }
     }
   }
 
   /** Serializes the 'type' byte followed by the message itself. */
-  public ByteBuffer toByteBuffer() {
-    // Allow room for encoded message, plus the type byte
-    ByteBuf buf = Unpooled.buffer(encodedLength() + 1);
-    buf.writeByte(type().id);
-    encode(buf);
-    assert buf.writableBytes() == 0 : "Writable bytes remain: " + buf.writableBytes();
-    return buf.nioBuffer();
+  public ChunkedByteBuffer toByteBuffer() {
+    try {
+      ChunkedByteBufferOutputStream out = ChunkedByteBufferOutputStream.newInstance();
+      // Allow room for encoded message, plus the type byte
+      Encoders.Bytes.encode(out, type().id);
+      encode(out);
+      out.close();
+      return out.toChunkedByteBuffer();
+    } catch (Throwable e) {
+      throw new RuntimeException(e);
+    }
   }
 }

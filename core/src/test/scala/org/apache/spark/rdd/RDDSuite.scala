@@ -188,8 +188,8 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val union = rdd1.union(rdd2)
     // The UnionRDD itself should be large, but each individual partition should be small.
-    assert(ser.serialize(union).limit() > 2000)
-    assert(ser.serialize(union.partitions.head).limit() < 2000)
+    assert(ser.serialize(union).toByteBuffer.limit() > 2000)
+    assert(ser.serialize(union.partitions.head).toByteBuffer.limit() < 2000)
   }
 
   test("aggregate") {

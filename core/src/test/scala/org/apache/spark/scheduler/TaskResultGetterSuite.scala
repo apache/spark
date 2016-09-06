@@ -36,8 +36,8 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark._
 import org.apache.spark.storage.TaskResultBlockId
 import org.apache.spark.TestUtils.JavaSourceFromString
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.util.{MutableURLClassLoader, RpcUtils, Utils}
-
 
 /**
  * Removes the TaskResult from the BlockManager before delegating to a normal TaskResultGetter.
@@ -52,11 +52,11 @@ private class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: Task
   @volatile var removeBlockSuccessfully = false
 
   override def enqueueSuccessfulTask(
-    taskSetManager: TaskSetManager, tid: Long, serializedData: ByteBuffer) {
+    taskSetManager: TaskSetManager, tid: Long, serializedData: ChunkedByteBuffer) {
     if (!removedResult) {
       // Only remove the result once, since we'd like to test the case where the task eventually
       // succeeds.
-      serializer.get().deserialize[TaskResult[_]](serializedData) match {
+      serializer.get().deserialize[TaskResult[_]](serializedData.duplicate()) match {
         case IndirectTaskResult(blockId, size) =>
           sparkEnv.blockManager.master.removeBlock(blockId)
           // removeBlock is asynchronous. Need to wait it's removed successfully
@@ -71,7 +71,6 @@ private class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: Task
         case directResult: DirectTaskResult[_] =>
           taskSetManager.abort("Internal error: expect only indirect results")
       }
-      serializedData.rewind()
       removedResult = true
     }
     super.enqueueSuccessfulTask(taskSetManager, tid, serializedData)
@@ -94,7 +93,8 @@ private class MyTaskResultGetter(env: SparkEnv, scheduler: TaskSchedulerImpl)
 
   def taskResults: Seq[DirectTaskResult[_]] = _taskResults
 
-  override def enqueueSuccessfulTask(tsm: TaskSetManager, tid: Long, data: ByteBuffer): Unit = {
+  override def enqueueSuccessfulTask(tsm: TaskSetManager, tid: Long,
+    data: ChunkedByteBuffer): Unit = {
     // work on a copy since the super class still needs to use the buffer
     val newBuffer = data.duplicate()
     _taskResults += env.closureSerializer.newInstance().deserialize[DirectTaskResult[_]](newBuffer)

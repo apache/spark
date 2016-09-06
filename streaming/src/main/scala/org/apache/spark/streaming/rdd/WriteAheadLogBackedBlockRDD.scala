@@ -24,11 +24,11 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark._
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, ChunkedByteBufferUtil}
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.util._
 import org.apache.spark.util.SerializableConfiguration
-import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Partition class for [[org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD]].
@@ -158,12 +158,13 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
       logInfo(s"Read partition data of $this from write ahead log, record handle " +
         partition.walRecordHandle)
       if (storeInBlockManager) {
-        blockManager.putBytes(blockId, new ChunkedByteBuffer(dataRead.duplicate()), storageLevel)
+        blockManager.putBytes(blockId, ChunkedByteBufferUtil.wrap(dataRead.duplicate()),
+          storageLevel)
         logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
         dataRead.rewind()
       }
       serializerManager
-        .dataDeserializeStream(blockId, new ChunkedByteBuffer(dataRead).toInputStream())
+        .dataDeserializeStream(blockId, ChunkedByteBufferUtil.wrap(dataRead).toInputStream())
         .asInstanceOf[Iterator[T]]
     }
 

@@ -121,7 +121,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     override def receive: PartialFunction[Any, Unit] = {
       case StatusUpdate(executorId, taskId, state, data) =>
-        scheduler.statusUpdate(taskId, state, data.value)
+        scheduler.statusUpdate(taskId, state, data)
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
@@ -248,13 +248,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
         val serializedTask = ser.serialize(task)
-        if (serializedTask.limit >= maxRpcMessageSize) {
+        if (serializedTask.size() >= maxRpcMessageSize) {
           scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
             try {
               var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
                 "spark.rpc.message.maxSize (%d bytes). Consider increasing " +
                 "spark.rpc.message.maxSize or using broadcast variables for large values."
-              msg = msg.format(task.taskId, task.index, serializedTask.limit, maxRpcMessageSize)
+              msg = msg.format(task.taskId, task.index, serializedTask.size(), maxRpcMessageSize)
               taskSetMgr.abort(msg)
             } catch {
               case e: Exception => logError("Exception in error callback", e)
@@ -268,7 +268,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           logInfo(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
             s"${executorData.executorHost}.")
 
-          executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
+          executorData.executorEndpoint.send(LaunchTask(serializedTask))
         }
       }
     }
