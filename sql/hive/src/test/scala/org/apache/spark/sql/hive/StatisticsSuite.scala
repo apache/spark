@@ -178,7 +178,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     if (hasSizeInBytes || expectedRowCounts.nonEmpty) {
       assert(stats.isDefined)
       assert(stats.get.sizeInBytes > 0)
-      assert(stats.get.rowCount == expectedRowCounts)
+      assert(stats.get.rowCount === expectedRowCounts)
     } else {
       assert(stats.isEmpty)
     }
