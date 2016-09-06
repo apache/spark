@@ -18,7 +18,8 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.util.UUID
+
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
@@ -141,6 +142,8 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
 class FileStreamSourceSuite extends FileStreamSourceTest {
 
   import testImplicits._
+
+  override val streamingTimeout = 10.minutes
 
   /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
   private def createFileStreamSource(
@@ -759,6 +762,27 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       } finally {
         q.stop()
       }
+    }
+  }
+
+  test("SPARK-17372 - write file names to WAL as Array[String]") {
+    val numFiles = 10000
+    withTempDirs { case (root, tmp) =>
+      val src = new File(root, "a=1")
+      src.mkdirs()
+
+      (1 to numFiles).map { _.toString }.foreach { i =>
+        val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+        val finalFile = new File(src, tempFile.getName)
+        stringToFile(finalFile, i)
+      }
+      assert(src.listFiles().size === numFiles)
+
+      val files = spark.readStream.text(root.getCanonicalPath).as[String]
+      testStream(files.filter(_ != "0").groupBy().count(), InternalOutputModes.Complete)(
+        AddTextFileData("0", src, tmp),
+        CheckAnswer(numFiles)
+      )
     }
   }
 }
