@@ -205,6 +205,12 @@ class SQLBuilder private (
     case p: ScriptTransformation =>
       scriptTransformationToSQL(p)
 
+    case p: LocalRelation =>
+      p.toSQL(newSubqueryName())
+
+    case p: Range =>
+      p.toSQL()
+
     case OneRowRelation =>
       ""
 
@@ -584,8 +590,12 @@ class SQLBuilder private (
 
   object ExtractSQLTable {
     def unapply(plan: LogicalPlan): Option[SQLTable] = plan match {
-      case l @ LogicalRelation(_, _, Some(TableIdentifier(table, Some(database)))) =>
-        Some(SQLTable(database, table, l.output.map(_.withQualifier(None))))
+      case l @ LogicalRelation(_, _, Some(catalogTable))
+          if catalogTable.identifier.database.isDefined =>
+        Some(SQLTable(
+          catalogTable.identifier.database.get,
+          catalogTable.identifier.table,
+          l.output.map(_.withQualifier(None))))
 
       case relation: CatalogRelation =>
         val m = relation.catalogTable

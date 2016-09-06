@@ -186,13 +186,18 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
   }
 
   private def verifySchema(schema: StructType): Unit = {
-    schema.foreach { field =>
-      field.dataType match {
-        case _: ArrayType | _: MapType | _: StructType =>
-          throw new UnsupportedOperationException(
-            s"CSV data source does not support ${field.dataType.simpleString} data type.")
+    def verifyType(dataType: DataType): Unit = dataType match {
+        case ByteType | ShortType | IntegerType | LongType | FloatType |
+             DoubleType | BooleanType | _: DecimalType | TimestampType |
+             DateType | StringType =>
+
+        case udt: UserDefinedType[_] => verifyType(udt.sqlType)
+
         case _ =>
-      }
+          throw new UnsupportedOperationException(
+            s"CSV data source does not support ${dataType.simpleString} data type.")
     }
+
+    schema.foreach(field => verifyType(field.dataType))
   }
 }

@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics, StatisticsSetter, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.util.StringUtils
 
 object SessionCatalog {
@@ -74,7 +74,7 @@ class SessionCatalog(
 
   /** List of temporary tables, mapping from table name to their logical plan. */
   @GuardedBy("this")
-  protected val tempTables = new mutable.HashMap[String, TempTable]
+  protected val tempTables = new mutable.HashMap[String, LogicalPlan]
 
   // Note: we track current database here because certain operations do not explicitly
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
@@ -238,18 +238,11 @@ class SessionCatalog(
   def alterTable(tableDefinition: CatalogTable): Unit = {
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
-    val tableIdent = TableIdentifier(table)
-    if (isTemporaryTable(tableIdent)) {
-      val plan = tempTables(table).logicalPlan
-      tempTables.remove(table)
-      tempTables.put(table, TempTable(plan, tableDefinition))
-    } else {
-      val tableIdentifier = TableIdentifier(table, Some(db))
-      val newTableDefinition = tableDefinition.copy(identifier = tableIdentifier)
-      requireDbExists(db)
-      requireTableExists(tableIdentifier)
-      externalCatalog.alterTable(newTableDefinition)
-    }
+    val tableIdentifier = TableIdentifier(table, Some(db))
+    val newTableDefinition = tableDefinition.copy(identifier = tableIdentifier)
+    requireDbExists(db)
+    requireTableExists(tableIdentifier)
+    externalCatalog.alterTable(newTableDefinition)
   }
 
   /**
@@ -262,7 +255,13 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     val tid = TableIdentifier(table)
     if (isTemporaryTable(name)) {
-      tempTables(table).metadata
+      CatalogTable(
+        identifier = tid,
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = tempTables(table).output.toStructType,
+        properties = Map(),
+        viewText = None)
     } else {
       requireDbExists(db)
       requireTableExists(TableIdentifier(table, Some(db)))
@@ -310,14 +309,13 @@ class SessionCatalog(
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit = {
+      inheritTableSpecs: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
-    externalCatalog.loadPartition(db, table, loadPath, partition, isOverwrite, holdDDLTime,
-      inheritTableSpecs, isSkewedStoreAsSubdir)
+    externalCatalog.loadPartition(
+      db, table, loadPath, partition, isOverwrite, holdDDLTime, inheritTableSpecs)
   }
 
   def defaultTablePath(tableIdent: TableIdentifier): String = {
@@ -342,15 +340,7 @@ class SessionCatalog(
     if (tempTables.contains(table) && !overrideIfExists) {
       throw new TempTableAlreadyExistsException(name)
     }
-    val tid = TableIdentifier(table)
-    val metadata = CatalogTable(
-      identifier = tid,
-      tableType = CatalogTableType.VIEW,
-      storage = CatalogStorageFormat.empty,
-      schema = tableDefinition.output.toStructType,
-      properties = Map(),
-      viewText = None)
-    tempTables.put(table, TempTable(tableDefinition, metadata))
+    tempTables.put(table, tableDefinition)
   }
 
   /**
@@ -359,29 +349,17 @@ class SessionCatalog(
    * If a database is specified in `oldName`, this will rename the table in that database.
    * If no database is specified, this will first attempt to rename a temporary table with
    * the same name, then, if that does not exist, rename the table in the current database.
-   *
-   * This assumes the database specified in `oldName` matches the one specified in `newName`.
    */
-  def renameTable(oldName: TableIdentifier, newName: TableIdentifier): Unit = synchronized {
+  def renameTable(oldName: TableIdentifier, newName: String): Unit = synchronized {
     val db = formatDatabaseName(oldName.database.getOrElse(currentDb))
     requireDbExists(db)
-    val newDb = formatDatabaseName(newName.database.getOrElse(currentDb))
-    if (db != newDb) {
-      throw new AnalysisException(
-        s"RENAME TABLE source and destination databases do not match: '$db' != '$newDb'")
-    }
     val oldTableName = formatTableName(oldName.table)
-    val newTableName = formatTableName(newName.table)
+    val newTableName = formatTableName(newName)
     if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
       requireTableExists(TableIdentifier(oldTableName, Some(db)))
       requireTableNotExists(TableIdentifier(newTableName, Some(db)))
       externalCatalog.renameTable(db, oldTableName, newTableName)
     } else {
-      if (newName.database.isDefined) {
-        throw new AnalysisException(
-          s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': cannot specify database " +
-            s"name '${newName.database.get}' in the destination table")
-      }
       if (tempTables.contains(newTableName)) {
         throw new AnalysisException(
           s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': destination table already exists")
@@ -441,26 +419,9 @@ class SessionCatalog(
         }
         SubqueryAlias(relationAlias, SimpleCatalogRelation(db, metadata), view)
       } else {
-        SubqueryAlias(relationAlias, lookupTempTable(table), Option(name))
+        SubqueryAlias(relationAlias, tempTables(table), Option(name))
       }
     }
-  }
-
-  /**
-   * Return a [[LogicalPlan]] that represents the given temporary table.
-   */
-  protected def lookupTempTable(table: String): LogicalPlan = {
-    val tempTable = tempTables(table)
-    tempTable.logicalPlan match {
-      case s: StatisticsSetter =>
-        val tableParameters = tempTable.metadata.properties
-        tableParameters.get("totalSize").foreach { size =>
-          val stat = Statistics(sizeInBytes = BigInt(size))
-          s.setStatistics(stat)
-        }
-      case o => o
-    }
-    tempTable.logicalPlan
   }
 
   /**
@@ -492,22 +453,6 @@ class SessionCatalog(
   }
 
   /**
-   * Return whether a temporary table can be analyzed.
-   */
-  def isAnalyzableTemporaryTable(name: TableIdentifier): Boolean = synchronized {
-    if (isTemporaryTable(name)) {
-      val table = formatTableName(name.table)
-      val tempTable = tempTables(table)
-      tempTable.logicalPlan match {
-        case s: StatisticsSetter => true
-        case o => false
-      }
-    } else {
-      false
-    }
-  }
-
-  /**
    * List all tables in the specified database, including temporary tables.
    */
   def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")
@@ -535,7 +480,7 @@ class SessionCatalog(
     // If the database is defined, this is definitely not a temp table.
     // If the database is not defined, there is a good chance this is a temp table.
     if (name.database.isEmpty) {
-      tempTables.get(formatTableName(name.table)).foreach(_.logicalPlan.refresh())
+      tempTables.get(formatTableName(name.table)).foreach(_.refresh())
     }
   }
 
@@ -552,7 +497,7 @@ class SessionCatalog(
    * For testing only.
    */
   private[catalog] def getTempTable(name: String): Option[LogicalPlan] = synchronized {
-    tempTables.get(formatTableName(name)).map(_.logicalPlan)
+    tempTables.get(formatTableName(name))
   }
 
   // ----------------------------------------------------------------------------
@@ -971,8 +916,3 @@ class SessionCatalog(
   }
 
 }
-
-/**
- * The case class represents a temporary table
- */
-private[sql] case class TempTable(logicalPlan: LogicalPlan, metadata: CatalogTable)

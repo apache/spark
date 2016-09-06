@@ -53,7 +53,7 @@ import org.apache.spark.util.Utils;
  */
 public class TaskMemoryManager {
 
-  private final Logger logger = LoggerFactory.getLogger(TaskMemoryManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(TaskMemoryManager.class);
 
   /** The number of bits used to address the page table. */
   private static final int PAGE_NUMBER_BITS = 13;

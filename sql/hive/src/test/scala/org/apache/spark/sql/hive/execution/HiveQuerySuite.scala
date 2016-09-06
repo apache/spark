@@ -216,15 +216,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(new Timestamp(1000) == r1.getTimestamp(0))
   }
 
-  createQueryTest("constant array",
-  """
-    |SELECT sort_array(
-    |  sort_array(
-    |    array("hadoop distributed file system",
-    |          "enterprise databases", "hadoop map-reduce")))
-    |FROM src LIMIT 1;
-  """.stripMargin)
-
   createQueryTest("null case",
     "SELECT case when(true) then 1 else null end FROM src LIMIT 1")
 
@@ -326,10 +317,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   createQueryTest("trivial join ON clause",
     "SELECT * FROM src a JOIN src b ON a.key = b.key")
-
-  createQueryTest("small.cartesian",
-    "SELECT a.key, b.key FROM (SELECT key FROM src WHERE key < 1) a JOIN " +
-      "(SELECT key FROM src WHERE key = 2) b")
 
   createQueryTest("length.udf",
     "SELECT length(\"test\") FROM src LIMIT 1")
