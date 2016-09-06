@@ -52,7 +52,7 @@ import org.apache.spark.sql.SparkSession;
  * </pre>
  */
 public final class JavaPageRank {
-  private static final Pattern SPACES = Pattern.compile("\\s+");
+  private static final Pattern SPACES = Pattern.compile("\\s*(=>|,|\\s)\\s*");
 
   static void showWarning() {
     String warning = "WARN: This is a naive implementation of PageRank " +
