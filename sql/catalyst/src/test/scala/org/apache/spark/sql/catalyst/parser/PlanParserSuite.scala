@@ -372,7 +372,7 @@ class PlanParserSuite extends PlanTest {
     assertEqual(
       "select * from t1 cross join t2 join t3 on t3.id = t1.id join t4 on t4.id = t1.id",
       table("t1")
-        .join(table("t2"), Cross)
+        .join(table("t2"), Inner)
         .join(table("t3"), Inner, Option(Symbol("t3.id") === Symbol("t1.id")))
         .join(table("t4"), Inner, Option(Symbol("t4.id") === Symbol("t1.id")))
         .select(star()))

@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import scala.collection.mutable.StringBuilder
 
-import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.{CharStream, ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.TerminalNode
 
