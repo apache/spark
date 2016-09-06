@@ -254,7 +254,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           // When we hit this branch, we are saving an external data source table with hive
           // compatible format, which means the data source is file-based and must have a `path`.
           val map = new CaseInsensitiveMap(tableDefinition.storage.properties)
-          assert(map.contains("path"),
+          require(map.contains("path"),
             "External file-based data source table must have a `path` entry in storage properties.")
           Some(new Path(map("path")).toUri.toString)
         } else {
