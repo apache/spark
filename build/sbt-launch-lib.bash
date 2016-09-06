@@ -108,16 +108,28 @@ addDebugger () {
   addJava "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=$1"
 }
 
-# a ham-fisted attempt to move some memory settings in concert
+# A ham-fisted attempt to move some memory settings in concert
 # so they need not be dicked around with individually.
+# First argument is java executable, second is heap size target.
 get_mem_opts () {
-  local mem=${1:-2048}
+  local java_exec=$1
+  local mem=${2:-2048}
   local perm=$(( $mem / 4 ))
   (( $perm > 256 )) || perm=256
   (( $perm < 4096 )) || perm=4096
   local codecache=$(( $perm / 2 ))
 
-  echo "-Xms${mem}m -Xmx${mem}m -XX:MaxPermSize=${perm}m -XX:ReservedCodeCacheSize=${codecache}m"
+  # Pull out single-digit Java version string
+  local java_version=`${java_exec} -version 2>&1 | head -1 | \
+                awk -F '"' '/version/ {print $2}' | \
+                awk -F '.' '{print $2}'`
+
+  if [ "${java_version}" -lt "8" ]; then
+    echo "-Xms${mem}m -Xmx${mem}m -XX:MaxPermSize=${perm}m -XX:ReservedCodeCacheSize=${codecache}m"
+  else
+    echo "-Xms${mem}m -Xmx${mem}m -XX:ReservedCodeCacheSize=${codecache}m"
+  fi
+
 }
 
 require_arg () {
@@ -180,7 +192,7 @@ run() {
   # run sbt
   execRunner "$java_cmd" \
     ${SBT_OPTS:-$default_sbt_opts} \
-    $(get_mem_opts $sbt_mem) \
+    $(get_mem_opts $java_cmd $sbt_mem) \
     ${java_opts} \
     ${java_args[@]} \
     -jar "$sbt_jar" \
