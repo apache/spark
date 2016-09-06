@@ -30,8 +30,8 @@ import pickle
 import functools
 import time
 import datetime
-
 import py4j
+
 try:
     import xmlrunner
 except ImportError:
@@ -45,6 +45,9 @@ if sys.version_info[:2] <= (2, 6):
         sys.exit(1)
 else:
     import unittest
+
+if sys.version > '3':
+    xrange = range
 
 from pyspark.sql import SparkSession, HiveContext, Column, Row
 from pyspark.sql.types import *
@@ -196,7 +199,8 @@ class SQLTests(ReusedPySparkTestCase):
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
         cls.spark = SparkSession(cls.sc)
-        cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
+        cls.testData = (Row(key=i, value=str(i)) for i in xrange(100))
+        # cls.testData is a generator
         cls.df = cls.spark.createDataFrame(cls.testData)
 
     @classmethod
@@ -764,8 +768,10 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_column_select(self):
         df = self.df
-        self.assertEqual(self.testData, df.select("*").collect())
-        self.assertEqual(self.testData, df.select(df.key, df.value).collect())
+        # Note: recreate the test data, since the generator has long gone
+        test_data = [Row(key=i, value=str(i)) for i in xrange(100)]
+        self.assertEqual(test_data, df.select("*").collect())
+        self.assertEqual(test_data, df.select(df.key, df.value).collect())
         self.assertEqual([Row(value='1')], df.where(df.key == 1).select(df.value).collect())
 
     def test_freqItems(self):

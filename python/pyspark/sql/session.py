@@ -16,8 +16,10 @@
 #
 
 from __future__ import print_function
+
 import sys
 import warnings
+
 from functools import reduce
 from threading import RLock
 
@@ -373,16 +375,18 @@ class SparkSession(object):
         rdd = rdd.map(schema.toInternal)
         return rdd, schema
 
-    def _createFromLocal(self, data, schema):
+    def _createFromLocal(self, prepareFunc, data, schema):
         """
         Create an RDD for DataFrame from a list or pandas.DataFrame, returns
         the RDD and schema.
+
+        Note: 'prepareFunc' can be None.
         """
-        # make sure data could consumed multiple times
-        if not isinstance(data, list):
-            data = list(data)
 
         if schema is None or isinstance(schema, (list, tuple)):
+            # make sure data could consumed multiple times
+            if not isinstance(data, list):
+                data = list(data)
             struct = self._inferSchemaFromList(data)
             converter = _create_converter(struct)
             data = map(converter, data)
@@ -396,14 +400,18 @@ class SparkSession(object):
             raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
 
         # convert python objects to sql data
-        data = [schema.toInternal(row) for row in data]
+        if prepareFunc is not None:
+            data = [schema.toInternal(prepareFunc(row)) for row in data]
+        else:
+            data = [schema.toInternal(row) for row in data]
         return self._sc.parallelize(data), schema
 
     @since(2.0)
     @ignore_unicode_prefix
     def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
         """
-        Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
+        Creates a :class:`DataFrame` from an :class:`RDD`, a list, a dict, a generator or a
+        :class:`pandas.DataFrame`.
 
         When ``schema`` is a list of column names, the type of each column
         will be inferred from ``data``.
@@ -421,8 +429,9 @@ class SparkSession(object):
         If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
-        :param data: an RDD of any kind of SQL data representation(e.g. row, tuple, int, boolean,
-            etc.), or :class:`list`, or :class:`pandas.DataFrame`.
+        :param data: an RDD of any kind of SQL data representation(e.g. :class:`Row`,
+            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`, or :class:`dict`, or a
+            Python generator, or :class:`pandas.DataFrame`.
         :param schema: a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is ``None``.  The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
@@ -445,6 +454,12 @@ class SparkSession(object):
         >>> d = [{'name': 'Alice', 'age': 1}]
         >>> spark.createDataFrame(d).collect()
         [Row(age=1, name=u'Alice')]
+
+        >>> d = ({'name': 'Alice-{}'.format(i), 'age': i} for i in range(0, 10000))
+        >>> # Please note that 'd' is a generator and not a structure with the 10000 elements.
+        >>> # Ex: <generator object <genexpr> at 0x7f1234b92af0>
+        >>> sqlContext.createDataFrame(d).take(3)  # doctest: +SKIP
+        [Row(age=0, name=u'Alice-0'), Row(age=1, name=u'Alice-1'), Row(age=2, name=u'Alice-2')
 
         >>> rdd = sc.parallelize(l)
         >>> spark.createDataFrame(rdd).collect()
@@ -514,12 +529,13 @@ class SparkSession(object):
         else:
             if isinstance(schema, list):
                 schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
-            prepare = lambda obj: obj
+            prepare = None
 
         if isinstance(data, RDD):
-            rdd, schema = self._createFromRDD(data.map(prepare), schema, samplingRatio)
+            rdd, schema = self._createFromRDD(data.map(prepare) if prepare is not None else data,
+                                              schema, samplingRatio)
         else:
-            rdd, schema = self._createFromLocal(map(prepare, data), schema)
+            rdd, schema = self._createFromLocal(prepare, data, schema)
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         jdf = self._jsparkSession.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         df = DataFrame(jdf, self._wrapped)

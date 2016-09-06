@@ -16,6 +16,7 @@
 #
 
 from __future__ import print_function
+
 import sys
 import warnings
 
@@ -217,7 +218,8 @@ class SQLContext(object):
     @ignore_unicode_prefix
     def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
         """
-        Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
+        Creates a :class:`DataFrame` from an :class:`RDD`, a list, a dict, a generator or a
+        :class:`pandas.DataFrame`.
 
         When ``schema`` is a list of column names, the type of each column
         will be inferred from ``data``.
@@ -236,8 +238,8 @@ class SQLContext(object):
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
         :param data: an RDD of any kind of SQL data representation(e.g. :class:`Row`,
-            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`, or
-            :class:`pandas.DataFrame`.
+            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`, or :class:`dict`, or a
+            Python generator, or :class:`pandas.DataFrame`.
         :param schema: a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is None.  The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
@@ -266,6 +268,12 @@ class SQLContext(object):
         >>> d = [{'name': 'Alice', 'age': 1}]
         >>> sqlContext.createDataFrame(d).collect()
         [Row(age=1, name=u'Alice')]
+
+        >>> d = ({'name': 'Alice-{}'.format(i), 'age': i} for i in range(0, 10000))
+        >>> # Please note that 'd' is a generator and not a structure with the 10000 elements.
+        >>> # Ex: <generator object <genexpr> at 0x7f1234b92af0>
+        >>> sqlContext.createDataFrame(d).take(3)  # doctest: +SKIP
+        [Row(age=0, name=u'Alice-0'), Row(age=1, name=u'Alice-1'), Row(age=2, name=u'Alice-2')
 
         >>> rdd = sc.parallelize(l)
         >>> sqlContext.createDataFrame(rdd).collect()
