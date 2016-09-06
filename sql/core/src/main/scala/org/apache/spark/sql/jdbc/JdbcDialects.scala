@@ -162,7 +162,7 @@ object JdbcDialects {
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
    */
-  private[sql] def get(url: String): JdbcDialect = {
+  def get(url: String): JdbcDialect = {
     val matchingDialects = dialects.filter(_.canHandle(url))
     matchingDialects.length match {
       case 0 => NoopDialect

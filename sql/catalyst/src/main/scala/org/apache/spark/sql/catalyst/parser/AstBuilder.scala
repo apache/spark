@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
+import javax.xml.bind.DatatypeConverter
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -26,7 +27,8 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -537,6 +539,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     def join(ctx: JoinRelationContext, left: LogicalPlan, right: LogicalPlan): Join = {
       val baseJoinType = ctx.joinType match {
         case null => Inner
+        case jt if jt.CROSS != null => Cross
         case jt if jt.FULL != null => FullOuter
         case jt if jt.SEMI != null => LeftSemi
         case jt if jt.ANTI != null => LeftAnti
@@ -1214,19 +1217,27 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * {{{
    *   [TYPE] '[VALUE]'
    * }}}
-   * Currently Date and Timestamp typed literals are supported.
-   *
-   * TODO what the added value of this over casting?
+   * Currently Date, Timestamp and Binary typed literals are supported.
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
-    ctx.identifier.getText.toUpperCase match {
-      case "DATE" =>
-        Literal(Date.valueOf(value))
-      case "TIMESTAMP" =>
-        Literal(Timestamp.valueOf(value))
-      case other =>
-        throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
+    val valueType = ctx.identifier.getText.toUpperCase
+    try {
+      valueType match {
+        case "DATE" =>
+          Literal(Date.valueOf(value))
+        case "TIMESTAMP" =>
+          Literal(Timestamp.valueOf(value))
+        case "X" =>
+          val padding = if (value.length % 2 == 1) "0" else ""
+          Literal(DatatypeConverter.parseHexBinary(padding + value))
+        case other =>
+          throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
+      }
+    } catch {
+      case e: IllegalArgumentException =>
+        val message = Option(e.getMessage).getOrElse(s"Exception parsing $valueType")
+        throw new ParseException(message, ctx)
     }
   }
 
@@ -1321,6 +1332,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitDoubleLiteral(ctx: DoubleLiteralContext): Literal = {
     numericLiteral(ctx, Double.MinValue, Double.MaxValue, DoubleType.simpleString)(_.toDouble)
+  }
+
+  /**
+   * Create a BigDecimal Literal expression.
+   */
+  override def visitBigDecimalLiteral(ctx: BigDecimalLiteralContext): Literal = {
+    val raw = ctx.getText.substring(0, ctx.getText.length - 2)
+    try {
+      Literal(BigDecimal(raw).underlying())
+    } catch {
+      case e: AnalysisException =>
+        throw new ParseException(e.message, ctx)
+    }
   }
 
   /**
