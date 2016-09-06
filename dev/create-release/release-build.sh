@@ -81,7 +81,7 @@ BASE_DIR=$(pwd)
 
 MVN="build/mvn --force"
 PUBLISH_PROFILES="-Pmesos -Pyarn -Phive -Phive-thriftserver -Phadoop-2.2"
-PUBLISH_PROFILES="$PUBLISH_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl"
+PUBLISH_PROFILES="$PUBLISH_PROFILES -Pspark-ganglia-lgpl"
 
 rm -rf spark
 git clone https://git-wip-us.apache.org/repos/asf/spark.git
