@@ -509,7 +509,9 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
       val bucketed = df.queryExecution.analyzed transform {
         case s @ Scanner(_, _, l @ LogicalRelation(r: HadoopFsRelation, _, _)) =>
           val newRelation = l.copy(relation =
-            r.copy(bucketSpec = Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(r.sparkSession))
+            r.copy(
+              bucketSpec = Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(
+                r.sparkSession))
           Scanner(newRelation.output, s.filters, newRelation)
       }
       Dataset.ofRows(spark, bucketed)
