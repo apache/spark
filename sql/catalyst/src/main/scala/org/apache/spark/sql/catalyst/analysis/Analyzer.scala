@@ -653,15 +653,9 @@ class Analyzer(
             case o => o :: Nil
           })
         case c: CreateNamedStruct if containsStar(c.valueExpressions) =>
-          val newChildren = for {
-            kv @ Seq(k, v) <- c.children.grouped(2)
-            expanded = v match {
-              case s: Star => CreateStruct(s.expand(child, resolver)).children
-              case _ => kv
-            }
-            starChild <- expanded
-          } yield {
-            starChild
+          val newChildren = c.children.grouped(2).flatMap {
+            case Seq(k, s : Star) => CreateStruct(s.expand(child, resolver)).children
+            case kv => kv
           }
           c.copy(children = newChildren.toList )
         case c: CreateArray if containsStar(c.children) =>

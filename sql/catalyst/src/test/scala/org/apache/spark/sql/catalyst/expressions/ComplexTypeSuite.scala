@@ -243,8 +243,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val b = AttributeReference("b", IntegerType)()
     checkMetadata(CreateStruct(Seq(a, b)))
     checkMetadata(CreateNamedStruct(Seq("a", a, "b", b)))
-    checkMetadata(CreateStruct(Seq(a, b)))
-    checkMetadata(CreateNamedStruct(Seq("a", a, "b", b)))
+    checkMetadata(CreateNamedStructUnsafe(Seq("a", a, "b", b)))
   }
 
   test("StringToMap") {
