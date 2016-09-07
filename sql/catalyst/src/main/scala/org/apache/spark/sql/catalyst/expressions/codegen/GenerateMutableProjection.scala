@@ -133,8 +133,8 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
       }
     """
 
-    val code = CodeFormatter.stripOverlappingComments(
-      new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
+    val code = CodeFormatter.stripOverlappingComments(new CodeAndComment(
+      CodeFormatter.stripExtraNewLines(codeBody), ctx.getPlaceHolderToComments()))
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = CodeGenerator.compile(code)
