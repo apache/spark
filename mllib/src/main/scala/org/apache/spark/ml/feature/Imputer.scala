@@ -81,10 +81,10 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
  * All Null values in the input column are treated as missing, and so are also imputed.
  */
 @Experimental
-class Imputer @Since("2.0.0")(override val uid: String)
+class Imputer @Since("2.1.0")(override val uid: String)
   extends Estimator[ImputerModel] with ImputerParams with DefaultParamsWritable {
 
-  @Since("2.0.0")
+  @Since("2.1.0")
   def this() = this(Identifiable.randomUID("imputer"))
 
   /** @group setParam */
@@ -126,13 +126,13 @@ class Imputer @Since("2.0.0")(override val uid: String)
   }
 }
 
-@Since("2.0.0")
+@Since("2.1.0")
 object Imputer extends DefaultParamsReadable[Imputer] {
 
   /** Set of strategy names that Imputer currently supports. */
   private[ml] val supportedStrategyNames = Set("mean", "median")
 
-  @Since("2.0.0")
+  @Since("2.1.0")
   override def load(path: String): Imputer = super.load(path)
 }
 
@@ -175,12 +175,12 @@ class ImputerModel private[ml](
     copyValues(copied, extra).setParent(parent)
   }
 
-  @Since("2.0.0")
+  @Since("2.1.0")
   override def write: MLWriter = new ImputerModelWriter(this)
 }
 
 
-@Since("2.0.0")
+@Since("2.1.0")
 object ImputerModel extends MLReadable[ImputerModel] {
 
   private[ImputerModel] class ImputerModelWriter(instance: ImputerModel) extends MLWriter {
@@ -211,9 +211,9 @@ object ImputerModel extends MLReadable[ImputerModel] {
     }
   }
 
-  @Since("2.0.0")
+  @Since("2.1.0")
   override def read: MLReader[ImputerModel] = new ImputerReader
 
-  @Since("2.0.0")
+  @Since("2.1.0")
   override def load(path: String): ImputerModel = super.load(path)
 }
