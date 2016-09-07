@@ -280,29 +280,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   /**
-   * Extracts the [[StructField]] with the given name recursively.
-   *
-   * @throws IllegalArgumentException if the parent field's type is not StructType
-   */
-  def getFieldRecursively(name: String): StructField = {
-    if (name.contains(',')) {
-      val curFieldStr = name.split(",", 2)(0)
-      val nextFieldStr = name.split(",", 2)(1)
-      val curField = this.apply(curFieldStr)
-      curField.dataType match {
-        case st: StructType =>
-          val newField = StructType(st.fields).getFieldRecursively(nextFieldStr)
-          StructField(curField.name, StructType(Seq(newField)),
-            curField.nullable, curField.metadata)
-        case _ =>
-          throw new IllegalArgumentException(s"""Field "$curFieldStr" is not struct field.""")
-      }
-    } else {
-      this.apply(name)
-    }
-  }
-
-  /**
    * Returns the index of a given field.
    *
    * @throws IllegalArgumentException if a field with the given name does not exist

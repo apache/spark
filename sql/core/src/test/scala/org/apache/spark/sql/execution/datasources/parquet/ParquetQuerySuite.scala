@@ -574,35 +574,28 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   test("SPARK-4502 parquet nested fields pruning") {
     // Schema of "test-data/nested-array-struct.parquet":
     //    root
-    //    |-- primitive: integer (nullable = true)
-    //    |-- myComplex: array (nullable = true)
-    //    |    |-- element: struct (containsNull = true)
-    //    |    |    |-- id: integer (nullable = true)
-    //    |    |    |-- repeatedMessage: array (nullable = true)
-    //    |    |    |    |-- element: struct (containsNull = true)
-    //    |    |    |    |    |-- someId: integer (nullable = true)
-    val df = readResourceParquetFile("test-data/nested-array-struct.parquet")
+    //    |-- col: struct (nullable = true)
+    //    |    |-- s1: struct (nullable = true)
+    //    |    |    |-- s1_1: long (nullable = true)
+    //    |    |    |-- s1_2: long (nullable = true)
+    //    |    |-- str: string (nullable = true)
+    //    |-- num: long (nullable = true)
+    //    |-- str: string (nullable = true)
+    val df = readResourceParquetFile("test-data/nested-struct.snappy.parquet")
     df.createOrReplaceTempView("tmp_table")
     // normal test
-    val query1 = "select primitive,myComplex[0].id from tmp_table"
+    val query1 = "select num,col.s1.s1_1 from tmp_table"
     val result1 = sql(query1)
     withSQLConf(SQLConf.PARQUET_NEST_COLUMN_PRUNING.key -> "true") {
       checkAnswer(sql(query1), result1)
     }
-    // test for array in struct
-    val query2 = "select primitive,myComplex[0].repeatedMessage[0].someId from tmp_table"
+    // test for same struct meta merge
+    // col.s1.s1_1 and col.str should merge
+    // like col.[s1.s1_1, str] before pass to parquet
+    val query2 = "select col.s1.s1_1,col.str from tmp_table"
     val result2 = sql(query2)
     withSQLConf(SQLConf.PARQUET_NEST_COLUMN_PRUNING.key -> "true") {
       checkAnswer(sql(query2), result2)
-    }
-    // test for same struct meta merge
-    // myComplex.id and myComplex.repeatedMessage.someId should merge
-    // like myComplex.[id, repeatedMessage.someId] before pass to parquet
-    val query3 = "select myComplex[0].id, myComplex[0].repeatedMessage[0].someId" +
-      " from tmp_table"
-    val result3 = sql(query3)
-    withSQLConf(SQLConf.PARQUET_NEST_COLUMN_PRUNING.key -> "true") {
-      checkAnswer(sql(query3), result3)
     }
 
     spark.sessionState.catalog.dropTable(
