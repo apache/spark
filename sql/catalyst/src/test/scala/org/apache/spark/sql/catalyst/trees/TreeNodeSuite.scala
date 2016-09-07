@@ -17,13 +17,21 @@
 
 package org.apache.spark.sql.catalyst.trees
 
+import java.math.BigInteger
+import java.util.UUID
+
 import scala.collection.mutable.ArrayBuffer
+
+import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.types.{IntegerType, NullType, StringType}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Union}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, Metadata, NullType, StringType}
+import org.apache.spark.storage.StorageLevel
 
 case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFallback {
   override def children: Seq[Expression] = optKey.toSeq
@@ -43,6 +51,20 @@ case class ExpressionInMap(map: Map[String, Expression]) extends Expression with
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
+}
+
+case class JsonTestTreeNode(arg: Any) extends LeafNode {
+  override def output: Seq[Attribute] = Seq.empty[Attribute]
+}
+
+case class NameValue(name: String, value: Any)
+
+case object DummyObject
+
+case class SelfReferenceUDF(
+    var config: Map[String, Any] = Map.empty[String, Any]) extends Function1[String, Boolean] {
+  config += "self" -> this
+  def apply(key: String): Boolean = config.contains(key)
 }
 
 class TreeNodeSuite extends SparkFunSuite {
@@ -260,5 +282,147 @@ class TreeNodeSuite extends SparkFunSuite {
       val expected = ExpressionInMap(Map("1" -> Literal(2), "2" -> Literal(3)))
       assert(actual === expected)
     }
+  }
+
+  test("toJSON") {
+    def expected(json: String): String = {
+      s"""[{"class":"${classOf[JsonTestTreeNode].getName}","num-children":0,"arg":$json}]"""
+    }
+    // Converts simple types to JSON
+    compareJSON(JsonTestTreeNode(true).toJSON, expected("true"))
+    compareJSON(JsonTestTreeNode(33.toByte).toJSON, expected("33"))
+    compareJSON(JsonTestTreeNode(44).toJSON, expected("44"))
+    compareJSON(JsonTestTreeNode(55L).toJSON, expected("55"))
+    compareJSON(JsonTestTreeNode(3.0).toJSON, expected("3.0"))
+    compareJSON(JsonTestTreeNode(4.0D).toJSON, expected("4.0"))
+    compareJSON(JsonTestTreeNode(BigInt(BigInteger.valueOf(88L))).toJSON, expected("88"))
+    compareJSON(JsonTestTreeNode(null).toJSON, expected("null"))
+    compareJSON(JsonTestTreeNode("text").toJSON, expected("\"text\""))
+    compareJSON(JsonTestTreeNode(Some("text")).toJSON, expected("\"text\""))
+    compareJSON(JsonTestTreeNode(None).toJSON,
+      s"""[
+         |  {
+         |    "class":"${classOf[JsonTestTreeNode].getName}",
+         |    "num-children":0
+         |  }
+         |]
+       """.stripMargin)
+
+    val uuid = UUID.randomUUID()
+    compareJSON(JsonTestTreeNode(uuid).toJSON, expected("\"" + uuid.toString + "\""))
+
+    // Converts some Spark Sql types to JSON
+    compareJSON(JsonTestTreeNode(IntegerType).toJSON, expected("\"integer\""))
+    compareJSON(JsonTestTreeNode(Metadata.empty).toJSON, expected(Metadata.empty.json))
+    compareJSON(JsonTestTreeNode(StorageLevel.NONE).toJSON,
+      expected(
+        """{
+          |  "useDisk":false,
+          |  "useMemory":false,
+          |  "useOffHeap":false,
+          |  "deserialized":false,
+          |  "replication":1
+          |}
+        """.stripMargin))
+
+    // Converts TreeNode argument to JSON
+    compareJSON(JsonTestTreeNode(Literal(333)).toJSON,
+      expected(
+        """[
+          |  {
+          |    "class":"org.apache.spark.sql.catalyst.expressions.Literal",
+          |    "num-children":0,
+          |    "value":"333",
+          |    "dataType":"integer"
+          |  }
+          |]
+        """.stripMargin))
+
+    // Converts case object to JSON
+    compareJSON(JsonTestTreeNode(DummyObject).toJSON,
+      expected("{\"object\":\"org.apache.spark.sql.catalyst.trees.DummyObject$\"}"))
+
+    // Convert Case class to JSON
+    val bigValue = new Array[Int](10000)
+    compareJSON(
+      JsonTestTreeNode(NameValue("name", bigValue)).toJSON,
+      expected(
+        """
+          |{
+          |  "product-class":"org.apache.spark.sql.catalyst.trees.NameValue",
+          |  "name":"name"
+          |}
+        """.stripMargin))
+
+    // Converts Seq[TreeNode] to JSON recursively
+    compareJSON(
+      JsonTestTreeNode(Seq(Literal(1), Literal(2))).toJSON,
+      expected(
+        """
+          |[
+          |  [
+          |    {
+          |      "class":"org.apache.spark.sql.catalyst.expressions.Literal",
+          |      "num-children":0,
+          |      "value":"1",
+          |      "dataType":"integer"
+          |    }
+          |  ],
+          |  [
+          |    {
+          |      "class":"org.apache.spark.sql.catalyst.expressions.Literal",
+          |      "num-children":0,
+          |      "value":"2",
+          |      "dataType":"integer"
+          |    }
+          |  ]
+          |]
+        """.stripMargin
+      ))
+
+    // Other Seq is converted to JNull, to reduce the risk of out of memory
+    compareJSON(JsonTestTreeNode(Seq(1, 2, 3)).toJSON, expected("null"))
+
+    // All Map type is converted to JNull, to reduce the risk of out of memory
+    compareJSON(JsonTestTreeNode(Map("key" -> "value")).toJSON, expected("null"))
+
+    // Unknown type is converted to JNull, to reduce the risk of out of memory
+    compareJSON(JsonTestTreeNode(new Object {}).toJSON, expected("null"))
+
+    // Convert all TreeNode children to JSON
+    compareJSON(
+      Union(Seq(JsonTestTreeNode("0"), JsonTestTreeNode("1"))).toJSON,
+      """
+        |[
+        |  {
+        |    "class":"org.apache.spark.sql.catalyst.plans.logical.Union",
+        |    "num-children":2,
+        |    "children":[0, 1]
+        |  },
+        |  {
+        |    "class":"org.apache.spark.sql.catalyst.trees.JsonTestTreeNode",
+        |    "num-children":0,
+        |    "arg":"0"
+        |  },
+        |  {
+        |    "class":"org.apache.spark.sql.catalyst.trees.JsonTestTreeNode",
+        |    "num-children":0,
+        |    "arg":"1"
+        |  }
+        |]
+      """.stripMargin
+    )
+  }
+
+  test("toJSON should not throws java.lang.StackOverflowError") {
+    val udf = ScalaUDF(SelfReferenceUDF(), BooleanType, Seq("col1".attr))
+    // Should not throw java.lang.StackOverflowError
+    udf.toJSON
+  }
+
+  private def compareJSON(leftJson: String, rightJson: String): Unit = {
+    val left = JsonMethods.parse(leftJson)
+    val right = JsonMethods.parse(rightJson)
+    assert(left == right)
   }
 }
