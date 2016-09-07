@@ -84,11 +84,6 @@ public class YarnShuffleService extends AuxiliaryService {
   private static final String RECOVERY_FILE_NAME = "registeredExecutors.ldb";
   private static final String SECRETS_RECOVERY_FILE_NAME = "sparkShuffleRecovery.ldb";
 
-  // Whether failure during service initialization should stop the NM.
-  @VisibleForTesting
-  static final String STOP_ON_FAILURE_KEY = "spark.yarn.shuffle.stopOnFailure";
-  private static final boolean DEFAULT_STOP_ON_FAILURE = false;
-
   // just for testing when you want to find an open port
   @VisibleForTesting
   static int boundPort = -1;
