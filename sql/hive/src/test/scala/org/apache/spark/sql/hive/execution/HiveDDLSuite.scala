@@ -370,6 +370,9 @@ class HiveDDLSuite
         checkMisuseForAlterTableOrView(
           s"$oldViewName RECOVER PARTITIONS", isAlterView = false)
 
+        checkMisuseForAlterTableOrView(
+          s"$oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')", isAlterView = false)
+
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
         assert(!catalog.tableExists(TableIdentifier(newViewName)))
