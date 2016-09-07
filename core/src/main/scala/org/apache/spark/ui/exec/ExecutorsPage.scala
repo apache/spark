@@ -83,18 +83,22 @@ private[spark] object ExecutorsPage {
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed
-    val totalCores = listener.executorToTotalCores.getOrElse(execId, 0)
-    val maxTasks = listener.executorToTasksMax.getOrElse(execId, 0)
-    val activeTasks = listener.executorToTasksActive.getOrElse(execId, 0)
-    val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
-    val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
+    val totalCores = listener.executorToTaskSummary.get(execId).map(_.totalCores).getOrElse(0)
+    val maxTasks = listener.executorToTaskSummary.get(execId).map(_.tasksMax).getOrElse(0)
+    val activeTasks = listener.executorToTaskSummary.get(execId).map(_.tasksActive).getOrElse(0)
+    val failedTasks = listener.executorToTaskSummary.get(execId).map(_.tasksFailed).getOrElse(0)
+    val completedTasks = listener.executorToTaskSummary.get(execId)
+      .map(_.tasksComplete).getOrElse(0)
     val totalTasks = activeTasks + failedTasks + completedTasks
-    val totalDuration = listener.executorToDuration.getOrElse(execId, 0L)
-    val totalGCTime = listener.executorToJvmGCTime.getOrElse(execId, 0L)
-    val totalInputBytes = listener.executorToInputBytes.getOrElse(execId, 0L)
-    val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
-    val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
-    val executorLogs = listener.executorToLogUrls.getOrElse(execId, Map.empty)
+    val totalDuration = listener.executorToTaskSummary.get(execId).map(_.duration).getOrElse(0L)
+    val totalGCTime = listener.executorToTaskSummary.get(execId).map(_.jvmGCTime).getOrElse(0L)
+    val totalInputBytes = listener.executorToTaskSummary.get(execId).map(_.inputBytes).getOrElse(0L)
+    val totalShuffleRead = listener.executorToTaskSummary.get(execId)
+      .map(_.shuffleRead).getOrElse(0L)
+    val totalShuffleWrite = listener.executorToTaskSummary.get(execId)
+      .map(_.shuffleWrite).getOrElse(0L)
+    val executorLogs = listener.executorToTaskSummary.get(execId)
+      .map(_.executorLogs).getOrElse(Map.empty)
 
     new ExecutorSummary(
       execId,
