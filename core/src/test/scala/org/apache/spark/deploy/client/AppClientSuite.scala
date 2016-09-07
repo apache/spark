@@ -196,7 +196,8 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
       execAddedList.add(id)
     }
 
-    def executorRemoved(id: String, message: String, exitStatus: Option[Int]): Unit = {
+    def executorRemoved(
+        id: String, message: String, exitStatus: Option[Int], workerLost: Boolean): Unit = {
       execRemovedList.add(id)
     }
   }

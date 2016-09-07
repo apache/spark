@@ -31,6 +31,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, LongAccumulator, Utils}
 
@@ -199,7 +200,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    sc = new SparkContext("local", "DAGSchedulerSuite")
+    init(new SparkConf())
+  }
+
+  private def init(testConf: SparkConf): Unit = {
+    sc = new SparkContext("local", "DAGSchedulerSuite", testConf)
     sparkListener.submittedStageInfos.clear()
     sparkListener.successfulStages.clear()
     sparkListener.failedStages.clear()
@@ -605,13 +610,52 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assertDataStructuresEmpty()
   }
 
+  private val shuffleFileLossTests = Seq(
+    ("slave lost with shuffle service", SlaveLost("", false), true, false),
+    ("worker lost with shuffle service", SlaveLost("", true), true, true),
+    ("worker lost without shuffle service", SlaveLost("", true), false, true),
+    ("executor failure with shuffle service", ExecutorKilled, true, false),
+    ("executor failure without shuffle service", ExecutorKilled, false, true))
+
+  for ((eventDescription, event, shuffleServiceOn, expectFileLoss) <- shuffleFileLossTests) {
+    val maybeLost = if (expectFileLoss) {
+      "lost"
+    } else {
+      "not lost"
+    }
+    test(s"shuffle files $maybeLost when $eventDescription") {
+      // reset the test context with the right shuffle service config
+      afterEach()
+      val conf = new SparkConf()
+      conf.set("spark.shuffle.service.enabled", shuffleServiceOn.toString)
+      init(conf)
+      assert(sc.env.blockManager.externalShuffleServiceEnabled == shuffleServiceOn)
+
+      val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+      val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+      val shuffleId = shuffleDep.shuffleId
+      val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
+      submit(reduceRdd, Array(0))
+      complete(taskSets(0), Seq(
+        (Success, makeMapStatus("hostA", 1)),
+        (Success, makeMapStatus("hostB", 1))))
+      runEvent(ExecutorLost("exec-hostA", event))
+      if (expectFileLoss) {
+        intercept[MetadataFetchFailedException] {
+          mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0)
+        }
+      } else {
+        assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+          HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+      }
+    }
+  }
 
   // Helper function to validate state when creating tests for task failures
   private def checkStageId(stageId: Int, attempt: Int, stageAttempt: TaskSet) {
     assert(stageAttempt.stageId === stageId)
     assert(stageAttempt.stageAttemptId == attempt)
   }
-
 
   // Helper functions to extract commonly used code in Fetch Failure test cases
   private def setupStageAbortTest(sc: SparkContext) {
@@ -1094,7 +1138,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
     // pretend we were told hostA went away
     val oldEpoch = mapOutputTracker.getEpoch
-    runEvent(ExecutorLost("exec-hostA"))
+    runEvent(ExecutorLost("exec-hostA", ExecutorKilled))
     val newEpoch = mapOutputTracker.getEpoch
     assert(newEpoch > oldEpoch)
 
@@ -1225,7 +1269,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     ))
 
     // then one executor dies, and a task fails in stage 1
-    runEvent(ExecutorLost("exec-hostA"))
+    runEvent(ExecutorLost("exec-hostA", ExecutorKilled))
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(0),
       FetchFailed(null, firstShuffleId, 2, 0, "Fetch failed"),
@@ -1323,7 +1367,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       makeMapStatus("hostA", reduceRdd.partitions.length)))
 
     // now that host goes down
-    runEvent(ExecutorLost("exec-hostA"))
+    runEvent(ExecutorLost("exec-hostA", ExecutorKilled))
 
     // so we resubmit those tasks
     runEvent(makeCompletionEvent(taskSets(0).tasks(0), Resubmitted, null))
@@ -1516,7 +1560,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     submit(reduceRdd, Array(0))
     // blockManagerMaster.removeExecutor("exec-hostA")
     // pretend we were told hostA went away
-    runEvent(ExecutorLost("exec-hostA"))
+    runEvent(ExecutorLost("exec-hostA", ExecutorKilled))
     // DAGScheduler will immediately resubmit the stage after it appears to have no pending tasks
     // rather than marking it is as failed and waiting.
     complete(taskSets(0), Seq(
@@ -1983,7 +2027,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
     // Pretend host A was lost
     val oldEpoch = mapOutputTracker.getEpoch
-    runEvent(ExecutorLost("exec-hostA"))
+    runEvent(ExecutorLost("exec-hostA", ExecutorKilled))
     val newEpoch = mapOutputTracker.getEpoch
     assert(newEpoch > oldEpoch)
 

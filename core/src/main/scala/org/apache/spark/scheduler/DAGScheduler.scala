@@ -233,8 +233,8 @@ class DAGScheduler(
   /**
    * Called by TaskScheduler implementation when an executor fails.
    */
-  def executorLost(execId: String): Unit = {
-    eventProcessLoop.post(ExecutorLost(execId))
+  def executorLost(execId: String, reason: ExecutorLossReason): Unit = {
+    eventProcessLoop.post(ExecutorLost(execId, reason))
   }
 
   /**
@@ -1297,7 +1297,7 @@ class DAGScheduler(
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
           if (bmAddress != null) {
-            handleExecutorLost(bmAddress.executorId, fetchFailed = true, Some(task.epoch))
+            handleExecutorLost(bmAddress.executorId, filesLost = true, Some(task.epoch))
           }
         }
 
@@ -1323,15 +1323,16 @@ class DAGScheduler(
    * modify the scheduler's internal state. Use executorLost() to post a loss event from outside.
    *
    * We will also assume that we've lost all shuffle blocks associated with the executor if the
-   * executor serves its own blocks (i.e., we're not using external shuffle) OR a FetchFailed
-   * occurred, in which case we presume all shuffle data related to this executor to be lost.
+   * executor serves its own blocks (i.e., we're not using external shuffle), the entire slave
+   * is lost (likely including the shuffle service), or a FetchFailed occurred, in which case we
+   * presume all shuffle data related to this executor to be lost.
    *
    * Optionally the epoch during which the failure was caught can be passed to avoid allowing
    * stray fetch failures from possibly retriggering the detection of a node as lost.
    */
   private[scheduler] def handleExecutorLost(
       execId: String,
-      fetchFailed: Boolean,
+      filesLost: Boolean,
       maybeEpoch: Option[Long] = None) {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
@@ -1339,7 +1340,8 @@ class DAGScheduler(
       logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
       blockManagerMaster.removeExecutor(execId)
 
-      if (!env.blockManager.externalShuffleServiceEnabled || fetchFailed) {
+      if (filesLost || !env.blockManager.externalShuffleServiceEnabled) {
+        logInfo("Shuffle files lost for executor: %s (epoch %d)".format(execId, currentEpoch))
         // TODO: This will be really slow if we keep accumulating shuffle map stages
         for ((shuffleId, stage) <- shuffleToMapStage) {
           stage.removeOutputsOnExecutor(execId)
@@ -1643,8 +1645,12 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case ExecutorAdded(execId, host) =>
       dagScheduler.handleExecutorAdded(execId, host)
 
-    case ExecutorLost(execId) =>
-      dagScheduler.handleExecutorLost(execId, fetchFailed = false)
+    case ExecutorLost(execId, reason) =>
+      val filesLost = reason match {
+        case SlaveLost(_, true) => true
+        case _ => false
+      }
+      dagScheduler.handleExecutorLost(execId, filesLost)
 
     case BeginEvent(task, taskInfo) =>
       dagScheduler.handleBeginEvent(task, taskInfo)
