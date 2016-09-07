@@ -19,14 +19,11 @@ package org.apache.spark.graphx.lib
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.graphx._
-import org.apache.spark.internal.Logging
-
-import org.apache.spark.ml.linalg.{Vectors, Vector}
-
 import breeze.linalg.{Vector => BV}
 
-import breeze.linalg.{SparseVector => BSV}
+import org.apache.spark.ml.linalg.{Vectors, Vector}
+import org.apache.spark.graphx._
+import org.apache.spark.internal.Logging
 
 /**
  * PageRank algorithm implementation. There are two implementations of PageRank implemented.
