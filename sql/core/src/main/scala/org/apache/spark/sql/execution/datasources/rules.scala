@@ -97,7 +97,12 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
     //   * sort columns' type must be orderable.
     case c @ CreateTable(tableDesc, mode, query) if c.childrenResolved =>
       val schema = if (query.isDefined) query.get.schema else tableDesc.schema
-      checkDuplication(schema.map(_.name), "table definition of " + tableDesc.identifier)
+      val columnNames = if (conf.caseSensitiveAnalysis) {
+        schema.map(_.name)
+      } else {
+        schema.map(_.name.toLowerCase)
+      }
+      checkDuplication(columnNames, "table definition of " + tableDesc.identifier)
 
       val partitionColsChecked = checkPartitionColumns(schema, tableDesc)
       val bucketColsChecked = checkBucketColumns(schema, partitionColsChecked)
