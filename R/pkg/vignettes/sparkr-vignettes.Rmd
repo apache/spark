@@ -11,7 +11,7 @@ output:
 
 ## Overview
 
-SparkR is an R package that provides a light-weight frontend to use Apache Spark from R. In Spark 2.0.0, SparkR provides a distributed data frame implementation that supports data processing operations like selection, filtering, aggregation etc. and distributed machine learning using [MLlib](http://spark.apache.org/mllib/).
+SparkR is an R package that provides a light-weight frontend to use Apache Spark from R. With Spark 2.0.0, SparkR provides a distributed data frame implementation that supports data processing operations like selection, filtering, aggregation etc. and distributed machine learning using [MLlib](http://spark.apache.org/mllib/).
 
 ## Getting Started
 
@@ -26,7 +26,7 @@ library(SparkR)
 
 We use default settings in which it runs in local mode. It auto downloads Spark package in the background if no previous installation is found. For more details about setup, see [Spark Session](#SetupSparkSession).
 
-```{r, message=FALSE, warning=FALSE}
+```{r, message=FALSE}
 sparkR.session()
 ```
 
@@ -39,26 +39,26 @@ cars <- cbind(model = rownames(mtcars), mtcars)
 carsDF <- createDataFrame(cars)
 ```
 
-We can view the first few rows of the `SparkDataFrame` by `showDF` or `head` function.
+We can view the first few rows of the `SparkDataFrame` by `head` or `showDF` function.
 ```{r}
-showDF(carsDF)
+head(carsDF)
 ```
 
 Common data processing operations such as `filter`, `select` are supported on the `SparkDataFrame`.
 ```{r}
 carsSubDF <- select(carsDF, "model", "mpg", "hp")
 carsSubDF <- filter(carsSubDF, carsSubDF$hp >= 200)
-showDF(carsSubDF)
+head(carsSubDF)
 ```
 
 SparkR can use many common aggregation functions after grouping.
 
 ```{r}
 carsGPDF <- summarize(groupBy(carsDF, carsDF$gear), count = n(carsDF$gear))
-showDF(carsGPDF)
+head(carsGPDF)
 ```
 
-The results `carsDF` and `carsSubDF` are `SparkDataFrame` objects. To convert back to R `data.frame`, we can use `collect`.
+The results `carsDF` and `carsSubDF` are `SparkDataFrame` objects. To convert back to R `data.frame`, we can use `collect`. *Caution*: This can cause the driver to run out of memory, though, because `collect()` fetches the entire distributed `DataFrame` to a single machine;
 ```{r}
 carsGP <- collect(carsGPDF)
 class(carsGP)
@@ -68,7 +68,7 @@ SparkR supports a number of commonly used machine learning algorithms. Under the
 
 SparkR supports a subset of R formula operators for model fitting, including ‘~’, ‘.’, ‘:’, ‘+’, and ‘-‘. We use linear regression as an example.
 ```{r}
-model <- spark.glm(carsDF, mpg ~ wt + cyl)
+model <- spark.glm(data = carsDF, formula = mpg ~ wt + cyl)
 ```
 
 ```{r}
@@ -91,7 +91,7 @@ sparkR.session.stop()
 
 Different from many other R packages, to use SparkR, you need an additional installation of Apache Spark. The Spark installation will be used to run a backend process that will compile and execute SparkR programs.
 
-If you don't have Spark installed on the computer, you may download it from [Apache Spark Website](http://spark.apache.org/downloads.html). Alternatively, we provide an easy-to-use function `install.spark` to complete this process.
+If you don't have Spark installed on the computer, you may download it from [Apache Spark Website](http://spark.apache.org/downloads.html). Alternatively, we provide an easy-to-use function `install.spark` to complete this process. You don't have to call it explicitly. We will check the installation when `sparkR.session` is called and `install.spark` function will be  triggered automatically if no installation is found.
 
 ```{r, eval=FALSE}
 install.spark()
@@ -105,12 +105,6 @@ sparkR.session(sparkHome = "/HOME/spark")
 
 ### Spark Session {#SetupSparkSession}
 
-**For Windows users**: Due to different file prefixes across operating systems, to avoid the issue of potential wrong prefix, a current workaround is to specify `spark.sql.warehouse.dir` when starting the `SparkSession`.
-
-```{r, eval=FALSE}
-spark_warehouse_path <- file.path(path.expand('~'), "spark-warehouse")
-sparkR.session(spark.sql.warehouse.dir = spark_warehouse_path)
-```
 
 In addition to `sparkHome`, many other options can be specified in `sparkR.session`. For a complete list, see the [SparkR API doc](http://spark.apache.org/docs/latest/api/R/sparkR.session.html).
 
@@ -123,9 +117,15 @@ spark.driver.extraClassPath | Runtime Environment | --driver-class-path
 spark.driver.extraJavaOptions | Runtime Environment | --driver-java-options
 spark.driver.extraLibraryPath | Runtime Environment | --driver-library-path
 
+**For Windows users**: Due to different file prefixes across operating systems, to avoid the issue of potential wrong prefix, a current workaround is to specify `spark.sql.warehouse.dir` when starting the `SparkSession`.
+
+```{r, eval=FALSE}
+spark_warehouse_path <- file.path(path.expand('~'), "spark-warehouse")
+sparkR.session(spark.sql.warehouse.dir = spark_warehouse_path)
+```
 
 
-### Cluster Mode
+#### Cluster Mode
 SparkR can connect to remote Spark clusters. [Cluster Mode Overview](http://spark.apache.org/docs/latest/cluster-overview.html) is a good introduction to different Spark cluster modes.
 
 When connecting SparkR to a remote Spark cluster, make sure that the Spark version and Hadoop version on the machine match the corresponding versions on the cluster. Current SparkR package is compatible with
@@ -145,7 +145,7 @@ For YARN cluster, SparkR supports the client mode with the master set as "yarn".
 ```{r, eval=FALSE}
 sparkR.session(master = "yarn")
 ```
-
+Yarn cluster mode is not supported in the current version.
 
 ## Data Import
 
@@ -261,7 +261,7 @@ You can also pass in column name as strings.
 head(select(carsDF, "mpg"))
 ```
 
-Filter the SparkDataFrame to only retain rows with wait times shorter than 50 mins.
+Filter the SparkDataFrame to only retain rows with mpg less than 20 miles/gallon.
 ```{r}
 head(filter(carsDF, carsDF$mpg < 20))
 ```
@@ -274,7 +274,7 @@ A common flow of grouping and aggregation is
 
 2. Feed the `GroupedData` object to `agg` or `summarize` functions, with some provided aggregation functions to compute a number within each group.
 
-A number of widely used functions are supported to aggregate data after grouping, including `avg`, `countDistinct`, `count`, `first`, `kurtosis`, `last`, `max`, `mean`, `min`, `sd`, `skewness`, `stddev_pop`, `stddev_samp`, `sumDistinct`, `sum`, `var_pop`, `var_samp`, `var`.
+A number of widely used functions are supported to aggregate data after grouping, including `avg`, `countDistinct`, `count`, `first`, `kurtosis`, `last`, `max`, `mean`, `min`, `sd`, `skewness`, `stddev_pop`, `stddev_samp`, `sumDistinct`, `sum`, `var_pop`, `var_samp`, `var`. See the [API doc for `mean`](http://spark.apache.org/docs/latest/api/R/mean.html) and other `agg_funcs` linked there.
 
 For example we can compute a histogram of the number of cylinders in the `mtcars` dataset as shown below.
 
@@ -310,7 +310,7 @@ We still use the `mtcars` dataset. The corresponding `SparkDataFrame` is `carsDF
 carsSubDF <- select(carsDF, "model", "mpg", "cyl")
 ws <- orderBy(windowPartitionBy("cyl"), "mpg")
 carsRank <- withColumn(carsSubDF, "rank", over(rank(), ws))
-showDF(carsRank)
+head(carsRank, n = 20L)
 ```
 
 We explain in detail the above steps.
@@ -319,7 +319,7 @@ We explain in detail the above steps.
 
 More window specification methods include `rangeBetween`, which can define boundaries of the frame by value, and `rowsBetween`, which can define the boundaries by row indices.
 
-* `withColumn` appends a Column called `"rank"` to the `SparkDataFrame`. `over` returns a windowing column. The first argument is usually a Column returned by window function(s) such as `rank()`, `lead(carsDF$wt)`. That calculates the corresponding values according to the partitioned-and-ordered table.
+* `withColumn` appends a Column called `rank` to the `SparkDataFrame`. `over` returns a windowing column. The first argument is usually a Column returned by window function(s) such as `rank()`, `lead(carsDF$wt)`. That calculates the corresponding values according to the partitioned-and-ordered table.
 
 ### User-Defined Function
 
@@ -516,7 +516,7 @@ titanicDF <- createDataFrame(titanic[titanic$Freq > 0, -5])
 naiveBayesModel <- spark.naiveBayes(titanicDF, Survived ~ Class + Sex + Age)
 summary(naiveBayesModel)
 naiveBayesPrediction <- predict(naiveBayesModel, titanicDF)
-showDF(select(naiveBayesPrediction, "Class", "Sex", "Age", "Survived", "prediction"))
+head(select(naiveBayesPrediction, "Class", "Sex", "Age", "Survived", "prediction"))
 ```
 
 #### k-Means Clustering
@@ -527,7 +527,7 @@ showDF(select(naiveBayesPrediction, "Class", "Sex", "Age", "Survived", "predicti
 kmeansModel <- spark.kmeans(carsDF, ~ mpg + hp + wt, k = 3)
 summary(kmeansModel)
 kmeansPredictions <- predict(kmeansModel, carsDF)
-showDF(select(kmeansPredictions, "model", "mpg", "hp", "wt", "prediction"))
+head(select(kmeansPredictions, "model", "mpg", "hp", "wt", "prediction"), n = 20L)
 ```
 
 #### AFT Survival Model
@@ -558,7 +558,7 @@ df <- createDataFrame(data)
 gmmModel <- spark.gaussianMixture(df, ~ V1 + V2, k = 2)
 summary(gmmModel)
 gmmFitted <- predict(gmmModel, df)
-showDF(select(gmmFitted, "V1", "V2", "prediction"))
+head(select(gmmFitted, "V1", "V2", "prediction"))
 ```
 
 
@@ -700,7 +700,7 @@ Make predictions.
 
 ```{r}
 predicted <- predict(model, df)
-showDF(predicted)
+head(predicted)
 ```
 
 #### Isotonic Regression Model
@@ -767,7 +767,7 @@ summary(gaussianGLM2)
 
 # Check model prediction
 gaussianPredictions <- predict(gaussianGLM2, irisDF)
-showDF(gaussianPredictions)
+head(gaussianPredictions)
 
 unlink(modelPath)
 ```
@@ -795,7 +795,7 @@ This is often an intermediate object with group information and followed up by a
 
 ### Architecture
 
-A complete description of architecture can be seen in paper [SparkR: Scaling R Programs with Spark](https://people.csail.mit.edu/matei/papers/2016/sigmod_sparkr.pdf), Shivaram Venkataraman, Zongheng Yang, Davies Liu, Eric Liang, Hossein Falaki, Xiangrui Meng, Reynold Xin, Ali Ghodsi, Michael Franklin, Ion Stoica, and Matei Zaharia. SIGMOD 2016. June 2016.
+A complete description of architecture can be seen in reference, in particular the paper *SparkR: Scaling R Programs with Spark*.
 
 Under the hood of SparkR is Spark SQL engine. This avoids the overheads of running interpreted R code, and the optimized SQL execution engine in Spark uses structural information about data and computation flow to perform a bunch of optimizations to speed up the computation.
 
@@ -803,13 +803,13 @@ The main method calls of actual computation happen in the Spark JVM of the drive
 
 Two kinds of RPCs are supported in the SparkR JVM backend: method invocation and creating new objects. Method invocation can be done in two ways.
 
-* `invokeJMethod` takes a reference to an existing Java object and a list of arguments to be passed on to the method.
+* `sparkR.invokeJMethod` takes a reference to an existing Java object and a list of arguments to be passed on to the method.
 
-* `invokeJStatic` takes a class name for static method and a list of arguments to be passed on to the method.
+* `sparkR.invokeJStatic` takes a class name for static method and a list of arguments to be passed on to the method.
 
 The arguments are serialized using our custom wire format which is then deserialized on the JVM side. We then use Java reflection to invoke the appropriate method.
 
-To create objects, a special method name `init` is used and then similarly the appropriate constructor is invoked with provided arguments.
+To create objects, `sparkR.newJObject` is used and then similarly the appropriate constructor is invoked with provided arguments.
 
 Finally, we use a new R class `jobj` that refers to a Java object existing in the backend. These references are tracked on the Java side and are automatically garbage collected when they go out of scope on the R side.
 
