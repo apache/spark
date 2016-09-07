@@ -252,7 +252,7 @@ private[deploy] class Master(
             appInfo.resetRetryCount()
           }
 
-          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus))
+          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus, false))
 
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
@@ -766,7 +766,7 @@ private[deploy] class Master(
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
       exec.application.driver.send(ExecutorUpdated(
-        exec.id, ExecutorState.LOST, Some("worker lost"), None))
+        exec.id, ExecutorState.LOST, Some("worker lost"), None, workerLost = true))
       exec.state = ExecutorState.LOST
       exec.application.removeExecutor(exec)
     }
