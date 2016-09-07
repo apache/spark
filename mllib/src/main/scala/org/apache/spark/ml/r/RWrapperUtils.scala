@@ -19,6 +19,7 @@ package org.apache.spark.ml.r
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.Dataset
 
 object RWrapperUtils extends Logging {
@@ -35,30 +36,10 @@ object RWrapperUtils extends Logging {
    */
   def checkDataColumns(rFormula: RFormula, data: Dataset[_]): Unit = {
     if (data.schema.fieldNames.contains(rFormula.getFeaturesCol)) {
-      val newFeaturesName = convertToUniqueName(rFormula.getFeaturesCol, data.schema.fieldNames)
+      val newFeaturesName = s"${Identifiable.randomUID(rFormula.getFeaturesCol)}"
       logWarning(s"data containing ${rFormula.getFeaturesCol} column, " +
         s"using new name $newFeaturesName instead")
       rFormula.setFeaturesCol(newFeaturesName)
     }
-  }
-
-  /**
-   * Convert conflicting name to be an unique name.
-   * Appending a sequence number, like originalName_output1
-   * and incrementing until it is not already there
-   *
-   * @param originalName Original name
-   * @param fieldNames Array of field names in existing schema
-   * @return String
-   */
-  def convertToUniqueName(originalName: String, fieldNames: Array[String]): String = {
-    var counter = 1
-    var newName = originalName + "_output"
-
-    while (fieldNames.contains(newName)) {
-      newName = originalName + "_output" + counter
-      counter += 1
-    }
-    newName
   }
 }
