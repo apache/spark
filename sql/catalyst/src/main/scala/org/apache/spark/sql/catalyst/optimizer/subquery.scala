@@ -53,27 +53,55 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       }
 
       // Filter the plan by applying left semi and left anti joins.
-      withSubquery.foldLeft(newFilter) {
-        case (p, PredicateSubquery(sub, conditions, _, _)) =>
-          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          Join(outerPlan, sub, LeftSemi, joinCond)
-        case (p, Not(PredicateSubquery(sub, conditions, false, _))) =>
-          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          Join(outerPlan, sub, LeftAnti, joinCond)
-        case (p, Not(PredicateSubquery(sub, conditions, true, _))) =>
-          // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
-          // Construct the condition. A NULL in one of the conditions is regarded as a positive
-          // result; such a row will be filtered out by the Anti-Join operator.
+      rewritePredicateSubquery(withSubquery, newFilter)
 
-          // Note that will almost certainly be planned as a Broadcast Nested Loop join.
-          // Use EXISTS if performance matters to you.
-          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          val anyNull = splitConjunctivePredicates(joinCond.get).map(IsNull).reduceLeft(Or)
-          Join(outerPlan, sub, LeftAnti, Option(Or(anyNull, joinCond.get)))
-        case (p, predicate) =>
-          val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
-          Project(p.output, Filter(newCond.get, inputPlan))
+    case Scanner(projectList, filters, child) if filters.exists(
+      PredicateSubquery.hasPredicateSubquery(_)) =>
+      val (withSubquery, withoutSubquery) =
+        filters.partition(PredicateSubquery.hasPredicateSubquery)
+
+      val newFilter: LogicalPlan = withoutSubquery match {
+        case Nil => Scanner(child)
+        case conditions => Scanner(conditions.reduce(And), child)
       }
+
+      val newPlan = rewritePredicateSubquery(withSubquery, newFilter)
+
+      if (newPlan.output.forall(projectList.contains(_))) {
+        newPlan
+      } else {
+        Project(projectList, newPlan)
+      }
+  }
+
+  /**
+   * Re-construct the plan by applying left semi and left anti joins instead of predicate
+   * subquerys.
+   */
+  private def rewritePredicateSubquery(
+      predicateSubquerys: Seq[Expression],
+      filter: LogicalPlan): LogicalPlan = {
+    predicateSubquerys.foldLeft(filter) {
+      case (p, PredicateSubquery(sub, conditions, _, _)) =>
+        val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
+        Join(outerPlan, sub, LeftSemi, joinCond)
+      case (p, Not(PredicateSubquery(sub, conditions, false, _))) =>
+        val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
+        Join(outerPlan, sub, LeftAnti, joinCond)
+      case (p, Not(PredicateSubquery(sub, conditions, true, _))) =>
+        // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
+        // Construct the condition. A NULL in one of the conditions is regarded as a positive
+        // result; such a row will be filtered out by the Anti-Join operator.
+
+        // Note that will almost certainly be planned as a Broadcast Nested Loop join.
+        // Use EXISTS if performance matters to you.
+        val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
+        val anyNull = splitConjunctivePredicates(joinCond.get).map(IsNull).reduceLeft(Or)
+        Join(outerPlan, sub, LeftAnti, Option(Or(anyNull, joinCond.get)))
+      case (p, predicate) =>
+        val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
+        Project(p.output, Filter(newCond.get, inputPlan))
+    }
   }
 
   /**
