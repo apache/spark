@@ -26,8 +26,8 @@ object RWrapperUtils extends Logging {
 
   /**
    * DataFrame column check.
-   * When loading data, default columns "features" and "label" will be added. And these two names
-   * would conflict with RFormula default feature and label column names.
+   * When loading libsvm data, default columns "features" and "label" will be added.
+   * And "features" would conflict with RFormula default feature column names.
    * Here is to change the column name to avoid "column already exists" error.
    *
    * @param rFormula RFormula instance
