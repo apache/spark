@@ -312,23 +312,22 @@ object TypeCoercion {
       case p @ Equality(left @ TimestampType(), right @ StringType()) =>
         p.makeCopy(Array(left, Cast(right, TimestampType)))
 
-      // We should cast all relative timestamp/date/string comparison into string comparisons
-      // This behaves as a user would expect because timestamp strings sort lexicographically.
-      // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
+      // Parsing of partial dates/timestamps has been added for SPARK-8995 hence
+      // converting strings to dates/timestamps.
       case p @ BinaryComparison(left @ StringType(), right @ DateType()) =>
-        p.makeCopy(Array(left, Cast(right, StringType)))
+        p.makeCopy(Array(Cast(left, DateType), right))
       case p @ BinaryComparison(left @ DateType(), right @ StringType()) =>
-        p.makeCopy(Array(Cast(left, StringType), right))
+        p.makeCopy(Array(left, Cast(right, DateType)))
       case p @ BinaryComparison(left @ StringType(), right @ TimestampType()) =>
-        p.makeCopy(Array(left, Cast(right, StringType)))
+        p.makeCopy(Array(Cast(left, TimestampType), right))
       case p @ BinaryComparison(left @ TimestampType(), right @ StringType()) =>
-        p.makeCopy(Array(Cast(left, StringType), right))
+        p.makeCopy(Array(left, Cast(right, TimestampType)))
 
       // Comparisons between dates and timestamps.
       case p @ BinaryComparison(left @ TimestampType(), right @ DateType()) =>
-        p.makeCopy(Array(Cast(left, StringType), Cast(right, StringType)))
+        p.makeCopy(Array(left, Cast(right, TimestampType)))
       case p @ BinaryComparison(left @ DateType(), right @ TimestampType()) =>
-        p.makeCopy(Array(Cast(left, StringType), Cast(right, StringType)))
+        p.makeCopy(Array(Cast(left, TimestampType), right))
 
       // Checking NullType
       case p @ BinaryComparison(left @ StringType(), right @ NullType()) =>
@@ -342,13 +341,13 @@ object TypeCoercion {
         p.makeCopy(Array(left, Cast(right, DoubleType)))
 
       case i @ In(a @ DateType(), b) if b.forall(_.dataType == StringType) =>
-        i.makeCopy(Array(Cast(a, StringType), b))
+        i.makeCopy(Array(a, b.map(Cast(_, DateType))))
       case i @ In(a @ TimestampType(), b) if b.forall(_.dataType == StringType) =>
         i.makeCopy(Array(a, b.map(Cast(_, TimestampType))))
       case i @ In(a @ DateType(), b) if b.forall(_.dataType == TimestampType) =>
-        i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
+        i.makeCopy(Array(Cast(a, TimestampType), b))
       case i @ In(a @ TimestampType(), b) if b.forall(_.dataType == DateType) =>
-        i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
+        i.makeCopy(Array(a, b.map(Cast(_, TimestampType))))
 
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
