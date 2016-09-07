@@ -238,7 +238,7 @@ private[spark] class ExternalSorter[K, V, C](
   override protected[this] def spill(collection: WritablePartitionedPairCollection[K, C]): Unit = {
     val inMemoryIterator = collection.destructiveSortedWritablePartitionedIterator(comparator)
     val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)
-    spills.append(spillFile)
+    spills += spillFile
   }
 
   /**
@@ -285,7 +285,7 @@ private[spark] class ExternalSorter[K, V, C](
     // The writer is committed at the end of this process.
     def flush(): Unit = {
       val segment = writer.commitAndGet()
-      batchSizes.append(segment.length)
+      batchSizes += segment.length
       _diskBytesSpilled += segment.length
       objectsWritten = 0
     }
@@ -796,7 +796,7 @@ private[spark] class ExternalSorter[K, V, C](
         logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
           s" it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
         val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)
-        forceSpillFiles.append(spillFile)
+        forceSpillFiles += spillFile
         val spillReader = new SpillReader(spillFile)
         nextUpstream = (0 until numPartitions).iterator.flatMap { p =>
           val iterator = spillReader.readNextPartition()

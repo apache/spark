@@ -332,14 +332,14 @@ private[yarn] class YarnAllocator(
       val newLocalityRequests = new mutable.ArrayBuffer[ContainerRequest]
       containerLocalityPreferences.foreach {
         case ContainerLocalityPreferences(nodes, racks) if nodes != null =>
-          newLocalityRequests.append(createContainerRequest(resource, nodes, racks))
+          newLocalityRequests += createContainerRequest(resource, nodes, racks)
         case _ =>
       }
 
       if (availableContainers >= newLocalityRequests.size) {
         // more containers are available than needed for locality, fill in requests for any host
         for (i <- 0 until (availableContainers - newLocalityRequests.size)) {
-          newLocalityRequests.append(createContainerRequest(resource, null, null))
+          newLocalityRequests += createContainerRequest(resource, null, null)
         }
       } else {
         val numToCancel = newLocalityRequests.size - availableContainers
