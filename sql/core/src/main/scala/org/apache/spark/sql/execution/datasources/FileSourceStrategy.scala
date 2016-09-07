@@ -102,7 +102,8 @@ object FileSourceStrategy extends Strategy with Logging {
         val requiredColumnsWithNesting = generateRequiredColumnsContainsNesting(
           projects, readDataColumns.attrs.map(_.name).toArray)
         val totalSchema = readDataColumns.toStructType
-        val prunedSchema = StructType(requiredColumnsWithNesting.map(totalSchema(_)))
+        val prunedSchema = StructType(requiredColumnsWithNesting
+          .map(totalSchema.getFieldRecursively))
         // Merge schema in same StructType and merge with filterAttributes
         prunedSchema.fields.map(f => StructType(Array(f))).reduceLeft(_ merge _)
           .merge(filterAttributes.toSeq.toStructType)
@@ -157,14 +158,14 @@ object FileSourceStrategy extends Strategy with Logging {
           if (isNestField && curString.isDefined) {
             val attrStr = attr.name
             if (nestFieldMap.contains(attrStr)) {
-              nestFieldMap(attrStr) = nestFieldMap(attrStr) ++ Seq(attrStr + "." + curString.get)
+              nestFieldMap(attrStr) = nestFieldMap(attrStr) ++ Seq(attrStr + "#" + curString.get)
             } else {
-              nestFieldMap += (attrStr -> Seq(attrStr + "." + curString.get))
+              nestFieldMap += (attrStr -> Seq(attrStr + "#" + curString.get))
             }
           }
         case sf: GetStructField =>
           val str = if (curString.isDefined) {
-            sf.name.get + "." + curString.get
+            sf.name.get + "#" + curString.get
           } else sf.name.get
           generateAttributeMap(nestFieldMap, isNestField = true, Option(str), sf.child)
         case _ =>
