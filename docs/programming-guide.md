@@ -24,7 +24,7 @@ along with if you launch Spark's interactive shell -- either `bin/spark-shell` f
 
 <div data-lang="scala"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} is built and distributed to work with Scala {{site.SCALA_BINARY_VERSION}} 
+Spark {{site.SPARK_VERSION}} is built and distributed to work with Scala {{site.SCALA_BINARY_VERSION}}
 by default. (Spark can be built to work with other versions of Scala, too.) To write
 applications in Scala, you will need to use a compatible Scala version (e.g. {{site.SCALA_BINARY_VERSION}}.X).
 
@@ -211,7 +211,7 @@ For a complete list of options, run `spark-shell --help`. Behind the scenes,
 
 In the PySpark shell, a special interpreter-aware SparkContext is already created for you, in the
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
-context connects to using the `--master` argument, and you can add Python .zip, .egg or .py files
+context connects to using the `--master` argument, and you can add Python .zip, .egg, .whl or .py files
 to the runtime path by passing a comma-separated list to `--py-files`. You can also add dependencies
 (e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
 to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)
@@ -240,13 +240,13 @@ use IPython, set the `PYSPARK_DRIVER_PYTHON` variable to `ipython` when running 
 $ PYSPARK_DRIVER_PYTHON=ipython ./bin/pyspark
 {% endhighlight %}
 
-To use the Jupyter notebook (previously known as the IPython notebook), 
+To use the Jupyter notebook (previously known as the IPython notebook),
 
 {% highlight bash %}
 $ PYSPARK_DRIVER_PYTHON=jupyter ./bin/pyspark
 {% endhighlight %}
 
-You can customize the `ipython` or `jupyter` commands by setting `PYSPARK_DRIVER_PYTHON_OPTS`. 
+You can customize the `ipython` or `jupyter` commands by setting `PYSPARK_DRIVER_PYTHON_OPTS`.
 
 After the Jupyter Notebook server is launched, you can create a new "Python 2" notebook from
 the "Files" tab. Inside the notebook, you can input the command `%pylab inline` as part of
@@ -812,7 +812,7 @@ The variables within the closure sent to each executor are now copies and thus, 
 
 In local mode, in some circumstances the `foreach` function will actually execute within the same JVM as the driver and will reference the same original **counter**, and may actually update it.
 
-To ensure well-defined behavior in these sorts of scenarios one should use an [`Accumulator`](#accumulators). Accumulators in Spark are used specifically to provide a mechanism for safely updating a variable when execution is split up across worker nodes in a cluster. The Accumulators section of this guide discusses these in more detail.  
+To ensure well-defined behavior in these sorts of scenarios one should use an [`Accumulator`](#accumulators). Accumulators in Spark are used specifically to provide a mechanism for safely updating a variable when execution is split up across worker nodes in a cluster. The Accumulators section of this guide discusses these in more detail.
 
 In general, closures - constructs like loops or locally defined methods, should not be used to mutate some global state. Spark does not define or guarantee the behavior of mutations to objects referenced from outside of closures. Some code that does this may work in local mode, but that's just by accident and such code will not behave as expected in distributed mode. Use an Accumulator instead if some global aggregation is needed.
 
@@ -1231,8 +1231,8 @@ storage levels is:
 </tr>
 </table>
 
-**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library, 
-so it does not matter whether you choose a serialized level. The available storage levels in Python include `MEMORY_ONLY`, `MEMORY_ONLY_2`, 
+**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library,
+so it does not matter whether you choose a serialized level. The available storage levels in Python include `MEMORY_ONLY`, `MEMORY_ONLY_2`,
 `MEMORY_AND_DISK`, `MEMORY_AND_DISK_2`, `DISK_ONLY`, and `DISK_ONLY_2`.*
 
 Spark also automatically persists some intermediate data in shuffle operations (e.g. `reduceByKey`), even without users calling `persist`. This is done to avoid recomputing the entire input if a node fails during the shuffle. We still recommend users call `persist` on the resulting RDD if they plan to reuse it.
@@ -1374,7 +1374,7 @@ res2: Long = 10
 
 While this code used the built-in support for accumulators of type Long, programmers can also
 create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.AccumulatorV2).
-The AccumulatorV2 abstract class has several methods which need to override: 
+The AccumulatorV2 abstract class has several methods which need to override:
 `reset` for resetting the accumulator to zero, and `add` for add anothor value into the accumulator, `merge` for merging another same-type accumulator into this one. Other methods need to override can refer to scala API document. For example, supposing we had a `MyVector` class
 representing mathematical vectors, we could write:
 

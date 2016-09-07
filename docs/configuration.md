@@ -392,7 +392,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.submit.pyFiles</code></td>
   <td></td>
   <td>
-    Comma-separated list of .zip, .egg, or .py files to place on the PYTHONPATH for Python apps.
+    Comma-separated list of .zip, .egg, .whl or .py files to place on the PYTHONPATH for Python apps.
   </td>
 </tr>
 <tr>

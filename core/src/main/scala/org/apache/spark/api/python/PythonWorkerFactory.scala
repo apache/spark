@@ -18,14 +18,18 @@
 package org.apache.spark.api.python
 
 import java.io.{DataInputStream, DataOutputStream, InputStream, OutputStreamWriter}
+import java.io.{File, FileInputStream, FileOutputStream, IOException}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 import java.nio.charset.StandardCharsets
+import java.nio.file.{Paths, Files}
 import java.util.Arrays
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.zip.{ZipEntry, ZipInputStream}
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
+import org.apache.commons.io.IOUtils
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{RedirectThread, Utils}
@@ -50,11 +54,31 @@ private[spark] class PythonWorkerFactory(pythonExec: String,
   val daemonWorkers = new mutable.WeakHashMap[Socket, Int]()
   val idleWorkers = new mutable.Queue[Socket]()
   var lastActivity = 0L
+  val sparkFiles = conf.getOption("spark.files")
   val virtualEnvEnabled = conf.getBoolean("spark.pyspark.virtualenv.enabled", false)
   val virtualEnvType = conf.get("spark.pyspark.virtualenv.type", "native")
-  val virtualEnvPath = conf.get("spark.pyspark.virtualenv.bin.path", "")
+  val virtualEnvPath = conf.get("spark.pyspark.virtualenv.bin.path", "virtualenv")
+  val virtualEnvSystemSitePackages = conf.getBoolean(
+    "spark.pyspark.virtualenv.system_site_packages", false)
+  val virtualWheelhouse = conf.get("spark.pyspark.virtualenv.wheelhouse", "wheelhouse.zip")
+  // virtualRequirements is empty string by default
+  val virtualRequirements = conf.get("spark.pyspark.virtualenv.requirements", "")
+  val virtualIndexUrl = conf.get("spark.pyspark.virtualenv.index_url", null)
+  val virtualTrustedHost = conf.get("spark.pyspark.virtualenv.trusted_host", null)
+  val virtualInstallPackage = conf.get("spark.pyspark.virtualenv.install_package", null)
+  val upgradePip = conf.getBoolean("spark.pyspark.virtualenv.upgrade_pip", false)
+  val virtualUseIndex = conf.getBoolean("spark.pyspark.virtualenv.use_index", true)
   var virtualEnvName: String = _
   var virtualPythonExec: String = _
+
+  // search for "wheelhouse.zip" to trigger unzipping and installation of wheelhouse
+  // also search for "requirements.txt if provided"
+  for (filename <- sparkFiles.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten) {
+    logDebug("Looking inside" + filename)
+    val file = new File(filename)
+    val prefixes = Iterator.iterate(file)(_.getParentFile).takeWhile(_ != null).toList.reverse
+    logDebug("=> prefixes" + prefixes)
+  }
 
   new MonitorThread().start()
 
@@ -65,7 +89,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String,
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
 
-  if (conf.getBoolean("spark.pyspark.virtualenv.enabled", false)) {
+  if (virtualEnvEnabled) {
     setupVirtualEnv()
   }
 
@@ -82,15 +106,73 @@ private[spark] class PythonWorkerFactory(pythonExec: String,
     }
   }
 
+
+  def unzipWheelhouse(zipFile: String, outputFolder: String): Unit = {
+    val buffer = new Array[Byte](1024)
+    try {
+      // output directory
+      val folder = new File(outputFolder);
+      if (!folder.exists()) {
+        folder.mkdir();
+      }
+
+      // zip file content
+      val zis: ZipInputStream = new ZipInputStream(new FileInputStream(zipFile));
+      // get the zipped file list entry
+      var ze: ZipEntry = zis.getNextEntry();
+
+      while (ze != null) {
+        if (!ze.isDirectory()) {
+          val fileName = ze.getName();
+          val newFile = new File(outputFolder + File.separator + fileName);
+          logDebug("Unzipping file " + newFile.getAbsoluteFile());
+
+          // create folders
+          new File(newFile.getParent()).mkdirs();
+          val fos = new FileOutputStream(newFile);
+          var len: Int = zis.read(buffer);
+
+          while (len > 0) {
+            fos.write(buffer, 0, len)
+            len = zis.read(buffer)
+          }
+          fos.close()
+        }
+        ze = zis.getNextEntry()
+      }
+      zis.closeEntry()
+      zis.close()
+    } catch {
+      case e: IOException => logError("exception caught: " + e.getMessage)
+    }
+  }
+
   /**
    * Create virtualenv using native virtualenv or conda
    *
    * Native Virtualenv:
-   *   -  Execute command: virtualenv -p pythonExec --no-site-packages virtualenvName
-   *   -  Execute command: python -m pip --cache-dir cache-dir install -r requirement_file
+   *   -  Install virtualenv:
+   *         virtualenv -p pythonExec [--system-site-packages] virtualenvName
+   *   -  if wheelhouse specified:
+   *        - unzip wheelhouse
+   *        - upgrade pip if set by conf (default: no)
+   *        - install using pip:
+   *
+   *            pip install -r requirement_file.txt \
+   *                        --find-links=wheelhouse  \
+   *                        [--no-index] \
+   *                        [--index-url http://pypi.mirror/simple] [--trusted-host pypi.mirror] \
+   *                        [package.whl]
+   *
+   *      else, if no wheelhouse is set:
+   *
+   *        pip install -r requirement_file.txt \
+   *                    [--no-index] \
+   *                    [--index-url http://pypi.mirror/simple] [--trusted-host pypi.mirror] \
+   *                    [package.whl]
    *
    * Conda
-   *   -  Execute command: conda create --name virtualenvName --file requirement_file -y
+   *   -  Execute command: conda create --name virtualenvName --file requirement_file.txt -y
    *
    */
   def setupVirtualEnv(): Unit = {
@@ -100,41 +182,114 @@ private[spark] class PythonWorkerFactory(pythonExec: String,
     // fetched from FileServer
     val pyspark_requirements =
       if (Utils.isLocalMaster(conf)) {
-        conf.get("spark.pyspark.virtualenv.requirements")
+        virtualRequirements
       } else {
-        conf.get("spark.pyspark.virtualenv.requirements").split("/").last
+        virtualRequirements.split("/").last
       }
+
+    logDebug("wheelhouse: " + virtualWheelhouse)
+    if (virtualWheelhouse != null &&
+        !virtualWheelhouse.isEmpty &&
+        Files.exists(Paths.get(virtualWheelhouse))) {
+      logDebug("Unziping wheelhouse archive " + virtualWheelhouse)
+      unzipWheelhouse(virtualWheelhouse, "wheelhouse")
+    }
 
     val createEnvCommand =
       if (virtualEnvType == "native") {
-        Arrays.asList(virtualEnvPath,
-          "-p", pythonExec,
-          "--no-site-packages", virtualEnvName)
+        if (virtualEnvSystemSitePackages) {
+          Arrays.asList(virtualEnvPath, "-p", pythonExec, "--system-site-packages", virtualEnvName)
+        }
+        else {
+          Arrays.asList(virtualEnvPath, "-p", pythonExec, virtualEnvName)
+        }
       } else {
-        Arrays.asList(virtualEnvPath,
-          "create", "--prefix", System.getProperty("user.dir") + "/" + virtualEnvName,
-          "--file", pyspark_requirements, "-y")
+        // Conda creates everything and install the packages
+        var basePipArgs = mutable.ListBuffer[String]()
+        basePipArgs += (virtualEnvPath,
+                        "create",
+                        "--prefix",
+                        System.getProperty("user.dir") + "/" + virtualEnvName)
+        if (pyspark_requirements != null && !pyspark_requirements.isEmpty) {
+            basePipArgs += ("--file", pyspark_requirements)
+        }
+        basePipArgs += ("-y")
+        basePipArgs.toList.asJava
       }
     execCommand(createEnvCommand)
-    // virtualenv will be created in the working directory of Executor.
     virtualPythonExec = virtualEnvName + "/bin/python"
+
+    // virtualenv will be created in the working directory of Executor.
     if (virtualEnvType == "native") {
-      execCommand(Arrays.asList(virtualPythonExec, "-m", "pip",
-        "--cache-dir", System.getProperty("user.home"),
-        "install", "-r", pyspark_requirements))
+      var virtualenvPipExec = virtualEnvName + "/bin/pip"
+      var pipUpgradeArgs = mutable.ListBuffer[String]()
+      if (upgradePip){
+        pipUpgradeArgs += (virtualenvPipExec, "install", "--upgrade", "pip")
+      }
+      var basePipArgs = mutable.ListBuffer[String]()
+      basePipArgs += (virtualenvPipExec, "install")
+      if (pyspark_requirements != null && !pyspark_requirements.isEmpty) {
+        basePipArgs += ("-r", pyspark_requirements)
+      }
+      if (virtualWheelhouse != null &&
+          !virtualWheelhouse.isEmpty &&
+          Files.exists(Paths.get(virtualWheelhouse))) {
+        basePipArgs += ("--find-links=wheelhouse")
+        pipUpgradeArgs += ("--find-links=wheelhouse")
+      }
+      if (virtualIndexUrl != null && !virtualIndexUrl.isEmpty) {
+        basePipArgs += ("--index-url", virtualIndexUrl)
+        pipUpgradeArgs += ("--index-url", virtualIndexUrl)
+      } else if (! virtualUseIndex){
+        basePipArgs += ("--no-index")
+        pipUpgradeArgs += ("--no-index")
+      }
+      if (virtualTrustedHost != null && !virtualTrustedHost.isEmpty) {
+        basePipArgs += ("--trusted-host", virtualTrustedHost)
+        pipUpgradeArgs += ("--trusted-host", virtualTrustedHost)
+      }
+      if (upgradePip){
+        // upgrade pip in the virtualenv
+        execCommand(pipUpgradeArgs.toList.asJava)
+      }
+      if (virtualInstallPackage != null && !virtualInstallPackage.isEmpty) {
+        basePipArgs += (virtualInstallPackage)
+      }
+      execCommand(basePipArgs.toList.asJava)
     }
+    // do not execute a second command line in "conda" mode
   }
 
   def execCommand(commands: java.util.List[String]): Unit = {
-    logDebug("Running command:" + commands.asScala.mkString(" "))
-    val pb = new ProcessBuilder(commands).inheritIO()
+    logDebug("Running command: " + commands.asScala.mkString(" "))
+
+    val pb = new ProcessBuilder(commands)
     pb.environment().putAll(envVars.asJava)
     pb.environment().putAll(System.getenv())
     pb.environment().put("HOME", System.getProperty("user.home"))
+
     val proc = pb.start()
+
     val exitCode = proc.waitFor()
     if (exitCode != 0) {
-      throw new RuntimeException("Fail to run command: " + commands.asScala.mkString(" "))
+      val errString = try {
+        val err = Option(proc.getErrorStream())
+        err.map(IOUtils.toString)
+      } catch {
+        case io: IOException => None
+      }
+
+      val outString = try {
+        val out = Option(proc.getInputStream())
+        out.map(IOUtils.toString)
+      } catch {
+        case io: IOException => None
+      }
+
+      throw new RuntimeException("Fail to run command: " + commands.asScala.mkString(" ") +
+                                 "\nOutput: " + outString +
+                                 "\nStderr: " + errString
+                                 )
     }
   }
 
@@ -183,8 +338,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String,
       // Create and start the worker
       val realPythonExec = if (virtualEnvEnabled) virtualPythonExec else pythonExec
       logDebug(s"Starting worker with pythonExec: ${realPythonExec}")
-      val pb = new ProcessBuilder(Arrays.asList(realPythonExec,
-        "-m", "pyspark.worker"))
+      val pb = new ProcessBuilder(Arrays.asList(realPythonExec, "-m", "pyspark.worker"))
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars.asJava)
       workerEnv.put("PYTHONPATH", pythonPath)

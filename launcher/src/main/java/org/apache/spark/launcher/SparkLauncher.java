@@ -351,7 +351,7 @@ public class SparkLauncher {
   }
 
   /**
-   * Adds a python file / zip / egg to be submitted with the application.
+   * Adds a python file / zip / whl / egg to be submitted with the application.
    *
    * @param file Path to the file.
    * @return This launcher.

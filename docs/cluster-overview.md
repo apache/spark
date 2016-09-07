@@ -87,9 +87,18 @@ The following table summarizes terms you'll see used to refer to cluster concept
     <tr>
       <td>Application jar</td>
       <td>
-        A jar containing the user's Spark application. In some cases users will want to create
-        an "uber jar" containing their application along with its dependencies. The user's jar
-        should never include Hadoop or Spark libraries, however, these will be added at runtime.
+        A jar containing the user's Spark application (for Java and Scala driver). In some cases
+        users will want to create an "uber jar" containing their application along with its
+        dependencies. The user's jar should never include Hadoop or Spark libraries, however, these
+        will be added at runtime.
+      </td>
+    </tr>
+    <tr>
+      <td>Application Wheelhouse</td>
+      <td>
+        An archive containing precompiled wheels of the user's PySpark application and dependencies
+        (for Python driver). The user's wheelhouse should not include jars, only Python Wheel files
+        for one or more architectures.
       </td>
     </tr>
     <tr>

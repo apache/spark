@@ -22,7 +22,6 @@ import shutil
 import signal
 import sys
 import threading
-from threading import RLock
 from tempfile import NamedTemporaryFile
 
 from pyspark import accumulators
@@ -38,6 +37,7 @@ from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
+
 
 if sys.version > '3':
     xrange = range
@@ -66,10 +66,10 @@ class SparkContext(object):
     _jvm = None
     _next_accum_id = 0
     _active_spark_context = None
-    _lock = RLock()
-    _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
+    _lock = threading.RLock()
+    _python_includes = None  # zip, egg, whl and jar files that need to be added to PYTHONPATH
 
-    PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
+    PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar', '.whl')
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
                  environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
@@ -82,9 +82,9 @@ class SparkContext(object):
                (e.g. mesos://host:port, spark://host:port, local[4]).
         :param appName: A name for your job, to display on the cluster web UI.
         :param sparkHome: Location where Spark is installed on cluster nodes.
-        :param pyFiles: Collection of .zip or .py files to send to the cluster
-               and add to PYTHONPATH.  These can be paths on the local file
-               system or HDFS, HTTP, HTTPS, or FTP URLs.
+        :param pyFiles: Collection of .zip, .egg, .whl or .py files to send
+               to the cluster and add to PYTHONPATH.
+               These can be paths on the local file system or HDFS, HTTP, HTTPS, or FTP URLs.
         :param environment: A dictionary of environment variables to set on
                worker nodes.
         :param batchSize: The number of Python objects represented as a single
@@ -178,16 +178,15 @@ class SparkContext(object):
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         if self._conf.get("spark.pyspark.virtualenv.enabled") == "true":
-            requirements = self._conf.get("spark.pyspark.virtualenv.requirements")
-            virtualEnvBinPath = self._conf.get("spark.pyspark.virtualenv.bin.path")
+            requirements = self._conf.get("spark.pyspark.virtualenv.requirements",
+                                          "requirements.txt")
+            virtualEnvBinPath = self._conf.get("spark.pyspark.virtualenv.bin.path", "virtualenv")
             if not requirements:
                 raise Exception("spark.pyspark.virtualenv.enabled is set as true but no value for "
                                 "spark.pyspark.virtualenv.requirements")
             if not virtualEnvBinPath:
                 raise Exception("spark.pyspark.virtualenv.enabled is set as true but no value for "
                                 "spark.pyspark.virtualenv.bin.path")
-            else:
-                self.addFile(self._conf.get("spark.pyspark.virtualenv.requirements"))
 
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
@@ -201,19 +200,34 @@ class SparkContext(object):
         root_dir = SparkFiles.getRootDirectory()
         sys.path.insert(1, root_dir)
 
+        self._python_wheels = set()
+
         # Deploy any code dependencies specified in the constructor
+        # Wheel files will be installed by pip later.
         self._python_includes = list()
         for path in (pyFiles or []):
             self.addPyFile(path)
 
         # Deploy code dependencies set by spark-submit; these will already have been added
         # with SparkContext.addFile, so we just need to add them to the PYTHONPATH
+        # Wheel files will be installed by pip later.
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
-            if path != "":
-                (dirname, filename) = os.path.split(path)
-                if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
-                    self._python_includes.append(filename)
-                    sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
+            if path:
+                (_dirname, filename) = os.path.split(path)
+                extname = os.path.splitext(path)[1].lower()
+                if extname in self.PACKAGE_EXTENSIONS:
+                    if extname == ".whl":
+                        self._python_wheels.add(path)
+                    else:
+                        self._python_includes.append(filename)
+                        sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
+
+        # Install all wheel files at once.
+        if self._python_wheels:
+            if 'VIRTUAL_ENV' not in os.environ or not os.environ['VIRTUAL_ENV']:
+                raise Exception("Whl installation requires to run inside a virtualenv. "
+                                "You may have forgotten to activate a virtualenv "
+                                "when using spark-submit in 'client' deployment mode?")
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
@@ -808,17 +822,27 @@ class SparkContext(object):
 
     def addPyFile(self, path):
         """
-        Add a .py or .zip dependency for all tasks to be executed on this
+        Add a .py, .zip or .egg dependency for all tasks to be executed on this
         SparkContext in the future.  The C{path} passed can be either a local
         file, a file in HDFS (or other Hadoop-supported filesystems), or an
         HTTP, HTTPS or FTP URI.
+        Note that .whl should not be handled by this method
         """
+        if not path:
+            return
         self.addFile(path)
-        (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
-        if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
+
+        (_dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
+        extname = os.path.splitext(path)[1].lower()
+        if extname == '.whl':
+            return
+
+        if extname in self.PACKAGE_EXTENSIONS:
             self._python_includes.append(filename)
-            # for tests in local mode
-            sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
+            if extname != '.whl':
+                # for tests in local mode
+                # Prepend the python package (except for *.whl) to sys.path
+                sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
         if sys.version > '3':
             import importlib
             importlib.invalidate_caches()
@@ -975,7 +999,7 @@ def _test():
     globs['sc'] = SparkContext('local[4]', 'PythonTest')
     globs['tempdir'] = tempfile.mkdtemp()
     atexit.register(lambda: shutil.rmtree(globs['tempdir']))
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, _test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)
