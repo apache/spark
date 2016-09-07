@@ -2248,7 +2248,7 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
   expect_identical(expected, result)
 })
 
-test_that("dapplyCollect() on dataframe with a binary column", {
+test_that("dapplyCollect() on DataFrame with a binary column", {
 
   df <- data.frame(key = 1:3)
   df$bytes <- lapply(df$key, serialize, connection = NULL)
@@ -2259,7 +2259,14 @@ test_that("dapplyCollect() on dataframe with a binary column", {
   expect_identical(df, result1)
 
   result2 <- dapplyCollect(df_spark, function(x) x)
-  expect_equal(df, result2)
+  expect_identical(df, result2)
+
+  # A data.frame with a single column of bytes
+  scb <- subset(df, select = "bytes")
+  scb_spark <- createDataFrame(scb)
+  result <- dapplyCollect(scb_spark, function(x) x)
+  expect_identical(scb, result)
+
 })
 
 test_that("repartition by columns on DataFrame", {
