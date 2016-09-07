@@ -134,9 +134,9 @@ trait HashJoin {
       joinRow.withLeft(srow)
       val matches = hashedRelation.get(joinKeys(srow))
       if (matches != null) {
-        matches.map(joinRow.withRight(_)).filter(boundCondition)
+        matches.map(joinRow.withRight).filter(boundCondition)
       } else {
-        Seq.empty
+        Iterator.empty
       }
     }
   }

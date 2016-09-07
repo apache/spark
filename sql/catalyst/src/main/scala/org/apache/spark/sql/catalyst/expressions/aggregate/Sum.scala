@@ -53,8 +53,20 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
 
   override lazy val aggBufferAttributes = sum :: Nil
 
+  override lazy val aggBufferAttributesForGroup: Seq[AttributeReference] = {
+    if (child.nullable) aggBufferAttributes
+    else sum.copy(nullable = false)(sum.exprId, sum.qualifier,
+      sum.isGenerated) :: Nil
+  }
+
   override lazy val initialValues: Seq[Expression] = Seq(
     /* sum = */ Literal.create(null, sumDataType)
+  )
+
+  override lazy val initialValuesForGroup: Seq[Expression] = Seq(
+    /* sum = */
+    if (child.nullable) Literal.create(null, sumDataType)
+    else Cast(Literal(0), sumDataType)
   )
 
   override lazy val updateExpressions: Seq[Expression] = {

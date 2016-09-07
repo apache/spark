@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.OpenHashMap
 
 
 private[columnar] case object PassThrough extends CompressionScheme {
@@ -208,7 +209,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
     private var values = new mutable.ArrayBuffer[T#InternalType](1024)
 
     // The dictionary that maps a value to the encoded short integer.
-    private val dictionary = mutable.HashMap.empty[Any, Short]
+    private val dictionary = new OpenHashMap[Any, Short]
 
     // Size of the serialized dictionary in bytes. Initialized to 4 since we need at least an `Int`
     // to store dictionary element count.

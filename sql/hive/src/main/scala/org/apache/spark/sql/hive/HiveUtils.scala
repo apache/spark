@@ -280,7 +280,7 @@ private[spark] object HiveUtils extends Logging {
         throw new IllegalArgumentException(
           "Builtin jars can only be used when hive execution version == hive metastore version. " +
             s"Execution: $hiveExecutionVersion != Metastore: $hiveMetastoreVersion. " +
-            "Specify a vaild path to the correct hive jars using $HIVE_METASTORE_JARS " +
+            s"Specify a vaild path to the correct hive jars using $HIVE_METASTORE_JARS " +
             s"or change ${HIVE_METASTORE_VERSION.key} to $hiveExecutionVersion.")
       }
 

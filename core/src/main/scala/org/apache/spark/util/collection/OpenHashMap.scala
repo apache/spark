@@ -149,6 +149,23 @@ class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
     }
   }
 
+  def clear() {
+    // first clear the values array and value for null key
+    val bitSet = _keySet.getBitSet
+    val nullV = null.asInstanceOf[V]
+    val values = _values
+    var pos = bitSet.nextSetBit(0)
+    while (pos >= 0) {
+      values(pos) = nullV
+      pos = bitSet.nextSetBit(pos + 1)
+    }
+    haveNullValue = false
+    nullValue = nullV
+    _oldValues = null
+    // next clear the key set
+    _keySet.clear()
+  }
+
   // The following member variables are declared as protected instead of private for the
   // specialization to work (specialized class extends the non-specialized one and needs access
   // to the "private" variables).

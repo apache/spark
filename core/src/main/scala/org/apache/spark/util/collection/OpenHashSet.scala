@@ -212,6 +212,12 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
    */
   def nextPos(fromPos: Int): Int = _bitset.nextSetBit(fromPos)
 
+  def clear() {
+    _data = new Array[T](_capacity)
+    _bitset.clear()
+    _size = 0
+  }
+
   /**
    * Double the table's size and re-hash everything. We are not really using k, but it is declared
    * so Scala compiler can specialize this method (which leads to calling the specialized version
