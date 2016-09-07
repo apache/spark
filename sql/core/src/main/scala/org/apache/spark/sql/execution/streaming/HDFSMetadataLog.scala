@@ -49,6 +49,10 @@ import org.apache.spark.util.UninterruptibleThread
 class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
   extends MetadataLog[T] with Logging {
 
+  // Avoid serializing generic sequences, see SPARK-17372
+  require(implicitly[ClassTag[T]].runtimeClass != classOf[Seq[_]],
+    "Should not create a log with type Seq, use Arrays instead - see SPARK-17372")
+
   import HDFSMetadataLog._
 
   val metadataPath = new Path(path)

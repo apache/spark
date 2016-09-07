@@ -360,10 +360,54 @@ class PlanParserSuite extends PlanTest {
     test("left anti join", LeftAnti, testExistence)
     test("anti join", LeftAnti, testExistence)
 
+    // Test natural cross join
+    intercept("select * from a natural cross join b")
+
+    // Test natural join with a condition
+    intercept("select * from a natural join b on a.id = b.id")
+
     // Test multiple consecutive joins
     assertEqual(
       "select * from a join b join c right join d",
       table("a").join(table("b")).join(table("c")).join(table("d"), RightOuter).select(star()))
+
+    // SPARK-17296
+    assertEqual(
+      "select * from t1 cross join t2 join t3 on t3.id = t1.id join t4 on t4.id = t1.id",
+      table("t1")
+        .join(table("t2"), Cross)
+        .join(table("t3"), Inner, Option(Symbol("t3.id") === Symbol("t1.id")))
+        .join(table("t4"), Inner, Option(Symbol("t4.id") === Symbol("t1.id")))
+        .select(star()))
+
+    // Test multiple on clauses.
+    intercept("select * from t1 inner join t2 inner join t3 on col3 = col2 on col3 = col1")
+
+    // Parenthesis
+    assertEqual(
+      "select * from t1 inner join (t2 inner join t3 on col3 = col2) on col3 = col1",
+      table("t1")
+        .join(table("t2")
+          .join(table("t3"), Inner, Option('col3 === 'col2)), Inner, Option('col3 === 'col1))
+        .select(star()))
+    assertEqual(
+      "select * from t1 inner join (t2 inner join t3) on col3 = col2",
+      table("t1")
+        .join(table("t2").join(table("t3"), Inner, None), Inner, Option('col3 === 'col2))
+        .select(star()))
+    assertEqual(
+      "select * from t1 inner join (t2 inner join t3 on col3 = col2)",
+      table("t1")
+        .join(table("t2").join(table("t3"), Inner, Option('col3 === 'col2)), Inner, None)
+        .select(star()))
+
+    // Implicit joins.
+    assertEqual(
+      "select * from t1, t3 join t2 on t1.col1 = t2.col2",
+      table("t1")
+        .join(table("t3"))
+        .join(table("t2"), Inner, Option(Symbol("t1.col1") === Symbol("t2.col2")))
+        .select(star()))
   }
 
   test("sampled relations") {

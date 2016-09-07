@@ -167,8 +167,8 @@ case class WindowExec(
       val key = (tpe, fr.frameType, FrameBoundary(fr.frameStart), FrameBoundary(fr.frameEnd))
       val (es, fns) = framedFunctions.getOrElseUpdate(
         key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
-      es.append(e)
-      fns.append(fn)
+      es += e
+      fns += fn
     }
 
     // Collect all valid window functions and group them by their frame.
