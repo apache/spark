@@ -236,8 +236,8 @@ case class AlterTableSetPropertiesCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    DDLUtils.verifyAlterTableType(catalog, tableName, isView)
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(table, tableName, isView)
     // This overrides old properties
     val newTable = table.copy(properties = table.properties ++ properties)
     catalog.alterTable(newTable)
@@ -264,8 +264,8 @@ case class AlterTableUnsetPropertiesCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    DDLUtils.verifyAlterTableType(catalog, tableName, isView)
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(table, tableName, isView)
     if (!ifExists) {
       propKeys.foreach { k =>
         if (!table.properties.contains(k)) {
@@ -305,6 +305,7 @@ case class AlterTableSerDePropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(table, tableName, isView = false)
     // For datasource tables, disallow setting serde or specifying partition
     if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException("Operation not allowed: ALTER TABLE SET " +
@@ -354,6 +355,7 @@ case class AlterTableAddPartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(table, tableName, isView = false)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         "ALTER TABLE ADD PARTITION is not allowed for tables defined using the datasource API")
@@ -383,7 +385,14 @@ case class AlterTableRenamePartitionCommand(
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.catalog.renamePartitions(
+    val catalog = sparkSession.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+    if (DDLUtils.isDatasourceTable(table)) {
+      throw new AnalysisException(
+        "ALTER TABLE RENAME PARTITION is not allowed for tables defined using the datasource API")
+    }
+    DDLUtils.verifyAlterTableType(catalog, tableName, isView = false)
+    catalog.renamePartitions(
       tableName, Seq(oldPartition), Seq(newPartition))
     Seq.empty[Row]
   }
@@ -414,6 +423,7 @@ case class AlterTableDropPartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(table, tableName, isView = false)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
@@ -475,6 +485,7 @@ case class AlterTableRecoverPartitionsCommand(
         s"Operation not allowed: $cmd on temporary tables: $tableName")
     }
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(table, tableName, isView = false)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         s"Operation not allowed: $cmd on datasource tables: $tableName")
@@ -650,6 +661,7 @@ case class AlterTableSetLocationCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(table, tableName, isView = false)
     partitionSpec match {
       case Some(spec) =>
         // Partition spec is specified, so we set the location only for this partition
@@ -693,7 +705,15 @@ object DDLUtils {
       catalog: SessionCatalog,
       tableIdentifier: TableIdentifier,
       isView: Boolean): Unit = {
-    catalog.getTableMetadataOption(tableIdentifier).map(_.tableType match {
+    catalog.getTableMetadataOption(tableIdentifier).foreach(
+      verifyAlterTableType(_, tableIdentifier, isView))
+  }
+
+  def verifyAlterTableType(
+      tableMetadata: CatalogTable,
+      tableIdentifier: TableIdentifier,
+      isView: Boolean): Unit = {
+    tableMetadata.tableType match {
       case CatalogTableType.VIEW if !isView =>
         throw new AnalysisException(
           "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
@@ -701,6 +721,6 @@ object DDLUtils {
         throw new AnalysisException(
           s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
       case _ =>
-    })
+    }
   }
 }

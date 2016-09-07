@@ -869,6 +869,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("alter table: rename partition") {
+    testRenamePartition(isDatasourceTable = false)
+  }
+
+  test("alter table: rename partition (datasource table)") {
+    testRenamePartition(isDatasourceTable = true)
+  }
+
+  private def testRenamePartition(isDatasourceTable: Boolean): Unit = {
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val part1 = Map("a" -> "1", "b" -> "q")
@@ -881,22 +889,29 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     createTablePartition(catalog, part3, tableIdent)
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
       Set(part1, part2, part3))
-    sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='q') RENAME TO PARTITION (a='100', b='p')")
-    sql("ALTER TABLE dbx.tab1 PARTITION (a='2', b='c') RENAME TO PARTITION (a='200', b='c')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(Map("a" -> "100", "b" -> "p"), Map("a" -> "200", "b" -> "c"), part3))
-    // rename without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 PARTITION (a='100', b='p') RENAME TO PARTITION (a='10', b='p')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(Map("a" -> "10", "b" -> "p"), Map("a" -> "200", "b" -> "c"), part3))
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='q') RENAME TO PARTITION (a='100', b='p')")
+    }
+    if (!isDatasourceTable) {
+      sql("ALTER TABLE dbx.tab1 PARTITION (a='2', b='c') RENAME TO PARTITION (a='200', b='c')")
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+        Set(Map("a" -> "100", "b" -> "p"), Map("a" -> "200", "b" -> "c"), part3))
+      // rename without explicitly specifying database
+      catalog.setCurrentDatabase("dbx")
+      sql("ALTER TABLE tab1 PARTITION (a='100', b='p') RENAME TO PARTITION (a='10', b='p')")
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+        Set(Map("a" -> "10", "b" -> "p"), Map("a" -> "200", "b" -> "c"), part3))
+      // partition to rename does not exist
+      intercept[NoSuchPartitionException] {
+        sql("ALTER TABLE tab1 PARTITION (a='not_found', b='1') RENAME TO PARTITION (a='1', b='2')")
+      }
+    }
     // table to alter does not exist
     intercept[NoSuchTableException] {
       sql("ALTER TABLE does_not_exist PARTITION (c='3') RENAME TO PARTITION (c='333')")
-    }
-    // partition to rename does not exist
-    intercept[NoSuchPartitionException] {
-      sql("ALTER TABLE tab1 PARTITION (a='not_found', b='1') RENAME TO PARTITION (a='1', b='2')")
     }
   }
 
@@ -1246,7 +1261,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
     // table to alter does not exist
     intercept[AnalysisException] {
-      sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
+      sql("ALTER TABLE does_not_exist PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
     }
   }
 

@@ -305,6 +305,19 @@ class HiveDDLSuite
     }
   }
 
+  private def checkMisuseForAlterTableOrView(sqlText: String, isAlterView: Boolean): Unit = {
+    val message = intercept[AnalysisException] {
+      val alterDDLHeader = if (isAlterView) "ALTER VIEW " else "ALTER TABLE "
+      sql(alterDDLHeader + sqlText)
+    }.getMessage
+    val expectedExceptionMsg = if (isAlterView) {
+      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"
+    } else {
+      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"
+    }
+    assert(message.contains(expectedExceptionMsg))
+  }
+
   test("alter views and alter table - misuse") {
     val tabName = "tab1"
     withTable(tabName) {
@@ -318,44 +331,48 @@ class HiveDDLSuite
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
 
-        var message = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $tabName RENAME TO $newViewName")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+        checkMisuseForAlterTableOrView(
+          s"$tabName RENAME TO $newViewName", isAlterView = true)
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+        checkMisuseForAlterTableOrView(
+          s"$oldViewName RENAME TO $newViewName", isAlterView = false)
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+        checkMisuseForAlterTableOrView(
+          s"$tabName SET TBLPROPERTIES ('p' = 'an')", isAlterView = true)
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+        checkMisuseForAlterTableOrView(
+          s"$oldViewName SET TBLPROPERTIES ('p' = 'an')", isAlterView = false)
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+        checkMisuseForAlterTableOrView(
+          s"$tabName UNSET TBLPROPERTIES ('p')", isAlterView = true)
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+        checkMisuseForAlterTableOrView(
+          s"$oldViewName UNSET TBLPROPERTIES ('p')", isAlterView = false)
+
+        checkMisuseForAlterTableOrView(
+          s"$oldViewName SET LOCATION '/path/to/your/lovely/heart'", isAlterView = false)
+
+        checkMisuseForAlterTableOrView(
+          s"$oldViewName SET SERDE 'whatever'", isAlterView = false)
+
+        checkMisuseForAlterTableOrView(
+          s"$oldViewName SET SERDEPROPERTIES ('x' = 'y')", isAlterView = false)
+
+        checkMisuseForAlterTableOrView(
+          s"$oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')", isAlterView = false)
+
+        checkMisuseForAlterTableOrView(
+          s"$oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')", isAlterView = false)
+
+        checkMisuseForAlterTableOrView(
+          s"$oldViewName DROP IF EXISTS PARTITION (a='2')", isAlterView = false)
+
+        checkMisuseForAlterTableOrView(
+          s"$oldViewName RECOVER PARTITIONS", isAlterView = false)
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(!catalog.tableExists(TableIdentifier(newViewName)))
       }
     }
   }
