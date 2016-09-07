@@ -90,4 +90,10 @@ private[spark] object ToolTips {
 
   val TASK_TIME =
   "Shaded red when garbage collection (GC) time is over 10% of task time"
+
+  val APPLICATION_EXECUTOR_LIMIT =
+    """The number of executors this application can have at any given time. This is set only when
+       dynamic allocation is enabled. Master assigns executors to an application only when the
+       number of its executors is less than this limit.
+    """
 }
