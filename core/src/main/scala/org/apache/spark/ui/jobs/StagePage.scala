@@ -1010,7 +1010,7 @@ private[ui] class TaskDataSource(
       }
 
     val logs = executorsListener.executorToTaskSummary.get(info.executorId)
-      .map(_.executorLogs).orElse(Map.empty)
+      .map(_.executorLogs).getOrElse(Map.empty)
     new TaskTableRowData(
       info.index,
       info.taskId,

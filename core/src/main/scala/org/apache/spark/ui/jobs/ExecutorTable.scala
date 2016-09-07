@@ -119,7 +119,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
               <div style="float: right">
               {
                 val logs = parent.executorsListener.executorToTaskSummary.get(k)
-                  .map(_.executorLogs).orElse(Map.empty)
+                  .map(_.executorLogs).getOrElse(Map.empty)
                 logs.map {
                   case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
                 }
