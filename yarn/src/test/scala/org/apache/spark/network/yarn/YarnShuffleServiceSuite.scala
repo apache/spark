@@ -323,6 +323,9 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     eventually(timeout(10 seconds), interval(5 millis)) {
       assert(!execStateFile.exists())
     }
+    eventually(timeout(10 seconds), interval(5 millis)) {
+      assert(!secretsFile.exists())
+    }
 
     val handler2 = s2.blockHandler
     val resolver2 = ShuffleTestAccessor.getBlockResolver(handler2)
