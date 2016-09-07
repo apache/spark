@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql._
@@ -143,7 +144,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   import testImplicits._
 
-  override val streamingTimeout = 10.minutes
+  override val streamingTimeout = 20.seconds
 
   /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
   private def createFileStreamSource(
@@ -766,7 +767,17 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   test("SPARK-17372 - write file names to WAL as Array[String]") {
+    // Note: If this test takes longer than the timeout, then its likely that this is actually
+    // running a Spark job with 10000 tasks. This test tries to avoid that by
+    // 1. Setting the threshold for parallel file listing to very high
+    // 2. Using a query that should use constant folding to eliminate reading of the files
+
     val numFiles = 10000
+
+    // This is to avoid running a spark job to list of files in parallel
+    // by the ListingFileCatalog.
+    spark.sessionState.conf.setConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD, numFiles * 2)
+
     withTempDirs { case (root, tmp) =>
       val src = new File(root, "a=1")
       src.mkdirs()
@@ -779,9 +790,14 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       assert(src.listFiles().size === numFiles)
 
       val files = spark.readStream.text(root.getCanonicalPath).as[String]
-      testStream(files.filter(_ != "0").groupBy().count(), InternalOutputModes.Complete)(
+
+      // Note this query will use constant folding to eliminate the file scan.
+      // This is to avoid actually running a Spark job with 10000 tasks
+      val df = files.filter("1 == 0").groupBy().count()
+
+      testStream(df, InternalOutputModes.Complete)(
         AddTextFileData("0", src, tmp),
-        CheckAnswer(numFiles)
+        CheckAnswer(0)
       )
     }
   }
