@@ -158,14 +158,14 @@ object FileSourceStrategy extends Strategy with Logging {
           if (isNestField && curString.isDefined) {
             val attrStr = attr.name
             if (nestFieldMap.contains(attrStr)) {
-              nestFieldMap(attrStr) = nestFieldMap(attrStr) ++ Seq(attrStr + "#" + curString.get)
+              nestFieldMap(attrStr) = nestFieldMap(attrStr) ++ Seq(attrStr + "," + curString.get)
             } else {
-              nestFieldMap += (attrStr -> Seq(attrStr + "#" + curString.get))
+              nestFieldMap += (attrStr -> Seq(attrStr + "," + curString.get))
             }
           }
         case sf: GetStructField =>
           val str = if (curString.isDefined) {
-            sf.name.get + "#" + curString.get
+            sf.name.get + "," + curString.get
           } else sf.name.get
           generateAttributeMap(nestFieldMap, isNestField = true, Option(str), sf.child)
         case _ =>

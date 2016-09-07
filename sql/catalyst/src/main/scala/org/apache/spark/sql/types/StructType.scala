@@ -285,9 +285,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * @throws IllegalArgumentException if the parent field's type is not StructType
    */
   def getFieldRecursively(name: String): StructField = {
-    if (name.contains('#')) {
-      val curFieldStr = name.split("#", 2)(0)
-      val nextFieldStr = name.split("#", 2)(1)
+    if (name.contains(',')) {
+      val curFieldStr = name.split(",", 2)(0)
+      val nextFieldStr = name.split(",", 2)(1)
       val curField = this.apply(curFieldStr)
       curField.dataType match {
         case st: StructType =>
