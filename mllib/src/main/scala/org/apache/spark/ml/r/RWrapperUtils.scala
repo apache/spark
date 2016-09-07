@@ -34,13 +34,6 @@ object RWrapperUtils extends Logging {
    * @return Unit
    */
   def checkDataColumns(rFormula: RFormula, data: Dataset[_]): Unit = {
-    if (data.schema.fieldNames.contains(rFormula.getLabelCol)) {
-      val newLabelName = convertToUniqueName(rFormula.getLabelCol, data.schema.fieldNames)
-      logWarning(
-        s"data containing ${rFormula.getLabelCol} column, using new name $newLabelName instead")
-      rFormula.setLabelCol(newLabelName)
-    }
-
     if (data.schema.fieldNames.contains(rFormula.getFeaturesCol)) {
       val newFeaturesName = convertToUniqueName(rFormula.getFeaturesCol, data.schema.fieldNames)
       logWarning(s"data containing ${rFormula.getFeaturesCol} column, " +
