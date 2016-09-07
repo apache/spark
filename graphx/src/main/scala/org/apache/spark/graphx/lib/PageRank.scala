@@ -21,9 +21,9 @@ import scala.reflect.ClassTag
 
 import breeze.linalg.{Vector => BV}
 
-import org.apache.spark.ml.linalg.{Vectors, Vector}
-import org.apache.spark.graphx._
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.internal.Logging
+import org.apache.spark.graphx._
 
 /**
  * PageRank algorithm implementation. There are two implementations of PageRank implemented.
@@ -239,7 +239,7 @@ object PageRank extends Logging {
     }
 
     rankGraph
-      .mapVertices { (vid, attr)  =>
+      .mapVertices { (vid, attr) =>
         Vectors.fromBreeze(attr)
       }
   }
