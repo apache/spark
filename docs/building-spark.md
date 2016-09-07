@@ -16,11 +16,11 @@ Building Spark using Maven requires Maven 3.3.9 or newer and Java 7+.
 
 ### Setting up Maven's Memory Usage
 
-You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`. We recommend the following settings:
+If you are compiling with Java 7, you'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`:
 
     export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
-If you don't run this, you may see errors like the following:
+If you don't add these parameters to `MAVEN_OPTS`, you may see errors like the following:
 
     [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_BINARY_VERSION}}/classes...
     [ERROR] PermGen space -> [Help 1]
@@ -28,12 +28,15 @@ If you don't run this, you may see errors like the following:
     [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_BINARY_VERSION}}/classes...
     [ERROR] Java heap space -> [Help 1]
 
-You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
+You can fix these problems by setting the `MAVEN_OPTS` variable as discussed before.
 
 **Note:**
 
-* For Java 8 and above this step is not required.
-* If using `build/mvn` with no `MAVEN_OPTS` set, the script will automate this for you.
+* This step is not needed for Java 8.
+* If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options to the `MAVEN_OPTS` environment variable.
+* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.
+* You may see warnings like "ignoring option MaxPermSize=1g; support was removed in 8.0" when building or running tests with Java 8. These warnings are harmless.
+    
 
 ### build/mvn
 
