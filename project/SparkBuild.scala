@@ -77,6 +77,22 @@ object BuildCommons {
 
   val javacJVMVersion = settingKey[String]("source and target JVM version for javac")
   val scalacJVMVersion = settingKey[String]("source and target JVM version for scalac")
+  
+  // SPARK-17421
+  // This code ported from Java version in CommandBuilderUtils class
+  val javaMajorVersion : Integer = {
+    val versionStr = System.getProperty("java.version")
+    val version = versionStr.split("[+.\\-]+");
+    val major = version(0).toInt
+    // if major > 1, we're using the JEP-223 version string, e.g., 9-ea, 9+120
+    // otherwise the second number is the major version
+    if (major > 1) {
+      major
+    } else {
+      version(1).toInt
+    }
+  }
+
 }
 
 object SparkBuild extends PomBuild {
@@ -415,12 +431,21 @@ object SparkBuild extends PomBuild {
      """.stripMargin)
   val sparkSql = taskKey[Unit]("starts the spark sql CLI.")
 
+  def javaVersion() = {
+    
+  }
+
   enable(Seq(
     connectInput in run := true,
     fork := true,
     outputStrategy in run := Some (StdoutOutput),
 
-    javaOptions ++= Seq("-Xmx2G", "-XX:MaxPermSize=256m"),
+    // SPARK-17421: Don't set MaxPermSize if Java version >= 8
+    if (javaMajorVersion >= 8) {
+      javaOptions ++= Seq("-Xmx2G")
+    } else {
+      javaOptions ++= Seq("-Xmx2G", "-XX:MaxPermSize=256m")
+    },
 
     sparkShell := {
       (runMain in Compile).toTask(" org.apache.spark.repl.Main -usejavacp").value
@@ -563,7 +588,8 @@ object SQL {
 object Hive {
 
   lazy val settings = Seq(
-    javaOptions += "-XX:MaxPermSize=256m",
+    // SPARK-17421: Don't set MaxPermSize if Java version >= 8
+    javaOptions += (if (BuildCommons.javaMajorVersion < 8) "-XX:MaxPermSize=256m" else ""),
     // Specially disable assertions since some Hive tests fail them
     javaOptions in Test := (javaOptions in Test).value.filterNot(_ == "-ea"),
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
@@ -809,6 +835,7 @@ object TestSettings {
       "2.11"
     }
 
+
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
@@ -835,8 +862,13 @@ object TestSettings {
     javaOptions in Test ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",
-    javaOptions in Test ++= "-Xmx3g -Xss4096k -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
-      .split(" ").toSeq,
+    // SPARK-17421: Don't set MaxPermSize if Java version >= 8
+    javaOptions in Test ++= 
+      (if (javaMajorVersion >= 8) {
+        "-Xmx3g -Xss4096k -XX:MaxNewSize=256m"
+      } else {
+        "-Xmx3g -Xss4096k -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
+      }).split(" ").toSeq,
     javaOptions += "-Xmx3g",
     // Exclude tags defined in a system property
     testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
