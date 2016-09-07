@@ -60,10 +60,15 @@ class QuantileSummaries(
    */
   def insert(x: Double): QuantileSummaries = {
     headSampled.append(x)
-    if (headSampled.size >= defaultHeadSize) {
+    val withInsertion = if (headSampled.size >= defaultHeadSize) {
       this.withHeadBufferInserted
     } else {
       this
+    }
+    if (withInsertion.sampled.length >= compressThreshold) {
+      withInsertion.compress()
+    } else {
+      withInsertion
     }
   }
 
@@ -258,7 +263,10 @@ object QuantileSummaries {
     }
     res.prepend(head)
     // If necessary, add the minimum element:
-    res.prepend(currentSamples.head)
+    val currHead = currentSamples.head
+    if (currHead.value < head.value) {
+      res.prepend(currentSamples.head)
+    }
     res.toArray
   }
 }
