@@ -153,8 +153,7 @@ public class YarnShuffleService extends AuxiliaryService {
       // If we don't find one, then we choose a file to use to save the state next time.  Even if
       // an application was stopped while the NM was down, we expect yarn to call stopApplication()
       // when it comes back
-      registeredExecutorFile =
-        findRegisteredExecutorFile(conf.getTrimmedStrings("yarn.nodemanager.local-dirs"));
+      registeredExecutorFile = findRecoveryDb(RECOVERY_FILE_NAME);
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
         blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
@@ -186,7 +185,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
   private void createSecretManager() throws IOException {
     secretManager = new ShuffleSecretManager();
-    secretsFile = new File(getRecoveryPath().toUri().getPath(), SECRETS_RECOVERY_FILE_NAME);
+    secretsFile = findRecoveryDb(SECRETS_RECOVERY_FILE_NAME);
  
     // Make sure this is protected in case its not in the NM recovery dir
     FileSystem fs = FileSystem.getLocal(_conf);
@@ -282,14 +281,15 @@ public class YarnShuffleService extends AuxiliaryService {
     logger.info("Stopping container {}", containerId);
   }
 
-  private File findRegisteredExecutorFile(String[] localDirs) {
+  private File findRecoveryDb(String fileName) {
+    String[] localDirs = _conf.getTrimmedStrings("yarn.nodemanager.local-dirs");
     for (String dir: localDirs) {
-      File f = new File(new Path(dir).toUri().getPath(), "registeredExecutors.ldb");
+      File f = new File(new Path(dir).toUri().getPath(), fileName);
       if (f.exists()) {
         return f;
       }
     }
-    return new File(new Path(localDirs[0]).toUri().getPath(), "registeredExecutors.ldb");
+    return new File(new Path(localDirs[0]).toUri().getPath(), fileName);
   }
 
   /**
