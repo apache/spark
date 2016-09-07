@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, TimeZone}
+import java.util.{ArrayDeque, Locale, TimeZone}
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -28,14 +28,17 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.{LogicalRDD, Queryable}
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.streaming.MemoryPlan
+import org.apache.spark.sql.types.{Metadata, ObjectType}
+
 
 abstract class QueryTest extends PlanTest {
 
-  protected def sqlContext: SQLContext
+  protected def spark: SparkSession
 
   // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
   TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
@@ -43,102 +46,131 @@ abstract class QueryTest extends PlanTest {
   Locale.setDefault(Locale.US)
 
   /**
-   * Runs the plan and makes sure the answer contains all of the keywords, or the
-   * none of keywords are listed in the answer
-   * @param df the [[DataFrame]] to be executed
-   * @param exists true for make sure the keywords are listed in the output, otherwise
-   *               to make sure none of the keyword are not listed in the output
-   * @param keywords keyword in string array
+   * Runs the plan and makes sure the answer contains all of the keywords.
    */
-  def checkExistence(df: DataFrame, exists: Boolean, keywords: String*) {
+  def checkKeywordsExist(df: DataFrame, keywords: String*): Unit = {
     val outputs = df.collect().map(_.mkString).mkString
     for (key <- keywords) {
-      if (exists) {
-        assert(outputs.contains(key), s"Failed for $df ($key doesn't exist in result)")
-      } else {
-        assert(!outputs.contains(key), s"Failed for $df ($key existed in the result)")
-      }
+      assert(outputs.contains(key), s"Failed for $df ($key doesn't exist in result)")
+    }
+  }
+
+  /**
+   * Runs the plan and makes sure the answer does NOT contain any of the keywords.
+   */
+  def checkKeywordsNotExist(df: DataFrame, keywords: String*): Unit = {
+    val outputs = df.collect().map(_.mkString).mkString
+    for (key <- keywords) {
+      assert(!outputs.contains(key), s"Failed for $df ($key existed in the result)")
     }
   }
 
   /**
    * Evaluates a dataset to make sure that the result of calling collect matches the given
    * expected answer.
-   *  - Special handling is done based on whether the query plan should be expected to return
-   *    the results in sorted order.
-   *  - This function also checks to make sure that the schema for serializing the expected answer
-   *    matches that produced by the dataset (i.e. does manual construction of object match
-   *    the constructed encoder for cases like joins, etc).  Note that this means that it will fail
-   *    for cases where reordering is done on fields.  For such tests, user `checkDecoding` instead
-   *    which performs a subset of the checks done by this function.
    */
-  protected def checkAnswer[T](
-      ds: Dataset[T],
-      expectedAnswer: T*): Unit = {
-    checkAnswer(
-      ds.toDF(),
-      sqlContext.createDataset(expectedAnswer)(ds.unresolvedTEncoder).toDF().collect().toSeq)
-
-    checkDecoding(ds, expectedAnswer: _*)
-  }
-
-  protected def checkDecoding[T](
+  protected def checkDataset[T](
       ds: => Dataset[T],
       expectedAnswer: T*): Unit = {
-    val decoded = try ds.collect().toSet catch {
-      case e: Exception =>
-        fail(
-          s"""
-             |Exception collecting dataset as objects
-             |${ds.resolvedTEncoder}
-             |${ds.resolvedTEncoder.fromRowExpression.treeString}
-             |${ds.queryExecution}
-           """.stripMargin, e)
-    }
+    val result = getResult(ds)
 
-    // Handle the case where the return type is an array
-    val isArray = decoded.headOption.map(_.getClass.isArray).getOrElse(false)
-    def normalEquality = decoded == expectedAnswer.toSet
-    def expectedAsSeq = expectedAnswer.map(_.asInstanceOf[Array[_]].toSeq).toSet
-    def decodedAsSeq = decoded.map(_.asInstanceOf[Array[_]].toSeq)
-
-    if (!((isArray && expectedAsSeq == decodedAsSeq) || normalEquality)) {
-      val expected = expectedAnswer.toSet.toSeq.map((a: Any) => a.toString).sorted
-      val actual = decoded.toSet.toSeq.map((a: Any) => a.toString).sorted
-
-      val comparision = sideBySide("expected" +: expected, "spark" +: actual).mkString("\n")
+    if (!compare(result.toSeq, expectedAnswer)) {
       fail(
-        s"""Decoded objects do not match expected objects:
-            |$comparision
-            |${ds.resolvedTEncoder.fromRowExpression.treeString}
+        s"""
+           |Decoded objects do not match expected objects:
+           |expected: $expectedAnswer
+           |actual:   ${result.toSeq}
+           |${ds.exprEnc.deserializer.treeString}
          """.stripMargin)
     }
   }
 
   /**
+   * Evaluates a dataset to make sure that the result of calling collect matches the given
+   * expected answer, after sort.
+   */
+  protected def checkDatasetUnorderly[T : Ordering](
+      ds: => Dataset[T],
+      expectedAnswer: T*): Unit = {
+    val result = getResult(ds)
+
+    if (!compare(result.toSeq.sorted, expectedAnswer.sorted)) {
+      fail(
+        s"""
+           |Decoded objects do not match expected objects:
+           |expected: $expectedAnswer
+           |actual:   ${result.toSeq}
+           |${ds.exprEnc.deserializer.treeString}
+         """.stripMargin)
+    }
+  }
+
+  private def getResult[T](ds: => Dataset[T]): Array[T] = {
+    val analyzedDS = try ds catch {
+      case ae: AnalysisException =>
+        if (ae.plan.isDefined) {
+          fail(
+            s"""
+               |Failed to analyze query: $ae
+               |${ae.plan.get}
+               |
+               |${stackTraceToString(ae)}
+             """.stripMargin)
+        } else {
+          throw ae
+        }
+    }
+    checkJsonFormat(analyzedDS)
+    assertEmptyMissingInput(analyzedDS)
+
+    try ds.collect() catch {
+      case e: Exception =>
+        fail(
+          s"""
+             |Exception collecting dataset as objects
+             |${ds.exprEnc}
+             |${ds.exprEnc.deserializer.treeString}
+             |${ds.queryExecution}
+           """.stripMargin, e)
+    }
+  }
+
+  private def compare(obj1: Any, obj2: Any): Boolean = (obj1, obj2) match {
+    case (null, null) => true
+    case (null, _) => false
+    case (_, null) => false
+    case (a: Array[_], b: Array[_]) =>
+      a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r)}
+    case (a: Iterable[_], b: Iterable[_]) =>
+      a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
+    case (a, b) => a == b
+  }
+
+  /**
    * Runs the plan and makes sure the answer matches the expected result.
+   *
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    */
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     val analyzedDF = try df catch {
       case ae: AnalysisException =>
-        val currentValue = sqlContext.conf.dataFrameEagerAnalysis
-        sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, false)
-        val partiallyAnalzyedPlan = df.queryExecution.analyzed
-        sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, currentValue)
-        fail(
-          s"""
-             |Failed to analyze query: $ae
-             |$partiallyAnalzyedPlan
-             |
-             |${stackTraceToString(ae)}
-             |""".stripMargin)
+        if (ae.plan.isDefined) {
+          fail(
+            s"""
+               |Failed to analyze query: $ae
+               |${ae.plan.get}
+               |
+               |${stackTraceToString(ae)}
+               |""".stripMargin)
+        } else {
+          throw ae
+        }
     }
 
     checkJsonFormat(analyzedDF)
 
-    assertEmptyMissingInput(df)
+    assertEmptyMissingInput(analyzedDF)
 
     QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
       case Some(errorMessage) => fail(errorMessage)
@@ -156,6 +188,7 @@ abstract class QueryTest extends PlanTest {
 
   /**
    * Runs the plan and makes sure the answer is within absTol of the expected result.
+   *
    * @param dataFrame the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    * @param absTol the absolute tolerance between actual and expected answers.
@@ -181,9 +214,9 @@ abstract class QueryTest extends PlanTest {
   }
 
   /**
-   * Asserts that a given [[Queryable]] will be executed using the given number of cached results.
+   * Asserts that a given [[Dataset]] will be executed using the given number of cached results.
    */
-  def assertCached(query: Queryable, numCachedTables: Int = 1): Unit = {
+  def assertCached(query: Dataset[_], numCachedTables: Int = 1): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
     val cachedData = planWithCaching collect {
       case cached: InMemoryRelation => cached
@@ -195,17 +228,31 @@ abstract class QueryTest extends PlanTest {
         planWithCaching)
   }
 
-  private def checkJsonFormat(df: DataFrame): Unit = {
-    val logicalPlan = df.queryExecution.analyzed
+  private def checkJsonFormat(ds: Dataset[_]): Unit = {
+    // Get the analyzed plan and rewrite the PredicateSubqueries in order to make sure that
+    // RDD and Data resolution does not break.
+    val logicalPlan = ds.queryExecution.analyzed
+
     // bypass some cases that we can't handle currently.
     logicalPlan.transform {
-      case _: MapPartitions => return
-      case _: MapGroups => return
+      case _: ObjectConsumer => return
+      case _: ObjectProducer => return
       case _: AppendColumns => return
-      case _: CoGroup => return
+      case _: TypedFilter => return
       case _: LogicalRelation => return
+      case p if p.getClass.getSimpleName == "MetastoreRelation" => return
+      case _: MemoryPlan => return
+      case p: InMemoryRelation =>
+        p.child.transform {
+          case _: ObjectConsumerExec => return
+          case _: ObjectProducerExec => return
+        }
+        p
     }.transformAllExpressions {
-      case a: ImperativeAggregate => return
+      case _: ImperativeAggregate => return
+      case _: TypedAggregateExpression => return
+      case Literal(_, _: ObjectType) => return
+      case _: UserDefinedGenerator => return
     }
 
     // bypass hive tests before we fix all corner cases in hive module.
@@ -227,17 +274,43 @@ abstract class QueryTest extends PlanTest {
     val normalized1 = logicalPlan.transformAllExpressions {
       case udf: ScalaUDF => udf.copy(function = null)
       case gen: UserDefinedGenerator => gen.copy(function = null)
+      // After SPARK-17356: the JSON representation no longer has the Metadata. We need to remove
+      // the Metadata from the normalized plan so that we can compare this plan with the
+      // JSON-deserialzed plan.
+      case a @ Alias(child, name) if a.explicitMetadata.isDefined =>
+        Alias(child, name)(a.exprId, a.qualifier, Some(Metadata.empty), a.isGenerated)
+      case a: AttributeReference if a.metadata != Metadata.empty =>
+        AttributeReference(a.name, a.dataType, a.nullable, Metadata.empty)(a.exprId, a.qualifier,
+          a.isGenerated)
     }
 
     // RDDs/data are not serializable to JSON, so we need to collect LogicalPlans that contains
     // these non-serializable stuff, and use these original ones to replace the null-placeholders
     // in the logical plans parsed from JSON.
-    var logicalRDDs = logicalPlan.collect { case l: LogicalRDD => l }
-    var localRelations = logicalPlan.collect { case l: LocalRelation => l }
-    var inMemoryRelations = logicalPlan.collect { case i: InMemoryRelation => i }
+    val logicalRDDs = new ArrayDeque[LogicalRDD]()
+    val localRelations = new ArrayDeque[LocalRelation]()
+    val inMemoryRelations = new ArrayDeque[InMemoryRelation]()
+    def collectData: (LogicalPlan => Unit) = {
+      case l: LogicalRDD =>
+        logicalRDDs.offer(l)
+      case l: LocalRelation =>
+        localRelations.offer(l)
+      case i: InMemoryRelation =>
+        inMemoryRelations.offer(i)
+      case p =>
+        p.expressions.foreach {
+          _.foreach {
+            case s: SubqueryExpression =>
+              s.plan.foreach(collectData)
+            case _ =>
+          }
+        }
+    }
+    logicalPlan.foreach(collectData)
+
 
     val jsonBackPlan = try {
-      TreeNode.fromJSON[LogicalPlan](jsonString, sqlContext.sparkContext)
+      TreeNode.fromJSON[LogicalPlan](jsonString, spark.sparkContext)
     } catch {
       case NonFatal(e) =>
         fail(
@@ -249,18 +322,15 @@ abstract class QueryTest extends PlanTest {
            """.stripMargin, e)
     }
 
-    val normalized2 = jsonBackPlan transformDown {
+    def renormalize: PartialFunction[LogicalPlan, LogicalPlan] = {
       case l: LogicalRDD =>
-        val origin = logicalRDDs.head
-        logicalRDDs = logicalRDDs.drop(1)
-        LogicalRDD(l.output, origin.rdd)(sqlContext)
+        val origin = logicalRDDs.pop()
+        LogicalRDD(l.output, origin.rdd)(spark)
       case l: LocalRelation =>
-        val origin = localRelations.head
-        localRelations = localRelations.drop(1)
+        val origin = localRelations.pop()
         l.copy(data = origin.data)
       case l: InMemoryRelation =>
-        val origin = inMemoryRelations.head
-        inMemoryRelations = inMemoryRelations.drop(1)
+        val origin = inMemoryRelations.pop()
         InMemoryRelation(
           l.output,
           l.useCompression,
@@ -269,9 +339,14 @@ abstract class QueryTest extends PlanTest {
           origin.child,
           l.tableName)(
           origin.cachedColumnBuffers,
-          l._statistics,
-          origin._batchStats)
+          origin.batchStats)
+      case p =>
+        p.transformExpressions {
+          case s: SubqueryExpression =>
+            s.withNewPlan(s.plan.transformDown(renormalize))
+        }
     }
+    val normalized2 = jsonBackPlan.transformDown(renormalize)
 
     assert(logicalRDDs.isEmpty)
     assert(localRelations.isEmpty)
@@ -287,15 +362,15 @@ abstract class QueryTest extends PlanTest {
   }
 
   /**
-    * Asserts that a given [[Queryable]] does not have missing inputs in all the analyzed plans.
-    */
-  def assertEmptyMissingInput(query: Queryable): Unit = {
+   * Asserts that a given [[Dataset]] does not have missing inputs in all the analyzed plans.
+   */
+  def assertEmptyMissingInput(query: Dataset[_]): Unit = {
     assert(query.queryExecution.analyzed.missingInput.isEmpty,
-      s"The analyzed logical plan has missing inputs: ${query.queryExecution.analyzed}")
+      s"The analyzed logical plan has missing inputs:\n${query.queryExecution.analyzed}")
     assert(query.queryExecution.optimizedPlan.missingInput.isEmpty,
-      s"The optimized logical plan has missing inputs: ${query.queryExecution.optimizedPlan}")
+      s"The optimized logical plan has missing inputs:\n${query.queryExecution.optimizedPlan}")
     assert(query.queryExecution.executedPlan.missingInput.isEmpty,
-      s"The physical plan has missing inputs: ${query.queryExecution.executedPlan}")
+      s"The physical plan has missing inputs:\n${query.queryExecution.executedPlan}")
   }
 }
 
@@ -305,12 +380,19 @@ object QueryTest {
    * If there was exception during the execution or the contents of the DataFrame does not
    * match the expected result, an error message will be returned. Otherwise, a [[None]] will
    * be returned.
+   *
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
    */
-  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Option[String] = {
+  def checkAnswer(
+      df: DataFrame,
+      expectedAnswer: Seq[Row],
+      checkToRDD: Boolean = true): Option[String] = {
     val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
-
+    if (checkToRDD) {
+      df.rdd.count()  // Also attempt to deserialize as an RDD [SPARK-15791]
+    }
 
     val sparkAnswer = try df.collect().toSeq catch {
       case e: Exception =>
@@ -328,6 +410,9 @@ object QueryTest {
     sameRows(expectedAnswer, sparkAnswer, isSorted).map { results =>
         s"""
         |Results do not match for query:
+        |Timezone: ${TimeZone.getDefault}
+        |Timezone Env: ${sys.env.getOrElse("TZ", "")}
+        |
         |${df.queryExecution}
         |== Results ==
         |$results
@@ -379,6 +464,7 @@ object QueryTest {
 
   /**
    * Runs the plan and makes sure the answer is within absTol of the expected result.
+   *
    * @param actualAnswer the actual result in a [[Row]].
    * @param expectedAnswer the expected result in a[[Row]].
    * @param absTol the absolute tolerance between actual and expected answers.
@@ -403,6 +489,14 @@ object QueryTest {
     checkAnswer(df, expectedAnswer.asScala) match {
       case Some(errorMessage) => errorMessage
       case None => null
+    }
+  }
+}
+
+class QueryTestSuite extends QueryTest with test.SharedSQLContext {
+  test("SPARK-16940: checkAnswer should raise TestFailedException for wrong results") {
+    intercept[org.scalatest.exceptions.TestFailedException] {
+      checkAnswer(sql("SELECT 1"), Row(2) :: Nil)
     }
   }
 }

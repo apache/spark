@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle.sort
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter}
 import org.apache.spark.storage.ShuffleBlockId
@@ -44,7 +45,7 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   private var mapStatus: MapStatus = null
 
-  private val writeMetrics = context.taskMetrics().registerShuffleWriteMetrics()
+  private val writeMetrics = context.taskMetrics().shuffleWriteMetrics
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
@@ -82,8 +83,6 @@ private[spark] class SortShuffleWriter[K, V, C](
       if (success) {
         return Option(mapStatus)
       } else {
-        // The map task failed, so delete our output data.
-        shuffleBlockResolver.removeDataByMap(dep.shuffleId, mapId)
         return None
       }
     } finally {

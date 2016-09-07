@@ -134,6 +134,46 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(CreateArray(Literal.create(null, IntegerType) :: Nil), null :: Nil)
   }
 
+  test("CreateMap") {
+    def interlace(keys: Seq[Literal], values: Seq[Literal]): Seq[Literal] = {
+      keys.zip(values).flatMap { case (k, v) => Seq(k, v) }
+    }
+
+    def createMap(keys: Seq[Any], values: Seq[Any]): Map[Any, Any] = {
+      // catalyst map is order-sensitive, so we create ListMap here to preserve the elements order.
+      scala.collection.immutable.ListMap(keys.zip(values): _*)
+    }
+
+    val intSeq = Seq(5, 10, 15, 20, 25)
+    val longSeq = intSeq.map(_.toLong)
+    val strSeq = intSeq.map(_.toString)
+    checkEvaluation(CreateMap(Nil), Map.empty)
+    checkEvaluation(
+      CreateMap(interlace(intSeq.map(Literal(_)), longSeq.map(Literal(_)))),
+      createMap(intSeq, longSeq))
+    checkEvaluation(
+      CreateMap(interlace(strSeq.map(Literal(_)), longSeq.map(Literal(_)))),
+      createMap(strSeq, longSeq))
+    checkEvaluation(
+      CreateMap(interlace(longSeq.map(Literal(_)), strSeq.map(Literal(_)))),
+      createMap(longSeq, strSeq))
+
+    val strWithNull = strSeq.drop(1).map(Literal(_)) :+ Literal.create(null, StringType)
+    checkEvaluation(
+      CreateMap(interlace(intSeq.map(Literal(_)), strWithNull)),
+      createMap(intSeq, strWithNull.map(_.value)))
+    intercept[RuntimeException] {
+      checkEvaluationWithoutCodegen(
+        CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
+        null, null)
+    }
+    intercept[RuntimeException] {
+      checkEvalutionWithUnsafeProjection(
+        CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
+        null, null)
+    }
+  }
+
   test("CreateStruct") {
     val row = create_row(1, 2, 3)
     val c1 = 'a.int.at(0)
@@ -187,5 +227,59 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkErrorMessage(structType, IntegerType, "Field name should be String Literal")
     checkErrorMessage(otherType, StringType, "Can't extract value from")
+  }
+
+  test("ensure to preserve metadata") {
+    val metadata = new MetadataBuilder()
+      .putString("key", "value")
+      .build()
+
+    def checkMetadata(expr: Expression): Unit = {
+      assert(expr.dataType.asInstanceOf[StructType]("a").metadata === metadata)
+      assert(expr.dataType.asInstanceOf[StructType]("b").metadata === Metadata.empty)
+    }
+
+    val a = AttributeReference("a", IntegerType, metadata = metadata)()
+    val b = AttributeReference("b", IntegerType)()
+    checkMetadata(CreateStruct(Seq(a, b)))
+    checkMetadata(CreateNamedStruct(Seq("a", a, "b", b)))
+    checkMetadata(CreateStructUnsafe(Seq(a, b)))
+    checkMetadata(CreateNamedStructUnsafe(Seq("a", a, "b", b)))
+  }
+
+  test("StringToMap") {
+    val s0 = Literal("a:1,b:2,c:3")
+    val m0 = Map("a" -> "1", "b" -> "2", "c" -> "3")
+    checkEvaluation(new StringToMap(s0), m0)
+
+    val s1 = Literal("a: ,b:2")
+    val m1 = Map("a" -> " ", "b" -> "2")
+    checkEvaluation(new StringToMap(s1), m1)
+
+    val s2 = Literal("a=1,b=2,c=3")
+    val m2 = Map("a" -> "1", "b" -> "2", "c" -> "3")
+    checkEvaluation(StringToMap(s2, Literal(","), Literal("=")), m2)
+
+    val s3 = Literal("")
+    val m3 = Map[String, String]("" -> null)
+    checkEvaluation(StringToMap(s3, Literal(","), Literal("=")), m3)
+
+    val s4 = Literal("a:1_b:2_c:3")
+    val m4 = Map("a" -> "1", "b" -> "2", "c" -> "3")
+    checkEvaluation(new StringToMap(s4, Literal("_")), m4)
+
+    // arguments checking
+    assert(new StringToMap(Literal("a:1,b:2,c:3")).checkInputDataTypes().isSuccess)
+    assert(new StringToMap(Literal(null)).checkInputDataTypes().isFailure)
+    assert(new StringToMap(Literal("a:1,b:2,c:3"), Literal(null)).checkInputDataTypes().isFailure)
+    assert(StringToMap(Literal("a:1,b:2,c:3"), Literal(null), Literal(null))
+      .checkInputDataTypes().isFailure)
+    assert(new StringToMap(Literal(null), Literal(null)).checkInputDataTypes().isFailure)
+
+    assert(new StringToMap(Literal("a:1_b:2_c:3"), NonFoldableLiteral("_"))
+        .checkInputDataTypes().isFailure)
+    assert(
+      new StringToMap(Literal("a=1_b=2_c=3"), Literal("_"), NonFoldableLiteral("="))
+        .checkInputDataTypes().isFailure)
   }
 }

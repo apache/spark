@@ -270,10 +270,10 @@ private[ml] trait HasFitIntercept extends Params {
 private[ml] trait HasHandleInvalid extends Params {
 
   /**
-   * Param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
+   * Param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later.
    * @group param
    */
-  final val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later", ParamValidators.inArray(Array("skip", "error")))
+  final val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later", ParamValidators.inArray(Array("skip", "error")))
 
   /** @group getParam */
   final def getHandleInvalid: String = $(handleInvalid)
@@ -334,10 +334,10 @@ private[ml] trait HasElasticNetParam extends Params {
 private[ml] trait HasTol extends Params {
 
   /**
-   * Param for the convergence tolerance for iterative algorithms.
+   * Param for the convergence tolerance for iterative algorithms (>= 0).
    * @group param
    */
-  final val tol: DoubleParam = new DoubleParam(this, "tol", "the convergence tolerance for iterative algorithms")
+  final val tol: DoubleParam = new DoubleParam(this, "tol", "the convergence tolerance for iterative algorithms (>= 0)", ParamValidators.gtEq(0))
 
   /** @group getParam */
   final def getTol: Double = $(tol)
@@ -349,10 +349,10 @@ private[ml] trait HasTol extends Params {
 private[ml] trait HasStepSize extends Params {
 
   /**
-   * Param for Step size to be used for each iteration of optimization.
+   * Param for Step size to be used for each iteration of optimization (> 0).
    * @group param
    */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization")
+  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization (> 0)", ParamValidators.gt(0))
 
   /** @group getParam */
   final def getStepSize: Double = $(stepSize)
@@ -388,5 +388,22 @@ private[ml] trait HasSolver extends Params {
 
   /** @group getParam */
   final def getSolver: String = $(solver)
+}
+
+/**
+ * Trait for shared param aggregationDepth (default: 2).
+ */
+private[ml] trait HasAggregationDepth extends Params {
+
+  /**
+   * Param for suggested depth for treeAggregate (>= 2).
+   * @group expertParam
+   */
+  final val aggregationDepth: IntParam = new IntParam(this, "aggregationDepth", "suggested depth for treeAggregate (>= 2)", ParamValidators.gtEq(2))
+
+  setDefault(aggregationDepth, 2)
+
+  /** @group expertGetParam */
+  final def getAggregationDepth: Int = $(aggregationDepth)
 }
 // scalastyle:on

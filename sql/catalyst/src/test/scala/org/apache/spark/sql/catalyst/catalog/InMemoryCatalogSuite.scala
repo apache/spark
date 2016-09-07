@@ -17,7 +17,14 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+
 /** Test suite for the [[InMemoryCatalog]]. */
-class InMemoryCatalogSuite extends CatalogTestCases {
-  override protected def newEmptyCatalog(): ExternalCatalog = new InMemoryCatalog
+class InMemoryCatalogSuite extends ExternalCatalogSuite {
+
+  protected override val utils: CatalogTestUtils = new CatalogTestUtils {
+    override val tableInputFormat: String = "org.apache.park.SequenceFileInputFormat"
+    override val tableOutputFormat: String = "org.apache.park.SequenceFileOutputFormat"
+    override def newEmptyCatalog(): ExternalCatalog = new InMemoryCatalog
+  }
+
 }

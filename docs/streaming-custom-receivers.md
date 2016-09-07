@@ -36,7 +36,7 @@ Any exception in the receiving threads should be caught and handled properly to 
 failures of the receiver. `restart(<exception>)` will restart the receiver by
 asynchronously calling `onStop()` and then calling `onStart()` after a delay.
 `stop(<exception>)` will call `onStop()` and terminate the receiver. Also, `reportError(<error>)`
-reports a error message to the driver (visible in the logs and UI) without stopping / restarting
+reports an error message to the driver (visible in the logs and UI) without stopping / restarting
 the receiver.
 
 The following is a custom receiver that receives a stream of text over a socket. It treats
@@ -59,8 +59,8 @@ class CustomReceiver(host: String, port: Int)
   }
 
   def onStop() {
-   // There is nothing much to do as the thread calling receive()
-   // is designed to stop by itself if isStopped() returns false
+    // There is nothing much to do as the thread calling receive()
+    // is designed to stop by itself if isStopped() returns false
   }
 
   /** Create a socket connection and receive data until receiver is stopped */
@@ -68,28 +68,29 @@ class CustomReceiver(host: String, port: Int)
     var socket: Socket = null
     var userInput: String = null
     try {
-     // Connect to host:port
-     socket = new Socket(host, port)
+      // Connect to host:port
+      socket = new Socket(host, port)
 
-     // Until stopped or connection broken continue reading
-     val reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"))
-     userInput = reader.readLine()
-     while(!isStopped && userInput != null) {
-       store(userInput)
-       userInput = reader.readLine()
-     }
-     reader.close()
-     socket.close()
+      // Until stopped or connection broken continue reading
+      val reader = new BufferedReader(
+        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
+      userInput = reader.readLine()
+      while(!isStopped && userInput != null) {
+        store(userInput)
+        userInput = reader.readLine()
+      }
+      reader.close()
+      socket.close()
 
-     // Restart in an attempt to connect again when server is active again
-     restart("Trying to connect again")
+      // Restart in an attempt to connect again when server is active again
+      restart("Trying to connect again")
     } catch {
-     case e: java.net.ConnectException =>
-       // restart if could not connect to server
-       restart("Error connecting to " + host + ":" + port, e)
-     case t: Throwable =>
-       // restart if there is any other error
-       restart("Error receiving data", t)
+      case e: java.net.ConnectException =>
+        // restart if could not connect to server
+        restart("Error connecting to " + host + ":" + port, e)
+      case t: Throwable =>
+        // restart if there is any other error
+        restart("Error receiving data", t)
     }
   }
 }
@@ -135,7 +136,8 @@ public class JavaCustomReceiver extends Receiver<String> {
       // connect to the server
       socket = new Socket(host, port);
 
-      BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+      BufferedReader reader = new BufferedReader(
+        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
 
       // Until stopped or connection broken continue reading
       while (!isStopped() && (userInput = reader.readLine()) != null) {
@@ -179,7 +181,7 @@ val words = lines.flatMap(_.split(" "))
 ...
 {% endhighlight %}
 
-The full source code is in the example [CustomReceiver.scala](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/CustomReceiver.scala).
+The full source code is in the example [CustomReceiver.scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/CustomReceiver.scala).
 
 </div>
 <div data-lang="java" markdown="1">
@@ -191,7 +193,7 @@ JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() 
 ...
 {% endhighlight %}
 
-The full source code is in the example [JavaCustomReceiver.java](https://github.com/apache/spark/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaCustomReceiver.java).
+The full source code is in the example [JavaCustomReceiver.java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaCustomReceiver.java).
 
 </div>
 </div>
@@ -254,64 +256,3 @@ The following table summarizes the characteristics of both types of receivers
   <td></td>
 </tr>
 </table>
-
-## Implementing and Using a Custom Actor-based Receiver
-
-Custom [Akka Actors](http://doc.akka.io/docs/akka/2.3.11/scala/actors.html) can also be used to
-receive data. Here are the instructions.
-
-1. **Linking:** You need to add the following dependency to your SBT or Maven project (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide for further information).
-
-		groupId = org.apache.spark
-		artifactId = spark-streaming-akka_{{site.SCALA_BINARY_VERSION}}
-		version = {{site.SPARK_VERSION_SHORT}}
-
-2. **Programming:**
-
-	<div class="codetabs">
-	<div data-lang="scala"  markdown="1" >
-
-	You need to extend [`ActorReceiver`](api/scala/index.html#org.apache.spark.streaming.akka.ActorReceiver)
-	so as to store received data into Spark using `store(...)` methods. The supervisor strategy of
-	this actor can be configured to handle failures, etc.
-
-		class CustomActor extends ActorReceiver {
-		  def receive = {
-		    case data: String => store(data)
-		  }
-		}
-
-		// A new input stream can be created with this custom actor as
-		val ssc: StreamingContext = ...
-		val lines = AkkaUtils.createStream[String](ssc, Props[CustomActor](), "CustomReceiver")
-
-	See [ActorWordCount.scala](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/ActorWordCount.scala) for an end-to-end example.
-	</div>
-	<div data-lang="java" markdown="1">
-
-	You need to extend [`JavaActorReceiver`](api/scala/index.html#org.apache.spark.streaming.akka.JavaActorReceiver)
-	so as to store received data into Spark using `store(...)` methods. The supervisor strategy of
-	this actor can be configured to handle failures, etc.
-
-		class CustomActor extends JavaActorReceiver {
-		  @Override
-		  public void onReceive(Object msg) throws Exception {
-		    store((String) msg);
-		  }
-		}
-
-		// A new input stream can be created with this custom actor as
-		JavaStreamingContext jssc = ...;
-		JavaDStream<String> lines = AkkaUtils.<String>createStream(jssc, Props.create(CustomActor.class), "CustomReceiver");
-
-	See [JavaActorWordCount.scala](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/JavaActorWordCount.scala) for an end-to-end example.
-	</div>
-	</div>
-
-3. **Deploying:** As with any Spark applications, `spark-submit` is used to launch your application.
-You need to package `spark-streaming-akka_{{site.SCALA_BINARY_VERSION}}` and its dependencies into
-the application JAR. Make sure `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}`
-are marked as `provided` dependencies as those are already present in a Spark installation. Then
-use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
-
-<span class="badge" style="background-color: grey">Python API</span> Since actors are available only in the Java and Scala libraries, AkkaUtils is not available in the Python API.

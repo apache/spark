@@ -21,10 +21,12 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 import com.google.common.collect.ConcurrentHashMultiset
 
-import org.apache.spark.{Logging, SparkException, TaskContext}
+import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.internal.Logging
 
 
 /**
@@ -36,10 +38,14 @@ import org.apache.spark.{Logging, SparkException, TaskContext}
  * @param level the block's storage level. This is the requested persistence level, not the
  *              effective storage level of the block (i.e. if this is MEMORY_AND_DISK, then this
  *              does not imply that the block is actually resident in memory).
+ * @param classTag the block's [[ClassTag]], used to select the serializer
  * @param tellMaster whether state changes for this block should be reported to the master. This
  *                   is true for most blocks, but is false for broadcast blocks.
  */
-private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
+private[storage] class BlockInfo(
+    val level: StorageLevel,
+    val classTag: ClassTag[_],
+    val tellMaster: Boolean) {
 
   /**
    * The size of the block (in bytes)
@@ -205,9 +211,6 @@ private[storage] class BlockInfoManager extends Logging {
    * If another task has already locked this block for either reading or writing, then this call
    * will block until the other locks are released or will return immediately if `blocking = false`.
    *
-   * If this is called by a task which already holds the block's exclusive write lock, then this
-   * method will throw an exception.
-   *
    * @param blockId the block to lock.
    * @param blocking if true (default), this call will block until the lock is acquired. If false,
    *                 this call will return immediately if the lock acquisition fails.
@@ -222,10 +225,7 @@ private[storage] class BlockInfoManager extends Logging {
       infos.get(blockId) match {
         case None => return None
         case Some(info) =>
-          if (info.writerTask == currentTaskAttemptId) {
-            throw new IllegalStateException(
-              s"Task $currentTaskAttemptId has already locked $blockId for writing")
-          } else if (info.writerTask == BlockInfo.NO_WRITER && info.readerCount == 0) {
+          if (info.writerTask == BlockInfo.NO_WRITER && info.readerCount == 0) {
             info.writerTask = currentTaskAttemptId
             writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
             logTrace(s"Task $currentTaskAttemptId acquired write lock for $blockId")
@@ -415,6 +415,7 @@ private[storage] class BlockInfoManager extends Logging {
           infos.remove(blockId)
           blockInfo.readerCount = 0
           blockInfo.writerTask = BlockInfo.NO_WRITER
+          writeLocksByTask.removeBinding(currentTaskAttemptId, blockId)
         }
       case None =>
         throw new IllegalArgumentException(

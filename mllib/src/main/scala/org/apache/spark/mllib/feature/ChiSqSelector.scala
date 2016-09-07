@@ -30,7 +30,7 @@ import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 
 /**
  * Chi Squared selector model.
@@ -134,8 +134,8 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
     val thisClassName = "org.apache.spark.mllib.feature.ChiSqSelectorModel"
 
     def save(sc: SparkContext, model: ChiSqSelectorModel, path: String): Unit = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
@@ -144,18 +144,17 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
       val dataArray = Array.tabulate(model.selectedFeatures.length) { i =>
         Data(model.selectedFeatures(i))
       }
-      sc.parallelize(dataArray, 1).toDF().write.parquet(Loader.dataPath(path))
-
+      spark.createDataFrame(dataArray).repartition(1).write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): ChiSqSelectorModel = {
       implicit val formats = DefaultFormats
-      val sqlContext = SQLContext.getOrCreate(sc)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
 
-      val dataFrame = sqlContext.read.parquet(Loader.dataPath(path))
+      val dataFrame = spark.read.parquet(Loader.dataPath(path))
       val dataArray = dataFrame.select("feature")
 
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
@@ -165,7 +164,7 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
         case Row(feature: Int) => (feature)
       }.collect()
 
-      return new ChiSqSelectorModel(features)
+      new ChiSqSelectorModel(features)
     }
   }
 }
@@ -174,8 +173,8 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
  * Creates a ChiSquared feature selector.
  * @param numTopFeatures number of features that selector will select
  *                       (ordered by statistic value descending)
- *                       Note that if the number of features is < numTopFeatures, then this will
- *                       select all features.
+ *                       Note that if the number of features is less than numTopFeatures,
+ *                       then this will select all features.
  */
 @Since("1.3.0")
 class ChiSqSelector @Since("1.3.0") (

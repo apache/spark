@@ -36,7 +36,7 @@ object ExpressionSet {
  * Internally this set uses the canonical representation, but keeps also track of the original
  * expressions to ease debugging.  Since different expressions can share the same canonical
  * representation, this means that operations that extract expressions from this set are only
- * guranteed to see at least one such expression.  For example:
+ * guaranteed to see at least one such expression.  For example:
  *
  * {{{
  *   val set = AttributeSet(a + 1, 1 + a)
@@ -55,7 +55,7 @@ class ExpressionSet protected(
   protected def add(e: Expression): Unit = {
     if (!baseSet.contains(e.canonicalized)) {
       baseSet.add(e.canonicalized)
-      originals.append(e)
+      originals += e
     }
   }
 

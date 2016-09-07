@@ -17,9 +17,9 @@
 
 package org.apache.spark.mllib.recommendation
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.recommendation.{ALS => NewALS}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -97,6 +97,8 @@ class ALS private (
    */
   @Since("0.8.0")
   def setBlocks(numBlocks: Int): this.type = {
+    require(numBlocks == -1 || numBlocks > 0,
+      s"Number of blocks must be -1 or positive but got ${numBlocks}")
     this.numUserBlocks = numBlocks
     this.numProductBlocks = numBlocks
     this
@@ -107,6 +109,8 @@ class ALS private (
    */
   @Since("1.1.0")
   def setUserBlocks(numUserBlocks: Int): this.type = {
+    require(numUserBlocks == -1 || numUserBlocks > 0,
+      s"Number of blocks must be -1 or positive but got ${numUserBlocks}")
     this.numUserBlocks = numUserBlocks
     this
   }
@@ -116,6 +120,8 @@ class ALS private (
    */
   @Since("1.1.0")
   def setProductBlocks(numProductBlocks: Int): this.type = {
+    require(numProductBlocks == -1 || numProductBlocks > 0,
+      s"Number of product blocks must be -1 or positive but got ${numProductBlocks}")
     this.numProductBlocks = numProductBlocks
     this
   }
@@ -123,6 +129,8 @@ class ALS private (
   /** Set the rank of the feature matrices computed (number of features). Default: 10. */
   @Since("0.8.0")
   def setRank(rank: Int): this.type = {
+    require(rank > 0,
+      s"Rank of the feature matrices must be positive but got ${rank}")
     this.rank = rank
     this
   }
@@ -130,6 +138,8 @@ class ALS private (
   /** Set the number of iterations to run. Default: 10. */
   @Since("0.8.0")
   def setIterations(iterations: Int): this.type = {
+    require(iterations >= 0,
+      s"Number of iterations must be nonnegative but got ${iterations}")
     this.iterations = iterations
     this
   }
@@ -137,6 +147,8 @@ class ALS private (
   /** Set the regularization parameter, lambda. Default: 0.01. */
   @Since("0.8.0")
   def setLambda(lambda: Double): this.type = {
+    require(lambda >= 0.0,
+      s"Regularization parameter must be nonnegative but got ${lambda}")
     this.lambda = lambda
     this
   }
@@ -204,6 +216,7 @@ class ALS private (
   }
 
   /**
+   * :: DeveloperApi ::
    * Set period (in iterations) between checkpoints (default = 10). Checkpointing helps with
    * recovery (when nodes fail) and StackOverflow exceptions caused by long lineage. It also helps
    * with eliminating temporary shuffle files on disk, which can be important when there are many

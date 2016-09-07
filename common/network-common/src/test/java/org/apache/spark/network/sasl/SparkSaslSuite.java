@@ -26,6 +26,7 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -276,7 +277,7 @@ public class SparkSaslSuite {
 
       ctx = new SaslTestCtx(rpcHandler, true, false);
 
-      final Object lock = new Object();
+      final CountDownLatch lock = new CountDownLatch(1);
 
       ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
       doAnswer(new Answer<Void>() {
@@ -284,17 +285,13 @@ public class SparkSaslSuite {
           public Void answer(InvocationOnMock invocation) {
             response.set((ManagedBuffer) invocation.getArguments()[1]);
             response.get().retain();
-            synchronized (lock) {
-              lock.notifyAll();
-            }
+            lock.countDown();
             return null;
           }
         }).when(callback).onSuccess(anyInt(), any(ManagedBuffer.class));
 
-      synchronized (lock) {
-        ctx.client.fetchChunk(0, 0, callback);
-        lock.wait(10 * 1000);
-      }
+      ctx.client.fetchChunk(0, 0, callback);
+      lock.await(10, TimeUnit.SECONDS);
 
       verify(callback, times(1)).onSuccess(anyInt(), any(ManagedBuffer.class));
       verify(callback, never()).onFailure(anyInt(), any(Throwable.class));

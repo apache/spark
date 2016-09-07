@@ -28,7 +28,7 @@ import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -86,7 +86,7 @@ class LogisticRegressionModel @Since("1.3.0") (
   /**
    * Sets the threshold that separates positive predictions from negative predictions
    * in Binary Logistic Regression. An example with prediction score greater than or equal to
-   * this threshold is identified as an positive, and negative otherwise. The default value is 0.5.
+   * this threshold is identified as a positive, and negative otherwise. The default value is 0.5.
    * It is only used for binary classification.
    */
   @Since("1.0.0")
@@ -200,7 +200,7 @@ object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
 /**
  * Train a classification model for Binary Logistic Regression
  * using Stochastic Gradient Descent. By default L2 regularization is used,
- * which can be changed via [[LogisticRegressionWithSGD.optimizer]].
+ * which can be changed via `LogisticRegressionWithSGD.optimizer`.
  * NOTE: Labels used in Logistic Regression should be {0, 1, ..., k - 1}
  * for k classes multi-label classification problem.
  * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
@@ -228,6 +228,7 @@ class LogisticRegressionWithSGD private[mllib] (
    * numIterations: 100, regParm: 0.01, miniBatchFraction: 1.0}.
    */
   @Since("0.8.0")
+  @deprecated("Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS", "2.0.0")
   def this() = this(1.0, 100, 0.01, 1.0)
 
   override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
@@ -240,6 +241,7 @@ class LogisticRegressionWithSGD private[mllib] (
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
 @Since("0.8.0")
+@deprecated("Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS", "2.0.0")
 object LogisticRegressionWithSGD {
   // NOTE(shivaram): We use multiple train methods instead of default arguments to support
   // Java programs.
@@ -418,9 +420,9 @@ class LogisticRegressionWithLBFGS
 
   private def run(input: RDD[LabeledPoint], initialWeights: Vector, userSuppliedWeights: Boolean):
       LogisticRegressionModel = {
-    // ml's Logisitic regression only supports binary classifcation currently.
+    // ml's Logistic regression only supports binary classification currently.
     if (numOfLinearPredictor == 1) {
-      def runWithMlLogisitcRegression(elasticNetParam: Double) = {
+      def runWithMlLogisticRegression(elasticNetParam: Double) = {
         // Prepare the ml LogisticRegression based on our settings
         val lr = new org.apache.spark.ml.classification.LogisticRegression()
         lr.setRegParam(optimizer.getRegParam())
@@ -429,26 +431,25 @@ class LogisticRegressionWithLBFGS
         if (userSuppliedWeights) {
           val uid = Identifiable.randomUID("logreg-static")
           lr.setInitialModel(new org.apache.spark.ml.classification.LogisticRegressionModel(
-            uid, initialWeights, 1.0))
+            uid, initialWeights.asML, 1.0))
         }
         lr.setFitIntercept(addIntercept)
         lr.setMaxIter(optimizer.getNumIterations())
         lr.setTol(optimizer.getConvergenceTol())
         // Convert our input into a DataFrame
-        val sqlContext = new SQLContext(input.context)
-        import sqlContext.implicits._
-        val df = input.toDF()
+        val spark = SparkSession.builder().sparkContext(input.context).getOrCreate()
+        val df = spark.createDataFrame(input.map(_.asML))
         // Determine if we should cache the DF
         val handlePersistence = input.getStorageLevel == StorageLevel.NONE
         // Train our model
-        val mlLogisticRegresionModel = lr.train(df, handlePersistence)
+        val mlLogisticRegressionModel = lr.train(df, handlePersistence)
         // convert the model
-        val weights = Vectors.dense(mlLogisticRegresionModel.coefficients.toArray)
-        createModel(weights, mlLogisticRegresionModel.intercept)
+        val weights = Vectors.dense(mlLogisticRegressionModel.coefficients.toArray)
+        createModel(weights, mlLogisticRegressionModel.intercept)
       }
       optimizer.getUpdater() match {
-        case x: SquaredL2Updater => runWithMlLogisitcRegression(0.0)
-        case x: L1Updater => runWithMlLogisitcRegression(1.0)
+        case x: SquaredL2Updater => runWithMlLogisticRegression(0.0)
+        case x: L1Updater => runWithMlLogisticRegression(1.0)
         case _ => super.run(input, initialWeights)
       }
     } else {

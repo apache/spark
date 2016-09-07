@@ -17,8 +17,12 @@
 
 package org.apache.spark.unsafe;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 
+import sun.misc.Cleaner;
 import sun.misc.Unsafe;
 
 public final class Platform {
@@ -36,6 +40,33 @@ public final class Platform {
   public static final int FLOAT_ARRAY_OFFSET;
 
   public static final int DOUBLE_ARRAY_OFFSET;
+
+  private static final boolean unaligned;
+  static {
+    boolean _unaligned;
+    // use reflection to access unaligned field
+    try {
+      Class<?> bitsClass =
+        Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
+      Method unalignedMethod = bitsClass.getDeclaredMethod("unaligned");
+      unalignedMethod.setAccessible(true);
+      _unaligned = Boolean.TRUE.equals(unalignedMethod.invoke(null));
+    } catch (Throwable t) {
+      // We at least know x86 and x64 support unaligned access.
+      String arch = System.getProperty("os.arch", "");
+      //noinspection DynamicRegexReplaceableByCompiledPattern
+      _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64|aarch64)$");
+    }
+    unaligned = _unaligned;
+  }
+
+  /**
+   * @return true when running JVM is having sun's Unsafe package available in it and underlying
+   *         system having unaligned-access capability.
+   */
+  public static boolean unaligned() {
+    return unaligned;
+  }
 
   public static int getInt(Object object, long offset) {
     return _UNSAFE.getInt(object, offset);
@@ -114,6 +145,39 @@ public final class Platform {
     copyMemory(null, address, null, newMemory, oldSize);
     freeMemory(address);
     return newMemory;
+  }
+
+  /**
+   * Uses internal JDK APIs to allocate a DirectByteBuffer while ignoring the JVM's
+   * MaxDirectMemorySize limit (the default limit is too low and we do not want to require users
+   * to increase it).
+   */
+  @SuppressWarnings("unchecked")
+  public static ByteBuffer allocateDirectBuffer(int size) {
+    try {
+      Class<?> cls = Class.forName("java.nio.DirectByteBuffer");
+      Constructor<?> constructor = cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE);
+      constructor.setAccessible(true);
+      Field cleanerField = cls.getDeclaredField("cleaner");
+      cleanerField.setAccessible(true);
+      final long memory = allocateMemory(size);
+      ByteBuffer buffer = (ByteBuffer) constructor.newInstance(memory, size);
+      Cleaner cleaner = Cleaner.create(buffer, new Runnable() {
+        @Override
+        public void run() {
+          freeMemory(memory);
+        }
+      });
+      cleanerField.set(buffer, cleaner);
+      return buffer;
+    } catch (Exception e) {
+      throwException(e);
+    }
+    throw new IllegalStateException("unreachable");
+  }
+
+  public static void setMemory(Object object, long offset, long size, byte value) {
+    _UNSAFE.setMemory(object, offset, size, value);
   }
 
   public static void setMemory(long address, byte value, long size) {

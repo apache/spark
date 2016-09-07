@@ -37,6 +37,9 @@ Public classes:
 
 """
 
+from functools import wraps
+import types
+
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
@@ -62,6 +65,38 @@ def since(version):
         f.__doc__ = f.__doc__.rstrip() + "\n\n%s.. versionadded:: %s" % (indent, version)
         return f
     return deco
+
+
+def copy_func(f, name=None, sinceversion=None, doc=None):
+    """
+    Returns a function with same code, globals, defaults, closure, and
+    name (or provide a new name).
+    """
+    # See
+    # http://stackoverflow.com/questions/6527633/how-can-i-make-a-deepcopy-of-a-function-in-python
+    fn = types.FunctionType(f.__code__, f.__globals__, name or f.__name__, f.__defaults__,
+                            f.__closure__)
+    # in case f was given attrs (note this dict is a shallow copy):
+    fn.__dict__.update(f.__dict__)
+    if doc is not None:
+        fn.__doc__ = doc
+    if sinceversion is not None:
+        fn = since(sinceversion)(fn)
+    return fn
+
+
+def keyword_only(func):
+    """
+    A decorator that forces keyword arguments in the wrapped method
+    and saves actual input keyword arguments in `_input_kwargs`.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if len(args) > 1:
+            raise TypeError("Method %s forces keyword arguments." % func.__name__)
+        wrapper._input_kwargs = kwargs
+        return func(*args, **kwargs)
+    return wrapper
 
 
 # for back compatibility

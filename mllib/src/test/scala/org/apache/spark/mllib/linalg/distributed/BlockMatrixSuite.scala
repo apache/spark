@@ -19,10 +19,10 @@ package org.apache.spark.mllib.linalg.distributed
 
 import java.{util => ju}
 
-import breeze.linalg.{DenseMatrix => BDM}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix}
+import org.apache.spark.mllib.linalg.{DenseMatrix, DenseVector, Matrices, Matrix, SparseMatrix, SparseVector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
@@ -134,6 +134,38 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(rowMat.numRows() === m)
     assert(rowMat.numCols() === n)
     assert(rowMat.toBreeze() === gridBasedMat.toBreeze())
+
+    // SPARK-15922: BlockMatrix to IndexedRowMatrix throws an error"
+    val bmat = rowMat.toBlockMatrix
+    val imat = bmat.toIndexedRowMatrix
+    imat.rows.collect
+
+    val rows = 1
+    val cols = 10
+
+    val matDense = new DenseMatrix(rows, cols,
+      Array(1.0, 1.0, 3.0, 2.0, 5.0, 6.0, 7.0, 1.0, 2.0, 3.0))
+    val matSparse = new SparseMatrix(rows, cols,
+      Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1), Array(0), Array(1.0))
+
+    val vectors: Seq[((Int, Int), Matrix)] = Seq(
+      ((0, 0), matDense),
+      ((1, 0), matSparse))
+
+    val rdd = sc.parallelize(vectors)
+    val B = new BlockMatrix(rdd, rows, cols)
+
+    val C = B.toIndexedRowMatrix.rows.collect
+
+    (C(0).vector.asBreeze, C(1).vector.asBreeze) match {
+      case (denseVector: BDV[Double], sparseVector: BSV[Double]) =>
+        assert(denseVector.length === sparseVector.length)
+
+        assert(matDense.toArray === denseVector.toArray)
+        assert(matSparse.toArray === sparseVector.toArray)
+      case _ =>
+        throw new RuntimeException("IndexedRow returns vectors of unexpected type")
+    }
   }
 
   test("toBreeze and toLocalMatrix") {
@@ -190,6 +222,49 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     val denseBM = new BlockMatrix(sc.makeRDD(denseBlocks, 4), 4, 4, 8, 8)
 
     assert(sparseBM.add(sparseBM).toBreeze() === sparseBM.add(denseBM).toBreeze())
+  }
+
+  test("subtract") {
+    val blocks: Seq[((Int, Int), Matrix)] = Seq(
+      ((0, 0), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 2.0))),
+      ((0, 1), new DenseMatrix(2, 2, Array(0.0, 1.0, 0.0, 0.0))),
+      ((1, 0), new DenseMatrix(2, 2, Array(3.0, 0.0, 1.0, 1.0))),
+      ((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))),
+      ((2, 0), new DenseMatrix(1, 2, Array(1.0, 0.0))), // Added block that doesn't exist in A
+      ((2, 1), new DenseMatrix(1, 2, Array(1.0, 5.0))))
+    val rdd = sc.parallelize(blocks, numPartitions)
+    val B = new BlockMatrix(rdd, rowPerPart, colPerPart)
+
+    val expected = BDM(
+      (0.0, 0.0, 0.0, 0.0),
+      (0.0, 0.0, 0.0, 0.0),
+      (0.0, 0.0, 0.0, 0.0),
+      (0.0, 0.0, 0.0, 0.0),
+      (-1.0, 0.0, 0.0, 0.0))
+
+    val AsubtractB = gridBasedMat.subtract(B)
+    assert(AsubtractB.numRows() === m)
+    assert(AsubtractB.numCols() === B.numCols())
+    assert(AsubtractB.toBreeze() === expected)
+
+    val C = new BlockMatrix(rdd, rowPerPart, colPerPart, m, n + 1) // columns don't match
+    intercept[IllegalArgumentException] {
+      gridBasedMat.subtract(C)
+    }
+    val largerBlocks: Seq[((Int, Int), Matrix)] = Seq(
+      ((0, 0), new DenseMatrix(4, 4, new Array[Double](16))),
+      ((1, 0), new DenseMatrix(1, 4, Array(1.0, 0.0, 1.0, 5.0))))
+    val C2 = new BlockMatrix(sc.parallelize(largerBlocks, numPartitions), 4, 4, m, n)
+    intercept[SparkException] { // partitioning doesn't match
+      gridBasedMat.subtract(C2)
+    }
+    // subtracting BlockMatrices composed of SparseMatrices
+    val sparseBlocks = for (i <- 0 until 4) yield ((i / 2, i % 2), SparseMatrix.speye(4))
+    val denseBlocks = for (i <- 0 until 4) yield ((i / 2, i % 2), DenseMatrix.eye(4))
+    val sparseBM = new BlockMatrix(sc.makeRDD(sparseBlocks, 4), 4, 4, 8, 8)
+    val denseBM = new BlockMatrix(sc.makeRDD(denseBlocks, 4), 4, 4, 8, 8)
+
+    assert(sparseBM.subtract(sparseBM).toBreeze() === sparseBM.subtract(denseBM).toBreeze())
   }
 
   test("multiply") {

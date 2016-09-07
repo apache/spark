@@ -28,6 +28,20 @@
 -->
 
 <suppressions>
-<suppress checks=".*"
-  files="core/src/main/java/org/apache/spark/util/collection/TimSort.java"/>
+    <suppress checks=".*"
+              files="core/src/main/java/org/apache/spark/util/collection/TimSort.java"/>
+    <suppress checks=".*"
+              files="sql/core/src/main/java/org/apache/spark/sql/api.java/*"/>
+    <suppress checks="LineLength"
+              files="src/test/java/org/apache/spark/sql/hive/test/Complex.java"/>
+    <suppress checks="LineLength"
+              files="src/main/java/org/apache/spark/examples/JavaLogQuery.java"/>
+    <suppress checks="LineLength"
+              files="src/main/java/org/apache/hive/service/*"/>
+    <suppress checks="MethodName"
+              files="src/main/java/org/apache/hive/service/auth/PasswdAuthenticationProvider.java"/>
+    <suppress checks="NoFinalizer"
+              files="src/main/java/org/apache/hive/service/server/ThreadWithGarbageCleanup.java"/>
+    <suppress checks="MethodName"
+              files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/OutputMode.java"/>
 </suppressions>

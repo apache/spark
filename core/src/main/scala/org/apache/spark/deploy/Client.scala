@@ -22,11 +22,12 @@ import scala.concurrent.ExecutionContext
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success}
 
-import org.apache.log4j.{Level, Logger}
+import org.apache.log4j.Logger
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.util.{SparkExitCode, ThreadUtils, Utils}
 
@@ -115,7 +116,7 @@ private class ClientEndpoint(
   }
 
   /* Find out driver status then exit the JVM */
-  def pollAndReportStatus(driverId: String) {
+  def pollAndReportStatus(driverId: String): Unit = {
     // Since ClientEndpoint is the only RpcEndpoint in the process, blocking the event loop thread
     // is fine.
     logInfo("... waiting before polling master for driver state")
@@ -123,25 +124,26 @@ private class ClientEndpoint(
     logInfo("... polling master for driver state")
     val statusResponse =
       activeMasterEndpoint.askWithRetry[DriverStatusResponse](RequestDriverStatus(driverId))
-    statusResponse.found match {
-      case false =>
-        logError(s"ERROR: Cluster master did not recognize $driverId")
-        System.exit(-1)
-      case true =>
-        logInfo(s"State of $driverId is ${statusResponse.state.get}")
-        // Worker node, if present
-        (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
-          case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
-            logInfo(s"Driver running on $hostPort ($id)")
-          case _ =>
-        }
-        // Exception, if present
-        statusResponse.exception.map { e =>
+    if (statusResponse.found) {
+      logInfo(s"State of $driverId is ${statusResponse.state.get}")
+      // Worker node, if present
+      (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
+        case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
+          logInfo(s"Driver running on $hostPort ($id)")
+        case _ =>
+      }
+      // Exception, if present
+      statusResponse.exception match {
+        case Some(e) =>
           logError(s"Exception from cluster was: $e")
           e.printStackTrace()
           System.exit(-1)
-        }
-        System.exit(0)
+        case _ =>
+          System.exit(0)
+      }
+    } else {
+      logError(s"ERROR: Cluster master did not recognize $driverId")
+      System.exit(-1)
     }
   }
 

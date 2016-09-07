@@ -18,17 +18,19 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Dataset
 
-class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
+class BisectingKMeansSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   final val k = 5
-  @transient var dataset: DataFrame = _
+  @transient var dataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    dataset = KMeansSuite.generateKMeansData(sqlContext, 50, 3, k)
+    dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
   }
 
   test("default parameters") {
@@ -84,4 +86,22 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.computeCost(dataset) < 0.1)
     assert(model.hasParent)
   }
+
+  test("read/write") {
+    def checkModelData(model: BisectingKMeansModel, model2: BisectingKMeansModel): Unit = {
+      assert(model.clusterCenters === model2.clusterCenters)
+    }
+    val bisectingKMeans = new BisectingKMeans()
+    testEstimatorAndModelReadWrite(
+      bisectingKMeans, dataset, BisectingKMeansSuite.allParamSettings, checkModelData)
+  }
+}
+
+object BisectingKMeansSuite {
+  val allParamSettings: Map[String, Any] = Map(
+    "k" -> 3,
+    "maxIter" -> 2,
+    "seed" -> -1L,
+    "minDivisibleClusterSize" -> 2.0
+  )
 }

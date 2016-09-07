@@ -19,6 +19,7 @@ package org.apache.spark.serializer
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable
 
@@ -31,6 +32,7 @@ import org.apache.commons.io.IOUtils
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.util.Utils
 
 /**
  * Custom serializer used for generic Avro records. If the user registers the schemas
@@ -71,8 +73,11 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
   def compress(schema: Schema): Array[Byte] = compressCache.getOrElseUpdate(schema, {
     val bos = new ByteArrayOutputStream()
     val out = codec.compressedOutputStream(bos)
-    out.write(schema.toString.getBytes("UTF-8"))
-    out.close()
+    Utils.tryWithSafeFinally {
+      out.write(schema.toString.getBytes(StandardCharsets.UTF_8))
+    } {
+      out.close()
+    }
     bos.toByteArray
   })
 
@@ -85,8 +90,13 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
       schemaBytes.array(),
       schemaBytes.arrayOffset() + schemaBytes.position(),
       schemaBytes.remaining())
-    val bytes = IOUtils.toByteArray(codec.compressedInputStream(bis))
-    new Schema.Parser().parse(new String(bytes, "UTF-8"))
+    val in = codec.compressedInputStream(bis)
+    val bytes = Utils.tryWithSafeFinally {
+      IOUtils.toByteArray(in)
+    } {
+      in.close()
+    }
+    new Schema.Parser().parse(new String(bytes, StandardCharsets.UTF_8))
   })
 
   /**

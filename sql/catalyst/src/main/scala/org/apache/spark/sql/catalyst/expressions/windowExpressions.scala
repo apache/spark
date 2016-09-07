@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.types._
 
@@ -30,6 +31,7 @@ sealed trait WindowSpec
 
 /**
  * The specification for a window function.
+ *
  * @param partitionSpec It defines the way that input rows are partitioned.
  * @param orderSpec It defines the ordering of rows in a partition.
  * @param frameSpecification It defines the window frame in a partition.
@@ -75,6 +77,22 @@ case class WindowSpecDefinition(
   override def nullable: Boolean = true
   override def foldable: Boolean = false
   override def dataType: DataType = throw new UnsupportedOperationException
+
+  override def sql: String = {
+    val partition = if (partitionSpec.isEmpty) {
+      ""
+    } else {
+      "PARTITION BY " + partitionSpec.map(_.sql).mkString(", ") + " "
+    }
+
+    val order = if (orderSpec.isEmpty) {
+      ""
+    } else {
+      "ORDER BY " + orderSpec.map(_.sql).mkString(", ") + " "
+    }
+
+    s"($partition$order${frameSpecification.toString})"
+  }
 }
 
 /**
@@ -278,6 +296,7 @@ case class WindowExpression(
   override def nullable: Boolean = windowFunction.nullable
 
   override def toString: String = s"$windowFunction $windowSpec"
+  override def sql: String = windowFunction.sql + " OVER " + windowSpec.sql
 }
 
 /**
@@ -302,8 +321,7 @@ abstract class OffsetWindowFunction
   val input: Expression
 
   /**
-   * Default result value for the function when the input expression returns NULL. The default will
-   * evaluated against the current row instead of the offset row.
+   * Default result value for the function when the 'offset'th row does not exist.
    */
   val default: Expression
 
@@ -329,7 +347,7 @@ abstract class OffsetWindowFunction
    */
   override def foldable: Boolean = false
 
-  override def nullable: Boolean = default == null || default.nullable
+  override def nullable: Boolean = default == null || default.nullable || input.nullable
 
   override lazy val frame = {
     // This will be triggered by the Analyzer.
@@ -354,20 +372,22 @@ abstract class OffsetWindowFunction
 }
 
 /**
- * The Lead function returns the value of 'x' at 'offset' rows after the current row in the window.
- * Offsets start at 0, which is the current row. The offset must be constant integer value. The
- * default offset is 1. When the value of 'x' is null at the offset, or when the offset is larger
- * than the window, the default expression is evaluated.
- *
- * This documentation has been based upon similar documentation for the Hive and Presto projects.
+ * The Lead function returns the value of 'x' at the 'offset'th row after the current row in
+ * the window. Offsets start at 0, which is the current row. The offset must be constant
+ * integer value. The default offset is 1. When the value of 'x' is null at the 'offset'th row,
+ * null is returned. If there is no such offset row, the default expression is evaluated.
  *
  * @param input expression to evaluate 'offset' rows after the current row.
  * @param offset rows to jump ahead in the partition.
- * @param default to use when the input value is null or when the offset is larger than the window.
+ * @param default to use when the offset is larger than the window. The default value is null.
  */
 @ExpressionDescription(usage =
-  """_FUNC_(input, offset, default) - LEAD returns the value of 'x' at 'offset' rows
-     after the current row in the window""")
+  """_FUNC_(input, offset, default) - LEAD returns the value of 'x' at the 'offset'th row
+     after the current row in the window.
+     The default value of 'offset' is 1 and the default value of 'default' is null.
+     If the value of 'x' at the 'offset'th row is null, null is returned.
+     If there is no such offset row (e.g. when the offset is 1, the last row of the window
+     does not have any subsequent row), 'default' is returned.""")
 case class Lead(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {
 
@@ -381,20 +401,22 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
 }
 
 /**
- * The Lag function returns the value of 'x' at 'offset' rows before the current row in the window.
- * Offsets start at 0, which is the current row. The offset must be constant integer value. The
- * default offset is 1. When the value of 'x' is null at the offset, or when the offset is smaller
- * than the window, the default expression is evaluated.
- *
- * This documentation has been based upon similar documentation for the Hive and Presto projects.
+ * The Lag function returns the value of 'x' at the 'offset'th row before the current row in
+ * the window. Offsets start at 0, which is the current row. The offset must be constant
+ * integer value. The default offset is 1. When the value of 'x' is null at the 'offset'th row,
+ * null is returned. If there is no such offset row, the default expression is evaluated.
  *
  * @param input expression to evaluate 'offset' rows before the current row.
  * @param offset rows to jump back in the partition.
- * @param default to use when the input value is null or when the offset is smaller than the window.
+ * @param default to use when the offset row does not exist.
  */
 @ExpressionDescription(usage =
-  """_FUNC_(input, offset, default) - LAG returns the value of 'x' at 'offset' rows
-     before the current row in the window""")
+  """_FUNC_(input, offset, default) - LAG returns the value of 'x' at the 'offset'th row
+     before the current row in the window.
+     The default value of 'offset' is 1 and the default value of 'default' is null.
+     If the value of 'x' at the 'offset'th row is null, null is returned.
+     If there is no such offset row (e.g. when the offset is 1, the first row of the window
+     does not have any previous row), 'default' is returned.""")
 case class Lag(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {
 
@@ -432,7 +454,11 @@ abstract class RowNumberLike extends AggregateWindowFunction {
  * A [[SizeBasedWindowFunction]] needs the size of the current window for its calculation.
  */
 trait SizeBasedWindowFunction extends AggregateWindowFunction {
-  protected def n: AttributeReference = SizeBasedWindowFunction.n
+  // It's made a val so that the attribute created on driver side is serialized to executor side.
+  // Otherwise, if it's defined as a function, when it's called on executor side, it actually
+  // returns the singleton value instantiated on executor side, which has different expression ID
+  // from the one created on driver side.
+  val n: AttributeReference = SizeBasedWindowFunction.n
 }
 
 object SizeBasedWindowFunction {
@@ -451,6 +477,7 @@ object SizeBasedWindowFunction {
      the window partition.""")
 case class RowNumber() extends RowNumberLike {
   override val evaluateExpression = rowNumber
+  override def prettyName: String = "row_number"
 }
 
 /**
@@ -470,6 +497,7 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   // return the same value for equal values in the partition.
   override val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
   override val evaluateExpression = Divide(Cast(rowNumber, DoubleType), Cast(n, DoubleType))
+  override def prettyName: String = "cume_dist"
 }
 
 /**
@@ -499,12 +527,25 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction {
   def this() = this(Literal(1))
 
+  override def children: Seq[Expression] = Seq(buckets)
+
   // Validate buckets. Note that this could be relaxed, the bucket value only needs to constant
   // for each partition.
-  buckets.eval() match {
-    case b: Int if b > 0 => // Ok
-    case x => throw new AnalysisException(
-      "Buckets expression must be a foldable positive integer expression: $x")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!buckets.foldable) {
+      return TypeCheckFailure(s"Buckets expression must be foldable, but got $buckets")
+    }
+
+    if (buckets.dataType != IntegerType) {
+      return TypeCheckFailure(s"Buckets expression must be integer type, but got $buckets")
+    }
+
+    val i = buckets.eval().asInstanceOf[Int]
+    if (i > 0) {
+      TypeCheckSuccess
+    } else {
+      TypeCheckFailure(s"Buckets expression must be positive, but got: $i")
+    }
   }
 
   private val bucket = AttributeReference("bucket", IntegerType, nullable = false)()
@@ -587,6 +628,8 @@ abstract class RankLike extends AggregateWindowFunction {
   override val updateExpressions = increaseRank +: increaseRowNumber +: children
   override val evaluateExpression: Expression = rank
 
+  override def sql: String = s"${prettyName.toUpperCase}()"
+
   def withOrder(order: Seq[Expression]): RankLike
 }
 
@@ -632,6 +675,7 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
   override val updateExpressions = increaseRank +: children
   override val aggBufferAttributes = rank +: orderAttrs
   override val initialValues = zero +: orderInit
+  override def prettyName: String = "dense_rank"
 }
 
 /**
@@ -658,4 +702,5 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
   override val evaluateExpression = If(GreaterThan(n, one),
       Divide(Cast(Subtract(rank, one), DoubleType), Cast(Subtract(n, one), DoubleType)),
       Literal(0.0d))
+  override def prettyName: String = "percent_rank"
 }

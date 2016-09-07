@@ -21,14 +21,10 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
-import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * A collection of implicit methods for converting common Scala objects into [[DataFrame]]s.
+ * A collection of implicit methods for converting common Scala objects into [[Dataset]]s.
  *
  * @since 1.6.0
  */
@@ -36,34 +32,68 @@ abstract class SQLImplicits {
 
   protected def _sqlContext: SQLContext
 
+  /**
+   * Converts $"col name" into a [[Column]].
+   *
+   * @since 2.0.0
+   */
+  implicit class StringToColumn(val sc: StringContext) {
+    def $(args: Any*): ColumnName = {
+      new ColumnName(sc.s(args: _*))
+    }
+  }
+
   /** @since 1.6.0 */
-  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = ExpressionEncoder()
+  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = Encoders.product[T]
 
   // Primitives
 
   /** @since 1.6.0 */
-  implicit def newIntEncoder: Encoder[Int] = ExpressionEncoder()
+  implicit def newIntEncoder: Encoder[Int] = Encoders.scalaInt
 
   /** @since 1.6.0 */
-  implicit def newLongEncoder: Encoder[Long] = ExpressionEncoder()
+  implicit def newLongEncoder: Encoder[Long] = Encoders.scalaLong
 
   /** @since 1.6.0 */
-  implicit def newDoubleEncoder: Encoder[Double] = ExpressionEncoder()
+  implicit def newDoubleEncoder: Encoder[Double] = Encoders.scalaDouble
 
   /** @since 1.6.0 */
-  implicit def newFloatEncoder: Encoder[Float] = ExpressionEncoder()
+  implicit def newFloatEncoder: Encoder[Float] = Encoders.scalaFloat
 
   /** @since 1.6.0 */
-  implicit def newByteEncoder: Encoder[Byte] = ExpressionEncoder()
+  implicit def newByteEncoder: Encoder[Byte] = Encoders.scalaByte
 
   /** @since 1.6.0 */
-  implicit def newShortEncoder: Encoder[Short] = ExpressionEncoder()
+  implicit def newShortEncoder: Encoder[Short] = Encoders.scalaShort
 
   /** @since 1.6.0 */
-  implicit def newBooleanEncoder: Encoder[Boolean] = ExpressionEncoder()
+  implicit def newBooleanEncoder: Encoder[Boolean] = Encoders.scalaBoolean
 
   /** @since 1.6.0 */
-  implicit def newStringEncoder: Encoder[String] = ExpressionEncoder()
+  implicit def newStringEncoder: Encoder[String] = Encoders.STRING
+
+  // Boxed primitives
+
+  /** @since 2.0.0 */
+  implicit def newBoxedIntEncoder: Encoder[java.lang.Integer] = Encoders.INT
+
+  /** @since 2.0.0 */
+  implicit def newBoxedLongEncoder: Encoder[java.lang.Long] = Encoders.LONG
+
+  /** @since 2.0.0 */
+  implicit def newBoxedDoubleEncoder: Encoder[java.lang.Double] = Encoders.DOUBLE
+
+  /** @since 2.0.0 */
+  implicit def newBoxedFloatEncoder: Encoder[java.lang.Float] = Encoders.FLOAT
+
+  /** @since 2.0.0 */
+  implicit def newBoxedByteEncoder: Encoder[java.lang.Byte] = Encoders.BYTE
+
+  /** @since 2.0.0 */
+  implicit def newBoxedShortEncoder: Encoder[java.lang.Short] = Encoders.SHORT
+
+  /** @since 2.0.0 */
+  implicit def newBoxedBooleanEncoder: Encoder[java.lang.Boolean] = Encoders.BOOLEAN
 
   // Seqs
 
@@ -126,6 +156,7 @@ abstract class SQLImplicits {
 
   /**
    * Creates a [[Dataset]] from an RDD.
+   *
    * @since 1.6.0
    */
   implicit def rddToDatasetHolder[T : Encoder](rdd: RDD[T]): DatasetHolder[T] = {
@@ -146,75 +177,4 @@ abstract class SQLImplicits {
    */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
-  /**
-   * Creates a DataFrame from an RDD of Product (e.g. case classes, tuples).
-   * @since 1.3.0
-   */
-  implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrameHolder = {
-    DataFrameHolder(_sqlContext.createDataFrame(rdd))
-  }
-
-  /**
-   * Creates a DataFrame from a local Seq of Product.
-   * @since 1.3.0
-   */
-  implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder =
-  {
-    DataFrameHolder(_sqlContext.createDataFrame(data))
-  }
-
-  // Do NOT add more implicit conversions for primitive types.
-  // They are likely to break source compatibility by making existing implicit conversions
-  // ambiguous. In particular, RDD[Double] is dangerous because of [[DoubleRDDFunctions]].
-
-  /**
-   * Creates a single column DataFrame from an RDD[Int].
-   * @since 1.3.0
-   */
-  implicit def intRddToDataFrameHolder(data: RDD[Int]): DataFrameHolder = {
-    val dataType = IntegerType
-    val rows = data.mapPartitions { iter =>
-      val row = new SpecificMutableRow(dataType :: Nil)
-      iter.map { v =>
-        row.setInt(0, v)
-        row: InternalRow
-      }
-    }
-    DataFrameHolder(
-      _sqlContext.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
-  }
-
-  /**
-   * Creates a single column DataFrame from an RDD[Long].
-   * @since 1.3.0
-   */
-  implicit def longRddToDataFrameHolder(data: RDD[Long]): DataFrameHolder = {
-    val dataType = LongType
-    val rows = data.mapPartitions { iter =>
-      val row = new SpecificMutableRow(dataType :: Nil)
-      iter.map { v =>
-        row.setLong(0, v)
-        row: InternalRow
-      }
-    }
-    DataFrameHolder(
-      _sqlContext.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
-  }
-
-  /**
-   * Creates a single column DataFrame from an RDD[String].
-   * @since 1.3.0
-   */
-  implicit def stringRddToDataFrameHolder(data: RDD[String]): DataFrameHolder = {
-    val dataType = StringType
-    val rows = data.mapPartitions { iter =>
-      val row = new SpecificMutableRow(dataType :: Nil)
-      iter.map { v =>
-        row.update(0, UTF8String.fromString(v))
-        row: InternalRow
-      }
-    }
-    DataFrameHolder(
-      _sqlContext.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
-  }
 }

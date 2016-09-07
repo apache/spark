@@ -30,7 +30,7 @@ package object graphx {
    */
   type VertexId = Long
 
-  /** Integer identifer of a graph partition. Must be less than 2^30. */
+  /** Integer identifier of a graph partition. Must be less than 2^30. */
   // TODO: Consider using Char.
   type PartitionID = Int
 

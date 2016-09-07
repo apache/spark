@@ -62,7 +62,7 @@ import org.apache.spark.sql.types._
 abstract class MutableValue extends Serializable {
   var isNull: Boolean = true
   def boxed: Any
-  def update(v: Any)
+  def update(v: Any): Unit
   def copy(): MutableValue
 }
 

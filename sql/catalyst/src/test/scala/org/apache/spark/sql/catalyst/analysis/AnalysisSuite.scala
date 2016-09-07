@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -29,10 +29,10 @@ class AnalysisSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
   test("union project *") {
-    val plan = (1 to 100)
+    val plan = (1 to 120)
       .map(_ => testRelation)
       .fold[LogicalPlan](testRelation) { (a, b) =>
-        a.select(UnresolvedStar(None)).select('a).unionAll(b.select(UnresolvedStar(None)))
+        a.select(UnresolvedStar(None)).select('a).union(b.select(UnresolvedStar(None)))
       }
 
     assertAnalysisSuccess(plan)
@@ -161,14 +161,10 @@ class AnalysisSuite extends AnalysisTest {
   }
 
   test("resolve relations") {
-    assertAnalysisError(
-      UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq("Table not found: tAbLe"))
-
+    assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq())
     checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation)
-
     checkAnalysis(
       UnresolvedRelation(TableIdentifier("tAbLe"), None), testRelation, caseSensitive = false)
-
     checkAnalysis(
       UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation, caseSensitive = false)
   }
@@ -186,8 +182,7 @@ class AnalysisSuite extends AnalysisTest {
     assert(pl(0).dataType == DoubleType)
     assert(pl(1).dataType == DoubleType)
     assert(pl(2).dataType == DoubleType)
-    // StringType will be promoted into Decimal(38, 18)
-    assert(pl(3).dataType == DecimalType(38, 22))
+    assert(pl(3).dataType == DoubleType)
     assert(pl(4).dataType == DoubleType)
   }
 
@@ -250,7 +245,7 @@ class AnalysisSuite extends AnalysisTest {
     assertAnalysisSuccess(plan)
   }
 
-  test("SPARK-8654: different types in inlist but can be converted to a commmon type") {
+  test("SPARK-8654: different types in inlist but can be converted to a common type") {
     val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(1.2345))), "a")() :: Nil,
       LocalRelation()
     )
@@ -344,10 +339,42 @@ class AnalysisSuite extends AnalysisTest {
     val query =
       Project(Seq($"x.key", $"y.key"),
         Join(
-          Project(Seq($"x.key"), SubqueryAlias("x", input)),
-          Project(Seq($"y.key"), SubqueryAlias("y", input)),
-          Inner, None))
+          Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
+          Project(Seq($"y.key"), SubqueryAlias("y", input, None)),
+          Cross, None))
 
     assertAnalysisSuccess(query)
+  }
+
+  private def assertExpressionType(
+      expression: Expression,
+      expectedDataType: DataType): Unit = {
+    val afterAnalyze =
+      Project(Seq(Alias(expression, "a")()), OneRowRelation).analyze.expressions.head
+    if (!afterAnalyze.dataType.equals(expectedDataType)) {
+      fail(
+        s"""
+           |data type of expression $expression doesn't match expected:
+           |Actual data type:
+           |${afterAnalyze.dataType}
+           |
+           |Expected data type:
+           |${expectedDataType}
+         """.stripMargin)
+    }
+  }
+
+  test("SPARK-15776: test whether Divide expression's data type can be deduced correctly by " +
+    "analyzer") {
+    assertExpressionType(sum(Divide(1, 2)), DoubleType)
+    assertExpressionType(sum(Divide(1.0, 2)), DoubleType)
+    assertExpressionType(sum(Divide(1, 2.0)), DoubleType)
+    assertExpressionType(sum(Divide(1.0, 2.0)), DoubleType)
+    assertExpressionType(sum(Divide(1, 2.0f)), DoubleType)
+    assertExpressionType(sum(Divide(1.0f, 2)), DoubleType)
+    assertExpressionType(sum(Divide(1, Decimal(2))), DecimalType(31, 11))
+    assertExpressionType(sum(Divide(Decimal(1), 2)), DecimalType(31, 11))
+    assertExpressionType(sum(Divide(Decimal(1), 2.0)), DoubleType)
+    assertExpressionType(sum(Divide(1.0, Decimal(2.0))), DoubleType)
   }
 }

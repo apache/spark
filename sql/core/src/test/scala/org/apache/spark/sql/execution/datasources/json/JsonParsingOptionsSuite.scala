@@ -27,16 +27,16 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
 
   test("allowComments off") {
     val str = """{'name': /* hello */ 'Reynold Xin'}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.json(rdd)
+    val rdd = spark.sparkContext.parallelize(Seq(str))
+    val df = spark.read.json(rdd)
 
     assert(df.schema.head.name == "_corrupt_record")
   }
 
   test("allowComments on") {
     val str = """{'name': /* hello */ 'Reynold Xin'}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.option("allowComments", "true").json(rdd)
+    val rdd = spark.sparkContext.parallelize(Seq(str))
+    val df = spark.read.option("allowComments", "true").json(rdd)
 
     assert(df.schema.head.name == "name")
     assert(df.first().getString(0) == "Reynold Xin")
@@ -44,16 +44,16 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
 
   test("allowSingleQuotes off") {
     val str = """{'name': 'Reynold Xin'}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.option("allowSingleQuotes", "false").json(rdd)
+    val rdd = spark.sparkContext.parallelize(Seq(str))
+    val df = spark.read.option("allowSingleQuotes", "false").json(rdd)
 
     assert(df.schema.head.name == "_corrupt_record")
   }
 
   test("allowSingleQuotes on") {
     val str = """{'name': 'Reynold Xin'}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.json(rdd)
+    val rdd = spark.sparkContext.parallelize(Seq(str))
+    val df = spark.read.json(rdd)
 
     assert(df.schema.head.name == "name")
     assert(df.first().getString(0) == "Reynold Xin")
@@ -61,16 +61,16 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
 
   test("allowUnquotedFieldNames off") {
     val str = """{name: 'Reynold Xin'}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.json(rdd)
+    val rdd = spark.sparkContext.parallelize(Seq(str))
+    val df = spark.read.json(rdd)
 
     assert(df.schema.head.name == "_corrupt_record")
   }
 
   test("allowUnquotedFieldNames on") {
     val str = """{name: 'Reynold Xin'}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.option("allowUnquotedFieldNames", "true").json(rdd)
+    val rdd = spark.sparkContext.parallelize(Seq(str))
+    val df = spark.read.option("allowUnquotedFieldNames", "true").json(rdd)
 
     assert(df.schema.head.name == "name")
     assert(df.first().getString(0) == "Reynold Xin")
@@ -78,16 +78,16 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
 
   test("allowNumericLeadingZeros off") {
     val str = """{"age": 0018}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.json(rdd)
+    val rdd = spark.sparkContext.parallelize(Seq(str))
+    val df = spark.read.json(rdd)
 
     assert(df.schema.head.name == "_corrupt_record")
   }
 
   test("allowNumericLeadingZeros on") {
     val str = """{"age": 0018}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.option("allowNumericLeadingZeros", "true").json(rdd)
+    val rdd = spark.sparkContext.parallelize(Seq(str))
+    val df = spark.read.option("allowNumericLeadingZeros", "true").json(rdd)
 
     assert(df.schema.head.name == "age")
     assert(df.first().getLong(0) == 18)
@@ -97,16 +97,16 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
   // JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS.
   ignore("allowNonNumericNumbers off") {
     val str = """{"age": NaN}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.json(rdd)
+    val rdd = spark.sparkContext.parallelize(Seq(str))
+    val df = spark.read.json(rdd)
 
     assert(df.schema.head.name == "_corrupt_record")
   }
 
   ignore("allowNonNumericNumbers on") {
     val str = """{"age": NaN}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.option("allowNonNumericNumbers", "true").json(rdd)
+    val rdd = spark.sparkContext.parallelize(Seq(str))
+    val df = spark.read.option("allowNonNumericNumbers", "true").json(rdd)
 
     assert(df.schema.head.name == "age")
     assert(df.first().getDouble(0).isNaN)
@@ -114,16 +114,16 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
 
   test("allowBackslashEscapingAnyCharacter off") {
     val str = """{"name": "Cazen Lee", "price": "\$10"}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.option("allowBackslashEscapingAnyCharacter", "false").json(rdd)
+    val rdd = spark.sparkContext.parallelize(Seq(str))
+    val df = spark.read.option("allowBackslashEscapingAnyCharacter", "false").json(rdd)
 
     assert(df.schema.head.name == "_corrupt_record")
   }
 
   test("allowBackslashEscapingAnyCharacter on") {
     val str = """{"name": "Cazen Lee", "price": "\$10"}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.option("allowBackslashEscapingAnyCharacter", "true").json(rdd)
+    val rdd = spark.sparkContext.parallelize(Seq(str))
+    val df = spark.read.option("allowBackslashEscapingAnyCharacter", "true").json(rdd)
 
     assert(df.schema.head.name == "name")
     assert(df.schema.last.name == "price")

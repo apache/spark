@@ -21,7 +21,9 @@ import java.io.{File, NotSerializableException}
 import java.lang.management.ManagementFactory
 import java.net.URL
 import java.nio.ByteBuffer
+import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -29,12 +31,14 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler.{AccumulableInfo, DirectTaskResult, IndirectTaskResult, Task}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Spark executor, backed by a threadpool to run tasks.
@@ -97,9 +101,11 @@ private[spark] class Executor(
   // Set the classloader for serializer
   env.serializer.setDefaultClassLoader(replClassLoader)
 
-  // Max RPC message size. If task result is bigger than this, we use the block manager
+  // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back.
-  private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
+  private val maxDirectResultSize = Math.min(
+    conf.getSizeAsBytes("spark.task.maxDirectResultSize", 1L << 20),
+    RpcUtils.maxMessageSizeBytes(conf))
 
   // Limit of bytes for total size of results (default is 1GB)
   private val maxResultSize = Utils.getMaxResultSize(conf)
@@ -122,7 +128,7 @@ private[spark] class Executor(
   private val HEARTBEAT_MAX_FAILURES = conf.getInt("spark.executor.heartbeat.maxFailures", 60)
 
   /**
-   * Count the failure times of heartbeat. It should only be acessed in the heartbeat thread. Each
+   * Count the failure times of heartbeat. It should only be accessed in the heartbeat thread. Each
    * successful heartbeat will reset it to 0.
    */
   private var heartbeatFailures = 0
@@ -145,6 +151,21 @@ private[spark] class Executor(
     val tr = runningTasks.get(taskId)
     if (tr != null) {
       tr.kill(interruptThread)
+    }
+  }
+
+  /**
+   * Function to kill the running tasks in an executor.
+   * This can be called by executor back-ends to kill the
+   * tasks instead of taking the JVM down.
+   * @param interruptThread whether to interrupt the task thread
+   */
+  def killAllTasks(interruptThread: Boolean) : Unit = {
+    // kill all the running tasks
+    for (taskRunner <- runningTasks.values().asScala) {
+      if (taskRunner != null) {
+        taskRunner.kill(interruptThread)
+      }
     }
   }
 
@@ -174,6 +195,10 @@ private[spark] class Executor(
     /** Whether this task has been killed. */
     @volatile private var killed = false
 
+    /** Whether this task has been finished. */
+    @GuardedBy("TaskRunner.this")
+    private var finished = false
+
     /** How much the JVM process has spent in GC when the task starts to run. */
     @volatile var startGCTime: Long = _
 
@@ -187,8 +212,23 @@ private[spark] class Executor(
       logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
       killed = true
       if (task != null) {
-        task.kill(interruptThread)
+        synchronized {
+          if (!finished) {
+            task.kill(interruptThread)
+          }
+        }
       }
+    }
+
+    /**
+     * Set the finished flag to true and clear the current thread's interrupt status
+     */
+    private def setTaskFinishedAndClearInterruptStatus(): Unit = synchronized {
+      this.finished = true
+      // SPARK-14234 - Reset the interrupted status of the thread to avoid the
+      // ClosedByInterruptException during execBackend.statusUpdate which causes
+      // Executor to crash
+      Thread.interrupted()
     }
 
     override def run(): Unit = {
@@ -202,9 +242,16 @@ private[spark] class Executor(
       startGCTime = computeTotalGcTime()
 
       try {
-        val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
+        val (taskFiles, taskJars, taskProps, taskBytes) =
+          Task.deserializeWithDependencies(serializedTask)
+
+        // Must be set before updateDependencies() is called, in case fetching dependencies
+        // requires access to properties contained within (e.g. for access control).
+        Executor.taskDeserializationProps.set(taskProps)
+
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
+        task.localProperties = taskProps
         task.setTaskMemoryManager(taskMemoryManager)
 
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
@@ -234,23 +281,23 @@ private[spark] class Executor(
           val releasedLocks = env.blockManager.releaseAllLocksForTask(taskId)
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
 
-          if (freedMemory > 0) {
+          if (freedMemory > 0 && !threwException) {
             val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
-            if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false) && !threwException) {
+            if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)) {
               throw new SparkException(errMsg)
             } else {
-              logError(errMsg)
+              logWarning(errMsg)
             }
           }
 
-          if (releasedLocks.nonEmpty) {
+          if (releasedLocks.nonEmpty && !threwException) {
             val errMsg =
               s"${releasedLocks.size} block locks were not released by TID = $taskId:\n" +
                 releasedLocks.mkString("[", ", ", "]")
-            if (conf.getBoolean("spark.storage.exceptionOnPinLeak", false) && !threwException) {
+            if (conf.getBoolean("spark.storage.exceptionOnPinLeak", false)) {
               throw new SparkException(errMsg)
             } else {
-              logError(errMsg)
+              logWarning(errMsg)
             }
           }
         }
@@ -266,19 +313,18 @@ private[spark] class Executor(
         val valueBytes = resultSer.serialize(value)
         val afterSerialization = System.currentTimeMillis()
 
-        for (m <- task.metrics) {
-          // Deserialization happens in two parts: first, we deserialize a Task object, which
-          // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
-          m.setExecutorDeserializeTime(
-            (taskStart - deserializeStartTime) + task.executorDeserializeTime)
-          // We need to subtract Task.run()'s deserialization time to avoid double-counting
-          m.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
-          m.setJvmGCTime(computeTotalGcTime() - startGCTime)
-          m.setResultSerializationTime(afterSerialization - beforeSerialization)
-        }
+        // Deserialization happens in two parts: first, we deserialize a Task object, which
+        // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
+        task.metrics.setExecutorDeserializeTime(
+          (taskStart - deserializeStartTime) + task.executorDeserializeTime)
+        // We need to subtract Task.run()'s deserialization time to avoid double-counting
+        task.metrics.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
+        task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
+        task.metrics.setResultSerializationTime(afterSerialization - beforeSerialization)
 
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()
+        // TODO: do not serialize value twice
         val directResult = new DirectTaskResult(valueBytes, accumUpdates)
         val serializedDirectResult = ser.serialize(directResult)
         val resultSize = serializedDirectResult.limit
@@ -290,10 +336,12 @@ private[spark] class Executor(
               s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
               s"dropping it.")
             ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
-          } else if (resultSize >= maxRpcMessageSize) {
+          } else if (resultSize > maxDirectResultSize) {
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
-              blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER)
+              blockId,
+              new ChunkedByteBuffer(serializedDirectResult.duplicate()),
+              StorageLevel.MEMORY_AND_DISK_SER)
             logInfo(
               s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")
             ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))
@@ -308,14 +356,22 @@ private[spark] class Executor(
       } catch {
         case ffe: FetchFailedException =>
           val reason = ffe.toTaskEndReason
+          setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
-        case _: TaskKilledException | _: InterruptedException if task.killed =>
+        case _: TaskKilledException =>
           logInfo(s"Executor killed $taskName (TID $taskId)")
+          setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
 
-        case cDE: CommitDeniedException =>
+        case _: InterruptedException if task.killed =>
+          logInfo(s"Executor interrupted and killed $taskName (TID $taskId)")
+          setTaskFinishedAndClearInterruptStatus()
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
+
+        case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskEndReason
+          setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
         case t: Throwable =>
@@ -325,26 +381,27 @@ private[spark] class Executor(
           logError(s"Exception in $taskName (TID $taskId)", t)
 
           // Collect latest accumulator values to report back to the driver
-          val accumulatorUpdates: Seq[AccumulableInfo] =
+          val accums: Seq[AccumulatorV2[_, _]] =
             if (task != null) {
-              task.metrics.foreach { m =>
-                m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
-                m.setJvmGCTime(computeTotalGcTime() - startGCTime)
-              }
+              task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+              task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
               task.collectAccumulatorUpdates(taskFailed = true)
             } else {
-              Seq.empty[AccumulableInfo]
+              Seq.empty
             }
+
+          val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
 
           val serializedTaskEndReason = {
             try {
-              ser.serialize(new ExceptionFailure(t, accumulatorUpdates))
+              ser.serialize(new ExceptionFailure(t, accUpdates).withAccums(accums))
             } catch {
               case _: NotSerializableException =>
                 // t is not serializable so just send the stacktrace
-                ser.serialize(new ExceptionFailure(t, accumulatorUpdates, preserveCause = false))
+                ser.serialize(new ExceptionFailure(t, accUpdates, false).withAccums(accums))
             }
           }
+          setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
@@ -450,16 +507,14 @@ private[spark] class Executor(
   /** Reports heartbeat and metrics for active tasks to the driver. */
   private def reportHeartBeat(): Unit = {
     // list of (task id, accumUpdates) to send back to the driver
-    val accumUpdates = new ArrayBuffer[(Long, Seq[AccumulableInfo])]()
+    val accumUpdates = new ArrayBuffer[(Long, Seq[AccumulatorV2[_, _]])]()
     val curGCTime = computeTotalGcTime()
 
     for (taskRunner <- runningTasks.values().asScala) {
       if (taskRunner.task != null) {
-        taskRunner.task.metrics.foreach { metrics =>
-          metrics.mergeShuffleReadMetrics()
-          metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
-          accumUpdates += ((taskRunner.taskId, metrics.accumulatorUpdates()))
-        }
+        taskRunner.task.metrics.mergeShuffleReadMetrics()
+        taskRunner.task.metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
+        accumUpdates += ((taskRunner.taskId, taskRunner.task.metrics.accumulators()))
       }
     }
 
@@ -498,4 +553,11 @@ private[spark] class Executor(
     }
     heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
   }
+}
+
+private[spark] object Executor {
+  // This is reserved for internal use by components that need to read task properties before a
+  // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
+  // used instead.
+  val taskDeserializationProps: ThreadLocal[Properties] = new ThreadLocal[Properties]
 }

@@ -17,15 +17,11 @@
 
 package org.apache.spark.util.sketch;
 
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 
 class Utils {
   public static byte[] getBytesFromUTF8String(String str) {
-    try {
-      return str.getBytes("utf-8");
-    } catch (UnsupportedEncodingException e) {
-      throw new IllegalArgumentException("Only support utf-8 string", e);
-    }
+    return str.getBytes(StandardCharsets.UTF_8);
   }
 
   public static long integralToLong(Object i) {

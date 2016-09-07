@@ -28,7 +28,7 @@ public enum TaskSorting {
   DECREASING_RUNTIME("-runtime");
 
   private final Set<String> alternateNames;
-  private TaskSorting(String... names) {
+  TaskSorting(String... names) {
     alternateNames = new HashSet<>();
     for (String n: names) {
       alternateNames.add(n);

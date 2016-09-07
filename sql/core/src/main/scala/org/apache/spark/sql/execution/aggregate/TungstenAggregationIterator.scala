@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.{Logging, TaskContext}
+import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVExternalSorter}
-import org.apache.spark.sql.execution.metric.LongSQLMetric
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
 
@@ -31,16 +32,16 @@ import org.apache.spark.unsafe.KVIterator
  * An iterator used to evaluate aggregate functions. It operates on [[UnsafeRow]]s.
  *
  * This iterator first uses hash-based aggregation to process input rows. It uses
- * a hash map to store groups and their corresponding aggregation buffers. If we
- * this map cannot allocate memory from memory manager, it spill the map into disk
- * and create a new one. After processed all the input, then merge all the spills
+ * a hash map to store groups and their corresponding aggregation buffers. If
+ * this map cannot allocate memory from memory manager, it spills the map into disk
+ * and creates a new one. After processed all the input, then merge all the spills
  * together using external sorter, and do sort-based aggregation.
  *
  * The process has the following step:
  *  - Step 0: Do hash-based aggregation.
  *  - Step 1: Sort all entries of the hash map based on values of grouping expressions and
  *            spill them to disk.
- *  - Step 2: Create a external sorter based on the spilled sorted map entries and reset the map.
+ *  - Step 2: Create an external sorter based on the spilled sorted map entries and reset the map.
  *  - Step 3: Get a sorted [[KVIterator]] from the external sorter.
  *  - Step 4: Repeat step 0 until no more input.
  *  - Step 5: Initialize sort-based aggregation on the sorted iterator.
@@ -81,13 +82,13 @@ class TungstenAggregationIterator(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     originalInputAttributes: Seq[Attribute],
     inputIter: Iterator[InternalRow],
-    testFallbackStartsAt: Option[Int],
-    numOutputRows: LongSQLMetric,
-    dataSize: LongSQLMetric,
-    spillSize: LongSQLMetric)
+    testFallbackStartsAt: Option[(Int, Int)],
+    numOutputRows: SQLMetric,
+    peakMemory: SQLMetric,
+    spillSize: SQLMetric)
   extends AggregationIterator(
     groupingExpressions,
     originalInputAttributes,
@@ -170,7 +171,7 @@ class TungstenAggregationIterator(
   // hashMap. If there is not enough memory, it will multiple hash-maps, spilling
   // after each becomes full then using sort to merge these spills, finally do sort
   // based aggregation.
-  private def processInputs(fallbackStartsAt: Int): Unit = {
+  private def processInputs(fallbackStartsAt: (Int, Int)): Unit = {
     if (groupingExpressions.isEmpty) {
       // If there is no grouping expressions, we can just reuse the same buffer over and over again.
       // Note that it would be better to eliminate the hash map entirely in the future.
@@ -186,7 +187,7 @@ class TungstenAggregationIterator(
         val newInput = inputIter.next()
         val groupingKey = groupingProjection.apply(newInput)
         var buffer: UnsafeRow = null
-        if (i < fallbackStartsAt) {
+        if (i < fallbackStartsAt._2) {
           buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
         }
         if (buffer == null) {
@@ -241,9 +242,9 @@ class TungstenAggregationIterator(
     // Basically the value of the KVIterator returned by externalSorter
     // will be just aggregation buffer, so we rewrite the aggregateExpressions to reflect it.
     val newExpressions = aggregateExpressions.map {
-      case agg @ AggregateExpression(_, Partial, _) =>
+      case agg @ AggregateExpression(_, Partial, _, _) =>
         agg.copy(mode = PartialMerge)
-      case agg @ AggregateExpression(_, Complete, _) =>
+      case agg @ AggregateExpression(_, Complete, _, _) =>
         agg.copy(mode = Final)
       case other => other
     }
@@ -351,7 +352,7 @@ class TungstenAggregationIterator(
   /**
    * Start processing input rows.
    */
-  processInputs(testFallbackStartsAt.getOrElse(Int.MaxValue))
+  processInputs(testFallbackStartsAt.getOrElse((Int.MaxValue, Int.MaxValue)))
 
   // If we did not switch to sort-based aggregation in processInputs,
   // we pre-load the first key-value pair from the map (to make hasNext idempotent).
@@ -414,11 +415,11 @@ class TungstenAggregationIterator(
       if (!hasNext) {
         val mapMemory = hashMap.getPeakMemoryUsedBytes
         val sorterMemory = Option(externalSorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
-        val peakMemory = Math.max(mapMemory, sorterMemory)
+        val maxMemory = Math.max(mapMemory, sorterMemory)
         val metrics = TaskContext.get().taskMetrics()
-        dataSize += peakMemory
+        peakMemory += maxMemory
         spillSize += metrics.memoryBytesSpilled - spillSizeBefore
-        metrics.incPeakExecutionMemory(peakMemory)
+        metrics.incPeakExecutionMemory(maxMemory)
       }
       numOutputRows += 1
       res
@@ -433,12 +434,12 @@ class TungstenAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   /**
-   * Generate a output row when there is no input and there is no grouping expression.
+   * Generate an output row when there is no input and there is no grouping expression.
    */
   def outputForEmptyGroupingKeyWithoutInput(): UnsafeRow = {
     if (groupingExpressions.isEmpty) {
       sortBasedAggregationBuffer.copyFrom(initialAggregationBuffer)
-      // We create a output row and copy it. So, we can free the map.
+      // We create an output row and copy it. So, we can free the map.
       val resultCopy =
         generateOutput(UnsafeRow.createFromByteArray(0, 0), sortBasedAggregationBuffer).copy()
       hashMap.free()

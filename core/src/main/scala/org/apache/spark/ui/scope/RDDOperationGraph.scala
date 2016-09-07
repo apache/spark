@@ -17,12 +17,14 @@
 
 package org.apache.spark.ui.scope
 
+import java.util.Objects
+
 import scala.collection.mutable
 import scala.collection.mutable.{ListBuffer, StringBuilder}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
 
@@ -71,6 +73,22 @@ private[ui] class RDDOperationCluster(val id: String, private var _name: String)
   /** Return all the nodes which are cached. */
   def getCachedNodes: Seq[RDDOperationNode] = {
     _childNodes.filter(_.cached) ++ _childClusters.flatMap(_.getCachedNodes)
+  }
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[RDDOperationCluster]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: RDDOperationCluster =>
+      (that canEqual this) &&
+          _childClusters == that._childClusters &&
+          id == that.id &&
+          _name == that._name
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(_childClusters, id, _name)
+    state.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
   }
 }
 

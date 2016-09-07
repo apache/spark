@@ -21,11 +21,10 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.11</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <version>2.1.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-assembly_2.11</artifactId>
   <name>Spark Project Assembly</name>
   <url>http://spark.apache.org/</url>
@@ -33,12 +32,18 @@
 
   <properties>
     <sbt.project.name>assembly</sbt.project.name>
-    <spark.jar.dir>scala-${scala.binary.version}</spark.jar.dir>
-    <spark.jar.basename>spark-assembly-${project.version}-hadoop${hadoop.version}.jar</spark.jar.basename>
-    <spark.jar>${project.build.directory}/${spark.jar.dir}/${spark.jar.basename}</spark.jar>
+    <build.testJarPhase>none</build.testJarPhase>
+    <build.copyDependenciesPhase>package</build.copyDependenciesPhase>
   </properties>
 
   <dependencies>
+    <!-- Prevent our dummy JAR from being included in Spark distributions or uploaded to YARN -->
+    <dependency>
+      <groupId>org.spark-project.spark</groupId>
+      <artifactId>unused</artifactId>
+      <version>1.0.0</version>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
@@ -69,6 +74,17 @@
       <artifactId>spark-repl_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
+
+    <!--
+      Because we don't shade dependencies anymore, we need to restore Guava to compile scope so
+      that the libraries Spark depend on have it available. We'll package the version that Spark
+      uses (14.0.1) which is not the same as Hadoop dependencies, but works.
+    -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -87,75 +103,26 @@
           <skip>true</skip>
         </configuration>
       </plugin>
-        <!-- zip pyspark archives to run python application on yarn mode -->
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-antrun-plugin</artifactId>
-            <executions>
-              <execution>
-                <phase>package</phase>
-                  <goals>
-                    <goal>run</goal>
-                  </goals>
-              </execution>
-            </executions>
-            <configuration>
-              <target>
-                <delete dir="${basedir}/../python/lib/pyspark.zip"/>
-                <zip destfile="${basedir}/../python/lib/pyspark.zip">
-                  <fileset dir="${basedir}/../python/" includes="pyspark/**/*"/>
-                </zip>
-              </target>
-            </configuration>
-        </plugin>
-      <!-- Use the shade plugin to create a big JAR with all the dependencies -->
+      <!-- zip pyspark archives to run python application on yarn mode -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-shade-plugin</artifactId>
-        <configuration>
-          <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${spark.jar}</outputFile>
-          <artifactSet>
-            <includes>
-              <include>*:*</include>
-            </includes>
-          </artifactSet>
-          <filters>
-            <filter>
-              <artifact>*:*</artifact>
-              <excludes>
-                <exclude>org/datanucleus/**</exclude>
-                <exclude>META-INF/*.SF</exclude>
-                <exclude>META-INF/*.DSA</exclude>
-                <exclude>META-INF/*.RSA</exclude>
-              </excludes>
-            </filter>
-          </filters>
-        </configuration>
-        <executions>
-          <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>shade</goal>
-            </goals>
-            <configuration>
-              <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
-                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
-                  <resource>META-INF/services/org.apache.hadoop.fs.FileSystem</resource>
-                </transformer>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
-                  <resource>reference.conf</resource>
-                </transformer>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
-                  <resource>log4j.properties</resource>
-                </transformer>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer"/>
-              </transformers>
-            </configuration>
-          </execution>
-        </executions>
+          <artifactId>maven-antrun-plugin</artifactId>
+          <executions>
+            <execution>
+              <phase>package</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+            </execution>
+          </executions>
+          <configuration>
+            <target>
+              <delete dir="${basedir}/../python/lib/pyspark.zip"/>
+              <zip destfile="${basedir}/../python/lib/pyspark.zip">
+                <fileset dir="${basedir}/../python/" includes="pyspark/**/*"/>
+              </zip>
+            </target>
+          </configuration>
       </plugin>
     </plugins>
   </build>
@@ -167,6 +134,16 @@
         <dependency>
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-yarn_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>mesos</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-mesos_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>

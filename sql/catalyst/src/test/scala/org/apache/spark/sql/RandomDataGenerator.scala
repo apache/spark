@@ -196,12 +196,11 @@ object RandomDataGenerator {
       case ShortType => randomNumeric[Short](
         rand, _.nextInt().toShort, Seq(Short.MinValue, Short.MaxValue, 0.toShort))
       case NullType => Some(() => null)
-      case ArrayType(elementType, containsNull) => {
+      case ArrayType(elementType, containsNull) =>
         forType(elementType, nullable = containsNull, rand).map {
           elementGenerator => () => Seq.fill(rand.nextInt(MAX_ARR_SIZE))(elementGenerator())
         }
-      }
-      case MapType(keyType, valueType, valueContainsNull) => {
+      case MapType(keyType, valueType, valueContainsNull) =>
         for (
           keyGenerator <- forType(keyType, nullable = false, rand);
           valueGenerator <-
@@ -221,8 +220,7 @@ object RandomDataGenerator {
             keys.zip(values).toMap
           }
         }
-      }
-      case StructType(fields) => {
+      case StructType(fields) =>
         val maybeFieldGenerators: Seq[Option[() => Any]] = fields.map { field =>
           forType(field.dataType, nullable = field.nullable, rand)
         }
@@ -232,16 +230,14 @@ object RandomDataGenerator {
         } else {
           None
         }
-      }
-      case udt: UserDefinedType[_] => {
+      case udt: UserDefinedType[_] =>
         val maybeSqlTypeGenerator = forType(udt.sqlType, nullable, rand)
         // Because random data generator at here returns scala value, we need to
         // convert it to catalyst value to call udt's deserialize.
         val toCatalystType = CatalystTypeConverters.createToCatalystConverter(udt.sqlType)
 
-        if (maybeSqlTypeGenerator.isDefined) {
-          val sqlTypeGenerator = maybeSqlTypeGenerator.get
-          val generator = () => {
+        maybeSqlTypeGenerator.map { sqlTypeGenerator =>
+          () => {
             val generatedScalaValue = sqlTypeGenerator.apply()
             if (generatedScalaValue == null) {
               null
@@ -249,11 +245,7 @@ object RandomDataGenerator {
               udt.deserialize(toCatalystType(generatedScalaValue))
             }
           }
-          Some(generator)
-        } else {
-          None
         }
-      }
       case unsupportedType => None
     }
     // Handle nullability by wrapping the non-null value generator:
@@ -277,7 +269,7 @@ object RandomDataGenerator {
     val fields = mutable.ArrayBuffer.empty[Any]
     schema.fields.foreach { f =>
       f.dataType match {
-        case ArrayType(childType, nullable) => {
+        case ArrayType(childType, nullable) =>
           val data = if (f.nullable && rand.nextFloat() <= PROBABILITY_OF_NULL) {
             null
           } else {
@@ -294,10 +286,8 @@ object RandomDataGenerator {
             arr
           }
           fields += data
-        }
-        case StructType(children) => {
+        case StructType(children) =>
           fields += randomRow(rand, StructType(children))
-        }
         case _ =>
           val generator = RandomDataGenerator.forType(f.dataType, f.nullable, rand)
           assert(generator.isDefined, "Unsupported type")

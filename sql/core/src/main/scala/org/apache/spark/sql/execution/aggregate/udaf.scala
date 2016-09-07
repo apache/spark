@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, MutableRow, _}
@@ -202,9 +202,9 @@ sealed trait BufferSetterGetterUtils {
 }
 
 /**
- * A Mutable [[Row]] representing an mutable aggregation buffer.
+ * A Mutable [[Row]] representing a mutable aggregation buffer.
  */
-private[sql] class MutableAggregationBufferImpl (
+private[aggregate] class MutableAggregationBufferImpl(
     schema: StructType,
     toCatalystConverters: Array[Any => Any],
     toScalaConverters: Array[Any => Any],
@@ -266,7 +266,7 @@ private[sql] class MutableAggregationBufferImpl (
 /**
  * A [[Row]] representing an immutable aggregation buffer.
  */
-private[sql] class InputAggregationBuffer private[sql] (
+private[aggregate] class InputAggregationBuffer(
     schema: StructType,
     toCatalystConverters: Array[Any => Any],
     toScalaConverters: Array[Any => Any],
@@ -319,7 +319,7 @@ private[sql] class InputAggregationBuffer private[sql] (
  * The internal wrapper used to hook a [[UserDefinedAggregateFunction]] `udaf` in the
  * internal aggregation code path.
  */
-private[sql] case class ScalaUDAF(
+case class ScalaUDAF(
     children: Seq[Expression],
     udaf: UserDefinedAggregateFunction,
     mutableAggBufferOffset: Int = 0,
@@ -361,7 +361,7 @@ private[sql] case class ScalaUDAF(
     val inputAttributes = childrenSchema.toAttributes
     log.debug(
       s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
-    GenerateMutableProjection.generate(children, inputAttributes)()
+    GenerateMutableProjection.generate(children, inputAttributes)
   }
 
   private[this] lazy val inputToScalaConverters: Any => Any =

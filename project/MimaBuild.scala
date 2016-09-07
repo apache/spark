@@ -42,14 +42,11 @@ object MimaBuild {
       ProblemFilters.exclude[IncompatibleFieldTypeProblem](fullName)
     )
 
-  // Exclude a single class and its corresponding object
+  // Exclude a single class
   def excludeClass(className: String) = Seq(
       excludePackage(className),
       ProblemFilters.exclude[MissingClassProblem](className),
-      ProblemFilters.exclude[MissingTypesProblem](className),
-      excludePackage(className + "$"),
-      ProblemFilters.exclude[MissingClassProblem](className + "$"),
-      ProblemFilters.exclude[MissingTypesProblem](className + "$")
+      ProblemFilters.exclude[MissingTypesProblem](className)
     )
 
   // Exclude a Spark class, that is in the package org.apache.spark
@@ -91,16 +88,19 @@ object MimaBuild {
 
   def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
     val organization = "org.apache.spark"
-    // The resolvers setting for MQTT Repository is needed for mqttv3(1.0.1)
-    // because spark-streaming-mqtt(1.6.0) depends on it.
-    // Remove the setting on updating previousSparkVersion.
     val previousSparkVersion = "1.6.0"
-    val fullId = "spark-" + projectRef.project + "_2.11"
+    // This check can be removed post-2.0
+    val project = if (previousSparkVersion == "1.6.0" &&
+      projectRef.project == "streaming-kafka-0-8"
+    ) {
+      "streaming-kafka"
+    } else {
+      projectRef.project
+    }
+    val fullId = "spark-" + project + "_2.11"
     mimaDefaultSettings ++
     Seq(previousArtifact := Some(organization % fullId % previousSparkVersion),
-      binaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value),
-      sbt.Keys.resolvers +=
-        "MQTT Repository" at "https://repo.eclipse.org/content/repositories/paho-releases")
+      binaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value))
   }
 
 }

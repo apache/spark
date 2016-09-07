@@ -101,7 +101,7 @@ private[sink] trait Logging {
   private def initializeLogging() {
     Logging.initialized = true
 
-    // Force a call into slf4j to initialize it. Avoids this happening from mutliple threads
+    // Force a call into slf4j to initialize it. Avoids this happening from multiple threads
     // and triggering this: http://mailman.qos.ch/pipermail/slf4j-dev/2010-April/002956.html
     log
   }

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Decision Trees - spark.mllib
-displayTitle: Decision Trees - spark.mllib
+title: Decision Trees - RDD-based API
+displayTitle: Decision Trees - RDD-based API
 ---
 
 * Table of contents
@@ -136,7 +136,7 @@ When tuning these parameters, be careful to validate on held-out test data to av
 
 * **`maxDepth`**: Maximum depth of a tree.  Deeper trees are more expressive (potentially allowing higher accuracy), but they are also more costly to train and are more likely to overfit.
 
-* **`minInstancesPerNode`**: For a node to be split further, each of its children must receive at least this number of training instances.  This is commonly used with [RandomForest](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest) since those are often trained deeper than individual trees.
+* **`minInstancesPerNode`**: For a node to be split further, each of its children must receive at least this number of training instances.  This is commonly used with [RandomForest](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest$) since those are often trained deeper than individual trees.
 
 * **`minInfoGain`**: For a node to be split further, the split must improve at least this much (in terms of information gain).
 
@@ -152,13 +152,13 @@ These parameters may be tuned.  Be careful to validate on held-out test data whe
   * The default value is conservatively chosen to be 256 MB to allow the decision algorithm to work in most scenarios.  Increasing `maxMemoryInMB` can lead to faster training (if the memory is available) by allowing fewer passes over the data.  However, there may be decreasing returns as `maxMemoryInMB` grows since the amount of communication on each iteration can be proportional to `maxMemoryInMB`.
   * *Implementation details*: For faster processing, the decision tree algorithm collects statistics about groups of nodes to split (rather than 1 node at a time).  The number of nodes which can be handled in one group is determined by the memory requirements (which vary per features).  The `maxMemoryInMB` parameter specifies the memory limit in terms of megabytes which each worker can use for these statistics.
 
-* **`subsamplingRate`**: Fraction of the training data used for learning the decision tree.  This parameter is most relevant for training ensembles of trees (using [`RandomForest`](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest) and [`GradientBoostedTrees`](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees)), where it can be useful to subsample the original data.  For training a single decision tree, this parameter is less useful since the number of training instances is generally not the main constraint.
+* **`subsamplingRate`**: Fraction of the training data used for learning the decision tree.  This parameter is most relevant for training ensembles of trees (using [`RandomForest`](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest$) and [`GradientBoostedTrees`](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees)), where it can be useful to subsample the original data.  For training a single decision tree, this parameter is less useful since the number of training instances is generally not the main constraint.
 
 * **`impurity`**: Impurity measure (discussed above) used to choose between candidate splits.  This measure must match the `algo` parameter.
 
 ### Caching and checkpointing
 
-MLlib 1.2 adds several features for scaling up to larger (deeper) trees and tree ensembles.  When `maxDepth` is set to be large, it can be useful to turn on node ID caching and checkpointing.  These parameters are also useful for [RandomForest](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest) when `numTrees` is set to be large.
+MLlib 1.2 adds several features for scaling up to larger (deeper) trees and tree ensembles.  When `maxDepth` is set to be large, it can be useful to turn on node ID caching and checkpointing.  These parameters are also useful for [RandomForest](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest$) when `numTrees` is set to be large.
 
 * **`useNodeIdCache`**: If this is set to true, the algorithm will avoid passing the current model (tree or trees) to executors on each iteration.
   * This can be useful with deep trees (speeding up computation on workers) and for large Random Forests (reducing communication on each iteration).

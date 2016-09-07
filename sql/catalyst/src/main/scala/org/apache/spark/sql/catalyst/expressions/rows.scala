@@ -164,7 +164,7 @@ trait BaseGenericInternalRow extends InternalRow {
 abstract class MutableRow extends InternalRow {
   def setNullAt(i: Int): Unit
 
-  def update(i: Int, value: Any)
+  def update(i: Int, value: Any): Unit
 
   // default implementation (slow)
   def setBoolean(i: Int, value: Boolean): Unit = { update(i, value) }
@@ -214,11 +214,11 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
 }
 
 /**
- * A internal row implementation that uses an array of objects as the underlying storage.
+ * An internal row implementation that uses an array of objects as the underlying storage.
  * Note that, while the array is not copied, and thus could technically be mutated after creation,
  * this is not allowed.
  */
-class GenericInternalRow(private[sql] val values: Array[Any]) extends BaseGenericInternalRow {
+class GenericInternalRow(val values: Array[Any]) extends BaseGenericInternalRow {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 

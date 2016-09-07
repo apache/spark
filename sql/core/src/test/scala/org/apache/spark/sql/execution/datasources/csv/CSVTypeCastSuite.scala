@@ -19,12 +19,17 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
 import java.sql.{Date, Timestamp}
+import java.text.SimpleDateFormat
 import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class CSVTypeCastSuite extends SparkFunSuite {
+
+  private def assertNull(v: Any) = assert(v == null)
 
   test("Can parse decimal type values") {
     val stringValues = Seq("10.05", "1,000.01", "158,058,049.001")
@@ -32,7 +37,9 @@ class CSVTypeCastSuite extends SparkFunSuite {
     val decimalType = new DecimalType()
 
     stringValues.zip(decimalValues).foreach { case (strVal, decimalVal) =>
-      assert(CSVTypeCast.castTo(strVal, decimalType) === new BigDecimal(decimalVal.toString))
+      val decimalValue = new BigDecimal(decimalVal.toString)
+      assert(CSVTypeCast.castTo(strVal, decimalType) ===
+        Decimal(decimalValue, decimalType.precision, decimalType.scale))
     }
   }
 
@@ -61,17 +68,21 @@ class CSVTypeCastSuite extends SparkFunSuite {
   }
 
   test("Nullable types are handled") {
-    assert(CSVTypeCast.castTo("", IntegerType, nullable = true) == null)
+    assert(CSVTypeCast.castTo("", IntegerType, nullable = true, CSVOptions()) == null)
   }
 
   test("String type should always return the same as the input") {
-    assert(CSVTypeCast.castTo("", StringType, nullable = true) == "")
-    assert(CSVTypeCast.castTo("", StringType, nullable = false) == "")
+    assert(
+      CSVTypeCast.castTo("", StringType, nullable = true, CSVOptions()) ==
+        UTF8String.fromString(""))
+    assert(
+      CSVTypeCast.castTo("", StringType, nullable = false, CSVOptions()) ==
+        UTF8String.fromString(""))
   }
 
   test("Throws exception for empty string with non null type") {
     val exception = intercept[NumberFormatException]{
-      CSVTypeCast.castTo("", IntegerType, nullable = false)
+      CSVTypeCast.castTo("", IntegerType, nullable = false, CSVOptions())
     }
     assert(exception.getMessage.contains("For input string: \"\""))
   }
@@ -84,9 +95,25 @@ class CSVTypeCastSuite extends SparkFunSuite {
     assert(CSVTypeCast.castTo("1.00", FloatType) == 1.0)
     assert(CSVTypeCast.castTo("1.00", DoubleType) == 1.0)
     assert(CSVTypeCast.castTo("true", BooleanType) == true)
+
+    val timestampsOptions = CSVOptions("timestampFormat", "dd/MM/yyyy hh:mm")
+    val customTimestamp = "31/01/2015 00:00"
+    val expectedTime = timestampsOptions.timestampFormat.parse(customTimestamp).getTime
+    val castedTimestamp =
+      CSVTypeCast.castTo(customTimestamp, TimestampType, nullable = true, timestampsOptions)
+    assert(castedTimestamp == expectedTime * 1000L)
+
+    val customDate = "31/01/2015"
+    val dateOptions = CSVOptions("dateFormat", "dd/MM/yyyy")
+    val expectedDate = dateOptions.dateFormat.parse(customDate).getTime
+    val castedDate = CSVTypeCast.castTo(customTimestamp, DateType, nullable = true, dateOptions)
+    assert(castedDate == DateTimeUtils.millisToDays(expectedDate))
+
     val timestamp = "2015-01-01 00:00:00"
-    assert(CSVTypeCast.castTo(timestamp, TimestampType) == Timestamp.valueOf(timestamp))
-    assert(CSVTypeCast.castTo("2015-01-01", DateType) == Date.valueOf("2015-01-01"))
+    assert(CSVTypeCast.castTo(timestamp, TimestampType) ==
+      DateTimeUtils.stringToTime(timestamp).getTime  * 1000L)
+    assert(CSVTypeCast.castTo("2015-01-01", DateType) ==
+      DateTimeUtils.millisToDays(DateTimeUtils.stringToTime("2015-01-01").getTime))
   }
 
   test("Float and Double Types are cast correctly with Locale") {
@@ -99,5 +126,64 @@ class CSVTypeCastSuite extends SparkFunSuite {
     } finally {
       Locale.setDefault(originalLocale)
     }
+  }
+
+  test("Float NaN values are parsed correctly") {
+    val floatVal: Float = CSVTypeCast.castTo(
+      "nn", FloatType, nullable = true, CSVOptions("nanValue", "nn")).asInstanceOf[Float]
+
+    // Java implements the IEEE-754 floating point standard which guarantees that any comparison
+    // against NaN will return false (except != which returns true)
+    assert(floatVal != floatVal)
+  }
+
+  test("Double NaN values are parsed correctly") {
+    val doubleVal: Double = CSVTypeCast.castTo(
+      "-", DoubleType, nullable = true, CSVOptions("nanValue", "-")).asInstanceOf[Double]
+
+    assert(doubleVal.isNaN)
+  }
+
+  test("Float infinite values can be parsed") {
+    val floatVal1 = CSVTypeCast.castTo(
+      "max", FloatType, nullable = true, CSVOptions("negativeInf", "max")).asInstanceOf[Float]
+
+    assert(floatVal1 == Float.NegativeInfinity)
+
+    val floatVal2 = CSVTypeCast.castTo(
+      "max", FloatType, nullable = true, CSVOptions("positiveInf", "max")).asInstanceOf[Float]
+
+    assert(floatVal2 == Float.PositiveInfinity)
+  }
+
+  test("Double infinite values can be parsed") {
+    val doubleVal1 = CSVTypeCast.castTo(
+      "max", DoubleType, nullable = true, CSVOptions("negativeInf", "max")
+    ).asInstanceOf[Double]
+
+    assert(doubleVal1 == Double.NegativeInfinity)
+
+    val doubleVal2 = CSVTypeCast.castTo(
+      "max", DoubleType, nullable = true, CSVOptions("positiveInf", "max")
+    ).asInstanceOf[Double]
+
+    assert(doubleVal2 == Double.PositiveInfinity)
+  }
+
+  test("Type-specific null values are used for casting") {
+    assertNull(
+      CSVTypeCast.castTo("-", ByteType, nullable = true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", ShortType, nullable = true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", IntegerType, nullable = true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", LongType, nullable = true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", FloatType, nullable = true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", DoubleType, nullable = true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", DecimalType.DoubleDecimal, true, CSVOptions("nullValue", "-")))
   }
 }

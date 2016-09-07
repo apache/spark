@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -35,56 +36,111 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   lazy val r3 = LocalRelation(aNotNull, bNotNull)
   lazy val r4 = LocalRelation(cNotNull, bNotNull)
 
-  test("natural inner join") {
-    val plan = r1.join(r2, NaturalJoin(Inner), None)
+  test("natural/using inner join") {
+    val naturalPlan = r1.join(r2, NaturalJoin(Inner), None)
+    val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("a"))), None)
     val expected = r1.join(r2, Inner, Some(EqualTo(a, a))).select(a, b, c)
-    checkAnalysis(plan, expected)
+    checkAnalysis(naturalPlan, expected)
+    checkAnalysis(usingPlan, expected)
   }
 
-  test("natural left join") {
-    val plan = r1.join(r2, NaturalJoin(LeftOuter), None)
+  test("natural/using left join") {
+    val naturalPlan = r1.join(r2, NaturalJoin(LeftOuter), None)
+    val usingPlan = r1.join(r2, UsingJoin(LeftOuter, Seq(UnresolvedAttribute("a"))), None)
     val expected = r1.join(r2, LeftOuter, Some(EqualTo(a, a))).select(a, b, c)
-    checkAnalysis(plan, expected)
+    checkAnalysis(naturalPlan, expected)
+    checkAnalysis(usingPlan, expected)
   }
 
-  test("natural right join") {
-    val plan = r1.join(r2, NaturalJoin(RightOuter), None)
+  test("natural/using right join") {
+    val naturalPlan = r1.join(r2, NaturalJoin(RightOuter), None)
+    val usingPlan = r1.join(r2, UsingJoin(RightOuter, Seq(UnresolvedAttribute("a"))), None)
     val expected = r1.join(r2, RightOuter, Some(EqualTo(a, a))).select(a, b, c)
-    checkAnalysis(plan, expected)
+    checkAnalysis(naturalPlan, expected)
+    checkAnalysis(usingPlan, expected)
   }
 
-  test("natural full outer join") {
-    val plan = r1.join(r2, NaturalJoin(FullOuter), None)
+  test("natural/using full outer join") {
+    val naturalPlan = r1.join(r2, NaturalJoin(FullOuter), None)
+    val usingPlan = r1.join(r2, UsingJoin(FullOuter, Seq(UnresolvedAttribute("a"))), None)
     val expected = r1.join(r2, FullOuter, Some(EqualTo(a, a))).select(
       Alias(Coalesce(Seq(a, a)), "a")(), b, c)
-    checkAnalysis(plan, expected)
+    checkAnalysis(naturalPlan, expected)
+    checkAnalysis(usingPlan, expected)
   }
 
-  test("natural inner join with no nullability") {
-    val plan = r3.join(r4, NaturalJoin(Inner), None)
+  test("natural/using inner join with no nullability") {
+    val naturalPlan = r3.join(r4, NaturalJoin(Inner), None)
+    val usingPlan = r3.join(r4, UsingJoin(Inner, Seq(UnresolvedAttribute("b"))), None)
     val expected = r3.join(r4, Inner, Some(EqualTo(bNotNull, bNotNull))).select(
       bNotNull, aNotNull, cNotNull)
-    checkAnalysis(plan, expected)
+    checkAnalysis(naturalPlan, expected)
+    checkAnalysis(usingPlan, expected)
   }
 
-  test("natural left join with no nullability") {
-    val plan = r3.join(r4, NaturalJoin(LeftOuter), None)
+  test("natural/using left join with no nullability") {
+    val naturalPlan = r3.join(r4, NaturalJoin(LeftOuter), None)
+    val usingPlan = r3.join(r4, UsingJoin(LeftOuter, Seq(UnresolvedAttribute("b"))), None)
     val expected = r3.join(r4, LeftOuter, Some(EqualTo(bNotNull, bNotNull))).select(
       bNotNull, aNotNull, c)
-    checkAnalysis(plan, expected)
+    checkAnalysis(naturalPlan, expected)
+    checkAnalysis(usingPlan, expected)
   }
 
-  test("natural right join with no nullability") {
-    val plan = r3.join(r4, NaturalJoin(RightOuter), None)
+  test("natural/using right join with no nullability") {
+    val naturalPlan = r3.join(r4, NaturalJoin(RightOuter), None)
+    val usingPlan = r3.join(r4, UsingJoin(RightOuter, Seq(UnresolvedAttribute("b"))), None)
     val expected = r3.join(r4, RightOuter, Some(EqualTo(bNotNull, bNotNull))).select(
       bNotNull, a, cNotNull)
-    checkAnalysis(plan, expected)
+    checkAnalysis(naturalPlan, expected)
+    checkAnalysis(usingPlan, expected)
   }
 
-  test("natural full outer join with no nullability") {
-    val plan = r3.join(r4, NaturalJoin(FullOuter), None)
+  test("natural/using full outer join with no nullability") {
+    val naturalPlan = r3.join(r4, NaturalJoin(FullOuter), None)
+    val usingPlan = r3.join(r4, UsingJoin(FullOuter, Seq(UnresolvedAttribute("b"))), None)
     val expected = r3.join(r4, FullOuter, Some(EqualTo(bNotNull, bNotNull))).select(
-      Alias(Coalesce(Seq(bNotNull, bNotNull)), "b")(), a, c)
-    checkAnalysis(plan, expected)
+      Alias(Coalesce(Seq(b, b)), "b")(), a, c)
+    checkAnalysis(naturalPlan, expected)
+    checkAnalysis(usingPlan, expected)
+  }
+
+  test("using unresolved attribute") {
+    val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("d"))), None)
+    val error = intercept[AnalysisException] {
+      SimpleAnalyzer.checkAnalysis(usingPlan)
+    }
+    assert(error.message.contains(
+      "using columns ['d] can not be resolved given input columns: [b, a, c]"))
+  }
+
+  test("using join with a case sensitive analyzer") {
+    val expected = r1.join(r2, Inner, Some(EqualTo(a, a))).select(a, b, c)
+
+    {
+      val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("a"))), None)
+      checkAnalysis(usingPlan, expected, caseSensitive = true)
+    }
+
+    {
+      val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("A"))), None)
+      assertAnalysisError(
+        usingPlan,
+        Seq("using columns ['A] can not be resolved given input columns: [b, a, c, a]"))
+    }
+  }
+
+  test("using join with a case insensitive analyzer") {
+    val expected = r1.join(r2, Inner, Some(EqualTo(a, a))).select(a, b, c)
+
+    {
+      val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("a"))), None)
+      checkAnalysis(usingPlan, expected, caseSensitive = false)
+    }
+
+    {
+      val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("A"))), None)
+      checkAnalysis(usingPlan, expected, caseSensitive = false)
+    }
   }
 }

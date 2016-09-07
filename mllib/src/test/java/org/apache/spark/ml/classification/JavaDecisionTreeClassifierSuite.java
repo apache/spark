@@ -17,36 +17,19 @@
 
 package org.apache.spark.ml.classification;
 
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.impl.TreeTests;
-import org.apache.spark.mllib.classification.LogisticRegressionSuite;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.ml.feature.LabeledPoint;
+import org.apache.spark.ml.tree.impl.TreeTests;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 
-
-public class JavaDecisionTreeClassifierSuite implements Serializable {
-
-  private transient JavaSparkContext sc;
-
-  @Before
-  public void setUp() {
-    sc = new JavaSparkContext("local", "JavaDecisionTreeClassifierSuite");
-  }
-
-  @After
-  public void tearDown() {
-    sc.stop();
-    sc = null;
-  }
+public class JavaDecisionTreeClassifierSuite extends SharedSparkSession {
 
   @Test
   public void runDT() {
@@ -54,10 +37,10 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
     double A = 2.0;
     double B = -1.5;
 
-    JavaRDD<LabeledPoint> data = sc.parallelize(
+    JavaRDD<LabeledPoint> data = jsc.parallelize(
       LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<>();
-    DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
+    Dataset<Row> dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
 
     // This tests setters. Training with various options is tested in Scala.
     DecisionTreeClassifier dt = new DecisionTreeClassifier()
@@ -69,7 +52,7 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
       .setCacheNodeIds(false)
       .setCheckpointInterval(10)
       .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (String impurity: DecisionTreeClassifier.supportedImpurities()) {
+    for (String impurity : DecisionTreeClassifier.supportedImpurities()) {
       dt.setImpurity(impurity);
     }
     DecisionTreeClassificationModel model = dt.fit(dataFrame);

@@ -177,7 +177,7 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
     new OpenHashMapBasedStateMap[K, S](this, deltaChainThreshold = deltaChainThreshold)
   }
 
-  /** Whether the delta chain lenght is long enough that it should be compacted */
+  /** Whether the delta chain length is long enough that it should be compacted */
   def shouldCompact: Boolean = {
     deltaChainLength >= deltaChainThreshold
   }

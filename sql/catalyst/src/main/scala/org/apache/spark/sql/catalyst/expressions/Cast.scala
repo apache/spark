@@ -52,7 +52,8 @@ object Cast {
     case (DateType, TimestampType) => true
     case (_: NumericType, TimestampType) => true
 
-    case (_, DateType) => true
+    case (StringType, DateType) => true
+    case (TimestampType, DateType) => true
 
     case (StringType, CalendarIntervalType) => true
 
@@ -112,7 +113,10 @@ object Cast {
 }
 
 /** Cast the child expression to the target data type. */
-case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
+@ExpressionDescription(
+  usage = " - Cast value v to the target data type.",
+  extended = "> SELECT _FUNC_('10' as int);\n 10")
+case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with NullIntolerant {
 
   override def toString: String = s"cast($child as ${dataType.simpleString})"
 
@@ -228,18 +232,12 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
       buildCast[Long](_, t => DateTimeUtils.millisToDays(t / 1000L))
-    // Hive throws this exception as a Semantic Exception
-    // It is never possible to compare result when hive return with exception,
-    // so we can return null
-    // NULL is more reasonable here, since the query itself obeys the grammar.
-    case _ => _ => null
   }
 
   // IntervalConverter
   private[this] def castToInterval(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => CalendarInterval.fromString(s.toString))
-    case _ => _ => null
   }
 
   // LongConverter
@@ -418,7 +416,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   }
 
   private[this] def cast(from: DataType, to: DataType): Any => Any = to match {
-    case dt if dt == child.dataType => identity[Any]
+    case dt if dt == from => identity[Any]
     case StringType => castToString(from)
     case BinaryType => castToBinary(from)
     case DateType => castToDate(from)
@@ -446,11 +444,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
 
   protected override def nullSafeEval(input: Any): Any = cast(input)
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval = child.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
     val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
-    eval.code +
-      castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast)
+    ev.copy(code = eval.code +
+      castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast))
   }
 
   // three function arguments are: child.primitive, result.primitive and result.isNull
@@ -898,7 +896,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     val result = ctx.freshName("result")
     val tmpRow = ctx.freshName("tmpRow")
 
-    val fieldsEvalCode = fieldsCasts.zipWithIndex.map { case (cast, i) => {
+    val fieldsEvalCode = fieldsCasts.zipWithIndex.map { case (cast, i) =>
       val fromFieldPrim = ctx.freshName("ffp")
       val fromFieldNull = ctx.freshName("ffn")
       val toFieldPrim = ctx.freshName("tfp")
@@ -920,7 +918,6 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
           }
         }
        """
-      }
     }.mkString("\n")
 
     (c, evPrim, evNull) =>

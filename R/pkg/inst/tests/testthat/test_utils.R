@@ -18,12 +18,13 @@
 context("functions in utils.R")
 
 # JavaSparkContext handle
-sc <- sparkR.init()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 test_that("convertJListToRList() gives back (deserializes) the original JLists
           of strings and integers", {
   # It's hard to manually create a Java List using rJava, since it does not
-  # support generics well. Instead, we rely on collect() returning a
+  # support generics well. Instead, we rely on collectRDD() returning a
   # JList.
   nums <- as.list(1:10)
   rdd <- parallelize(sc, nums, 1L)
@@ -41,13 +42,13 @@ test_that("convertJListToRList() gives back (deserializes) the original JLists
 test_that("serializeToBytes on RDD", {
   # File content
   mockFile <- c("Spark is pretty.", "Spark is awesome.")
-  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
   text.rdd <- textFile(sc, fileName)
   expect_equal(getSerializedMode(text.rdd), "string")
   ser.rdd <- serializeToBytes(text.rdd)
-  expect_equal(collect(ser.rdd), as.list(mockFile))
+  expect_equal(collectRDD(ser.rdd), as.list(mockFile))
   expect_equal(getSerializedMode(ser.rdd), "byte")
 
   unlink(fileName)
@@ -86,8 +87,8 @@ test_that("cleanClosure on R functions", {
   f <- function(x) {
     defUse <- base::as.integer(x) + 1  # Test for access operators `::`.
     lapply(x, g) + 1  # Test for capturing function call "g"'s closure as a argument of lapply.
-    l$field[1,1] <- 3  # Test for access operators `$`.
-    res <- defUse + l$field[1,]  # Test for def-use chain of "defUse", and "" symbol.
+    l$field[1, 1] <- 3  # Test for access operators `$`.
+    res <- defUse + l$field[1, ]  # Test for def-use chain of "defUse", and "" symbol.
     f(res)  # Test for recursive calls.
   }
   newF <- cleanClosure(f)
@@ -127,12 +128,12 @@ test_that("cleanClosure on R functions", {
   env <- environment(newF)
   expect_equal(ls(env), "t")
   expect_equal(get("t", envir = env, inherits = FALSE), t)
-  actual <- collect(lapply(rdd, f))
+  actual <- collectRDD(lapply(rdd, f))
   expected <- as.list(c(rep(FALSE, 4), rep(TRUE, 6)))
   expect_equal(actual, expected)
 
   # Test for broadcast variables.
-  a <- matrix(nrow=10, ncol=10, data=rnorm(100))
+  a <- matrix(nrow = 10, ncol = 10, data = rnorm(100))
   aBroadcast <- broadcast(sc, a)
   normMultiply <- function(x) { norm(aBroadcast$value) * x }
   newnormMultiply <- SparkR:::cleanClosure(normMultiply)
@@ -140,3 +141,70 @@ test_that("cleanClosure on R functions", {
   expect_equal(ls(env), "aBroadcast")
   expect_equal(get("aBroadcast", envir = env, inherits = FALSE), aBroadcast)
 })
+
+test_that("varargsToJProperties", {
+  jprops <- newJObject("java.util.Properties")
+  expect_true(class(jprops) == "jobj")
+
+  jprops <- varargsToJProperties(abc = "123")
+  expect_true(class(jprops) == "jobj")
+  expect_equal(callJMethod(jprops, "getProperty", "abc"), "123")
+
+  jprops <- varargsToJProperties(abc = "abc", b = 1)
+  expect_equal(callJMethod(jprops, "getProperty", "abc"), "abc")
+  expect_equal(callJMethod(jprops, "getProperty", "b"), "1")
+
+  jprops <- varargsToJProperties()
+  expect_equal(callJMethod(jprops, "size"), 0L)
+})
+
+test_that("convertToJSaveMode", {
+  s <- convertToJSaveMode("error")
+  expect_true(class(s) == "jobj")
+  expect_match(capture.output(print.jobj(s)), "Java ref type org.apache.spark.sql.SaveMode id ")
+  expect_error(convertToJSaveMode("foo"),
+    'mode should be one of "append", "overwrite", "error", "ignore"') #nolint
+})
+
+test_that("hashCode", {
+  expect_error(hashCode("bc53d3605e8a5b7de1e8e271c2317645"), NA)
+})
+
+test_that("overrideEnvs", {
+  config <- new.env()
+  config[["spark.master"]] <- "foo"
+  config[["config_only"]] <- "ok"
+  param <- new.env()
+  param[["spark.master"]] <- "local"
+  param[["param_only"]] <- "blah"
+  overrideEnvs(config, param)
+  expect_equal(config[["spark.master"]], "local")
+  expect_equal(config[["param_only"]], "blah")
+  expect_equal(config[["config_only"]], "ok")
+})
+
+test_that("rbindRaws", {
+
+  # Mixed Column types
+  r <- serialize(1:5, connection = NULL)
+  r1 <- serialize(1, connection = NULL)
+  r2 <- serialize(letters, connection = NULL)
+  r3 <- serialize(1:10, connection = NULL)
+  inputData <- list(list(1L, r1, "a", r), list(2L, r2, "b", r),
+                    list(3L, r3, "c", r))
+  expected <- data.frame(V1 = 1:3)
+  expected$V2 <- list(r1, r2, r3)
+  expected$V3 <- c("a", "b", "c")
+  expected$V4 <- list(r, r, r)
+  result <- rbindRaws(inputData)
+  expect_equal(expected, result)
+
+  # Single binary column
+  input <- list(list(r1), list(r2), list(r3))
+  expected <- subset(expected, select = "V2")
+  result <- setNames(rbindRaws(input), "V2")
+  expect_equal(expected, result)
+
+})
+
+sparkR.session.stop()

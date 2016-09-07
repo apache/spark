@@ -29,7 +29,8 @@ import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 import io.netty.handler.codec.bytes.{ByteArrayDecoder, ByteArrayEncoder}
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 
 /**
  * Netty-based backend server that is used to communicate between R and Java.
@@ -93,6 +94,8 @@ private[spark] class RBackend {
 }
 
 private[spark] object RBackend extends Logging {
+  initializeLogIfNecessary(true)
+
   def main(args: Array[String]): Unit = {
     if (args.length < 1) {
       // scalastyle:off println
@@ -100,6 +103,7 @@ private[spark] object RBackend extends Logging {
       // scalastyle:on println
       System.exit(-1)
     }
+
     val sparkRBackend = new RBackend()
     try {
       // bind to random port

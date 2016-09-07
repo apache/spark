@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{Dataset, Row}
 
 @BeanInfo
 case class TokenizerTestData(rawText: String, wantedTokens: Array[String])
@@ -57,13 +57,13 @@ class RegexTokenizerSuite
       .setPattern("\\w+|\\p{Punct}")
       .setInputCol("rawText")
       .setOutputCol("tokens")
-    val dataset0 = sqlContext.createDataFrame(Seq(
+    val dataset0 = spark.createDataFrame(Seq(
       TokenizerTestData("Test for tokenization.", Array("test", "for", "tokenization", ".")),
       TokenizerTestData("Te,st. punct", Array("te", ",", "st", ".", "punct"))
     ))
     testRegexTokenizer(tokenizer0, dataset0)
 
-    val dataset1 = sqlContext.createDataFrame(Seq(
+    val dataset1 = spark.createDataFrame(Seq(
       TokenizerTestData("Test for tokenization.", Array("test", "for", "tokenization")),
       TokenizerTestData("Te,st. punct", Array("punct"))
     ))
@@ -73,7 +73,7 @@ class RegexTokenizerSuite
     val tokenizer2 = new RegexTokenizer()
       .setInputCol("rawText")
       .setOutputCol("tokens")
-    val dataset2 = sqlContext.createDataFrame(Seq(
+    val dataset2 = spark.createDataFrame(Seq(
       TokenizerTestData("Test for tokenization.", Array("test", "for", "tokenization.")),
       TokenizerTestData("Te,st.  punct", Array("te,st.", "punct"))
     ))
@@ -85,7 +85,7 @@ class RegexTokenizerSuite
       .setInputCol("rawText")
       .setOutputCol("tokens")
       .setToLowercase(false)
-    val dataset = sqlContext.createDataFrame(Seq(
+    val dataset = spark.createDataFrame(Seq(
       TokenizerTestData("JAVA SCALA", Array("JAVA", "SCALA")),
       TokenizerTestData("java scala", Array("java", "scala"))
     ))
@@ -106,7 +106,7 @@ class RegexTokenizerSuite
 
 object RegexTokenizerSuite extends SparkFunSuite {
 
-  def testRegexTokenizer(t: RegexTokenizer, dataset: DataFrame): Unit = {
+  def testRegexTokenizer(t: RegexTokenizer, dataset: Dataset[_]): Unit = {
     t.transform(dataset)
       .select("tokens", "wantedTokens")
       .collect()

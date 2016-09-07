@@ -28,14 +28,13 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
@@ -44,21 +43,22 @@ import org.apache.spark.sql.types.StructType;
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
 // see http://stackoverflow.com/questions/758570/.
 public class JavaApplySchemaSuite implements Serializable {
-  private transient JavaSparkContext javaCtx;
-  private transient SQLContext sqlContext;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    SparkContext context = new SparkContext("local[*]", "testing");
-    javaCtx = new JavaSparkContext(context);
-    sqlContext = new SQLContext(context);
+    spark = SparkSession.builder()
+      .master("local[*]")
+      .appName("testing")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sqlContext.sparkContext().stop();
-    sqlContext = null;
-    javaCtx = null;
+    spark.stop();
+    spark = null;
   }
 
   public static class Person implements Serializable {
@@ -94,7 +94,7 @@ public class JavaApplySchemaSuite implements Serializable {
     person2.setAge(28);
     personList.add(person2);
 
-    JavaRDD<Row> rowRDD = javaCtx.parallelize(personList).map(
+    JavaRDD<Row> rowRDD = jsc.parallelize(personList).map(
       new Function<Person, Row>() {
         @Override
         public Row call(Person person) throws Exception {
@@ -107,15 +107,15 @@ public class JavaApplySchemaSuite implements Serializable {
     fields.add(DataTypes.createStructField("age", DataTypes.IntegerType, false));
     StructType schema = DataTypes.createStructType(fields);
 
-    DataFrame df = sqlContext.createDataFrame(rowRDD, schema);
-    df.registerTempTable("people");
-    Row[] actual = sqlContext.sql("SELECT * FROM people").collect();
+    Dataset<Row> df = spark.createDataFrame(rowRDD, schema);
+    df.createOrReplaceTempView("people");
+    List<Row> actual = spark.sql("SELECT * FROM people").collectAsList();
 
     List<Row> expected = new ArrayList<>(2);
     expected.add(RowFactory.create("Michael", 29));
     expected.add(RowFactory.create("Yin", 28));
 
-    Assert.assertEquals(expected, Arrays.asList(actual));
+    Assert.assertEquals(expected, actual);
   }
 
   @Test
@@ -130,7 +130,7 @@ public class JavaApplySchemaSuite implements Serializable {
     person2.setAge(28);
     personList.add(person2);
 
-    JavaRDD<Row> rowRDD = javaCtx.parallelize(personList).map(
+    JavaRDD<Row> rowRDD = jsc.parallelize(personList).map(
         new Function<Person, Row>() {
           @Override
           public Row call(Person person) {
@@ -143,14 +143,15 @@ public class JavaApplySchemaSuite implements Serializable {
     fields.add(DataTypes.createStructField("age", DataTypes.IntegerType, false));
     StructType schema = DataTypes.createStructType(fields);
 
-    DataFrame df = sqlContext.createDataFrame(rowRDD, schema);
-    df.registerTempTable("people");
-    List<String> actual = sqlContext.sql("SELECT * FROM people").toJavaRDD().map(new Function<Row, String>() {
-      @Override
-      public String call(Row row) {
-        return row.getString(0) + "_" + row.get(1);
-      }
-    }).collect();
+    Dataset<Row> df = spark.createDataFrame(rowRDD, schema);
+    df.createOrReplaceTempView("people");
+    List<String> actual = spark.sql("SELECT * FROM people").toJavaRDD()
+      .map(new Function<Row, String>() {
+        @Override
+        public String call(Row row) {
+          return row.getString(0) + "_" + row.get(1);
+        }
+      }).collect();
 
     List<String> expected = new ArrayList<>(2);
     expected.add("Michael_29");
@@ -161,7 +162,7 @@ public class JavaApplySchemaSuite implements Serializable {
 
   @Test
   public void applySchemaToJSON() {
-    JavaRDD<String> jsonRDD = javaCtx.parallelize(Arrays.asList(
+    JavaRDD<String> jsonRDD = jsc.parallelize(Arrays.asList(
       "{\"string\":\"this is a simple string.\", \"integer\":10, \"long\":21474836470, " +
         "\"bigInteger\":92233720368547758070, \"double\":1.7976931348623157E308, " +
         "\"boolean\":true, \"null\":null}",
@@ -198,18 +199,18 @@ public class JavaApplySchemaSuite implements Serializable {
         null,
         "this is another simple string."));
 
-    DataFrame df1 = sqlContext.read().json(jsonRDD);
+    Dataset<Row> df1 = spark.read().json(jsonRDD);
     StructType actualSchema1 = df1.schema();
     Assert.assertEquals(expectedSchema, actualSchema1);
-    df1.registerTempTable("jsonTable1");
-    List<Row> actual1 = sqlContext.sql("select * from jsonTable1").collectAsList();
+    df1.createOrReplaceTempView("jsonTable1");
+    List<Row> actual1 = spark.sql("select * from jsonTable1").collectAsList();
     Assert.assertEquals(expectedResult, actual1);
 
-    DataFrame df2 = sqlContext.read().schema(expectedSchema).json(jsonRDD);
+    Dataset<Row> df2 = spark.read().schema(expectedSchema).json(jsonRDD);
     StructType actualSchema2 = df2.schema();
     Assert.assertEquals(expectedSchema, actualSchema2);
-    df2.registerTempTable("jsonTable2");
-    List<Row> actual2 = sqlContext.sql("select * from jsonTable2").collectAsList();
+    df2.createOrReplaceTempView("jsonTable2");
+    List<Row> actual2 = spark.sql("select * from jsonTable2").collectAsList();
     Assert.assertEquals(expectedResult, actual2);
   }
 }

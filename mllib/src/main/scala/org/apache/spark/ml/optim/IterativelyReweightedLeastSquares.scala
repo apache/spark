@@ -17,24 +17,28 @@
 
 package org.apache.spark.ml.optim
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.mllib.linalg._
+import org.apache.spark.ml.linalg._
 import org.apache.spark.rdd.RDD
 
 /**
  * Model fitted by [[IterativelyReweightedLeastSquares]].
  * @param coefficients model coefficients
  * @param intercept model intercept
+ * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1 in the last iteration
+ * @param numIterations number of iterations
  */
 private[ml] class IterativelyReweightedLeastSquaresModel(
     val coefficients: DenseVector,
-    val intercept: Double) extends Serializable
+    val intercept: Double,
+    val diagInvAtWA: DenseVector,
+    val numIterations: Int) extends Serializable
 
 /**
  * Implements the method of iteratively reweighted least squares (IRLS) which is used to solve
  * certain optimization problems by an iterative method. In each step of the iterations, it
- * involves solving a weighted lease squares (WLS) problem by [[WeightedLeastSquares]].
+ * involves solving a weighted least squares (WLS) problem by [[WeightedLeastSquares]].
  * It can be used to find maximum likelihood estimates of a generalized linear model (GLM),
  * find M-estimator in robust regression and other optimization problems.
  *
@@ -103,6 +107,7 @@ private[ml] class IterativelyReweightedLeastSquares(
 
     }
 
-    new IterativelyReweightedLeastSquaresModel(model.coefficients, model.intercept)
+    new IterativelyReweightedLeastSquaresModel(
+      model.coefficients, model.intercept, model.diagInvAtWA, iter)
   }
 }

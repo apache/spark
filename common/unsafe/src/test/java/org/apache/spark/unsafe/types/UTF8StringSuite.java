@@ -17,7 +17,7 @@
 
 package org.apache.spark.unsafe.types;
 
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 
@@ -30,9 +30,9 @@ import static org.apache.spark.unsafe.types.UTF8String.*;
 
 public class UTF8StringSuite {
 
-  private static void checkBasic(String str, int len) throws UnsupportedEncodingException {
+  private static void checkBasic(String str, int len) {
     UTF8String s1 = fromString(str);
-    UTF8String s2 = fromBytes(str.getBytes("utf8"));
+    UTF8String s2 = fromBytes(str.getBytes(StandardCharsets.UTF_8));
     assertEquals(s1.numChars(), len);
     assertEquals(s2.numChars(), len);
 
@@ -51,7 +51,7 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void basicTest() throws UnsupportedEncodingException {
+  public void basicTest() {
     checkBasic("", 0);
     checkBasic("hello", 5);
     checkBasic("大 千 世 界", 7);
@@ -232,6 +232,16 @@ public class UTF8StringSuite {
     assertEquals(fromString("数据砖头"), fromString("数据砖头").trim());
     assertEquals(fromString("数据砖头"), fromString("数据砖头").trimLeft());
     assertEquals(fromString("数据砖头"), fromString("数据砖头").trimRight());
+
+    char[] charsLessThan0x20 = new char[10];
+    Arrays.fill(charsLessThan0x20, (char)(' ' - 1));
+    String stringStartingWithSpace =
+      new String(charsLessThan0x20) + "hello" + new String(charsLessThan0x20);
+    assertEquals(fromString(stringStartingWithSpace), fromString(stringStartingWithSpace).trim());
+    assertEquals(fromString(stringStartingWithSpace),
+      fromString(stringStartingWithSpace).trimLeft());
+    assertEquals(fromString(stringStartingWithSpace),
+      fromString(stringStartingWithSpace).trimRight());
   }
 
   @Test

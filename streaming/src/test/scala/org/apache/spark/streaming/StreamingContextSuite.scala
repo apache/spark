@@ -31,6 +31,7 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.storage.StorageLevel
@@ -147,7 +148,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     }
   }
 
-  test("start with non-seriazable DStream checkpoints") {
+  test("start with non-serializable DStream checkpoints") {
     val checkpointDir = Utils.createTempDir()
     ssc = new StreamingContext(conf, batchDuration)
     ssc.checkpoint(checkpointDir.getAbsolutePath)
@@ -181,7 +182,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(ssc.scheduler.isStarted === false)
   }
 
-  test("start should set job group and description of streaming jobs correctly") {
+  test("start should set local properties of streaming jobs correctly") {
     ssc = new StreamingContext(conf, batchDuration)
     ssc.sc.setJobGroup("non-streaming", "non-streaming", true)
     val sc = ssc.sc
@@ -189,15 +190,21 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     @volatile var jobGroupFound: String = ""
     @volatile var jobDescFound: String = ""
     @volatile var jobInterruptFound: String = ""
+    @volatile var customPropFound: String = ""
     @volatile var allFound: Boolean = false
 
     addInputStream(ssc).foreachRDD { rdd =>
       jobGroupFound = sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
       jobDescFound = sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)
       jobInterruptFound = sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL)
+      customPropFound = sc.getLocalProperty("customPropKey")
       allFound = true
     }
+    ssc.sc.setLocalProperty("customPropKey", "value1")
     ssc.start()
+
+    // Local props set after start should be ignored
+    ssc.sc.setLocalProperty("customPropKey", "value2")
 
     eventually(timeout(10 seconds), interval(10 milliseconds)) {
       assert(allFound === true)
@@ -207,11 +214,13 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(jobGroupFound === null)
     assert(jobDescFound.contains("Streaming job from"))
     assert(jobInterruptFound === "false")
+    assert(customPropFound === "value1")
 
     // Verify current thread's thread-local properties have not changed
     assert(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID) === "non-streaming")
     assert(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION) === "non-streaming")
     assert(sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL) === "true")
+    assert(sc.getLocalProperty("customPropKey") === "value2")
   }
 
   test("start multiple times") {
@@ -810,10 +819,13 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     ssc.checkpoint(checkpointDirectory)
     ssc.textFileStream(testDirectory).foreachRDD { rdd => rdd.count() }
     ssc.start()
-    eventually(timeout(10000 millis)) {
-      assert(Checkpoint.getCheckpointFiles(checkpointDirectory).size > 1)
+    try {
+      eventually(timeout(30000 millis)) {
+        assert(Checkpoint.getCheckpointFiles(checkpointDirectory).size > 1)
+      }
+    } finally {
+      ssc.stop()
     }
-    ssc.stop()
     checkpointDirectory
   }
 

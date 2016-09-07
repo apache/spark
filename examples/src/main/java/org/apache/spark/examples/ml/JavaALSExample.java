@@ -17,9 +17,9 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 
 // $example on$
 import java.io.Serializable;
@@ -29,8 +29,6 @@ import org.apache.spark.api.java.function.Function;
 import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.recommendation.ALS;
 import org.apache.spark.ml.recommendation.ALSModel;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.types.DataTypes;
 // $example off$
 
 public class JavaALSExample {
@@ -82,21 +80,23 @@ public class JavaALSExample {
   // $example off$
 
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaALSExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaALSExample")
+      .getOrCreate();
 
     // $example on$
-    JavaRDD<Rating> ratingsRDD = jsc.textFile("data/mllib/als/sample_movielens_ratings.txt")
+    JavaRDD<Rating> ratingsRDD = spark
+      .read().textFile("data/mllib/als/sample_movielens_ratings.txt").javaRDD()
       .map(new Function<String, Rating>() {
         public Rating call(String str) {
           return Rating.parseRating(str);
         }
       });
-    DataFrame ratings = sqlContext.createDataFrame(ratingsRDD, Rating.class);
-    DataFrame[] splits = ratings.randomSplit(new double[]{0.8, 0.2});
-    DataFrame training = splits[0];
-    DataFrame test = splits[1];
+    Dataset<Row> ratings = spark.createDataFrame(ratingsRDD, Rating.class);
+    Dataset<Row>[] splits = ratings.randomSplit(new double[]{0.8, 0.2});
+    Dataset<Row> training = splits[0];
+    Dataset<Row> test = splits[1];
 
     // Build the recommendation model using ALS on the training data
     ALS als = new ALS()
@@ -108,10 +108,7 @@ public class JavaALSExample {
     ALSModel model = als.fit(training);
 
     // Evaluate the model by computing the RMSE on the test data
-    DataFrame rawPredictions = model.transform(test);
-    DataFrame predictions = rawPredictions
-      .withColumn("rating", rawPredictions.col("rating").cast(DataTypes.DoubleType))
-      .withColumn("prediction", rawPredictions.col("prediction").cast(DataTypes.DoubleType));
+    Dataset<Row> predictions = model.transform(test);
 
     RegressionEvaluator evaluator = new RegressionEvaluator()
       .setMetricName("rmse")
@@ -120,6 +117,6 @@ public class JavaALSExample {
     Double rmse = evaluator.evaluate(predictions);
     System.out.println("Root-mean-square error = " + rmse);
     // $example off$
-    jsc.stop();
+    spark.stop();
   }
 }

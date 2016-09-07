@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Collaborative Filtering - spark.ml
-displayTitle: Collaborative Filtering - spark.ml
+title: Collaborative Filtering
+displayTitle: Collaborative Filtering
 ---
 
 * Table of contents
@@ -29,6 +29,10 @@ following parameters:
   *baseline* confidence in preference observations (defaults to 1.0).
 * *nonnegative* specifies whether or not to use nonnegative constraints for least squares (defaults to `false`).
 
+**Note:** The DataFrame-based API for ALS currently only supports integers for user and item ids.
+Other numeric types are supported for the user and item id columns, 
+but the ids must be within the integer value range. 
+
 ### Explicit vs. implicit feedback
 
 The standard approach to matrix factorization based collaborative filtering treats 
@@ -36,7 +40,7 @@ the entries in the user-item matrix as *explicit* preferences given by the user 
 for example, users giving ratings to movies.
 
 It is common in many real-world use cases to only have access to *implicit feedback* (e.g. views,
-clicks, purchases, likes, shares etc.). The approach used in `spark.mllib` to deal with such data is taken
+clicks, purchases, likes, shares etc.). The approach used in `spark.ml` to deal with such data is taken
 from [Collaborative Filtering for Implicit Feedback Datasets](http://dx.doi.org/10.1109/ICDM.2008.22).
 Essentially, instead of trying to model the matrix of ratings directly, this approach treats the data
 as numbers representing the *strength* in observations of user actions (such as the number of clicks,
@@ -60,7 +64,7 @@ best parameter learned from a sampled subset to the full dataset and expect simi
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-In the following example, we load rating data from the
+In the following example, we load ratings data from the
 [MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
 consisting of a user, a movie, a rating and a timestamp.
 We then train an ALS model which assumes, by default, that the ratings are
@@ -91,7 +95,7 @@ val als = new ALS()
 
 <div data-lang="java" markdown="1">
 
-In the following example, we load rating data from the
+In the following example, we load ratings data from the
 [MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
 consisting of a user, a movie, a rating and a timestamp.
 We then train an ALS model which assumes, by default, that the ratings are
@@ -122,7 +126,7 @@ ALS als = new ALS()
 
 <div data-lang="python" markdown="1">
 
-In the following example, we load rating data from the
+In the following example, we load ratings data from the
 [MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
 consisting of a user, a movie, a rating and a timestamp.
 We then train an ALS model which assumes, by default, that the ratings are

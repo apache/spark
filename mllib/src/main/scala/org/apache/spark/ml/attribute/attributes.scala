@@ -481,7 +481,7 @@ object NominalAttribute extends AttributeFactory {
  * A binary attribute.
  * @param name optional name
  * @param index optional index
- * @param values optionla values. If set, its size must be 2.
+ * @param values optional values. If set, its size must be 2.
  */
 @DeveloperApi
 class BinaryAttribute private[ml] (

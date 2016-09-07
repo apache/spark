@@ -64,7 +64,7 @@ public class TransportClientFactory implements Closeable {
     TransportClient[] clients;
     Object[] locks;
 
-    public ClientPool(int size) {
+    ClientPool(int size) {
       clients = new TransportClient[size];
       locks = new Object[size];
       for (int i = 0; i < size; i++) {
@@ -73,7 +73,7 @@ public class TransportClientFactory implements Closeable {
     }
   }
 
-  private final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
 
   private final TransportContext context;
   private final TransportConf conf;
@@ -94,7 +94,7 @@ public class TransportClientFactory implements Closeable {
     this.context = Preconditions.checkNotNull(context);
     this.conf = context.getConf();
     this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
-    this.connectionPool = new ConcurrentHashMap<SocketAddress, ClientPool>();
+    this.connectionPool = new ConcurrentHashMap<>();
     this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
     this.rand = new Random();
 
@@ -123,13 +123,15 @@ public class TransportClientFactory implements Closeable {
   public TransportClient createClient(String remoteHost, int remotePort) throws IOException {
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
-    final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
+    // Use unresolved address here to avoid DNS resolution each time we creates a client.
+    final InetSocketAddress unresolvedAddress =
+      InetSocketAddress.createUnresolved(remoteHost, remotePort);
 
     // Create the ClientPool if we don't have it yet.
-    ClientPool clientPool = connectionPool.get(address);
+    ClientPool clientPool = connectionPool.get(unresolvedAddress);
     if (clientPool == null) {
-      connectionPool.putIfAbsent(address, new ClientPool(numConnectionsPerPeer));
-      clientPool = connectionPool.get(address);
+      connectionPool.putIfAbsent(unresolvedAddress, new ClientPool(numConnectionsPerPeer));
+      clientPool = connectionPool.get(unresolvedAddress);
     }
 
     int clientIndex = rand.nextInt(numConnectionsPerPeer);
@@ -146,25 +148,35 @@ public class TransportClientFactory implements Closeable {
       }
 
       if (cachedClient.isActive()) {
-        logger.trace("Returning cached connection to {}: {}", address, cachedClient);
+        logger.trace("Returning cached connection to {}: {}",
+          cachedClient.getSocketAddress(), cachedClient);
         return cachedClient;
       }
     }
 
     // If we reach here, we don't have an existing connection open. Let's create a new one.
     // Multiple threads might race here to create new connections. Keep only one of them active.
+    final long preResolveHost = System.nanoTime();
+    final InetSocketAddress resolvedAddress = new InetSocketAddress(remoteHost, remotePort);
+    final long hostResolveTimeMs = (System.nanoTime() - preResolveHost) / 1000000;
+    if (hostResolveTimeMs > 2000) {
+      logger.warn("DNS resolution for {} took {} ms", resolvedAddress, hostResolveTimeMs);
+    } else {
+      logger.trace("DNS resolution for {} took {} ms", resolvedAddress, hostResolveTimeMs);
+    }
+
     synchronized (clientPool.locks[clientIndex]) {
       cachedClient = clientPool.clients[clientIndex];
 
       if (cachedClient != null) {
         if (cachedClient.isActive()) {
-          logger.trace("Returning cached connection to {}: {}", address, cachedClient);
+          logger.trace("Returning cached connection to {}: {}", resolvedAddress, cachedClient);
           return cachedClient;
         } else {
-          logger.info("Found inactive connection to {}, creating a new one.", address);
+          logger.info("Found inactive connection to {}, creating a new one.", resolvedAddress);
         }
       }
-      clientPool.clients[clientIndex] = createClient(address);
+      clientPool.clients[clientIndex] = createClient(resolvedAddress);
       return clientPool.clients[clientIndex];
     }
   }
@@ -183,7 +195,7 @@ public class TransportClientFactory implements Closeable {
 
   /** Create a completely new {@link TransportClient} to the remote address. */
   private TransportClient createClient(InetSocketAddress address) throws IOException {
-    logger.debug("Creating new connection to " + address);
+    logger.debug("Creating new connection to {}", address);
 
     Bootstrap bootstrap = new Bootstrap();
     bootstrap.group(workerGroup)
@@ -235,7 +247,7 @@ public class TransportClientFactory implements Closeable {
     }
     long postBootstrap = System.nanoTime();
 
-    logger.debug("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
+    logger.info("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
       address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
 
     return client;

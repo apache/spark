@@ -19,11 +19,11 @@ package org.apache.spark.deploy.rest
 
 import java.io.DataOutputStream
 import java.net.{HttpURLConnection, URL}
+import java.nio.charset.StandardCharsets
 import javax.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
 
-import com.google.common.base.Charsets
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfterEach
@@ -408,7 +408,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   /**
    * Start a [[StandaloneRestServer]] that communicates with the given endpoint.
-   * If `faulty` is true, start an [[FaultyStandaloneRestServer]] instead.
+   * If `faulty` is true, start a [[FaultyStandaloneRestServer]] instead.
    * Return the master URL that corresponds to the address of this server.
    */
   private def startServer(
@@ -498,7 +498,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     if (body.nonEmpty) {
       conn.setDoOutput(true)
       val out = new DataOutputStream(conn.getOutputStream)
-      out.write(body.getBytes(Charsets.UTF_8))
+      out.write(body.getBytes(StandardCharsets.UTF_8))
       out.close()
     }
     conn

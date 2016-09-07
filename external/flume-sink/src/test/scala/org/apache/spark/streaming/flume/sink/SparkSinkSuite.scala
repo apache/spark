@@ -17,6 +17,7 @@
 package org.apache.spark.streaming.flume.sink
 
 import java.net.InetSocketAddress
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -184,7 +185,8 @@ class SparkSinkSuite extends FunSuite {
   private def putEvents(ch: MemoryChannel, count: Int): Unit = {
     val tx = ch.getTransaction
     tx.begin()
-    (1 to count).foreach(x => ch.put(EventBuilder.withBody(x.toString.getBytes)))
+    (1 to count).foreach(x =>
+      ch.put(EventBuilder.withBody(x.toString.getBytes(StandardCharsets.UTF_8))))
     tx.commit()
     tx.close()
   }

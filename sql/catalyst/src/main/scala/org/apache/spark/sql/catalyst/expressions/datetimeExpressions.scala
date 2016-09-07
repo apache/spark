@@ -35,6 +35,8 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  *
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns the current date at the start of query evaluation.")
 case class CurrentDate() extends LeafExpression with CodegenFallback {
   override def foldable: Boolean = true
   override def nullable: Boolean = false
@@ -54,6 +56,8 @@ case class CurrentDate() extends LeafExpression with CodegenFallback {
  *
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns the current timestamp at the start of query evaluation.")
 case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
   override def foldable: Boolean = true
   override def nullable: Boolean = false
@@ -70,6 +74,9 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
 /**
  * Adds a number of days to startdate.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(start_date, num_days) - Returns the date that is num_days after start_date.",
+  extended = "> SELECT _FUNC_('2016-07-30', 1);\n '2016-07-31'")
 case class DateAdd(startDate: Expression, days: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -84,7 +91,7 @@ case class DateAdd(startDate: Expression, days: Expression)
     start.asInstanceOf[Int] + d.asInstanceOf[Int]
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (sd, d) => {
       s"""${ev.value} = $sd + $d;"""
     })
@@ -96,6 +103,9 @@ case class DateAdd(startDate: Expression, days: Expression)
 /**
  * Subtracts a number of days to startdate.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(start_date, num_days) - Returns the date that is num_days before start_date.",
+  extended = "> SELECT _FUNC_('2016-07-30', 1);\n '2016-07-29'")
 case class DateSub(startDate: Expression, days: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
   override def left: Expression = startDate
@@ -109,7 +119,7 @@ case class DateSub(startDate: Expression, days: Expression)
     start.asInstanceOf[Int] - d.asInstanceOf[Int]
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (sd, d) => {
       s"""${ev.value} = $sd - $d;"""
     })
@@ -118,6 +128,9 @@ case class DateSub(startDate: Expression, days: Expression)
   override def prettyName: String = "date_sub"
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(param) - Returns the hour component of the string/timestamp/interval.",
+  extended = "> SELECT _FUNC_('2009-07-30 12:58:59');\n 12")
 case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
@@ -128,12 +141,15 @@ case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInpu
     DateTimeUtils.getHours(timestamp.asInstanceOf[Long])
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getHours($c)")
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(param) - Returns the minute component of the string/timestamp/interval.",
+  extended = "> SELECT _FUNC_('2009-07-30 12:58:59');\n 58")
 case class Minute(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
@@ -144,12 +160,15 @@ case class Minute(child: Expression) extends UnaryExpression with ImplicitCastIn
     DateTimeUtils.getMinutes(timestamp.asInstanceOf[Long])
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getMinutes($c)")
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(param) - Returns the second component of the string/timestamp/interval.",
+  extended = "> SELECT _FUNC_('2009-07-30 12:58:59');\n 59")
 case class Second(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
@@ -160,12 +179,15 @@ case class Second(child: Expression) extends UnaryExpression with ImplicitCastIn
     DateTimeUtils.getSeconds(timestamp.asInstanceOf[Long])
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getSeconds($c)")
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(param) - Returns the day of year of date/timestamp.",
+  extended = "> SELECT _FUNC_('2016-04-09');\n 100")
 case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -176,13 +198,15 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
     DateTimeUtils.getDayInYear(date.asInstanceOf[Int])
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getDayInYear($c)")
   }
 }
 
-
+@ExpressionDescription(
+  usage = "_FUNC_(param) - Returns the year component of the date/timestamp/interval.",
+  extended = "> SELECT _FUNC_('2016-07-30');\n 2016")
 case class Year(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -193,12 +217,14 @@ case class Year(child: Expression) extends UnaryExpression with ImplicitCastInpu
     DateTimeUtils.getYear(date.asInstanceOf[Int])
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getYear($c)")
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(param) - Returns the quarter of the year for date, in the range 1 to 4.")
 case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -209,12 +235,15 @@ case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastI
     DateTimeUtils.getQuarter(date.asInstanceOf[Int])
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getQuarter($c)")
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(param) - Returns the month component of the date/timestamp/interval",
+  extended = "> SELECT _FUNC_('2016-07-30');\n 7")
 case class Month(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -225,12 +254,15 @@ case class Month(child: Expression) extends UnaryExpression with ImplicitCastInp
     DateTimeUtils.getMonth(date.asInstanceOf[Int])
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getMonth($c)")
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(param) - Returns the day of month of date/timestamp, or the day of interval.",
+  extended = "> SELECT _FUNC_('2009-07-30');\n 30")
 case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -241,12 +273,15 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
     DateTimeUtils.getDayOfMonth(date.asInstanceOf[Int])
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getDayOfMonth($c)")
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(param) - Returns the week of the year of the given date.",
+  extended = "> SELECT _FUNC_('2008-02-20');\n 8")
 case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -265,7 +300,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
     c.get(Calendar.WEEK_OF_YEAR)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, time => {
       val cal = classOf[Calendar].getName
       val c = ctx.freshName("cal")
@@ -283,6 +318,11 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
   }
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(date/timestamp/string, fmt) - Converts a date/timestamp/string to a value of string in the format specified by the date format fmt.",
+  extended = "> SELECT _FUNC_('2016-04-08', 'y')\n '2016'")
+// scalastyle:on line.size.limit
 case class DateFormatClass(left: Expression, right: Expression) extends BinaryExpression
   with ImplicitCastInputTypes {
 
@@ -295,7 +335,7 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
     UTF8String.fromString(sdf.format(new java.util.Date(timestamp.asInstanceOf[Long] / 1000)))
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val sdf = classOf[SimpleDateFormat].getName
     defineCodeGen(ctx, ev, (timestamp, format) => {
       s"""UTF8String.fromString((new $sdf($format.toString()))
@@ -310,6 +350,8 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
  * Converts time string with given pattern.
  * Deterministic version of [[UnixTimestamp]], must have at least one parameter.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(date[, pattern]) - Returns the UNIX timestamp of the give time.")
 case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends UnixTime {
   override def left: Expression = timeExp
   override def right: Expression = format
@@ -331,6 +373,8 @@ case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends Unix
  * If the first parameter is a Date or Timestamp instead of String, we will ignore the
  * second parameter.
  */
+@ExpressionDescription(
+  usage = "_FUNC_([date[, pattern]]) - Returns the UNIX timestamp of current or specified time.")
 case class UnixTimestamp(timeExp: Expression, format: Expression) extends UnixTime {
   override def left: Expression = timeExp
   override def right: Expression = format
@@ -355,6 +399,8 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
   override def nullable: Boolean = true
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
+  private lazy val formatter: SimpleDateFormat =
+    Try(new SimpleDateFormat(constFormat.toString)).getOrElse(null)
 
   override def eval(input: InternalRow): Any = {
     val t = left.eval(input)
@@ -367,11 +413,11 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
         case TimestampType =>
           t.asInstanceOf[Long] / 1000000L
         case StringType if right.foldable =>
-          if (constFormat != null) {
-            Try(new SimpleDateFormat(constFormat.toString).parse(
-              t.asInstanceOf[UTF8String].toString).getTime / 1000L).getOrElse(null)
-          } else {
+          if (constFormat == null || formatter == null) {
             null
+          } else {
+            Try(formatter.parse(
+              t.asInstanceOf[UTF8String].toString).getTime / 1000L).getOrElse(null)
           }
         case StringType =>
           val f = right.eval(input)
@@ -386,33 +432,26 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     left.dataType match {
       case StringType if right.foldable =>
         val sdf = classOf[SimpleDateFormat].getName
-        val fString = if (constFormat == null) null else constFormat.toString
-        val formatter = ctx.freshName("formatter")
-        if (fString == null) {
-          s"""
-            boolean ${ev.isNull} = true;
-            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          """
+        if (formatter == null) {
+          ExprCode("", "true", ctx.defaultValue(dataType))
         } else {
-          val eval1 = left.gen(ctx)
-          s"""
+          val formatterName = ctx.addReferenceObj("formatter", formatter, sdf)
+          val eval1 = left.genCode(ctx)
+          ev.copy(code = s"""
             ${eval1.code}
             boolean ${ev.isNull} = ${eval1.isNull};
             ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
             if (!${ev.isNull}) {
               try {
-                $sdf $formatter = new $sdf("$fString");
-                ${ev.value} =
-                  $formatter.parse(${eval1.value}.toString()).getTime() / 1000L;
-              } catch (java.lang.Throwable e) {
+                ${ev.value} = $formatterName.parse(${eval1.value}.toString()).getTime() / 1000L;
+              } catch (java.text.ParseException e) {
                 ${ev.isNull} = true;
               }
-            }
-          """
+            }""")
         }
       case StringType =>
         val sdf = classOf[SimpleDateFormat].getName
@@ -421,32 +460,32 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
             try {
               ${ev.value} =
                 (new $sdf($format.toString())).parse($string.toString()).getTime() / 1000L;
-            } catch (java.lang.Throwable e) {
+            } catch (java.lang.IllegalArgumentException e) {
+              ${ev.isNull} = true;
+            } catch (java.text.ParseException e) {
               ${ev.isNull} = true;
             }
           """
         })
       case TimestampType =>
-        val eval1 = left.gen(ctx)
-        s"""
+        val eval1 = left.genCode(ctx)
+        ev.copy(code = s"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = ${eval1.value} / 1000000L;
-          }
-        """
+          }""")
       case DateType =>
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-        val eval1 = left.gen(ctx)
-        s"""
+        val eval1 = left.genCode(ctx)
+        ev.copy(code = s"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = $dtu.daysToMillis(${eval1.value}) / 1000L;
-          }
-        """
+          }""")
     }
   }
 
@@ -459,6 +498,9 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
  * format. If the format is missing, using format like "1970-01-01 00:00:00".
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(unix_time, format) - Returns unix_time in the specified format",
+  extended = "> SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');\n '1970-01-01 00:00:00'")
 case class FromUnixTime(sec: Expression, format: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -477,6 +519,8 @@ case class FromUnixTime(sec: Expression, format: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringType)
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
+  private lazy val formatter: SimpleDateFormat =
+    Try(new SimpleDateFormat(constFormat.toString)).getOrElse(null)
 
   override def eval(input: InternalRow): Any = {
     val time = left.eval(input)
@@ -484,10 +528,10 @@ case class FromUnixTime(sec: Expression, format: Expression)
       null
     } else {
       if (format.foldable) {
-        if (constFormat == null) {
+        if (constFormat == null || formatter == null) {
           null
         } else {
-          Try(UTF8String.fromString(new SimpleDateFormat(constFormat.toString).format(
+          Try(UTF8String.fromString(formatter.format(
             new java.util.Date(time.asInstanceOf[Long] * 1000L)))).getOrElse(null)
         }
       } else {
@@ -503,29 +547,26 @@ case class FromUnixTime(sec: Expression, format: Expression)
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val sdf = classOf[SimpleDateFormat].getName
     if (format.foldable) {
-      if (constFormat == null) {
-        s"""
-          boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        """
+      if (formatter == null) {
+        ExprCode("", "true", "(UTF8String) null")
       } else {
-        val t = left.gen(ctx)
-        s"""
+        val formatterName = ctx.addReferenceObj("formatter", formatter, sdf)
+        val t = left.genCode(ctx)
+        ev.copy(code = s"""
           ${t.code}
           boolean ${ev.isNull} = ${t.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
             try {
-              ${ev.value} = UTF8String.fromString(new $sdf("${constFormat.toString}").format(
+              ${ev.value} = UTF8String.fromString($formatterName.format(
                 new java.util.Date(${t.value} * 1000L)));
-            } catch (java.lang.Throwable e) {
+            } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
             }
-          }
-        """
+          }""")
       }
     } else {
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
@@ -533,7 +574,7 @@ case class FromUnixTime(sec: Expression, format: Expression)
         try {
           ${ev.value} = UTF8String.fromString((new $sdf($f.toString())).format(
             new java.util.Date($seconds * 1000L)));
-        } catch (java.lang.Throwable e) {
+        } catch (java.lang.IllegalArgumentException e) {
           ${ev.isNull} = true;
         }""".stripMargin
       })
@@ -544,6 +585,9 @@ case class FromUnixTime(sec: Expression, format: Expression)
 /**
  * Returns the last day of the month which the date belongs to.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the last day of the month which the date belongs to.",
+  extended = "> SELECT _FUNC_('2009-01-12');\n '2009-01-31'")
 case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def child: Expression = startDate
 
@@ -555,7 +599,7 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
     DateTimeUtils.getLastDayOfMonth(date.asInstanceOf[Int])
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, sd => s"$dtu.getLastDayOfMonth($sd)")
   }
@@ -570,6 +614,11 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
  *
  * Allowed "dayOfWeek" is defined in [[DateTimeUtils.getDayOfWeekFromString]].
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(start_date, day_of_week) - Returns the first date which is later than start_date and named as indicated.",
+  extended = "> SELECT _FUNC_('2015-01-14', 'TU');\n '2015-01-20'")
+// scalastyle:on line.size.limit
 case class NextDay(startDate: Expression, dayOfWeek: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -591,7 +640,7 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
     }
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (sd, dowS) => {
       val dateTimeUtilClass = DateTimeUtils.getClass.getName.stripSuffix("$")
       val dayOfWeekTerm = ctx.freshName("dayOfWeek")
@@ -643,7 +692,7 @@ case class TimeAdd(start: Expression, interval: Expression)
       start.asInstanceOf[Long], itvl.months, itvl.microseconds)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, i) => {
       s"""$dtu.timestampAddInterval($sd, $i.months, $i.microseconds)"""
@@ -654,6 +703,10 @@ case class TimeAdd(start: Expression, interval: Expression)
 /**
  * Assumes given timestamp is UTC and converts to given timezone.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(timestamp, string timezone) - Assumes given timestamp is UTC and converts to given timezone.")
+// scalastyle:on line.size.limit
 case class FromUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -666,29 +719,30 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
       timezone.asInstanceOf[UTF8String].toString)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     if (right.foldable) {
       val tz = right.eval()
       if (tz == null) {
-        s"""
+        ev.copy(code = s"""
            |boolean ${ev.isNull} = true;
            |long ${ev.value} = 0;
-         """.stripMargin
+         """.stripMargin)
       } else {
         val tzTerm = ctx.freshName("tz")
+        val utcTerm = ctx.freshName("utc")
         val tzClass = classOf[TimeZone].getName
         ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $tzClass.getTimeZone("$tz");""")
-        val eval = left.gen(ctx)
-        s"""
+        ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $tzClass.getTimeZone("UTC");""")
+        val eval = left.genCode(ctx)
+        ev.copy(code = s"""
            |${eval.code}
            |boolean ${ev.isNull} = ${eval.isNull};
            |long ${ev.value} = 0;
            |if (!${ev.isNull}) {
-           |  ${ev.value} = ${eval.value} +
-           |   ${tzTerm}.getOffset(${eval.value} / 1000) * 1000L;
+           |  ${ev.value} = $dtu.convertTz(${eval.value}, $utcTerm, $tzTerm);
            |}
-         """.stripMargin
+         """.stripMargin)
       }
     } else {
       defineCodeGen(ctx, ev, (timestamp, format) => {
@@ -718,7 +772,7 @@ case class TimeSub(start: Expression, interval: Expression)
       start.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.microseconds)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, i) => {
       s"""$dtu.timestampAddInterval($sd, 0 - $i.months, 0 - $i.microseconds)"""
@@ -729,6 +783,9 @@ case class TimeSub(start: Expression, interval: Expression)
 /**
  * Returns the date that is num_months after start_date.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(start_date, num_months) - Returns the date that is num_months after start_date.",
+  extended = "> SELECT _FUNC_('2016-08-31', 1);\n '2016-09-30'")
 case class AddMonths(startDate: Expression, numMonths: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -743,7 +800,7 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
     DateTimeUtils.dateAddMonths(start.asInstanceOf[Int], months.asInstanceOf[Int])
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, m) => {
       s"""$dtu.dateAddMonths($sd, $m)"""
@@ -756,6 +813,9 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
 /**
  * Returns number of months between dates date1 and date2.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(date1, date2) - returns number of months between dates date1 and date2.",
+  extended = "> SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30');\n 3.94959677")
 case class MonthsBetween(date1: Expression, date2: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -770,7 +830,7 @@ case class MonthsBetween(date1: Expression, date2: Expression)
     DateTimeUtils.monthsBetween(t1.asInstanceOf[Long], t2.asInstanceOf[Long])
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (l, r) => {
       s"""$dtu.monthsBetween($l, $r)"""
@@ -783,6 +843,10 @@ case class MonthsBetween(date1: Expression, date2: Expression)
 /**
  * Assumes given timestamp is in given timezone and converts to UTC.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(timestamp, string timezone) - Assumes given timestamp is in given timezone and converts to UTC.")
+// scalastyle:on line.size.limit
 case class ToUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -795,29 +859,30 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
       timezone.asInstanceOf[UTF8String].toString)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     if (right.foldable) {
       val tz = right.eval()
       if (tz == null) {
-        s"""
+        ev.copy(code = s"""
            |boolean ${ev.isNull} = true;
            |long ${ev.value} = 0;
-         """.stripMargin
+         """.stripMargin)
       } else {
         val tzTerm = ctx.freshName("tz")
+        val utcTerm = ctx.freshName("utc")
         val tzClass = classOf[TimeZone].getName
         ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $tzClass.getTimeZone("$tz");""")
-        val eval = left.gen(ctx)
-        s"""
+        ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $tzClass.getTimeZone("UTC");""")
+        val eval = left.genCode(ctx)
+        ev.copy(code = s"""
            |${eval.code}
            |boolean ${ev.isNull} = ${eval.isNull};
            |long ${ev.value} = 0;
            |if (!${ev.isNull}) {
-           |  ${ev.value} = ${eval.value} -
-           |   ${tzTerm}.getOffset(${eval.value} / 1000) * 1000L;
+           |  ${ev.value} = $dtu.convertTz(${eval.value}, $tzTerm, $utcTerm);
            |}
-         """.stripMargin
+         """.stripMargin)
       }
     } else {
       defineCodeGen(ctx, ev, (timestamp, format) => {
@@ -830,6 +895,9 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
 /**
  * Returns the date part of a timestamp or string.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Extracts the date part of the date or datetime expression expr.",
+  extended = "> SELECT _FUNC_('2009-07-30 04:17:52');\n '2009-07-30'")
 case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   // Implicit casting of spark will accept string in both date and timestamp format, as
@@ -840,7 +908,7 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
 
   override def eval(input: InternalRow): Any = child.eval(input)
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, d => d)
   }
 
@@ -850,6 +918,11 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
 /**
  * Returns date truncated to the unit specified by the format.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(date, fmt) - Returns returns date with the time portion of the day truncated to the unit specified by the format model fmt.",
+  extended = "> SELECT _FUNC_('2009-02-12', 'MM')\n '2009-02-01'\n> SELECT _FUNC_('2015-10-27', 'YEAR');\n '2015-01-01'")
+// scalastyle:on line.size.limit
 case class TruncDate(date: Expression, format: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
   override def left: Expression = date
@@ -882,25 +955,23 @@ case class TruncDate(date: Expression, format: Expression)
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
 
     if (format.foldable) {
       if (truncLevel == -1) {
-        s"""
+        ev.copy(code = s"""
           boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        """
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
       } else {
-        val d = date.gen(ctx)
-        s"""
+        val d = date.genCode(ctx)
+        ev.copy(code = s"""
           ${d.code}
           boolean ${ev.isNull} = ${d.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = $dtu.truncDate(${d.value}, $truncLevel);
-          }
-        """
+          }""")
       }
     } else {
       nullSafeCodeGen(ctx, ev, (dateVal, fmt) => {
@@ -921,6 +992,9 @@ case class TruncDate(date: Expression, format: Expression)
 /**
  * Returns the number of days from startDate to endDate.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(date1, date2) - Returns the number of days between date1 and date2.",
+  extended = "> SELECT _FUNC_('2009-07-30', '2009-07-31');\n 1")
 case class DateDiff(endDate: Expression, startDate: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -933,7 +1007,7 @@ case class DateDiff(endDate: Expression, startDate: Expression)
     end.asInstanceOf[Int] - start.asInstanceOf[Int]
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (end, start) => s"$end - $start")
   }
 }

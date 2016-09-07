@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -30,15 +30,15 @@ import org.apache.spark.sql.execution._
  * each operator by inserting [[ShuffleExchange]] Operators where required.  Also ensure that the
  * input partition ordering requirements are met.
  */
-private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[SparkPlan] {
-  private def defaultNumPreShufflePartitions: Int = sqlContext.conf.numShufflePartitions
+case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
+  private def defaultNumPreShufflePartitions: Int = conf.numShufflePartitions
 
-  private def targetPostShuffleInputSize: Long = sqlContext.conf.targetPostShuffleInputSize
+  private def targetPostShuffleInputSize: Long = conf.targetPostShuffleInputSize
 
-  private def adaptiveExecutionEnabled: Boolean = sqlContext.conf.adaptiveExecutionEnabled
+  private def adaptiveExecutionEnabled: Boolean = conf.adaptiveExecutionEnabled
 
   private def minNumPostShufflePartitions: Option[Int] = {
-    val minNumPostShufflePartitions = sqlContext.conf.minNumPostShufflePartitions
+    val minNumPostShufflePartitions = conf.minNumPostShufflePartitions
     if (minNumPostShufflePartitions > 0) Some(minNumPostShufflePartitions) else None
   }
 
@@ -160,7 +160,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
         child
       case (child, BroadcastDistribution(mode)) =>
-        BroadcastExchange(mode, child)
+        BroadcastExchangeExec(mode, child)
       case (child, distribution) =>
         ShuffleExchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
     }
@@ -236,8 +236,17 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
       if (requiredOrdering.nonEmpty) {
         // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
-        if (requiredOrdering != child.outputOrdering.take(requiredOrdering.length)) {
-          Sort(requiredOrdering, global = false, child = child)
+        val orderingMatched = if (requiredOrdering.length > child.outputOrdering.length) {
+          false
+        } else {
+          requiredOrdering.zip(child.outputOrdering).forall {
+            case (requiredOrder, childOutputOrder) =>
+              requiredOrder.semanticEquals(childOutputOrder)
+          }
+        }
+
+        if (!orderingMatched) {
+          SortExec(requiredOrdering, global = false, child = child)
         } else {
           child
         }

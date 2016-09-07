@@ -21,6 +21,7 @@ import javax.annotation.Nonnull;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Map;
 
@@ -105,15 +106,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Creates an UTF8String from String.
    */
   public static UTF8String fromString(String str) {
-    if (str == null) return null;
-    try {
-      return fromBytes(str.getBytes("utf-8"));
-    } catch (UnsupportedEncodingException e) {
-      // Turn the exception into unchecked so we can find out about it at runtime, but
-      // don't need to add lots of boilerplate code everywhere.
-      throwException(e);
-      return null;
-    }
+    return str == null ? null : fromBytes(str.getBytes(StandardCharsets.UTF_8));
   }
 
   /**
@@ -472,12 +465,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int s = 0;
     int e = this.numBytes - 1;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) <= 0x20 && getByte(s) >= 0x00) s++;
+    while (s < this.numBytes && getByte(s) == 0x20) s++;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && getByte(e) <= 0x20 && getByte(e) >= 0x00) e--;
+    while (e >= 0 && getByte(e) == 0x20) e--;
     if (s > e) {
       // empty string
-      return UTF8String.fromBytes(new byte[0]);
+      return EMPTY_UTF8;
     } else {
       return copyUTF8String(s, e);
     }
@@ -486,10 +479,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimLeft() {
     int s = 0;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) <= 0x20 && getByte(s) >= 0x00) s++;
+    while (s < this.numBytes && getByte(s) == 0x20) s++;
     if (s == this.numBytes) {
       // empty string
-      return UTF8String.fromBytes(new byte[0]);
+      return EMPTY_UTF8;
     } else {
       return copyUTF8String(s, this.numBytes - 1);
     }
@@ -498,11 +491,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimRight() {
     int e = numBytes - 1;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && getByte(e) <= 0x20 && getByte(e) >= 0x00) e--;
+    while (e >= 0 && getByte(e) == 0x20) e--;
 
     if (e < 0) {
       // empty string
-      return UTF8String.fromBytes(new byte[0]);
+      return EMPTY_UTF8;
     } else {
       return copyUTF8String(0, e);
     }
@@ -768,7 +761,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     if (numInputs == 0) {
       // Return an empty string if there is no input, or all the inputs are null.
-      return fromBytes(new byte[0]);
+      return EMPTY_UTF8;
     }
 
     // Allocate a new byte array, and copy the inputs one by one into it.
@@ -825,14 +818,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   @Override
   public String toString() {
-    try {
-      return new String(getBytes(), "utf-8");
-    } catch (UnsupportedEncodingException e) {
-      // Turn the exception into unchecked so we can find out about it at runtime, but
-      // don't need to add lots of boilerplate code everywhere.
-      throwException(e);
-      return "unknown";  // we will never reach here.
-    }
+    return new String(getBytes(), StandardCharsets.UTF_8);
   }
 
   @Override

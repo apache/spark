@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.classification;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
@@ -37,7 +36,7 @@ import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import static org.apache.spark.streaming.JavaTestUtils.*;
 
-public class JavaStreamingLogisticRegressionSuite implements Serializable {
+public class JavaStreamingLogisticRegressionSuite {
 
   protected transient JavaStreamingContext ssc;
 
@@ -66,8 +65,8 @@ public class JavaStreamingLogisticRegressionSuite implements Serializable {
     JavaDStream<LabeledPoint> training =
       attachTestInputStream(ssc, Arrays.asList(trainingBatch, trainingBatch), 2);
     List<Tuple2<Integer, Vector>> testBatch = Arrays.asList(
-      new Tuple2<Integer, Vector>(10, Vectors.dense(1.0)),
-      new Tuple2<Integer, Vector>(11, Vectors.dense(0.0)));
+      new Tuple2<>(10, Vectors.dense(1.0)),
+      new Tuple2<>(11, Vectors.dense(0.0)));
     JavaPairDStream<Integer, Vector> test = JavaPairDStream.fromJavaDStream(
       attachTestInputStream(ssc, Arrays.asList(testBatch, testBatch), 2));
     StreamingLogisticRegressionWithSGD slr = new StreamingLogisticRegressionWithSGD()

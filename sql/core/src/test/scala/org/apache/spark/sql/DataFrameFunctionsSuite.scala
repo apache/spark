@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -42,15 +44,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val expectedType = ArrayType(IntegerType, containsNull = false)
     assert(row.schema(0).dataType === expectedType)
-    assert(row.getAs[Seq[Int]](0) === Seq(0, 2))
+    assert(row.getSeq[Int](0) === Seq(0, 2))
   }
 
-  // Turn this on once we add a rule to the analyzer to throw a friendly exception
-  ignore("array: throw exception if putting columns of different types into an array") {
-    val df = Seq((0, "str")).toDF("a", "b")
-    intercept[AnalysisException] {
-      df.select(array("a", "b"))
-    }
+  test("map with column expressions") {
+    val df = Seq(1 -> "a").toDF("a", "b")
+    val row = df.select(map($"a" + 1, $"b")).first()
+
+    val expectedType = MapType(IntegerType, StringType, valueContainsNull = true)
+    assert(row.schema(0).dataType === expectedType)
+    assert(row.getMap[Int, String](0) === Map(2 -> "a"))
   }
 
   test("struct with column name") {
@@ -149,12 +152,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("one", "not_one"))
   }
 
-  test("nvl function") {
-    checkAnswer(
-      sql("SELECT nvl(null, 'x'), nvl('y', 'x'), nvl(null, null)"),
-      Row("x", "y", null))
-  }
-
   test("misc md5 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
@@ -167,12 +164,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("misc sha1 function") {
-    val df = Seq(("ABC", "ABC".getBytes)).toDF("a", "b")
+    val df = Seq(("ABC", "ABC".getBytes(StandardCharsets.UTF_8))).toDF("a", "b")
     checkAnswer(
       df.select(sha1($"a"), sha1($"b")),
       Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8", "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8"))
 
-    val dfEmpty = Seq(("", "".getBytes)).toDF("a", "b")
+    val dfEmpty = Seq(("", "".getBytes(StandardCharsets.UTF_8))).toDF("a", "b")
     checkAnswer(
       dfEmpty.selectExpr("sha1(a)", "sha1(b)"),
       Row("da39a3ee5e6b4b0d3255bfef95601890afd80709", "da39a3ee5e6b4b0d3255bfef95601890afd80709"))
@@ -327,15 +324,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = Seq(
       (Seq[Int](1, 2), "x"),
       (Seq[Int](), "y"),
-      (Seq[Int](1, 2, 3), "z")
+      (Seq[Int](1, 2, 3), "z"),
+      (null, "empty")
     ).toDF("a", "b")
     checkAnswer(
       df.select(size($"a")),
-      Seq(Row(2), Row(0), Row(3))
+      Seq(Row(2), Row(0), Row(3), Row(-1))
     )
     checkAnswer(
       df.selectExpr("size(a)"),
-      Seq(Row(2), Row(0), Row(3))
+      Seq(Row(2), Row(0), Row(3), Row(-1))
     )
   }
 
@@ -343,15 +341,32 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = Seq(
       (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
       (Map[Int, Int](), "y"),
-      (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z")
+      (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z"),
+      (null, "empty")
     ).toDF("a", "b")
     checkAnswer(
       df.select(size($"a")),
-      Seq(Row(2), Row(0), Row(3))
+      Seq(Row(2), Row(0), Row(3), Row(-1))
     )
     checkAnswer(
       df.selectExpr("size(a)"),
-      Seq(Row(2), Row(0), Row(3))
+      Seq(Row(2), Row(0), Row(3), Row(-1))
+    )
+  }
+
+  test("map_keys/map_values function") {
+    val df = Seq(
+      (Map[Int, Int](1 -> 100, 2 -> 200), "x"),
+      (Map[Int, Int](), "y"),
+      (Map[Int, Int](1 -> 100, 2 -> 200, 3 -> 300), "z")
+    ).toDF("a", "b")
+    checkAnswer(
+      df.selectExpr("map_keys(a)"),
+      Seq(Row(Seq(1, 2)), Row(Seq.empty), Row(Seq(1, 2, 3)))
+    )
+    checkAnswer(
+      df.selectExpr("map_values(a)"),
+      Seq(Row(Seq(100, 200)), Row(Seq.empty), Row(Seq(100, 200, 300)))
     )
   }
 

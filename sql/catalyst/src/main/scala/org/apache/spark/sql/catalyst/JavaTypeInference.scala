@@ -25,8 +25,9 @@ import scala.language.existentials
 
 import com.google.common.reflect.TypeToken
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -63,6 +64,11 @@ object JavaTypeInference {
       case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
         (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
 
+      case c: Class[_] if UDTRegistration.exists(c.getName) =>
+        val udt = UDTRegistration.getUDTFor(c.getName).get.newInstance()
+          .asInstanceOf[UserDefinedType[_ >: Null]]
+        (udt, true)
+
       case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
       case c: Class[_] if c == classOf[Array[Byte]] => (BinaryType, true)
 
@@ -83,6 +89,7 @@ object JavaTypeInference {
       case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
 
       case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType.SYSTEM_DEFAULT, true)
+      case c: Class[_] if c == classOf[java.math.BigInteger] => (DecimalType.BigIntDecimal, true)
       case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
 
@@ -155,23 +162,23 @@ object JavaTypeInference {
   }
 
   /**
-   * Returns an expression that can be used to construct an object of java bean `T` given an input
-   * row with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
+   * Returns an expression that can be used to deserialize an internal row to an object of java bean
+   * `T` with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
    * of the same name as the constructor arguments.  Nested classes will have their fields accessed
    * using UnresolvedExtractValue.
    */
-  def constructorFor(beanClass: Class[_]): Expression = {
-    constructorFor(TypeToken.of(beanClass), None)
+  def deserializerFor(beanClass: Class[_]): Expression = {
+    deserializerFor(TypeToken.of(beanClass), None)
   }
 
-  private def constructorFor(typeToken: TypeToken[_], path: Option[Expression]): Expression = {
+  private def deserializerFor(typeToken: TypeToken[_], path: Option[Expression]): Expression = {
     /** Returns the current path with a sub-field extracted. */
     def addToPath(part: String): Expression = path
       .map(p => UnresolvedExtractValue(p, expressions.Literal(part)))
       .getOrElse(UnresolvedAttribute(part))
 
-    /** Returns the current path or `BoundReference`. */
-    def getPath: Expression = path.getOrElse(BoundReference(0, inferDataType(typeToken)._1, true))
+    /** Returns the current path or `GetColumnByOrdinal`. */
+    def getPath: Expression = path.getOrElse(GetColumnByOrdinal(0, inferDataType(typeToken)._1))
 
     typeToken.getRawType match {
       case c if !inferExternalType(c).isInstanceOf[ObjectType] => getPath
@@ -231,7 +238,7 @@ object JavaTypeInference {
         }.getOrElse {
           Invoke(
             MapObjects(
-              p => constructorFor(typeToken.getComponentType, Some(p)),
+              p => deserializerFor(typeToken.getComponentType, Some(p)),
               getPath,
               inferDataType(elementType)._1),
             "array",
@@ -243,7 +250,7 @@ object JavaTypeInference {
         val array =
           Invoke(
             MapObjects(
-              p => constructorFor(et, Some(p)),
+              p => deserializerFor(et, Some(p)),
               getPath,
               inferDataType(et)._1),
             "array",
@@ -259,7 +266,7 @@ object JavaTypeInference {
         val keyData =
           Invoke(
             MapObjects(
-              p => constructorFor(keyType, Some(p)),
+              p => deserializerFor(keyType, Some(p)),
               Invoke(getPath, "keyArray", ArrayType(keyDataType)),
               keyDataType),
             "array",
@@ -268,7 +275,7 @@ object JavaTypeInference {
         val valueData =
           Invoke(
             MapObjects(
-              p => constructorFor(valueType, Some(p)),
+              p => deserializerFor(valueType, Some(p)),
               Invoke(getPath, "valueArray", ArrayType(valueDataType)),
               valueDataType),
             "array",
@@ -288,7 +295,7 @@ object JavaTypeInference {
           val fieldName = p.getName
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
           val (_, nullable) = inferDataType(fieldType)
-          val constructor = constructorFor(fieldType, Some(addToPath(fieldName)))
+          val constructor = deserializerFor(fieldType, Some(addToPath(fieldName)))
           val setter = if (nullable) {
             constructor
           } else {
@@ -313,14 +320,14 @@ object JavaTypeInference {
   }
 
   /**
-   * Returns expressions for extracting all the fields from the given type.
+   * Returns an expression for serializing an object of the given type to an internal row.
    */
-  def extractorsFor(beanClass: Class[_]): CreateNamedStruct = {
+  def serializerFor(beanClass: Class[_]): CreateNamedStruct = {
     val inputObject = BoundReference(0, ObjectType(beanClass), nullable = true)
-    extractorFor(inputObject, TypeToken.of(beanClass)).asInstanceOf[CreateNamedStruct]
+    serializerFor(inputObject, TypeToken.of(beanClass)).asInstanceOf[CreateNamedStruct]
   }
 
-  private def extractorFor(inputObject: Expression, typeToken: TypeToken[_]): Expression = {
+  private def serializerFor(inputObject: Expression, typeToken: TypeToken[_]): Expression = {
 
     def toCatalystArray(input: Expression, elementType: TypeToken[_]): Expression = {
       val (dataType, nullable) = inferDataType(elementType)
@@ -330,7 +337,7 @@ object JavaTypeInference {
           input :: Nil,
           dataType = ArrayType(dataType, nullable))
       } else {
-        MapObjects(extractorFor(_, elementType), input, ObjectType(elementType.getRawType))
+        MapObjects(serializerFor(_, elementType), input, ObjectType(elementType.getRawType))
       }
     }
 
@@ -388,10 +395,14 @@ object JavaTypeInference {
           toCatalystArray(inputObject, elementType(typeToken))
 
         case _ if mapType.isAssignableFrom(typeToken) =>
-          // TODO: for java map, if we get the keys and values by `keySet` and `values`, we can
-          // not guarantee they have same iteration order(which is different from scala map).
-          // A possible solution is creating a new `MapObjects` that can iterate a map directly.
-          throw new UnsupportedOperationException("map type is not supported currently")
+          val (keyType, valueType) = mapKeyValueType(typeToken)
+          ExternalMapToCatalyst(
+            inputObject,
+            ObjectType(keyType.getRawType),
+            serializerFor(_, keyType),
+            ObjectType(valueType.getRawType),
+            serializerFor(_, valueType)
+          )
 
         case other =>
           val properties = getJavaBeanProperties(other)
@@ -403,7 +414,7 @@ object JavaTypeInference {
                 inputObject,
                 p.getReadMethod.getName,
                 inferExternalType(fieldType.getRawType))
-              expressions.Literal(fieldName) :: extractorFor(fieldValue, fieldType) :: Nil
+              expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType) :: Nil
             })
           } else {
             throw new UnsupportedOperationException(

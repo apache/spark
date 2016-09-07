@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
@@ -25,8 +28,7 @@ import org.apache.spark.sql.{Column, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
-import org.apache.spark.sql.sources.HadoopFsRelation
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
 
 /**
  * A test suite that tests ORC filter API based filter pushdown optimization.
@@ -49,11 +51,11 @@ class OrcFilterSuite extends QueryTest with OrcTest {
     }.flatten.reduceLeftOption(_ && _)
     assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
-    val (_, selectedFilters) =
+    val (_, selectedFilters, _) =
       DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
     assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
-    val maybeFilter = OrcFilters.createFilter(selectedFilters.toArray)
+    val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters.toArray)
     assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $selectedFilters")
     checker(maybeFilter.get)
   }
@@ -77,10 +79,28 @@ class OrcFilterSuite extends QueryTest with OrcTest {
     checkFilterPredicate(df, predicate, checkLogicalOperator)
   }
 
-  test("filter pushdown - boolean") {
-    withOrcDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { implicit df =>
-      checkFilterPredicate('_1.isNull, PredicateLeaf.Operator.IS_NULL)
-    }
+  private def checkNoFilterPredicate
+      (predicate: Predicate)
+      (implicit df: DataFrame): Unit = {
+    val output = predicate.collect { case a: Attribute => a }.distinct
+    val query = df
+      .select(output.map(e => Column(e)): _*)
+      .where(Column(predicate))
+
+    var maybeRelation: Option[HadoopFsRelation] = None
+    val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
+      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _)) =>
+        maybeRelation = Some(orcRelation)
+        filters
+    }.flatten.reduceLeftOption(_ && _)
+    assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
+
+    val (_, selectedFilters, _) =
+      DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
+    assert(selectedFilters.nonEmpty, "No filter is pushed down")
+
+    val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters.toArray)
+    assert(maybeFilter.isEmpty, s"Could generate filter predicate for $selectedFilters")
   }
 
   test("filter pushdown - integer") {
@@ -188,13 +208,24 @@ class OrcFilterSuite extends QueryTest with OrcTest {
     }
   }
 
-  test("filter pushdown - binary") {
-    implicit class IntToBinary(int: Int) {
-      def b: Array[Byte] = int.toString.getBytes("UTF-8")
-    }
-
-    withOrcDataFrame((1 to 4).map(i => Tuple1(i.b))) { implicit df =>
+  test("filter pushdown - boolean") {
+    withOrcDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { implicit df =>
       checkFilterPredicate('_1.isNull, PredicateLeaf.Operator.IS_NULL)
+
+      checkFilterPredicate('_1 === true, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate('_1 <=> true, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+
+      checkFilterPredicate('_1 < true, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate('_1 > false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate('_1 <= false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate('_1 >= false, PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(false) === '_1, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(false) <=> '_1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(false) > '_1, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(true) < '_1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(true) >= '_1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(true) <= '_1, PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
@@ -212,8 +243,9 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       )
       checkFilterPredicate(
         '_1 =!= 1,
-        """leaf-0 = (EQUALS _1 1)
-          |expr = (not leaf-0)""".stripMargin.trim
+        """leaf-0 = (IS_NULL _1)
+          |leaf-1 = (EQUALS _1 1)
+          |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
       )
       checkFilterPredicate(
         !('_1 < 4),
@@ -234,6 +266,38 @@ class OrcFilterSuite extends QueryTest with OrcTest {
           |leaf-2 = (LESS_THAN_EQUALS _1 3)
           |expr = (and (not leaf-0) leaf-1 (not leaf-2))""".stripMargin.trim
       )
+    }
+  }
+
+  test("no filter pushdown - non-supported types") {
+    implicit class IntToBinary(int: Int) {
+      def b: Array[Byte] = int.toString.getBytes(StandardCharsets.UTF_8)
+    }
+    // ArrayType
+    withOrcDataFrame((1 to 4).map(i => Tuple1(Array(i)))) { implicit df =>
+      checkNoFilterPredicate('_1.isNull)
+    }
+    // DecimalType
+    withOrcDataFrame((1 to 4).map(i => Tuple1(BigDecimal.valueOf(i)))) { implicit df =>
+      checkNoFilterPredicate('_1 <= BigDecimal.valueOf(4))
+    }
+    // BinaryType
+    withOrcDataFrame((1 to 4).map(i => Tuple1(i.b))) { implicit df =>
+      checkNoFilterPredicate('_1 <=> 1.b)
+    }
+    // TimestampType
+    val stringTimestamp = "2015-08-20 15:57:00"
+    withOrcDataFrame(Seq(Tuple1(Timestamp.valueOf(stringTimestamp)))) { implicit df =>
+      checkNoFilterPredicate('_1 <=> Timestamp.valueOf(stringTimestamp))
+    }
+    // DateType
+    val stringDate = "2015-01-01"
+    withOrcDataFrame(Seq(Tuple1(Date.valueOf(stringDate)))) { implicit df =>
+      checkNoFilterPredicate('_1 === Date.valueOf(stringDate))
+    }
+    // MapType
+    withOrcDataFrame((1 to 4).map(i => Tuple1(Map(i -> i)))) { implicit df =>
+      checkNoFilterPredicate('_1.isNotNull)
     }
   }
 }

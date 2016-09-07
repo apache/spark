@@ -22,17 +22,16 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.11</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <version>2.1.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
-  <artifactId>spark-test-tags_2.11</artifactId>
+  <artifactId>spark-tags_2.11</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Test Tags</name>
+  <name>Spark Project Tags</name>
   <url>http://spark.apache.org/</url>
   <properties>
-    <sbt.project.name>test-tags</sbt.project.name>
+    <sbt.project.name>tags</sbt.project.name>
   </properties>
 
   <dependencies>

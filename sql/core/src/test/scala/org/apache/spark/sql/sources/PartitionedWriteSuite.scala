@@ -29,11 +29,11 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
     val path = Utils.createTempDir()
     path.delete()
 
-    val df = sqlContext.range(100).select($"id", lit(1).as("data"))
+    val df = spark.range(100).select($"id", lit(1).as("data"))
     df.write.partitionBy("id").save(path.getCanonicalPath)
 
     checkAnswer(
-      sqlContext.read.load(path.getCanonicalPath),
+      spark.read.load(path.getCanonicalPath),
       (0 to 99).map(Row(1, _)).toSeq)
 
     Utils.deleteRecursively(path)
@@ -43,12 +43,12 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
     val path = Utils.createTempDir()
     path.delete()
 
-    val base = sqlContext.range(100)
-    val df = base.unionAll(base).select($"id", lit(1).as("data"))
+    val base = spark.range(100)
+    val df = base.union(base).select($"id", lit(1).as("data"))
     df.write.partitionBy("id").save(path.getCanonicalPath)
 
     checkAnswer(
-      sqlContext.read.load(path.getCanonicalPath),
+      spark.read.load(path.getCanonicalPath),
       (0 to 99).map(Row(1, _)).toSeq ++ (0 to 99).map(Row(1, _)).toSeq)
 
     Utils.deleteRecursively(path)
@@ -58,7 +58,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
     withTempPath { f =>
       val path = f.getAbsolutePath
       Seq(1 -> "a").toDF("i", "j").write.partitionBy("i").parquet(path)
-      assert(sqlContext.read.parquet(path).schema.map(_.name) == Seq("j", "i"))
+      assert(spark.read.parquet(path).schema.map(_.name) == Seq("j", "i"))
     }
   }
 }

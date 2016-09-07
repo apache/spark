@@ -17,12 +17,10 @@
 
 package org.apache.spark.launcher;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -43,7 +41,8 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
   }
 
   @Override
-  public List<String> buildCommand(Map<String, String> env) throws IOException {
+  public List<String> buildCommand(Map<String, String> env)
+      throws IOException, IllegalArgumentException {
     List<String> javaOptsKeys = new ArrayList<>();
     String memKey = null;
     String extraClassPath = null;
@@ -76,38 +75,24 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
       javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
       javaOptsKeys.add("SPARK_SHUFFLE_OPTS");
       memKey = "SPARK_DAEMON_MEMORY";
-    } else if (className.startsWith("org.apache.spark.tools.")) {
-      String sparkHome = getSparkHome();
-      File toolsDir = new File(join(File.separator, sparkHome, "tools", "target",
-        "scala-" + getScalaVersion()));
-      checkState(toolsDir.isDirectory(), "Cannot find tools build directory.");
-
-      Pattern re = Pattern.compile("spark-tools_.*\\.jar");
-      for (File f : toolsDir.listFiles()) {
-        if (re.matcher(f.getName()).matches()) {
-          extraClassPath = f.getAbsolutePath();
-          break;
-        }
-      }
-
-      checkState(extraClassPath != null,
-        "Failed to find Spark Tools Jar in %s.\n" +
-        "You need to run \"build/sbt tools/package\" before running %s.",
-        toolsDir.getAbsolutePath(), className);
-
-      javaOptsKeys.add("SPARK_JAVA_OPTS");
     } else {
       javaOptsKeys.add("SPARK_JAVA_OPTS");
       memKey = "SPARK_DRIVER_MEMORY";
     }
 
     List<String> cmd = buildJavaCommand(extraClassPath);
+
     for (String key : javaOptsKeys) {
-      addOptionString(cmd, System.getenv(key));
+      String envValue = System.getenv(key);
+      if (!isEmpty(envValue) && envValue.contains("Xmx")) {
+        String msg = String.format("%s is not allowed to specify max heap(Xmx) memory settings " +
+                "(was %s). Use the corresponding configuration instead.", key, envValue);
+        throw new IllegalArgumentException(msg);
+      }
+      addOptionString(cmd, envValue);
     }
 
     String mem = firstNonEmpty(memKey != null ? System.getenv(memKey) : null, DEFAULT_MEM);
-    cmd.add("-Xms" + mem);
     cmd.add("-Xmx" + mem);
     addPermGenSizeOpt(cmd);
     cmd.add(className);

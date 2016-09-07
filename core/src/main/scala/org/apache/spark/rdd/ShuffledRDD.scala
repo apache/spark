@@ -25,7 +25,10 @@ import org.apache.spark.serializer.Serializer
 
 private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
   override val index: Int = idx
-  override def hashCode(): Int = idx
+
+  override def hashCode(): Int = index
+
+  override def equals(other: Any): Boolean = super.equals(other)
 }
 
 /**
@@ -44,7 +47,7 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     part: Partitioner)
   extends RDD[(K, C)](prev.context, Nil) {
 
-  private var serializer: Option[Serializer] = None
+  private var userSpecifiedSerializer: Option[Serializer] = None
 
   private var keyOrdering: Option[Ordering[K]] = None
 
@@ -54,7 +57,7 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
 
   /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): ShuffledRDD[K, V, C] = {
-    this.serializer = Option(serializer)
+    this.userSpecifiedSerializer = Option(serializer)
     this
   }
 
@@ -77,6 +80,14 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
+    val serializer = userSpecifiedSerializer.getOrElse {
+      val serializerManager = SparkEnv.get.serializerManager
+      if (mapSideCombine) {
+        serializerManager.getSerializer(implicitly[ClassTag[K]], implicitly[ClassTag[C]])
+      } else {
+        serializerManager.getSerializer(implicitly[ClassTag[K]], implicitly[ClassTag[V]])
+      }
+    }
     List(new ShuffleDependency(prev, part, serializer, keyOrdering, aggregator, mapSideCombine))
   }
 

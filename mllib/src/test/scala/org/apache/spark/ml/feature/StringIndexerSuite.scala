@@ -39,7 +39,7 @@ class StringIndexerSuite
 
   test("StringIndexer") {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
-    val df = sqlContext.createDataFrame(data).toDF("id", "label")
+    val df = spark.createDataFrame(data).toDF("id", "label")
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
@@ -63,8 +63,8 @@ class StringIndexerSuite
   test("StringIndexerUnseen") {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (4, "b")), 2)
     val data2 = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c")), 2)
-    val df = sqlContext.createDataFrame(data).toDF("id", "label")
-    val df2 = sqlContext.createDataFrame(data2).toDF("id", "label")
+    val df = spark.createDataFrame(data).toDF("id", "label")
+    val df2 = spark.createDataFrame(data2).toDF("id", "label")
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
@@ -93,7 +93,7 @@ class StringIndexerSuite
 
   test("StringIndexer with a numeric input column") {
     val data = sc.parallelize(Seq((0, 100), (1, 200), (2, 300), (3, 100), (4, 100), (5, 300)), 2)
-    val df = sqlContext.createDataFrame(data).toDF("id", "label")
+    val df = spark.createDataFrame(data).toDF("id", "label")
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
@@ -114,18 +114,26 @@ class StringIndexerSuite
     val indexerModel = new StringIndexerModel("indexer", Array("a", "b", "c"))
       .setInputCol("label")
       .setOutputCol("labelIndex")
-    val df = sqlContext.range(0L, 10L)
-    assert(indexerModel.transform(df).eq(df))
+    val df = spark.range(0L, 10L).toDF()
+    assert(indexerModel.transform(df).collect().toSet === df.collect().toSet)
   }
 
   test("StringIndexerModel can't overwrite output column") {
-    val df = sqlContext.createDataFrame(Seq((1, 2), (3, 4))).toDF("input", "output")
+    val df = spark.createDataFrame(Seq((1, 2), (3, 4))).toDF("input", "output")
+    intercept[IllegalArgumentException] {
+      new StringIndexer()
+        .setInputCol("input")
+        .setOutputCol("output")
+        .fit(df)
+    }
+
     val indexer = new StringIndexer()
       .setInputCol("input")
-      .setOutputCol("output")
+      .setOutputCol("indexedInput")
       .fit(df)
+
     intercept[IllegalArgumentException] {
-      indexer.transform(df)
+      indexer.setOutputCol("output").transform(df)
     }
   }
 
@@ -153,7 +161,7 @@ class StringIndexerSuite
 
   test("IndexToString.transform") {
     val labels = Array("a", "b", "c")
-    val df0 = sqlContext.createDataFrame(Seq(
+    val df0 = spark.createDataFrame(Seq(
       (0, "a"), (1, "b"), (2, "c"), (0, "a")
     )).toDF("index", "expected")
 
@@ -180,7 +188,7 @@ class StringIndexerSuite
 
   test("StringIndexer, IndexToString are inverses") {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
-    val df = sqlContext.createDataFrame(data).toDF("id", "label")
+    val df = spark.createDataFrame(data).toDF("id", "label")
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
@@ -209,5 +217,18 @@ class StringIndexerSuite
       .setOutputCol("myOutputCol")
       .setLabels(Array("a", "b", "c"))
     testDefaultReadWrite(t)
+  }
+
+  test("StringIndexer metadata") {
+    val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
+    val df = spark.createDataFrame(data).toDF("id", "label")
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+      .fit(df)
+    val transformed = indexer.transform(df)
+    val attrs =
+      NominalAttribute.decodeStructField(transformed.schema("labelIndex"), preserveName = true)
+    assert(attrs.name.nonEmpty && attrs.name.get === "labelIndex")
   }
 }

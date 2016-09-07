@@ -17,16 +17,14 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.SparkSession;
 
 // $example on$
 import java.util.Arrays;
+import java.util.List;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.Binarizer;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -37,32 +35,34 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaBinarizerExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaBinarizerExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaBinarizerExample")
+      .getOrCreate();
 
     // $example on$
-    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+    List<Row> data = Arrays.asList(
       RowFactory.create(0, 0.1),
       RowFactory.create(1, 0.8),
       RowFactory.create(2, 0.2)
-    ));
+    );
     StructType schema = new StructType(new StructField[]{
-      new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
+      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
       new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
     });
-    DataFrame continuousDataFrame = jsql.createDataFrame(jrdd, schema);
+    Dataset<Row> continuousDataFrame = spark.createDataFrame(data, schema);
+
     Binarizer binarizer = new Binarizer()
       .setInputCol("feature")
       .setOutputCol("binarized_feature")
       .setThreshold(0.5);
-    DataFrame binarizedDataFrame = binarizer.transform(continuousDataFrame);
-    DataFrame binarizedFeatures = binarizedDataFrame.select("binarized_feature");
-    for (Row r : binarizedFeatures.collect()) {
-      Double binarized_value = r.getDouble(0);
-      System.out.println(binarized_value);
-    }
+
+    Dataset<Row> binarizedDataFrame = binarizer.transform(continuousDataFrame);
+
+    System.out.println("Binarizer output with Threshold = " + binarizer.getThreshold());
+    binarizedDataFrame.show();
     // $example off$
-    jsc.stop();
+
+    spark.stop();
   }
 }

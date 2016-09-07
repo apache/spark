@@ -26,5 +26,5 @@ import scala.Tuple2;
  * construct PairRDDs.
  */
 public interface PairFunction<T, K, V> extends Serializable {
-  public Tuple2<K, V> call(T t) throws Exception;
+  Tuple2<K, V> call(T t) throws Exception;
 }

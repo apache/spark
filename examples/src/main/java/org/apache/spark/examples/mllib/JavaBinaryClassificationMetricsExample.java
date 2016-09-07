@@ -65,7 +65,8 @@ public class JavaBinaryClassificationMetricsExample {
     );
 
     // Get evaluation metrics.
-    BinaryClassificationMetrics metrics = new BinaryClassificationMetrics(predictionAndLabels.rdd());
+    BinaryClassificationMetrics metrics =
+      new BinaryClassificationMetrics(predictionAndLabels.rdd());
 
     // Precision by threshold
     JavaRDD<Tuple2<Object, Object>> precision = metrics.precisionByThreshold().toJavaRDD();

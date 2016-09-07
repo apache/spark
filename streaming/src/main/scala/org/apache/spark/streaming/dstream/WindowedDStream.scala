@@ -19,7 +19,7 @@ package org.apache.spark.streaming.dstream
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.rdd.{PartitionerAwareUnionRDD, RDD, UnionRDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.Duration
@@ -63,13 +63,6 @@ class WindowedDStream[T: ClassTag](
   override def compute(validTime: Time): Option[RDD[T]] = {
     val currentWindow = new Interval(validTime - windowDuration + parent.slideDuration, validTime)
     val rddsInWindow = parent.slice(currentWindow)
-    val windowRDD = if (rddsInWindow.flatMap(_.partitioner).distinct.length == 1) {
-      logDebug("Using partition aware union for windowing at " + validTime)
-      new PartitionerAwareUnionRDD(ssc.sc, rddsInWindow)
-    } else {
-      logDebug("Using normal union for windowing at " + validTime)
-      new UnionRDD(ssc.sc, rddsInWindow)
-    }
-    Some(windowRDD)
+    Some(ssc.sc.union(rddsInWindow))
   }
 }

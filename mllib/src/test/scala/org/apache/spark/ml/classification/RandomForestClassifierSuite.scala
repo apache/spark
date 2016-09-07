@@ -18,12 +18,13 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.LeafNode
-import org.apache.spark.ml.util.MLTestingUtils
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.ml.tree.impl.TreeTests
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -34,7 +35,8 @@ import org.apache.spark.sql.{DataFrame, Row}
 /**
  * Test suite for [[RandomForestClassifier]].
  */
-class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
+class RandomForestClassifierSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import RandomForestClassifierSuite.compareAPIs
 
@@ -45,8 +47,10 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     super.beforeAll()
     orderedLabeledPoints50_1000 =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000))
+        .map(_.asML)
     orderedLabeledPoints5_20 =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 5, 20))
+        .map(_.asML)
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -105,7 +109,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     compareAPIs(rdd, rf, categoricalFeatures, numClasses)
   }
 
-  test("subsampling rate in RandomForest"){
+  test("subsampling rate in RandomForest") {
     val rdd = orderedLabeledPoints5_20
     val categoricalFeatures = Map.empty[Int, Int]
     val numClasses = 2
@@ -153,9 +157,16 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     }
   }
 
+  test("Fitting without numClasses in metadata") {
+    val df: DataFrame = spark.createDataFrame(TreeTests.featureImportanceData(sc))
+    val rf = new RandomForestClassifier().setMaxDepth(1).setNumTrees(1)
+    rf.fit(df)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of feature importance
   /////////////////////////////////////////////////////////////////////////////
+
   test("Feature importance with toy data") {
     val numClasses = 2
     val rf = new RandomForestClassifier()
@@ -178,31 +189,36 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     assert(importances.toArray.forall(_ >= 0.0))
   }
 
+  test("should support all NumericType labels and not support other types") {
+    val rf = new RandomForestClassifier().setMaxDepth(1)
+    MLTestingUtils.checkNumericTypes[RandomForestClassificationModel, RandomForestClassifier](
+      rf, spark) { (expected, actual) =>
+        TreeTests.checkEqual(expected, actual)
+      }
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: Reinstate test once save/load are implemented  SPARK-6725
-  /*
-  test("model save/load") {
-    val tempDir = Utils.createTempDir()
-    val path = tempDir.toURI.toString
-
-    val trees =
-      Range(0, 3).map(_ => OldDecisionTreeSuite.createModel(OldAlgo.Classification)).toArray
-    val oldModel = new OldRandomForestModel(OldAlgo.Classification, trees)
-    val newModel = RandomForestClassificationModel.fromOld(oldModel)
-
-    // Save model, load it back, and compare.
-    try {
-      newModel.save(sc, path)
-      val sameNewModel = RandomForestClassificationModel.load(sc, path)
-      TreeTests.checkEqual(newModel, sameNewModel)
-    } finally {
-      Utils.deleteRecursively(tempDir)
+  test("read/write") {
+    def checkModelData(
+        model: RandomForestClassificationModel,
+        model2: RandomForestClassificationModel): Unit = {
+      TreeTests.checkEqual(model, model2)
+      assert(model.numFeatures === model2.numFeatures)
+      assert(model.numClasses === model2.numClasses)
     }
+
+    val rf = new RandomForestClassifier().setNumTrees(2)
+    val rdd = TreeTests.getTreeReadWriteData(sc)
+
+    val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "entropy")
+
+    val continuousData: DataFrame =
+      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
+    testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings, checkModelData)
   }
-  */
 }
 
 private object RandomForestClassifierSuite extends SparkFunSuite {
@@ -220,7 +236,8 @@ private object RandomForestClassifierSuite extends SparkFunSuite {
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, rf.getOldImpurity)
     val oldModel = OldRandomForest.trainClassifier(
-      data, oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy, rf.getSeed.toInt)
+      data.map(OldLabeledPoint.fromML), oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy,
+      rf.getSeed.toInt)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.

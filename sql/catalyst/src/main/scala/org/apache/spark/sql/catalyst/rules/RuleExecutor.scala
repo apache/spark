@@ -21,9 +21,11 @@ import scala.collection.JavaConverters._
 
 import com.google.common.util.concurrent.AtomicLongMap
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.util.Utils
 
 object RuleExecutor {
   protected val timeMap = AtomicLongMap.create[String]()
@@ -98,7 +100,12 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
         if (iteration > batch.strategy.maxIterations) {
           // Only log if this is a rule that is supposed to run more than once.
           if (iteration != 2) {
-            logInfo(s"Max iterations (${iteration - 1}) reached for batch ${batch.name}")
+            val message = s"Max iterations (${iteration - 1}) reached for batch ${batch.name}"
+            if (Utils.isTesting) {
+              throw new TreeNodeException(curPlan, message, null)
+            } else {
+              logWarning(message)
+            }
           }
           continue = false
         }

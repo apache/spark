@@ -18,20 +18,20 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.VectorIndexer
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object VectorIndexerExample {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("VectorIndexerExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("VectorIndexerExample")
+      .getOrCreate()
 
     // $example on$
-    val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    val data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     val indexer = new VectorIndexer()
       .setInputCol("features")
@@ -48,7 +48,8 @@ object VectorIndexerExample {
     val indexedData = indexerModel.transform(data)
     indexedData.show()
     // $example off$
-    sc.stop()
+
+    spark.stop()
   }
 }
 // scalastyle:on println

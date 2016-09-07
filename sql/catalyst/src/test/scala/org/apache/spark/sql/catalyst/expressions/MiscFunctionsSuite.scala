@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.commons.codec.digest.DigestUtils
 
 import org.apache.spark.SparkFunSuite
@@ -27,7 +29,8 @@ import org.apache.spark.sql.types._
 class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("md5") {
-    checkEvaluation(Md5(Literal("ABC".getBytes)), "902fbdd2b1df0c4f70b4a5d23525e932")
+    checkEvaluation(Md5(Literal("ABC".getBytes(StandardCharsets.UTF_8))),
+      "902fbdd2b1df0c4f70b4a5d23525e932")
     checkEvaluation(Md5(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
       "6ac1e56bc78f031059be7be854522c4c")
     checkEvaluation(Md5(Literal.create(null, BinaryType)), null)
@@ -35,31 +38,52 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("sha1") {
-    checkEvaluation(Sha1(Literal("ABC".getBytes)), "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8")
+    checkEvaluation(Sha1(Literal("ABC".getBytes(StandardCharsets.UTF_8))),
+      "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8")
     checkEvaluation(Sha1(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
       "5d211bad8f4ee70e16c7d343a838fc344a1ed961")
     checkEvaluation(Sha1(Literal.create(null, BinaryType)), null)
-    checkEvaluation(Sha1(Literal("".getBytes)), "da39a3ee5e6b4b0d3255bfef95601890afd80709")
+    checkEvaluation(Sha1(Literal("".getBytes(StandardCharsets.UTF_8))),
+      "da39a3ee5e6b4b0d3255bfef95601890afd80709")
     checkConsistencyBetweenInterpretedAndCodegen(Sha1, BinaryType)
   }
 
   test("sha2") {
-    checkEvaluation(Sha2(Literal("ABC".getBytes), Literal(256)), DigestUtils.sha256Hex("ABC"))
+    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(256)),
+      DigestUtils.sha256Hex("ABC"))
     checkEvaluation(Sha2(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType), Literal(384)),
       DigestUtils.sha384Hex(Array[Byte](1, 2, 3, 4, 5, 6)))
     // unsupported bit length
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(1024)), null)
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(512)), null)
-    checkEvaluation(Sha2(Literal("ABC".getBytes), Literal.create(null, IntegerType)), null)
+    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)),
+      Literal.create(null, IntegerType)), null)
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal.create(null, IntegerType)), null)
   }
 
   test("crc32") {
-    checkEvaluation(Crc32(Literal("ABC".getBytes)), 2743272264L)
+    checkEvaluation(Crc32(Literal("ABC".getBytes(StandardCharsets.UTF_8))), 2743272264L)
     checkEvaluation(Crc32(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
       2180413220L)
     checkEvaluation(Crc32(Literal.create(null, BinaryType)), null)
     checkConsistencyBetweenInterpretedAndCodegen(Crc32, BinaryType)
+  }
+
+  test("assert_true") {
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(false, BooleanType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Cast(Literal(0), BooleanType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(null, NullType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(null, BooleanType)), null)
+    }
+    checkEvaluation(AssertTrue(Literal.create(true, BooleanType)), null)
+    checkEvaluation(AssertTrue(Cast(Literal(1), BooleanType)), null)
   }
 
   private val structOfString = new StructType().add("str", StringType)
@@ -69,7 +93,7 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val mapOfString = MapType(StringType, StringType)
   private val arrayOfUDT = ArrayType(new ExamplePointUDT, false)
 
-  testMurmur3Hash(
+  testHash(
     new StructType()
       .add("null", NullType)
       .add("boolean", BooleanType)
@@ -87,7 +111,7 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .add("timestamp", TimestampType)
       .add("udt", new ExamplePointUDT))
 
-  testMurmur3Hash(
+  testHash(
     new StructType()
       .add("arrayOfNull", arrayOfNull)
       .add("arrayOfString", arrayOfString)
@@ -97,7 +121,7 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .add("arrayOfStruct", ArrayType(structOfString))
       .add("arrayOfUDT", arrayOfUDT))
 
-  testMurmur3Hash(
+  testHash(
     new StructType()
       .add("mapOfIntAndString", MapType(IntegerType, StringType))
       .add("mapOfStringAndArray", MapType(StringType, arrayOfString))
@@ -107,7 +131,7 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .add("mapOfStructAndString", MapType(structOfString, StringType))
       .add("mapOfStruct", MapType(structOfString, structOfString)))
 
-  testMurmur3Hash(
+  testHash(
     new StructType()
       .add("structOfString", structOfString)
       .add("structOfStructOfString", new StructType().add("struct", structOfString))
@@ -117,11 +141,11 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         new StructType().add("array", arrayOfString).add("map", mapOfString))
       .add("structOfUDT", structOfUDT))
 
-  private def testMurmur3Hash(inputSchema: StructType): Unit = {
+  private def testHash(inputSchema: StructType): Unit = {
     val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get
     val encoder = RowEncoder(inputSchema)
     val seed = scala.util.Random.nextInt()
-    test(s"murmur3 hash: ${inputSchema.simpleString}") {
+    test(s"murmur3/xxHash64 hash: ${inputSchema.simpleString}") {
       for (_ <- 1 to 10) {
         val input = encoder.toRow(inputGenerator.apply().asInstanceOf[Row]).asInstanceOf[UnsafeRow]
         val literals = input.toSeq(inputSchema).zip(inputSchema.map(_.dataType)).map {
@@ -129,6 +153,7 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
         // Only test the interpreted version has same result with codegen version.
         checkEvaluation(Murmur3Hash(literals, seed), Murmur3Hash(literals, seed).eval())
+        checkEvaluation(XxHash64(literals, seed), XxHash64(literals, seed).eval())
       }
     }
   }

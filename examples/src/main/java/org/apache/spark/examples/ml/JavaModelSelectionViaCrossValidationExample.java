@@ -21,8 +21,6 @@ package org.apache.spark.examples.ml;
 import java.util.Arrays;
 // $example off$
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
 // $example on$
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineStage;
@@ -34,24 +32,24 @@ import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.tuning.CrossValidator;
 import org.apache.spark.ml.tuning.CrossValidatorModel;
 import org.apache.spark.ml.tuning.ParamGridBuilder;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 // $example off$
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 /**
  * Java example for Model Selection via Cross Validation.
  */
 public class JavaModelSelectionViaCrossValidationExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf()
-      .setAppName("JavaModelSelectionViaCrossValidationExample");
-    SparkContext sc = new SparkContext(conf);
-    SQLContext sqlContext = new SQLContext(sc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaModelSelectionViaCrossValidationExample")
+      .getOrCreate();
 
     // $example on$
     // Prepare training documents, which are labeled.
-    DataFrame training = sqlContext.createDataFrame(Arrays.asList(
+    Dataset<Row> training = spark.createDataFrame(Arrays.asList(
       new JavaLabeledDocument(0L, "a b c d e spark", 1.0),
       new JavaLabeledDocument(1L, "b d", 0.0),
       new JavaLabeledDocument(2L,"spark f g h", 1.0),
@@ -102,7 +100,7 @@ public class JavaModelSelectionViaCrossValidationExample {
     CrossValidatorModel cvModel = cv.fit(training);
 
     // Prepare test documents, which are unlabeled.
-    DataFrame test = sqlContext.createDataFrame(Arrays.asList(
+    Dataset<Row> test = spark.createDataFrame(Arrays.asList(
       new JavaDocument(4L, "spark i j k"),
       new JavaDocument(5L, "l m n"),
       new JavaDocument(6L, "mapreduce spark"),
@@ -110,13 +108,13 @@ public class JavaModelSelectionViaCrossValidationExample {
     ), JavaDocument.class);
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
-    DataFrame predictions = cvModel.transform(test);
-    for (Row r : predictions.select("id", "text", "probability", "prediction").collect()) {
+    Dataset<Row> predictions = cvModel.transform(test);
+    for (Row r : predictions.select("id", "text", "probability", "prediction").collectAsList()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
         + ", prediction=" + r.get(3));
     }
     // $example off$
 
-    sc.stop();
+    spark.stop();
   }
 }

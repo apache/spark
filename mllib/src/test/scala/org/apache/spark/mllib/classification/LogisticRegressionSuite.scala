@@ -411,10 +411,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val testRDD1 = sc.parallelize(testData, 2)
 
     val testRDD2 = sc.parallelize(
-      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.toBreeze * 1.0E3))), 2)
+      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.asBreeze * 1.0E3))), 2)
 
     val testRDD3 = sc.parallelize(
-      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.toBreeze * 1.0E6))), 2)
+      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.asBreeze * 1.0E6))), 2)
 
     testRDD1.cache()
     testRDD2.cache()
@@ -496,7 +496,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
      *    features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
      *    weights = coef(glmnet(features,label, family="multinomial", alpha = 0, lambda = 0))
      *
-     * The model weights of mutinomial logstic regression in R have `K` set of linear predictors
+     * The model weights of multinomial logistic regression in R have `K` set of linear predictors
      * for `K` classes classification problem; however, only `K-1` set is required if the first
      * outcome is chosen as a "pivot", and the other `K-1` outcomes are separately regressed against
      * the pivot outcome. This can be done by subtracting the first weights from those `K-1` set

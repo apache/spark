@@ -1,1 +1,0 @@
-SHOW TBLPROPERTIES NonExistentTable; 

@@ -7,7 +7,10 @@
     "lastUpdated" : "",
     "duration" : 9011,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "startTimeEpoch" : 1422981779720,
+    "endTimeEpoch" : 1422981788731,
+    "lastUpdatedEpoch" : 0
   } ]
 }, {
   "id" : "local-1422981759269",
@@ -18,6 +21,9 @@
     "lastUpdated" : "",
     "duration" : 8635,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "startTimeEpoch" : 1422981758277,
+    "endTimeEpoch" : 1422981766912,
+    "lastUpdatedEpoch" : 0
   } ]
 } ]

@@ -17,11 +17,10 @@
 
 package org.apache.spark.graphx.lib
 
-import scala.language.postfixOps
 import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
 import org.apache.spark.graphx._
+import org.apache.spark.internal.Logging
 
 /**
  * PageRank algorithm implementation. There are two implementations of PageRank implemented.
@@ -54,7 +53,7 @@ import org.apache.spark.graphx._
  * }}}
  *
  * `alpha` is the random reset probability (typically 0.15), `inNbrs[i]` is the set of
- * neighbors whick link to `i` and `outDeg[j]` is the out degree of vertex `j`.
+ * neighbors which link to `i` and `outDeg[j]` is the out degree of vertex `j`.
  *
  * Note that this is not the "normalized" PageRank and as a consequence pages that have no
  * inlinks will have a PageRank of alpha.
@@ -104,7 +103,12 @@ object PageRank extends Logging {
       graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15,
       srcId: Option[VertexId] = None): Graph[Double, Double] =
   {
-    val personalized = srcId isDefined
+    require(numIter > 0, s"Number of iterations must be greater than 0," +
+      s" but got ${numIter}")
+    require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
+      s" to [0, 1], but got ${resetProb}")
+
+    val personalized = srcId.isDefined
     val src: VertexId = srcId.getOrElse(-1L)
 
     // Initialize the PageRank graph with each edge attribute having
@@ -197,6 +201,10 @@ object PageRank extends Logging {
       graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15,
       srcId: Option[VertexId] = None): Graph[Double, Double] =
   {
+    require(tol >= 0, s"Tolerance must be no less than 0, but got ${tol}")
+    require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
+      s" to [0, 1], but got ${resetProb}")
+
     val personalized = srcId.isDefined
     val src: VertexId = srcId.getOrElse(-1L)
 
@@ -209,7 +217,7 @@ object PageRank extends Logging {
       }
       // Set the weight on the edges based on the degree
       .mapTriplets( e => 1.0 / e.srcAttr )
-      // Set the vertex attributes to (initalPR, delta = 0)
+      // Set the vertex attributes to (initialPR, delta = 0)
       .mapVertices { (id, attr) =>
         if (id == src) (resetProb, Double.NegativeInfinity) else (0.0, 0.0)
       }

@@ -131,7 +131,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
       i += 1
     }
 
-    // Merge the lower and upper halfs.
+    // Merge the lower and upper halves.
     hll.merge(buffer1a, buffer1b)
 
     // Create the other buffer in reverse

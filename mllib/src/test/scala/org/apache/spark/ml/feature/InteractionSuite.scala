@@ -21,9 +21,9 @@ import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.functions.col
 
@@ -59,7 +59,7 @@ class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext with Def
   }
 
   test("numeric interaction") {
-    val data = sqlContext.createDataFrame(
+    val data = spark.createDataFrame(
       Seq(
         (2, Vectors.dense(3.0, 4.0)),
         (1, Vectors.dense(1.0, 5.0)))
@@ -74,7 +74,7 @@ class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext with Def
       col("b").as("b", groupAttr.toMetadata()))
     val trans = new Interaction().setInputCols(Array("a", "b")).setOutputCol("features")
     val res = trans.transform(df)
-    val expected = sqlContext.createDataFrame(
+    val expected = spark.createDataFrame(
       Seq(
         (2, Vectors.dense(3.0, 4.0), Vectors.dense(6.0, 8.0)),
         (1, Vectors.dense(1.0, 5.0), Vectors.dense(1.0, 5.0)))
@@ -90,7 +90,7 @@ class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext with Def
   }
 
   test("nominal interaction") {
-    val data = sqlContext.createDataFrame(
+    val data = spark.createDataFrame(
       Seq(
         (2, Vectors.dense(3.0, 4.0)),
         (1, Vectors.dense(1.0, 5.0)))
@@ -106,7 +106,7 @@ class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext with Def
       col("b").as("b", groupAttr.toMetadata()))
     val trans = new Interaction().setInputCols(Array("a", "b")).setOutputCol("features")
     val res = trans.transform(df)
-    val expected = sqlContext.createDataFrame(
+    val expected = spark.createDataFrame(
       Seq(
         (2, Vectors.dense(3.0, 4.0), Vectors.dense(0, 0, 0, 0, 3, 4)),
         (1, Vectors.dense(1.0, 5.0), Vectors.dense(0, 0, 1, 5, 0, 0)))
@@ -126,7 +126,7 @@ class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext with Def
   }
 
   test("default attr names") {
-    val data = sqlContext.createDataFrame(
+    val data = spark.createDataFrame(
       Seq(
         (2, Vectors.dense(0.0, 4.0), 1.0),
         (1, Vectors.dense(1.0, 5.0), 10.0))
@@ -142,7 +142,7 @@ class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext with Def
       col("c").as("c", NumericAttribute.defaultAttr.toMetadata()))
     val trans = new Interaction().setInputCols(Array("a", "b", "c")).setOutputCol("features")
     val res = trans.transform(df)
-    val expected = sqlContext.createDataFrame(
+    val expected = spark.createDataFrame(
       Seq(
         (2, Vectors.dense(0.0, 4.0), 1.0, Vectors.dense(0, 0, 0, 0, 0, 0, 1, 0, 4)),
         (1, Vectors.dense(1.0, 5.0), 10.0, Vectors.dense(0, 0, 0, 0, 10, 50, 0, 0, 0)))

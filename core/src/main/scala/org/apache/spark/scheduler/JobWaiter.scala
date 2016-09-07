@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.{Future, Promise}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * An object that waits for a DAGScheduler job to complete. As tasks finish, it passes their

@@ -27,6 +27,8 @@ private[spark] class ByteBufferOutputStream(capacity: Int) extends ByteArrayOutp
 
   def this() = this(32)
 
+  def getCount(): Int = count
+
   def toByteBuffer: ByteBuffer = {
     return ByteBuffer.wrap(buf, 0, count)
   }

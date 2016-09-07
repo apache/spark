@@ -29,25 +29,31 @@ import py4j
 
 import pyspark
 from pyspark.context import SparkContext
-from pyspark.sql import SQLContext, HiveContext
+from pyspark.sql import SparkSession, SQLContext
 from pyspark.storagelevel import StorageLevel
 
 if os.environ.get("SPARK_EXECUTOR_URI"):
     SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
-sc = SparkContext()
-atexit.register(lambda: sc.stop())
+SparkContext._ensure_initialized()
 
 try:
     # Try to access HiveConf, it will raise exception if Hive is not added
-    sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
-    sqlContext = HiveContext(sc)
+    SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()
+    spark = SparkSession.builder\
+        .enableHiveSupport()\
+        .getOrCreate()
 except py4j.protocol.Py4JError:
-    sqlContext = SQLContext(sc)
+    spark = SparkSession.builder.getOrCreate()
 except TypeError:
-    sqlContext = SQLContext(sc)
+    spark = SparkSession.builder.getOrCreate()
+
+sc = spark.sparkContext
+sql = spark.sql
+atexit.register(lambda: sc.stop())
 
 # for compatibility
+sqlContext = spark._wrapped
 sqlCtx = sqlContext
 
 print("""Welcome to
@@ -61,7 +67,7 @@ print("Using Python version %s (%s, %s)" % (
     platform.python_version(),
     platform.python_build()[0],
     platform.python_build()[1]))
-print("SparkContext available as sc, %s available as sqlContext." % sqlContext.__class__.__name__)
+print("SparkSession available as 'spark'.")
 
 # The ./bin/pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,
 # which allows us to execute the user's PYTHONSTARTUP file:

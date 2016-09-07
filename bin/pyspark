@@ -24,50 +24,40 @@ fi
 source "${SPARK_HOME}"/bin/load-spark-env.sh
 export _SPARK_CMD_USAGE="Usage: ./bin/pyspark [options]"
 
-# In Spark <= 1.1, setting IPYTHON=1 would cause the driver to be launched using the `ipython`
-# executable, while the worker would still be launched using PYSPARK_PYTHON.
-#
-# In Spark 1.2, we removed the documentation of the IPYTHON and IPYTHON_OPTS variables and added
-# PYSPARK_DRIVER_PYTHON and PYSPARK_DRIVER_PYTHON_OPTS to allow IPython to be used for the driver.
-# Now, users can simply set PYSPARK_DRIVER_PYTHON=ipython to use IPython and set
-# PYSPARK_DRIVER_PYTHON_OPTS to pass options when starting the Python driver
+# In Spark 2.0, IPYTHON and IPYTHON_OPTS are removed and pyspark fails to launch if either option
+# is set in the user's environment. Instead, users should set PYSPARK_DRIVER_PYTHON=ipython 
+# to use IPython and set PYSPARK_DRIVER_PYTHON_OPTS to pass options when starting the Python driver
 # (e.g. PYSPARK_DRIVER_PYTHON_OPTS='notebook').  This supports full customization of the IPython
 # and executor Python executables.
-#
-# For backwards-compatibility, we retain the old IPYTHON and IPYTHON_OPTS variables.
 
-# Determine the Python executable to use if PYSPARK_PYTHON or PYSPARK_DRIVER_PYTHON isn't set:
-if hash python2.7 2>/dev/null; then
-  # Attempt to use Python 2.7, if installed:
-  DEFAULT_PYTHON="python2.7"
-else
-  DEFAULT_PYTHON="python"
+# Fail noisily if removed options are set
+if [[ -n "$IPYTHON" || -n "$IPYTHON_OPTS" ]]; then
+  echo "Error in pyspark startup:" 
+  echo "IPYTHON and IPYTHON_OPTS are removed in Spark 2.0+. Remove these from the environment and set PYSPARK_DRIVER_PYTHON and PYSPARK_DRIVER_PYTHON_OPTS instead."
+  exit 1
 fi
 
-# Determine the Python executable to use for the driver:
-if [[ -n "$IPYTHON_OPTS" || "$IPYTHON" == "1" ]]; then
-  # If IPython options are specified, assume user wants to run IPython
-  # (for backwards-compatibility)
-  PYSPARK_DRIVER_PYTHON_OPTS="$PYSPARK_DRIVER_PYTHON_OPTS $IPYTHON_OPTS"
-  PYSPARK_DRIVER_PYTHON="ipython"
-elif [[ -z "$PYSPARK_DRIVER_PYTHON" ]]; then
-  PYSPARK_DRIVER_PYTHON="${PYSPARK_PYTHON:-"$DEFAULT_PYTHON"}"
+# Default to standard python interpreter unless told otherwise
+if [[ -z "$PYSPARK_DRIVER_PYTHON" ]]; then
+  PYSPARK_DRIVER_PYTHON="${PYSPARK_PYTHON:-"python"}"
 fi
+
+WORKS_WITH_IPYTHON=$(python -c 'import sys; print(sys.version_info >= (2, 7, 0))')
 
 # Determine the Python executable to use for the executors:
 if [[ -z "$PYSPARK_PYTHON" ]]; then
-  if [[ $PYSPARK_DRIVER_PYTHON == *ipython* && $DEFAULT_PYTHON != "python2.7" ]]; then
+  if [[ $PYSPARK_DRIVER_PYTHON == *ipython* && ! WORKS_WITH_IPYTHON ]]; then
     echo "IPython requires Python 2.7+; please install python2.7 or set PYSPARK_PYTHON" 1>&2
     exit 1
   else
-    PYSPARK_PYTHON="$DEFAULT_PYTHON"
+    PYSPARK_PYTHON=python
   fi
 fi
 export PYSPARK_PYTHON
 
 # Add the PySpark classes to the Python path:
 export PYTHONPATH="${SPARK_HOME}/python/:$PYTHONPATH"
-export PYTHONPATH="${SPARK_HOME}/python/lib/py4j-0.9.1-src.zip:$PYTHONPATH"
+export PYTHONPATH="${SPARK_HOME}/python/lib/py4j-0.10.3-src.zip:$PYTHONPATH"
 
 # Load the PySpark shell.py script when ./pyspark is used interactively:
 export OLD_PYTHONSTARTUP="$PYTHONSTARTUP"

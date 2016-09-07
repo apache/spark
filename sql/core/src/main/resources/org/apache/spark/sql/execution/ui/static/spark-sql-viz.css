@@ -41,3 +41,8 @@
   stroke: #444;
   stroke-width: 1.5px;
 }
+
+/* Breaks the long string like file path when showing tooltips */
+.tooltip-inner {
+  word-wrap:break-word;
+}

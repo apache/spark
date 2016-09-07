@@ -19,6 +19,7 @@ package org.apache.spark.mllib.api.python
 
 import java.io.OutputStream
 import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -40,8 +41,7 @@ import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.stat.{
-  KernelDensity, MultivariateStatisticalSummary, Statistics}
+import org.apache.spark.mllib.stat.{KernelDensity, MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.stat.test.{ChiSqTestResult, KolmogorovSmirnovTestResult}
@@ -53,7 +53,7 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTree
   RandomForestModel}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLUtils}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -126,13 +126,13 @@ private[python] class PythonMLLibAPI extends Serializable {
       k: Int,
       maxIterations: Int,
       minDivisibleClusterSize: Double,
-      seed: Long): BisectingKMeansModel = {
-    new BisectingKMeans()
+      seed: java.lang.Long): BisectingKMeansModel = {
+    val kmeans = new BisectingKMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setMinDivisibleClusterSize(minDivisibleClusterSize)
-      .setSeed(seed)
-      .run(data)
+    if (seed != null) kmeans.setSeed(seed)
+    kmeans.run(data)
   }
 
   /**
@@ -149,7 +149,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       intercept: Boolean,
       validateData: Boolean,
       convergenceTol: Double): JList[Object] = {
-    val lrAlg = new LinearRegressionWithSGD()
+    val lrAlg = new LinearRegressionWithSGD(1.0, 100, 0.0, 1.0)
     lrAlg.setIntercept(intercept)
       .setValidateData(validateData)
     lrAlg.optimizer
@@ -178,7 +178,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       intercept: Boolean,
       validateData: Boolean,
       convergenceTol: Double): JList[Object] = {
-    val lassoAlg = new LassoWithSGD()
+    val lassoAlg = new LassoWithSGD(1.0, 100, 0.01, 1.0)
     lassoAlg.setIntercept(intercept)
       .setValidateData(validateData)
     lassoAlg.optimizer
@@ -206,7 +206,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       intercept: Boolean,
       validateData: Boolean,
       convergenceTol: Double): JList[Object] = {
-    val ridgeAlg = new RidgeRegressionWithSGD()
+    val ridgeAlg = new RidgeRegressionWithSGD(1.0, 100, 0.01, 1.0)
     ridgeAlg.setIntercept(intercept)
       .setValidateData(validateData)
     ridgeAlg.optimizer
@@ -265,7 +265,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       intercept: Boolean,
       validateData: Boolean,
       convergenceTol: Double): JList[Object] = {
-    val LogRegAlg = new LogisticRegressionWithSGD()
+    val LogRegAlg = new LogisticRegressionWithSGD(1.0, 100, 0.01, 1.0)
     LogRegAlg.setIntercept(intercept)
       .setValidateData(validateData)
     LogRegAlg.optimizer
@@ -356,7 +356,6 @@ private[python] class PythonMLLibAPI extends Serializable {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
-      .internalSetRuns(runs)
       .setInitializationMode(initializationMode)
       .setInitializationSteps(initializationSteps)
       .setEpsilon(epsilon)
@@ -428,7 +427,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       val weight = wt.toArray
       val mean = mu.map(_.asInstanceOf[DenseVector])
       val sigma = si.map(_.asInstanceOf[DenseMatrix])
-      val gaussians = Array.tabulate(weight.length){
+      val gaussians = Array.tabulate(weight.length) {
         i => new MultivariateGaussian(mean(i), sigma(i))
       }
       val model = new GaussianMixtureModel(weight, gaussians)
@@ -670,6 +669,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * @param numPartitions number of partitions
    * @param numIterations number of iterations
    * @param seed initial seed for random generator
+   * @param windowSize size of window
    * @return A handle to java Word2VecModelWrapper instance at python side
    */
   def trainWord2VecModel(
@@ -678,15 +678,17 @@ private[python] class PythonMLLibAPI extends Serializable {
       learningRate: Double,
       numPartitions: Int,
       numIterations: Int,
-      seed: Long,
-      minCount: Int): Word2VecModelWrapper = {
+      seed: java.lang.Long,
+      minCount: Int,
+      windowSize: Int): Word2VecModelWrapper = {
     val word2vec = new Word2Vec()
       .setVectorSize(vectorSize)
       .setLearningRate(learningRate)
       .setNumPartitions(numPartitions)
       .setNumIterations(numIterations)
-      .setSeed(seed)
       .setMinCount(minCount)
+      .setWindowSize(windowSize)
+    if (seed != null) word2vec.setSeed(seed)
     try {
       val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
       new Word2VecModelWrapper(model)
@@ -749,7 +751,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       impurityStr: String,
       maxDepth: Int,
       maxBins: Int,
-      seed: Int): RandomForestModel = {
+      seed: java.lang.Long): RandomForestModel = {
 
     val algo = Algo.fromString(algoStr)
     val impurity = Impurities.fromString(impurityStr)
@@ -761,11 +763,13 @@ private[python] class PythonMLLibAPI extends Serializable {
       maxBins = maxBins,
       categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap)
     val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
+    // Only done because methods below want an int, not an optional Long
+    val intSeed = getSeedOrDefault(seed).toInt
     try {
       if (algo == Algo.Classification) {
-        RandomForest.trainClassifier(cached, strategy, numTrees, featureSubsetStrategy, seed)
+        RandomForest.trainClassifier(cached, strategy, numTrees, featureSubsetStrategy, intSeed)
       } else {
-        RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, seed)
+        RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, intSeed)
       }
     } finally {
       cached.unpersist(blocking = false)
@@ -1125,7 +1129,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Wrapper around RowMatrix constructor.
    */
   def createRowMatrix(rows: JavaRDD[Vector], numRows: Long, numCols: Int): RowMatrix = {
-    new RowMatrix(rows.rdd.retag(classOf[Vector]), numRows, numCols)
+    new RowMatrix(rows.rdd, numRows, numCols)
   }
 
   /**
@@ -1173,8 +1177,9 @@ private[python] class PythonMLLibAPI extends Serializable {
   def getIndexedRows(indexedRowMatrix: IndexedRowMatrix): DataFrame = {
     // We use DataFrames for serialization of IndexedRows to Python,
     // so return a DataFrame.
-    val sqlContext = SQLContext.getOrCreate(indexedRowMatrix.rows.sparkContext)
-    sqlContext.createDataFrame(indexedRowMatrix.rows)
+    val sc = indexedRowMatrix.rows.sparkContext
+    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+    spark.createDataFrame(indexedRowMatrix.rows)
   }
 
   /**
@@ -1183,8 +1188,9 @@ private[python] class PythonMLLibAPI extends Serializable {
   def getMatrixEntries(coordinateMatrix: CoordinateMatrix): DataFrame = {
     // We use DataFrames for serialization of MatrixEntry entries to
     // Python, so return a DataFrame.
-    val sqlContext = SQLContext.getOrCreate(coordinateMatrix.entries.sparkContext)
-    sqlContext.createDataFrame(coordinateMatrix.entries)
+    val sc = coordinateMatrix.entries.sparkContext
+    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+    spark.createDataFrame(coordinateMatrix.entries)
   }
 
   /**
@@ -1193,23 +1199,52 @@ private[python] class PythonMLLibAPI extends Serializable {
   def getMatrixBlocks(blockMatrix: BlockMatrix): DataFrame = {
     // We use DataFrames for serialization of sub-matrix blocks to
     // Python, so return a DataFrame.
-    val sqlContext = SQLContext.getOrCreate(blockMatrix.blocks.sparkContext)
-    sqlContext.createDataFrame(blockMatrix.blocks)
+    val sc = blockMatrix.blocks.sparkContext
+    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+    spark.createDataFrame(blockMatrix.blocks)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertVectorColumnsToML()]].
+   */
+  def convertVectorColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertVectorColumnsToML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertVectorColumnsFromML()]]
+   */
+  def convertVectorColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertVectorColumnsFromML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertMatrixColumnsToML()]].
+   */
+  def convertMatrixColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertMatrixColumnsToML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertMatrixColumnsFromML()]]
+   */
+  def convertMatrixColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertMatrixColumnsFromML(dataset, cols.asScala: _*)
   }
 }
 
 /**
- * SerDe utility functions for PythonMLLibAPI.
+ * Basic SerDe utility class.
  */
-private[spark] object SerDe extends Serializable {
+private[spark] abstract class SerDeBase {
 
-  val PYSPARK_PACKAGE = "pyspark.mllib"
-  val LATIN1 = "ISO-8859-1"
+  val PYSPARK_PACKAGE: String
+  def initialize(): Unit
 
   /**
    * Base class used for pickle
    */
-  private[python] abstract class BasePickler[T: ClassTag]
+  private[spark] abstract class BasePickler[T: ClassTag]
     extends IObjectPickler with IObjectConstructor {
 
     private val cls = implicitly[ClassTag[T]].runtimeClass
@@ -1226,7 +1261,7 @@ private[spark] object SerDe extends Serializable {
     def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       if (obj == this) {
         out.write(Opcodes.GLOBAL)
-        out.write((module + "\n" + name + "\n").getBytes)
+        out.write((module + "\n" + name + "\n").getBytes(StandardCharsets.UTF_8))
       } else {
         pickler.save(this)  // it will be memorized by Pickler
         saveState(obj, out, pickler)
@@ -1252,12 +1287,75 @@ private[spark] object SerDe extends Serializable {
       if (obj.getClass.isArray) {
         obj.asInstanceOf[Array[Byte]]
       } else {
-        obj.asInstanceOf[String].getBytes(LATIN1)
+        // This must be ISO 8859-1 / Latin 1, not UTF-8, to interoperate correctly
+        obj.asInstanceOf[String].getBytes(StandardCharsets.ISO_8859_1)
       }
     }
 
     private[python] def saveState(obj: Object, out: OutputStream, pickler: Pickler)
   }
+
+  def dumps(obj: AnyRef): Array[Byte] = {
+    obj match {
+      // Pickler in Python side cannot deserialize Scala Array normally. See SPARK-12834.
+      case array: Array[_] => new Pickler().dumps(array.toSeq.asJava)
+      case _ => new Pickler().dumps(obj)
+    }
+  }
+
+  def loads(bytes: Array[Byte]): AnyRef = {
+    new Unpickler().loads(bytes)
+  }
+
+  /* convert object into Tuple */
+  def asTupleRDD(rdd: RDD[Array[Any]]): RDD[(Int, Int)] = {
+    rdd.map(x => (x(0).asInstanceOf[Int], x(1).asInstanceOf[Int]))
+  }
+
+  /* convert RDD[Tuple2[,]] to RDD[Array[Any]] */
+  def fromTuple2RDD(rdd: RDD[(Any, Any)]): RDD[Array[Any]] = {
+    rdd.map(x => Array(x._1, x._2))
+  }
+
+  /**
+   * Convert an RDD of Java objects to an RDD of serialized Python objects, that is usable by
+   * PySpark.
+   */
+  def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
+    jRDD.rdd.mapPartitions { iter =>
+      initialize()  // let it called in executor
+      new SerDeUtil.AutoBatchedPickler(iter)
+    }
+  }
+
+  /**
+   * Convert an RDD of serialized Python objects to RDD of objects, that is usable by PySpark.
+   */
+  def pythonToJava(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Any] = {
+    pyRDD.rdd.mapPartitions { iter =>
+      initialize()  // let it called in executor
+      val unpickle = new Unpickler
+      iter.flatMap { row =>
+        val obj = unpickle.loads(row)
+        if (batched) {
+          obj match {
+            case list: JArrayList[_] => list.asScala
+            case arr: Array[_] => arr
+          }
+        } else {
+          Seq(obj)
+        }
+      }
+    }.toJavaRDD()
+  }
+}
+
+/**
+ * SerDe utility functions for PythonMLLibAPI.
+ */
+private[spark] object SerDe extends SerDeBase with Serializable {
+
+  override val PYSPARK_PACKAGE = "pyspark.mllib"
 
   // Pickler for DenseVector
   private[python] class DenseVectorPickler extends BasePickler[DenseVector] {
@@ -1425,7 +1523,7 @@ private[spark] object SerDe extends Serializable {
     }
   }
 
-  // Pickler for LabeledPoint
+  // Pickler for MLlib LabeledPoint
   private[python] class LabeledPointPickler extends BasePickler[LabeledPoint] {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
@@ -1471,7 +1569,7 @@ private[spark] object SerDe extends Serializable {
   var initialized = false
   // This should be called before trying to serialize any above classes
   // In cluster mode, this should be put in the closure
-  def initialize(): Unit = {
+  override def initialize(): Unit = {
     SerDeUtil.initialize()
     synchronized {
       if (!initialized) {
@@ -1487,58 +1585,4 @@ private[spark] object SerDe extends Serializable {
   }
   // will not called in Executor automatically
   initialize()
-
-  def dumps(obj: AnyRef): Array[Byte] = {
-    obj match {
-      // Pickler in Python side cannot deserialize Scala Array normally. See SPARK-12834.
-      case array: Array[_] => new Pickler().dumps(array.toSeq.asJava)
-      case _ => new Pickler().dumps(obj)
-    }
-  }
-
-  def loads(bytes: Array[Byte]): AnyRef = {
-    new Unpickler().loads(bytes)
-  }
-
-  /* convert object into Tuple */
-  def asTupleRDD(rdd: RDD[Array[Any]]): RDD[(Int, Int)] = {
-    rdd.map(x => (x(0).asInstanceOf[Int], x(1).asInstanceOf[Int]))
-  }
-
-  /* convert RDD[Tuple2[,]] to RDD[Array[Any]] */
-  def fromTuple2RDD(rdd: RDD[(Any, Any)]): RDD[Array[Any]] = {
-    rdd.map(x => Array(x._1, x._2))
-  }
-
-  /**
-   * Convert an RDD of Java objects to an RDD of serialized Python objects, that is usable by
-   * PySpark.
-   */
-  def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
-    jRDD.rdd.mapPartitions { iter =>
-      initialize()  // let it called in executor
-      new SerDeUtil.AutoBatchedPickler(iter)
-    }
-  }
-
-  /**
-   * Convert an RDD of serialized Python objects to RDD of objects, that is usable by PySpark.
-   */
-  def pythonToJava(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Any] = {
-    pyRDD.rdd.mapPartitions { iter =>
-      initialize()  // let it called in executor
-      val unpickle = new Unpickler
-      iter.flatMap { row =>
-        val obj = unpickle.loads(row)
-        if (batched) {
-          obj match {
-            case list: JArrayList[_] => list.asScala
-            case arr: Array[_] => arr
-          }
-        } else {
-          Seq(obj)
-        }
-      }
-    }.toJavaRDD()
-  }
 }

@@ -23,11 +23,13 @@ import org.apache.spark.sql.types._
 
 /**
  * Returns the last value of `child` for a group of rows. If the last value of `child`
- * is `null`, it returns `null` (respecting nulls). Even if [[Last]] is used on a already
+ * is `null`, it returns `null` (respecting nulls). Even if [[Last]] is used on an already
  * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
  * is used) its result will not be deterministic (unless the input table is sorted and has
  * a single partition, and we use a single reducer to do the aggregation.).
  */
+@ExpressionDescription(
+  usage = "_FUNC_(expr,isIgnoreNull) - Returns the last value of `child` for a group of rows.")
 case class Last(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
 
   def this(child: Expression) = this(child, Literal.create(false, BooleanType))
@@ -38,7 +40,7 @@ case class Last(child: Expression, ignoreNullsExpr: Expression) extends Declarat
       throw new AnalysisException("The second argument of First should be a boolean literal.")
   }
 
-  override def children: Seq[Expression] = child :: Nil
+  override def children: Seq[Expression] = child :: ignoreNullsExpr :: Nil
 
   override def nullable: Boolean = true
 
@@ -49,7 +51,7 @@ case class Last(child: Expression, ignoreNullsExpr: Expression) extends Declarat
   override def dataType: DataType = child.dataType
 
   // Expected input data type.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, BooleanType)
 
   private lazy val last = AttributeReference("last", child.dataType)()
 

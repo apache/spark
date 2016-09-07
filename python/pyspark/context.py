@@ -155,10 +155,6 @@ class SparkContext(object):
         self.appName = self._conf.get("spark.app.name")
         self.sparkHome = self._conf.get("spark.home", None)
 
-        # Let YARN know it's a pyspark app, so it distributes needed libraries.
-        if self.master == "yarn-client":
-            self._conf.set("spark.yarn.isPython", "true")
-
         for (k, v) in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
@@ -170,6 +166,8 @@ class SparkContext(object):
 
         # Create the Java SparkContext through Py4J
         self._jsc = jsc or self._initialize_context(self._conf._jconf)
+        # Reset the SparkConf to the one actually used by the SparkContext in JVM.
+        self._conf = SparkConf(_jconf=self._jsc.sc().conf())
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
@@ -428,15 +426,19 @@ class SparkContext(object):
         # because it sends O(n) Py4J commands.  As an alternative, serialized
         # objects are written to a file and loaded through textFile().
         tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
-        # Make sure we distribute data evenly if it's smaller than self.batchSize
-        if "__len__" not in dir(c):
-            c = list(c)    # Make it a list so we can compute its length
-        batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
-        serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
-        serializer.dump_stream(c, tempFile)
-        tempFile.close()
-        readRDDFromFile = self._jvm.PythonRDD.readRDDFromFile
-        jrdd = readRDDFromFile(self._jsc, tempFile.name, numSlices)
+        try:
+            # Make sure we distribute data evenly if it's smaller than self.batchSize
+            if "__len__" not in dir(c):
+                c = list(c)    # Make it a list so we can compute its length
+            batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
+            serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
+            serializer.dump_stream(c, tempFile)
+            tempFile.close()
+            readRDDFromFile = self._jvm.PythonRDD.readRDDFromFile
+            jrdd = readRDDFromFile(self._jsc, tempFile.name, numSlices)
+        finally:
+            # readRDDFromFile eagerily reads the file so we can delete right after.
+            os.unlink(tempFile.name)
         return RDD(jrdd, self, serializer)
 
     def pickleFile(self, name, minPartitions=None):
@@ -947,6 +949,11 @@ class SparkContext(object):
         """ Dump the profile stats into directory `path`
         """
         self.profiler_collector.dump_profiles(path)
+
+    def getConf(self):
+        conf = SparkConf()
+        conf.setAll(self._conf.getAll())
+        return conf
 
 
 def _test():

@@ -19,6 +19,8 @@ package org.apache.spark.serializer
 
 import java.io._
 
+import scala.annotation.meta.param
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
@@ -124,7 +126,11 @@ class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(find(new SerializableClassWithWriteReplace(new SerializableClass1)).isEmpty)
   }
 
-    test("object containing writeObject() and not serializable field") {
+  test("no infinite loop with writeReplace() which returns class of its own type") {
+    assert(find(new SerializableClassWithRecursiveWriteReplace).isEmpty)
+  }
+
+  test("object containing writeObject() and not serializable field") {
     val s = find(new SerializableClassWithWriteObject(new NotSerializable))
     assert(s.size === 3)
     assert(s(0).contains("NotSerializable"))
@@ -191,7 +197,7 @@ class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val originalException = new NotSerializableException("someClass")
-    // verify thaht original exception is returned on failure
+    // verify that original exception is returned on failure
     assert(SerializationDebugger.improveException(o, originalException).eq(originalException))
   }
 }
@@ -219,10 +225,17 @@ class SerializableClassWithWriteObject(val objectField: Object) extends Serializ
 }
 
 
-class SerializableClassWithWriteReplace(@transient replacementFieldObject: Object)
+class SerializableClassWithWriteReplace(@(transient @param) replacementFieldObject: Object)
   extends Serializable {
   private def writeReplace(): Object = {
     replacementFieldObject
+  }
+}
+
+
+class SerializableClassWithRecursiveWriteReplace extends Serializable {
+  private def writeReplace(): Object = {
+    new SerializableClassWithRecursiveWriteReplace
   }
 }
 

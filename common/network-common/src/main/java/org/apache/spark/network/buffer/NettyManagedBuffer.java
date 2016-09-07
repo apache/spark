@@ -28,7 +28,7 @@ import io.netty.buffer.ByteBufInputStream;
 /**
  * A {@link ManagedBuffer} backed by a Netty {@link ByteBuf}.
  */
-public final class NettyManagedBuffer extends ManagedBuffer {
+public class NettyManagedBuffer extends ManagedBuffer {
   private final ByteBuf buf;
 
   public NettyManagedBuffer(ByteBuf buf) {

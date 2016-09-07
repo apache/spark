@@ -18,25 +18,29 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.regression.AFTSurvivalRegression
-import org.apache.spark.mllib.linalg.Vectors
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 /**
- * An example for AFTSurvivalRegression.
+ * An example demonstrating AFTSurvivalRegression.
+ * Run with
+ * {{{
+ * bin/run-example ml.AFTSurvivalRegressionExample
+ * }}}
  */
 object AFTSurvivalRegressionExample {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("AFTSurvivalRegressionExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("AFTSurvivalRegressionExample")
+      .getOrCreate()
 
     // $example on$
-    val training = sqlContext.createDataFrame(Seq(
+    val training = spark.createDataFrame(Seq(
       (1.218, 1.0, Vectors.dense(1.560, -0.605)),
       (2.949, 0.0, Vectors.dense(0.346, 2.158)),
       (3.627, 0.0, Vectors.dense(1.380, 0.231)),
@@ -51,12 +55,13 @@ object AFTSurvivalRegressionExample {
     val model = aft.fit(training)
 
     // Print the coefficients, intercept and scale parameter for AFT survival regression
-    println(s"Coefficients: ${model.coefficients} Intercept: " +
-      s"${model.intercept} Scale: ${model.scale}")
+    println(s"Coefficients: ${model.coefficients}")
+    println(s"Intercept: ${model.intercept}")
+    println(s"Scale: ${model.scale}")
     model.transform(training).show(false)
     // $example off$
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

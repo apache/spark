@@ -35,16 +35,16 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
 
   override def getPartitions: Array[Partition] = {
     assertValid()
-    (0 until blockIds.length).map(i => {
+    (0 until blockIds.length).map { i =>
       new BlockRDDPartition(blockIds(i), i).asInstanceOf[Partition]
-    }).toArray
+    }.toArray
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     assertValid()
     val blockManager = SparkEnv.get.blockManager
     val blockId = split.asInstanceOf[BlockRDDPartition].blockId
-    blockManager.get(blockId) match {
+    blockManager.get[T](blockId) match {
       case Some(block) => block.data.asInstanceOf[Iterator[T]]
       case None =>
         throw new Exception("Could not compute split, block " + blockId + " not found")

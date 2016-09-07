@@ -29,10 +29,3 @@ pyspark.streaming.flume.module
     :members:
     :undoc-members:
     :show-inheritance:
-
-pyspark.streaming.mqtt module
------------------------------
-.. automodule:: pyspark.streaming.mqtt
-    :members:
-    :undoc-members:
-    :show-inheritance:

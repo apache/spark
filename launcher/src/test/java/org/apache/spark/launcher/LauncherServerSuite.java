@@ -23,11 +23,11 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.Test;
 import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
 
 import static org.apache.spark.launcher.LauncherProtocol.*;
 
@@ -69,48 +69,35 @@ public class LauncherServerSuite extends BaseSuite {
       Socket s = new Socket(InetAddress.getLoopbackAddress(),
         LauncherServer.getServerInstance().getPort());
 
-      final Object waitLock = new Object();
+      final Semaphore semaphore = new Semaphore(0);
       handle.addListener(new SparkAppHandle.Listener() {
         @Override
         public void stateChanged(SparkAppHandle handle) {
-          wakeUp();
+          semaphore.release();
         }
-
         @Override
         public void infoChanged(SparkAppHandle handle) {
-          wakeUp();
-        }
-
-        private void wakeUp() {
-          synchronized (waitLock) {
-            waitLock.notifyAll();
-          }
+          semaphore.release();
         }
       });
 
       client = new TestClient(s);
-      synchronized (waitLock) {
-        client.send(new Hello(handle.getSecret(), "1.4.0"));
-        waitLock.wait(TimeUnit.SECONDS.toMillis(10));
-      }
+      client.send(new Hello(handle.getSecret(), "1.4.0"));
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
 
       // Make sure the server matched the client to the handle.
       assertNotNull(handle.getConnection());
 
-      synchronized (waitLock) {
-        client.send(new SetAppId("app-id"));
-        waitLock.wait(TimeUnit.SECONDS.toMillis(10));
-      }
+      client.send(new SetAppId("app-id"));
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
       assertEquals("app-id", handle.getAppId());
 
-      synchronized (waitLock) {
-        client.send(new SetState(SparkAppHandle.State.RUNNING));
-        waitLock.wait(TimeUnit.SECONDS.toMillis(10));
-      }
+      client.send(new SetState(SparkAppHandle.State.RUNNING));
+      assertTrue(semaphore.tryAcquire(1, TimeUnit.SECONDS));
       assertEquals(SparkAppHandle.State.RUNNING, handle.getState());
 
       handle.stop();
-      Message stopMsg = client.inbound.poll(10, TimeUnit.SECONDS);
+      Message stopMsg = client.inbound.poll(30, TimeUnit.SECONDS);
       assertTrue(stopMsg instanceof Stop);
     } finally {
       kill(handle);
@@ -165,6 +152,37 @@ public class LauncherServerSuite extends BaseSuite {
     }
   }
 
+  @Test
+  public void testSparkSubmitVmShutsDown() throws Exception {
+    ChildProcAppHandle handle = LauncherServer.newAppHandle();
+    TestClient client = null;
+    final Semaphore semaphore = new Semaphore(0);
+    try {
+      Socket s = new Socket(InetAddress.getLoopbackAddress(),
+        LauncherServer.getServerInstance().getPort());
+      handle.addListener(new SparkAppHandle.Listener() {
+        public void stateChanged(SparkAppHandle handle) {
+          semaphore.release();
+        }
+        public void infoChanged(SparkAppHandle handle) {
+          semaphore.release();
+        }
+      });
+      client = new TestClient(s);
+      client.send(new Hello(handle.getSecret(), "1.4.0"));
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
+      // Make sure the server matched the client to the handle.
+      assertNotNull(handle.getConnection());
+      close(client);
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
+      assertEquals(SparkAppHandle.State.LOST, handle.getState());
+    } finally {
+      kill(handle);
+      close(client);
+      client.clientThread.join();
+    }
+  }
+
   private void kill(SparkAppHandle handle) {
     if (handle != null) {
       handle.kill();
@@ -188,7 +206,7 @@ public class LauncherServerSuite extends BaseSuite {
 
     TestClient(Socket s) throws IOException {
       super(s);
-      this.inbound = new LinkedBlockingQueue<Message>();
+      this.inbound = new LinkedBlockingQueue<>();
       this.clientThread = new Thread(this);
       clientThread.setName("TestClient");
       clientThread.setDaemon(true);

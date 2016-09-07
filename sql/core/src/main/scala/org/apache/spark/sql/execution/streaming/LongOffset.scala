@@ -30,4 +30,6 @@ case class LongOffset(offset: Long) extends Offset {
 
   def +(increment: Long): LongOffset = new LongOffset(offset + increment)
   def -(decrement: Long): LongOffset = new LongOffset(offset - decrement)
+
+  override def toString: String = s"#$offset"
 }
