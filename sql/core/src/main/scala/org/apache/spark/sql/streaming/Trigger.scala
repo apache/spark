@@ -73,6 +73,11 @@ case class ProcessingTime(intervalMs: Long) extends Trigger {
 object ProcessingTime {
 
   /**
+   * Default microbatch trigger interval if the user does not specify one explicitly
+   */
+  val defaultTriggerInterval : Trigger = ProcessingTime(100L)
+
+  /**
    * Create a [[ProcessingTime]]. If `interval` is 0, the query will run as fast as possible.
    *
    * Example:

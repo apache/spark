@@ -152,8 +152,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
   /** Starts the stream, resuming if data has already been processed. It must not be running. */
   case class StartStream(
-      trigger: Trigger = ProcessingTime(0),
-      triggerClock: Clock = new SystemClock)
+                          trigger: Trigger = ProcessingTime.defaultTriggerInterval,
+                          triggerClock: Clock = new SystemClock)
     extends StreamAction
 
   /** Advance the trigger clock's time manually. */

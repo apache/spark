@@ -192,7 +192,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       outputMode: OutputMode,
       useTempCheckpointLocation: Boolean = false,
       recoverFromCheckpointLocation: Boolean = true,
-      trigger: Trigger = ProcessingTime(0),
+      trigger: Trigger = ProcessingTime.defaultTriggerInterval,
       triggerClock: Clock = new SystemClock()): StreamingQuery = {
     activeQueriesLock.synchronized {
       val id = StreamExecution.nextId

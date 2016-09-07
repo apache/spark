@@ -79,8 +79,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * :: Experimental ::
-   * Set the trigger for the stream query. The default value is `ProcessingTime(0)` and it will run
-   * the query as fast as possible.
+   * Set the trigger for the stream query. The default value is 1/10 of a second.
    *
    * Scala Example:
    * {{{
@@ -384,7 +383,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private var outputMode: OutputMode = OutputMode.Append
 
-  private var trigger: Trigger = ProcessingTime(0L)
+  private var trigger: Trigger = ProcessingTime.defaultTriggerInterval
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 
