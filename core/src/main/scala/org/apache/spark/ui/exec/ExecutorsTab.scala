@@ -88,21 +88,20 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
       executorEvents.remove(0)
     }
     if (deadExecutorCount > retainedDeadExecutors) {
-      executorToTaskSummary.filter(t => !t._2.isAlive).remove(0).foreach { e =>
-        executorToTaskSummary.remove(e.executorId)
-        deadExecutorCount = deadExecutorCount - 1
-      }
+      val head = executorToTaskSummary.filter(t => !t._2.isAlive).head
+      executorToTaskSummary.remove(head._1)
+      deadExecutorCount = deadExecutorCount - 1
     }
   }
 
   override def onExecutorRemoved(
       executorRemoved: SparkListenerExecutorRemoved): Unit = synchronized {
     executorEvents += executorRemoved
-    if (executorEvents.size > MAX_EXECUTOR_LIMIT) {
+    if (executorEvents.size > maxTimelineExecutors) {
       executorEvents.remove(0)
     }
     deadExecutorCount = deadExecutorCount + 1
-    executorToTaskSummary(eid).isAlive = false
+    executorToTaskSummary(executorRemoved.executorId).isAlive = false
   }
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
