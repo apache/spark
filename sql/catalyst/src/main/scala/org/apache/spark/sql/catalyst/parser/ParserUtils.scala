@@ -192,9 +192,7 @@ object ParserUtils {
      * Map a [[LogicalPlan]] to another [[LogicalPlan]] if the passed context exists using the
      * passed function. The original plan is returned when the context does not exist.
      */
-    def optionalMap[C <: ParserRuleContext](
-        ctx: C)(
-        f: (C, LogicalPlan) => LogicalPlan): LogicalPlan = {
+    def optionalMap[C](ctx: C)(f: (C, LogicalPlan) => LogicalPlan): LogicalPlan = {
       if (ctx != null) {
         f(ctx, plan)
       } else {
