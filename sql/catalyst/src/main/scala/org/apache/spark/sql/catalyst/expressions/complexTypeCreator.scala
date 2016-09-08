@@ -175,8 +175,6 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
  * Returns a Row containing the evaluation of all children expressions.
  */
 object CreateStruct extends (Seq[Expression] => CreateNamedStruct) {
-  @ExpressionDescription(
-    usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
   def apply(children: Seq[Expression]) : CreateNamedStruct = {
     val namedStructArgs = {
       val attNames = for {
