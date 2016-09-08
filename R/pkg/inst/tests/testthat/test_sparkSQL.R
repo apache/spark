@@ -208,7 +208,7 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
-test_that("read csv as DataFrame", {
+test_that("read/write csv as DataFrame", {
   csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
   mockLinesCsv <- c("year,make,model,comment,blank",
                    "\"2012\",\"Tesla\",\"S\",\"No comment\",",
@@ -243,7 +243,15 @@ test_that("read csv as DataFrame", {
   expect_equal(count(withoutna2), 3)
   expect_equal(count(where(withoutna2, withoutna2$make == "Dummy")), 0)
 
+  # writing csv file
+  csvPath2 <- tempfile(pattern = "csvtest2", fileext = ".csv")
+  write.df(df2, path = csvPath2, "csv", header = "true")
+  df3 <- read.df(csvPath2, "csv", header = "true")
+  expect_equal(nrow(df3), nrow(df2))
+  expect_equal(colnames(df3), colnames(df2))
+
   unlink(csvPath)
+  unlink(csvPath2)
 })
 
 test_that("convert NAs to null type in DataFrames", {
