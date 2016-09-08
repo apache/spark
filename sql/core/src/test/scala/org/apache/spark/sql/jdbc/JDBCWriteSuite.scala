@@ -215,12 +215,12 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val df = sqlContext.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
     df.write.format("jdbc")
-    .options(Map("url" -> url, "dbtable" -> "TEST.BASICCREATETEST"))
+    .options(Map("url" -> url, "dbtable" -> "TEST.SAVETEST"))
     .save
 
-    assert(2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count)
+    assert(2 === sqlContext.read.jdbc(url, "TEST.SAVETEST", new Properties).count)
     assert(
-      2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
+      2 === sqlContext.read.jdbc(url, "TEST.SAVETEST", new Properties).collect()(0).length)
   }
 
   test("save API with SaveMode.Overwrite") {
@@ -229,16 +229,16 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     df.write.format("jdbc")
       .option("url", url1)
-      .option("dbtable", "TEST.TRUNCATETEST")
+      .option("dbtable", "TEST.SAVETEST")
       .options(properties.asScala)
       .save()
     df2.write.mode(SaveMode.Overwrite).format("jdbc")
       .option("url", url1)
-      .option("dbtable", "TEST.TRUNCATETEST")
+      .option("dbtable", "TEST.SAVETEST")
       .options(properties.asScala)
       .save()
-    assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
-    assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
+    assert(1 === spark.read.jdbc(url1, "TEST.SAVETEST", properties).count())
+    assert(2 === spark.read.jdbc(url1, "TEST.SAVETEST", properties).collect()(0).length)
   }
 
   test("save errors if url is not specified") {
@@ -246,7 +246,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     val e = intercept[RuntimeException] {
       df.write.format("jdbc")
-        .option("dbtable", "TEST.TRUNCATETEST")
+        .option("dbtable", "TEST.SAVETEST")
         .options(properties.asScala)
         .save()
     }.getMessage
@@ -270,10 +270,24 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     val e = intercept[org.h2.jdbc.JdbcSQLException] {
       df.write.format("jdbc")
-        .option("dbtable", "TEST.TRUNCATETEST")
+        .option("dbtable", "TEST.SAVETEST")
         .option("url", url1)
         .save()
     }.getMessage
     assert(e.contains("Wrong user name or password"))
+  }
+
+  test("save errors if partitionColumn and numPartitions and bounds not set") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    val e = intercept[java.lang.IllegalArgumentException] {
+      df.write.format("jdbc")
+        .option("dbtable", "TEST.SAVETEST")
+        .option("url", url1)
+        .option("partitionColumn", "foo")
+        .save()
+    }.getMessage
+    assert(e.contains("If 'partitionColumn' is specified then 'lowerBound', 'upperBound'," +
+      " and 'numPartitions' are required."))
   }
 }

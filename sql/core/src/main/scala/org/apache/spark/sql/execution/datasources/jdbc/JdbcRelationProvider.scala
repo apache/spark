@@ -24,7 +24,6 @@ import scala.collection.JavaConverters.mapAsJavaMapConverter
 
 import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
-import org.apache.spark.sql.types.StructType
 
 class JdbcRelationProvider extends CreatableRelationProvider
   with RelationProvider with DataSourceRegister {
@@ -40,8 +39,8 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val upperBound = jdbcOptions.upperBound
     val numPartitions = jdbcOptions.numPartitions
 
-    val partitionInfo = if (partitionColumn == null) { 
-      null 
+    val partitionInfo = if (partitionColumn == null) {
+      null
     } else {
       JDBCPartitioningInfo(
         partitionColumn, lowerBound.toLong, upperBound.toLong, numPartitions.toInt)
@@ -82,7 +81,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
       val (doCreate, doSave) = (mode, tableExists) match {
         case (SaveMode.Ignore, true) => (false, false)
-        case (SaveMode.ErrorIfExists, true) => throw new TableAlreadyExistsException(
+        case (SaveMode.ErrorIfExists, true) => throw new SQLException(
           s"Table $table already exists, and SaveMode is set to ErrorIfExists.")
         case (SaveMode.Overwrite, true) =>
           if (jdbcOptions.isTruncate && JdbcUtils.isCascadingTruncateTable(url) == Some(false)) {
