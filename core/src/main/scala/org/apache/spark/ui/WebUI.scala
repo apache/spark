@@ -83,8 +83,8 @@ private[spark] abstract class WebUI(
       (request: HttpServletRequest) => page.renderJson(request), securityManager, conf, basePath)
     attachHandler(renderHandler)
     attachHandler(renderJsonHandler)
-    pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
-      .append(renderHandler)
+    val handlers = pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
+    handlers += renderHandler
   }
 
   /** Attach a handler to this UI. */

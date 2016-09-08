@@ -49,7 +49,7 @@ class FileStreamSource(
     fs.makeQualified(new Path(path))  // can contains glob patterns
   }
 
-  private val metadataLog = new HDFSMetadataLog[Seq[FileEntry]](sparkSession, metadataPath)
+  private val metadataLog = new HDFSMetadataLog[Array[FileEntry]](sparkSession, metadataPath)
 
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
@@ -98,7 +98,7 @@ class FileStreamSource(
 
     if (batchFiles.nonEmpty) {
       maxBatchId += 1
-      metadataLog.add(maxBatchId, batchFiles)
+      metadataLog.add(maxBatchId, batchFiles.toArray)
       logInfo(s"Max batch id increased to $maxBatchId with ${batchFiles.size} new files")
     }
 

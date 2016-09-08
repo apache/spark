@@ -407,6 +407,9 @@ class StreamExecution(
       awaitBatchLock.lock()
       try {
         awaitBatchLockCondition.await(100, TimeUnit.MILLISECONDS)
+        if (streamDeathCause != null) {
+          throw streamDeathCause
+        }
       } finally {
         awaitBatchLock.unlock()
       }

@@ -374,11 +374,12 @@ setQuantifier
     ;
 
 relation
-    : left=relation
-      (joinType JOIN right=relation joinCriteria?
-      | NATURAL joinType JOIN right=relation
-      )                                           #joinRelation
-    | relationPrimary                             #relationDefault
+    : relationPrimary joinRelation*
+    ;
+
+joinRelation
+    : (joinType) JOIN right=relationPrimary joinCriteria?
+    | NATURAL joinType JOIN right=relationPrimary
     ;
 
 joinType
