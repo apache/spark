@@ -29,6 +29,8 @@ import org.apache.spark.sql.catalyst.util.StringUtils
 
 /**
  * A thread-safe manager for a list of temp views, providing atomic operations to manage temp views.
+ * Note that, the temp view name is always case-sensitive here, callers are responsible to format
+ * the view name w.r.t. case-sensitivity config.
  */
 class TempViewManager {
 

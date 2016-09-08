@@ -272,6 +272,22 @@ class SessionCatalog(
   }
 
   /**
+   * Return a [[LogicalPlan]] that represents the given table/view in metastore.
+   *
+   * If the relation is a view, the relation will be wrapped in a [[SubqueryAlias]] which will
+   * track the name of the view.
+   */
+  def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(name.table)
+    val tableMeta = externalCatalog.getTable(db, table)
+    val view = Option(tableMeta.tableType).collect {
+      case CatalogTableType.VIEW => TableIdentifier(table, Some(db))
+    }
+    SubqueryAlias(alias.getOrElse(table), SimpleCatalogRelation(db, tableMeta), view)
+  }
+
+  /**
    * Return whether a table/view with the specified name exists in metastore.
    */
   def tableExists(name: TableIdentifier): Boolean = {
@@ -371,6 +387,16 @@ class SessionCatalog(
   }
 
   /**
+   * Return a [[LogicalPlan]] that represents the given temporary view.
+   */
+  def lookupTempView(name: String, alias: Option[String] = None): Option[LogicalPlan] = {
+    val viewName = formatTableName(name)
+    tempViews.get(viewName).map { viewDef =>
+      SubqueryAlias(alias.getOrElse(viewName), viewDef, Some(TableIdentifier(viewName)))
+    }
+  }
+
+  /**
    * Rename a temporary view, and returns true if it succeeds, false otherwise.
    */
   def renameTempView(oldName: String, newName: String): Boolean = {
@@ -400,43 +426,6 @@ class SessionCatalog(
   // -------------------------------------------------------------------------
   // | Methods that interact with temporary views and metastore tables/views |
   // -------------------------------------------------------------------------
-
-  /**
-   * Return a [[LogicalPlan]] that represents the given table/view.
-   *
-   * If a database is specified in `name`, this will return the table/view from that database.
-   * If no database is specified, this will first attempt to return a temporary view with
-   * the same name, then, if that does not exist, return the table/view from the current database.
-   *
-   * If the relation is a view, the relation will be wrapped in a [[SubqueryAlias]] which will
-   * track the name of the view.
-   */
-  def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
-    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
-    val table = formatTableName(name.table)
-
-    if (name.database.isDefined) {
-      lookupMetastoreRelation(db, table, alias)
-    } else {
-      val maybeTempView = tempViews.get(table)
-      if (maybeTempView.isDefined) {
-        SubqueryAlias(alias.getOrElse(table), maybeTempView.get, Some(name))
-      } else {
-        lookupMetastoreRelation(db, table, alias)
-      }
-    }
-  }
-
-  protected def lookupMetastoreRelation(
-      db: String,
-      table: String,
-      alias: Option[String]): LogicalPlan = {
-    val metadata = externalCatalog.getTable(db, table)
-    val view = Option(metadata.tableType).collect {
-      case CatalogTableType.VIEW => TableIdentifier(table, Some(db))
-    }
-    SubqueryAlias(alias.getOrElse(table), SimpleCatalogRelation(db, metadata), view)
-  }
 
   /**
    * List all tables/views in the specified database, including temporary views.
@@ -474,11 +463,6 @@ class SessionCatalog(
    * For testing only.
    */
   def clearTempViews(): Unit = tempViews.clear()
-
-  /**
-   * Return a temporary view exactly as it was stored.
-   */
-  def getTempView(name: String): Option[LogicalPlan] = tempViews.get(formatTableName(name))
 
   // ----------------------------------------------------------------------------
   // Partitions

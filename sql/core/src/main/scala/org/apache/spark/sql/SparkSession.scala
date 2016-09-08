@@ -556,7 +556,20 @@ class SparkSession private(
   }
 
   private[sql] def table(tableIdent: TableIdentifier): DataFrame = {
-    Dataset.ofRows(self, sessionState.catalog.lookupRelation(tableIdent))
+    val plan = {
+      if (tableIdent.database.isDefined) {
+        sessionState.catalog.lookupRelation(tableIdent)
+      } else {
+        val maybeTempView = sessionState.catalog.lookupTempView(tableIdent.table)
+        if (maybeTempView.isDefined) {
+          maybeTempView.get
+        } else {
+          sessionState.catalog.lookupRelation(tableIdent)
+        }
+      }
+    }
+
+    Dataset.ofRows(self, plan)
   }
 
   /* ----------------- *

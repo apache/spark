@@ -201,16 +201,16 @@ class SessionCatalogSuite extends SparkFunSuite {
     val tempTable2 = Range(1, 20, 2, 10)
     catalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
     catalog.createTempView("tbl2", tempTable2, overrideIfExists = false)
-    assert(catalog.getTempView("tbl1") == Option(tempTable1))
-    assert(catalog.getTempView("tbl2") == Option(tempTable2))
-    assert(catalog.getTempView("tbl3").isEmpty)
+    assert(catalog.lookupTempView("tbl1") == Option(tempTable1))
+    assert(catalog.lookupTempView("tbl2") == Option(tempTable2))
+    assert(catalog.lookupTempView("tbl3").isEmpty)
     // Temporary table already exists
     intercept[TempViewAlreadyExistsException] {
       catalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
     }
     // Temporary table already exists but we override it
     catalog.createTempView("tbl1", tempTable2, overrideIfExists = true)
-    assert(catalog.getTempView("tbl1") == Option(tempTable2))
+    assert(catalog.lookupTempView("tbl1") == Option(tempTable2))
   }
 
   test("drop table") {
@@ -251,10 +251,10 @@ class SessionCatalogSuite extends SparkFunSuite {
     val tempTable = Range(1, 10, 2, 10)
     sessionCatalog.createTempView("tbl1", tempTable, overrideIfExists = false)
     sessionCatalog.setCurrentDatabase("db2")
-    assert(sessionCatalog.getTempView("tbl1") == Some(tempTable))
+    assert(sessionCatalog.lookupTempView("tbl1") == Some(tempTable))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
     sessionCatalog.dropTempView("tbl1")
-    assert(sessionCatalog.getTempView("tbl1").isEmpty)
+    assert(sessionCatalog.lookupTempView("tbl1").isEmpty)
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
   }
 
@@ -292,11 +292,11 @@ class SessionCatalogSuite extends SparkFunSuite {
     val tempTable = Range(1, 10, 2, 10)
     sessionCatalog.createTempView("tbl1", tempTable, overrideIfExists = false)
     sessionCatalog.setCurrentDatabase("db2")
-    assert(sessionCatalog.getTempView("tbl1") == Option(tempTable))
+    assert(sessionCatalog.lookupTempView("tbl1") == Option(tempTable))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
     sessionCatalog.renameTempView("tbl1", "tbl3")
-    assert(sessionCatalog.getTempView("tbl1").isEmpty)
-    assert(sessionCatalog.getTempView("tbl3") == Option(tempTable))
+    assert(sessionCatalog.lookupTempView("tbl1").isEmpty)
+    assert(sessionCatalog.lookupTempView("tbl3") == Option(tempTable))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
   }
 

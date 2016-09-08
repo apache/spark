@@ -139,7 +139,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("table does not exist")
   override def listColumns(tableName: String): Dataset[Column] = {
-    val maybeTempView = sessionCatalog.getTempView(tableName)
+    val maybeTempView = sessionCatalog.lookupTempView(tableName)
     if (maybeTempView.isDefined) {
       val columns = maybeTempView.get.schema.map { c =>
         new Column(
@@ -368,7 +368,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     // If this table is cached as an InMemoryRelation, drop the original
     // cached version and make the new version cached lazily.
-    val logicalPlan = sparkSession.sessionState.catalog.lookupRelation(tableIdent)
+    val logicalPlan = sparkSession.table(tableIdent).queryExecution.logical
     // Use lookupCachedData directly since RefreshTable also takes databaseName.
     val isCached = sparkSession.sharedState.cacheManager.lookupCachedData(logicalPlan).nonEmpty
     if (isCached) {

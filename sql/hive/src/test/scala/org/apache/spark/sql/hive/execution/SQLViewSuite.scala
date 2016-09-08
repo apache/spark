@@ -83,7 +83,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("error handling: insert/load/truncate table commands against a temp view") {
-    val viewName = "testView"
+    val viewName = "test_view"
     withTempView(viewName) {
       sql(s"CREATE TEMPORARY VIEW $viewName AS SELECT id FROM jt")
       var e = intercept[AnalysisException] {
@@ -95,12 +95,12 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       e = intercept[AnalysisException] {
         sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE $viewName""")
       }.getMessage
-      assert(e.contains(s"Target table in LOAD DATA does not exist: `$viewName`"))
+      assert(e.contains(s"Table or view '$viewName' not found in database 'default'"))
 
       e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $viewName")
       }.getMessage
-      assert(e.contains(s"Table `$viewName` in TRUNCATE TABLE does not exist"))
+      assert(e.contains(s"Table or view '$viewName' not found in database 'default'"))
     }
   }
 

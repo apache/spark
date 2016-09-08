@@ -53,10 +53,9 @@ private[sql] class HiveSessionCatalog(
     conf,
     hadoopConf) {
 
-  override protected def lookupMetastoreRelation(
-      db: String,
-      table: String,
-      alias: Option[String]): LogicalPlan = {
+  override def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(name.table)
     metastoreCatalog.lookupRelation(TableIdentifier(table, Some(db)), alias)
   }
 

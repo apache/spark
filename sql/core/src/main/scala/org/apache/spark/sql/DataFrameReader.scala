@@ -463,9 +463,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    Dataset.ofRows(sparkSession,
-      sparkSession.sessionState.catalog.lookupRelation(
-        sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)))
+    sparkSession.table(tableName)
   }
 
   /**

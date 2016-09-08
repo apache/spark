@@ -675,7 +675,7 @@ class HiveDDLSuite
           identifier = TableIdentifier(sourceViewName),
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
-          schema = spark.sessionState.catalog.getTempView(sourceViewName).get.schema)
+          schema = spark.sessionState.catalog.lookupTempView(sourceViewName).get.schema)
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
 

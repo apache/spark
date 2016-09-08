@@ -66,7 +66,7 @@ case class CreateTableLikeCommand(
     val sourceTableDesc = if (sourceTable.database.isDefined) {
       catalog.getTableMetadata(sourceTable)
     } else {
-      val maybeTempView = catalog.getTempView(sourceTable.table)
+      val maybeTempView = catalog.lookupTempView(sourceTable.table)
       if (maybeTempView.isDefined) {
         CatalogTable(
           identifier = sourceTable,
@@ -228,12 +228,7 @@ case class LoadDataCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (!catalog.tableExists(table)) {
-      throw new AnalysisException(s"Target table in LOAD DATA does not exist: $table")
-    }
-    val targetTable = catalog.getTableMetadataOption(table).getOrElse {
-      throw new AnalysisException(s"Target table in LOAD DATA cannot be temporary: $table")
-    }
+    val targetTable = catalog.getTableMetadata(table)
     if (targetTable.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $table")
     }
@@ -349,9 +344,6 @@ case class TruncateTableCommand(
 
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
-    if (!catalog.tableExists(tableName)) {
-      throw new AnalysisException(s"Table $tableName in TRUNCATE TABLE does not exist.")
-    }
     val table = catalog.getTableMetadata(tableName)
     if (table.tableType == CatalogTableType.EXTERNAL) {
       throw new AnalysisException(
@@ -436,7 +428,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     if (table.database.isDefined) {
       describeMetastoreTable(catalog, result)
     } else {
-      val maybeTempView = catalog.getTempView(table.table)
+      val maybeTempView = catalog.lookupTempView(table.table)
       if (maybeTempView.isDefined) {
         describeSchema(maybeTempView.get.schema, result)
       } else {
@@ -619,7 +611,7 @@ case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
     val schema = if (table.database.isDefined) {
       catalog.getTableMetadata(table).schema
     } else {
-      val maybeTempView = catalog.getTempView(table.table)
+      val maybeTempView = catalog.lookupTempView(table.table)
       if (maybeTempView.isDefined) {
         maybeTempView.get.schema
       } else {
@@ -713,10 +705,6 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (!catalog.tableExists(table)) {
-      throw new AnalysisException(s"Table $table doesn't exist")
-    }
-
     val tableMetadata = catalog.getTableMetadata(table)
 
     // TODO: unify this after we unify the CREATE TABLE syntax for hive serde and data source table.
