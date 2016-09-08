@@ -34,7 +34,6 @@ public abstract class AbstractSparkAppHandle implements SparkAppHandle {
   protected State state;
   private LauncherConnection connection;
   private String appId;
-
   OutputRedirector redirector;
 
   public AbstractSparkAppHandle(LauncherServer server, String secret) {
@@ -131,5 +130,4 @@ public abstract class AbstractSparkAppHandle implements SparkAppHandle {
       }
     }
   }
-
 }
