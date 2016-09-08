@@ -49,7 +49,6 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer {
   protected final Logger logger = LoggerFactory.getLogger(RowBasedKeyValueBatch.class);
 
   private static final int DEFAULT_CAPACITY = 1 << 16;
-  private static final long DEFAULT_PAGE_SIZE = 64 * 1024 * 1024;
 
   protected final StructType keySchema;
   protected final StructType valueSchema;
@@ -105,7 +104,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer {
     this.keyRow = new UnsafeRow(keySchema.length());
     this.valueRow = new UnsafeRow(valueSchema.length());
 
-    if (!acquirePage(DEFAULT_PAGE_SIZE)) {
+    if (!acquirePage(manager.pageSizeBytes())) {
       page = null;
       recordStartOffset = 0;
     } else {
