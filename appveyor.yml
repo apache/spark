@@ -36,6 +36,11 @@ install:
   - ps: .\dev\appveyor-install-dependencies.ps1
   # Required package for R unit tests
   - cmd: R -e "install.packages('testthat', repos='http://cran.us.r-project.org')"
+  - cmd: R -e "packageVersion('testthat')"
+  - cmd: R -e "install.packages('e1071', repos='http://cran.us.r-project.org')"
+  - cmd: R -e "packageVersion('e1071')"
+  - cmd: R -e "install.packages('survival', repos='http://cran.us.r-project.org')"
+  - cmd: R -e "packageVersion('survival')"
 
 build_script:
   - cmd: mvn -DskipTests -Phadoop-2.6 -Psparkr -Phive -Phive-thriftserver package
