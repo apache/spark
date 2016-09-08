@@ -127,15 +127,17 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
       start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1
     val endOrdinal = end.asInstanceOf[LongOffset].offset.toInt + 1
 
-    // Internal buffer only holds the batches after lastCommittedOffset
+    // Internal buffer only holds the batches after lastOffsetCommitted
     val rawList = synchronized {
-      val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt
-      val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt
+      val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt - 1
+      val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
       batches.slice(sliceStart, sliceEnd)
     }
 
     import sqlContext.implicits._
     val rawBatch = sqlContext.createDataset(rawList)
+
+
 
     // Underlying MemoryStream has schema (String, Timestamp); strip out the timestamp
     // if requested.
