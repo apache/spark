@@ -720,8 +720,9 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 # Returns the summary of a Multilayer Perceptron Classification Model produced by \code{spark.mlp}
 
 #' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
-#' @return \code{summary} returns a list containing \code{layers}, the label distribution, and
-#'         \code{tables}, conditional probabilities given the target label.
+#' @return \code{summary} returns a list containing \code{labelCount}, \code{layers}, and
+#'         \code{weights}. For \code{weights}, it is a numeric vector with length equal to
+#'         the expected given the architecture (i.e., for 8-10-2 network, 100 connection weights).
 #' @rdname spark.mlp
 #' @export
 #' @aliases summary,MultilayerPerceptronClassificationModel-method
@@ -732,7 +733,6 @@ setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel
             labelCount <- callJMethod(jobj, "labelCount")
             layers <- unlist(callJMethod(jobj, "layers"))
             weights <- callJMethod(jobj, "weights")
-            weights <- matrix(weights, nrow = length(weights))
             list(labelCount = labelCount, layers = layers, weights = weights)
           })
 
