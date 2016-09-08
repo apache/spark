@@ -627,7 +627,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case n: TreeNode[_] => n.jsonValue
     case o: Option[_] => o.map(parseToJson)
     // Recursive scan Seq[TreeNode]
-    case t: Seq[_] if t.length > 0 && t.head.isInstanceOf[TreeNode[_]] =>
+    case t: Seq[_] if t.forall(_.isInstanceOf[TreeNode[_]]) =>
       JArray(t.map(parseToJson).toList)
     // if it's a scala object, we can simply keep the full class path.
     // TODO: currently if the class name ends with "$", we think it's a scala object, there is
