@@ -47,7 +47,7 @@ class JDBCOptions(
   val numPartitions = parameters.getOrElse("numPartitions", null)
 
   require(partitionColumn == null ||
-    (partitionColumn != null && lowerBound != null && upperBound != null && numPartitions != null),
+    (lowerBound != null && upperBound != null && numPartitions != null),
     "If 'partitionColumn' is specified then 'lowerBound', 'upperBound'," +
       " and 'numPartitions' are required.")
 
