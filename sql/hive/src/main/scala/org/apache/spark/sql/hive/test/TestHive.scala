@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.implicitConversions
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -40,8 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
@@ -54,6 +52,7 @@ object TestHive
         .set("spark.sql.test", "")
         .set("spark.sql.hive.metastore.barrierPrefixes",
           "org.apache.spark.sql.hive.execution.PairSerDe")
+        .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
         .set("spark.ui.enabled", "false")))
 
@@ -85,8 +84,6 @@ class TestHiveContext(
     new TestHiveContext(sparkSession.newSession())
   }
 
-  override def sharedState: TestHiveSharedState = sparkSession.sharedState
-
   override def sessionState: TestHiveSessionState = sparkSession.sessionState
 
   def setCacheTables(c: Boolean): Unit = {
@@ -111,56 +108,50 @@ class TestHiveContext(
  * A [[SparkSession]] used in [[TestHiveContext]].
  *
  * @param sc SparkContext
- * @param warehousePath path to the Hive warehouse directory
- * @param scratchDirPath scratch directory used by Hive's metastore client
- * @param metastoreTemporaryConf configuration options for Hive's metastore
- * @param existingSharedState optional [[TestHiveSharedState]]
+ * @param existingSharedState optional [[SharedState]]
  * @param loadTestTables if true, load the test tables. They can only be loaded when running
  *                       in the JVM, i.e when calling from Python this flag has to be false.
  */
 private[hive] class TestHiveSparkSession(
     @transient private val sc: SparkContext,
-    val warehousePath: File,
-    scratchDirPath: File,
-    metastoreTemporaryConf: Map[String, String],
-    @transient private val existingSharedState: Option[TestHiveSharedState],
+    @transient private val existingSharedState: Option[SharedState],
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
 
-  // TODO: We need to set the temp warehouse path to sc's conf.
-  // Right now, In SparkSession, we will set the warehouse path to the default one
-  // instead of the temp one. Then, we override the setting in TestHiveSharedState
-  // when we creating metadataHive. This flow is not easy to follow and can introduce
-  // confusion when a developer is debugging an issue. We need to refactor this part
-  // to just set the temp warehouse path in sc's conf.
   def this(sc: SparkContext, loadTestTables: Boolean) {
     this(
       sc,
-      Utils.createTempDir(namePrefix = "warehouse"),
-      TestHiveContext.makeScratchDir(),
-      HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false),
-      None,
+      existingSharedState = None,
       loadTestTables)
+  }
+
+  { // set the metastore temporary configuration
+    val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
+      ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
+      // scratch directory used by Hive's metastore client
+      ConfVars.SCRATCHDIR.varname -> TestHiveContext.makeScratchDir().toURI.toString,
+      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1")
+
+    metastoreTempConf.foreach { case (k, v) =>
+      sc.hadoopConfiguration.set(k, v)
+    }
   }
 
   assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
 
-  // TODO: Let's remove TestHiveSharedState and TestHiveSessionState. Otherwise,
-  // we are not really testing the reflection logic based on the setting of
-  // CATALOG_IMPLEMENTATION.
   @transient
-  override lazy val sharedState: TestHiveSharedState = {
-    existingSharedState.getOrElse(
-      new TestHiveSharedState(sc, warehousePath, scratchDirPath, metastoreTemporaryConf))
+  override lazy val sharedState: SharedState = {
+    existingSharedState.getOrElse(new SharedState(sc))
   }
 
+  // TODO: Let's remove TestHiveSessionState. Otherwise, we are not really testing the reflection
+  // logic based on the setting of CATALOG_IMPLEMENTATION.
   @transient
   override lazy val sessionState: TestHiveSessionState =
-    new TestHiveSessionState(self, warehousePath)
+    new TestHiveSessionState(self)
 
   override def newSession(): TestHiveSparkSession = {
-    new TestHiveSparkSession(
-      sc, warehousePath, scratchDirPath, metastoreTemporaryConf, Some(sharedState), loadTestTables)
+    new TestHiveSparkSession(sc, Some(sharedState), loadTestTables)
   }
 
   private var cacheTables: Boolean = false
@@ -197,6 +188,12 @@ private[hive] class TestHiveSparkSession(
 
   def getHiveFile(path: String): File = {
     new File(Thread.currentThread().getContextClassLoader.getResource(path).getFile)
+  }
+
+  def getWarehousePath(): String = {
+    val tempConf = new SQLConf
+    sc.conf.getAll.foreach { case (k, v) => tempConf.setConfString(k, v) }
+    tempConf.warehousePath
   }
 
   val describedTable = "DESCRIBE (\\w+)".r
@@ -507,23 +504,8 @@ private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
 }
 
 
-private[hive] class TestHiveSharedState(
-    sc: SparkContext,
-    warehousePath: File,
-    scratchDirPath: File,
-    metastoreTemporaryConf: Map[String, String])
-  extends HiveSharedState(sc) {
-
-  override lazy val metadataHive: HiveClient = {
-    TestHiveContext.newClientForMetadata(
-      sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath, metastoreTemporaryConf)
-  }
-}
-
-
 private[hive] class TestHiveSessionState(
-    sparkSession: TestHiveSparkSession,
-    warehousePath: File)
+    sparkSession: TestHiveSparkSession)
   extends HiveSessionState(sparkSession) { self =>
 
   override lazy val conf: SQLConf = {
@@ -533,7 +515,6 @@ private[hive] class TestHiveSessionState(
       override def clear(): Unit = {
         super.clear()
         TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
-        setConfString("hive.metastore.warehouse.dir", self.warehousePath.toURI.toString)
       }
     }
   }
@@ -565,36 +546,10 @@ private[hive] object TestHiveContext {
       SQLConf.SHUFFLE_PARTITIONS.key -> "5"
     )
 
-  /**
-   * Create a [[HiveClient]] used to retrieve metadata from the Hive MetaStore.
-   */
-  def newClientForMetadata(
-      conf: SparkConf,
-      hadoopConf: Configuration,
-      warehousePath: File,
-      scratchDirPath: File,
-      metastoreTemporaryConf: Map[String, String]): HiveClient = {
-    HiveUtils.newClientForMetadata(
-      conf,
-      hadoopConf,
-      hiveClientConfigurations(hadoopConf, warehousePath, scratchDirPath, metastoreTemporaryConf))
-  }
-
-  /**
-   * Configurations needed to create a [[HiveClient]].
-   */
-  def hiveClientConfigurations(
-      hadoopConf: Configuration,
-      warehousePath: File,
-      scratchDirPath: File,
-      metastoreTemporaryConf: Map[String, String]): Map[String, String] = {
-    HiveUtils.hiveClientConfigurations(hadoopConf) ++ metastoreTemporaryConf ++ Map(
-      // Override WAREHOUSE_PATH and METASTOREWAREHOUSE to use the given path.
-      SQLConf.WAREHOUSE_PATH.key -> warehousePath.toURI.toString,
-      ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
-      ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
-      ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,
-      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1")
+  def makeWarehouseDir(): File = {
+    val warehouseDir = Utils.createTempDir(namePrefix = "warehouse")
+    warehouseDir.delete()
+    warehouseDir
   }
 
   def makeScratchDir(): File = {

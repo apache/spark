@@ -165,7 +165,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   }
 
   /**
-   * Transforms dataset by reading from [[featuresCol]], calling [[predict()]], and storing
+   * Transforms dataset by reading from [[featuresCol]], calling `predict`, and storing
    * the predictions as a new column [[predictionCol]].
    *
    * @param dataset input dataset

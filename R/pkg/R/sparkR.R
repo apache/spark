@@ -28,14 +28,6 @@ connExists <- function(env) {
   })
 }
 
-#' @rdname sparkR.session.stop
-#' @name sparkR.stop
-#' @export
-#' @note sparkR.stop since 1.4.0
-sparkR.stop <- function() {
-  sparkR.session.stop()
-}
-
 #' Stop the Spark Session and Spark Context
 #'
 #' Stop the Spark Session and Spark Context.
@@ -88,6 +80,14 @@ sparkR.session.stop <- function() {
 
   # Clear jobj maps
   clearJobjs()
+}
+
+#' @rdname sparkR.session.stop
+#' @name sparkR.stop
+#' @export
+#' @note sparkR.stop since 1.4.0
+sparkR.stop <- function() {
+  sparkR.session.stop()
 }
 
 #' (Deprecated) Initialize a new Spark Context
@@ -155,6 +155,10 @@ sparkR.sparkContext <- function(
 
   existingPort <- Sys.getenv("EXISTING_SPARKR_BACKEND_PORT", "")
   if (existingPort != "") {
+    if (length(packages) != 0) {
+      warning(paste("sparkPackages has no effect when using spark-submit or sparkR shell",
+                    " please use the --packages commandline instead", sep = ","))
+    }
     backendPort <- existingPort
   } else {
     path <- tempfile(pattern = "backend_port")
@@ -310,20 +314,23 @@ sparkRHive.init <- function(jsc = NULL) {
 
 #' Get the existing SparkSession or initialize a new SparkSession.
 #'
-#' Additional Spark properties can be set (...), and these named parameters take priority over
-#' over values in master, appName, named lists of sparkConfig.
+#' SparkSession is the entry point into SparkR. \code{sparkR.session} gets the existing
+#' SparkSession or initializes a new SparkSession.
+#' Additional Spark properties can be set in \code{...}, and these named parameters take priority
+#' over values in \code{master}, \code{appName}, named lists of \code{sparkConfig}.
 #'
 #' For details on how to initialize and use SparkR, refer to SparkR programming guide at
 #' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
 #'
-#' @param master The Spark master URL
-#' @param appName Application name to register with cluster manager
-#' @param sparkHome Spark Home directory
-#' @param sparkConfig Named list of Spark configuration to set on worker nodes
-#' @param sparkJars Character vector of jar files to pass to the worker nodes
-#' @param sparkPackages Character vector of packages from spark-packages.org
-#' @param enableHiveSupport Enable support for Hive, fallback if not built with Hive support; once
+#' @param master the Spark master URL.
+#' @param appName application name to register with cluster manager.
+#' @param sparkHome Spark Home directory.
+#' @param sparkConfig named list of Spark configuration to set on worker nodes.
+#' @param sparkJars character vector of jar files to pass to the worker nodes.
+#' @param sparkPackages character vector of packages from spark-packages.org
+#' @param enableHiveSupport enable support for Hive, fallback if not built with Hive support; once
 #'        set, this cannot be turned off on an existing session
+#' @param ... named Spark properties passed to the method.
 #' @export
 #' @examples
 #'\dontrun{
@@ -363,6 +370,8 @@ sparkR.session <- function(
   }
 
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
+    retHome <- sparkCheckInstall(sparkHome, master)
+    if (!is.null(retHome)) sparkHome <- retHome
     sparkExecutorEnvMap <- new.env()
     sparkR.sparkContext(master, appName, sparkHome, sparkConfigMap, sparkExecutorEnvMap,
        sparkJars, sparkPackages)
@@ -392,9 +401,9 @@ sparkR.session <- function(
 #' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
 #' different value or cleared.
 #'
-#' @param groupid the ID to be assigned to job groups
-#' @param description description for the job group ID
-#' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation
+#' @param groupId the ID to be assigned to job groups.
+#' @param description description for the job group ID.
+#' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation.
 #' @rdname setJobGroup
 #' @name setJobGroup
 #' @examples
@@ -524,4 +533,36 @@ processSparkPackages <- function(packages) {
     warning("sparkPackages as a comma-separated string is deprecated, use character vector instead")
   }
   splittedPackages
+}
+
+# Utility function that checks and install Spark to local folder if not found
+#
+# Installation will not be triggered if it's called from sparkR shell
+# or if the master url is not local
+#
+# @param sparkHome directory to find Spark package.
+# @param master the Spark master URL, used to check local or remote mode.
+# @return NULL if no need to update sparkHome, and new sparkHome otherwise.
+sparkCheckInstall <- function(sparkHome, master) {
+  if (!isSparkRShell()) {
+    if (!is.na(file.info(sparkHome)$isdir)) {
+      msg <- paste0("Spark package found in SPARK_HOME: ", sparkHome)
+      message(msg)
+      NULL
+    } else {
+      if (!nzchar(master) || isMasterLocal(master)) {
+        msg <- paste0("Spark not found in SPARK_HOME: ",
+                      sparkHome)
+        message(msg)
+        packageLocalDir <- install.spark()
+        packageLocalDir
+      } else {
+        msg <- paste0("Spark not found in SPARK_HOME: ",
+                      sparkHome, "\n", installInstruction("remote"))
+        stop(msg)
+      }
+    }
+  } else {
+    NULL
+  }
 }

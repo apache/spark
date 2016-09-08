@@ -25,6 +25,9 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 
@@ -99,8 +102,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   test("drop database when the database is not empty") {
     // Throw exception if there are functions left
     val catalog1 = newBasicCatalog()
-    catalog1.dropTable("db2", "tbl1", ignoreIfNotExists = false)
-    catalog1.dropTable("db2", "tbl2", ignoreIfNotExists = false)
+    catalog1.dropTable("db2", "tbl1", ignoreIfNotExists = false, purge = false)
+    catalog1.dropTable("db2", "tbl2", ignoreIfNotExists = false, purge = false)
     intercept[AnalysisException] {
       catalog1.dropDatabase("db2", ignoreIfNotExists = false, cascade = false)
     }
@@ -156,15 +159,24 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     val table =
       newTable("external_table1", "db2").copy(tableType = CatalogTableType.EXTERNAL)
-    catalog.createTable("db2", table, ignoreIfExists = false)
+    catalog.createTable(table, ignoreIfExists = false)
     val actual = catalog.getTable("db2", "external_table1")
     assert(actual.tableType === CatalogTableType.EXTERNAL)
+  }
+
+  test("create table when the table already exists") {
+    val catalog = newBasicCatalog()
+    assert(catalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
+    val table = newTable("tbl1", "db2")
+    intercept[TableAlreadyExistsException] {
+      catalog.createTable(table, ignoreIfExists = false)
+    }
   }
 
   test("drop table") {
     val catalog = newBasicCatalog()
     assert(catalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
-    catalog.dropTable("db2", "tbl1", ignoreIfNotExists = false)
+    catalog.dropTable("db2", "tbl1", ignoreIfNotExists = false, purge = false)
     assert(catalog.listTables("db2").toSet == Set("tbl2"))
   }
 
@@ -172,16 +184,16 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     // Should always throw exception when the database does not exist
     intercept[AnalysisException] {
-      catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = false)
+      catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = false, purge = false)
     }
     intercept[AnalysisException] {
-      catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = true)
+      catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = true, purge = false)
     }
     // Should throw exception when the table does not exist, if ignoreIfNotExists is false
     intercept[AnalysisException] {
-      catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = false)
+      catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = false, purge = false)
     }
-    catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = true)
+    catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = true, purge = false)
   }
 
   test("rename table") {
@@ -211,7 +223,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   test("alter table") {
     val catalog = newBasicCatalog()
     val tbl1 = catalog.getTable("db2", "tbl1")
-    catalog.alterTable("db2", tbl1.copy(properties = Map("toh" -> "frem")))
+    catalog.alterTable(tbl1.copy(properties = Map("toh" -> "frem")))
     val newTbl1 = catalog.getTable("db2", "tbl1")
     assert(!tbl1.properties.contains("toh"))
     assert(newTbl1.properties.size == tbl1.properties.size + 1)
@@ -221,10 +233,10 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   test("alter table when database/table does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.alterTable("unknown_db", newTable("tbl1", "unknown_db"))
+      catalog.alterTable(newTable("tbl1", "unknown_db"))
     }
     intercept[AnalysisException] {
-      catalog.alterTable("db2", newTable("unknown_table", "db2"))
+      catalog.alterTable(newTable("unknown_table", "db2"))
     }
   }
 
@@ -265,7 +277,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   test("basic create and list partitions") {
     val catalog = newEmptyCatalog()
     catalog.createDatabase(newDb("mydb"), ignoreIfExists = false)
-    catalog.createTable("mydb", newTable("tbl", "mydb"), ignoreIfExists = false)
+    catalog.createTable(newTable("tbl", "mydb"), ignoreIfExists = false)
     catalog.createPartitions("mydb", "tbl", Seq(part1, part2), ignoreIfExists = false)
     assert(catalogPartitionsEqual(catalog, "mydb", "tbl", Seq(part1, part2)))
   }
@@ -292,13 +304,13 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     assert(catalogPartitionsEqual(catalog, "db2", "tbl2", Seq(part1, part2)))
     catalog.dropPartitions(
-      "db2", "tbl2", Seq(part1.spec), ignoreIfNotExists = false)
+      "db2", "tbl2", Seq(part1.spec), ignoreIfNotExists = false, purge = false)
     assert(catalogPartitionsEqual(catalog, "db2", "tbl2", Seq(part2)))
     resetState()
     val catalog2 = newBasicCatalog()
     assert(catalogPartitionsEqual(catalog2, "db2", "tbl2", Seq(part1, part2)))
     catalog2.dropPartitions(
-      "db2", "tbl2", Seq(part1.spec, part2.spec), ignoreIfNotExists = false)
+      "db2", "tbl2", Seq(part1.spec, part2.spec), ignoreIfNotExists = false, purge = false)
     assert(catalog2.listPartitions("db2", "tbl2").isEmpty)
   }
 
@@ -306,11 +318,11 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
       catalog.dropPartitions(
-        "does_not_exist", "tbl1", Seq(), ignoreIfNotExists = false)
+        "does_not_exist", "tbl1", Seq(), ignoreIfNotExists = false, purge = false)
     }
     intercept[AnalysisException] {
       catalog.dropPartitions(
-        "db2", "does_not_exist", Seq(), ignoreIfNotExists = false)
+        "db2", "does_not_exist", Seq(), ignoreIfNotExists = false, purge = false)
     }
   }
 
@@ -318,10 +330,10 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
       catalog.dropPartitions(
-        "db2", "tbl2", Seq(part3.spec), ignoreIfNotExists = false)
+        "db2", "tbl2", Seq(part3.spec), ignoreIfNotExists = false, purge = false)
     }
     catalog.dropPartitions(
-      "db2", "tbl2", Seq(part3.spec), ignoreIfNotExists = true)
+      "db2", "tbl2", Seq(part3.spec), ignoreIfNotExists = true, purge = false)
   }
 
   test("get partition") {
@@ -399,11 +411,11 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       // alter other storage information
       catalog.alterPartitions("db2", "tbl2", Seq(
         oldPart1.copy(storage = storageFormat.copy(serde = Some(newSerde))),
-        oldPart2.copy(storage = storageFormat.copy(serdeProperties = newSerdeProps))))
+        oldPart2.copy(storage = storageFormat.copy(properties = newSerdeProps))))
       val newPart1b = catalog.getPartition("db2", "tbl2", part1.spec)
       val newPart2b = catalog.getPartition("db2", "tbl2", part2.spec)
       assert(newPart1b.storage.serde == Some(newSerde))
-      assert(newPart2b.storage.serdeProperties == newSerdeProps)
+      assert(newPart2b.storage.properties == newSerdeProps)
       // alter but change spec, should fail because new partition specs do not exist yet
       val badPart1 = part1.copy(spec = Map("a" -> "v1", "b" -> "v2"))
       val badPart2 = part2.copy(spec = Map("a" -> "v3", "b" -> "v4"))
@@ -439,14 +451,14 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
   test("create function when database does not exist") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
+    intercept[NoSuchDatabaseException] {
       catalog.createFunction("does_not_exist", newFunc())
     }
   }
 
   test("create function that already exists") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
+    intercept[FunctionAlreadyExistsException] {
       catalog.createFunction("db2", newFunc("func1"))
     }
   }
@@ -460,14 +472,14 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
   test("drop function when database does not exist") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
+    intercept[NoSuchDatabaseException] {
       catalog.dropFunction("does_not_exist", "something")
     }
   }
 
   test("drop function that does not exist") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
+    intercept[NoSuchFunctionException] {
       catalog.dropFunction("db2", "does_not_exist")
     }
   }
@@ -477,14 +489,14 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(catalog.getFunction("db2", "func1") ==
       CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass,
         Seq.empty[FunctionResource]))
-    intercept[AnalysisException] {
+    intercept[NoSuchFunctionException] {
       catalog.getFunction("db2", "does_not_exist")
     }
   }
 
   test("get function when database does not exist") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
+    intercept[NoSuchDatabaseException] {
       catalog.getFunction("does_not_exist", "func1")
     }
   }
@@ -494,15 +506,15 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val newName = "funcky"
     assert(catalog.getFunction("db2", "func1").className == funcClass)
     catalog.renameFunction("db2", "func1", newName)
-    intercept[AnalysisException] { catalog.getFunction("db2", "func1") }
+    intercept[NoSuchFunctionException] { catalog.getFunction("db2", "func1") }
     assert(catalog.getFunction("db2", newName).identifier.funcName == newName)
     assert(catalog.getFunction("db2", newName).className == funcClass)
-    intercept[AnalysisException] { catalog.renameFunction("db2", "does_not_exist", "me") }
+    intercept[NoSuchFunctionException] { catalog.renameFunction("db2", "does_not_exist", "me") }
   }
 
   test("rename function when database does not exist") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
+    intercept[NoSuchDatabaseException] {
       catalog.renameFunction("does_not_exist", "func1", "func5")
     }
   }
@@ -510,7 +522,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   test("rename function when new function already exists") {
     val catalog = newBasicCatalog()
     catalog.createFunction("db2", newFunc("func2", Some("db2")))
-    intercept[AnalysisException] {
+    intercept[FunctionAlreadyExistsException] {
       catalog.renameFunction("db2", "func1", "func2")
     }
   }
@@ -551,17 +563,18 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       identifier = TableIdentifier("my_table", Some("db1")),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat(None, None, None, None, false, Map.empty),
-      schema = Seq(CatalogColumn("a", "int"), CatalogColumn("b", "string"))
+      schema = new StructType().add("a", "int").add("b", "string"),
+      provider = Some("hive")
     )
 
-    catalog.createTable("db1", table, ignoreIfExists = false)
+    catalog.createTable(table, ignoreIfExists = false)
     assert(exists(db.locationUri, "my_table"))
 
     catalog.renameTable("db1", "my_table", "your_table")
     assert(!exists(db.locationUri, "my_table"))
     assert(exists(db.locationUri, "your_table"))
 
-    catalog.dropTable("db1", "your_table", ignoreIfNotExists = false)
+    catalog.dropTable("db1", "your_table", ignoreIfNotExists = false, purge = false)
     assert(!exists(db.locationUri, "your_table"))
 
     val externalTable = CatalogTable(
@@ -570,9 +583,10 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       storage = CatalogStorageFormat(
         Some(Utils.createTempDir().getAbsolutePath),
         None, None, None, false, Map.empty),
-      schema = Seq(CatalogColumn("a", "int"), CatalogColumn("b", "string"))
+      schema = new StructType().add("a", "int").add("b", "string"),
+      provider = Some("hive")
     )
-    catalog.createTable("db1", externalTable, ignoreIfExists = false)
+    catalog.createTable(externalTable, ignoreIfExists = false)
     assert(!exists(db.locationUri, "external_table"))
   }
 
@@ -583,14 +597,15 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       identifier = TableIdentifier("tbl", Some("db1")),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat(None, None, None, None, false, Map.empty),
-      schema = Seq(
-        CatalogColumn("col1", "int"),
-        CatalogColumn("col2", "string"),
-        CatalogColumn("a", "int"),
-        CatalogColumn("b", "string")),
+      schema = new StructType()
+        .add("col1", "int")
+        .add("col2", "string")
+        .add("a", "int")
+        .add("b", "string"),
+      provider = Some("hive"),
       partitionColumnNames = Seq("a", "b")
     )
-    catalog.createTable("db1", table, ignoreIfExists = false)
+    catalog.createTable(table, ignoreIfExists = false)
 
     catalog.createPartitions("db1", "tbl", Seq(part1, part2), ignoreIfExists = false)
     assert(exists(databaseDir, "tbl", "a=1", "b=2"))
@@ -600,7 +615,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(!exists(databaseDir, "tbl", "a=1", "b=2"))
     assert(exists(databaseDir, "tbl", "a=5", "b=6"))
 
-    catalog.dropPartitions("db1", "tbl", Seq(part2.spec, part3.spec), ignoreIfNotExists = false)
+    catalog.dropPartitions("db1", "tbl", Seq(part2.spec, part3.spec), ignoreIfNotExists = false,
+      purge = false)
     assert(!exists(databaseDir, "tbl", "a=3", "b=4"))
     assert(!exists(databaseDir, "tbl", "a=5", "b=6"))
 
@@ -633,7 +649,7 @@ abstract class CatalogTestUtils {
     outputFormat = Some(tableOutputFormat),
     serde = None,
     compressed = false,
-    serdeProperties = Map.empty)
+    properties = Map.empty)
   lazy val part1 = CatalogTablePartition(Map("a" -> "1", "b" -> "2"), storageFormat)
   lazy val part2 = CatalogTablePartition(Map("a" -> "3", "b" -> "4"), storageFormat)
   lazy val part3 = CatalogTablePartition(Map("a" -> "5", "b" -> "6"), storageFormat)
@@ -663,8 +679,8 @@ abstract class CatalogTestUtils {
     catalog.createDatabase(newDb("default"), ignoreIfExists = true)
     catalog.createDatabase(newDb("db1"), ignoreIfExists = false)
     catalog.createDatabase(newDb("db2"), ignoreIfExists = false)
-    catalog.createTable("db2", newTable("tbl1", "db2"), ignoreIfExists = false)
-    catalog.createTable("db2", newTable("tbl2", "db2"), ignoreIfExists = false)
+    catalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = false)
+    catalog.createTable(newTable("tbl2", "db2"), ignoreIfExists = false)
     catalog.createPartitions("db2", "tbl2", Seq(part1, part2), ignoreIfExists = false)
     catalog.createFunction("db2", newFunc("func1", Some("db2")))
     catalog
@@ -685,13 +701,14 @@ abstract class CatalogTestUtils {
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
       storage = storageFormat,
-      schema = Seq(
-        CatalogColumn("col1", "int"),
-        CatalogColumn("col2", "string"),
-        CatalogColumn("a", "int"),
-        CatalogColumn("b", "string")),
+      schema = new StructType()
+        .add("col1", "int")
+        .add("col2", "string")
+        .add("a", "int")
+        .add("b", "string"),
+      provider = Some("hive"),
       partitionColumnNames = Seq("a", "b"),
-      bucketColumnNames = Seq("col1"))
+      bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {

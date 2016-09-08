@@ -43,8 +43,9 @@ class UDFXPathUtilSuite extends SparkFunSuite {
     assert(util.eval("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "", STRING) == null)
 
     // wrong expression:
-    assert(
-      util.eval("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/text(", STRING) == null)
+    intercept[RuntimeException] {
+      util.eval("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/text(", STRING)
+    }
   }
 
   test("generic eval") {

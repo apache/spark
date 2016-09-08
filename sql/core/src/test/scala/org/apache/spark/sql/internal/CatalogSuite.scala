@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 
 /**
@@ -62,7 +63,7 @@ class CatalogSuite
   }
 
   private def dropTable(name: String, db: Option[String] = None): Unit = {
-    sessionCatalog.dropTable(TableIdentifier(name, db), ignoreIfNotExists = false)
+    sessionCatalog.dropTable(TableIdentifier(name, db), ignoreIfNotExists = false, purge = false)
   }
 
   private def createFunction(name: String, db: Option[String] = None): Unit = {
@@ -90,11 +91,12 @@ class CatalogSuite
       .getOrElse { spark.catalog.listColumns(tableName) }
     assume(tableMetadata.schema.nonEmpty, "bad test")
     assume(tableMetadata.partitionColumnNames.nonEmpty, "bad test")
-    assume(tableMetadata.bucketColumnNames.nonEmpty, "bad test")
+    assume(tableMetadata.bucketSpec.isDefined, "bad test")
     assert(columns.collect().map(_.name).toSet == tableMetadata.schema.map(_.name).toSet)
+    val bucketColumnNames = tableMetadata.bucketSpec.map(_.bucketColumnNames).getOrElse(Nil).toSet
     columns.collect().foreach { col =>
       assert(col.isPartition == tableMetadata.partitionColumnNames.contains(col.name))
-      assert(col.isBucket == tableMetadata.bucketColumnNames.contains(col.name))
+      assert(col.isBucket == bucketColumnNames.contains(col.name))
     }
   }
 
@@ -234,6 +236,11 @@ class CatalogSuite
     testListColumns("tab1", dbName = None)
   }
 
+  test("list columns in temporary table") {
+    createTempTable("temp1")
+    spark.catalog.listColumns("temp1")
+  }
+
   test("list columns in database") {
     createDatabase("db1")
     createTable("tab1", Some("db1"))
@@ -297,6 +304,22 @@ class CatalogSuite
     tableFields.foreach { f => assert(tableString.contains(f.toString)) }
     functionFields.foreach { f => assert(functionString.contains(f.toString)) }
     columnFields.foreach { f => assert(columnString.contains(f.toString)) }
+  }
+
+  test("createExternalTable should fail if path is not given for file-based data source") {
+    val e = intercept[AnalysisException] {
+      spark.catalog.createExternalTable("tbl", "json", Map.empty[String, String])
+    }
+    assert(e.message.contains("Unable to infer schema"))
+
+    val e2 = intercept[AnalysisException] {
+      spark.catalog.createExternalTable(
+        "tbl",
+        "json",
+        new StructType().add("i", IntegerType),
+        Map.empty[String, String])
+    }
+    assert(e2.message == "Cannot create a file-based external data source table without path")
   }
 
   // TODO: add tests for the rest of them

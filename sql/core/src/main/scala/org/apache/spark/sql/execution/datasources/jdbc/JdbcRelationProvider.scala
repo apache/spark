@@ -64,21 +64,20 @@ class JdbcRelationProvider extends CreatableRelationProvider
    *------------------------------------------------------------------------------------
    * Ignore          | BaseRelation              | CreateTable, saveTable, BaseRelation
    * ErrorIfExists   | ERROR                     | CreateTable, saveTable, BaseRelation
-   * Overwrite       | DropTable, CreateTable,   | CreateTable, saveTable, BaseRelation
+   * Overwrite*      | (DropTable, CreateTable,) | CreateTable, saveTable, BaseRelation
    *                 | saveTable, BaseRelation   |
    * Append          | saveTable, BaseRelation   | CreateTable, saveTable, BaseRelation
+   *
+   * *Overwrite & tableExists with truncate, will not drop & create, but instead truncate
    */
   override def createRelation(
       sqlContext: SQLContext,
       mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
-    require(parameters.isDefinedAt("url"), "Saving jdbc source requires 'url' to be set." +
-        " (ie. df.option(\"url\", \"ACTUAL_URL\")")
-    require(parameters.isDefinedAt("dbtable"), "Saving jdbc source requires 'dbtable' to be set." +
-        " (ie. df.option(\"dbtable\", \"ACTUAL_DB_TABLE\")")
-    val url = parameters("url")
-    val table = parameters("dbtable")
+    val jdbcOptions = new JDBCOptions(parameters)
+    val url = jdbcOptions.url
+    val table = jdbcOptions.table
 
     import collection.JavaConverters._
     val props = new Properties()
@@ -93,8 +92,13 @@ class JdbcRelationProvider extends CreatableRelationProvider
         case (SaveMode.ErrorIfExists, true) => throw new SQLException(
           s"Table $table already exists, and SaveMode is set to ErrorIfExists.")
         case (SaveMode.Overwrite, true) =>
-          JdbcUtils.dropTable(conn, table)
-          (true, true)
+          if (jdbcOptions.isTruncate && JdbcUtils.isCascadingTruncateTable(url) == Some(false)) {
+            JdbcUtils.truncateTable(conn, table)
+            (false, true)
+          } else {
+            JdbcUtils.dropTable(conn, table)
+            (true, true)
+          }
         case (SaveMode.Append, true) => (false, true)
         case (_, true) => throw new IllegalArgumentException(s"Unexpected SaveMode, '$mode'," +
           " for handling existing tables.")
@@ -103,7 +107,11 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
       if(doCreate) {
         val schema = JdbcUtils.schemaString(data, url)
-        val sql = s"CREATE TABLE $table ($schema)"
+        // To allow certain options to append when create a new table, which can be
+        // table_options or partition_options.
+        // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+        val createtblOptions = jdbcOptions.createTableOptions
+        val sql = s"CREATE TABLE $table ($schema) $createtblOptions"
         val statement = conn.createStatement
         try {
           statement.executeUpdate(sql)

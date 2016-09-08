@@ -201,7 +201,8 @@ private[spark] object UIUtils extends Logging {
       activeTab: SparkUITab,
       refreshInterval: Option[Int] = None,
       helpText: Option[String] = None,
-      showVisualization: Boolean = false): Seq[Node] = {
+      showVisualization: Boolean = false,
+      useDataTables: Boolean = false): Seq[Node] = {
 
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
@@ -216,6 +217,7 @@ private[spark] object UIUtils extends Logging {
       <head>
         {commonHeaderNodes}
         {if (showVisualization) vizHeaderNodes else Seq.empty}
+        {if (useDataTables) dataTablesHeaderNodes else Seq.empty}
         <title>{appName} - {title}</title>
       </head>
       <body>

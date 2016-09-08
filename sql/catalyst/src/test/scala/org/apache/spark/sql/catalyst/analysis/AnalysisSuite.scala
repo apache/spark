@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -339,9 +339,9 @@ class AnalysisSuite extends AnalysisTest {
     val query =
       Project(Seq($"x.key", $"y.key"),
         Join(
-          Project(Seq($"x.key"), SubqueryAlias("x", input)),
-          Project(Seq($"y.key"), SubqueryAlias("y", input)),
-          Inner, None))
+          Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
+          Project(Seq($"y.key"), SubqueryAlias("y", input, None)),
+          Cross, None))
 
     assertAnalysisSuccess(query)
   }

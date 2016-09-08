@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.hive.MetastoreRelation
@@ -34,7 +34,6 @@ import org.apache.spark.sql.hive.MetastoreRelation
  * @param ignoreIfExists allow continue working if it's already exists, otherwise
  *                      raise exception
  */
-private[hive]
 case class CreateHiveTableAsSelectCommand(
     tableDesc: CatalogTable,
     query: LogicalPlan,
@@ -43,7 +42,7 @@ case class CreateHiveTableAsSelectCommand(
 
   private val tableIdentifier = tableDesc.identifier
 
-  override def children: Seq[LogicalPlan] = Seq(query)
+  override def innerChildren: Seq[LogicalPlan] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     lazy val metastoreRelation: MetastoreRelation = {
@@ -65,9 +64,7 @@ case class CreateHiveTableAsSelectCommand(
       val withSchema = if (withFormat.schema.isEmpty) {
         // Hive doesn't support specifying the column list for target table in CTAS
         // However we don't think SparkSQL should follow that.
-        tableDesc.copy(schema = query.output.map { c =>
-          CatalogColumn(c.name, c.dataType.catalogString)
-        })
+        tableDesc.copy(schema = query.output.toStructType)
       } else {
         withFormat
       }
@@ -95,7 +92,8 @@ case class CreateHiveTableAsSelectCommand(
       } catch {
         case NonFatal(e) =>
           // drop the created table.
-          sparkSession.sessionState.catalog.dropTable(tableIdentifier, ignoreIfNotExists = true)
+          sparkSession.sessionState.catalog.dropTable(tableIdentifier, ignoreIfNotExists = true,
+            purge = false)
           throw e
       }
     }

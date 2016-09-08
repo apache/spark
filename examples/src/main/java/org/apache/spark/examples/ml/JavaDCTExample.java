@@ -25,8 +25,8 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.spark.ml.feature.DCT;
-import org.apache.spark.mllib.linalg.VectorUDT;
-import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.ml.linalg.VectorUDT;
+import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.Metadata;
@@ -51,13 +51,17 @@ public class JavaDCTExample {
       new StructField("features", new VectorUDT(), false, Metadata.empty()),
     });
     Dataset<Row> df = spark.createDataFrame(data, schema);
+
     DCT dct = new DCT()
       .setInputCol("features")
       .setOutputCol("featuresDCT")
       .setInverse(false);
+
     Dataset<Row> dctDf = dct.transform(df);
-    dctDf.select("featuresDCT").show(3);
+
+    dctDf.select("featuresDCT").show(false);
     // $example off$
+
     spark.stop();
   }
 }

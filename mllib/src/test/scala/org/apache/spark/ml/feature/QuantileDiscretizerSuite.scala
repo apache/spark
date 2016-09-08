@@ -52,6 +52,25 @@ class QuantileDiscretizerSuite
       "Bucket sizes are not within expected relative error tolerance.")
   }
 
+  test("Test Bucketizer on duplicated splits") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val datasetSize = 12
+    val numBuckets = 5
+    val df = sc.parallelize(Array(1.0, 3.0, 2.0, 1.0, 1.0, 2.0, 3.0, 2.0, 2.0, 2.0, 1.0, 3.0))
+      .map(Tuple1.apply).toDF("input")
+    val discretizer = new QuantileDiscretizer()
+      .setInputCol("input")
+      .setOutputCol("result")
+      .setNumBuckets(numBuckets)
+    val result = discretizer.fit(df).transform(df)
+
+    val observedNumBuckets = result.select("result").distinct.count
+    assert(2 <= observedNumBuckets && observedNumBuckets <= numBuckets,
+      "Observed number of buckets are not within expected range.")
+  }
+
   test("Test transform method on unseen data") {
     val spark = this.spark
     import spark.implicits._

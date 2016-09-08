@@ -181,7 +181,7 @@ Note that jars or python files that are passed to spark-submit should be URIs re
 # Mesos Run Modes
 
 Spark can run over Mesos in two modes: "coarse-grained" (default) and
-"fine-grained".
+"fine-grained" (deprecated).
 
 ## Coarse-Grained
 
@@ -207,13 +207,28 @@ The scheduler will start executors round-robin on the offers Mesos
 gives it, but there are no spread guarantees, as Mesos does not
 provide such guarantees on the offer stream.
 
+In this mode spark executors will honor port allocation if such is
+provided from the user. Specifically if the user defines
+`spark.executor.port` or `spark.blockManager.port` in Spark configuration,
+the mesos scheduler will check the available offers for a valid port
+range containing the port numbers. If no such range is available it will
+not launch any task. If no restriction is imposed on port numbers by the
+user, ephemeral ports are used as usual. This port honouring implementation
+implies one task per host if the user defines a port. In the future network
+isolation shall be supported.
+
 The benefit of coarse-grained mode is much lower startup overhead, but
 at the cost of reserving Mesos resources for the complete duration of
 the application.  To configure your job to dynamically adjust to its
 resource requirements, look into
 [Dynamic Allocation](#dynamic-resource-allocation-with-mesos).
 
-## Fine-Grained
+## Fine-Grained (deprecated)
+
+**NOTE:** Fine-grained mode is deprecated as of Spark 2.0.0.  Consider
+ using [Dynamic Allocation](#dynamic-resource-allocation-with-mesos)
+ for some of the benefits.  For a full explanation see
+ [SPARK-11857](https://issues.apache.org/jira/browse/SPARK-11857)
 
 In "fine-grained" mode, each Spark task inside the Spark executor runs
 as a separate Mesos task. This allows multiple instances of Spark (and
@@ -254,6 +269,10 @@ The Docker image used must have an appropriate version of Spark already part of 
 have Mesos download Spark via the usual methods.
 
 Requires Mesos version 0.20.1 or later.
+
+Note that by default Mesos agents will not pull the image if it already exists on the agent. If you use mutable image
+tags you can set `spark.mesos.executor.docker.forcePullImage` to `true` in order to force the agent to always pull the
+image before running the executor. Force pulling images is only available in Mesos version 0.22 and above.
 
 # Running Alongside Hadoop
 
@@ -327,6 +346,14 @@ See the [configuration page](configuration.html) for information on Spark config
     image must have Spark installed, as well as a compatible version of the Mesos library.
     The installed path of Spark in the image can be specified with <code>spark.mesos.executor.home</code>;
     the installed path of the Mesos library can be specified with <code>spark.executorEnv.MESOS_NATIVE_JAVA_LIBRARY</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.docker.forcePullImage</code></td>
+  <td>false</td>
+  <td>
+    Force Mesos agents to pull the image specified in <code>spark.mesos.executor.docker.image</code>.
+    By default Mesos agents will not pull images they already have cached.
   </td>
 </tr>
 <tr>
@@ -416,11 +443,31 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.containerizer</code></td>
+  <td><code>docker</code></td>
+  <td>
+    This only affects docker containers, and must be one of "docker"
+    or "mesos".  Mesos supports two types of
+    containerizers for docker: the "docker" containerizer, and the preferred
+    "mesos" containerizer.  Read more here: http://mesos.apache.org/documentation/latest/container-image/
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.driver.webui.url</code></td>
   <td><code>(none)</code></td>
   <td>
     Set the Spark Mesos driver webui_url for interacting with the framework.
     If unset it will point to Spark's internal web UI.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driverEnv.[EnvironmentVariableName]</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    This only affects drivers submitted in cluster mode.  Add the
+    environment variable specified by EnvironmentVariableName to the
+    driver process. The user can specify multiple of these to set
+    multiple environment variables.
   </td>
 </tr>
 <tr>
@@ -430,7 +477,28 @@ See the [configuration page](configuration.html) for information on Spark config
     Set the Spark Mesos dispatcher webui_url for interacting with the framework.
     If unset it will point to Spark's internal web UI.
   </td>
+  </tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.driverDefault.[PropertyName]</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set default properties for drivers submitted through the
+    dispatcher.  For example,
+    spark.mesos.dispatcher.driverProperty.spark.executor.memory=32g
+    results in the executors for all drivers submitted in cluster mode
+    to run in 32g containers.
+</td>
 </tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.historyServer.url</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the URL of the <a href="http://spark.apache.org/docs/latest/monitoring.html#viewing-after-the-fact">history
+    server</a>.  The dispatcher will then link each driver to its entry
+    in the history server.
+  </td>
+</tr>
+
 </table>
 
 # Troubleshooting and Debugging

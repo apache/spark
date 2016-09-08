@@ -45,7 +45,7 @@ trait Saveable {
    *  - human-readable (JSON) model metadata to path/metadata/
    *  - Parquet formatted data to path/data/
    *
-   * The model may be loaded using [[Loader.load]].
+   * The model may be loaded using `Loader.load`.
    *
    * @param sc  Spark context used to save model data.
    * @param path  Path specifying the directory in which to save this model.

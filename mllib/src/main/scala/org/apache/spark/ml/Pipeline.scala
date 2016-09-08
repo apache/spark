@@ -27,7 +27,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util._
@@ -78,7 +78,6 @@ abstract class PipelineStage extends Params with Logging {
 }
 
 /**
- * :: Experimental ::
  * A simple pipeline, which acts as an estimator. A Pipeline consists of a sequence of stages, each
  * of which is either an [[Estimator]] or a [[Transformer]]. When [[Pipeline#fit]] is called, the
  * stages are executed in order. If a stage is an [[Estimator]], its [[Estimator#fit]] method will
@@ -90,7 +89,6 @@ abstract class PipelineStage extends Params with Logging {
  * an identity transformer.
  */
 @Since("1.2.0")
-@Experimental
 class Pipeline @Since("1.4.0") (
   @Since("1.4.0") override val uid: String) extends Estimator[PipelineModel] with MLWritable {
 
@@ -214,7 +212,7 @@ object Pipeline extends MLReadable[Pipeline] {
     }
   }
 
-  /** Methods for [[MLReader]] and [[MLWriter]] shared between [[Pipeline]] and [[PipelineModel]] */
+  /** Methods for `MLReader` and `MLWriter` shared between [[Pipeline]] and [[PipelineModel]] */
   private[ml] object SharedReadWrite {
 
     import org.json4s.JsonDSL._
@@ -282,11 +280,9 @@ object Pipeline extends MLReadable[Pipeline] {
 }
 
 /**
- * :: Experimental ::
  * Represents a fitted pipeline.
  */
 @Since("1.2.0")
-@Experimental
 class PipelineModel private[ml] (
     @Since("1.4.0") override val uid: String,
     @Since("1.4.0") val stages: Array[Transformer])

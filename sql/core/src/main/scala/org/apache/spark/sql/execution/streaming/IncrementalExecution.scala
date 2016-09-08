@@ -27,11 +27,11 @@ import org.apache.spark.sql.streaming.OutputMode
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
  * plan incrementally. Possibly preserving state in between each execution.
  */
-class IncrementalExecution private[sql](
+class IncrementalExecution(
     sparkSession: SparkSession,
     logicalPlan: LogicalPlan,
-    outputMode: OutputMode,
-    checkpointLocation: String,
+    val outputMode: OutputMode,
+    val checkpointLocation: String,
     val currentBatchId: Long)
   extends QueryExecution(sparkSession, logicalPlan) {
 

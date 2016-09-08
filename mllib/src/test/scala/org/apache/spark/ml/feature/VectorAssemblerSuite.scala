@@ -74,10 +74,10 @@ class VectorAssemblerSuite
     val assembler = new VectorAssembler()
       .setInputCols(Array("a", "b", "c"))
       .setOutputCol("features")
-    val thrown = intercept[SparkException] {
+    val thrown = intercept[IllegalArgumentException] {
       assembler.transform(df)
     }
-    assert(thrown.getMessage contains "VectorAssembler does not support the StringType type")
+    assert(thrown.getMessage contains "Data type StringType is not supported")
   }
 
   test("ML attributes") {

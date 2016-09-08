@@ -18,15 +18,28 @@
 package org.apache.spark.network.yarn;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Map;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
+import org.apache.spark.network.util.LevelDBProvider;
+import org.iq80.leveldb.DB;
+import org.iq80.leveldb.DBIterator;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,7 +71,7 @@ import org.apache.spark.network.yarn.util.HadoopConfigProvider;
  * the service's.
  */
 public class YarnShuffleService extends AuxiliaryService {
-  private final Logger logger = LoggerFactory.getLogger(YarnShuffleService.class);
+  private static final Logger logger = LoggerFactory.getLogger(YarnShuffleService.class);
 
   // Port on which the shuffle server listens for fetch requests
   private static final String SPARK_SHUFFLE_SERVICE_PORT_KEY = "spark.shuffle.service.port";
@@ -68,7 +81,26 @@ public class YarnShuffleService extends AuxiliaryService {
   private static final String SPARK_AUTHENTICATE_KEY = "spark.authenticate";
   private static final boolean DEFAULT_SPARK_AUTHENTICATE = false;
 
-  private static final String RECOVERY_FILE_NAME = "registeredExecutor.ldb";
+  private static final String RECOVERY_FILE_NAME = "registeredExecutors.ldb";
+  private static final String SECRETS_RECOVERY_FILE_NAME = "sparkShuffleRecovery.ldb";
+
+  // Whether failure during service initialization should stop the NM.
+  @VisibleForTesting
+  static final String STOP_ON_FAILURE_KEY = "spark.yarn.shuffle.stopOnFailure";
+  private static final boolean DEFAULT_STOP_ON_FAILURE = false;
+
+  // just for testing when you want to find an open port
+  @VisibleForTesting
+  static int boundPort = -1;
+  private static final ObjectMapper mapper = new ObjectMapper();
+  private static final String APP_CREDS_KEY_PREFIX = "AppCreds";
+  private static final LevelDBProvider.StoreVersion CURRENT_VERSION = new LevelDBProvider
+      .StoreVersion(1, 0);
+
+  // just for integration tests that want to look at this file -- in general not sensible as
+  // a static
+  @VisibleForTesting
+  static YarnShuffleService instance;
 
   // An entity that manages the shuffle secret per application
   // This is used only if authentication is enabled
@@ -91,14 +123,11 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   File registeredExecutorFile;
 
-  // just for testing when you want to find an open port
+  // Where to store & reload application secrets for recovering state after an NM restart
   @VisibleForTesting
-  static int boundPort = -1;
+  File secretsFile;
 
-  // just for integration tests that want to look at this file -- in general not sensible as
-  // a static
-  @VisibleForTesting
-  static YarnShuffleService instance;
+  private DB db;
 
   public YarnShuffleService() {
     super("spark_shuffle");
@@ -119,44 +148,94 @@ public class YarnShuffleService extends AuxiliaryService {
    * Start the shuffle server with the given configuration.
    */
   @Override
-  protected void serviceInit(Configuration conf) {
+  protected void serviceInit(Configuration conf) throws Exception {
     _conf = conf;
 
-    // In case this NM was killed while there were running spark applications, we need to restore
-    // lost state for the existing executors.  We look for an existing file in the NM's local dirs.
-    // If we don't find one, then we choose a file to use to save the state next time.  Even if
-    // an application was stopped while the NM was down, we expect yarn to call stopApplication()
-    // when it comes back
-    registeredExecutorFile =
-      new File(getRecoveryPath().toUri().getPath(), RECOVERY_FILE_NAME);
+    boolean stopOnFailure = conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
 
-    TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
-    // If authentication is enabled, set up the shuffle server to use a
-    // special RPC handler that filters out unauthenticated fetch requests
-    boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
     try {
+      // In case this NM was killed while there were running spark applications, we need to restore
+      // lost state for the existing executors. We look for an existing file in the NM's local dirs.
+      // If we don't find one, then we choose a file to use to save the state next time.  Even if
+      // an application was stopped while the NM was down, we expect yarn to call stopApplication()
+      // when it comes back
+      registeredExecutorFile =
+        new File(getRecoveryPath().toUri().getPath(), RECOVERY_FILE_NAME);
+
+      TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
       blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
+
+      // If authentication is enabled, set up the shuffle server to use a
+      // special RPC handler that filters out unauthenticated fetch requests
+      List<TransportServerBootstrap> bootstraps = Lists.newArrayList();
+      boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
+      if (authEnabled) {
+        createSecretManager();
+        bootstraps.add(new SaslServerBootstrap(transportConf, secretManager));
+      }
+
+      int port = conf.getInt(
+        SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
+      TransportContext transportContext = new TransportContext(transportConf, blockHandler);
+      shuffleServer = transportContext.createServer(port, bootstraps);
+      // the port should normally be fixed, but for tests its useful to find an open port
+      port = shuffleServer.getPort();
+      boundPort = port;
+      String authEnabledString = authEnabled ? "enabled" : "not enabled";
+      logger.info("Started YARN shuffle service for Spark on port {}. " +
+        "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
+        registeredExecutorFile);
     } catch (Exception e) {
-      logger.error("Failed to initialize external shuffle service", e);
+      if (stopOnFailure) {
+        throw e;
+      } else {
+        noteFailure(e);
+      }
     }
+  }
 
-    List<TransportServerBootstrap> bootstraps = Lists.newArrayList();
-    if (authEnabled) {
-      secretManager = new ShuffleSecretManager();
-      bootstraps.add(new SaslServerBootstrap(transportConf, secretManager));
+  private void createSecretManager() throws IOException {
+    secretManager = new ShuffleSecretManager();
+    secretsFile = new File(getRecoveryPath().toUri().getPath(), SECRETS_RECOVERY_FILE_NAME);
+ 
+    // Make sure this is protected in case its not in the NM recovery dir
+    FileSystem fs = FileSystem.getLocal(_conf);
+    fs.mkdirs(new Path(secretsFile.getPath()), new FsPermission((short)0700));
+
+    db = LevelDBProvider.initLevelDB(secretsFile, CURRENT_VERSION, mapper);
+    logger.info("Recovery location is: " + secretsFile.getPath());
+    if (db != null) {
+      logger.info("Going to reload spark shuffle data");
+      DBIterator itr = db.iterator();
+      itr.seek(APP_CREDS_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
+      while (itr.hasNext()) {
+        Map.Entry<byte[], byte[]> e = itr.next();
+        String key = new String(e.getKey(), StandardCharsets.UTF_8);
+        if (!key.startsWith(APP_CREDS_KEY_PREFIX)) {
+          break;
+        }
+        String id = parseDbAppKey(key);
+        ByteBuffer secret = mapper.readValue(e.getValue(), ByteBuffer.class);
+        logger.info("Reloading tokens for app: " + id);
+        secretManager.registerApp(id, secret);
+      }
     }
+  }
 
-    int port = conf.getInt(
-      SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
-    TransportContext transportContext = new TransportContext(transportConf, blockHandler);
-    shuffleServer = transportContext.createServer(port, bootstraps);
-    // the port should normally be fixed, but for tests its useful to find an open port
-    port = shuffleServer.getPort();
-    boundPort = port;
-    String authEnabledString = authEnabled ? "enabled" : "not enabled";
-    logger.info("Started YARN shuffle service for Spark on port {}. " +
-      "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
-      registeredExecutorFile);
+  private static String parseDbAppKey(String s) throws IOException {
+    if (!s.startsWith(APP_CREDS_KEY_PREFIX)) {
+      throw new IllegalArgumentException("expected a string starting with " + APP_CREDS_KEY_PREFIX);
+    }
+    String json = s.substring(APP_CREDS_KEY_PREFIX.length() + 1);
+    AppId parsed = mapper.readValue(json, AppId.class);
+    return parsed.appId;
+  }
+
+  private static byte[] dbAppKey(AppId appExecId) throws IOException {
+    // we stick a common prefix on all the keys so we can find them in the DB
+    String appExecJson = mapper.writeValueAsString(appExecId);
+    String key = (APP_CREDS_KEY_PREFIX + ";" + appExecJson);
+    return key.getBytes(StandardCharsets.UTF_8);
   }
 
   @Override
@@ -166,6 +245,12 @@ public class YarnShuffleService extends AuxiliaryService {
       ByteBuffer shuffleSecret = context.getApplicationDataForService();
       logger.info("Initializing application {}", appId);
       if (isAuthenticationEnabled()) {
+        AppId fullId = new AppId(appId);
+        if (db != null) {
+          byte[] key = dbAppKey(fullId);
+          byte[] value = mapper.writeValueAsString(shuffleSecret).getBytes(StandardCharsets.UTF_8);
+          db.put(key, value);
+        }
         secretManager.registerApp(appId, shuffleSecret);
       }
     } catch (Exception e) {
@@ -179,6 +264,14 @@ public class YarnShuffleService extends AuxiliaryService {
     try {
       logger.info("Stopping application {}", appId);
       if (isAuthenticationEnabled()) {
+        AppId fullId = new AppId(appId);
+        if (db != null) {
+          try {
+            db.delete(dbAppKey(fullId));
+          } catch (IOException e) {
+            logger.error("Error deleting {} from executor state db", appId, e);
+          }
+        }
         secretManager.unregisterApp(appId);
       }
       blockHandler.applicationRemoved(appId, false /* clean up local dirs */);
@@ -211,6 +304,9 @@ public class YarnShuffleService extends AuxiliaryService {
       if (blockHandler != null) {
         blockHandler.close();
       }
+      if (db != null) {
+        db.close();
+      } 
     } catch (Exception e) {
       logger.error("Exception when stopping service", e);
     }
@@ -264,4 +360,38 @@ public class YarnShuffleService extends AuxiliaryService {
 
     return _recoveryPath;
   }
+
+  /**
+   * Simply encodes an application ID.
+   */
+  public static class AppId {
+    public final String appId;
+
+    @JsonCreator
+    public AppId(@JsonProperty("appId") String appId) {
+      this.appId = appId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      AppId appExecId = (AppId) o;
+      return Objects.equal(appId, appExecId.appId);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(appId);
+    }
+
+    @Override
+    public String toString() {
+      return Objects.toStringHelper(this)
+          .add("appId", appId)
+          .toString();
+    }
+  }
+
 }

@@ -328,6 +328,12 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
     }
   }
 
+  test("null check for map key") {
+    val encoder = ExpressionEncoder[Map[String, Int]]()
+    val e = intercept[RuntimeException](encoder.toRow(Map(("a", 1), (null, 2))))
+    assert(e.getMessage.contains("Cannot use null as map key"))
+  }
+
   private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
       testName: String): Unit = {

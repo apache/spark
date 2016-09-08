@@ -54,9 +54,6 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     intercept[IllegalArgumentException] {
       formula.fit(original)
     }
-    intercept[IllegalArgumentException] {
-      formula.fit(original)
-    }
   }
 
   test("label column already exists") {

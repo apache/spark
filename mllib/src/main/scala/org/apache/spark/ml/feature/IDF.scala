@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
@@ -61,10 +61,8 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
 }
 
 /**
- * :: Experimental ::
  * Compute the Inverse Document Frequency (IDF) given a collection of documents.
  */
-@Experimental
 @Since("1.4.0")
 final class IDF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Estimator[IDFModel] with IDFBase with DefaultParamsWritable {
@@ -111,10 +109,8 @@ object IDF extends DefaultParamsReadable[IDF] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[IDF]].
  */
-@Experimental
 @Since("1.4.0")
 class IDFModel private[ml] (
     @Since("1.4.0") override val uid: String,
