@@ -249,6 +249,8 @@ test_that("read/write csv as DataFrame", {
   df3 <- read.df(csvPath2, "csv", header = "true")
   expect_equal(nrow(df3), nrow(df2))
   expect_equal(colnames(df3), colnames(df2))
+  csv <- read.csv(file = list.files(csvPath2, pattern = "^part", full.names = T)[[1]])
+  expect_equal(colnames(df3), colnames(csv))
 
   unlink(csvPath)
   unlink(csvPath2)
