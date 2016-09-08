@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -61,7 +62,7 @@ import org.apache.spark.util.Utils
  *              qualified. This option only works when reading from a [[FileFormat]].
  * @param userSpecifiedSchema An optional specification of the schema of the data. When present
  *                            we skip attempting to infer the schema.
- * @param partitionColumns A list of column names that the relation is partitioned by.  When this
+ * @param partitionColumns A list of column names that the relation is partitioned by. When this
  *                         list is empty, the relation is unpartitioned.
  * @param bucketSpec An optional specification for bucketing (hash-partitioning) of the data.
  */
@@ -314,12 +315,8 @@ case class DataSource(
   /**
    * Create a resolved [[BaseRelation]] that can be used to read data from or write data into this
    * [[DataSource]]
-   *
-   * @param checkPathExist A flag to indicate whether to check the existence of path or not.
-   *                       This flag will be set to false when we create an empty table (the
-   *                       path of the table does not exist).
    */
-  def resolveRelation(checkPathExist: Boolean = true): BaseRelation = {
+  def resolveRelation(): BaseRelation = {
     val caseInsensitiveOptions = new CaseInsensitiveMap(options)
     val relation = (providingClass.newInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
@@ -350,13 +347,12 @@ case class DataSource(
         }
 
         HadoopFsRelation(
-          sparkSession,
           fileCatalog,
           partitionSchema = fileCatalog.partitionSpec().partitionColumns,
           dataSchema = dataSchema,
           bucketSpec = None,
           format,
-          options)
+          options)(sparkSession)
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
@@ -367,11 +363,11 @@ case class DataSource(
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
           val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified)
 
-          if (checkPathExist && globPath.isEmpty) {
+          if (globPath.isEmpty) {
             throw new AnalysisException(s"Path does not exist: $qualified")
           }
           // Sufficient to check head of the globPath seq for non-glob scenario
-          if (checkPathExist && !fs.exists(globPath.head)) {
+          if (!fs.exists(globPath.head)) {
             throw new AnalysisException(s"Path does not exist: ${globPath.head}")
           }
           globPath
@@ -391,16 +387,10 @@ case class DataSource(
 
         val fileCatalog =
           new ListingFileCatalog(
-            sparkSession, globbedPaths, options, partitionSchema, !checkPathExist)
+            sparkSession, globbedPaths, options, partitionSchema)
 
         val dataSchema = userSpecifiedSchema.map { schema =>
-          val equality =
-            if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-              org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
-            } else {
-              org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
-            }
-
+          val equality = sparkSession.sessionState.conf.resolver
           StructType(schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
         }.orElse {
           format.inferSchema(
@@ -414,13 +404,12 @@ case class DataSource(
         }
 
         HadoopFsRelation(
-          sparkSession,
           fileCatalog,
           partitionSchema = fileCatalog.partitionSpec().partitionColumns,
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
-          caseInsensitiveOptions)
+          caseInsensitiveOptions)(sparkSession)
 
       case _ =>
         throw new AnalysisException(
@@ -430,7 +419,7 @@ case class DataSource(
     relation
   }
 
-  /** Writes the give [[DataFrame]] out to this [[DataSource]]. */
+  /** Writes the given [[DataFrame]] out to this [[DataSource]]. */
   def write(
       mode: SaveMode,
       data: DataFrame): BaseRelation = {
@@ -485,13 +474,23 @@ case class DataSource(
           }
         }
 
+        // SPARK-17230: Resolve the partition columns so InsertIntoHadoopFsRelationCommand does
+        // not need to have the query as child, to avoid to analyze an optimized query,
+        // because InsertIntoHadoopFsRelationCommand will be optimized first.
+        val columns = partitionColumns.map { name =>
+          val plan = data.logicalPlan
+          plan.resolve(name :: Nil, data.sparkSession.sessionState.analyzer.resolver).getOrElse {
+            throw new AnalysisException(
+              s"Unable to resolve ${name} given [${plan.output.map(_.name).mkString(", ")}]")
+          }.asInstanceOf[Attribute]
+        }
         // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This
         // will be adjusted within InsertIntoHadoopFsRelation.
         val plan =
           InsertIntoHadoopFsRelationCommand(
             outputPath,
-            partitionColumns.map(UnresolvedAttribute.quoted),
+            columns,
             bucketSpec,
             format,
             () => Unit, // No existing table needs to be refreshed.
