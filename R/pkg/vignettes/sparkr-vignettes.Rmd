@@ -11,7 +11,7 @@ output:
 
 ## Overview
 
-SparkR is an R package that provides a light-weight frontend to use Apache Spark from R. With Spark 2.0.0, SparkR provides a distributed data frame implementation that supports data processing operations like selection, filtering, aggregation etc. and distributed machine learning using [MLlib](http://spark.apache.org/mllib/).
+SparkR is an R package that provides a light-weight frontend to use Apache Spark from R. With Spark `r packageVersion("SparkR")`, SparkR provides a distributed data frame implementation that supports data processing operations like selection, filtering, aggregation etc. and distributed machine learning using [MLlib](http://spark.apache.org/mllib/).
 
 ## Getting Started
 
@@ -58,7 +58,7 @@ carsGPDF <- summarize(groupBy(carsDF, carsDF$gear), count = n(carsDF$gear))
 head(carsGPDF)
 ```
 
-The results `carsDF` and `carsSubDF` are `SparkDataFrame` objects. To convert back to R `data.frame`, we can use `collect`. *Caution*: This can cause the driver to run out of memory, though, because `collect()` fetches the entire distributed `DataFrame` to a single machine;
+The results `carsDF` and `carsSubDF` are `SparkDataFrame` objects. To convert back to R `data.frame`, we can use `collect`. **Caution**: This can cause the driver to run out of memory, though, because `collect()` fetches the entire distributed `DataFrame` to a single machine;
 ```{r}
 carsGP <- collect(carsGPDF)
 class(carsGP)
@@ -68,8 +68,10 @@ SparkR supports a number of commonly used machine learning algorithms. Under the
 
 SparkR supports a subset of R formula operators for model fitting, including ‘~’, ‘.’, ‘:’, ‘+’, and ‘-‘. We use linear regression as an example.
 ```{r}
-model <- spark.glm(data = carsDF, formula = mpg ~ wt + cyl)
+model <- spark.glm(carsDF, mpg ~ wt + cyl)
 ```
+
+The result matches that returned by R `glm` function applied to the corresponding `data.frame` `mtcars` of `carsDF`. In fact, for Generalized Linear Model, we specifically expose `glm` for `SparkDataFrame` as well so that the above is equivalent to `model <- glm(mpg ~ wt + cyl, data = carsDF)`.
 
 ```{r}
 summary(model)
@@ -106,7 +108,7 @@ sparkR.session(sparkHome = "/HOME/spark")
 ### Spark Session {#SetupSparkSession}
 
 
-In addition to `sparkHome`, many other options can be specified in `sparkR.session`. For a complete list, see the [SparkR API doc](http://spark.apache.org/docs/latest/api/R/sparkR.session.html).
+In addition to `sparkHome`, many other options can be specified in `sparkR.session`. For a complete list, see [Starting up: SparkSession](http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession) and [SparkR API doc](http://spark.apache.org/docs/latest/api/R/sparkR.session.html).
 
 In particular, the following Spark driver properties can be set in `sparkConfig`.
 

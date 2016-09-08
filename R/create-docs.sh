@@ -46,6 +46,6 @@ Rscript -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); library(knit
 popd
 
 # render creates SparkR vignettes
-Rscript -e 'library(rmarkdown); Sys.setenv(SPARK_HOME=tools::file_path_as_absolute("..")); render("pkg/vignettes/sparkr-vignettes.Rmd")'
+Rscript -e 'library(rmarkdown); .libPaths(c("../../lib", .libPaths())); Sys.setenv(SPARK_HOME=tools::file_path_as_absolute("..")); render("pkg/vignettes/sparkr-vignettes.Rmd")'
 
 popd
