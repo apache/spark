@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.SQLException
 import java.util.Properties
 
 import scala.collection.JavaConverters.mapAsJavaMapConverter
 
-import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 
 class JdbcRelationProvider extends CreatableRelationProvider
@@ -81,8 +80,8 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
       val (doCreate, doSave) = (mode, tableExists) match {
         case (SaveMode.Ignore, true) => (false, false)
-        case (SaveMode.ErrorIfExists, true) => throw new SQLException(
-          s"Table $table already exists, and SaveMode is set to ErrorIfExists.")
+        case (SaveMode.ErrorIfExists, true) => throw new AnalysisException(
+          s"Table or view '$table' already exists, and SaveMode is set to ErrorIfExists.")
         case (SaveMode.Overwrite, true) =>
           if (jdbcOptions.isTruncate && JdbcUtils.isCascadingTruncateTable(url) == Some(false)) {
             JdbcUtils.truncateTable(conn, table)
