@@ -53,27 +53,25 @@ private[spark] abstract class LauncherBackend extends Logging {
   }
 
   def connect(port: Int, secret: String): Unit = {
-    if (port != None && secret != None) {
-      val s = new Socket(InetAddress.getLoopbackAddress(), port)
-      connection = new BackendConnection(s)
-      connection.send(new Hello(secret, SPARK_VERSION))
-      clientThread = LauncherBackend.threadFactory.newThread(connection)
-      clientThread.start()
-      _isConnected = true
-      if(stopFlag) {
-        logDebug("Adding shutdown hook") // force eager creation of logger
-        var _shutdownHookRef = ShutdownHookManager.addShutdownHook(
-          ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
-          logInfo("Invoking onStopRequest() from shutdown hook")
-          try {
-            if (_isConnected && stopFlag) {
-              onStopRequest()
-            }
+    val s = new Socket(InetAddress.getLoopbackAddress(), port)
+    connection = new BackendConnection(s)
+    connection.send(new Hello(secret, SPARK_VERSION))
+    clientThread = LauncherBackend.threadFactory.newThread(connection)
+    clientThread.start()
+    _isConnected = true
+    if (stopFlag) {
+      logDebug("Adding shutdown hook") // force eager creation of logger
+      var _shutdownHookRef = ShutdownHookManager.addShutdownHook(
+        ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
+        logInfo("Invoking onStopRequest() from shutdown hook")
+        try {
+          if (_isConnected && stopFlag) {
+            onStopRequest()
           }
-          catch {
-            case anotherIOE: IOException =>
-              logError("Error while running LauncherBackend shutdownHook...", anotherIOE)
-          }
+        }
+        catch {
+          case anotherIOE: IOException =>
+            logError("Error while running LauncherBackend shutdownHook...", anotherIOE)
         }
       }
     }
@@ -106,7 +104,7 @@ private[spark] abstract class LauncherBackend extends Logging {
     if (connection != null && lastState != state) {
       connection.send(new SetState(state))
       lastState = state
-      if(!_isConnected && stopFlag) {
+      if (!_isConnected && stopFlag) {
         fireStopRequest()
       }
     }
@@ -148,6 +146,9 @@ private[spark] abstract class LauncherBackend extends Logging {
     override def close(): Unit = {
       try {
         super.close()
+        if (!_isConnected && stopFlag) {
+          fireStopRequest()
+        }
       } finally {
         onDisconnected()
         _isConnected = false

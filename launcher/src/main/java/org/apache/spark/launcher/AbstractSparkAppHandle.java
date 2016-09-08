@@ -37,8 +37,6 @@ public abstract class AbstractSparkAppHandle implements SparkAppHandle {
 
   OutputRedirector redirector;
 
-
-
   public AbstractSparkAppHandle(LauncherServer server, String secret) {
     this.server = server;
     this.secret = secret;
@@ -135,4 +133,3 @@ public abstract class AbstractSparkAppHandle implements SparkAppHandle {
   }
 
 }
-
