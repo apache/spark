@@ -160,8 +160,6 @@ class SessionCatalog(
     val dbName = formatDatabaseName(db)
     if (dbName == DEFAULT_DATABASE) {
       throw new AnalysisException(s"Can not drop default database")
-    } else if (dbName == getCurrentDatabase) {
-      setCurrentDatabase(DEFAULT_DATABASE)
     }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
   }
