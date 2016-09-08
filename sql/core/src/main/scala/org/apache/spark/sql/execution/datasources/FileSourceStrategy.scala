@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -98,7 +99,8 @@ object FileSourceStrategy extends Strategy with Logging {
         dataColumns
           .filter(requiredAttributes.contains)
           .filterNot(partitionColumns.contains)
-      val outputSchema = if (fsRelation.sqlContext.conf.isParquetNestColumnPruning) {
+      val outputSchema = if (fsRelation.sqlContext.conf.isParquetNestColumnPruning
+        && fsRelation.fileFormat.isInstanceOf[ParquetFileFormat]) {
         val totalSchema = readDataColumns.toStructType
         val prunedSchema = StructType(
           generateStructFieldsContainsNesting(projects, totalSchema))
