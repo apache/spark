@@ -448,7 +448,7 @@ case class FileSourceScanExec(
           FilePartition(
             partitions.size,
             currentFiles.toArray.toSeq) // Copy to a new Array.
-        partitions.append(newPartition)
+        partitions += newPartition
       }
       currentFiles.clear()
       currentSize = 0
@@ -462,7 +462,7 @@ case class FileSourceScanExec(
       }
       // Add the given file to the current partition.
       currentSize += file.length + openCostInBytes
-      currentFiles.append(file)
+      currentFiles += file
     }
     closePartition()
 

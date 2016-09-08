@@ -906,7 +906,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val e = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendOrcToParquet")
       }
-      assert(e.getMessage.contains("The file format of the existing table `appendOrcToParquet` " +
+      assert(e.getMessage.contains("The file format of the existing table appendOrcToParquet " +
         "is `org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat`. " +
         "It doesn't match the specified format `orc`"))
     }
@@ -917,7 +917,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         createDF(10, 19).write.mode(SaveMode.Append).format("parquet")
           .saveAsTable("appendParquetToJson")
       }
-      assert(e.getMessage.contains("The file format of the existing table `appendParquetToJson` " +
+      assert(e.getMessage.contains("The file format of the existing table appendParquetToJson " +
         "is `org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
         "It doesn't match the specified format `parquet`"))
     }
@@ -928,7 +928,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         createDF(10, 19).write.mode(SaveMode.Append).format("text")
           .saveAsTable("appendTextToJson")
       }
-      assert(e.getMessage.contains("The file format of the existing table `appendTextToJson` is " +
+      assert(e.getMessage.contains("The file format of the existing table appendTextToJson is " +
         "`org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
         "It doesn't match the specified format `text`"))
     }
@@ -1148,6 +1148,58 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           .write.mode("append").saveAsTable("saveAsTable_too_many_columns")
       }
       assert(e.getMessage.contains("doesn't match"))
+    }
+  }
+
+  test("saveAsTable - source and target are the same table") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable(tableName)
+
+      table(tableName).write.mode(SaveMode.Append).saveAsTable(tableName)
+      checkAnswer(table(tableName),
+        Seq(Row(1, 2), Row(1, 2)))
+
+      table(tableName).write.mode(SaveMode.Ignore).saveAsTable(tableName)
+      checkAnswer(table(tableName),
+        Seq(Row(1, 2), Row(1, 2)))
+
+      var e = intercept[AnalysisException] {
+        table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
+      }.getMessage
+      assert(e.contains(s"Cannot overwrite table `$tableName` that is also being read from"))
+
+      e = intercept[AnalysisException] {
+        table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
+      }.getMessage
+      assert(e.contains(s"Table `$tableName` already exists"))
+    }
+  }
+
+  test("insertInto - source and target are the same table") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable(tableName)
+
+      table(tableName).write.mode(SaveMode.Append).insertInto(tableName)
+      checkAnswer(
+        table(tableName),
+        Seq(Row(1, 2), Row(1, 2)))
+
+      table(tableName).write.mode(SaveMode.Ignore).insertInto(tableName)
+      checkAnswer(
+        table(tableName),
+        Seq(Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2)))
+
+      table(tableName).write.mode(SaveMode.ErrorIfExists).insertInto(tableName)
+      checkAnswer(
+        table(tableName),
+        Seq(Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2)))
+
+      val e = intercept[AnalysisException] {
+        table(tableName).write.mode(SaveMode.Overwrite).insertInto(tableName)
+      }.getMessage
+      assert(e.contains(s"Cannot overwrite a path that is also being read from"))
     }
   }
 

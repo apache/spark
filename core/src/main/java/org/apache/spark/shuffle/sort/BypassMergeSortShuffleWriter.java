@@ -73,7 +73,7 @@ import org.apache.spark.util.Utils;
  */
 final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
-  private final Logger logger = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
+  private static final Logger logger = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
 
   private final int fileBufferSize;
   private final boolean transferToEnabled;
@@ -238,7 +238,6 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             partitionWriters = null;
           }
         }
-        shuffleBlockResolver.removeDataByMap(shuffleId, mapId);
         return None$.empty();
       }
     }

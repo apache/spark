@@ -18,7 +18,9 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.util.UUID
+
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
@@ -141,6 +143,8 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
 class FileStreamSourceSuite extends FileStreamSourceTest {
 
   import testImplicits._
+
+  override val streamingTimeout = 20.seconds
 
   /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
   private def createFileStreamSource(
@@ -759,6 +763,42 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       } finally {
         q.stop()
       }
+    }
+  }
+
+  test("SPARK-17372 - write file names to WAL as Array[String]") {
+    // Note: If this test takes longer than the timeout, then its likely that this is actually
+    // running a Spark job with 10000 tasks. This test tries to avoid that by
+    // 1. Setting the threshold for parallel file listing to very high
+    // 2. Using a query that should use constant folding to eliminate reading of the files
+
+    val numFiles = 10000
+
+    // This is to avoid running a spark job to list of files in parallel
+    // by the ListingFileCatalog.
+    spark.sessionState.conf.setConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD, numFiles * 2)
+
+    withTempDirs { case (root, tmp) =>
+      val src = new File(root, "a=1")
+      src.mkdirs()
+
+      (1 to numFiles).map { _.toString }.foreach { i =>
+        val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+        val finalFile = new File(src, tempFile.getName)
+        stringToFile(finalFile, i)
+      }
+      assert(src.listFiles().size === numFiles)
+
+      val files = spark.readStream.text(root.getCanonicalPath).as[String]
+
+      // Note this query will use constant folding to eliminate the file scan.
+      // This is to avoid actually running a Spark job with 10000 tasks
+      val df = files.filter("1 == 0").groupBy().count()
+
+      testStream(df, InternalOutputModes.Complete)(
+        AddTextFileData("0", src, tmp),
+        CheckAnswer(0)
+      )
     }
   }
 }
