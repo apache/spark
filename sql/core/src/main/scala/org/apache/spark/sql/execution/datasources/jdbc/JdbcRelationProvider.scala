@@ -38,7 +38,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val upperBound = jdbcOptions.upperBound
     val numPartitions = jdbcOptions.numPartitions
 
-    val partitionInfo = if (partitionColumn == null) null
+    val partitionInfo = if (partitionColumn == null) { null }
     else {
       JDBCPartitioningInfo(
         partitionColumn, lowerBound.toLong, upperBound.toLong, numPartitions.toInt)
@@ -66,11 +66,12 @@ class JdbcRelationProvider extends CreatableRelationProvider
       mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
+    import collection.JavaConverters._
+    
     val jdbcOptions = new JDBCOptions(parameters)
     val url = jdbcOptions.url
     val table = jdbcOptions.table
 
-    import collection.JavaConverters._
     val props = new Properties()
     props.putAll(parameters.asJava)
     val conn = JdbcUtils.createConnectionFactory(url, props)()
