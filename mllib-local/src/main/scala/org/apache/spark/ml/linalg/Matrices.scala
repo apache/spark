@@ -150,6 +150,10 @@ sealed trait Matrix extends Serializable {
    */
   private[spark] def foreachActive(f: (Int, Int, Double) => Unit)
 
+  def toSparse: SparseMatrix
+
+  def toDense: DenseMatrix = new DenseMatrix(numRows, numCols, this.toArray)
+
   /**
    * Find the number of non-zero active values.
    */
@@ -295,27 +299,32 @@ class DenseMatrix @Since("2.0.0") (
    * set to false.
    */
   @Since("2.0.0")
-  def toSparse: SparseMatrix = {
-    val spVals: MArrayBuilder[Double] = new MArrayBuilder.ofDouble
-    val colPtrs: Array[Int] = new Array[Int](numCols + 1)
-    val rowIndices: MArrayBuilder[Int] = new MArrayBuilder.ofInt
-    var nnz = 0
-    var j = 0
-    while (j < numCols) {
-      var i = 0
-      while (i < numRows) {
-        val v = values(index(i, j))
-        if (v != 0.0) {
-          rowIndices += i
-          spVals += v
-          nnz += 1
+  def toSparse: SparseMatrix = toSparse(columnMajor = true)
+
+  private[ml] def toSparse(columnMajor: Boolean): SparseMatrix = {
+    if (!columnMajor) this.transpose.toSparse.transpose
+    else {
+      val spVals: MArrayBuilder[Double] = new MArrayBuilder.ofDouble
+      val colPtrs: Array[Int] = new Array[Int](numCols + 1)
+      val rowIndices: MArrayBuilder[Int] = new MArrayBuilder.ofInt
+      var nnz = 0
+      var j = 0
+      while (j < numCols) {
+        var i = 0
+        while (i < numRows) {
+          val v = values(index(i, j))
+          if (v != 0.0) {
+            rowIndices += i
+            spVals += v
+            nnz += 1
+          }
+          i += 1
         }
-        i += 1
+        j += 1
+        colPtrs(j) = nnz
       }
-      j += 1
-      colPtrs(j) = nnz
+      new SparseMatrix(numRows, numCols, colPtrs, rowIndices.result(), spVals.result())
     }
-    new SparseMatrix(numRows, numCols, colPtrs, rowIndices.result(), spVals.result())
   }
 
   override def colIter: Iterator[Vector] = {
@@ -513,6 +522,16 @@ class SparseMatrix @Since("2.0.0") (
        val breezeMatrix = new BSM[Double](values, numCols, numRows, colPtrs, rowIndices)
        breezeMatrix.t
      }
+  }
+
+  def toSparse: SparseMatrix = {
+    val nnz = numNonzeros
+    if (nnz == numNonzeros) {
+      this
+    } else {
+      // TODO
+      this
+    }
   }
 
   override def apply(i: Int, j: Int): Double = {
