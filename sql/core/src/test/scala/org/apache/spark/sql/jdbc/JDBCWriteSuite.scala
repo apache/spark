@@ -220,4 +220,63 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(
       2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
   }
+
+  test("save API with SaveMode.Overwrite") {
+    import scala.collection.JavaConverters._
+
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
+
+    df.write.format("jdbc")
+      .option("url", url1)
+      .option("dbtable", "TEST.TRUNCATETEST")
+      .options(properties.asScala)
+      .save()
+    df2.write.mode(SaveMode.Overwrite).format("jdbc")
+      .option("url", url1)
+      .option("dbtable", "TEST.TRUNCATETEST")
+      .options(properties.asScala)
+      .save()
+    assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
+    assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
+  }
+
+  test("save errors if url is not specified") {
+    import scala.collection.JavaConverters._
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    var e = intercept[RuntimeException] {
+      df.write.format("jdbc")
+        .option("dbtable", "TEST.TRUNCATETEST")
+        .options(properties.asScala)
+        .save()
+    }.getMessage
+    assert(e.contains("Option 'url' is required"))
+  }
+
+  test("save errors if dbtable is not specified") {
+    import scala.collection.JavaConverters._
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    var e = intercept[RuntimeException] {
+      df.write.format("jdbc")
+        .option("url", url1)
+        .options(properties.asScala)
+        .save()
+    }.getMessage
+    assert(e.contains("Option 'dbtable' is required"))
+  }
+
+  test("save errors if wrong user/password combination") {
+    import scala.collection.JavaConverters._
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    var e = intercept[org.h2.jdbc.JdbcSQLException] {
+      df.write.format("jdbc")
+        .option("dbtable", "TEST.TRUNCATETEST")
+        .option("url", url1)
+        .save()
+    }.getMessage
+    assert(e.contains("Wrong user name or password"))
+  }
 }
