@@ -63,7 +63,7 @@ configuring Flume agents.
 
 	By default, the Python API will decode Flume event body as UTF8 encoded strings. You can specify your custom decoding function to decode the body byte arrays in Flume events to any arbitrary data type. 
 	See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.flume.FlumeUtils)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/flume_wordcount.py).
+	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/flume_wordcount.py).
 	</div>
 	</div>
 

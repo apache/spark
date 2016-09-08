@@ -21,19 +21,18 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 
 
 /**
  * Analyzes the given table in the current database to generate statistics, which will be
  * used in query optimizations.
- *
- * Right now, it only supports Hive tables and it only updates the size of a Hive table
- * in the Hive metastore.
  */
-case class AnalyzeTableCommand(tableName: String) extends RunnableCommand {
+case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
@@ -71,8 +70,6 @@ case class AnalyzeTableCommand(tableName: String) extends RunnableCommand {
           size
         }
 
-        val tableParameters = catalogTable.properties
-        val oldTotalSize = tableParameters.get("totalSize").map(_.toLong).getOrElse(0L)
         val newTotalSize =
           catalogTable.storage.locationUri.map { p =>
             val path = new Path(p)
@@ -88,24 +85,47 @@ case class AnalyzeTableCommand(tableName: String) extends RunnableCommand {
             }
           }.getOrElse(0L)
 
-        // Update the Hive metastore if the total size of the table is different than the size
-        // recorded in the Hive metastore.
-        // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
-        if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          sessionState.catalog.alterTable(
-            catalogTable.copy(
-              properties = relation.catalogTable.properties +
-                (AnalyzeTableCommand.TOTAL_SIZE_FIELD -> newTotalSize.toString)))
-        }
+        updateTableStats(catalogTable, newTotalSize)
+
+      // data source tables have been converted into LogicalRelations
+      case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
+        updateTableStats(logicalRel.catalogTable.get, logicalRel.relation.sizeInBytes)
 
       case otherRelation =>
-        throw new AnalysisException(s"ANALYZE TABLE is only supported for Hive tables, " +
-          s"but '${tableIdent.unquotedString}' is a ${otherRelation.nodeName}.")
+        throw new AnalysisException(s"ANALYZE TABLE is not supported for " +
+          s"${otherRelation.nodeName}.")
     }
+
+    def updateTableStats(catalogTable: CatalogTable, newTotalSize: Long): Unit = {
+      val oldTotalSize = catalogTable.stats.map(_.sizeInBytes.toLong).getOrElse(0L)
+      val oldRowCount = catalogTable.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
+      var newStats: Option[Statistics] = None
+      if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
+        newStats = Some(Statistics(sizeInBytes = newTotalSize))
+      }
+      // We only set rowCount when noscan is false, because otherwise:
+      // 1. when total size is not changed, we don't need to alter the table;
+      // 2. when total size is changed, `oldRowCount` becomes invalid.
+      // This is to make sure that we only record the right statistics.
+      if (!noscan) {
+        val newRowCount = Dataset.ofRows(sparkSession, relation).count()
+        if (newRowCount >= 0 && newRowCount != oldRowCount) {
+          newStats = if (newStats.isDefined) {
+            newStats.map(_.copy(rowCount = Some(BigInt(newRowCount))))
+          } else {
+            Some(Statistics(sizeInBytes = oldTotalSize, rowCount = Some(BigInt(newRowCount))))
+          }
+        }
+      }
+      // Update the metastore if the above statistics of the table are different from those
+      // recorded in the metastore.
+      if (newStats.isDefined) {
+        sessionState.catalog.alterTable(catalogTable.copy(stats = newStats))
+        // Refresh the cached data source table in the catalog.
+        sessionState.catalog.refreshTable(tableIdent)
+      }
+    }
+
     Seq.empty[Row]
   }
-}
-
-object AnalyzeTableCommand {
-  val TOTAL_SIZE_FIELD = "totalSize"
 }

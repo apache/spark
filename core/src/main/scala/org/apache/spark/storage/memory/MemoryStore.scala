@@ -330,7 +330,7 @@ private[spark] class MemoryStore(
     redirectableStream.setOutputStream(bbos)
     val serializationStream: SerializationStream = {
       val ser = serializerManager.getSerializer(classTag).newInstance()
-      ser.serializeStream(serializerManager.wrapForCompression(blockId, redirectableStream))
+      ser.serializeStream(serializerManager.wrapStream(blockId, redirectableStream))
     }
 
     // Request enough memory to begin unrolling

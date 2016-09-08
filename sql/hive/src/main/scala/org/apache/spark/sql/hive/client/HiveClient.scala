@@ -68,6 +68,9 @@ private[hive] trait HiveClient {
   /** List the names of all the databases that match the specified pattern. */
   def listDatabases(pattern: String): Seq[String]
 
+  /** Return whether a table/view with the specified name exists. */
+  def tableExists(dbName: String, tableName: String): Boolean
+
   /** Returns the specified table, or throws [[NoSuchTableException]]. */
   final def getTable(dbName: String, tableName: String): CatalogTable = {
     getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException(dbName, tableName))
@@ -192,12 +195,12 @@ private[hive] trait HiveClient {
   /** Loads a static partition into an existing table. */
   def loadPartition(
       loadPath: String,
+      dbName: String,
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit
+      inheritTableSpecs: Boolean): Unit
 
   /** Loads data into an existing table. */
   def loadTable(
@@ -209,12 +212,12 @@ private[hive] trait HiveClient {
   /** Loads new dynamic partitions into an existing table. */
   def loadDynamicPartitions(
       loadPath: String,
+      dbName: String,
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
-      listBucketingEnabled: Boolean): Unit
+      holdDDLTime: Boolean): Unit
 
   /** Create a function in an existing database. */
   def createFunction(db: String, func: CatalogFunction): Unit

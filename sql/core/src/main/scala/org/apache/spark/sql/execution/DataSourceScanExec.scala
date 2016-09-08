@@ -38,7 +38,7 @@ import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.Utils
 
-private[sql] trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
+trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
   val relation: BaseRelation
   val metastoreTableIdentifier: Option[TableIdentifier]
 
@@ -48,7 +48,7 @@ private[sql] trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
 }
 
 /** Physical plan node for scanning data from a relation. */
-private[sql] case class RowDataSourceScanExec(
+case class RowDataSourceScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
@@ -57,7 +57,7 @@ private[sql] case class RowDataSourceScanExec(
     override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
 
-  private[sql] override lazy val metrics =
+  override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   val outputUnsafeRows = relation match {
@@ -138,7 +138,7 @@ private[sql] case class RowDataSourceScanExec(
  * @param dataFilters Data source filters to use for filtering data within partitions.
  * @param metastoreTableIdentifier
  */
-private[sql] case class FileSourceScanExec(
+case class FileSourceScanExec(
     @transient relation: HadoopFsRelation,
     output: Seq[Attribute],
     outputSchema: StructType,
@@ -211,7 +211,7 @@ private[sql] case class FileSourceScanExec(
     inputRDD :: Nil
   }
 
-  private[sql] override lazy val metrics =
+  override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
@@ -448,7 +448,7 @@ private[sql] case class FileSourceScanExec(
           FilePartition(
             partitions.size,
             currentFiles.toArray.toSeq) // Copy to a new Array.
-        partitions.append(newPartition)
+        partitions += newPartition
       }
       currentFiles.clear()
       currentSize = 0
@@ -462,7 +462,7 @@ private[sql] case class FileSourceScanExec(
       }
       // Add the given file to the current partition.
       currentSize += file.length + openCostInBytes
-      currentFiles.append(file)
+      currentFiles += file
     }
     closePartition()
 

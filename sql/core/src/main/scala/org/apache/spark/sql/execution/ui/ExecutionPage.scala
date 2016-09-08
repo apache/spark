@@ -24,7 +24,7 @@ import scala.xml.Node
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
-private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
+class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
 
   private val listener = parent.listener
 

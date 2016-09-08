@@ -104,7 +104,7 @@ package object debug {
     }
   }
 
-  private[sql] case class DebugExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+  case class DebugExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
     def output: Seq[Attribute] = child.output
 
     class SetAccumulator[T] extends AccumulatorV2[T, HashSet[T]] {

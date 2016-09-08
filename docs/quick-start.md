@@ -40,7 +40,7 @@ RDDs have _[actions](programming-guide.html#actions)_, which return values, and 
 
 {% highlight scala %}
 scala> textFile.count() // Number of items in this RDD
-res0: Long = 126
+res0: Long = 126 // May be different from yours as README.md will change over time, similar to other outputs
 
 scala> textFile.first() // First item in this RDD
 res1: String = # Apache Spark
@@ -74,10 +74,10 @@ Spark's primary abstraction is a distributed collection of items called a Resili
 RDDs have _[actions](programming-guide.html#actions)_, which return values, and _[transformations](programming-guide.html#transformations)_, which return pointers to new RDDs. Let's start with a few actions:
 
 {% highlight python %}
->>> textFile.count() # Number of items in this RDD
+>>> textFile.count()  # Number of items in this RDD
 126
 
->>> textFile.first() # First item in this RDD
+>>> textFile.first()  # First item in this RDD
 u'# Apache Spark'
 {% endhighlight %}
 
@@ -90,7 +90,7 @@ Now let's use a transformation. We will use the [`filter`](programming-guide.htm
 We can chain together transformations and actions:
 
 {% highlight python %}
->>> textFile.filter(lambda line: "Spark" in line).count() # How many lines contain "Spark"?
+>>> textFile.filter(lambda line: "Spark" in line).count()  # How many lines contain "Spark"?
 15
 {% endhighlight %}
 
@@ -184,10 +184,10 @@ scala> linesWithSpark.cache()
 res7: linesWithSpark.type = MapPartitionsRDD[2] at filter at <console>:27
 
 scala> linesWithSpark.count()
-res8: Long = 19
+res8: Long = 15
 
 scala> linesWithSpark.count()
-res9: Long = 19
+res9: Long = 15
 {% endhighlight %}
 
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
@@ -202,10 +202,10 @@ a cluster, as described in the [programming guide](programming-guide.html#initia
 >>> linesWithSpark.cache()
 
 >>> linesWithSpark.count()
-19
+15
 
 >>> linesWithSpark.count()
-19
+15
 {% endhighlight %}
 
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is

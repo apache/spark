@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.SparkPlan
  * Extracts all the Python UDFs in logical aggregate, which depends on aggregate expression or
  * grouping key, evaluate them after aggregate.
  */
-private[spark] object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
+object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
 
   /**
    * Returns whether the expression could only be evaluated within aggregate.
@@ -90,7 +90,7 @@ private[spark] object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
-private[spark] object ExtractPythonUDFs extends Rule[SparkPlan] {
+object ExtractPythonUDFs extends Rule[SparkPlan] {
 
   private def hasPythonUDF(e: Expression): Boolean = {
     e.find(_.isInstanceOf[PythonUDF]).isDefined

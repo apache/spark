@@ -46,7 +46,9 @@ object MimaExcludes {
     ) ++ Seq(
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references"),
       // [SPARK-16853][SQL] Fixes encoder error in DataSet typed select
-      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.Dataset.select")
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.Dataset.select"),
+      // [SPARK-16967] Move Mesos to Module
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkMasterRegex.MESOS_REGEX")
     )
   }
 
@@ -790,7 +792,10 @@ object MimaExcludes {
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.jdbc"),
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.parquetFile"),
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.applySchema")
-    )
+    ) ++ Seq(
+        // [SPARK-14743] Improve delegation token handling in secure cluster
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.SparkHadoopUtil.getTimeFromNowToRenewal")
+      )
   }
 
   def excludes(version: String) = version match {

@@ -429,6 +429,13 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract int getInt(int rowId);
 
   /**
+   * Returns the dictionary Id for rowId.
+   * This should only be called when the ColumnVector is dictionaryIds.
+   * We have this separate method for dictionaryIds as per SPARK-16928.
+   */
+  public abstract int getDictId(int rowId);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putLong(int rowId, long value);
@@ -615,7 +622,7 @@ public abstract class ColumnVector implements AutoCloseable {
       ColumnVector.Array a = getByteArray(rowId);
       return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
     } else {
-      Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(rowId));
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
       return UTF8String.fromBytes(v.getBytes());
     }
   }
@@ -630,7 +637,7 @@ public abstract class ColumnVector implements AutoCloseable {
       System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
       return bytes;
     } else {
-      Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(rowId));
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
       return v.getBytes();
     }
   }
