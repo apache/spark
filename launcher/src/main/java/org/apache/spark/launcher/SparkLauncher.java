@@ -19,6 +19,7 @@ package org.apache.spark.launcher;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -73,6 +74,21 @@ public class SparkLauncher {
   /** Logger name to use when launching a child process. */
   public static final String CHILD_PROCESS_LOGGER_NAME = "spark.launcher.childProcLoggerName";
 
+  /** Launcher Server Port to use when launching a child process. */
+  public static final String LAUNCHER_INTERNAL_PORT = "spark.launcher.internal.port";
+
+  /** Launcher Server sets this when launching a child process. */
+  public static final String CHILD_PROCESS_LAUNCHER_INTERNAL_SECRET = "spark.launcher.internal.secret";
+
+  /** Stop Flag if interrupted Launcher Server goes away. */
+  public static final String CHILD_PROCESS_LAUNCHER_STOP_FLAG = "spark.launcher.internal.stop.flag";
+
+  public SparkLauncher stopIfInterrupted() {
+    this.stopIfInterrupted = true;
+    return this;
+  }
+
+  private boolean stopIfInterrupted = false;
   /**
    * A special value for the resource that tells Spark to not try to process the app resource as a
    * file. This is useful when the class being executed is added to the application using other
@@ -503,23 +519,7 @@ public class SparkLauncher {
     // Only setup stderr + stdout to logger redirection if user has not otherwise configured output
     // redirection.
     if (loggerName == null) {
-      String appName = builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
-      if (appName == null) {
-        if (builder.appName != null) {
-          appName = builder.appName;
-        } else if (builder.mainClass != null) {
-          int dot = builder.mainClass.lastIndexOf(".");
-          if (dot >= 0 && dot < builder.mainClass.length() - 1) {
-            appName = builder.mainClass.substring(dot + 1, builder.mainClass.length());
-          } else {
-            appName = builder.mainClass;
-          }
-        } else if (builder.appResource != null) {
-          appName = new File(builder.appResource).getName();
-        } else {
-          appName = String.valueOf(COUNTER.incrementAndGet());
-        }
-      }
+      String appName = getAppName();
       String loggerPrefix = getClass().getPackage().getName();
       loggerName = String.format("%s.app.%s", loggerPrefix, appName);
       pb.redirectErrorStream(true);
@@ -528,6 +528,7 @@ public class SparkLauncher {
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_PORT,
       String.valueOf(LauncherServer.getServerInstance().getPort()));
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_SECRET, handle.getSecret());
+    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_STOP_FLAG, String.valueOf(stopIfInterrupted));
     try {
       handle.setChildProc(pb.start(), loggerName);
     } catch (IOException ioe) {
@@ -537,6 +538,71 @@ public class SparkLauncher {
 
     return handle;
   }
+
+  private String getAppName() throws IOException {
+    String appName = builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
+    if (appName == null) {
+      if (builder.appName != null) {
+        appName = builder.appName;
+      } else if (builder.mainClass != null) {
+        int dot = builder.mainClass.lastIndexOf(".");
+        if (dot >= 0 && dot < builder.mainClass.length() - 1) {
+          appName = builder.mainClass.substring(dot + 1, builder.mainClass.length());
+        } else {
+          appName = builder.mainClass;
+        }
+      } else if (builder.appResource != null) {
+        appName = new File(builder.appResource).getName();
+      } else {
+        appName = String.valueOf(COUNTER.incrementAndGet());
+      }
+    }
+    return appName;
+  }
+
+  /**
+   * Starts a Spark application.
+   * <p>
+   * This method returns a handle that provides information about the running application and can
+   * be used to do basic interaction with it.
+   * <p>
+   * The returned handle assumes that the application will instantiate a single SparkContext
+   * during its lifetime. Once that context reports a final state (one that indicates the
+   * SparkContext has stopped), the handle will not perform new state transitions, so anything
+   * that happens after that cannot be monitored. The underlying application is launched as
+   * a Thread, {@link SparkAppHandle#kill()} can still be used to kill the spark application.
+   * <p>
+   * @since 2.1.0
+   * @param listeners Listeners to add to the handle before the app is launched.
+   * @return A handle for the launched application.
+   */
+  public SparkAppHandle startApplicationInProcess(SparkAppHandle.Listener... listeners) throws IOException {
+
+    ChildThreadAppHandle handle = LauncherServer.newAppThreadHandle();
+    for (SparkAppHandle.Listener l : listeners) {
+      handle.addListener(l);
+    }
+
+    String appName = getAppName();
+    setConf(LAUNCHER_INTERNAL_PORT,String.valueOf(LauncherServer.getServerInstance().getPort()));
+    setConf(CHILD_PROCESS_LAUNCHER_INTERNAL_SECRET, handle.getSecret());
+    setConf(CHILD_PROCESS_LAUNCHER_STOP_FLAG, String.valueOf(stopIfInterrupted));
+    try {
+      //trying to see if method is available in the classpath.
+      Method main = SparkSubmitRunner.getSparkSubmitMain();
+      Thread submitJobThread = new Thread(new SparkSubmitRunner(main, builder.buildSparkSubmitArgs()));
+      submitJobThread.setName(appName);
+      handle.setChildThread(submitJobThread);
+      submitJobThread.start();
+    } catch (ClassNotFoundException cnfe) {
+      throw new IOException(cnfe);
+    } catch (NoSuchMethodException nsme) {
+      throw new IOException(nsme);
+    }
+    return handle;
+
+  }
+
 
   private ProcessBuilder createBuilder() {
     List<String> cmd = new ArrayList<>();
@@ -612,5 +678,7 @@ public class SparkLauncher {
     }
 
   }
+
+
 
 }

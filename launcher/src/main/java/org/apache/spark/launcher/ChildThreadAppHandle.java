@@ -17,51 +17,38 @@
 
 package org.apache.spark.launcher;
 
-import java.io.IOException;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * Handle implementation for monitoring apps started as a child process.
- */
-class ChildProcAppHandle extends AbstractSparkAppHandle {
+public class ChildThreadAppHandle extends AbstractSparkAppHandle {
+  private static final Logger LOG = Logger.getLogger(ChildThreadAppHandle.class.getName());
+  private Thread childThread;
 
-  private static final Logger LOG = Logger.getLogger(ChildProcAppHandle.class.getName());
-
-  private Process childProc;
-
-  ChildProcAppHandle(String secret, LauncherServer server) {
+  public ChildThreadAppHandle(String secret, LauncherServer server) {
     super(server, secret);
   }
 
   @Override
-  public synchronized void kill() {
+  public synchronized void  kill() {
     if (!disposed) {
       disconnect();
     }
-    if (childProc != null) {
+    if (childThread!= null) {
       try {
-        childProc.exitValue();
-      } catch (IllegalThreadStateException e) {
+        childThread.join(3000);
+      } catch (IllegalThreadStateException | InterruptedException e) {
         try {
-          childProc.destroy();
+          childThread.interrupt();
         } catch (Exception inner) {
-          // no-op
+          LOG.info("Failed to stop Thread: "+ inner.getMessage());
         }
       } finally {
-        childProc = null;
+        childThread = null;
       }
     }
+
   }
 
-  void setChildProc(Process childProc, String loggerName) {
-    this.childProc = childProc;
-    this.redirector = new OutputRedirector(childProc.getInputStream(), loggerName,
-      SparkLauncher.REDIRECTOR_FACTORY);
+  void setChildThread(Thread childThread) {
+    this.childThread = childThread;
   }
-
-
 }

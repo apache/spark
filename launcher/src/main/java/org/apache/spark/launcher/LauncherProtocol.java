@@ -32,6 +32,9 @@ final class LauncherProtocol {
   /** Environment variable where the secret for connecting back to the server is stored. */
   static final String ENV_LAUNCHER_SECRET = "_SPARK_LAUNCHER_SECRET";
 
+  /** Environment variable where the stop if Launcher is stored. */
+  static final String ENV_LAUNCHER_STOP_FLAG = "_SPARK_LAUNCHER_STOP_FLAG";
+
   static class Message implements Serializable {
 
   }

@@ -106,5 +106,4 @@ abstract class LauncherConnection implements Closeable, Runnable {
       }
     }
   }
-
 }

@@ -17,9 +17,11 @@
 
 package org.apache.spark.launcher
 
+import java.io.IOException
 import java.net.{InetAddress, Socket}
 
 import org.apache.spark.SPARK_VERSION
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.LauncherProtocol._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -29,24 +31,61 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  *
  * See `LauncherServer` for an explanation of how launcher communication works.
  */
-private[spark] abstract class LauncherBackend {
+private[spark] abstract class LauncherBackend extends Logging {
 
   private var clientThread: Thread = _
   private var connection: BackendConnection = _
   private var lastState: SparkAppHandle.State = _
+  private var stopFlag: Boolean = false
   @volatile private var _isConnected = false
 
   def connect(): Unit = {
     val port = sys.env.get(LauncherProtocol.ENV_LAUNCHER_PORT).map(_.toInt)
     val secret = sys.env.get(LauncherProtocol.ENV_LAUNCHER_SECRET)
+    val stopFlag = sys.env.get(LauncherProtocol.ENV_LAUNCHER_STOP_FLAG).map(_.toBoolean)
     if (port != None && secret != None) {
-      val s = new Socket(InetAddress.getLoopbackAddress(), port.get)
+      if(stopFlag != None) {
+        connect(port.get, secret.get, stopFlag.get)
+      } else {
+        connect(port.get, secret.get)
+      }
+    }
+  }
+
+  def connect(port: Int, secret: String): Unit = {
+    if (port != None && secret != None) {
+      val s = new Socket(InetAddress.getLoopbackAddress(), port)
       connection = new BackendConnection(s)
-      connection.send(new Hello(secret.get, SPARK_VERSION))
+      connection.send(new Hello(secret, SPARK_VERSION))
       clientThread = LauncherBackend.threadFactory.newThread(connection)
       clientThread.start()
       _isConnected = true
+      if(stopFlag) {
+        val shutdownHook: Runnable = new Runnable() {
+          def run {
+            logInfo("LauncherBackend shutdown hook invoked..")
+            try {
+              if(_isConnected && stopFlag) {
+                onStopRequest()
+              }
+            }
+            catch {
+              case anotherIOE: IOException => {
+                logInfo("Error while running LauncherBackend shutdownHook...", anotherIOE)
+              }
+            }
+          }
+        }
+
+        val shutdownHookThread: Thread = LauncherBackend.threadFactory.newThread(shutdownHook)
+        Runtime.getRuntime.addShutdownHook(shutdownHookThread)
+      }
     }
+  }
+
+  def connect(port: Int, secret: String, stopFlag: Boolean): Unit = {
+    this.stopFlag = stopFlag
+    connect(port, secret)
   }
 
   def close(): Unit = {
@@ -71,6 +110,9 @@ private[spark] abstract class LauncherBackend {
     if (connection != null && lastState != state) {
       connection.send(new SetState(state))
       lastState = state
+      if(!_isConnected && stopFlag) {
+        fireStopRequest()
+      }
     }
   }
 
@@ -115,7 +157,6 @@ private[spark] abstract class LauncherBackend {
         _isConnected = false
       }
     }
-
   }
 
 }
