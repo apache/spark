@@ -343,27 +343,30 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     }
 
     var i = 0
-    val len = input.length
-    while (i < len) {
-      var j = i
+    val n = input.length - 1
+    var notFinished = true
 
-      // Find monotonicity violating sequence, if any.
-      while (j < len - 1 && input(j)._1 > input(j + 1)._1) {
-        j = j + 1
-      }
+    while (notFinished) {
+      i = 0
+      notFinished = false
 
-      // If monotonicity was not violated, move to next data point.
-      if (i == j) {
-        i = i + 1
-      } else {
-        // Otherwise pool the violating sequence
-        // and check if pooling caused monotonicity violation in previously processed points.
-        while (i >= 0 && input(i)._1 > input(i + 1)._1) {
-          pool(input, i, j)
-          i = i - 1
+      // Iterate through the data, fix any monotonicity violations we find
+      // We may need to do this multiple times, as pooling can introduce violations
+      // at locations that were previously fine.
+      while (i < n) {
+        var j = i
+
+        // Find next monotonicity violating sequence, if any.
+        while (j < n && input(j)._1 >= input(j + 1)._1) {
+          j = j + 1
         }
 
-        i = j
+        // Pool the violating sequence with the data point preceding it
+        if (input(i)._1 != input(j)._1) {
+          pool(input, i, j)
+          notFinished = true
+        }
+        i = j + 1
       }
     }
 
