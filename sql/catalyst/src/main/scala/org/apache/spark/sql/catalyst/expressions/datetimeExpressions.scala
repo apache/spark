@@ -72,12 +72,9 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
 }
 
 /**
- * Adds a number of days to date/timestamp.
+ * The base for addition/subtraction for days.
  */
-@ExpressionDescription(
-  usage = "_FUNC_(instant, num_days) - Returns the date/timestamp that is num_days after instant.",
-  extended = "> SELECT _FUNC_('2016-07-30', 1);\n '2016-07-31'")
-case class AddDays(instant: Expression, days: Expression)
+abstract class AddDaysBase(instant: Expression, days: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = instant
@@ -88,23 +85,38 @@ case class AddDays(instant: Expression, days: Expression)
 
   override def dataType: DataType = instant.dataType
 
+  // 1 for addition, -1 for subtraction
+  def signModifier: Int
+
   override def nullSafeEval(start: Any, days: Any): Any = {
     (instant.dataType, start, days) match {
       case (_: DateType, startDate: Int, days: Int) =>
-        startDate + days
+        startDate + (signModifier * days)
       case (_: TimestampType, startTimestamp: Long, days: Int) =>
-        DateTimeUtils.timestampAddDays(startTimestamp, days)
+        DateTimeUtils.timestampAddDays(startTimestamp, signModifier * days)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     instant.dataType match {
-      case DateType => nullSafeCodeGen(ctx, ev, (sd, d) => s"""${ev.value} = $sd + $d;""")
+      case DateType =>
+        nullSafeCodeGen(ctx, ev, (sd, d) => s"""${ev.value} = $sd + ($signModifier * $d);""")
       case TimestampType =>
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-        defineCodeGen(ctx, ev, (sd, d) => s"""$dtu.timestampAddDays($sd, $d)""")
+        defineCodeGen(ctx, ev, (sd, d) => s"""$dtu.timestampAddDays($sd, ($signModifier * $d))""")
     }
   }
+}
+
+/**
+ * Adds a number of days to date/timestamp.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(instant, num_days) - Returns the date/timestamp that is num_days after instant.",
+  extended = "> SELECT _FUNC_('2016-07-30', 1);\n '2016-07-31'")
+case class AddDays(instant: Expression, days: Expression) extends AddDaysBase(instant, days) {
+
+  override def signModifier: Int = 1
 
   override def prettyName: String = "date_add"
 }
@@ -115,34 +127,9 @@ case class AddDays(instant: Expression, days: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(instant, num_days) - Returns the date/timestamp that is num_days before instant.",
   extended = "> SELECT _FUNC_('2016-07-30', 1);\n '2016-07-29'")
-case class SubDays(instant: Expression, days: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+case class SubDays(instant: Expression, days: Expression) extends AddDaysBase(instant, days) {
 
-  override def left: Expression = instant
-  override def right: Expression = days
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DateType, TimestampType), IntegerType)
-
-  override def dataType: DataType = instant.dataType
-
-  override def nullSafeEval(start: Any, days: Any): Any = {
-    (instant.dataType, start, days) match {
-      case (_: DateType, startDate: Int, days: Int) =>
-        startDate - days
-      case (_: TimestampType, startTimestamp: Long, days: Int) =>
-        DateTimeUtils.timestampAddDays(startTimestamp, -days)
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    instant.dataType match {
-      case DateType => nullSafeCodeGen(ctx, ev, (sd, d) => s"""${ev.value} = $sd - $d;""")
-      case TimestampType =>
-        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-        defineCodeGen(ctx, ev, (sd, d) => s"""$dtu.timestampAddDays($sd, -$d)""")
-    }
-  }
+  override def signModifier: Int = -1
 
   override def prettyName: String = "date_sub"
 }
@@ -1002,7 +989,7 @@ case class TruncateTimestamp(timestamp: Expression, format: Expression)
           boolean ${ev.isNull} = ${ts.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $dtu.truncDate(${ts.value}, $truncLevel);
+            ${ev.value} = $dtu.truncateTimestamp(${ts.value}, $truncLevel);
           }""")
       }
     } else {
@@ -1013,7 +1000,7 @@ case class TruncateTimestamp(timestamp: Expression, format: Expression)
           if ($form == -1) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = $dtu.truncDate($dateVal, $form);
+            ${ev.value} = $dtu.truncateTimestamp($dateVal, $form);
           }
         """
       })

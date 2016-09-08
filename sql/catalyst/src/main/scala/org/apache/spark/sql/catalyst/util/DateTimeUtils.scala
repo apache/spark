@@ -43,7 +43,7 @@ object DateTimeUtils {
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
-  final val SECONDS_PER_DAY = 60L * 24L
+  final val SECONDS_PER_DAY = 60 * 60 * 24L
 
   final val MILLIS_PER_SECOND = 1000L
   final val MILLIS_PER_MINUTE = 60L * MILLIS_PER_SECOND
@@ -875,8 +875,7 @@ object DateTimeUtils {
 
     val millisUtc = ts / 1000L
     val millisLocal = millisUtc + threadLocalLocalTimeZone.get().getOffset(millisUtc)
-    val days = Math.floor(millisLocal.toDouble / unitInMillis).toInt
-    val truncatedMillisLocal = days.toLong * unitInMillis
+    val truncatedMillisLocal = millisLocal - millisLocal % unitInMillis
     val offset = getOffsetFromLocalMillis(truncatedMillisLocal, threadLocalLocalTimeZone.get())
     val truncatedMillis = truncatedMillisLocal - offset
     truncatedMillis * 1000L
