@@ -23,7 +23,7 @@ import java.net.{InetAddress, Socket}
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.LauncherProtocol._
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{ShutdownHookManager, ThreadUtils, Utils}
 
 /**
  * A class that can be used to talk to a launcher server. Users should extend this class to
@@ -44,7 +44,7 @@ private[spark] abstract class LauncherBackend extends Logging {
     val secret = sys.env.get(LauncherProtocol.ENV_LAUNCHER_SECRET)
     val stopFlag = sys.env.get(LauncherProtocol.ENV_LAUNCHER_STOP_FLAG).map(_.toBoolean)
     if (port != None && secret != None) {
-      if(stopFlag != None) {
+      if (stopFlag != None) {
         connect(port.get, secret.get, stopFlag.get)
       } else {
         connect(port.get, secret.get)
@@ -61,24 +61,20 @@ private[spark] abstract class LauncherBackend extends Logging {
       clientThread.start()
       _isConnected = true
       if(stopFlag) {
-        val shutdownHook: Runnable = new Runnable() {
-          def run {
-            logInfo("LauncherBackend shutdown hook invoked..")
-            try {
-              if(_isConnected && stopFlag) {
-                onStopRequest()
-              }
-            }
-            catch {
-              case anotherIOE: IOException => {
-                logInfo("Error while running LauncherBackend shutdownHook...", anotherIOE)
-              }
+        logDebug("Adding shutdown hook") // force eager creation of logger
+        var _shutdownHookRef = ShutdownHookManager.addShutdownHook(
+          ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
+          logInfo("Invoking onStopRequest() from shutdown hook")
+          try {
+            if (_isConnected && stopFlag) {
+              onStopRequest()
             }
           }
+          catch {
+            case anotherIOE: IOException =>
+              logError("Error while running LauncherBackend shutdownHook...", anotherIOE)
+          }
         }
-
-        val shutdownHookThread: Thread = LauncherBackend.threadFactory.newThread(shutdownHook)
-        Runtime.getRuntime.addShutdownHook(shutdownHookThread)
       }
     }
   }

@@ -75,7 +75,8 @@ private[spark] class Client(
 
   private val launcherServerPort : Int = sparkConf.get("spark.launcher.internal.port", "0").toInt
   private val launcherServerSecret : String = sparkConf.get("spark.launcher.internal.secret", "")
-  private val launcherServerStopFlag : Boolean = sparkConf.get("spark.launcher.internal.stop.flag", "false").toBoolean
+  private val launcherServerStopFlag : Boolean = sparkConf.get("spark.launcher.internal.stop.flag",
+    "false").toBoolean
 
   // AM related configurations
   private val amMemory = if (isClusterMode) {
@@ -148,7 +149,8 @@ private[spark] class Client(
   def submitApplication(): ApplicationId = {
     var appId: ApplicationId = null
     try {
-      if ( launcherServerSecret !=null && launcherServerSecret != "" && launcherServerPort != 0 && launcherServerStopFlag != null) {
+      if ( launcherServerSecret !=null && launcherServerSecret != "" && launcherServerPort != 0 &&
+        launcherServerStopFlag != null) {
         launcherBackend.connect(launcherServerPort, launcherServerSecret, launcherServerStopFlag)
       } else {
         launcherBackend.connect()
