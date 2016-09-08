@@ -69,7 +69,6 @@ Currently, SparkR on Windows is being tested with [AppVeyor](https://ci.appveyor
   <img width="707" alt="2016-09-04 11 22 37" src="https://cloud.githubusercontent.com/assets/6477701/18228828/5174cad4-729a-11e6-8737-bb7b9e0703c8.png">
 
 
-
 ### Checking the status, restarting and stopping the build 
 
 - Click "PROJECTS" menu.
@@ -114,8 +113,6 @@ Note: It seems the configurations in UI and `appveyor.yml` are  mutually exclusi
 
 
   <img width="471" alt="2016-08-30 12 42 43" src="https://cloud.githubusercontent.com/assets/6477701/18075450/d4ef256a-6eaf-11e6-8e41-74e38dac8ca0.png">
-
-
 
 
 ### Filtering commits and Pull Requests
