@@ -238,7 +238,6 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             partitionWriters = null;
           }
         }
-        shuffleBlockResolver.removeDataByMap(shuffleId, mapId);
         return None$.empty();
       }
     }

@@ -22,6 +22,11 @@ context("MLlib functions")
 # Tests for MLlib functions in SparkR
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 
+absoluteSparkPath <- function(x) {
+  sparkHome <- sparkR.conf("spark.home")
+  file.path(sparkHome, x)
+}
+
 test_that("formula of spark.glm", {
   training <- suppressWarnings(createDataFrame(iris))
   # directly calling the spark API
@@ -354,7 +359,8 @@ test_that("spark.kmeans", {
 })
 
 test_that("spark.mlp", {
-  df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
+  df <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
+                source = "libsvm")
   model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs", maxIter = 100,
                      tol = 0.5, stepSize = 1, seed = 1)
 
@@ -616,7 +622,7 @@ test_that("spark.gaussianMixture", {
 })
 
 test_that("spark.lda with libsvm", {
-  text <- read.df("data/mllib/sample_lda_libsvm_data.txt", source = "libsvm")
+  text <- read.df(absoluteSparkPath("data/mllib/sample_lda_libsvm_data.txt"), source = "libsvm")
   model <- spark.lda(text, optimizer = "em")
 
   stats <- summary(model, 10)
@@ -652,7 +658,7 @@ test_that("spark.lda with libsvm", {
 })
 
 test_that("spark.lda with text input", {
-  text <- read.text("data/mllib/sample_lda_data.txt")
+  text <- read.text(absoluteSparkPath("data/mllib/sample_lda_data.txt"))
   model <- spark.lda(text, optimizer = "online", features = "value")
 
   stats <- summary(model)
@@ -688,7 +694,7 @@ test_that("spark.lda with text input", {
 })
 
 test_that("spark.posterior and spark.perplexity", {
-  text <- read.text("data/mllib/sample_lda_data.txt")
+  text <- read.text(absoluteSparkPath("data/mllib/sample_lda_data.txt"))
   model <- spark.lda(text, features = "value", k = 3)
 
   # Assert perplexities are equal

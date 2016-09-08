@@ -288,7 +288,7 @@ object MultilayerPerceptronClassifier
  *
  * @param uid uid
  * @param layers array of layer sizes including input and output layers
- * @param weights vector of initial weights for the model that consists of the weights of layers
+ * @param weights the weights of layers
  * @return prediction model
  */
 @Since("1.5.0")

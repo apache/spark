@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -56,12 +55,6 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       }
     }
 
-    val optionsWithPath = if (table.tableType == CatalogTableType.MANAGED) {
-      table.storage.properties + ("path" -> sessionState.catalog.defaultTablePath(table.identifier))
-    } else {
-      table.storage.properties
-    }
-
     // Create the relation to validate the arguments before writing the metadata to the metastore,
     // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
     val dataSource: BaseRelation =
@@ -70,7 +63,16 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
         className = table.provider.get,
         bucketSpec = table.bucketSpec,
-        options = optionsWithPath).resolveRelation(checkPathExist = false)
+        options = table.storage.properties).resolveRelation()
+
+    dataSource match {
+      case fs: HadoopFsRelation =>
+        if (table.tableType == CatalogTableType.EXTERNAL && fs.location.paths.isEmpty) {
+          throw new AnalysisException(
+            "Cannot create a file-based external data source table without path")
+        }
+      case _ =>
+    }
 
     val partitionColumnNames = if (table.schema.nonEmpty) {
       table.partitionColumnNames
@@ -81,6 +83,12 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         case r: HadoopFsRelation => r.partitionSchema.fieldNames.toSeq
         case _ => Nil
       }
+    }
+
+    val optionsWithPath = if (table.tableType == CatalogTableType.MANAGED) {
+      table.storage.properties + ("path" -> sessionState.catalog.defaultTablePath(table.identifier))
+    } else {
+      table.storage.properties
     }
 
     val newTable = table.copy(

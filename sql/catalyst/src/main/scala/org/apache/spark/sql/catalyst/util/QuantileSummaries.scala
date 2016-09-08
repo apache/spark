@@ -59,7 +59,7 @@ class QuantileSummaries(
    * @param x the new observation to insert into the summary
    */
   def insert(x: Double): QuantileSummaries = {
-    headSampled.append(x)
+    headSampled += x
     if (headSampled.size >= defaultHeadSize) {
       this.withHeadBufferInserted
     } else {
@@ -90,7 +90,7 @@ class QuantileSummaries(
       val currentSample = sorted(opsIdx)
       // Add all the samples before the next observation.
       while(sampleIdx < sampled.size && sampled(sampleIdx).value <= currentSample) {
-        newSamples.append(sampled(sampleIdx))
+        newSamples += sampled(sampleIdx)
         sampleIdx += 1
       }
 
@@ -104,13 +104,13 @@ class QuantileSummaries(
         }
 
       val tuple = Stats(currentSample, 1, delta)
-      newSamples.append(tuple)
+      newSamples += tuple
       opsIdx += 1
     }
 
     // Add all the remaining existing samples
     while(sampleIdx < sampled.size) {
-      newSamples.append(sampled(sampleIdx))
+      newSamples += sampled(sampleIdx)
       sampleIdx += 1
     }
     new QuantileSummaries(compressThreshold, relativeError, newSamples.toArray, currentCount)
