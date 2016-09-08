@@ -131,3 +131,41 @@ only_commits:
 ```
 
 Please refer https://www.appveyor.com/docs/how-to/filtering-commits for more details.
+
+
+### Checking the full log of the build
+
+Currently, the console in AppVeyor does not print full details. This can be manually checked. For example, AppVeyor shows the failed tests as below in console
+
+```
+Failed -------------------------------------------------------------------------
+1. Error: union on two RDDs (@test_binary_function.R#38) -----------------------
+1: textFile(sc, fileName) at C:/projects/spark/R/lib/SparkR/tests/testthat/test_binary_function.R:38
+2: callJMethod(sc, "textFile", path, getMinPartitions(sc, minPartitions))
+3: invokeJava(isStatic = FALSE, objId$id, methodName, ...)
+4: stop(readString(conn))
+```
+
+After downloading the log by clicking the log button as below:
+
+![2016-09-08 11 37 17](https://cloud.githubusercontent.com/assets/6477701/18335227/b07d0782-75b8-11e6-94da-1b88cd2a2402.png)
+
+the details can be checked as below (e.g. exceptions)
+
+```
+Failed -------------------------------------------------------------------------
+1. Error: spark.lda with text input (@test_mllib.R#655) ------------------------
+ org.apache.spark.sql.AnalysisException: Path does not exist: file:/C:/projects/spark/R/lib/SparkR/tests/testthat/data/mllib/sample_lda_data.txt;
+    at org.apache.spark.sql.execution.datasources.DataSource$$anonfun$12.apply(DataSource.scala:376)
+    at org.apache.spark.sql.execution.datasources.DataSource$$anonfun$12.apply(DataSource.scala:365)
+    at scala.collection.TraversableLike$$anonfun$flatMap$1.apply(TraversableLike.scala:241)
+    at scala.collection.TraversableLike$$anonfun$flatMap$1.apply(TraversableLike.scala:241)
+    ...
+
+ 1: read.text("data/mllib/sample_lda_data.txt") at C:/projects/spark/R/lib/SparkR/tests/testthat/test_mllib.R:655
+ 2: dispatchFunc("read.text(path)", x, ...)
+ 3: f(x, ...)
+ 4: callJMethod(read, "text", paths)
+ 5: invokeJava(isStatic = FALSE, objId$id, methodName, ...)
+ 6: stop(readString(conn))
+```
