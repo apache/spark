@@ -39,7 +39,7 @@ setHiveContext <- function(sc) {
     # initialize once and reuse
     ssc <- callJMethod(sc, "sc")
     hiveCtx <- tryCatch({
-      newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
+      newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc, FALSE)
     },
     error = function(err) {
       skip("Hive is not build with SparkSQL, skipped")
@@ -526,6 +526,17 @@ test_that(
   expect_is(newdf, "SparkDataFrame")
   expect_equal(count(newdf), 1)
   dropTempView("table1")
+
+  createOrReplaceTempView(df, "dfView")
+  sqlCast <- collect(sql("select cast('2' as decimal) as x from dfView limit 1"))
+  out <- capture.output(sqlCast)
+  expect_true(is.data.frame(sqlCast))
+  expect_equal(names(sqlCast)[1], "x")
+  expect_equal(nrow(sqlCast), 1)
+  expect_equal(ncol(sqlCast), 1)
+  expect_equal(out[1], "  x")
+  expect_equal(out[2], "1 2")
+  dropTempView("dfView")
 })
 
 test_that("test cache, uncache and clearCache", {
@@ -2089,6 +2100,9 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   # Test primitive types
   DF <- createDataFrame(data, schema)
   expect_equal(coltypes(DF), c("integer", "logical", "POSIXct"))
+  createOrReplaceTempView(DF, "DFView")
+  sqlCast <- sql("select cast('2' as decimal) as x from DFView limit 1")
+  expect_equal(coltypes(sqlCast), "numeric")
 
   # Test complex types
   x <- createDataFrame(list(list(as.environment(
@@ -2131,6 +2145,14 @@ test_that("Method str()", {
   expect_equal(out[6], paste0(" $ Species     : chr \"setosa\" \"setosa\" \"",
                               "setosa\" \"setosa\" \"setosa\" \"setosa\""))
   expect_equal(out[7], " $ col         : logi TRUE TRUE TRUE TRUE TRUE TRUE")
+
+  createOrReplaceTempView(irisDF2, "irisView")
+
+  sqlCast <- sql("select cast('2' as decimal) as x from irisView limit 1")
+  castStr <- capture.output(str(sqlCast))
+  expect_equal(length(castStr), 2)
+  expect_equal(castStr[1], "'SparkDataFrame': 1 variables:")
+  expect_equal(castStr[2], " $ x: num 2")
 
   # A random dataset with many columns. This test is to check str limits
   # the number of columns. Therefore, it will suffice to check for the
@@ -2246,6 +2268,27 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
                x[, c("a", "b", "c")]
               })
   expect_identical(expected, result)
+})
+
+test_that("dapplyCollect() on DataFrame with a binary column", {
+
+  df <- data.frame(key = 1:3)
+  df$bytes <- lapply(df$key, serialize, connection = NULL)
+
+  df_spark <- createDataFrame(df)
+
+  result1 <- collect(df_spark)
+  expect_identical(df, result1)
+
+  result2 <- dapplyCollect(df_spark, function(x) x)
+  expect_identical(df, result2)
+
+  # A data.frame with a single column of bytes
+  scb <- subset(df, select = "bytes")
+  scb_spark <- createDataFrame(scb)
+  result <- dapplyCollect(scb_spark, function(x) x)
+  expect_identical(scb, result)
+
 })
 
 test_that("repartition by columns on DataFrame", {
@@ -2483,6 +2526,12 @@ test_that("enableHiveSupport on SparkSession", {
   conf <- callJMethod(sparkSession, "conf")
   value <- callJMethod(conf, "get", "spark.sql.catalogImplementation", "")
   expect_equal(value, "hive")
+})
+
+test_that("Spark version from SparkSession", {
+  ver <- callJMethod(sc, "version")
+  version <- sparkR.version()
+  expect_equal(ver, version)
 })
 
 unlink(parquetPath)

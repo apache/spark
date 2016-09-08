@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util
 import java.util.Objects
+import javax.xml.bind.DatatypeConverter
 
 import org.json4s.JsonAST._
 
@@ -168,14 +170,29 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression with 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
 
-  override def toString: String = if (value != null) value.toString else "null"
+  override def toString: String = value match {
+    case null => "null"
+    case binary: Array[Byte] => s"0x" + DatatypeConverter.printHexBinary(binary)
+    case other => other.toString
+  }
 
-  override def hashCode(): Int = 31 * (31 * Objects.hashCode(dataType)) + Objects.hashCode(value)
+  override def hashCode(): Int = {
+    val valueHashCode = value match {
+      case null => 0
+      case binary: Array[Byte] => util.Arrays.hashCode(binary)
+      case other => other.hashCode()
+    }
+    31 * Objects.hashCode(dataType) + valueHashCode
+  }
 
   override def equals(other: Any): Boolean = other match {
+    case o: Literal if !dataType.equals(o.dataType) => false
     case o: Literal =>
-      dataType.equals(o.dataType) &&
-        (value == null && null == o.value || value != null && value.equals(o.value))
+      (value, o.value) match {
+        case (null, null) => true
+        case (a: Array[Byte], b: Array[Byte]) => util.Arrays.equals(a, b)
+        case (a, b) => a != null && a.equals(b)
+      }
     case _ => false
   }
 
@@ -269,6 +286,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression with 
     case (v: Decimal, t: DecimalType) => v + "BD"
     case (v: Int, DateType) => s"DATE '${DateTimeUtils.toJavaDate(v)}'"
     case (v: Long, TimestampType) => s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
+    case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
     case _ => value.toString
   }
 }

@@ -591,7 +591,7 @@ class DataStreamWriter(object):
 
         .. note:: Experimental.
 
-        :param source: string, name of the data source, e.g. 'json', 'parquet'.
+        :param source: string, name of the data source, which for now can be 'parquet'.
 
         >>> writer = sdf.writeStream.format('json')
         """

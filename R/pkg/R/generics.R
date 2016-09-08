@@ -1375,3 +1375,7 @@ setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml")
 #' @rdname spark.als
 #' @export
 setGeneric("spark.als", function(data, ...) { standardGeneric("spark.als") })
+
+#' @rdname spark.kstest
+#' @export
+setGeneric("spark.kstest", function(data, ...) { standardGeneric("spark.kstest") })
