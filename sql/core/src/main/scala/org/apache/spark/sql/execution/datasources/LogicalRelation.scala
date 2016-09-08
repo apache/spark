@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.BaseRelation
@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
 case class LogicalRelation(
     relation: BaseRelation,
     expectedOutputAttributes: Option[Seq[Attribute]] = None,
-    metastoreTableIdentifier: Option[TableIdentifier] = None)
+    catalogTable: Option[CatalogTable] = None)
   extends LeafNode with MultiInstanceRelation {
 
   override val output: Seq[AttributeReference] = {
@@ -72,18 +72,26 @@ case class LogicalRelation(
   // expId can be different but the relation is still the same.
   override lazy val cleanArgs: Seq[Any] = Seq(relation)
 
-  @transient override lazy val statistics: Statistics = Statistics(
-    sizeInBytes = BigInt(relation.sizeInBytes)
-  )
+  @transient override lazy val statistics: Statistics = {
+    catalogTable.flatMap(_.stats.map(_.copy(sizeInBytes = relation.sizeInBytes))).getOrElse(
+      Statistics(sizeInBytes = relation.sizeInBytes))
+  }
 
   /** Used to lookup original attribute capitalization */
   val attributeMap: AttributeMap[AttributeReference] = AttributeMap(output.map(o => (o, o)))
 
-  def newInstance(): this.type =
+  /**
+   * Returns a new instance of this LogicalRelation. According to the semantics of
+   * MultiInstanceRelation, this method returns a copy of this object with
+   * unique expression ids. We respect the `expectedOutputAttributes` and create
+   * new instances of attributes in it.
+   */
+  override def newInstance(): this.type = {
     LogicalRelation(
       relation,
-      expectedOutputAttributes,
-      metastoreTableIdentifier).asInstanceOf[this.type]
+      expectedOutputAttributes.map(_.map(_.newInstance())),
+      catalogTable).asInstanceOf[this.type]
+  }
 
   override def refresh(): Unit = relation match {
     case fs: HadoopFsRelation => fs.refresh()

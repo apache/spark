@@ -467,7 +467,7 @@ private[spark] object PythonRDD extends Logging {
           val length = file.readInt()
           val obj = new Array[Byte](length)
           file.readFully(obj)
-          objs.append(obj)
+          objs += obj
         }
       } catch {
         case eof: EOFException => // No-op

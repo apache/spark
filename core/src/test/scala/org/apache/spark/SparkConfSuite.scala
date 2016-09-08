@@ -26,8 +26,9 @@ import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
 
+import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
+import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
 class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
@@ -283,6 +284,25 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(conf.contains("spark.io.compression.lz4.blockSize"))
     assert(conf.contains("spark.io.unknown") === false)
   }
+
+  val serializers = Map(
+    "java" -> new JavaSerializer(new SparkConf()),
+    "kryo" -> new KryoSerializer(new SparkConf()))
+
+  serializers.foreach { case (name, ser) =>
+    test(s"SPARK-17240: SparkConf should be serializable ($name)") {
+      val conf = new SparkConf()
+      conf.set(DRIVER_CLASS_PATH, "${" + DRIVER_JAVA_OPTIONS.key + "}")
+      conf.set(DRIVER_JAVA_OPTIONS, "test")
+
+      val serializer = ser.newInstance()
+      val bytes = serializer.serialize(conf)
+      val deser = serializer.deserialize[SparkConf](bytes)
+
+      assert(conf.get(DRIVER_CLASS_PATH) === deser.get(DRIVER_CLASS_PATH))
+    }
+  }
+
 }
 
 class Class1 {}

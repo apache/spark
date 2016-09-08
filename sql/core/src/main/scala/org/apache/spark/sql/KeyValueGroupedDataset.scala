@@ -79,6 +79,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Scala-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an iterator containing elements of an arbitrary type which will be returned
@@ -107,6 +108,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Java-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an iterator containing elements of an arbitrary type which will be returned
@@ -129,6 +131,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Scala-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an element of arbitrary type which will be returned as a new [[Dataset]].
@@ -151,6 +154,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Java-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an element of arbitrary type which will be returned as a new [[Dataset]].
@@ -172,6 +176,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Scala-specific)
    * Reduces the elements of each group of data using the specified binary function.
    * The given function must be commutative and associative or the result may be non-deterministic.
    *
@@ -184,6 +189,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Java-specific)
    * Reduces the elements of each group of data using the specified binary function.
    * The given function must be commutative and associative or the result may be non-deterministic.
    *
@@ -269,6 +275,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def count(): Dataset[(K, Long)] = agg(functions.count("*").as(ExpressionEncoder[Long]()))
 
   /**
+   * (Scala-specific)
    * Applies the given function to each cogrouped data.  For each unique group, the function will
    * be passed the grouping key and 2 iterators containing all elements in the group from
    * [[Dataset]] `this` and `other`.  The function can return an iterator containing elements of an
@@ -293,6 +300,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Java-specific)
    * Applies the given function to each cogrouped data.  For each unique group, the function will
    * be passed the grouping key and 2 iterators containing all elements in the group from
    * [[Dataset]] `this` and `other`.  The function can return an iterator containing elements of an
