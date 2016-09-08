@@ -213,43 +213,43 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("date_add") {
     checkEvaluation(
-      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1)),
+      AddDays(Literal(Date.valueOf("2016-02-28")), Literal(1)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
     checkEvaluation(
-      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(-365)),
+      AddDays(Literal(Date.valueOf("2016-02-28")), Literal(-365)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2015-02-28")))
-    checkEvaluation(DateAdd(Literal.create(null, DateType), Literal(1)), null)
-    checkEvaluation(DateAdd(Literal(Date.valueOf("2016-02-28")), Literal.create(null, IntegerType)),
+    checkEvaluation(AddDays(Literal.create(null, DateType), Literal(1)), null)
+    checkEvaluation(AddDays(Literal(Date.valueOf("2016-02-28")), Literal.create(null, IntegerType)),
       null)
-    checkEvaluation(DateAdd(Literal.create(null, DateType), Literal.create(null, IntegerType)),
+    checkEvaluation(AddDays(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
     checkEvaluation(
-      DateAdd(Literal(Date.valueOf("2016-02-28")), positiveIntLit), 49627)
+      AddDays(Literal(Date.valueOf("2016-02-28")), positiveIntLit), 49627)
     checkEvaluation(
-      DateAdd(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -15910)
-    checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, IntegerType)
-    checkEvaluation(DateAdd(Literal(Timestamp.valueOf("2015-01-10 12:00:00")), Literal(1)),
+      AddDays(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -15910)
+    checkConsistencyBetweenInterpretedAndCodegen(AddDays, DateType, IntegerType)
+    checkEvaluation(AddDays(Literal(Timestamp.valueOf("2015-01-10 12:00:00")), Literal(1)),
       DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-01-11 12:00:00")))
   }
 
   test("date_sub") {
     checkEvaluation(
-      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(1)),
+      SubDays(Literal(Date.valueOf("2015-01-01")), Literal(1)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2014-12-31")))
     checkEvaluation(
-      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(-1)),
+      SubDays(Literal(Date.valueOf("2015-01-01")), Literal(-1)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2015-01-02")))
-    checkEvaluation(DateSub(Literal.create(null, DateType), Literal(1)), null)
-    checkEvaluation(DateSub(Literal(Date.valueOf("2016-02-28")), Literal.create(null, IntegerType)),
+    checkEvaluation(SubDays(Literal.create(null, DateType), Literal(1)), null)
+    checkEvaluation(SubDays(Literal(Date.valueOf("2016-02-28")), Literal.create(null, IntegerType)),
       null)
-    checkEvaluation(DateSub(Literal.create(null, DateType), Literal.create(null, IntegerType)),
+    checkEvaluation(SubDays(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
     checkEvaluation(
-      DateSub(Literal(Date.valueOf("2016-02-28")), positiveIntLit), -15909)
+      SubDays(Literal(Date.valueOf("2016-02-28")), positiveIntLit), -15909)
     checkEvaluation(
-      DateSub(Literal(Date.valueOf("2016-02-28")), negativeIntLit), 49628)
-    checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, IntegerType)
-    checkEvaluation(DateSub(Literal(Timestamp.valueOf("2015-01-10 12:00:00")), Literal(1)),
+      SubDays(Literal(Date.valueOf("2016-02-28")), negativeIntLit), 49628)
+    checkConsistencyBetweenInterpretedAndCodegen(SubDays, DateType, IntegerType)
+    checkEvaluation(SubDays(Literal(Timestamp.valueOf("2015-01-10 12:00:00")), Literal(1)),
       DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-01-09 12:00:00")))
   }
 
@@ -398,10 +398,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("function trunc") {
     def testTrunc(input: Timestamp, fmt: String, expected: Timestamp): Unit = {
       checkEvaluation(
-        TruncDate(Literal.create(input, TimestampType), Literal.create(fmt, StringType)),
+        TruncateTimestamp(Literal.create(input, TimestampType), Literal.create(fmt, StringType)),
         expected)
       checkEvaluation(
-        TruncDate(
+        TruncateTimestamp(
           Literal.create(input, TimestampType), NonFoldableLiteral.create(fmt, StringType)),
         expected)
     }

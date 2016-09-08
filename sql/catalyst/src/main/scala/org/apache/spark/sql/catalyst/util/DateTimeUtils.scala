@@ -43,19 +43,15 @@ object DateTimeUtils {
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
-  final val SECONDS_PER_MINUTE = 60L
-  final val SECONDS_PER_HOUR = SECONDS_PER_MINUTE * 60L
-  final val SECONDS_PER_DAY = SECONDS_PER_HOUR * 24L
+  final val SECONDS_PER_DAY = 60L * 24L
 
   final val MILLIS_PER_SECOND = 1000L
-  final val MILLIS_PER_MINUTE = SECONDS_PER_MINUTE * MILLIS_PER_SECOND
-  final val MILLIS_PER_HOUR = SECONDS_PER_HOUR * MILLIS_PER_SECOND
+  final val MILLIS_PER_MINUTE = 60L * MILLIS_PER_SECOND
+  final val MILLIS_PER_HOUR = 60L * 60L * MILLIS_PER_SECOND
   final val MILLIS_PER_DAY = SECONDS_PER_DAY * MILLIS_PER_SECOND
 
   final val MICROS_PER_SECOND = MILLIS_PER_SECOND * 1000L
   final val MICROS_PER_DAY = SECONDS_PER_DAY * MICROS_PER_SECOND
-
-  final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
 
   // number of days in 400 years
   final val daysIn400Years: Int = 146097
@@ -96,14 +92,6 @@ object DateTimeUtils {
     override def initialValue(): SimpleDateFormat = {
       new SimpleDateFormat("yyyy-MM-dd")
     }
-  }
-
-  // A wrapper function to apply date related functions with timestamps. This truncates
-  // time parts.
-  private def dateFuncToTimestampFunc(
-      timestamp: SQLTimestamp,
-      dateFunc: (SQLDate) => SQLDate): SQLTimestamp = {
-    daysToMillis(dateFunc(millisToDays(timestamp / 1000L))) * 1000L
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
@@ -851,11 +839,11 @@ object DateTimeUtils {
    * Returns the trunc timestamp from original timestamp and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should only be 1 - 6.
    */
-  def truncDate(ts: SQLTimestamp, level: Int): SQLTimestamp = {
+  def truncateTimestamp(ts: SQLTimestamp, level: Int): SQLTimestamp = {
     if (level == TRUNC_TO_YEAR || level == TRUNC_TO_MONTH) {
-      dateFuncToTimestampFunc(ts, truncDate(_: SQLDate, level))
+      daysToMillis(truncateDate(millisToDays(ts / 1000L), level)) * 1000L
     } else {
-      truncTime(ts, level)
+      truncateTime(ts, level)
     }
   }
 
@@ -863,7 +851,7 @@ object DateTimeUtils {
    * Returns the trunc date from original date and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should only be 1 or 2.
    */
-  private def truncDate(d: SQLDate, level: Int): SQLDate = {
+  private def truncateDate(d: SQLDate, level: Int): SQLDate = {
     if (level == TRUNC_TO_YEAR) {
       d - DateTimeUtils.getDayInYear(d) + 1
     } else if (level == TRUNC_TO_MONTH) {
@@ -874,7 +862,7 @@ object DateTimeUtils {
     }
   }
 
-  private def truncTime(ts: SQLTimestamp, level: Int): SQLTimestamp = {
+  private def truncateTime(ts: SQLTimestamp, level: Int): SQLTimestamp = {
     val unitInMillis = level match {
       case TRUNC_TO_DAY => MILLIS_PER_DAY
       case TRUNC_TO_HOUR => MILLIS_PER_HOUR

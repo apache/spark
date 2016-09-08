@@ -2374,14 +2374,14 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def date_add(start: Column, days: Int): Column = withExpr { DateAdd(start.expr, Literal(days)) }
+  def date_add(start: Column, days: Int): Column = withExpr { AddDays(start.expr, Literal(days)) }
 
   /**
    * Returns the date that is `days` days before `start`
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def date_sub(start: Column, days: Int): Column = withExpr { DateSub(start.expr, Literal(days)) }
+  def date_sub(start: Column, days: Int): Column = withExpr { SubDays(start.expr, Literal(days)) }
 
   /**
    * Returns the number of days from `start` to `end`.
@@ -2548,7 +2548,7 @@ object functions {
   def to_date(e: Column): Column = withExpr { ToDate(e.expr) }
 
   /**
-   * Returns date truncated to the unit specified by the format.
+   * Returns timestamp truncated to the unit specified by the format.
    *
    * @param format: 'year', 'yyyy', 'yy' for truncate by year,
    *                'month', 'mon', 'mm' for truncate by month,
@@ -2561,7 +2561,7 @@ object functions {
    * @since 1.5.0
    */
   def trunc(date: Column, format: String): Column = withExpr {
-    TruncDate(date.expr, Literal(format))
+    TruncateTimestamp(date.expr, Literal(format))
   }
 
   /**

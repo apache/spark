@@ -77,7 +77,7 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
 @ExpressionDescription(
   usage = "_FUNC_(instant, num_days) - Returns the date/timestamp that is num_days after instant.",
   extended = "> SELECT _FUNC_('2016-07-30', 1);\n '2016-07-31'")
-case class DateAdd(instant: Expression, days: Expression)
+case class AddDays(instant: Expression, days: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = instant
@@ -115,7 +115,7 @@ case class DateAdd(instant: Expression, days: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(instant, num_days) - Returns the date/timestamp that is num_days before instant.",
   extended = "> SELECT _FUNC_('2016-07-30', 1);\n '2016-07-29'")
-case class DateSub(instant: Expression, days: Expression)
+case class SubDays(instant: Expression, days: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = instant
@@ -951,7 +951,7 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
   usage = "_FUNC_(timestamp, fmt) - Returns returns timestamp with the time portion truncated to the unit specified by the format model fmt.",
   extended = "> SELECT _FUNC_('2009-02-12', 'MM')\n '2009-02-01 00:00:00'\n> SELECT _FUNC_('2015-10-27', 'YEAR');\n '2015-01-01 00:00:00'")
 // scalastyle:on line.size.limit
-case class TruncDate(timestamp: Expression, format: Expression)
+case class TruncateTimestamp(timestamp: Expression, format: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = timestamp
@@ -982,7 +982,7 @@ case class TruncDate(timestamp: Expression, format: Expression)
       if (ts == null) {
         null
       } else {
-        DateTimeUtils.truncDate(ts.asInstanceOf[Long], level)
+        DateTimeUtils.truncateTimestamp(ts.asInstanceOf[Long], level)
       }
     }
   }
