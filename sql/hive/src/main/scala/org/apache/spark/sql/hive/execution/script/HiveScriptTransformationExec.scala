@@ -97,6 +97,7 @@ case class HiveScriptTransformationExec(
     val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
       var curLine: String = null
       val scriptOutputStream = new DataInputStream(inputStream)
+      val fieldDelimiter = ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")
 
       @Nullable val scriptOutputReader =
         ioschema.recordReader(scriptOutputStream, hadoopConf).orNull
@@ -107,7 +108,7 @@ case class HiveScriptTransformationExec(
       } else {
         null
       }
-      val mutableRow = new SpecificMutableRow(output.map(_.dataType))
+      val mutableRow = new SpecificInternalRow(output.map(_.dataType))
 
       @transient
       lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)
@@ -166,12 +167,10 @@ case class HiveScriptTransformationExec(
           curLine = reader.readLine()
           if (!ioschema.schemaLess) {
             new GenericInternalRow(
-              prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-                .map(CatalystTypeConverters.convertToCatalyst))
+              prevLine.split(fieldDelimiter).map(CatalystTypeConverters.convertToCatalyst))
           } else {
             new GenericInternalRow(
-              prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
-                .map(CatalystTypeConverters.convertToCatalyst))
+              prevLine.split(fieldDelimiter, 2).map(CatalystTypeConverters.convertToCatalyst))
           }
         } else {
           val raw = outputSerde.deserialize(scriptOutputWritable)

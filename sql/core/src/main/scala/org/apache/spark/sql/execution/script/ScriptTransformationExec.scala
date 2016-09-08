@@ -32,8 +32,10 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{SQLDate, SQLTimestamp}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, DateType, StructType, TimestampType}
 import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
 
 /**
@@ -82,7 +84,8 @@ case class ScriptTransformationExec(
 
     val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] {
       var curLine: String = null
-      val mutableRow = new SpecificMutableRow(output.map(_.dataType))
+      val mutableRow = new SpecificInternalRow(output.map(_.dataType))
+      val fieldDelimiter = ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")
 
       override def hasNext: Boolean = {
         try {
@@ -112,12 +115,10 @@ case class ScriptTransformationExec(
         curLine = reader.readLine()
         if (!ioschema.isSchemaLess) {
           new GenericInternalRow(
-            prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-              .map(CatalystTypeConverters.convertToCatalyst))
+            prevLine.split(fieldDelimiter).map(CatalystTypeConverters.convertToCatalyst))
         } else {
           new GenericInternalRow(
-            prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
-              .map(CatalystTypeConverters.convertToCatalyst))
+            prevLine.split(fieldDelimiter, 2).map(CatalystTypeConverters.convertToCatalyst))
         }
       }
     }
@@ -129,9 +130,10 @@ case class ScriptTransformationExec(
 
 private[sql] trait ScriptTransformBase extends Serializable with Logging {
 
-  def init(input: Seq[Expression],
-           script: String,
-           child: SparkPlan
+  def init(
+      input: Seq[Expression],
+      script: String,
+      child: SparkPlan
     ): (Process, InputStream, OutputStream, CircularBuffer, InterpretedProjection) = {
 
     val cmd = List("/bin/bash", "-c", script)
@@ -173,10 +175,11 @@ private[sql] trait ScriptTransformBase extends Serializable with Logging {
     }
   }
 
-  def checkFailureAndPropagate(writerException: Option[Throwable],
-                               cause: Throwable = null,
-                               proc: Process,
-                               stderrBuffer: CircularBuffer): Unit = {
+  def checkFailureAndPropagate(
+      writerException: Option[Throwable],
+      cause: Throwable = null,
+      proc: Process,
+      stderrBuffer: CircularBuffer): Unit = {
     if (writerException.isDefined) {
       throw writerException.get
     }
@@ -223,6 +226,9 @@ private[sql] class ScriptTransformationWriterThread(
 
   @volatile protected var _exception: Throwable = null
 
+  protected val lineDelimiter = ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
+  protected val fieldDelimiter = ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD")
+
   /** Contains the exception thrown while writing the parent iterator to the external process. */
   def exception: Option[Throwable] = Option(_exception)
 
@@ -232,17 +238,27 @@ private[sql] class ScriptTransformationWriterThread(
 
   protected def processRow(row: InternalRow, numColumns: Int): Unit = {
     val data = if (numColumns == 0) {
-      ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
+      lineDelimiter
     } else {
       val sb = new StringBuilder
-      sb.append(row.get(0, inputSchema(0)))
+      sb.append(row.get(0, inputSchema.head))
       var i = 1
       while (i < numColumns) {
-        sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-        sb.append(row.get(i, inputSchema(i)))
+        sb.append(fieldDelimiter)
+        val columnType = inputSchema(i)
+        val fieldValue = row.get(i, columnType)
+        val fieldStringValue = columnType match {
+          case _: DateType =>
+            DateTimeUtils.dateToString(fieldValue.asInstanceOf[SQLDate])
+          case _: TimestampType =>
+            DateTimeUtils.timestampToString(fieldValue.asInstanceOf[SQLTimestamp])
+          case _ =>
+            fieldValue.toString
+        }
+        sb.append(fieldStringValue)
         i += 1
       }
-      sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))
+      sb.append(lineDelimiter)
       sb.toString()
     }
     outputStream.write(data.getBytes(StandardCharsets.UTF_8))
@@ -295,6 +311,11 @@ object ScriptTransformIOSchema {
 
 /**
  * The wrapper class of Hive input and output schema properties
+ *
+ * @param inputRowFormat Contains delimiter information for the script's output
+ * @param outputRowFormat Contains delimiter information for the script's input
+ * @param schemaLess When set to true, script's output is tokenized as a key-value pair
+ *                   else it would be tokenized to extract multiple columns.
  */
 private[sql] class ScriptTransformIOSchema (
     inputRowFormat: Seq[(String, String)],
