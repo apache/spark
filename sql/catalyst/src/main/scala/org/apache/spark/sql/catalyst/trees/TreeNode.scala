@@ -597,10 +597,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       // this child in all children.
       case (name, value: TreeNode[_]) if containsChild(value) =>
         name -> JInt(children.indexOf(value))
-      // Check the value (Seq[BaseType]) element type first before converting it to a Set.
-      // Otherwise, it may take a lot of memory to convert a super big Seq to Set.
-      case (name, value: Seq[BaseType]) if value.length > 1 &&
-        value.head.isInstanceOf[TreeNode[_]] && value.toSet.subsetOf(containsChild) =>
+      case (name, value: Seq[BaseType]) if value.forall(containsChild) =>
         name -> JArray(
           value.map(v => JInt(children.indexOf(v.asInstanceOf[TreeNode[_]]))).toList
         )
