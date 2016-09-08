@@ -20,6 +20,8 @@ package org.apache.spark.sql.jdbc
 import java.sql.DriverManager
 import java.util.Properties
 
+import scala.collection.JavaConverters.propertiesAsScalaMapConverter
+
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
@@ -222,8 +224,6 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   }
 
   test("save API with SaveMode.Overwrite") {
-    import scala.collection.JavaConverters._
-
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
 
@@ -242,10 +242,9 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   }
 
   test("save errors if url is not specified") {
-    import scala.collection.JavaConverters._
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
-    var e = intercept[RuntimeException] {
+    val e = intercept[RuntimeException] {
       df.write.format("jdbc")
         .option("dbtable", "TEST.TRUNCATETEST")
         .options(properties.asScala)
@@ -255,10 +254,9 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   }
 
   test("save errors if dbtable is not specified") {
-    import scala.collection.JavaConverters._
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
-    var e = intercept[RuntimeException] {
+    val e = intercept[RuntimeException] {
       df.write.format("jdbc")
         .option("url", url1)
         .options(properties.asScala)
@@ -268,10 +266,9 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   }
 
   test("save errors if wrong user/password combination") {
-    import scala.collection.JavaConverters._
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
-    var e = intercept[org.h2.jdbc.JdbcSQLException] {
+    val e = intercept[org.h2.jdbc.JdbcSQLException] {
       df.write.format("jdbc")
         .option("dbtable", "TEST.TRUNCATETEST")
         .option("url", url1)

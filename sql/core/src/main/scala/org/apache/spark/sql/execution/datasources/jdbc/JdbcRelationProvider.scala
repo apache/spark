@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.SQLException
 import java.util.Properties
 
+import scala.collection.JavaConverters.mapAsJavaMapConverter
+
 import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 import org.apache.spark.sql.types.StructType
@@ -38,8 +40,9 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val upperBound = jdbcOptions.upperBound
     val numPartitions = jdbcOptions.numPartitions
 
-    val partitionInfo = if (partitionColumn == null) { null }
-    else {
+    val partitionInfo = if (partitionColumn == null) { 
+      null 
+    } else {
       JDBCPartitioningInfo(
         partitionColumn, lowerBound.toLong, upperBound.toLong, numPartitions.toInt)
     }
@@ -66,8 +69,6 @@ class JdbcRelationProvider extends CreatableRelationProvider
       mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
-    import collection.JavaConverters._
-    
     val jdbcOptions = new JDBCOptions(parameters)
     val url = jdbcOptions.url
     val table = jdbcOptions.table
@@ -81,7 +82,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
       val (doCreate, doSave) = (mode, tableExists) match {
         case (SaveMode.Ignore, true) => (false, false)
-        case (SaveMode.ErrorIfExists, true) => throw new SQLException(
+        case (SaveMode.ErrorIfExists, true) => throw new TableAlreadyExistsException(
           s"Table $table already exists, and SaveMode is set to ErrorIfExists.")
         case (SaveMode.Overwrite, true) =>
           if (jdbcOptions.isTruncate && JdbcUtils.isCascadingTruncateTable(url) == Some(false)) {
@@ -97,7 +98,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
         case (_, false) => (true, true)
       }
 
-      if(doCreate) {
+      if (doCreate) {
         val schema = JdbcUtils.schemaString(data, url)
         // To allow certain options to append when create a new table, which can be
         // table_options or partition_options.
@@ -111,7 +112,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
           statement.close()
         }
       }
-      if(doSave) JdbcUtils.saveTable(data, url, table, props)
+      if (doSave) JdbcUtils.saveTable(data, url, table, props)
     } finally {
       conn.close()
     }
