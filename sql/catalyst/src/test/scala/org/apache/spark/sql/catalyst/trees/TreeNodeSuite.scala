@@ -285,20 +285,23 @@ class TreeNodeSuite extends SparkFunSuite {
   }
 
   test("toJSON") {
-    def expected(json: String): String = {
-      s"""[{"class":"${classOf[JsonTestTreeNode].getName}","num-children":0,"arg":$json}]"""
+    def assertJSON(input: Any, json: String): Unit = {
+      val expected =
+        s"""[{"class":"${classOf[JsonTestTreeNode].getName}","num-children":0,"arg":$json}]"""
+      compareJSON(JsonTestTreeNode(input).toJSON, expected)
     }
+
     // Converts simple types to JSON
-    compareJSON(JsonTestTreeNode(true).toJSON, expected("true"))
-    compareJSON(JsonTestTreeNode(33.toByte).toJSON, expected("33"))
-    compareJSON(JsonTestTreeNode(44).toJSON, expected("44"))
-    compareJSON(JsonTestTreeNode(55L).toJSON, expected("55"))
-    compareJSON(JsonTestTreeNode(3.0).toJSON, expected("3.0"))
-    compareJSON(JsonTestTreeNode(4.0D).toJSON, expected("4.0"))
-    compareJSON(JsonTestTreeNode(BigInt(BigInteger.valueOf(88L))).toJSON, expected("88"))
-    compareJSON(JsonTestTreeNode(null).toJSON, expected("null"))
-    compareJSON(JsonTestTreeNode("text").toJSON, expected("\"text\""))
-    compareJSON(JsonTestTreeNode(Some("text")).toJSON, expected("\"text\""))
+    assertJSON(true, "true")
+    assertJSON(33.toByte, "33")
+    assertJSON(44, "44")
+    assertJSON(55L, "55")
+    assertJSON(3.0, "3.0")
+    assertJSON(4.0D, "4.0")
+    assertJSON(BigInt(BigInteger.valueOf(88L)), "88")
+    assertJSON(null, "null")
+    assertJSON("text", "\"text\"")
+    assertJSON(Some("text"), "\"text\"")
     compareJSON(JsonTestTreeNode(None).toJSON,
       s"""[
          |  {
@@ -309,85 +312,83 @@ class TreeNodeSuite extends SparkFunSuite {
        """.stripMargin)
 
     val uuid = UUID.randomUUID()
-    compareJSON(JsonTestTreeNode(uuid).toJSON, expected("\"" + uuid.toString + "\""))
+    assertJSON(uuid, "\"" + uuid.toString + "\"")
 
     // Converts some Spark Sql types to JSON
-    compareJSON(JsonTestTreeNode(IntegerType).toJSON, expected("\"integer\""))
-    compareJSON(JsonTestTreeNode(Metadata.empty).toJSON, expected(Metadata.empty.json))
-    compareJSON(JsonTestTreeNode(StorageLevel.NONE).toJSON,
-      expected(
-        """{
-          |  "useDisk":false,
-          |  "useMemory":false,
-          |  "useOffHeap":false,
-          |  "deserialized":false,
-          |  "replication":1
-          |}
-        """.stripMargin))
+    assertJSON(IntegerType, "\"integer\"")
+    assertJSON(Metadata.empty, Metadata.empty.json)
+    assertJSON(
+      StorageLevel.NONE,
+      """{
+        |  "useDisk":false,
+        |  "useMemory":false,
+        |  "useOffHeap":false,
+        |  "deserialized":false,
+        |  "replication":1
+        |}
+      """.stripMargin)
 
     // Converts TreeNode argument to JSON
-    compareJSON(JsonTestTreeNode(Literal(333)).toJSON,
-      expected(
-        """[
-          |  {
-          |    "class":"org.apache.spark.sql.catalyst.expressions.Literal",
-          |    "num-children":0,
-          |    "value":"333",
-          |    "dataType":"integer"
-          |  }
-          |]
-        """.stripMargin))
+    assertJSON(
+      Literal(333),
+      """[
+        |  {
+        |    "class":"org.apache.spark.sql.catalyst.expressions.Literal",
+        |    "num-children":0,
+        |    "value":"333",
+        |    "dataType":"integer"
+        |  }
+        |]
+      """.stripMargin)
 
     // Converts case object to JSON
-    compareJSON(JsonTestTreeNode(DummyObject).toJSON,
-      expected("{\"object\":\"org.apache.spark.sql.catalyst.trees.DummyObject$\"}"))
+    assertJSON(
+      DummyObject,
+      "{\"object\":\"org.apache.spark.sql.catalyst.trees.DummyObject$\"}")
 
     // Convert Case class to JSON
     val bigValue = new Array[Int](10000)
-    compareJSON(
-      JsonTestTreeNode(NameValue("name", bigValue)).toJSON,
-      expected(
-        """
-          |{
-          |  "product-class":"org.apache.spark.sql.catalyst.trees.NameValue",
-          |  "name":"name"
-          |}
-        """.stripMargin))
+    assertJSON(
+      NameValue("name", bigValue),
+      """
+        |{
+        |  "product-class":"org.apache.spark.sql.catalyst.trees.NameValue",
+        |  "name":"name"
+        |}
+      """.stripMargin)
 
     // Converts Seq[TreeNode] to JSON recursively
-    compareJSON(
-      JsonTestTreeNode(Seq(Literal(1), Literal(2))).toJSON,
-      expected(
-        """
-          |[
-          |  [
-          |    {
-          |      "class":"org.apache.spark.sql.catalyst.expressions.Literal",
-          |      "num-children":0,
-          |      "value":"1",
-          |      "dataType":"integer"
-          |    }
-          |  ],
-          |  [
-          |    {
-          |      "class":"org.apache.spark.sql.catalyst.expressions.Literal",
-          |      "num-children":0,
-          |      "value":"2",
-          |      "dataType":"integer"
-          |    }
-          |  ]
-          |]
-        """.stripMargin
-      ))
+    assertJSON(
+      Seq(Literal(1), Literal(2)),
+      """
+        |[
+        |  [
+        |    {
+        |      "class":"org.apache.spark.sql.catalyst.expressions.Literal",
+        |      "num-children":0,
+        |      "value":"1",
+        |      "dataType":"integer"
+        |    }
+        |  ],
+        |  [
+        |    {
+        |      "class":"org.apache.spark.sql.catalyst.expressions.Literal",
+        |      "num-children":0,
+        |      "value":"2",
+        |      "dataType":"integer"
+        |    }
+        |  ]
+        |]
+      """.stripMargin)
 
     // Other Seq is converted to JNull, to reduce the risk of out of memory
-    compareJSON(JsonTestTreeNode(Seq(1, 2, 3)).toJSON, expected("null"))
+    assertJSON(Seq(1, 2, 3), "null")
 
     // All Map type is converted to JNull, to reduce the risk of out of memory
-    compareJSON(JsonTestTreeNode(Map("key" -> "value")).toJSON, expected("null"))
+    assertJSON(Map("key" -> "value"), "null")
 
     // Unknown type is converted to JNull, to reduce the risk of out of memory
-    compareJSON(JsonTestTreeNode(new Object {}).toJSON, expected("null"))
+    assertJSON(new Object {}, "null")
 
     // Convert all TreeNode children to JSON
     compareJSON(
