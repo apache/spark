@@ -1199,6 +1199,1020 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
     assertUnsupportedFeature { sql("DROP TEMPORARY MACRO SIGMOID") }
   }
+
+  // scalastyle:off
+  createQueryTest("alter_rename_partition",
+    """
+      |-- Cleanup
+      |DROP TABLE IF EXISTS alter_rename_partition_src;
+      |DROP TABLE IF EXISTS alter_rename_partition;
+      |SHOW TABLES;
+      |
+      |create table alter_rename_partition_src ( col1 string ) stored as textfile ;
+      |load data local inpath '../../data/files/test.dat' overwrite into table alter_rename_partition_src ;
+      |
+      |create table alter_rename_partition ( col1 string ) partitioned by (pcol1 string , pcol2 string) stored as sequencefile;
+      |
+      |insert overwrite table alter_rename_partition partition (pCol1='old_part1:', pcol2='old_part2:') select col1 from alter_rename_partition_src ;
+      |select * from alter_rename_partition where pcol1='old_part1:' and pcol2='old_part2:';
+      |
+      |alter table alter_rename_partition partition (pCol1='old_part1:', pcol2='old_part2:') rename to partition (pCol1='new_part1:', pcol2='new_part2:');
+      |SHOW PARTITIONS alter_rename_partition;
+      |select * from alter_rename_partition where pcol1='old_part1:' and pcol2='old_part2:';
+      |select * from alter_rename_partition where pcol1='new_part1:' and pcol2='new_part2:';
+      |
+      |-- Cleanup
+      |DROP TABLE IF EXISTS alter_rename_partition_src;
+      |DROP TABLE IF EXISTS alter_rename_partition;
+      |SHOW TABLES;
+      |
+      |-- With non-default Database
+      |
+      |CREATE DATABASE alter_rename_partition_db;
+      |USE alter_rename_partition_db;
+      |SHOW TABLES;
+      |
+      |CREATE TABLE alter_rename_partition_src (col1 STRING) STORED AS TEXTFILE ;
+      |LOAD DATA LOCAL INPATH '../../data/files/test.dat' OVERWRITE INTO TABLE alter_rename_partition_src ;
+      |
+      |CREATE TABLE alter_rename_partition (col1 STRING) PARTITIONED BY (pcol1 STRING, pcol2 STRING) STORED AS SEQUENCEFILE;
+      |
+      |INSERT OVERWRITE TABLE alter_rename_partition PARTITION (pCol1='old_part1:', pcol2='old_part2:') SELECT col1 FROM alter_rename_partition_src ;
+      |SELECT * FROM alter_rename_partition WHERE pcol1='old_part1:' AND pcol2='old_part2:';
+      |
+      |ALTER TABLE alter_rename_partition PARTITION (pCol1='old_part1:', pcol2='old_part2:') RENAME TO PARTITION (pCol1='new_part1:', pcol2='new_part2:');
+      |SHOW PARTITIONS alter_rename_partition;
+      |SELECT * FROM alter_rename_partition WHERE pcol1='old_part1:' and pcol2='old_part2:';
+      |SELECT * FROM alter_rename_partition WHERE pcol1='new_part1:' and pcol2='new_part2:';
+    """.stripMargin)
+
+  createQueryTest("date_4",
+    """
+      |set hive.fetch.task.conversion=more;
+      |
+      |drop table if exists date_4;
+      |
+      |create table date_4 (d date);
+      |alter table date_4 set serde 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe';
+      |
+      |-- Test date literal syntax
+      |insert overwrite table date_4
+      |  select date '2011-01-01' from src tablesample (1 rows);
+      |select d, date '2011-01-01' from date_4 limit 1;
+      |
+      |drop table if exists date_4;
+    """.stripMargin)
+
+  createQueryTest("date_join1",
+    """
+      |drop table if exists date_join1;
+      |
+      |create table date_join1 (
+      |  ORIGIN_CITY_NAME string,
+      |  DEST_CITY_NAME string,
+      |  FL_DATE date,
+      |  ARR_DELAY float,
+      |  FL_NUM int
+      |);
+      |
+      |LOAD DATA LOCAL INPATH '../../data/files/flights_join.txt' OVERWRITE INTO TABLE date_join1;
+      |
+      |-- Note that there are 2 rows with date 2000-11-28, so we should expect 4 rows with that date in the join results
+      |select t1.fl_num, t1.fl_date, t2.fl_num, t2.fl_date
+      |  from date_join1 t1
+      |  join date_join1 t2
+      |  on (t1.fl_date = t2.fl_date);
+      |
+      |drop table if exists date_join1;
+    """.stripMargin)
+
+  createQueryTest("date_serde",
+    """
+      |drop table if exists date_serde_regex;
+      |drop table if exists date_serde_lb;
+      |drop table if exists date_serde_ls;
+      |drop table if exists date_serde_c;
+      |drop table if exists date_serde_lbc;
+      |drop table if exists date_serde_orc;
+      |
+      |
+      |--
+      |-- RegexSerDe
+      |--
+      |create table date_serde_regex (
+      |  ORIGIN_CITY_NAME string,
+      |  DEST_CITY_NAME string,
+      |  FL_DATE date,
+      |  ARR_DELAY float,
+      |  FL_NUM int
+      |)
+      |row format serde 'org.apache.hadoop.hive.serde2.RegexSerDe'
+      |with serdeproperties (
+      |  "input.regex" = "([^]*)([^]*)([^]*)([^]*)([0-9]*)"
+      |)
+      |stored as textfile;
+      |
+      |load data local inpath '../../data/files/flights_tiny.txt.1' overwrite into table date_serde_regex;
+      |
+      |select * from date_serde_regex;
+      |select fl_date, count(*) from date_serde_regex group by fl_date;
+      |
+      |--
+      |-- LazyBinary
+      |--
+      |create table date_serde_lb (
+      |  c1 date,
+      |  c2 int
+      |);
+      |alter table date_serde_lb set serde 'org.apache.hadoop.hive.serde2.lazybinary.LazyBinarySerDe';
+      |
+      |insert overwrite table date_serde_lb
+      |  select fl_date, fl_num from date_serde_regex limit 1;
+      |
+      |select * from date_serde_lb;
+      |select c1, sum(c2) from date_serde_lb group by c1;
+      |
+      |--
+      |-- LazySimple
+      |--
+      |create table date_serde_ls (
+      |  c1 date,
+      |  c2 int
+      |);
+      |alter table date_serde_ls set serde 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe';
+      |
+      |insert overwrite table date_serde_ls
+      |  select c1, c2 from date_serde_lb limit 1;
+      |
+      |select * from date_serde_ls;
+      |select c1, sum(c2) from date_serde_ls group by c1;
+      |
+      |--
+      |-- Columnar
+      |--
+      |create table date_serde_c (
+      |  c1 date,
+      |  c2 int
+      |) stored as rcfile;
+      |alter table date_serde_c set serde 'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe';
+      |
+      |insert overwrite table date_serde_c
+      |  select c1, c2 from date_serde_ls limit 1;
+      |
+      |select * from date_serde_c;
+      |select c1, sum(c2) from date_serde_c group by c1;
+      |
+      |--
+      |-- LazyBinaryColumnar
+      |--
+      |create table date_serde_lbc (
+      |  c1 date,
+      |  c2 int
+      |) stored as rcfile;
+      |alter table date_serde_lbc set serde 'org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe';
+      |
+      |insert overwrite table date_serde_lbc
+      |  select c1, c2 from date_serde_c limit 1;
+      |
+      |select * from date_serde_lbc;
+      |select c1, sum(c2) from date_serde_lbc group by c1;
+      |
+      |--
+      |-- ORC
+      |--
+      |create table date_serde_orc (
+      |  c1 date,
+      |  c2 int
+      |) stored as orc;
+      |alter table date_serde_orc set serde 'org.apache.hadoop.hive.ql.io.orc.OrcSerde';
+      |
+      |insert overwrite table date_serde_orc
+      |  select c1, c2 from date_serde_lbc limit 1;
+      |
+      |select * from date_serde_orc;
+      |select c1, sum(c2) from date_serde_orc group by c1;
+      |
+      |
+      |
+      |drop table if exists date_serde_regex;
+      |drop table if exists date_serde_lb;
+      |drop table if exists date_serde_ls;
+      |drop table if exists date_serde_c;
+      |drop table if exists date_serde_lbc;
+      |drop table if exists date_serde_orc;
+    """.stripMargin)
+
+  createQueryTest("insert_compressed",
+    """
+      |set hive.exec.compress.output=true;
+      |
+      |drop table if exists insert_compressed;
+      |create table insert_compressed (key int, value string);
+      |
+      |insert overwrite table insert_compressed select * from src;
+      |select count(*) from insert_compressed;
+      |
+      |insert into table insert_compressed select * from src;
+      |select count(*) from insert_compressed;
+      |
+      |insert into table insert_compressed select * from src;
+      |select count(*) from insert_compressed;
+      |
+      |drop table if exists insert_compressed;
+    """.stripMargin)
+
+  createQueryTest("lateral_view_cp",
+    """
+      |--HIVE 3226
+      |drop table if exists array_valued_src;
+      |create table array_valued_src (key string, value array<string>);
+      |insert overwrite table array_valued_src select key, array(value) from src;
+      |
+      |-- replace sel(*) to sel(exprs) for reflecting CP result properly
+      |explain select count(val) from (select a.key as key, b.value as array_val from src a join array_valued_src b on a.key=b.key) i lateral view explode (array_val) c as val;
+      |select count(val) from (select a.key as key, b.value as array_val from src a join array_valued_src b on a.key=b.key) i lateral view explode (array_val) c as val;
+    """.stripMargin)
+
+  createQueryTest("leftsemijoin",
+    """
+      |drop table if exists sales;
+      |drop table if exists things;
+      |
+      |set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
+      |
+      |CREATE TABLE sales (name STRING, id INT)
+      |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
+      |
+      |CREATE TABLE things (id INT, name STRING) partitioned by (ds string)
+      |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
+      |
+      |load data local inpath '../../data/files/sales.txt' INTO TABLE sales;
+      |load data local inpath '../../data/files/things.txt' INTO TABLE things partition(ds='2011-10-23');
+      |load data local inpath '../../data/files/things2.txt' INTO TABLE things partition(ds='2011-10-24');
+      |
+      |SELECT name,id FROM sales ORDER BY name ASC, id ASC;
+      |
+      |SELECT id,name FROM things ORDER BY id ASC, name ASC;
+      |
+      |SELECT name,id FROM sales LEFT SEMI JOIN things ON (sales.id = things.id) ORDER BY name ASC, id ASC;
+      |
+      |drop table if exists sales;
+      |drop table if exists things;
+    """.stripMargin)
+
+  createQueryTest("mapjoin_subquery2",
+    """
+      |drop table if exists x;
+      |drop table if exists y;
+      |drop table if exists z;
+      |
+      |CREATE TABLE x (name STRING, id INT)
+      |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
+      |
+      |CREATE TABLE y (id INT, name STRING)
+      |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
+      |
+      |CREATE TABLE z (id INT, name STRING)
+      |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
+      |
+      |load data local inpath '../../data/files/x.txt' INTO TABLE x;
+      |load data local inpath '../../data/files/y.txt' INTO TABLE y;
+      |load data local inpath '../../data/files/z.txt' INTO TABLE z;
+      |
+      |set hive.auto.convert.join=true;
+      |set hive.auto.convert.join.noconditionaltask=true;
+      |set hive.auto.convert.join.noconditionaltask.size=10000;
+      |
+      |-- Since the inputs are small, it should be automatically converted to mapjoin
+      |
+      |EXPLAIN
+      |SELECT subq.key1, subq.value1, subq.key2, subq.value2, z.id, z.name
+      |FROM
+      |(SELECT x.id as key1, x.name as value1, y.id as key2, y.name as value2
+      | FROM y JOIN x ON (x.id = y.id)) subq
+      | JOIN z ON (subq.key1 = z.id);
+      |
+      |SELECT subq.key1, subq.value1, subq.key2, subq.value2, z.id, z.name
+      |FROM
+      |(SELECT x.id as key1, x.name as value1, y.id as key2, y.name as value2
+      | FROM y JOIN x ON (x.id = y.id)) subq
+      | JOIN z ON (subq.key1 = z.id);
+      |
+      |drop table if exists x;
+      |drop table if exists y;
+      |drop table if exists z;
+    """.stripMargin)
+
+  createQueryTest("nomore_ambiguous_table_col",
+    """
+      |-- was negative/ambiguous_table_col.q
+      |
+      |drop table if exists ambiguous;
+      |create table ambiguous (key string, value string);
+      |
+      |FROM src key
+      |INSERT OVERWRITE TABLE ambiguous SELECT key.key, key.value WHERE key.value < 'val_100';
+      |
+      |drop table if exists ambiguous;
+    """.stripMargin)
+
+  createQueryTest("partition_date",
+    """
+      |drop table if exists partition_date_1;
+      |
+      |create table partition_date_1 (key string, value string) partitioned by (dt date, region string);
+      |
+      |insert overwrite table partition_date_1 partition(dt='2000-01-01', region= '1')
+      |  select * from src tablesample (10 rows);
+      |insert overwrite table partition_date_1 partition(dt='2000-01-01', region= '2')
+      |  select * from src tablesample (5 rows);
+      |insert overwrite table partition_date_1 partition(dt='2013-12-10', region= '2020-20-20')
+      |  select * from src tablesample (5 rows);
+      |insert overwrite table partition_date_1 partition(dt='2013-08-08', region= '1')
+      |  select * from src tablesample (20 rows);
+      |insert overwrite table partition_date_1 partition(dt='2013-08-08', region= '10')
+      |  select * from src tablesample (11 rows);
+      |
+      |
+      |select distinct dt from partition_date_1;
+      |select * from partition_date_1 where dt = '2000-01-01' and region = '2' order by key,value;
+      |
+      |-- 15
+      |select count(*) from partition_date_1 where dt = date '2000-01-01';
+      |-- 15.  Also try with string value in predicate
+      |select count(*) from partition_date_1 where dt = '2000-01-01';
+      |-- 5
+      |select count(*) from partition_date_1 where dt = date '2000-01-01' and region = '2';
+      |-- 11
+      |select count(*) from partition_date_1 where dt = date '2013-08-08' and region = '10';
+      |-- 30
+      |select count(*) from partition_date_1 where region = '1';
+      |-- 0
+      |select count(*) from partition_date_1 where dt = date '2000-01-01' and region = '3';
+      |-- 0
+      |select count(*) from partition_date_1 where dt = date '1999-01-01';
+      |
+      |-- Try other comparison operations
+      |
+      |-- 20
+      |select count(*) from partition_date_1 where dt > date '2000-01-01' and region = '1';
+      |-- 10
+      |select count(*) from partition_date_1 where dt < date '2000-01-02' and region = '1';
+      |-- 20
+      |select count(*) from partition_date_1 where dt >= date '2000-01-02' and region = '1';
+      |-- 10
+      |select count(*) from partition_date_1 where dt <= date '2000-01-01' and region = '1';
+      |-- 20
+      |select count(*) from partition_date_1 where dt <> date '2000-01-01' and region = '1';
+      |-- 10
+      |select count(*) from partition_date_1 where dt between date '1999-12-30' and date '2000-01-03' and region = '1';
+      |
+      |
+      |-- Try a string key with date-like strings
+      |
+      |-- 5
+      |select count(*) from partition_date_1 where region = '2020-20-20';
+      |-- 5
+      |select count(*) from partition_date_1 where region > '2010-01-01';
+      |
+      |drop table if exists partition_date_1;
+    """.stripMargin)
+
+  createQueryTest("partition_varchar1",
+    """
+      |drop table if exists partition_varchar_1;
+      |
+      |create table partition_varchar_1 (key string, value varchar(20)) partitioned by (dt varchar(10), region int);
+      |
+      |insert overwrite table partition_varchar_1 partition(dt='2000-01-01', region=1)
+      |  select * from src tablesample (10 rows);
+      |insert overwrite table partition_varchar_1 partition(dt='2000-01-01', region=2)
+      |  select * from src tablesample (5 rows);
+      |insert overwrite table partition_varchar_1 partition(dt='2013-08-08', region=1)
+      |  select * from src tablesample (20 rows);
+      |insert overwrite table partition_varchar_1 partition(dt='2013-08-08', region=10)
+      |  select * from src tablesample (11 rows);
+      |
+      |select distinct dt from partition_varchar_1;
+      |select * from partition_varchar_1 where dt = '2000-01-01' and region = 2 order by key,value;
+      |
+      |-- 15
+      |select count(*) from partition_varchar_1 where dt = '2000-01-01';
+      |-- 5
+      |select count(*) from partition_varchar_1 where dt = '2000-01-01' and region = 2;
+      |-- 11
+      |select count(*) from partition_varchar_1 where dt = '2013-08-08' and region = 10;
+      |-- 30
+      |select count(*) from partition_varchar_1 where region = 1;
+      |-- 0
+      |select count(*) from partition_varchar_1 where dt = '2000-01-01' and region = 3;
+      |-- 0
+      |select count(*) from partition_varchar_1 where dt = '1999-01-01';
+      |
+      |-- Try other comparison operations
+      |
+      |-- 20
+      |select count(*) from partition_varchar_1 where dt > '2000-01-01' and region = 1;
+      |-- 10
+      |select count(*) from partition_varchar_1 where dt < '2000-01-02' and region = 1;
+      |-- 20
+      |select count(*) from partition_varchar_1 where dt >= '2000-01-02' and region = 1;
+      |-- 10
+      |select count(*) from partition_varchar_1 where dt <= '2000-01-01' and region = 1;
+      |-- 20
+      |select count(*) from partition_varchar_1 where dt <> '2000-01-01' and region = 1;
+      |
+      |drop table if exists partition_varchar_1;
+    """.stripMargin)
+
+  createQueryTest("ppd_repeated_alias",
+    """
+      |drop table if exists pokes;
+      |drop table if exists pokes2;
+      |create table pokes (foo int, bar int, blah int);
+      |create table pokes2 (foo int, bar int, blah int);
+      |
+      |-- Q1: predicate should not be pushed on the right side of a left outer join
+      |explain
+      |SELECT a.foo as foo1, b.foo as foo2, b.bar
+      |FROM pokes a LEFT OUTER JOIN pokes2 b
+      |ON a.foo=b.foo
+      |WHERE b.bar=3;
+      |
+      |-- Q2: predicate should not be pushed on the right side of a left outer join
+      |explain
+      |SELECT * FROM
+      |    (SELECT a.foo as foo1, b.foo as foo2, b.bar
+      |    FROM pokes a LEFT OUTER JOIN pokes2 b
+      |    ON a.foo=b.foo) a
+      |WHERE a.bar=3;
+      |
+      |-- Q3: predicate should be pushed
+      |explain
+      |SELECT * FROM
+      |    (SELECT a.foo as foo1, b.foo as foo2, a.bar
+      |    FROM pokes a JOIN pokes2 b
+      |    ON a.foo=b.foo) a
+      |WHERE a.bar=3;
+      |
+      |-- Q4: here, the filter c.bar should be created under the first join but above the second
+      |explain select c.foo, d.bar from (select c.foo, b.bar, c.blah from pokes c left outer join pokes b on c.foo=b.foo) c left outer join pokes d where d.foo=1 and c.bar=2;
+      |
+      |drop table if exists pokes;
+      |drop table if exists pokes2;
+    """.stripMargin)
+
+  createQueryTest("push_or",
+    """
+      |drop table if exists push_or;
+      |
+      |create table push_or (key int, value string) partitioned by (ds string);
+      |
+      |insert overwrite table push_or partition (ds='2000-04-08') select * from src where key < 20 order by key;
+      |insert overwrite table push_or partition (ds='2000-04-09') select * from src where key < 20 order by key;
+      |
+      |explain extended select key, value, ds from push_or where ds='2000-04-09' or key=5 order by key, ds;
+      |select key, value, ds from push_or where ds='2000-04-09' or key=5 order by key, ds;
+    """.stripMargin)
+
+  createQueryTest("reducesink_dedup",
+    """
+      |DROP TABLE IF EXISTS part;
+      |
+      |-- data setup
+      |CREATE TABLE part(
+      |    p_partkey INT,
+      |    p_name STRING,
+      |    p_mfgr STRING,
+      |    p_brand STRING,
+      |    p_type STRING,
+      |    p_size INT,
+      |    p_container STRING,
+      |    p_retailprice DOUBLE,
+      |    p_comment STRING
+      |);
+      |
+      |
+      |select p_name
+      |from (select p_name from part distribute by 1 sort by 1) p
+      |distribute by 1 sort by 1
+      |;
+    """.stripMargin)
+
+  createQueryTest("subquery_in",
+    """
+      |DROP TABLE IF EXISTS part;
+      |
+      |-- data setup
+      |CREATE TABLE part(
+      |    p_partkey INT,
+      |    p_name STRING,
+      |    p_mfgr STRING,
+      |    p_brand STRING,
+      |    p_type STRING,
+      |    p_size INT,
+      |    p_container STRING,
+      |    p_retailprice DOUBLE,
+      |    p_comment STRING
+      |);
+      |
+      |LOAD DATA LOCAL INPATH '../../data/files/part_tiny.txt' overwrite into table part;
+      |
+      |DROP TABLE IF EXISTS lineitem;
+      |CREATE TABLE lineitem (L_ORDERKEY      INT,
+      |                                L_PARTKEY       INT,
+      |                                L_SUPPKEY       INT,
+      |                                L_LINENUMBER    INT,
+      |                                L_QUANTITY      DOUBLE,
+      |                                L_EXTENDEDPRICE DOUBLE,
+      |                                L_DISCOUNT      DOUBLE,
+      |                                L_TAX           DOUBLE,
+      |                                L_RETURNFLAG    STRING,
+      |                                L_LINESTATUS    STRING,
+      |                                l_shipdate      STRING,
+      |                                L_COMMITDATE    STRING,
+      |                                L_RECEIPTDATE   STRING,
+      |                                L_SHIPINSTRUCT  STRING,
+      |                                L_SHIPMODE      STRING,
+      |                                L_COMMENT       STRING)
+      |ROW FORMAT DELIMITED
+      |FIELDS TERMINATED BY '|';
+      |
+      |LOAD DATA LOCAL INPATH '../../data/files/lineitem.txt' OVERWRITE INTO TABLE lineitem;
+      |
+      |-- non agg, non corr
+      |explain
+      | select *
+      |from src
+      |where src.key in (select key from src s1 where s1.key > '9')
+      |;
+      |
+      |select *
+      |from src
+      |where src.key in (select key from src s1 where s1.key > '9')
+      |order by key
+      |;
+      |
+      |-- non agg, corr
+      |explain
+      |select *
+      |from src b
+      |where b.key in
+      |        (select a.key
+      |         from src a
+      |         where b.value = a.value and a.key > '9'
+      |        )
+      |;
+      |
+      |select *
+      |from src b
+      |where b.key in
+      |        (select a.key
+      |         from src a
+      |         where b.value = a.value and a.key > '9'
+      |        )
+      |order by b.key
+      |;
+      |
+      |-- agg, non corr
+      |explain
+      |select p_name, p_size
+      |from
+      |part where part.p_size in
+      |	(select avg(p_size)
+      |	 from (select p_size, rank() over(partition by p_mfgr order by p_size) as r from part) a
+      |	 where r <= 2
+      |	)
+      |;
+      |select p_name, p_size
+      |from
+      |part where part.p_size in
+      |	(select avg(p_size)
+      |	 from (select p_size, rank() over(partition by p_mfgr order by p_size) as r from part) a
+      |	 where r <= 2
+      |	)
+      |order by p_name
+      |;
+      |
+      |-- agg, corr
+      |explain
+      |select p_mfgr, p_name, p_size
+      |from part b where b.p_size in
+      |	(select min(p_size)
+      |	 from (select p_mfgr, p_size, rank() over(partition by p_mfgr order by p_size) as r from part) a
+      |	 where r <= 2 and b.p_mfgr = a.p_mfgr
+      |	)
+      |;
+      |
+      |select p_mfgr, p_name, p_size
+      |from part b where b.p_size in
+      |	(select min(p_size)
+      |	 from (select p_mfgr, p_size, rank() over(partition by p_mfgr order by p_size) as r from part) a
+      |	 where r <= 2 and b.p_mfgr = a.p_mfgr
+      |	)
+      |order by p_mfgr, p_name, p_size
+      |;
+      |
+      |-- distinct, corr
+      |explain
+      |select *
+      |from src b
+      |where b.key in
+      |        (select distinct a.key
+      |         from src a
+      |         where b.value = a.value and a.key > '9'
+      |        )
+      |;
+      |
+      |select *
+      |from src b
+      |where b.key in
+      |        (select distinct a.key
+      |         from src a
+      |         where b.value = a.value and a.key > '9'
+      |        )
+      |order by b.key
+      |;
+      |
+      |-- non agg, non corr, windowing
+      |select p_mfgr, p_name, p_size
+      |from part
+      |where part.p_size in
+      |  (select first_value(p_size) over(partition by p_mfgr order by p_size) from part)
+      |order by p_mfgr, p_name, p_size
+      |;
+      |
+      |-- non agg, non corr, with join in Parent Query
+      |explain
+      |select p.p_partkey, li.l_suppkey
+      |from (select distinct l_partkey as p_partkey from lineitem) p join lineitem li on p.p_partkey = li.l_partkey
+      |where li.l_linenumber = 1 and
+      | li.l_orderkey in (select l_orderkey from lineitem where l_shipmode = 'AIR')
+      |;
+      |
+      |select p.p_partkey, li.l_suppkey
+      |from (select distinct l_partkey as p_partkey from lineitem) p join lineitem li on p.p_partkey = li.l_partkey
+      |where li.l_linenumber = 1 and
+      | li.l_orderkey in (select l_orderkey from lineitem where l_shipmode = 'AIR')
+      |order by p.p_partkey, li.l_suppkey
+      |;
+      |
+      |-- non agg, corr, with join in Parent Query
+      |select p.p_partkey, li.l_suppkey
+      |from (select distinct l_partkey as p_partkey from lineitem) p join lineitem li on p.p_partkey = li.l_partkey
+      |where li.l_linenumber = 1 and
+      | li.l_orderkey in (select l_orderkey from lineitem where l_shipmode = 'AIR' and l_linenumber = li.l_linenumber)
+      |order by p.p_partkey, li.l_suppkey
+      |;
+    """.stripMargin)
+
+  createQueryTest("subquery_notin_having",
+    """
+      |DROP TABLE IF EXISTS part;
+      |
+      |-- data setup
+      |CREATE TABLE part(
+      |    p_partkey INT,
+      |    p_name STRING,
+      |    p_mfgr STRING,
+      |    p_brand STRING,
+      |    p_type STRING,
+      |    p_size INT,
+      |    p_container STRING,
+      |    p_retailprice DOUBLE,
+      |    p_comment STRING
+      |);
+      |
+      |LOAD DATA LOCAL INPATH '../../data/files/part_tiny.txt' overwrite into table part;
+      |
+      |
+      |-- non agg, non corr
+      |explain
+      |select key, count(*)
+      |from src
+      |group by key
+      |having key not in
+      |  ( select key  from src s1
+      |    where s1.key > '12'
+      |  )
+      |;
+      |
+      |-- non agg, corr
+      |explain
+      |select b.p_mfgr, min(p_retailprice)
+      |from part b
+      |group by b.p_mfgr
+      |having b.p_mfgr not in
+      |  (select p_mfgr
+      |  from (select p_mfgr, min(p_retailprice) l, max(p_retailprice) r, avg(p_retailprice) a from part group by p_mfgr) a
+      |  where min(p_retailprice) = l and r - l > 600
+      |  )
+      |;
+      |
+      |select b.p_mfgr, min(p_retailprice)
+      |from part b
+      |group by b.p_mfgr
+      |having b.p_mfgr not in
+      |  (select p_mfgr
+      |  from (select p_mfgr, min(p_retailprice) l, max(p_retailprice) r, avg(p_retailprice) a from part group by p_mfgr) a
+      |  where min(p_retailprice) = l and r - l > 600
+      |  )
+      |;
+      |
+      |-- agg, non corr
+      |explain
+      |select b.p_mfgr, min(p_retailprice)
+      |from part b
+      |group by b.p_mfgr
+      |having b.p_mfgr not in
+      |  (select p_mfgr
+      |  from part a
+      |  group by p_mfgr
+      |  having max(p_retailprice) - min(p_retailprice) > 600
+      |  )
+      |;
+      |
+      |select b.p_mfgr, min(p_retailprice)
+      |from part b
+      |group by b.p_mfgr
+      |having b.p_mfgr not in
+      |  (select p_mfgr
+      |  from part a
+      |  group by p_mfgr
+      |  having max(p_retailprice) - min(p_retailprice) > 600
+      |  )
+      |;
+    """.stripMargin)
+
+  createQueryTest("timestamp_3",
+    """
+      |set hive.fetch.task.conversion=more;
+      |
+      |drop table if exists timestamp_3;
+      |
+      |create table timestamp_3 (t timestamp);
+      |alter table timestamp_3 set serde 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe';
+      |
+      |insert overwrite table timestamp_3
+      |  select cast(cast('1.3041352164485E9' as double) as timestamp) from src tablesample (1 rows);
+      |select cast(t as boolean) from timestamp_3 limit 1;
+      |select cast(t as tinyint) from timestamp_3 limit 1;
+      |select cast(t as smallint) from timestamp_3 limit 1;
+      |select cast(t as int) from timestamp_3 limit 1;
+      |select cast(t as bigint) from timestamp_3 limit 1;
+      |select cast(t as float) from timestamp_3 limit 1;
+      |select cast(t as double) from timestamp_3 limit 1;
+      |select cast(t as string) from timestamp_3 limit 1;
+      |
+      |select t, sum(t), count(*), sum(t)/count(*), avg(t) from timestamp_3 group by t;
+      |
+      |drop table if exists timestamp_3;
+    """.stripMargin)
+
+  createQueryTest("timestamp_lazy",
+    """
+      |drop table if exists timestamp_lazy;
+      |create table timestamp_lazy (t timestamp, key string, value string);
+      |insert overwrite table timestamp_lazy select cast('2011-01-01 01:01:01' as timestamp), key, value from src tablesample (5 rows);
+      |
+      |select t,key,value from timestamp_lazy ORDER BY key ASC, value ASC;
+      |select t,key,value from timestamp_lazy distribute by t sort by key ASC, value ASC;
+    """.stripMargin)
+
+  createQueryTest("udaf_covar_pop",
+    """
+      |DROP TABLE IF EXISTS covar_tab;
+      |CREATE TABLE covar_tab (a INT, b INT, c INT)
+      |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+      |STORED AS TEXTFILE;
+      |LOAD DATA LOCAL INPATH '../../data/files/covar_tab.txt' OVERWRITE
+      |INTO TABLE covar_tab;
+      |
+      |DESCRIBE FUNCTION covar_pop;
+      |DESCRIBE FUNCTION EXTENDED covar_pop;
+      |SELECT covar_pop(b, c) FROM covar_tab WHERE a < 1;
+      |SELECT covar_pop(b, c) FROM covar_tab WHERE a < 3;
+      |SELECT covar_pop(b, c) FROM covar_tab WHERE a = 3;
+      |SELECT a, covar_pop(b, c) FROM covar_tab GROUP BY a ORDER BY a;
+      |SELECT covar_pop(b, c) FROM covar_tab;
+      |
+      |DROP TABLE IF EXISTS covar_tab;
+    """.stripMargin)
+
+  createQueryTest("union31",
+    """
+      |drop table if exists t1;
+      |drop table if exists t2;
+      |
+      |
+      |create table t1 as select * from src where key < 10;
+      |create table t2 as select * from src where key < 10;
+      |
+      |create table t3(key string, cnt int);
+      |create table t4(value string, cnt int);
+      |
+      |explain
+      |from
+      |(select * from t1
+      | union all
+      | select * from t2
+      |) x
+      |insert overwrite table t3
+      |  select key, count(1) group by key
+      |insert overwrite table t4
+      |  select value, count(1) group by value;
+      |
+      |from
+      |(select * from t1
+      | union all
+      | select * from t2
+      |) x
+      |insert overwrite table t3
+      |  select key, count(1) group by key
+      |insert overwrite table t4
+      |  select value, count(1) group by value;
+      |
+      |select * from t3 order by key;
+      |select * from t4 order by value;
+      |
+      |create table t5(c1 string, cnt int);
+      |create table t6(c1 string, cnt int);
+      |
+      |explain
+      |from
+      |(
+      | select key as c1, count(1) as cnt from t1 group by key
+      |   union all
+      | select key as c1, count(1) as cnt from t2 group by key
+      |) x
+      |insert overwrite table t5
+      |  select c1, sum(cnt) group by c1
+      |insert overwrite table t6
+      |  select c1, sum(cnt) group by c1;
+      |
+      |from
+      |(
+      | select key as c1, count(1) as cnt from t1 group by key
+      |   union all
+      | select key as c1, count(1) as cnt from t2 group by key
+      |) x
+      |insert overwrite table t5
+      |  select c1, sum(cnt) group by c1
+      |insert overwrite table t6
+      |  select c1, sum(cnt) group by c1;
+      |
+      |select * from t5 order by c1;
+      |select * from t6 order by c1;
+      |
+      |drop table if exists t1;
+      |drop table if exists t2;
+      |
+      |create table t1 as select * from src where key < 10;
+      |create table t2 as select key, count(1) as cnt from src where key < 10 group by key;
+      |
+      |create table t7(c1 string, cnt int);
+      |create table t8(c1 string, cnt int);
+      |
+      |explain
+      |from
+      |(
+      | select key as c1, count(1) as cnt from t1 group by key
+      |   union all
+      | select key as c1, cnt from t2
+      |) x
+      |insert overwrite table t7
+      |  select c1, count(1) group by c1
+      |insert overwrite table t8
+      |  select c1, count(1) group by c1;
+      |
+      |from
+      |(
+      | select key as c1, count(1) as cnt from t1 group by key
+      |   union all
+      | select key as c1, cnt from t2
+      |) x
+      |insert overwrite table t7
+      |  select c1, count(1) group by c1
+      |insert overwrite table t8
+      |  select c1, count(1) group by c1;
+      |
+      |select * from t7 order by c1;
+      |select * from t8 order by c1;
+    """.stripMargin)
+
+  createQueryTest("union_date",
+    """
+      |drop table if exists union_date_1;
+      |drop table if exists union_date_2;
+      |
+      |create table union_date_1 (
+      |  ORIGIN_CITY_NAME string,
+      |  DEST_CITY_NAME string,
+      |  FL_DATE date,
+      |  ARR_DELAY float,
+      |  FL_NUM int
+      |);
+      |
+      |create table union_date_2 (
+      |  ORIGIN_CITY_NAME string,
+      |  DEST_CITY_NAME string,
+      |  FL_DATE date,
+      |  ARR_DELAY float,
+      |  FL_NUM int
+      |);
+      |
+      |LOAD DATA LOCAL INPATH '../../data/files/flights_join.txt' OVERWRITE INTO TABLE union_date_1;
+      |LOAD DATA LOCAL INPATH '../../data/files/flights_join.txt' OVERWRITE INTO TABLE union_date_2;
+      |
+      |select * from (
+      |  select fl_num, fl_date from union_date_1
+      |  union all
+      |  select fl_num, fl_date from union_date_2
+      |) union_result order by fl_date, fl_num;
+      |
+      |drop table if exists union_date_1;
+      |drop table if exists union_date_2;
+    """.stripMargin)
+
+  createQueryTest("varchar_2",
+    """
+      |drop table if exists varchar_2;
+      |
+      |create table varchar_2 (
+      |  key varchar(10),
+      |  value varchar(20)
+      |);
+      |
+      |insert overwrite table varchar_2 select * from src;
+      |
+      |select value, sum(cast(key as int)), count(*) numrows
+      |from src
+      |group by value
+      |order by value asc
+      |limit 5;
+      |
+      |-- should match the query from src
+      |select value, sum(cast(key as int)), count(*) numrows
+      |from varchar_2
+      |group by value
+      |order by value asc
+      |limit 5;
+      |
+      |select value, sum(cast(key as int)), count(*) numrows
+      |from src
+      |group by value
+      |order by value desc
+      |limit 5;
+      |
+      |-- should match the query from src
+      |select value, sum(cast(key as int)), count(*) numrows
+      |from varchar_2
+      |group by value
+      |order by value desc
+      |limit 5;
+      |
+      |drop table if exists varchar_2;
+    """.stripMargin)
+
+  createQueryTest("varchar_join1",
+    """
+      |drop table if exists varchar_join1_vc1;
+      |drop table if exists varchar_join1_vc2;
+      |drop table if exists varchar_join1_str;
+      |
+      |create table  varchar_join1_vc1 (
+      |  c1 int,
+      |  c2 varchar(10)
+      |);
+      |
+      |create table  varchar_join1_vc2 (
+      |  c1 int,
+      |  c2 varchar(20)
+      |);
+      |
+      |create table  varchar_join1_str (
+      |  c1 int,
+      |  c2 string
+      |);
+      |
+      |load data local inpath '../../data/files/vc1.txt' into table varchar_join1_vc1;
+      |load data local inpath '../../data/files/vc1.txt' into table varchar_join1_vc2;
+      |load data local inpath '../../data/files/vc1.txt' into table varchar_join1_str;
+      |
+      |-- Join varchar with same length varchar
+      |select * from varchar_join1_vc1 a join varchar_join1_vc1 b on (a.c2 = b.c2) order by a.c1;
+      |
+      |-- Join varchar with different length varchar
+      |select * from varchar_join1_vc1 a join varchar_join1_vc2 b on (a.c2 = b.c2) order by a.c1;
+      |
+      |-- Join varchar with string
+      |select * from varchar_join1_vc1 a join varchar_join1_str b on (a.c2 = b.c2) order by a.c1;
+      |
+      |drop table if exists varchar_join1_vc1;
+      |drop table if exists varchar_join1_vc2;
+      |drop table if exists varchar_join1_str;
+    """.stripMargin)
+  // scalastyle:on
 }
 
 // for SPARK-2180 test
