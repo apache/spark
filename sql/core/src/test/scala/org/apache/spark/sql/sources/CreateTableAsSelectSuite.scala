@@ -201,7 +201,7 @@ class CreateTableAsSelectSuite
          """.stripMargin
       )
       val table = catalog.getTableMetadata(TableIdentifier("t"))
-      assert(DDLUtils.getPartitionColumnsFromTableProperties(table) == Seq("a"))
+      assert(table.partitionColumnNames == Seq("a"))
     }
   }
 
@@ -217,8 +217,7 @@ class CreateTableAsSelectSuite
          """.stripMargin
       )
       val table = catalog.getTableMetadata(TableIdentifier("t"))
-      assert(DDLUtils.getBucketSpecFromTableProperties(table) ==
-        Option(BucketSpec(5, Seq("a"), Seq("b"))))
+      assert(table.bucketSpec == Option(BucketSpec(5, Seq("a"), Seq("b"))))
     }
   }
 

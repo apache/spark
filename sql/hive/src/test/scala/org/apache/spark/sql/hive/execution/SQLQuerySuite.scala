@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
-import scala.sys.process.Process
+import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
 
 import org.apache.hadoop.fs.Path
@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
@@ -436,8 +435,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             assert(r.options("path") === location)
           case None => // OK.
         }
-        assert(
-          catalogTable.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER) === format)
+        assert(catalogTable.provider.get === format)
 
       case r: MetastoreRelation =>
         if (isDataSourceParquet) {
@@ -1790,6 +1788,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   def testCommandAvailable(command: String): Boolean = {
-    Try(Process(command) !!).isSuccess
+    val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
+    attempt.isSuccess && attempt.get == 0
   }
 }

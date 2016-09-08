@@ -126,7 +126,7 @@ ssc.awaitTermination()  // Wait for the computation to terminate
 {% endhighlight %}
 
 The complete code can be found in the Spark Streaming example
-[NetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/NetworkWordCount.scala).
+[NetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/NetworkWordCount.scala).
 <br>
 
 </div>
@@ -216,7 +216,7 @@ jssc.awaitTermination();   // Wait for the computation to terminate
 {% endhighlight %}
 
 The complete code can be found in the Spark Streaming example
-[JavaNetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaNetworkWordCount.java).
+[JavaNetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaNetworkWordCount.java).
 <br>
 
 </div>
@@ -277,7 +277,7 @@ ssc.awaitTermination()  # Wait for the computation to terminate
 {% endhighlight %}
 
 The complete code can be found in the Spark Streaming example
-[NetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/network_wordcount.py).
+[NetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/network_wordcount.py).
 <br>
 
 </div>
@@ -656,7 +656,7 @@ methods for creating DStreams from files as input sources.
 	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
 
 - **Streams based on Custom Receivers:** DStreams can be created with data streams received through custom receivers. See the [Custom Receiver
-  Guide](streaming-custom-receivers.html) and [DStream Akka](https://github.com/spark-packages/dstream-akka) for more details.
+  Guide](streaming-custom-receivers.html) for more details.
 
 - **Queue of RDDs as a Stream:** For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
 
@@ -854,7 +854,7 @@ JavaPairDStream<String, Integer> runningCounts = pairs.updateStateByKey(updateFu
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
 the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
 Java code, take a look at the example
-[JavaStatefulNetworkWordCount.java]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming
+[JavaStatefulNetworkWordCount.java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming
 /JavaStatefulNetworkWordCount.java).
 
 </div>
@@ -863,7 +863,7 @@ Java code, take a look at the example
 {% highlight python %}
 def updateFunction(newValues, runningCount):
     if runningCount is None:
-       runningCount = 0
+        runningCount = 0
     return sum(newValues, runningCount)  # add the new values with the previous running count to get the new count
 {% endhighlight %}
 
@@ -877,7 +877,7 @@ runningCounts = pairs.updateStateByKey(updateFunction)
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
 the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
 Python code, take a look at the example
-[stateful_network_wordcount.py]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/stateful_network_wordcount.py).
+[stateful_network_wordcount.py]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/stateful_network_wordcount.py).
 
 </div>
 </div>
@@ -903,10 +903,10 @@ spam information (maybe generated with Spark as well) and then filtering based o
 {% highlight scala %}
 val spamInfoRDD = ssc.sparkContext.newAPIHadoopRDD(...) // RDD containing spam information
 
-val cleanedDStream = wordCounts.transform(rdd => {
+val cleanedDStream = wordCounts.transform { rdd =>
   rdd.join(spamInfoRDD).filter(...) // join data stream with spam information to do data cleaning
   ...
-})
+}
 {% endhighlight %}
 
 </div>
@@ -930,7 +930,7 @@ JavaPairDStream<String, Integer> cleanedDStream = wordCounts.transform(
 <div data-lang="python" markdown="1">
 
 {% highlight python %}
-spamInfoRDD = sc.pickleFile(...) # RDD containing spam information
+spamInfoRDD = sc.pickleFile(...)  # RDD containing spam information
 
 # join data stream with spam information to do data cleaning
 cleanedDStream = wordCounts.transform(lambda rdd: rdd.join(spamInfoRDD).filter(...))
@@ -1142,12 +1142,12 @@ val joinedStream = windowedStream.transform { rdd => rdd.join(dataset) }
 JavaPairRDD<String, String> dataset = ...
 JavaPairDStream<String, String> windowedStream = stream.window(Durations.seconds(20));
 JavaPairDStream<String, String> joinedStream = windowedStream.transform(
-    new Function<JavaRDD<Tuple2<String, String>>, JavaRDD<Tuple2<String, String>>>() {
-        @Override 
-        public JavaRDD<Tuple2<String, String>> call(JavaRDD<Tuple2<String, String>> rdd) {
-            return rdd.join(dataset);
-        }
+  new Function<JavaRDD<Tuple2<String, String>>, JavaRDD<Tuple2<String, String>>>() {
+    @Override
+    public JavaRDD<Tuple2<String, String>> call(JavaRDD<Tuple2<String, String>> rdd) {
+      return rdd.join(dataset);
     }
+  }
 );
 {% endhighlight %}
 </div>
@@ -1428,7 +1428,7 @@ wordCounts.foreachRDD { (rdd: RDD[(String, Int)], time: Time) =>
 
 {% endhighlight %}
 
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/RecoverableNetworkWordCount.scala).
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/RecoverableNetworkWordCount.scala).
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
@@ -1491,20 +1491,19 @@ wordCounts.foreachRDD(new Function2<JavaPairRDD<String, Integer>, Time, Void>() 
 
 {% endhighlight %}
 
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaRecoverableNetworkWordCount.java).
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaRecoverableNetworkWordCount.java).
 </div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
-
 def getWordBlacklist(sparkContext):
-    if ('wordBlacklist' not in globals()):
-        globals()['wordBlacklist'] = sparkContext.broadcast(["a", "b", "c"])
-    return globals()['wordBlacklist']
+    if ("wordBlacklist" not in globals()):
+        globals()["wordBlacklist"] = sparkContext.broadcast(["a", "b", "c"])
+    return globals()["wordBlacklist"]
 
 def getDroppedWordsCounter(sparkContext):
-    if ('droppedWordsCounter' not in globals()):
-        globals()['droppedWordsCounter'] = sparkContext.accumulator(0)
-    return globals()['droppedWordsCounter']
+    if ("droppedWordsCounter" not in globals()):
+        globals()["droppedWordsCounter"] = sparkContext.accumulator(0)
+    return globals()["droppedWordsCounter"]
 
 def echo(time, rdd):
     # Get or register the blacklist Broadcast
@@ -1526,7 +1525,7 @@ wordCounts.foreachRDD(echo)
 
 {% endhighlight %}
 
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/recoverable_network_wordcount.py).
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/recoverable_network_wordcount.py).
 
 </div>
 </div>
@@ -1564,7 +1563,7 @@ words.foreachRDD { rdd =>
 
 {% endhighlight %}
 
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/SqlNetworkWordCount.scala).
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/SqlNetworkWordCount.scala).
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
@@ -1611,7 +1610,7 @@ words.foreachRDD(
 
       // Do word count on table using SQL and print it
       DataFrame wordCountsDataFrame =
-          spark.sql("select word, count(*) as total from words group by word");
+        spark.sql("select word, count(*) as total from words group by word");
       wordCountsDataFrame.show();
       return null;
     }
@@ -1619,19 +1618,19 @@ words.foreachRDD(
 );
 {% endhighlight %}
 
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaSqlNetworkWordCount.java).
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaSqlNetworkWordCount.java).
 </div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 
 # Lazily instantiated global instance of SparkSession
 def getSparkSessionInstance(sparkConf):
-    if ('sparkSessionSingletonInstance' not in globals()):
-        globals()['sparkSessionSingletonInstance'] = SparkSession\
-            .builder\
-            .config(conf=sparkConf)\
+    if ("sparkSessionSingletonInstance" not in globals()):
+        globals()["sparkSessionSingletonInstance"] = SparkSession \
+            .builder \
+            .config(conf=sparkConf) \
             .getOrCreate()
-    return globals()['sparkSessionSingletonInstance']
+    return globals()["sparkSessionSingletonInstance"]
 
 ...
 
@@ -1661,7 +1660,7 @@ def process(time, rdd):
 words.foreachRDD(process)
 {% endhighlight %}
 
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/sql_network_wordcount.py).
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/sql_network_wordcount.py).
 
 </div>
 </div>
@@ -1759,11 +1758,11 @@ This behavior is made simple by using `StreamingContext.getOrCreate`. This is us
 {% highlight scala %}
 // Function to create and setup a new StreamingContext
 def functionToCreateContext(): StreamingContext = {
-    val ssc = new StreamingContext(...)   // new context
-    val lines = ssc.socketTextStream(...) // create DStreams
-    ...
-    ssc.checkpoint(checkpointDirectory)   // set checkpoint directory
-    ssc
+  val ssc = new StreamingContext(...)   // new context
+  val lines = ssc.socketTextStream(...) // create DStreams
+  ...
+  ssc.checkpoint(checkpointDirectory)   // set checkpoint directory
+  ssc
 }
 
 // Get StreamingContext from checkpoint data or create a new one
@@ -1829,11 +1828,11 @@ This behavior is made simple by using `StreamingContext.getOrCreate`. This is us
 {% highlight python %}
 # Function to create and setup a new StreamingContext
 def functionToCreateContext():
-    sc = SparkContext(...)   # new context
-    ssc = new StreamingContext(...)
-    lines = ssc.socketTextStream(...) # create DStreams
+    sc = SparkContext(...)  # new context
+    ssc = StreamingContext(...)
+    lines = ssc.socketTextStream(...)  # create DStreams
     ...
-    ssc.checkpoint(checkpointDirectory)   # set checkpoint directory
+    ssc.checkpoint(checkpointDirectory)  # set checkpoint directory
     return ssc
 
 # Get StreamingContext from checkpoint data or create a new one
@@ -2383,11 +2382,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     - [Kafka Integration Guide](streaming-kafka-integration.html)
     - [Kinesis Integration Guide](streaming-kinesis-integration.html)
     - [Custom Receiver Guide](streaming-custom-receivers.html)
-* External DStream data sources:
-    - [DStream MQTT](https://github.com/spark-packages/dstream-mqtt)
-    - [DStream Twitter](https://github.com/spark-packages/dstream-twitter)
-    - [DStream Akka](https://github.com/spark-packages/dstream-akka)
-    - [DStream ZeroMQ](https://github.com/spark-packages/dstream-zeromq)
+* Third-party DStream data sources can be found in [Spark Packages](https://spark-packages.org/)
 * API documentation
   - Scala docs
     * [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) and

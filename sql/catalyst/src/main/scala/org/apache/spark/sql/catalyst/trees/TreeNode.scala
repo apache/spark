@@ -103,9 +103,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Find the first [[TreeNode]] that satisfies the condition specified by `f`.
    * The condition is recursively applied to this node and all of its children (pre-order).
    */
-  def find(f: BaseType => Boolean): Option[BaseType] = f(this) match {
-    case true => Some(this)
-    case false => children.foldLeft(Option.empty[BaseType]) { (l, r) => l.orElse(r.find(f)) }
+  def find(f: BaseType => Boolean): Option[BaseType] = if (f(this)) {
+    Some(this)
+  } else {
+    children.foldLeft(Option.empty[BaseType]) { (l, r) => l.orElse(r.find(f)) }
   }
 
   /**
@@ -538,9 +539,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
-        depth + 2, lastChildren :+ false :+ false, builder, verbose))
+        depth + 2, lastChildren :+ children.isEmpty :+ false, builder, verbose))
       innerChildren.last.generateTreeString(
-        depth + 2, lastChildren :+ false :+ true, builder, verbose)
+        depth + 2, lastChildren :+ children.isEmpty :+ true, builder, verbose)
     }
 
     if (children.nonEmpty) {
@@ -617,7 +618,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case s: String => JString(s)
     case u: UUID => JString(u.toString)
     case dt: DataType => dt.jsonValue
-    case m: Metadata => m.jsonValue
+    // SPARK-17356: In usage of mllib, Metadata may store a huge vector of data, transforming
+    // it to JSON may trigger OutOfMemoryError.
+    case m: Metadata => Metadata.empty.jsonValue
     case s: StorageLevel =>
       ("useDisk" -> s.useDisk) ~ ("useMemory" -> s.useMemory) ~ ("useOffHeap" -> s.useOffHeap) ~
         ("deserialized" -> s.deserialized) ~ ("replication" -> s.replication)

@@ -248,6 +248,7 @@ public final class UnsafeInMemorySorter {
     private long baseOffset;
     private long keyPrefix;
     private int recordLength;
+    private long currentPageNumber;
 
     private SortedIterator(int numRecords, int offset) {
       this.numRecords = numRecords;
@@ -262,6 +263,7 @@ public final class UnsafeInMemorySorter {
       iter.baseOffset = baseOffset;
       iter.keyPrefix = keyPrefix;
       iter.recordLength = recordLength;
+      iter.currentPageNumber = currentPageNumber;
       return iter;
     }
 
@@ -279,6 +281,7 @@ public final class UnsafeInMemorySorter {
     public void loadNext() {
       // This pointer points to a 4-byte record length, followed by the record's bytes
       final long recordPointer = array.get(offset + position);
+      currentPageNumber = memoryManager.decodePageNumber(recordPointer);
       baseObject = memoryManager.getPage(recordPointer);
       baseOffset = memoryManager.getOffsetInPage(recordPointer) + 4;  // Skip over record length
       recordLength = Platform.getInt(baseObject, baseOffset - 4);
@@ -291,6 +294,10 @@ public final class UnsafeInMemorySorter {
 
     @Override
     public long getBaseOffset() { return baseOffset; }
+
+    public long getCurrentPageNumber() {
+      return currentPageNumber;
+    }
 
     @Override
     public int getRecordLength() { return recordLength; }

@@ -97,6 +97,10 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   test("non-matching optional group") {
     val df = Seq(Tuple1("aaaac")).toDF("s")
     checkAnswer(
+      df.select(regexp_extract($"s", "(foo)", 1)),
+      Row("")
+    )
+    checkAnswer(
       df.select(regexp_extract($"s", "(a+)(b)?(c)", 2)),
       Row("")
     )
