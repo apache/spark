@@ -160,18 +160,11 @@ private[spark] class CoarseGrainedExecutorBackend(
       logError(message)
     }
 
-    if (notifyDriver) {
-      logInfo(s"Notifying the driver before exiting the executor")
-      rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
-        // This is a very fast action so we can use "ThreadUtils.sameThread"
-        driver = Some(ref)
-        ref.ask[Boolean](RemoveExecutor(executorId, new ExecutorLossReason(reason)))
-      }(ThreadUtils.sameThread).onComplete {
-        // This is a very fast action so we can use "ThreadUtils.sameThread"
-        case Success(msg) =>
-        // Just ignore it
-        case Failure(e) =>
-          logWarning(s"Unable to notify the driver due to " + e.getMessage, e)
+    if (notifyDriver && driver.nonEmpty) {
+      driver.get.ask[Boolean](
+        RemoveExecutor(executorId, new ExecutorLossReason(reason))
+      ).onFailure { case e =>
+        logWarning(s"Unable to notify the driver due to " + e.getMessage, e)
       }(ThreadUtils.sameThread)
     }
 
