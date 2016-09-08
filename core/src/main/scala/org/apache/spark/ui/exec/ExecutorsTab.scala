@@ -122,52 +122,54 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
 
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
     val eid = taskStart.taskInfo.executorId
-    if (executorToTaskSummary.contains(eid)) {
-      executorToTaskSummary(eid).tasksActive = executorToTaskSummary(eid).tasksActive + 1
+    if (!executorToTaskSummary.contains(eid)) {
+      executorToTaskSummary(eid) = ExecutorTaskSummary(eid)
     }
+    executorToTaskSummary(eid).tasksActive = executorToTaskSummary(eid).tasksActive + 1
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     val info = taskEnd.taskInfo
     if (info != null) {
       val eid = info.executorId
-      if (executorToTaskSummary.contains(eid)) {
-        taskEnd.reason match {
-          case Resubmitted =>
-            // Note: For resubmitted tasks, we continue to use the metrics that belong to the
-            // first attempt of this task. This may not be 100% accurate because the first attempt
-            // could have failed half-way through. The correct fix would be to keep track of the
-            // metrics added by each attempt, but this is much more complicated.
-            return
-          case e: ExceptionFailure =>
-            executorToTaskSummary(eid).tasksFailed = executorToTaskSummary(eid).tasksFailed + 1
-          case _ =>
-            executorToTaskSummary(eid).tasksComplete = executorToTaskSummary(eid).tasksComplete + 1
-        }
-        if (executorToTaskSummary(eid).tasksActive >= 1) {
-          executorToTaskSummary(eid).tasksActive = executorToTaskSummary(eid).tasksActive - 1
-        }
-        executorToTaskSummary(eid).duration = executorToTaskSummary(eid).duration + info.duration
+      if (!executorToTaskSummary.contains(eid)) {
+        executorToTaskSummary(eid) = ExecutorTaskSummary(eid)
+      }
+      taskEnd.reason match {
+        case Resubmitted =>
+          // Note: For resubmitted tasks, we continue to use the metrics that belong to the
+          // first attempt of this task. This may not be 100% accurate because the first attempt
+          // could have failed half-way through. The correct fix would be to keep track of the
+          // metrics added by each attempt, but this is much more complicated.
+          return
+        case e: ExceptionFailure =>
+          executorToTaskSummary(eid).tasksFailed = executorToTaskSummary(eid).tasksFailed + 1
+        case _ =>
+          executorToTaskSummary(eid).tasksComplete = executorToTaskSummary(eid).tasksComplete + 1
+      }
+      if (executorToTaskSummary(eid).tasksActive >= 1) {
+        executorToTaskSummary(eid).tasksActive = executorToTaskSummary(eid).tasksActive - 1
+      }
+      executorToTaskSummary(eid).duration = executorToTaskSummary(eid).duration + info.duration
 
-        // Update shuffle read/write
-        val metrics = taskEnd.taskMetrics
-        if (metrics != null) {
-          executorToTaskSummary(eid).inputBytes =
-            executorToTaskSummary(eid).inputBytes + metrics.inputMetrics.bytesRead
-          executorToTaskSummary(eid).inputRecords =
-            executorToTaskSummary(eid).inputRecords + metrics.inputMetrics.recordsRead
-          executorToTaskSummary(eid).outputBytes =
-            executorToTaskSummary(eid).outputBytes + metrics.outputMetrics.bytesWritten
-          executorToTaskSummary(eid).outputRecords =
-            executorToTaskSummary(eid).outputRecords + metrics.outputMetrics.recordsWritten
+      // Update shuffle read/write
+      val metrics = taskEnd.taskMetrics
+      if (metrics != null) {
+        executorToTaskSummary(eid).inputBytes =
+          executorToTaskSummary(eid).inputBytes + metrics.inputMetrics.bytesRead
+        executorToTaskSummary(eid).inputRecords =
+          executorToTaskSummary(eid).inputRecords + metrics.inputMetrics.recordsRead
+        executorToTaskSummary(eid).outputBytes =
+          executorToTaskSummary(eid).outputBytes + metrics.outputMetrics.bytesWritten
+        executorToTaskSummary(eid).outputRecords =
+          executorToTaskSummary(eid).outputRecords + metrics.outputMetrics.recordsWritten
 
-          executorToTaskSummary(eid).shuffleRead =
-            executorToTaskSummary(eid).shuffleRead + metrics.shuffleReadMetrics.remoteBytesRead
-          executorToTaskSummary(eid).shuffleWrite =
-            executorToTaskSummary(eid).shuffleWrite + metrics.shuffleWriteMetrics.bytesWritten
-          executorToTaskSummary(eid).jvmGCTime =
-            executorToTaskSummary(eid).jvmGCTime + metrics.jvmGCTime
-        }
+        executorToTaskSummary(eid).shuffleRead =
+          executorToTaskSummary(eid).shuffleRead + metrics.shuffleReadMetrics.remoteBytesRead
+        executorToTaskSummary(eid).shuffleWrite =
+          executorToTaskSummary(eid).shuffleWrite + metrics.shuffleWriteMetrics.bytesWritten
+        executorToTaskSummary(eid).jvmGCTime =
+          executorToTaskSummary(eid).jvmGCTime + metrics.jvmGCTime
       }
     }
   }
