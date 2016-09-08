@@ -2635,8 +2635,7 @@ setMethod("write.df",
             write <- callJMethod(df@sdf, "write")
             write <- callJMethod(write, "format", source)
             write <- callJMethod(write, "mode", jmode)
-            write <- callJMethod(write, "save", path)
-            write <- callJMethod(write, "options", options)
+            write <- callJMethod(write, "save", options)
           })
 
 #' @rdname write.df
