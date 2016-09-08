@@ -21,25 +21,17 @@ import java.sql.SQLException
 import java.util.Properties
 
 import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
-import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider, SchemaRelationProvider}
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 import org.apache.spark.sql.types.StructType
 
 class JdbcRelationProvider extends CreatableRelationProvider
-  with SchemaRelationProvider with RelationProvider with DataSourceRegister {
+  with RelationProvider with DataSourceRegister {
 
   override def shortName(): String = "jdbc"
 
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    createRelation(sqlContext, parameters, null)
-  }
-
-  /** Returns a new base relation with the given parameters. */
-  override def createRelation(
-      sqlContext: SQLContext,
-      parameters: Map[String, String],
-      schema: StructType): BaseRelation = {
     val jdbcOptions = new JDBCOptions(parameters)
     val partitionColumn = jdbcOptions.partitionColumn
     val lowerBound = jdbcOptions.lowerBound
@@ -54,8 +46,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val parts = JDBCRelation.columnPartition(partitionInfo)
     val properties = new Properties() // Additional properties that we will pass to getConnection
     parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
-    JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties,
-      Option(schema))(sqlContext.sparkSession)
+    JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties)(sqlContext.sparkSession)
   }
 
   /*
@@ -124,6 +115,6 @@ class JdbcRelationProvider extends CreatableRelationProvider
       conn.close()
     }
 
-    createRelation(sqlContext, parameters, data.schema)
+    createRelation(sqlContext, parameters)
   }
 }
