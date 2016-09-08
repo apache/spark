@@ -117,7 +117,8 @@ private[sql] class SessionState(sparkSession: SparkSession) {
         DataSourceAnalysis(conf) ::
         (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
+      override val extendedCheckRules =
+        Seq(PreWriteCheck(conf, catalog), HiveOnlyCheck)
     }
   }
 
@@ -191,7 +192,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
    * Right now, it only supports catalog tables and it only updates the size of a catalog table
    * in the external catalog.
    */
-  def analyze(tableName: String): Unit = {
-    AnalyzeTableCommand(tableName).run(sparkSession)
+  def analyze(tableName: String, noscan: Boolean = true): Unit = {
+    AnalyzeTableCommand(tableName, noscan).run(sparkSession)
   }
 }

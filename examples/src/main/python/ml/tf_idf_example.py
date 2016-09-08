@@ -30,9 +30,9 @@ if __name__ == "__main__":
 
     # $example on$
     sentenceData = spark.createDataFrame([
-        (0, "Hi I heard about Spark"),
-        (0, "I wish Java could use case classes"),
-        (1, "Logistic regression models are neat")
+        (0.0, "Hi I heard about Spark"),
+        (0.0, "I wish Java could use case classes"),
+        (1.0, "Logistic regression models are neat")
     ], ["label", "sentence"])
 
     tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
@@ -46,8 +46,7 @@ if __name__ == "__main__":
     idfModel = idf.fit(featurizedData)
     rescaledData = idfModel.transform(featurizedData)
 
-    for features_label in rescaledData.select("features", "label").take(3):
-        print(features_label)
+    rescaledData.select("label", "features").show()
     # $example off$
 
     spark.stop()

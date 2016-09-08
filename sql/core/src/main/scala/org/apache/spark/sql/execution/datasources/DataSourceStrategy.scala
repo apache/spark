@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.command.{CreateDataSourceTableUtils, DDLUtils, ExecutedCommandExec}
+import org.apache.spark.sql.execution.command.{DDLUtils, ExecutedCommandExec}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -43,18 +43,12 @@ import org.apache.spark.unsafe.types.UTF8String
  * Replaces generic operations with specific variants that are designed to work with Spark
  * SQL Data Sources.
  */
-private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
+case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
-  def resolver: Resolver = {
-    if (conf.caseSensitiveAnalysis) {
-      caseSensitiveResolution
-    } else {
-      caseInsensitiveResolution
-    }
-  }
+  def resolver: Resolver = conf.resolver
 
-  // The access modifier is used to expose this method to tests.
-  private[sql] def convertStaticPartitions(
+  // Visible for testing.
+  def convertStaticPartitions(
       sourceAttributes: Seq[Attribute],
       providedPartitions: Map[String, Option[String]],
       targetAttributes: Seq[Attribute],
@@ -187,7 +181,7 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
 
       InsertIntoHadoopFsRelationCommand(
         outputPath,
-        t.partitionSchema.fields.map(_.name).map(UnresolvedAttribute(_)),
+        query.resolve(t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver),
         t.bucketSpec,
         t.fileFormat,
         () => t.refresh(),
@@ -202,30 +196,20 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
  * Replaces [[SimpleCatalogRelation]] with data source table if its table property contains data
  * source information.
  */
-private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def readDataSourceTable(sparkSession: SparkSession, table: CatalogTable): LogicalPlan = {
-    val schema = DDLUtils.getSchemaFromTableProperties(table)
-
-    // We only need names at here since userSpecifiedSchema we loaded from the metastore
-    // contains partition columns. We can always get datatypes of partitioning columns
-    // from userSpecifiedSchema.
-    val partitionColumns = DDLUtils.getPartitionColumnsFromTableProperties(table)
-
-    val bucketSpec = DDLUtils.getBucketSpecFromTableProperties(table)
-
-    val options = table.storage.properties
     val dataSource =
       DataSource(
         sparkSession,
-        userSpecifiedSchema = Some(schema),
-        partitionColumns = partitionColumns,
-        bucketSpec = bucketSpec,
-        className = table.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER),
-        options = options)
+        userSpecifiedSchema = Some(table.schema),
+        partitionColumns = table.partitionColumnNames,
+        bucketSpec = table.bucketSpec,
+        className = table.provider.get,
+        options = table.storage.properties)
 
     LogicalRelation(
       dataSource.resolveRelation(),
-      metastoreTableIdentifier = Some(table.identifier))
+      catalogTable = Some(table))
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -242,7 +226,7 @@ private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
-private[sql] object DataSourceStrategy extends Strategy with Logging {
+object DataSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _)) =>
       pruneFilterProjectRaw(
@@ -382,7 +366,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val scan = RowDataSourceScanExec(
         projects.map(_.toAttribute),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, UnknownPartitioning(0), metadata, relation.metastoreTableIdentifier)
+        relation.relation, UnknownPartitioning(0), metadata,
+        relation.catalogTable.map(_.identifier))
       filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan)
     } else {
       // Don't request columns that are only referenced by pushed filters.
@@ -392,7 +377,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val scan = RowDataSourceScanExec(
         requestedColumns,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, UnknownPartitioning(0), metadata, relation.metastoreTableIdentifier)
+        relation.relation, UnknownPartitioning(0), metadata,
+        relation.catalogTable.map(_.identifier))
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))
     }

@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
@@ -39,7 +39,11 @@ import org.apache.spark.sql.catalyst.util.StringUtils
  *
  * All public methods should be synchronized for thread-safety.
  */
-class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends ExternalCatalog {
+class InMemoryCatalog(
+    conf: SparkConf = new SparkConf,
+    hadoopConfig: Configuration = new Configuration)
+  extends ExternalCatalog {
+
   import CatalogTypes.TablePartitionSpec
 
   private class TableDesc(var table: CatalogTable) {
@@ -57,18 +61,6 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
   private def partitionExists(db: String, table: String, spec: TablePartitionSpec): Boolean = {
     requireTableExists(db, table)
     catalog(db).tables(table).partitions.contains(spec)
-  }
-
-  private def requireFunctionExists(db: String, funcName: String): Unit = {
-    if (!functionExists(db, funcName)) {
-      throw new NoSuchFunctionException(db = db, func = funcName)
-    }
-  }
-
-  private def requireFunctionNotExists(db: String, funcName: String): Unit = {
-    if (functionExists(db, funcName)) {
-      throw new FunctionAlreadyExistsException(db = db, func = funcName)
-    }
   }
 
   private def requireTableExists(db: String, table: String): Unit = {
@@ -313,9 +305,19 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit = {
+      inheritTableSpecs: Boolean): Unit = {
     throw new UnsupportedOperationException("loadPartition is not implemented.")
+  }
+
+  override def loadDynamicPartitions(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      replace: Boolean,
+      numDP: Int,
+      holdDDLTime: Boolean): Unit = {
+    throw new UnsupportedOperationException("loadDynamicPartitions is not implemented.")
   }
 
   // --------------------------------------------------------------------------
@@ -452,6 +454,17 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
     catalog(db).tables(table).partitions(spec)
   }
 
+  override def getPartitionOption(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec): Option[CatalogTablePartition] = synchronized {
+    if (!partitionExists(db, table, spec)) {
+      None
+    } else {
+      Option(catalog(db).tables(table).partitions(spec))
+    }
+  }
+
   override def listPartitions(
       db: String,
       table: String,
@@ -470,11 +483,8 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
 
   override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
     requireDbExists(db)
-    if (functionExists(db, func.identifier.funcName)) {
-      throw new FunctionAlreadyExistsException(db = db, func = func.identifier.funcName)
-    } else {
-      catalog(db).functions.put(func.identifier.funcName, func)
-    }
+    requireFunctionNotExists(db, func.identifier.funcName)
+    catalog(db).functions.put(func.identifier.funcName, func)
   }
 
   override def dropFunction(db: String, funcName: String): Unit = synchronized {

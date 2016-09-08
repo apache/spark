@@ -309,14 +309,13 @@ class SessionCatalog(
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit = {
+      inheritTableSpecs: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
-    externalCatalog.loadPartition(db, table, loadPath, partition, isOverwrite, holdDDLTime,
-      inheritTableSpecs, isSkewedStoreAsSubdir)
+    externalCatalog.loadPartition(
+      db, table, loadPath, partition, isOverwrite, holdDDLTime, inheritTableSpecs)
   }
 
   def defaultTablePath(tableIdent: TableIdentifier): String = {
@@ -350,29 +349,17 @@ class SessionCatalog(
    * If a database is specified in `oldName`, this will rename the table in that database.
    * If no database is specified, this will first attempt to rename a temporary table with
    * the same name, then, if that does not exist, rename the table in the current database.
-   *
-   * This assumes the database specified in `oldName` matches the one specified in `newName`.
    */
-  def renameTable(oldName: TableIdentifier, newName: TableIdentifier): Unit = synchronized {
+  def renameTable(oldName: TableIdentifier, newName: String): Unit = synchronized {
     val db = formatDatabaseName(oldName.database.getOrElse(currentDb))
     requireDbExists(db)
-    val newDb = formatDatabaseName(newName.database.getOrElse(currentDb))
-    if (db != newDb) {
-      throw new AnalysisException(
-        s"RENAME TABLE source and destination databases do not match: '$db' != '$newDb'")
-    }
     val oldTableName = formatTableName(oldName.table)
-    val newTableName = formatTableName(newName.table)
+    val newTableName = formatTableName(newName)
     if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
       requireTableExists(TableIdentifier(oldTableName, Some(db)))
       requireTableNotExists(TableIdentifier(newTableName, Some(db)))
       externalCatalog.renameTable(db, oldTableName, newTableName)
     } else {
-      if (newName.database.isDefined) {
-        throw new AnalysisException(
-          s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': cannot specify database " +
-            s"name '${newName.database.get}' in the destination table")
-      }
       if (tempTables.contains(newTableName)) {
         throw new AnalysisException(
           s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': destination table already exists")
@@ -411,27 +398,29 @@ class SessionCatalog(
   }
 
   /**
-   * Return a [[LogicalPlan]] that represents the given table.
+   * Return a [[LogicalPlan]] that represents the given table or view.
    *
-   * If a database is specified in `name`, this will return the table from that database.
-   * If no database is specified, this will first attempt to return a temporary table with
-   * the same name, then, if that does not exist, return the table from the current database.
+   * If a database is specified in `name`, this will return the table/view from that database.
+   * If no database is specified, this will first attempt to return a temporary table/view with
+   * the same name, then, if that does not exist, return the table/view from the current database.
+   *
+   * If the relation is a view, the relation will be wrapped in a [[SubqueryAlias]] which will
+   * track the name of the view.
    */
   def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
     synchronized {
       val db = formatDatabaseName(name.database.getOrElse(currentDb))
       val table = formatTableName(name.table)
-      val relation =
-        if (name.database.isDefined || !tempTables.contains(table)) {
-          val metadata = externalCatalog.getTable(db, table)
-          SimpleCatalogRelation(db, metadata)
-        } else {
-          tempTables(table)
+      val relationAlias = alias.getOrElse(table)
+      if (name.database.isDefined || !tempTables.contains(table)) {
+        val metadata = externalCatalog.getTable(db, table)
+        val view = Option(metadata.tableType).collect {
+          case CatalogTableType.VIEW => name
         }
-      val qualifiedTable = SubqueryAlias(table, relation)
-      // If an alias was specified by the lookup, wrap the plan in a subquery so that
-      // attributes are properly qualified with this alias.
-      alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
+        SubqueryAlias(relationAlias, SimpleCatalogRelation(db, metadata), view)
+      } else {
+        SubqueryAlias(relationAlias, tempTables(table), Option(name))
+      }
     }
   }
 
@@ -491,7 +480,7 @@ class SessionCatalog(
     // If the database is defined, this is definitely not a temp table.
     // If the database is not defined, there is a good chance this is a temp table.
     if (name.database.isEmpty) {
-      tempTables.get(name.table).foreach(_.refresh())
+      tempTables.get(formatTableName(name.table)).foreach(_.refresh())
     }
   }
 
@@ -508,7 +497,7 @@ class SessionCatalog(
    * For testing only.
    */
   private[catalog] def getTempTable(name: String): Option[LogicalPlan] = synchronized {
-    tempTables.get(name)
+    tempTables.get(formatTableName(name))
   }
 
   // ----------------------------------------------------------------------------

@@ -67,7 +67,7 @@ object RDDConversions {
   }
 }
 
-private[sql] object ExternalRDD {
+object ExternalRDD {
 
   def apply[T: Encoder](rdd: RDD[T], session: SparkSession): LogicalPlan = {
     val externalRdd = ExternalRDD(CatalystSerde.generateObjAttr[T], rdd)(session)
@@ -76,7 +76,7 @@ private[sql] object ExternalRDD {
 }
 
 /** Logical plan node for scanning data from an RDD. */
-private[sql] case class ExternalRDD[T](
+case class ExternalRDD[T](
     outputObjAttr: Attribute,
     rdd: RDD[T])(session: SparkSession)
   extends LeafNode with ObjectProducer with MultiInstanceRelation {
@@ -103,11 +103,11 @@ private[sql] case class ExternalRDD[T](
 }
 
 /** Physical plan node for scanning data from an RDD. */
-private[sql] case class ExternalRDDScanExec[T](
+case class ExternalRDDScanExec[T](
     outputObjAttr: Attribute,
     rdd: RDD[T]) extends LeafExecNode with ObjectProducerExec {
 
-  private[sql] override lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -128,7 +128,7 @@ private[sql] case class ExternalRDDScanExec[T](
 }
 
 /** Logical plan node for scanning data from an RDD of InternalRow. */
-private[sql] case class LogicalRDD(
+case class LogicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow])(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
@@ -155,12 +155,12 @@ private[sql] case class LogicalRDD(
 }
 
 /** Physical plan node for scanning data from an RDD of InternalRow. */
-private[sql] case class RDDScanExec(
+case class RDDScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
     override val nodeName: String) extends LeafExecNode {
 
-  private[sql] override lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {

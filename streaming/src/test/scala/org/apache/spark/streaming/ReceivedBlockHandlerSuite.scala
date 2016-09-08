@@ -23,6 +23,7 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfter, Matchers}
@@ -163,7 +164,7 @@ class ReceivedBlockHandlerSuite
           val bytes = reader.read(fileSegment)
           reader.close()
           serializerManager.dataDeserializeStream(
-            generateBlockId(), new ChunkedByteBuffer(bytes).toInputStream()).toList
+            generateBlockId(), new ChunkedByteBuffer(bytes).toInputStream())(ClassTag.Any).toList
         }
         loggedData shouldEqual data
       }

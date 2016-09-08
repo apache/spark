@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand}
-import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.streaming.{DataStreamWriter, StreamingQuery}
@@ -589,9 +589,9 @@ class Dataset[T] private[sql](
   def stat: DataFrameStatFunctions = new DataFrameStatFunctions(toDF())
 
   /**
-   * Cartesian join with another [[DataFrame]].
+   * Join with another [[DataFrame]].
    *
-   * Note that cartesian joins are very expensive without an extra filter that can be pushed down.
+   * Behaves as an INNER JOIN and requires a subsequent join predicate.
    *
    * @param right Right side of the join operation.
    *
@@ -761,6 +761,20 @@ class Dataset[T] private[sql](
     withPlan {
       plan.copy(condition = cond)
     }
+  }
+
+  /**
+   * Explicit cartesian join with another [[DataFrame]].
+   *
+   * Note that cartesian joins are very expensive without an extra filter that can be pushed down.
+   *
+   * @param right Right side of the join operation.
+   *
+   * @group untypedrel
+   * @since 2.0.0
+   */
+  def crossJoin(right: Dataset[_]): DataFrame = withPlan {
+    Join(logicalPlan, right.logicalPlan, joinType = Cross, None)
   }
 
   /**
@@ -967,7 +981,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def as(alias: String): Dataset[T] = withTypedPlan {
-    SubqueryAlias(alias, logicalPlan)
+    SubqueryAlias(alias, logicalPlan, None)
   }
 
   /**
@@ -1059,7 +1073,7 @@ class Dataset[T] private[sql](
   @Experimental
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
     implicit val encoder = c1.encoder
-    val project = Project(c1.withInputType(exprEnc.deserializer, logicalPlan.output).named :: Nil,
+    val project = Project(c1.withInputType(exprEnc, logicalPlan.output).named :: Nil,
       logicalPlan)
 
     if (encoder.flat) {
@@ -1078,7 +1092,7 @@ class Dataset[T] private[sql](
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
-      columns.map(_.withInputType(exprEnc.deserializer, logicalPlan.output).named)
+      columns.map(_.withInputType(exprEnc, logicalPlan.output).named)
     val execution = new QueryExecution(sparkSession, Project(namedColumns, logicalPlan))
     new Dataset(sparkSession, execution, ExpressionEncoder.tuple(encoders))
   }

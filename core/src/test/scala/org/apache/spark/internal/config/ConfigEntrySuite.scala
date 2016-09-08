@@ -24,6 +24,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.util.SparkConfWithEnv
 
 class ConfigEntrySuite extends SparkFunSuite {
 
@@ -161,25 +162,9 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(stringConf) === null)
   }
 
-  test("variable expansion") {
+  test("variable expansion of spark config entries") {
     val env = Map("ENV1" -> "env1")
-    val conf = HashMap("spark.value1" -> "value1", "spark.value2" -> "value2")
-
-    def getenv(key: String): String = env.getOrElse(key, null)
-
-    def expand(value: String): String = ConfigEntry.expand(value, conf.asJava, getenv, Set())
-
-    assert(expand("${spark.value1}") === "value1")
-    assert(expand("spark.value1 is: ${spark.value1}") === "spark.value1 is: value1")
-    assert(expand("${spark.value1} ${spark.value2}") === "value1 value2")
-    assert(expand("${spark.value3}") === "${spark.value3}")
-
-    // Make sure anything that is not in the "spark." namespace is ignored.
-    conf("notspark.key") = "value"
-    assert(expand("${notspark.key}") === "${notspark.key}")
-
-    assert(expand("${env:ENV1}") === "env1")
-    assert(expand("${system:user.name}") === sys.props("user.name"))
+    val conf = new SparkConfWithEnv(env)
 
     val stringConf = ConfigBuilder(testKey("stringForExpansion"))
       .stringConf
@@ -193,45 +178,44 @@ class ConfigEntrySuite extends SparkFunSuite {
     val fallbackConf = ConfigBuilder(testKey("fallbackForExpansion"))
       .fallbackConf(intConf)
 
-    assert(expand("${" + stringConf.key + "}") === "string1")
-    assert(expand("${" + optionalConf.key + "}") === "${" + optionalConf.key + "}")
-    assert(expand("${" + intConf.key + "}") === "42")
-    assert(expand("${" + fallbackConf.key + "}") === "42")
-
-    conf(optionalConf.key) = "string2"
-    assert(expand("${" + optionalConf.key + "}") === "string2")
-
-    conf(fallbackConf.key) = "84"
-    assert(expand("${" + fallbackConf.key + "}") === "84")
-
-    assert(expand("${spark.value1") === "${spark.value1")
-
-    // Unknown prefixes.
-    assert(expand("${unknown:value}") === "${unknown:value}")
-
-    // Chained references.
-    val conf1 = ConfigBuilder(testKey("conf1"))
+    val refConf = ConfigBuilder(testKey("configReferenceTest"))
       .stringConf
-      .createWithDefault("value1")
-    val conf2 = ConfigBuilder(testKey("conf2"))
-      .stringConf
-      .createWithDefault("value2")
+      .createWithDefault(null)
 
-    conf(conf2.key) = "${" + conf1.key + "}"
-    assert(expand("${" + conf2.key + "}") === conf1.defaultValueString)
+    def ref(entry: ConfigEntry[_]): String = "${" + entry.key + "}"
 
-    // Circular references.
-    conf(conf1.key) = "${" + conf2.key + "}"
-    val e = intercept[IllegalArgumentException] {
-      expand("${" + conf2.key + "}")
+    def testEntryRef(entry: ConfigEntry[_], expected: String): Unit = {
+      conf.set(refConf, ref(entry))
+      assert(conf.get(refConf) === expected)
     }
-    assert(e.getMessage().contains("Circular"))
+
+    testEntryRef(stringConf, "string1")
+    testEntryRef(intConf, "42")
+    testEntryRef(fallbackConf, "42")
+
+    testEntryRef(optionalConf, ref(optionalConf))
+
+    conf.set(optionalConf, ref(stringConf))
+    testEntryRef(optionalConf, "string1")
+
+    conf.set(optionalConf, ref(fallbackConf))
+    testEntryRef(optionalConf, "42")
 
     // Default string values with variable references.
     val parameterizedStringConf = ConfigBuilder(testKey("stringWithParams"))
       .stringConf
-      .createWithDefault("${spark.value1}")
-    assert(parameterizedStringConf.readFrom(conf.asJava, getenv) === conf("spark.value1"))
+      .createWithDefault(ref(stringConf))
+    assert(conf.get(parameterizedStringConf) === conf.get(stringConf))
+
+    // Make sure SparkConf's env override works.
+    conf.set(refConf, "${env:ENV1}")
+    assert(conf.get(refConf) === env("ENV1"))
+
+    // Conf with null default value is not expanded.
+    val nullConf = ConfigBuilder(testKey("nullString"))
+      .stringConf
+      .createWithDefault(null)
+    testEntryRef(nullConf, ref(nullConf))
   }
 
 }

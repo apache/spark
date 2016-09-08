@@ -1058,6 +1058,20 @@ the Data Sources API. The following options are supported:
       The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (eg. Oracle with 10 rows).
     </td>
   </tr>
+  
+  <tr>
+    <td><code>truncate</code></td>
+    <td>
+     This is a JDBC writer related option. When <code>SaveMode.Overwrite</code> is enabled, this option causes Spark to truncate an existing table instead of dropping and recreating it. This can be more efficient, and prevents the table metadata (e.g. indices) from being removed. However, it will not work in some cases, such as when the new data has a different schema. It defaults to <code>false</code>. 
+   </td>
+  </tr>
+  
+  <tr>
+    <td><code>createTableOptions</code></td>
+    <td>
+     This is a JDBC writer related option. If specified, this option allows setting of database-specific table and partition options when creating a table. For example: <code>CREATE TABLE t (name string) ENGINE=InnoDB.</code>
+   </td>
+  </tr>
 </table>
 
 <div class="codetabs">
@@ -1157,6 +1171,15 @@ that these options will be deprecated in future release as more optimizations ar
       time. This is used when putting multiple files into a partition. It is better to over estimated,
       then the partitions with small files will be faster than partitions with bigger files (which is
       scheduled first).
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.broadcastTimeout</code></td>
+    <td>300</td>
+    <td>
+    <p>
+      Timeout in seconds for the broadcast wait time in broadcast joins
+    </p>
     </td>
   </tr>
   <tr>

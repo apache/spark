@@ -25,7 +25,6 @@ import org.apache.spark.ml.feature.HashingTF;
 import org.apache.spark.ml.feature.IDF;
 import org.apache.spark.ml.feature.IDFModel;
 import org.apache.spark.ml.feature.Tokenizer;
-import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -54,25 +53,24 @@ public class JavaTfIdfExample {
       new StructField("sentence", DataTypes.StringType, false, Metadata.empty())
     });
     Dataset<Row> sentenceData = spark.createDataFrame(data, schema);
+
     Tokenizer tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words");
     Dataset<Row> wordsData = tokenizer.transform(sentenceData);
+
     int numFeatures = 20;
     HashingTF hashingTF = new HashingTF()
       .setInputCol("words")
       .setOutputCol("rawFeatures")
       .setNumFeatures(numFeatures);
+
     Dataset<Row> featurizedData = hashingTF.transform(wordsData);
     // alternatively, CountVectorizer can also be used to get term frequency vectors
 
     IDF idf = new IDF().setInputCol("rawFeatures").setOutputCol("features");
     IDFModel idfModel = idf.fit(featurizedData);
+
     Dataset<Row> rescaledData = idfModel.transform(featurizedData);
-    for (Row r : rescaledData.select("features", "label").takeAsList(3)) {
-      Vector features = r.getAs(0);
-      Double label = r.getDouble(1);
-      System.out.println(features);
-      System.out.println(label);
-    }
+    rescaledData.select("label", "features").show();
     // $example off$
 
     spark.stop();

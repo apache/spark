@@ -26,10 +26,10 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.log4j.{Level, Logger}
 
@@ -60,7 +60,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 private[yarn] class YarnAllocator(
     driverUrl: String,
     driverRef: RpcEndpointRef,
-    conf: Configuration,
+    conf: YarnConfiguration,
     sparkConf: SparkConf,
     amClient: AMRMClient[ContainerRequest],
     appAttemptId: ApplicationAttemptId,
@@ -297,8 +297,9 @@ private[yarn] class YarnAllocator(
     val missing = targetNumExecutors - numPendingAllocate - numExecutorsRunning
 
     if (missing > 0) {
-      logInfo(s"Will request $missing executor containers, each with ${resource.getVirtualCores} " +
-        s"cores and ${resource.getMemory} MB memory including $memoryOverhead MB overhead")
+      logInfo(s"Will request $missing executor container(s), each with " +
+        s"${resource.getVirtualCores} core(s) and " +
+        s"${resource.getMemory} MB memory (including $memoryOverhead MB of overhead)")
 
       // Split the pending container request into three groups: locality matched list, locality
       // unmatched list and non-locality list. Take the locality matched container request into
@@ -314,7 +315,9 @@ private[yarn] class YarnAllocator(
         amClient.removeContainerRequest(stale)
       }
       val cancelledContainers = staleRequests.size
-      logInfo(s"Canceled $cancelledContainers container requests (locality no longer needed)")
+      if (cancelledContainers > 0) {
+        logInfo(s"Canceled $cancelledContainers container request(s) (locality no longer needed)")
+      }
 
       // consider the number of new containers and cancelled stale containers available
       val availableContainers = missing + cancelledContainers
@@ -329,14 +332,14 @@ private[yarn] class YarnAllocator(
       val newLocalityRequests = new mutable.ArrayBuffer[ContainerRequest]
       containerLocalityPreferences.foreach {
         case ContainerLocalityPreferences(nodes, racks) if nodes != null =>
-          newLocalityRequests.append(createContainerRequest(resource, nodes, racks))
+          newLocalityRequests += createContainerRequest(resource, nodes, racks)
         case _ =>
       }
 
       if (availableContainers >= newLocalityRequests.size) {
         // more containers are available than needed for locality, fill in requests for any host
         for (i <- 0 until (availableContainers - newLocalityRequests.size)) {
-          newLocalityRequests.append(createContainerRequest(resource, null, null))
+          newLocalityRequests += createContainerRequest(resource, null, null)
         }
       } else {
         val numToCancel = newLocalityRequests.size - availableContainers
@@ -344,14 +347,24 @@ private[yarn] class YarnAllocator(
         anyHostRequests.slice(0, numToCancel).foreach { nonLocal =>
           amClient.removeContainerRequest(nonLocal)
         }
-        logInfo(s"Canceled $numToCancel container requests for any host to resubmit with locality")
+        if (numToCancel > 0) {
+          logInfo(s"Canceled $numToCancel unlocalized container requests to resubmit with locality")
+        }
       }
 
       newLocalityRequests.foreach { request =>
         amClient.addContainerRequest(request)
-        logInfo(s"Submitted container request (host: ${hostStr(request)}, capability: $resource)")
       }
 
+      if (log.isInfoEnabled()) {
+        val (localized, anyHost) = newLocalityRequests.partition(_.getNodes() != null)
+        if (anyHost.nonEmpty) {
+          logInfo(s"Submitted ${anyHost.size} unlocalized container requests.")
+        }
+        localized.foreach { request =>
+          logInfo(s"Submitted container request for host ${hostStr(request)}.")
+        }
+      }
     } else if (numPendingAllocate > 0 && missing < 0) {
       val numToCancel = math.min(numPendingAllocate, -missing)
       logInfo(s"Canceling requests for $numToCancel executor container(s) to have a new desired " +
@@ -479,7 +492,7 @@ private[yarn] class YarnAllocator(
       val containerId = container.getId
       val executorId = executorIdCounter.toString
       assert(container.getResource.getMemory >= resource.getMemory)
-      logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
+      logInfo(s"Launching container $containerId on host $executorHostname")
 
       def updateInternalState(): Unit = synchronized {
         numExecutorsRunning += 1
@@ -494,14 +507,11 @@ private[yarn] class YarnAllocator(
       }
 
       if (launchContainers) {
-        logInfo("Launching ExecutorRunnable. driverUrl: %s,  executorHostname: %s".format(
-          driverUrl, executorHostname))
-
         launcherPool.execute(new Runnable {
           override def run(): Unit = {
             try {
               new ExecutorRunnable(
-                container,
+                Some(container),
                 conf,
                 sparkConf,
                 driverUrl,

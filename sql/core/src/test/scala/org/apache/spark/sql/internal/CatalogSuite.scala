@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 
 /**
@@ -303,6 +304,22 @@ class CatalogSuite
     tableFields.foreach { f => assert(tableString.contains(f.toString)) }
     functionFields.foreach { f => assert(functionString.contains(f.toString)) }
     columnFields.foreach { f => assert(columnString.contains(f.toString)) }
+  }
+
+  test("createExternalTable should fail if path is not given for file-based data source") {
+    val e = intercept[AnalysisException] {
+      spark.catalog.createExternalTable("tbl", "json", Map.empty[String, String])
+    }
+    assert(e.message.contains("Unable to infer schema"))
+
+    val e2 = intercept[AnalysisException] {
+      spark.catalog.createExternalTable(
+        "tbl",
+        "json",
+        new StructType().add("i", IntegerType),
+        Map.empty[String, String])
+    }
+    assert(e2.message == "Cannot create a file-based external data source table without path")
   }
 
   // TODO: add tests for the rest of them

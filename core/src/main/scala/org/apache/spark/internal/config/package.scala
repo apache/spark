@@ -17,8 +17,6 @@
 
 package org.apache.spark.internal
 
-import java.util.concurrent.TimeUnit
-
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 
@@ -82,11 +80,6 @@ package object config {
     .doc("Name of the Kerberos principal.")
     .stringConf.createOptional
 
-  private[spark] val TOKEN_RENEWAL_INTERVAL = ConfigBuilder("spark.yarn.token.renewal.interval")
-    .internal()
-    .timeConf(TimeUnit.MILLISECONDS)
-    .createOptional
-
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .intConf
     .createOptional
@@ -113,4 +106,41 @@ package object config {
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
     .stringConf
     .createOptional
+
+  private[spark] val PYSPARK_DRIVER_PYTHON = ConfigBuilder("spark.pyspark.driver.python")
+    .stringConf
+    .createOptional
+
+  private[spark] val PYSPARK_PYTHON = ConfigBuilder("spark.pyspark.python")
+    .stringConf
+    .createOptional
+
+  // To limit memory usage, we only track information for a fixed number of tasks
+  private[spark] val UI_RETAINED_TASKS = ConfigBuilder("spark.ui.retainedTasks")
+    .intConf
+    .createWithDefault(100000)
+
+  // To limit how many applications are shown in the History Server summary ui
+  private[spark] val HISTORY_UI_MAX_APPS =
+    ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)
+
+  private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
+    .booleanConf
+    .createWithDefault(false)
+
+  private[spark] val IO_ENCRYPTION_KEYGEN_ALGORITHM =
+    ConfigBuilder("spark.io.encryption.keygen.algorithm")
+      .stringConf
+      .createWithDefault("HmacSHA1")
+
+  private[spark] val IO_ENCRYPTION_KEY_SIZE_BITS = ConfigBuilder("spark.io.encryption.keySizeBits")
+    .intConf
+    .checkValues(Set(128, 192, 256))
+    .createWithDefault(128)
+
+  private[spark] val IO_CRYPTO_CIPHER_TRANSFORMATION =
+    ConfigBuilder("spark.io.crypto.cipher.transformation")
+      .internal()
+      .stringConf
+      .createWithDefaultString("AES/CTR/NoPadding")
 }
