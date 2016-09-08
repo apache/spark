@@ -37,12 +37,12 @@ import org.slf4j.LoggerFactory;
  * We use `FixedLengthRowBasedKeyValueBatch` if all fields in the key and the value are fixed-length
  * data types. Otherwise we use `VariableLengthRowBasedKeyValueBatch`.
  *
- * RowBasedKeyValueBatch is backed by a single page / MemoryBlock (defaults to 64MB). If the page
- * is full, the aggregate logic should fallback to a second level, larger hash map. We intentionally
- * use the single-page design because it simplifies memory address encoding & decoding for each
- * key-value pair. Because the maximum capacity for RowBasedKeyValueBatch is only 2^16, it is
- * unlikely we need a second page anyway. Filling the page requires an average size for key value
- * pairs to be larger than 1024 bytes.
+ * RowBasedKeyValueBatch is backed by a single page / MemoryBlock (ranges from 1 to 64MB depending
+ * on the system configuration). If the page is full, the aggregate logic should fallback to a
+ * second level, larger hash map. We intentionally use the single-page design because it simplifies
+ * memory address encoding & decoding for each key-value pair. Because the maximum capacity for
+ * RowBasedKeyValueBatch is only 2^16, it is unlikely we need a second page anyway. Filling the
+ * page requires an average size for key value pairs to be larger than 1024 bytes.
  *
  */
 public abstract class RowBasedKeyValueBatch extends MemoryConsumer {
