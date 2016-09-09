@@ -41,3 +41,6 @@ To run the SparkR unit tests on Windows, the following steps are required —ass
     .\bin\spark-submit2.cmd --conf spark.hadoop.fs.default.name="file:///" R\pkg\tests\run-all.R
     ```
 
+## AppVeyor
+
+SparkR tests are also automatically run on Windows using AppVeyor. Please see `dev/appveyor-guide.md` for more details.
