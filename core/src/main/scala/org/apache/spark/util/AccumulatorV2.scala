@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicLong
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
