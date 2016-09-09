@@ -1216,25 +1216,30 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer)
         }
         pushdownConds = pushdowns.toSeq
     }
-    val finalPushdownCondition: Expression = pushdownConds.reduce(And)
-    plan transformDown {
-      case f @ Filter(cond, s @ SubqueryAlias(alias, subquery, v, true)) if s.sameResult(keyPlan) =>
-        val pushdownCond: Expression = subqueries.foldLeft(finalPushdownCondition) {
-          case (currentCond, sub) =>
-            val rewrites = buildRewrites(sub.asInstanceOf[Filter].child, subquery)
-            pushToOtherPlan(currentCond, rewrites)
-        }
+    // No pushdown for common subqueries.
+    if (pushdownConds.isEmpty) {
+      plan
+    } else {
+      val finalPushdownCondition: Expression = pushdownConds.reduce(And)
+      plan transformDown {
+        case f @ Filter(cond, s @ SubqueryAlias(a, subquery, v, true)) if s.sameResult(keyPlan) =>
+          val pushdownCond: Expression = subqueries.foldLeft(finalPushdownCondition) {
+            case (currentCond, sub) =>
+              val rewrites = buildRewrites(sub.asInstanceOf[Filter].child, subquery)
+              pushToOtherPlan(currentCond, rewrites)
+          }
 
-        val newSubquery = Filter(pushdownCond, subquery)
-        val optimized = optimizer.execute(newSubquery)
+          val newSubquery = Filter(pushdownCond, subquery)
+          val optimized = optimizer.execute(newSubquery)
 
-        // Check if any optimization is performed.
-        if (optimized.sameResult(newSubquery)) {
-          // No optimization happens. Let's keep original subquery.
-          f
-        } else {
-          Filter(cond, SubqueryAlias(alias, newSubquery, v, true))
-        }
+          // Check if any optimization is performed.
+          if (optimized.sameResult(newSubquery)) {
+            // No optimization happens. Let's keep original subquery.
+            f
+          } else {
+            Filter(cond, SubqueryAlias(a, newSubquery, v, true))
+          }
+      }
     }
   }
 
