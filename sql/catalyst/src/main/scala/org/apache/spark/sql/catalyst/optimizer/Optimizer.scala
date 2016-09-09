@@ -1169,7 +1169,7 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer)
    * Rewrites an expression so that it can be pushed to another LogicalPlan.
    */
   private def pushToOtherPlan[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
-    val result = e transform {
+    val result = e transformUp {
       case a: Attribute => rewrites.get(a).getOrElse(a)
     }
 
@@ -1194,8 +1194,24 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer)
         val pushdowns = new ArrayBuffer[Expression]()
         splitConjunctivePredicates(otherCond).foreach { cond =>
           val rewritten = pushToOtherPlan(cond, rewrites)
-          pushdowns ++= pushdownConds.map { pushdown =>
-            Or(pushdown, rewritten)
+          pushdownConds.flatMap { pushdown =>
+            val subConds = splitDisjunctivePredicates(pushdown)
+            val orCond = Or(pushdown, rewritten)
+            // To avoid exponential explosion of predicates, we skip [[IsNotNull]] and predicates
+            // which semantically equal to existing predicates.
+            if (rewritten.isInstanceOf[IsNotNull]
+                || pushdown.isInstanceOf[IsNotNull]
+                || subConds.exists(rewritten.semanticEquals(_))
+                || pushdowns.exists(orCond.semanticEquals(_))
+                || pushdownConds.exists(orCond.semanticEquals(_))) {
+              None
+            } else {
+              Some(orCond)
+            }
+          }.map { cond =>
+            if (!pushdowns.exists(cond.semanticEquals(_))) {
+              pushdowns += cond
+            }
           }
         }
         pushdownConds = pushdowns.toSeq
