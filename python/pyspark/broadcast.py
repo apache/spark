@@ -75,7 +75,13 @@ class Broadcast(object):
             self._path = path
 
     def dump(self, value, f):
-        pickle.dump(value, f, 2)
+        try:
+            pickle.dump(value, f, 2)
+        except pickle.PickleError:
+            raise
+        except Exception as e:
+            msg = "Could not serialize broadcast: " + e.__class__.__name__ + ": " + e.message
+            raise pickle.PicklingError, pickle.PicklingError(msg), sys.exc_info()[2]
         f.close()
         return f.name
 
