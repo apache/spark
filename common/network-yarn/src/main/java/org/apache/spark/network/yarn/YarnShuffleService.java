@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 
@@ -339,6 +340,13 @@ public class YarnShuffleService extends AuxiliaryService {
    * it will uses a YARN local dir.
    */
   protected File initRecoveryDb(String dbFileName) {
+    if (_recoveryPath != null) {
+        File recoveryFile = new File(_recoveryPath.toUri().getPath(), dbFileName);
+        if (recoveryFile.exists()) {
+          return recoveryFile;
+        }
+    } 
+    // db doesn't exist in recovery path go check local dirs for it
     String[] localDirs = _conf.getTrimmedStrings("yarn.nodemanager.local-dirs");
     for (String dir : localDirs) {
       File f = new File(new Path(dir).toUri().getPath(), dbFileName);
@@ -356,17 +364,18 @@ public class YarnShuffleService extends AuxiliaryService {
           // location.
           File newLoc = new File(_recoveryPath.toUri().getPath(), dbFileName);
           if (!newLoc.equals(f)) {
-            if (!f.renameTo(newLoc)) {
+            try {
+              Files.move(f.toPath(), newLoc.toPath());
+            } catch (Exception e) {
               // Fail to move recovery file to new path, just continue on with new DB location
               logger.error("Failed to move recovery file {} to the path {}",
-                dbFileName, _recoveryPath.toString());
+                dbFileName, _recoveryPath.toString(), e);
             }
           }
           return newLoc;
         }
       }
     }
-
     if (_recoveryPath == null) {
       _recoveryPath = new Path(localDirs[0]);
     }
