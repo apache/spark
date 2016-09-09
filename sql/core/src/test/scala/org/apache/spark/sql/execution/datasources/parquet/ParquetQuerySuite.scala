@@ -703,6 +703,16 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
   }
+
+  test("SPARK-17059: Allow FileFormat to specify partition pruning strategy") {
+    withSQLConf(ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true") {
+      withTempPath { path =>
+        Seq(1, 2, 3).toDF("x").write.parquet(path.getCanonicalPath)
+        val df = spark.read.parquet(path.getCanonicalPath).where("x = 0")
+        assert(df.rdd.partitions.length == 0)
+      }
+    }
+  }
 }
 
 object TestingUDT {

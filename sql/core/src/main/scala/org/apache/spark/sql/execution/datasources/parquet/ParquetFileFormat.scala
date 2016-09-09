@@ -27,12 +27,14 @@ import scala.util.{Failure, Try}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.{Log => ApacheParquetLog}
-import org.apache.parquet.filter2.compat.FilterCompat
+import org.apache.parquet.filter2.compat.{FilterCompat, RowGroupFilter}
 import org.apache.parquet.filter2.predicate.FilterApi
+import org.apache.parquet.format.converter.ParquetMetadataConverter
 import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.metadata.ParquetMetadata
 import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.parquet.schema.MessageType
 import org.slf4j.bridge.SLF4JBridgeHandler
@@ -56,6 +58,9 @@ class ParquetFileFormat
   with DataSourceRegister
   with Logging
   with Serializable {
+
+  // Attempt to cache parquet metadata
+  @transient @volatile private var cachedMetadata: ParquetMetadata = _
 
   override def shortName(): String = "parquet"
 
@@ -422,6 +427,64 @@ class ParquetFileFormat
       sqlContext.sessionState.newHadoopConf(),
       options)
   }
+
+  override def filterPartitions(
+      filters: Seq[Filter],
+      schema: StructType,
+      conf: Configuration,
+      allFiles: Seq[FileStatus],
+      root: Path,
+      partitions: Seq[Partition]): Seq[Partition] = {
+    // Read the "_metadata" file if available, contains all block headers. On S3 better to grab
+    // all of the footers in a batch rather than having to read every single file just to get its
+    // footer.
+    allFiles.find(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE).map { stat =>
+      val metadata = getOrReadMetadata(conf, stat)
+      partitions.map { part =>
+        filterByMetadata(
+          filters,
+          schema,
+          conf,
+          root,
+          metadata,
+          part)
+      }.filterNot(_.files.isEmpty)
+    }.getOrElse(partitions)
+  }
+
+  private def filterByMetadata(
+      filters: Seq[Filter],
+      schema: StructType,
+      conf: Configuration,
+      root: Path,
+      metadata: ParquetMetadata,
+      partition: Partition): Partition = {
+    val blockMetadatas = metadata.getBlocks.asScala
+    val parquetSchema = metadata.getFileMetaData.getSchema
+    val conjunctiveFilter = filters
+      .flatMap(ParquetFilters.createFilter(schema, _))
+      .reduceOption(FilterApi.and)
+    conjunctiveFilter.map { conjunction =>
+      val filteredBlocks = RowGroupFilter.filterRowGroups(
+        FilterCompat.get(conjunction), blockMetadatas.asJava, parquetSchema).asScala.map { bmd =>
+        new Path(root, bmd.getPath).toString
+      }
+      Partition(partition.values, partition.files.filter { f =>
+        filteredBlocks.contains(f.getPath.toString)
+      })
+    }.getOrElse(partition)
+  }
+
+  private def getOrReadMetadata(conf: Configuration, stat: FileStatus): ParquetMetadata = {
+    if (cachedMetadata == null) {
+      logInfo("Reading summary metadata into cache in ParquetFileFormat")
+      cachedMetadata = ParquetFileReader.readFooter(conf, stat, ParquetMetadataConverter.NO_FILTER)
+    } else {
+      logInfo("Using cached summary metadata")
+    }
+    cachedMetadata
+  }
+
 }
 
 /**
