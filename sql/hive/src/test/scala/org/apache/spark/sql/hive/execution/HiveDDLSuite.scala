@@ -305,17 +305,14 @@ class HiveDDLSuite
     }
   }
 
-  private def checkMisuseForAlterTableOrView(sqlText: String, isAlterView: Boolean): Unit = {
-    val message = intercept[AnalysisException] {
-      val alterDDLHeader = if (isAlterView) "ALTER VIEW " else "ALTER TABLE "
-      sql(alterDDLHeader + sqlText)
-    }.getMessage
-    val expectedExceptionMsg = if (isAlterView) {
-      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"
-    } else {
-      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"
-    }
-    assert(message.contains(expectedExceptionMsg))
+  private def assertErrorForAlterTableOnView(sqlText: String): Unit = {
+    val message = intercept[AnalysisException](sql(sqlText)).getMessage
+    assert(message.contains("Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+  }
+
+  private def assertErrorForAlterViewOnTable(sqlText: String): Unit = {
+    val message = intercept[AnalysisException](sql(sqlText)).getMessage
+    assert(message.contains("Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
   }
 
   test("alter views and alter table - misuse") {
@@ -330,48 +327,38 @@ class HiveDDLSuite
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(!catalog.tableExists(TableIdentifier(newViewName)))
 
-        checkMisuseForAlterTableOrView(
-          s"$tabName RENAME TO $newViewName", isAlterView = true)
+        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName RENAME TO $newViewName")
 
-        checkMisuseForAlterTableOrView(
-          s"$oldViewName RENAME TO $newViewName", isAlterView = false)
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
 
-        checkMisuseForAlterTableOrView(
-          s"$tabName SET TBLPROPERTIES ('p' = 'an')", isAlterView = true)
+        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
 
-        checkMisuseForAlterTableOrView(
-          s"$oldViewName SET TBLPROPERTIES ('p' = 'an')", isAlterView = false)
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
 
-        checkMisuseForAlterTableOrView(
-          s"$tabName UNSET TBLPROPERTIES ('p')", isAlterView = true)
+        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
 
-        checkMisuseForAlterTableOrView(
-          s"$oldViewName UNSET TBLPROPERTIES ('p')", isAlterView = false)
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
 
-        checkMisuseForAlterTableOrView(
-          s"$oldViewName SET LOCATION '/path/to/your/lovely/heart'", isAlterView = false)
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
 
-        checkMisuseForAlterTableOrView(
-          s"$oldViewName SET SERDE 'whatever'", isAlterView = false)
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET SERDE 'whatever'")
 
-        checkMisuseForAlterTableOrView(
-          s"$oldViewName SET SERDEPROPERTIES ('x' = 'y')", isAlterView = false)
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')")
 
-        checkMisuseForAlterTableOrView(
-          s"$oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')", isAlterView = false)
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
 
-        checkMisuseForAlterTableOrView(
-          s"$oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')", isAlterView = false)
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
 
-        checkMisuseForAlterTableOrView(
-          s"$oldViewName DROP IF EXISTS PARTITION (a='2')", isAlterView = false)
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')")
 
-        checkMisuseForAlterTableOrView(
-          s"$oldViewName RECOVER PARTITIONS", isAlterView = false)
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RECOVER PARTITIONS")
 
-        checkMisuseForAlterTableOrView(
-          s"$oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')", isAlterView = false)
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))

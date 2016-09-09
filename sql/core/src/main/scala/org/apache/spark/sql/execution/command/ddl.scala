@@ -391,7 +391,7 @@ case class AlterTableRenamePartitionCommand(
       throw new AnalysisException(
         "ALTER TABLE RENAME PARTITION is not allowed for tables defined using the datasource API")
     }
-    DDLUtils.verifyAlterTableType(catalog, tableName, isView = false)
+    DDLUtils.verifyAlterTableType(table, tableName, isView = false)
     catalog.renamePartitions(
       tableName, Seq(oldPartition), Seq(newPartition))
     Seq.empty[Row]
@@ -701,14 +701,6 @@ object DDLUtils {
    * If the command ALTER VIEW is to alter a table or ALTER TABLE is to alter a view,
    * issue an exception [[AnalysisException]].
    */
-  def verifyAlterTableType(
-      catalog: SessionCatalog,
-      tableIdentifier: TableIdentifier,
-      isView: Boolean): Unit = {
-    catalog.getTableMetadataOption(tableIdentifier).foreach(
-      verifyAlterTableType(_, tableIdentifier, isView))
-  }
-
   def verifyAlterTableType(
       tableMetadata: CatalogTable,
       tableIdentifier: TableIdentifier,
