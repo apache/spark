@@ -239,8 +239,7 @@ object PageRank extends Logging {
       i += 1
     }
 
-    rankGraph
-      .mapVertices { (vid, attr) =>
+    rankGraph.mapVertices { (vid, attr) =>
         Vectors.fromBreeze(attr)
       }
   }
