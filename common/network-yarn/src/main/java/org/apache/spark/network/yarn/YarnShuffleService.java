@@ -283,6 +283,6 @@ public class YarnShuffleService extends AuxiliaryService {
       }
     }
 
-    return null;
+    return _recoveryPath;
   }
 }
