@@ -1316,21 +1316,29 @@ private[spark] class BlockManager(
         // The block has already been removed; do nothing.
         logWarning(s"Asked to remove block $blockId, which does not exist")
       case Some(info) =>
-        // Removals are idempotent in disk store and memory store. At worst, we get a warning.
-        val removedFromMemory = memoryStore.remove(blockId)
-        val removedFromDisk = diskStore.remove(blockId)
-        if (!removedFromMemory && !removedFromDisk) {
-          logWarning(s"Block $blockId could not be removed as it was not found in either " +
-            "the disk, memory, or external block store")
-        }
-        blockInfoManager.removeBlock(blockId)
-        val removeBlockStatus = getCurrentBlockStatus(blockId, info)
-        if (tellMaster && info.tellMaster) {
-          reportBlockStatus(blockId, info, removeBlockStatus)
-        }
-        Option(TaskContext.get()).foreach { c =>
-          c.taskMetrics().incUpdatedBlockStatuses(blockId -> removeBlockStatus)
-        }
+        removeBlockInternal(blockId, info, tellMaster)
+    }
+  }
+
+  /**
+   * Internal version of [[removeBlock()]] which assumes that the caller already holds a write
+   * lock on the block.
+   */
+  private def removeBlockInternal(blockId: BlockId, info: BlockInfo, tellMaster: Boolean): Unit = {
+    // Removals are idempotent in disk store and memory store. At worst, we get a warning.
+    val removedFromMemory = memoryStore.remove(blockId)
+    val removedFromDisk = diskStore.remove(blockId)
+    if (!removedFromMemory && !removedFromDisk) {
+      logWarning(s"Block $blockId could not be removed as it was not found in either " +
+        "the disk, memory, or external block store")
+    }
+    blockInfoManager.removeBlock(blockId)
+    val removeBlockStatus = getCurrentBlockStatus(blockId, info)
+    if (tellMaster && info.tellMaster) {
+      reportBlockStatus(blockId, info, removeBlockStatus)
+    }
+    Option(TaskContext.get()).foreach { c =>
+      c.taskMetrics().incUpdatedBlockStatuses(blockId -> removeBlockStatus)
     }
   }
 
