@@ -28,24 +28,23 @@ public class ChildThreadAppHandle extends AbstractSparkAppHandle {
   }
 
   @Override
-  public synchronized void  kill() {
+  public synchronized void kill() {
     if (!disposed) {
       disconnect();
     }
-    if (childThread!= null) {
+    if (childThread != null) {
       try {
         childThread.join(3000);
-      } catch (IllegalThreadStateException | InterruptedException e) {
+      } catch (InterruptedException e) {
         try {
           childThread.interrupt();
         } catch (Exception inner) {
-          LOG.info("Failed to stop Thread: "+ inner.getMessage());
+          LOG.info("Failed to stop Thread: " + inner.getMessage());
         }
       } finally {
         childThread = null;
       }
     }
-
   }
 
   void setChildThread(Thread childThread) {
