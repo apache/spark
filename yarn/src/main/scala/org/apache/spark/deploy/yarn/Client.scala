@@ -149,8 +149,7 @@ private[spark] class Client(
   def submitApplication(): ApplicationId = {
     var appId: ApplicationId = null
     try {
-      if ( launcherServerSecret !=null && launcherServerSecret != "" && launcherServerPort != 0 &&
-        launcherServerStopFlag != null) {
+      if ( launcherServerSecret !=null && launcherServerSecret != "" && launcherServerPort != 0) {
         launcherBackend.connect(launcherServerPort, launcherServerSecret, launcherServerStopFlag)
       } else {
         launcherBackend.connect()
