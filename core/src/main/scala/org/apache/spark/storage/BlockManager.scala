@@ -280,7 +280,12 @@ private[spark] class BlockManager(
     } else {
       getLocalBytes(blockId) match {
         case Some(buffer) => new BlockManagerManagedBuffer(blockInfoManager, blockId, buffer)
-        case None => throw new BlockNotFoundException(blockId.toString)
+        case None =>
+          // If this block manager receives a request for a block that it doesn't have then it's
+          // likely that the master has outdated block statuses for this block. Therefore, we send
+          // an RPC so that this block is marked as being unavailable from this block manager.
+          reportBlockStatus(blockId, BlockStatus.empty)
+          throw new BlockNotFoundException(blockId.toString)
       }
     }
   }
