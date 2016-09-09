@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.graphx.impl._
+import org.apache.spark.graphx.util.FrequencyDistribution
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 import org.apache.spark.util.BoundedPriorityQueue
 import org.apache.spark.util.collection.{BitSet, OpenHashSet}
@@ -41,6 +42,7 @@ object GraphXUtils {
       classOf[PartitionStrategy],
       classOf[BoundedPriorityQueue[Object]],
       classOf[EdgeDirection],
+      classOf[FrequencyDistribution],
       classOf[GraphXPrimitiveKeyOpenHashMap[VertexId, Int]],
       classOf[OpenHashSet[Int]],
       classOf[OpenHashSet[Long]]))
