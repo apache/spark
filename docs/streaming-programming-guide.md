@@ -2072,7 +2072,7 @@ unifiedStream.pprint()
 </div>
 </div>
 
-Another parameter that should be considered is the receiver's blocking interval,
+Another parameter that should be considered is the receiver's block interval,
 which is determined by the [configuration parameter](configuration.html#spark-streaming)
 `spark.streaming.blockInterval`. For most receivers, the received data is coalesced together into
 blocks of data before storing inside Spark's memory. The number of blocks in each batch
