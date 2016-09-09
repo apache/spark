@@ -73,9 +73,10 @@ abstract class AggregationIterator(
       startingInputBufferOffset: Int): Array[AggregateFunction] = {
     var mutableBufferOffset = 0
     var inputBufferOffset: Int = startingInputBufferOffset
-    val functions = new Array[AggregateFunction](expressions.length)
+    val expressionsLength = expressions.length
+    val functions = new Array[AggregateFunction](expressionsLength)
     var i = 0
-    while (i < expressions.length) {
+    while (i < expressionsLength) {
       val func = expressions(i).aggregateFunction
       val funcWithBoundReferences: AggregateFunction = expressions(i).mode match {
         case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
@@ -181,11 +182,7 @@ abstract class AggregationIterator(
         // Process all expression-based aggregate functions.
         updateProjection.target(currentBuffer)(joinedRow(currentBuffer, row))
         // Process all imperative aggregate functions.
-        var i = 0
-        while (i < updateFunctions.length) {
-          updateFunctions(i)(currentBuffer, row)
-          i += 1
-        }
+        updateFunctions.foreach(updateFunction => updateFunction(currentBuffer, row))
       }
     } else {
       // Grouping only.
