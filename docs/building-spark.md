@@ -20,6 +20,10 @@ If you are compiling with Java 7, you'll need to configure Maven to use more mem
 
     export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
+When compiling with Java 8, a similar but smaller set of memory parameters is necessary:
+
+    export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
+
 If you don't add these parameters to `MAVEN_OPTS`, you may see errors like the following:
 
     [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_BINARY_VERSION}}/classes...
@@ -33,7 +37,7 @@ You can fix these problems by setting the `MAVEN_OPTS` variable as discussed bef
 **Note:**
 
 * This step is not needed for Java 8.
-* If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options to the `MAVEN_OPTS` environment variable.
+* If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options for Java 7 to the `MAVEN_OPTS` environment variable.
 * The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.
 * You may see warnings like "ignoring option MaxPermSize=1g; support was removed in 8.0" when building or running tests with Java 8. These warnings are harmless.
     
