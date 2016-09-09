@@ -55,7 +55,7 @@ object SortPrefixUtils {
   private def getPrefixComparatorWithNullOrder(
      sortOrder: SortOrder, signedType: String): PrefixComparator = {
     sortOrder.direction match {
-      case Ascending if (sortOrder == NullLast) =>
+      case Ascending if (sortOrder.nullOrdering == NullLast) =>
         signedType match {
           case "LONG" => PrefixComparators.LONG_NULLLAST
           case "STRING" => PrefixComparators.STRING_NULLLAST

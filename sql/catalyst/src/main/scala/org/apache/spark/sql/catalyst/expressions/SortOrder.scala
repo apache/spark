@@ -20,9 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.BinaryPrefixComparator
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.DoublePrefixComparator
+import org.apache.spark.sql.types.{BinaryType, StringType, _}
+import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.{BinaryPrefixComparator, DoublePrefixComparator, StringPrefixComparator}
 
 abstract sealed class SortDirection {
   def sql: String
@@ -114,9 +113,23 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
         (!child.isAscending && child.nullOrdering == NullLast)) {
         DoublePrefixComparator.computePrefix(Double.NegativeInfinity)
       } else {
-        DoublePrefixComparator.computePrefix(Double.PositiveInfinity)
+        DoublePrefixComparator.computePrefix(Double.NaN)
       }
-    case _ => 0L
+    case BinaryType =>
+      if ((child.isAscending && child.nullOrdering == NullFirst) ||
+        (!child.isAscending && child.nullOrdering == NullLast)) {
+        0L
+      } else {
+        // This may not be the best choice for null value
+        DoublePrefixComparator.computePrefix(Double.MaxValue)
+      }
+    case _ =>
+      if ((child.isAscending && child.nullOrdering == NullFirst) ||
+        (!child.isAscending && child.nullOrdering == NullLast)) {
+        0L
+      } else {
+        DoublePrefixComparator.computePrefix(Double.NaN)
+      }
   }
 
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
@@ -126,6 +139,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
     val input = childCode.value
     val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getName
     val DoublePrefixCmp = classOf[DoublePrefixComparator].getName
+    val StringPrefixCmp = classOf[StringPrefixComparator].getName
     val prefixCode = child.child.dataType match {
       case BooleanType =>
         s"$input ? 1L : 0L"
@@ -135,7 +149,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
         s"(long) $input"
       case FloatType | DoubleType =>
         s"$DoublePrefixCmp.computePrefix((double)$input)"
-      case StringType => s"$input.getPrefix()"
+      case StringType => s"$StringPrefixCmp.computePrefix($input)"
       case BinaryType => s"$BinaryPrefixCmp.computePrefix($input)"
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
         if (dt.precision <= Decimal.MAX_LONG_DIGITS) {

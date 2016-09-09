@@ -74,9 +74,7 @@ public class PrefixComparators {
   }
 
   public static final class BinaryPrefixComparator {
-    public static long computePrefix(byte[] bytes) {
-      return ByteArray.getPrefix(bytes);
-    }
+    public static long computePrefix(byte[] bytes) { return ByteArray.getPrefix(bytes); }
   }
 
   public static final class DoublePrefixComparator {

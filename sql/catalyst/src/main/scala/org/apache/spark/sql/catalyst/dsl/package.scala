@@ -109,8 +109,9 @@ package object dsl {
     def cast(to: DataType): Expression = Cast(expr, to)
 
     def asc: SortOrder = SortOrder(expr, Ascending)
+    def asc_nullLast: SortOrder = SortOrder(expr, Ascending, NullLast)
     def desc: SortOrder = SortOrder(expr, Descending)
-
+    def desc_nullFirst: SortOrder = SortOrder(expr, Descending, NullFirst)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
     def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }
