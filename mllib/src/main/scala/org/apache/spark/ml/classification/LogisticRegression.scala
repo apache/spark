@@ -359,14 +359,16 @@ class LogisticRegression @Since("1.2.0") (
       case None => histogram.length
     }
     val isBinaryClassification = numClasses == 1 || numClasses == 2
-    val isMultinomial = ($(family) == "auto" && !isBinaryClassification) ||
-      ($(family) == "multinomial")
-    val numCoefficientSets = if (isMultinomial) numClasses else 1
-
-    if (!isMultinomial) {
-      require(isBinaryClassification, s"Binomial family only supports 1 or 2 " +
+    val isMultinomial = $(family) match {
+      case "binomial" =>
+        require(isBinaryClassification, s"Binomial family only supports 1 or 2 " +
         s"outcome classes but found $numClasses.")
+        false
+      case "multinomial" => true
+      case "auto" => !isBinaryClassification
+      case other => throw new IllegalArgumentException(s"Unsupported family: $other")
     }
+    val numCoefficientSets = if (isMultinomial) numClasses else 1
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
