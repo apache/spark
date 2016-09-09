@@ -374,7 +374,7 @@ private[spark] class BlockManager(
     info.synchronized {
       info.level match {
         case null =>
-          BlockStatus(StorageLevel.NONE, memSize = 0L, diskSize = 0L)
+          BlockStatus.empty
         case level =>
           val inMem = level.useMemory && memoryStore.contains(blockId)
           val onDisk = level.useDisk && diskStore.contains(blockId)
@@ -1333,12 +1333,11 @@ private[spark] class BlockManager(
         "the disk, memory, or external block store")
     }
     blockInfoManager.removeBlock(blockId)
-    val removeBlockStatus = getCurrentBlockStatus(blockId, info)
     if (tellMaster && info.tellMaster) {
-      reportBlockStatus(blockId, info, removeBlockStatus)
+      reportBlockStatus(blockId, info, BlockStatus.empty)
     }
     Option(TaskContext.get()).foreach { c =>
-      c.taskMetrics().incUpdatedBlockStatuses(blockId -> removeBlockStatus)
+      c.taskMetrics().incUpdatedBlockStatuses(blockId -> BlockStatus.empty)
     }
   }
 
