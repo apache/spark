@@ -232,6 +232,7 @@ object PageRank extends Logging {
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
       prevRankGraph.vertices.unpersist(false)
       prevRankGraph.edges.unpersist(false)
+      sourcesInitMapBC.destroy(false)
 
       logInfo(s"Parallel Personalized PageRank finished iteration $i.")
 
