@@ -217,7 +217,7 @@ private[spark] class BlockManager(
     logInfo(s"Reporting ${blockInfoManager.size} blocks to the master.")
     for ((blockId, info) <- blockInfoManager.entries) {
       val status = getCurrentBlockStatus(blockId, info)
-      if (!tryToReportBlockStatus(blockId, info, status)) {
+      if (info.tellMaster && !tryToReportBlockStatus(blockId, status)) {
         logError(s"Failed to report $blockId to master; giving up.")
         return
       }
@@ -333,10 +333,9 @@ private[spark] class BlockManager(
    */
   private def reportBlockStatus(
       blockId: BlockId,
-      info: BlockInfo,
       status: BlockStatus,
       droppedMemorySize: Long = 0L): Unit = {
-    val needReregister = !tryToReportBlockStatus(blockId, info, status, droppedMemorySize)
+    val needReregister = !tryToReportBlockStatus(blockId, status, droppedMemorySize)
     if (needReregister) {
       logInfo(s"Got told to re-register updating block $blockId")
       // Re-registering will report our new block for free.
@@ -352,17 +351,12 @@ private[spark] class BlockManager(
    */
   private def tryToReportBlockStatus(
       blockId: BlockId,
-      info: BlockInfo,
       status: BlockStatus,
       droppedMemorySize: Long = 0L): Boolean = {
-    if (info.tellMaster) {
-      val storageLevel = status.storageLevel
-      val inMemSize = Math.max(status.memSize, droppedMemorySize)
-      val onDiskSize = status.diskSize
-      master.updateBlockInfo(blockManagerId, blockId, storageLevel, inMemSize, onDiskSize)
-    } else {
-      true
-    }
+    val storageLevel = status.storageLevel
+    val inMemSize = Math.max(status.memSize, droppedMemorySize)
+    val onDiskSize = status.diskSize
+    master.updateBlockInfo(blockManagerId, blockId, storageLevel, inMemSize, onDiskSize)
   }
 
   /**
@@ -807,8 +801,8 @@ private[spark] class BlockManager(
         // Now that the block is in either the memory or disk store,
         // tell the master about it.
         info.size = size
-        if (tellMaster) {
-          reportBlockStatus(blockId, info, putBlockStatus)
+        if (tellMaster && info.tellMaster) {
+          reportBlockStatus(blockId, putBlockStatus)
         }
         Option(TaskContext.get()).foreach { c =>
           c.taskMetrics().incUpdatedBlockStatuses(blockId -> putBlockStatus)
@@ -964,8 +958,8 @@ private[spark] class BlockManager(
         // Now that the block is in either the memory, externalBlockStore, or disk store,
         // tell the master about it.
         info.size = size
-        if (tellMaster) {
-          reportBlockStatus(blockId, info, putBlockStatus)
+        if (tellMaster && info.tellMaster) {
+          reportBlockStatus(blockId, putBlockStatus)
         }
         Option(TaskContext.get()).foreach { c =>
           c.taskMetrics().incUpdatedBlockStatuses(blockId -> putBlockStatus)
@@ -1271,7 +1265,7 @@ private[spark] class BlockManager(
 
     val status = getCurrentBlockStatus(blockId, info)
     if (info.tellMaster) {
-      reportBlockStatus(blockId, info, status, droppedMemorySize)
+      reportBlockStatus(blockId, status, droppedMemorySize)
     }
     if (blockIsUpdated) {
       Option(TaskContext.get()).foreach { c =>
@@ -1334,7 +1328,7 @@ private[spark] class BlockManager(
     }
     blockInfoManager.removeBlock(blockId)
     if (tellMaster && info.tellMaster) {
-      reportBlockStatus(blockId, info, BlockStatus.empty)
+      reportBlockStatus(blockId, BlockStatus.empty)
     }
     Option(TaskContext.get()).foreach { c =>
       c.taskMetrics().incUpdatedBlockStatuses(blockId -> BlockStatus.empty)
