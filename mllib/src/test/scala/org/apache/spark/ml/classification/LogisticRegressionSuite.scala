@@ -1965,6 +1965,11 @@ class LogisticRegressionSuite
     val model2 = mlr.fit(moreFeaturesThanClasses)
     assert(model2.coefficientMatrix.isInstanceOf[SparseMatrix])
     assert(model2.coefficientMatrix.asInstanceOf[SparseMatrix].colPtrs.length === 3)
+
+    val blr = new LogisticRegression().setFamily("binomial")
+    val blrModel = blr.fit(moreFeaturesThanClasses)
+    assert(blrModel.coefficientMatrix.isInstanceOf[SparseMatrix])
+    assert(blrModel.coefficientMatrix.asInstanceOf[SparseMatrix].colPtrs.length === 2)
   }
 
   test("numClasses specified in metadata/inferred") {

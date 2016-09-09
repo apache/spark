@@ -358,6 +358,7 @@ class LogisticRegression @Since("1.2.0") (
         n
       case None => histogram.length
     }
+
     val isBinaryClassification = numClasses == 1 || numClasses == 2
     val isMultinomial = $(family) match {
       case "binomial" =>
@@ -393,11 +394,11 @@ class LogisticRegression @Since("1.2.0") (
         logWarning(s"All labels are the same value and fitIntercept=true, so the coefficients " +
           s"will be zeros. Training is not needed.")
         val constantLabelIndex = Vectors.dense(histogram).argmax
-        val coefMatrix = if (numFeatures < numClasses) {
+        val coefMatrix = if (numFeatures < numCoefficientSets) {
           new SparseMatrix(numCoefficientSets, numFeatures,
             Array.fill(numFeatures + 1)(0), Array.empty[Int], Array.empty[Double])
         } else {
-          new SparseMatrix(numCoefficientSets, numFeatures, Array.fill(numClasses + 1)(0),
+          new SparseMatrix(numCoefficientSets, numFeatures, Array.fill(numCoefficientSets + 1)(0),
             Array.empty[Int], Array.empty[Double], isTransposed = true)
         }
         val interceptVec = if (isMultinomial) {
