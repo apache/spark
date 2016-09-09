@@ -114,11 +114,11 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
 case class TakeOrderedAndProjectExec(
     limit: Int,
     sortOrder: Seq[SortOrder],
-    projectList: Option[Seq[NamedExpression]],
+    projectList: Seq[NamedExpression],
     child: SparkPlan) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = {
-    projectList.map(_.map(_.toAttribute)).getOrElse(child.output)
+    projectList.map(_.toAttribute)
   }
 
   override def outputPartitioning: Partitioning = SinglePartition
@@ -126,8 +126,8 @@ case class TakeOrderedAndProjectExec(
   override def executeCollect(): Array[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
-    if (projectList.isDefined) {
-      val proj = UnsafeProjection.create(projectList.get, child.output)
+    if (AttributeSet(projectList) != child.outputSet) {
+      val proj = UnsafeProjection.create(projectList, child.output)
       data.map(r => proj(r).copy())
     } else {
       data
@@ -148,8 +148,8 @@ case class TakeOrderedAndProjectExec(
         localTopK, child.output, SinglePartition, serializer))
     shuffled.mapPartitions { iter =>
       val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
-      if (projectList.isDefined) {
-        val proj = UnsafeProjection.create(projectList.get, child.output)
+      if (AttributeSet(projectList) != child.outputSet) {
+        val proj = UnsafeProjection.create(projectList, child.output)
         topK.map(r => proj(r))
       } else {
         topK
