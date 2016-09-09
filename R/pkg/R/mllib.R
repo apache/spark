@@ -1241,7 +1241,7 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @note spark.als since 2.1.0
 setMethod("spark.als", signature(data = "SparkDataFrame"),
           function(data, ratingCol = "rating", userCol = "user", itemCol = "item",
-                   rank = 10, reg = 1.0, maxIter = 10, nonnegative = FALSE,
+                   rank = 10, reg = 0.1, maxIter = 10, nonnegative = FALSE,
                    implicitPrefs = FALSE, alpha = 1.0, numUserBlocks = 10, numItemBlocks = 10,
                    checkpointInterval = 10, seed = 0) {
 
