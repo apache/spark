@@ -1842,8 +1842,9 @@ class UserDefinedJythonFunction(object):
                                          for k, v in req_imports.items())
                 serialized_imports = b64encode(ser.dumps(formatted_imports)).decode("utf-8")
 
-        ctx = SQLContext.getOrCreate(sc)
-        jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
+        from pyspark.sql import SparkSession
+        spark = SparkSession.builder.getOrCreate()
+        jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         if name is None:
             f = self.func
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
