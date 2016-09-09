@@ -123,28 +123,23 @@ private[ui] object RDDOperationGraph extends Logging {
     val addRDDIds = new mutable.HashSet[Int]()
     val dropRDDIds = new mutable.HashSet[Int]()
 
-    def isAllowed(rdd: RDDInfo): Boolean = {
-      val parentIds = rdd.parentIds
-      if (parentIds.size == 0) {
-        rootNodeCount < retainedNodes
-      } else {
-        parentIds.exists(id => addRDDIds.contains(id) || !dropRDDIds.contains(id))
-      }
-    }
-
     // Find nodes, edges, and operation scopes that belong to this stage
     stage.rddInfos.sortBy(_.id).foreach { rdd =>
-      val keepNode = isAllowed(rdd)
-      if (keepNode) {
-        addRDDIds.add(rdd.id)
-        edges ++= rdd.parentIds.filter(id => !dropRDDIds.contains(id))
-          .map { parentId => RDDOperationEdge(parentId, rdd.id) }
+      var isAllowed = true
+      val parentIds = rdd.parentIds
+      if (parentIds.isEmpty) {
+        isAllowed = rootNodeCount < retainedNodes
+        rootNodeCount += 1
       } else {
-        dropRDDIds.add(rdd.id)
+        isAllowed = parentIds.exists(id => addRDDIds.contains(id) || !dropRDDIds.contains(id))
       }
 
-      if (rdd.parentIds.size == 0) {
-        rootNodeCount = rootNodeCount + 1
+      if (isAllowed) {
+        addRDDIds += rdd.id
+        edges ++= parentIds.filter(id => !dropRDDIds.contains(id))
+          .map { parentId => RDDOperationEdge(parentId, rdd.id) }
+      } else {
+        dropRDDIds += rdd.id
       }
 
       // TODO: differentiate between the intention to cache an RDD and whether it's actually cached
@@ -153,7 +148,7 @@ private[ui] object RDDOperationGraph extends Logging {
       if (rdd.scope.isEmpty) {
         // This RDD has no encompassing scope, so we put it directly in the root cluster
         // This should happen only if an RDD is instantiated outside of a public RDD API
-        if (keepNode) {
+        if (isAllowed) {
           rootCluster.attachChildNode(node)
         }
       } else {
@@ -179,7 +174,7 @@ private[ui] object RDDOperationGraph extends Logging {
             rootCluster.attachChildCluster(cluster)
           }
         }
-        if (keepNode) {
+        if (isAllowed) {
           rddClusters.lastOption.foreach { cluster => cluster.attachChildNode(node) }
         }
       }
