@@ -298,7 +298,7 @@ private[spark] class BlockManager(
 
   /**
    * Get the BlockStatus for the block identified by the given ID, if it exists.
-   * NOTE: This is mainly for testing, and it doesn't fetch information from external block store.
+   * NOTE: This is mainly for testing.
    */
   def getStatus(blockId: BlockId): Option[BlockStatus] = {
     blockInfoManager.get(blockId).map { info =>
@@ -955,8 +955,7 @@ private[spark] class BlockManager(
       val putBlockStatus = getCurrentBlockStatus(blockId, info)
       val blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
       if (blockWasSuccessfullyStored) {
-        // Now that the block is in either the memory, externalBlockStore, or disk store,
-        // tell the master about it.
+        // Now that the block is in either the memory or disk store, tell the master about it.
         info.size = size
         if (tellMaster && info.tellMaster) {
           reportBlockStatus(blockId, putBlockStatus)
@@ -1323,8 +1322,7 @@ private[spark] class BlockManager(
     val removedFromMemory = memoryStore.remove(blockId)
     val removedFromDisk = diskStore.remove(blockId)
     if (!removedFromMemory && !removedFromDisk) {
-      logWarning(s"Block $blockId could not be removed as it was not found in either " +
-        "the disk, memory, or external block store")
+      logWarning(s"Block $blockId could not be removed as it was not found on disk or in memory")
     }
     blockInfoManager.removeBlock(blockId)
     if (tellMaster && info.tellMaster) {
