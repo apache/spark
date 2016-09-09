@@ -63,6 +63,13 @@ public class UnsafeArrayWriter {
     for (int i = 8; i < headerInBytes; i += 8) {
       Platform.putLong(holder.buffer, startingOffset + i, 0L);
     }
+
+    // fill 0 into reminder part of 8-bytes alignment in unsafe array
+    if ((fixedPartInBytes - elementSize * numElements) != 0) {
+      for (int i = elementSize * numElements; i < fixedPartInBytes; i++) {
+        Platform.putByte(holder.buffer, startingOffset + headerInBytes + i, (byte) 0);
+      }
+    }
     holder.cursor += (headerInBytes + fixedPartInBytes);
   }
 
