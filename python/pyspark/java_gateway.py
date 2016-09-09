@@ -56,6 +56,8 @@ def launch_gateway():
                 "--conf spark.ui.enabled=false",
                 submit_args
             ])
+        if len(sys.argv) > 1 and os.environ.get("PYSPARK_PASS_ARGS_TO_GATEWAY", True):
+            submit_args = ' '.join(sys.argv[1:] + [submit_args])
         command = [os.path.join(SPARK_HOME, script)] + shlex.split(submit_args)
 
         # Start a socket that will be used by PythonGatewayServer to communicate its port to us
