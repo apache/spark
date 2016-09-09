@@ -26,7 +26,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Vector, Vectors}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -1849,7 +1849,7 @@ class LogisticRegressionSuite
     predictions3.zip(predictions4).foreach { case (Row(p1: Double), Row(p2: Double)) =>
       assert(p1 === p2)
     }
-    // TODO: check that it converges in a single iteration when initial model is available
+    // TODO: check that it converges in a single iteration when model summary is available
   }
 
   test("logistic regression with all labels the same") {
@@ -1892,6 +1892,26 @@ class LogisticRegressionSuite
       .fit(sameLabels)
     assert(allOneNoInterceptModel.intercept === 0.0)
     assert(allOneNoInterceptModel.summary.totalIterations > 0)
+  }
+
+  test("compressed storage") {
+    val moreClassesThanFeatures = spark.createDataFrame(Seq(
+      LabeledPoint(4.0, Vectors.dense(0.0, 0.0, 0.0)),
+      LabeledPoint(4.0, Vectors.dense(1.0, 1.0, 1.0)),
+      LabeledPoint(4.0, Vectors.dense(2.0, 2.0, 2.0)))
+    )
+    val mlr = new LogisticRegression().setFamily("multinomial")
+    val model = mlr.fit(moreClassesThanFeatures)
+    assert(model.coefficientMatrix.isInstanceOf[SparseMatrix])
+    assert(model.coefficientMatrix.asInstanceOf[SparseMatrix].colPtrs.length === 4)
+    val moreFeaturesThanClasses = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0, 1.0, 1.0)),
+      LabeledPoint(1.0, Vectors.dense(2.0, 2.0, 2.0)))
+    )
+    val model2 = mlr.fit(moreFeaturesThanClasses)
+    assert(model2.coefficientMatrix.isInstanceOf[SparseMatrix])
+    assert(model2.coefficientMatrix.asInstanceOf[SparseMatrix].colPtrs.length === 3)
   }
 
   test("multiclass logistic regression with all labels the same") {

@@ -50,7 +50,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
   with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth {
 
-  import LogisticRegression._
+  import org.apache.spark.ml.classification.LogisticRegression.supportedFamilyNames
 
   /**
    * Set threshold in binary classification, in range [0, 1].
@@ -377,7 +377,7 @@ class LogisticRegression @Since("1.2.0") (
     instr.logNumClasses(numClasses)
     instr.logNumFeatures(numFeatures)
 
-    val (coefficients, intercept, objectiveHistory) = {
+    val (coefficientMatrix, interceptVector, objectiveHistory) = {
       if (numInvalid != 0) {
         val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
           s"Found $numInvalid invalid labels."
@@ -385,20 +385,25 @@ class LogisticRegression @Since("1.2.0") (
         throw new SparkException(msg)
       }
 
-      val isConstantLabel = histogram.count(_ != 0) == 1
+      val isConstantLabel = histogram.count(_ != 0.0) == 1
 
       if ($(fitIntercept) && isConstantLabel) {
         logWarning(s"All labels are the same value and fitIntercept=true, so the coefficients " +
           s"will be zeros. Training is not needed.")
         val constantLabelIndex = Vectors.dense(histogram).argmax
-        val coefficientMatrix = Matrices.sparse(numCoefficientSets, numFeatures,
-          Array.fill(numFeatures + 1)(0), Array.empty[Int], Array.empty[Double])
-        val interceptVector = if (isMultinomial) {
+        val coefMatrix = if (numFeatures < numClasses) {
+          new SparseMatrix(numCoefficientSets, numFeatures,
+            Array.fill(numFeatures + 1)(0), Array.empty[Int], Array.empty[Double])
+        } else {
+          new SparseMatrix(numCoefficientSets, numFeatures, Array.fill(numClasses + 1)(0),
+            Array.empty[Int], Array.empty[Double], isTransposed = true)
+        }
+        val interceptVec = if (isMultinomial) {
           Vectors.sparse(numClasses, Seq((constantLabelIndex, Double.PositiveInfinity)))
         } else {
           Vectors.dense(if (numClasses == 2) Double.PositiveInfinity else Double.NegativeInfinity)
         }
-        (coefficientMatrix, interceptVector, Array.empty[Double])
+        (coefMatrix, interceptVec, Array.empty[Double])
       } else {
         if (!$(fitIntercept) && isConstantLabel) {
           logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
@@ -460,31 +465,34 @@ class LogisticRegression @Since("1.2.0") (
         val initialCoefficientsWithIntercept =
           Vectors.zeros(numCoefficientSets * numFeaturesPlusIntercept)
 
-        val initialModelIsValid = optInitialModel.exists { model =>
-          val providedCoefs = model.coefficientMatrix
-          val modelValid = (providedCoefs.numRows == numCoefficientSets) &&
-            (providedCoefs.numCols == numFeatures) &&
-            (model.interceptVector.size == numCoefficientSets)
-          if (!modelValid) {
-            logWarning(s"Initial coefficients will be ignored! Its dimensions " +
-              s"(${providedCoefs.numRows}, ${providedCoefs.numCols}) did not match the expected " +
-              s"size ($numCoefficientSets, $numFeatures)")
-          }
-          modelValid
+        val initialModelIsValid = optInitialModel match {
+          case Some(_initialModel) =>
+            val providedCoefs = _initialModel.coefficientMatrix
+            val modelIsValid = (providedCoefs.numRows == numCoefficientSets) &&
+              (providedCoefs.numCols == numFeatures) &&
+              (_initialModel.interceptVector.size == numCoefficientSets) &&
+              (_initialModel.getFitIntercept == $(fitIntercept))
+            if (!modelIsValid) {
+              logWarning(s"Initial coefficients will be ignored! Its dimensions " +
+                s"(${providedCoefs.numRows}, ${providedCoefs.numCols}) did not match the " +
+                s"expected size ($numCoefficientSets, $numFeatures)")
+            }
+            modelIsValid
+          case None => false
         }
 
         if (initialModelIsValid) {
-          val initialCoefArray = initialCoefficientsWithIntercept.toArray
+          val initialCoefWithInterceptArray = initialCoefficientsWithIntercept.toArray
           val providedCoef = optInitialModel.get.coefficientMatrix
           providedCoef.foreachActive { (row, col, value) =>
             val flatIndex = row * numFeaturesPlusIntercept + col
             // We need to scale the coefficients since they will be trained in the scaled space
-            initialCoefArray(flatIndex) = value * featuresStd(col)
+            initialCoefWithInterceptArray(flatIndex) = value * featuresStd(col)
           }
           if ($(fitIntercept)) {
             optInitialModel.get.interceptVector.foreachActive { (index, value) =>
               val coefIndex = (index + 1) * numFeaturesPlusIntercept - 1
-              initialCoefArray(coefIndex) = value
+              initialCoefWithInterceptArray(coefIndex) = value
             }
           }
         } else if ($(fitIntercept) && isMultinomial) {
@@ -549,13 +557,13 @@ class LogisticRegression @Since("1.2.0") (
           state = states.next()
           arrayBuilder += state.adjustedValue
         }
+        bcFeaturesStd.destroy(blocking = false)
 
         if (state == null) {
           val msg = s"${optimizer.getClass.getName} failed."
           logError(msg)
           throw new SparkException(msg)
         }
-        bcFeaturesStd.destroy(blocking = false)
 
         /*
            The coefficients are trained in the scaled space; we're converting them back to
@@ -617,8 +625,8 @@ class LogisticRegression @Since("1.2.0") (
 
     if (handlePersistence) instances.unpersist()
 
-    val model = copyValues(new LogisticRegressionModel(uid, coefficients, intercept, numClasses,
-      isMultinomial))
+    val model = copyValues(new LogisticRegressionModel(uid, coefficientMatrix, interceptVector,
+      numClasses, isMultinomial))
     // TODO: implement summary model for multinomial case
     val m = if (!isMultinomial) {
       val (summaryModel, probabilityColName) = model.findSummaryModelAndProbabilityCol()
