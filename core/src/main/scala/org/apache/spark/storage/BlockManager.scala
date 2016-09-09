@@ -565,8 +565,9 @@ private[spark] class BlockManager(
             // Give up trying anymore locations. Either we've tried all of the original locations,
             // or we've refreshed the list of locations from the master, and have still
             // hit failures after trying locations from the refreshed list.
-            throw new BlockFetchException(s"Failed to fetch block after" +
-              s" ${totalFailureCount} fetch failures. Most recent failure cause:", e)
+            logError(s"Failed to fetch block after $totalFailureCount fetch failures." +
+              s"Most recent failure cause:", e)
+            return None
           }
 
           logWarning(s"Failed to fetch remote block $blockId " +
