@@ -146,6 +146,11 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
           // It will fail if there is an existing file (someone has committed the batch)
           logDebug(s"Attempting to write log #${batchIdToPath(batchId)}")
           fileManager.rename(tempPath, batchIdToPath(batchId))
+
+          // SPARK-17475: HDFSMetadataLog should not leak CRC files
+          // If the underlying filesystem didn't rename the CRC file, delete it.
+          val crcPath = new Path(tempPath.getParent(), s".${tempPath.getName()}.crc")
+          if (fileManager.exists(crcPath)) fileManager.delete(crcPath)
           return
         } catch {
           case e: IOException if isFileAlreadyExistsException(e) =>
