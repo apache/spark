@@ -11,3 +11,7 @@ include Rtools and R in `PATH`.
 directory in Maven in `PATH`.
 4. Set `MAVEN_OPTS` as described in [Building Spark](http://spark.apache.org/docs/latest/building-spark.html).
 5. Open a command shell (`cmd`) in the Spark directory and run `mvn -DskipTests -Psparkr package`
+
+## AppVeyor
+
+SparkR tests are also automatically run on Windows using AppVeyor. Please see `dev/appveyor-guide.md` for more details.
