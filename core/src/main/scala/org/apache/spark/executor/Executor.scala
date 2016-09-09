@@ -402,7 +402,12 @@ private[spark] class Executor(
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
           if (Utils.isFatalError(t)) {
-            SparkUncaughtExceptionHandler.uncaughtException(t)
+            if (!isLocal) {
+              Thread.getDefaultUncaughtExceptionHandler.
+                  uncaughtException(Thread.currentThread(), t)
+            } else {
+              SparkUncaughtExceptionHandler.uncaughtException(t)
+            }
           }
 
       } finally {
