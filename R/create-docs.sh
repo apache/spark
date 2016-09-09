@@ -48,4 +48,6 @@ popd
 # render creates SparkR vignettes
 Rscript -e 'library(rmarkdown); .libPaths(c("lib", .libPaths())); Sys.setenv(SPARK_HOME=tools::file_path_as_absolute("..")); render("pkg/vignettes/sparkr-vignettes.Rmd")'
 
+find pkg/vignettes -not -name '.' -not -name '*.Rmd' -not -name '*.md' -not -name '*.pdf' -not -name '*.html' -delete
+
 popd
