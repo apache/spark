@@ -153,7 +153,7 @@ class LogisticRegressionSuite
   }
 
   test("setThreshold, getThreshold") {
-    val lr = new LogisticRegression
+    val lr = new LogisticRegression().setFamily("binomial")
     // default
     assert(lr.getThreshold === 0.5, "LogisticRegression.threshold should default to 0.5")
     withClue("LogisticRegression should not have thresholds set by default.") {
@@ -170,7 +170,7 @@ class LogisticRegressionSuite
     lr.setThreshold(0.5)
     assert(lr.getThresholds === Array(0.5, 0.5))
     // Set via thresholds
-    val lr2 = new LogisticRegression
+    val lr2 = new LogisticRegression().setFamily("binomial")
     lr2.setThresholds(Array(0.3, 0.7))
     val expectedThreshold = 1.0 / (1.0 + 0.3 / 0.7)
     assert(lr2.getThreshold ~== expectedThreshold relTol 1E-7)
@@ -234,10 +234,15 @@ class LogisticRegressionSuite
   }
 
   test("logistic regression doesn't fit intercept when fitIntercept is off") {
-    val lr = new LogisticRegression
+    val lr = new LogisticRegression().setFamily("binomial")
     lr.setFitIntercept(false)
     val model = lr.fit(smallBinaryDataset)
     assert(model.intercept === 0.0)
+
+    val mlr = new LogisticRegression().setFamily("multinomial")
+    mlr.setFitIntercept(false)
+    val mlrModel = mlr.fit(smallMultinomialDataset)
+    assert(mlrModel.interceptVector === Vectors.sparse(3, Seq()))
 
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
@@ -288,7 +293,7 @@ class LogisticRegressionSuite
   }
 
   test("multinomial logistic regression: Predictor, Classifier methods") {
-    val mlr = new LogisticRegression
+    val mlr = new LogisticRegression().setFamily("multinomial")
 
     val model = mlr.fit(smallMultinomialDataset)
     assert(model.numClasses === 3)
@@ -335,7 +340,7 @@ class LogisticRegressionSuite
   }
 
   test("binary logistic regression: Predictor, Classifier methods") {
-    val lr = new LogisticRegression
+    val lr = new LogisticRegression().setFamily("binomial")
 
     val model = lr.fit(smallBinaryDataset)
     assert(model.numClasses === 2)
@@ -364,7 +369,7 @@ class LogisticRegressionSuite
   }
 
   test("coefficients and intercept methods") {
-    val mlr = new LogisticRegression().setMaxIter(1)
+    val mlr = new LogisticRegression().setMaxIter(1).setFamily("multinomial")
     val mlrModel = mlr.fit(smallMultinomialDataset)
     val thrownCoef = intercept[SparkException] {
       mlrModel.coefficients
@@ -375,7 +380,7 @@ class LogisticRegressionSuite
     assert(thrownCoef.getMessage().contains("use coefficientMatrix instead"))
     assert(thrownIntercept.getMessage().contains("use interceptVector instead"))
 
-    val blr = new LogisticRegression().setMaxIter(1)
+    val blr = new LogisticRegression().setMaxIter(1).setFamily("binomial")
     val blrModel = blr.fit(smallBinaryDataset)
     assert(blrModel.coefficients.size === 1)
     assert(blrModel.intercept !== 0.0)
@@ -1751,7 +1756,7 @@ class LogisticRegressionSuite
     val testData = spark.createDataFrame(Array.tabulate[LabeledPoint](numClasses) { i =>
       LabeledPoint(i.toDouble, Vectors.dense(i.toDouble))
     })
-    val lr = new LogisticRegression().setWeightCol("weight")
+    val lr = new LogisticRegression().setFamily("binomial").setWeightCol("weight")
     val model = lr.fit(outlierData)
     val results = model.transform(testData).select("label", "prediction").collect()
 
@@ -1775,7 +1780,7 @@ class LogisticRegressionSuite
     val testData = spark.createDataFrame(Array.tabulate[LabeledPoint](numClasses) { i =>
       LabeledPoint(i.toDouble, Vectors.dense(i.toDouble))
     })
-    val mlr = new LogisticRegression().setWeightCol("weight")
+    val mlr = new LogisticRegression().setFamily("multinomial").setWeightCol("weight")
     val model = mlr.fit(outlierData)
     val results = model.transform(testData).select("label", "prediction").collect()
 
@@ -1829,9 +1834,9 @@ class LogisticRegressionSuite
   }
 
   test("set initial model") {
-    val lr = new LogisticRegression()
+    val lr = new LogisticRegression().setFamily("binomial")
     val model1 = lr.fit(smallBinaryDataset)
-    val lr2 = new LogisticRegression().setInitialModel(model1).setMaxIter(5)
+    val lr2 = new LogisticRegression().setInitialModel(model1).setMaxIter(5).setFamily("binomial")
     val model2 = lr2.fit(smallBinaryDataset)
     val predictions1 = model1.transform(smallBinaryDataset).select("prediction").collect()
     val predictions2 = model2.transform(smallBinaryDataset).select("prediction").collect()
@@ -1840,9 +1845,10 @@ class LogisticRegressionSuite
     }
     assert(model2.summary.totalIterations === 1)
 
-    val lr3 = new LogisticRegression()
+    val lr3 = new LogisticRegression().setFamily("multinomial")
     val model3 = lr3.fit(smallMultinomialDataset)
-    val lr4 = new LogisticRegression().setInitialModel(model3).setMaxIter(5)
+    val lr4 = new LogisticRegression()
+      .setInitialModel(model3).setMaxIter(5).setFamily("multinomial")
     val model4 = lr4.fit(smallMultinomialDataset)
     val predictions3 = model3.transform(smallMultinomialDataset).select("prediction").collect()
     val predictions4 = model4.transform(smallMultinomialDataset).select("prediction").collect()
@@ -1852,7 +1858,7 @@ class LogisticRegressionSuite
     // TODO: check that it converges in a single iteration when model summary is available
   }
 
-  test("logistic regression with all labels the same") {
+  test("binary logistic regression with all labels the same") {
     val sameLabels = smallBinaryDataset
       .withColumn("zeroLabel", lit(0.0))
       .withColumn("oneLabel", lit(1.0))
@@ -1861,6 +1867,7 @@ class LogisticRegressionSuite
     val lrIntercept = new LogisticRegression()
       .setFitIntercept(true)
       .setMaxIter(3)
+      .setFamily("binomial")
 
     val allZeroInterceptModel = lrIntercept
       .setLabelCol("zeroLabel")
@@ -1880,6 +1887,7 @@ class LogisticRegressionSuite
     val lrNoIntercept = new LogisticRegression()
       .setFitIntercept(false)
       .setMaxIter(3)
+      .setFamily("binomial")
 
     val allZeroNoInterceptModel = lrNoIntercept
       .setLabelCol("zeroLabel")
@@ -1892,26 +1900,6 @@ class LogisticRegressionSuite
       .fit(sameLabels)
     assert(allOneNoInterceptModel.intercept === 0.0)
     assert(allOneNoInterceptModel.summary.totalIterations > 0)
-  }
-
-  test("compressed storage") {
-    val moreClassesThanFeatures = spark.createDataFrame(Seq(
-      LabeledPoint(4.0, Vectors.dense(0.0, 0.0, 0.0)),
-      LabeledPoint(4.0, Vectors.dense(1.0, 1.0, 1.0)),
-      LabeledPoint(4.0, Vectors.dense(2.0, 2.0, 2.0)))
-    )
-    val mlr = new LogisticRegression().setFamily("multinomial")
-    val model = mlr.fit(moreClassesThanFeatures)
-    assert(model.coefficientMatrix.isInstanceOf[SparseMatrix])
-    assert(model.coefficientMatrix.asInstanceOf[SparseMatrix].colPtrs.length === 4)
-    val moreFeaturesThanClasses = spark.createDataFrame(Seq(
-      LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0)),
-      LabeledPoint(1.0, Vectors.dense(1.0, 1.0, 1.0)),
-      LabeledPoint(1.0, Vectors.dense(2.0, 2.0, 2.0)))
-    )
-    val model2 = mlr.fit(moreFeaturesThanClasses)
-    assert(model2.coefficientMatrix.isInstanceOf[SparseMatrix])
-    assert(model2.coefficientMatrix.asInstanceOf[SparseMatrix].colPtrs.length === 3)
   }
 
   test("multiclass logistic regression with all labels the same") {
@@ -1959,8 +1947,28 @@ class LogisticRegressionSuite
     // TODO: check num iters is zero when it become available in the model
   }
 
+  test("compressed storage") {
+    val moreClassesThanFeatures = spark.createDataFrame(Seq(
+      LabeledPoint(4.0, Vectors.dense(0.0, 0.0, 0.0)),
+      LabeledPoint(4.0, Vectors.dense(1.0, 1.0, 1.0)),
+      LabeledPoint(4.0, Vectors.dense(2.0, 2.0, 2.0)))
+    )
+    val mlr = new LogisticRegression().setFamily("multinomial")
+    val model = mlr.fit(moreClassesThanFeatures)
+    assert(model.coefficientMatrix.isInstanceOf[SparseMatrix])
+    assert(model.coefficientMatrix.asInstanceOf[SparseMatrix].colPtrs.length === 4)
+    val moreFeaturesThanClasses = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0, 1.0, 1.0)),
+      LabeledPoint(1.0, Vectors.dense(2.0, 2.0, 2.0)))
+    )
+    val model2 = mlr.fit(moreFeaturesThanClasses)
+    assert(model2.coefficientMatrix.isInstanceOf[SparseMatrix])
+    assert(model2.coefficientMatrix.asInstanceOf[SparseMatrix].colPtrs.length === 3)
+  }
+
   test("numClasses specified in metadata/inferred") {
-    val lr = new LogisticRegression().setMaxIter(1)
+    val lr = new LogisticRegression().setMaxIter(1).setFamily("multinomial")
 
     // specify more classes than unique label values
     val labelMeta = NominalAttribute.defaultAttr.withName("label").withNumValues(4).toMetadata()
