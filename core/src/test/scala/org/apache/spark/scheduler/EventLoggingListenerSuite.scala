@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
 import java.net.URI
+import java.nio.file.Files
 
 import scala.collection.mutable
 import scala.io.Source
@@ -265,6 +266,24 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
 }
 
+class EventLoggingListenerNoCreateSuite extends SparkFunSuite {
+  import EventLoggingListenerSuite._
+
+  private val fileSystem = Utils.getHadoopFileSystem("/",
+    SparkHadoopUtil.get.newConfiguration(new SparkConf()))
+
+  test("Verify log directory creation") {
+    val testDir = Files.createTempDirectory("event-log")
+    val testDirPath = new Path(testDir.toAbsolutePath.toString)
+    testDir.toFile.delete()
+    // Verify logging directory exists
+    val conf = getLoggingConf(testDirPath)
+    new EventLoggingListener("test", None, testDirPath.toUri, conf)
+    assert(fileSystem.exists(testDirPath), "event log directory not created")
+    Utils.deleteRecursively(testDir.toFile)
+  }
+
+}
 
 object EventLoggingListenerSuite {
 
