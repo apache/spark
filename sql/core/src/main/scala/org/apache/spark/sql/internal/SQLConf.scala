@@ -556,12 +556,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val STREAMING_POLLING_DELAY =
+  val STREAMING_POLLING_MIN_DELAY =
     SQLConfigBuilder("spark.sql.streaming.pollingDelay")
       .internal()
-      .doc("How long to delay polling new data when no data is available")
+      .doc("Minimimum time to delay polling new data when no data is available")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10L)
+
+  val STREAMING_POLLING_MAX_DELAY =
+    SQLConfigBuilder("spark.sql.streaming.maxPollingDelay")
+      .internal()
+      .doc("Maximum time to delay polling new data when no data is available")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(200L)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
