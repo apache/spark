@@ -46,20 +46,21 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     RadixSortType("unsigned binary data asc nulls first",
       PrefixComparators.BINARY, 0, 7, false, false, true),
     RadixSortType("unsigned binary data asc nulls last",
-      PrefixComparators.BINARY, 0, 7, false, false, false),
+      PrefixComparators.BINARY_NULLLAST, 0, 7, false, false, false),
     RadixSortType("unsigned binary data desc nulls last",
-      PrefixComparators.BINARY_DESC, 0, 7, true, false, false),
+      PrefixComparators.BINARY_DESC_NULLFIRST, 0, 7, true, false, false),
     RadixSortType("unsigned binary data desc nulls first",
       PrefixComparators.BINARY_DESC, 0, 7, true, false, true),
 
     RadixSortType("twos complement asc nulls first",
       PrefixComparators.LONG, 0, 7, false, true, true),
     RadixSortType("twos complement asc nulls last",
-      PrefixComparators.LONG, 0, 7, false, true, false),
+      PrefixComparators.LONG_NULLLAST, 0, 7, false, true, false),
     RadixSortType("twos complement desc nulls last",
       PrefixComparators.LONG_DESC, 0, 7, true, true, false),
     RadixSortType("twos complement desc nulls first",
-      PrefixComparators.LONG_DESC, 0, 7, true, true, true),
+      PrefixComparators.LONG_DESC_NULLFIRST, 0, 7, true, true, true),
+
     RadixSortType(
       "binary data partial",
       new PrefixComparators.RadixSortSupport {

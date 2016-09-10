@@ -27,45 +27,33 @@ import org.apache.spark.unsafe.types.UTF8String;
 public class PrefixComparators {
   private PrefixComparators() {}
 
-  public static final PrefixComparator STRING =
-          new UnsignedPrefixComparator();
-  public static final PrefixComparator STRING_NULLLAST =
-          new UnsignedPrefixComparatorNullLast();
+  public static final PrefixComparator STRING = new UnsignedPrefixComparator();
+  public static final PrefixComparator STRING_NULLLAST = new UnsignedPrefixComparatorNullLast();
 
   public static final PrefixComparator STRING_DESC_NULLFIRST =
           new UnsignedPrefixComparatorDescNullFirst();
-  public static final PrefixComparator STRING_DESC =
-          new UnsignedPrefixComparatorDesc();
+  public static final PrefixComparator STRING_DESC = new UnsignedPrefixComparatorDesc();
 
-  public static final PrefixComparator BINARY =
-          new UnsignedPrefixComparator();
-  public static final PrefixComparator BINARY_NULLLAST =
-          new UnsignedPrefixComparatorNullLast();
+  public static final PrefixComparator BINARY = new UnsignedPrefixComparator();
+  public static final PrefixComparator BINARY_NULLLAST = new UnsignedPrefixComparatorNullLast();
 
   public static final PrefixComparator BINARY_DESC_NULLFIRST =
           new UnsignedPrefixComparatorDescNullFirst();
-  public static final PrefixComparator BINARY_DESC =
-          new UnsignedPrefixComparatorDesc();
+  public static final PrefixComparator BINARY_DESC = new UnsignedPrefixComparatorDesc();
 
-  public static final PrefixComparator LONG =
-          new SignedPrefixComparator();
-  public static final PrefixComparator LONG_NULLLAST =
-          new SignedPrefixComparatorNullLast();
+  public static final PrefixComparator LONG = new SignedPrefixComparator();
+  public static final PrefixComparator LONG_NULLLAST = new SignedPrefixComparatorNullLast();
 
   public static final PrefixComparator LONG_DESC_NULLFIRST =
           new SignedPrefixComparatorDescNullFirst();
-  public static final PrefixComparator LONG_DESC =
-          new SignedPrefixComparatorDesc();
+  public static final PrefixComparator LONG_DESC = new SignedPrefixComparatorDesc();
 
-  public static final PrefixComparator DOUBLE =
-          new UnsignedPrefixComparator();
-  public static final PrefixComparator DOUBLE_NULLLAST =
-          new UnsignedPrefixComparatorNullLast();
+  public static final PrefixComparator DOUBLE = new UnsignedPrefixComparator();
+  public static final PrefixComparator DOUBLE_NULLLAST = new UnsignedPrefixComparatorNullLast();
 
   public static final PrefixComparator DOUBLE_DESC_NULLFIRST =
           new UnsignedPrefixComparatorDescNullFirst();
-  public static final PrefixComparator DOUBLE_DESC =
-          new UnsignedPrefixComparatorDesc();
+  public static final PrefixComparator DOUBLE_DESC = new UnsignedPrefixComparatorDesc();
 
   public static final class StringPrefixComparator {
     public static long computePrefix(UTF8String value) {

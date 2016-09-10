@@ -120,8 +120,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
         (!child.isAscending && child.nullOrdering == NullLast)) {
         0L
       } else {
-        // This may not be the best choice for null value for BinaryType
-        DoublePrefixComparator.computePrefix(Double.NaN)
+        -1L
       }
   }
 
