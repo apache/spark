@@ -441,6 +441,15 @@ object ScalaReflection extends ScalaReflection {
           val newPath = s"""- array element class: "$clsName"""" +: walkedTypePath
           MapObjects(serializerFor(_, elementType, newPath), input, dt)
 
+        case dt @ (IntegerType | DoubleType) =>
+        // case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
+        //            FloatType | DoubleType) =>
+          StaticInvoke(
+            classOf[UnsafeArrayData],
+            ArrayType(dt, false),
+            "fromPrimitiveArray",
+            input :: Nil)
+
         case dt =>
           NewInstance(
             classOf[GenericArrayData],

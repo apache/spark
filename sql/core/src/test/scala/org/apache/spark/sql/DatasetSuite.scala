@@ -987,6 +987,18 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       checkAnswer(agg, ds.groupBy('id % 2).agg(count('id)))
     }
   }
+
+  test("array") {
+    val arrayInt = Array(1, 2, 3)
+    val arrayDouble = Array(1.1, 2.2, 3.3)
+    val arrayString = Array("a", "b", "c")
+    val dsInt = sparkContext.parallelize(Seq(arrayInt), 1).toDS.map(e => e)
+    val dsDouble = sparkContext.parallelize(Seq(arrayDouble), 1).toDS.map(e => e)
+    val dsString = sparkContext.parallelize(Seq(arrayString), 1).toDS.map(e => e)
+    checkDataset(dsInt, arrayInt)
+    checkDataset(dsDouble, arrayDouble)
+    checkDataset(dsString, arrayString)
+  }
 }
 
 case class Generic[T](id: T, value: Double)
