@@ -115,19 +115,12 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       } else {
         DoublePrefixComparator.computePrefix(Double.NaN)
       }
-    case BinaryType =>
-      if ((child.isAscending && child.nullOrdering == NullFirst) ||
-        (!child.isAscending && child.nullOrdering == NullLast)) {
-        0L
-      } else {
-        // This may not be the best choice for null value
-        DoublePrefixComparator.computePrefix(Double.MaxValue)
-      }
     case _ =>
       if ((child.isAscending && child.nullOrdering == NullFirst) ||
         (!child.isAscending && child.nullOrdering == NullLast)) {
         0L
       } else {
+        // This may not be the best choice for null value for BinaryType
         DoublePrefixComparator.computePrefix(Double.NaN)
       }
   }
