@@ -172,7 +172,7 @@ abstract class AggregationIterator(
             case PartialMerge | Final =>
               (buffer: MutableRow, row: InternalRow) => ae.merge(buffer, row)
           }
-      }
+      }.toArray
       // This projection is used to merge buffer values for all expression-based aggregates.
       val aggregationBufferSchema = functions.flatMap(_.aggBufferAttributes)
       val updateProjection =
@@ -182,7 +182,11 @@ abstract class AggregationIterator(
         // Process all expression-based aggregate functions.
         updateProjection.target(currentBuffer)(joinedRow(currentBuffer, row))
         // Process all imperative aggregate functions.
-        updateFunctions.foreach(updateFunction => updateFunction(currentBuffer, row))
+        var i = 0
+        while (i < updateFunctions.length) {
+          updateFunctions(i)(currentBuffer, row)
+          i += 1
+        }
       }
     } else {
       // Grouping only.
