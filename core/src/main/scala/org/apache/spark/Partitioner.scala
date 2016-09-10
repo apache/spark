@@ -55,16 +55,16 @@ object Partitioner {
    * We use two method parameters (rdd, others) to enforce callers passing at least 1 RDD.
    */
   def defaultPartitioner(rdd: RDD[_], others: RDD[_]*): Partitioner = {
-    val rdds = Seq(rdd) ++ others
-
-    val filteredRdds = rdds.filter( _.partitioner.exists(_.numPartitions > 0 ))
-    if(filteredRdds.nonEmpty) {
-      return filteredRdds.maxBy( _.partitions.length).partitioner.get
-    }
-    if (rdd.context.conf.contains("spark.default.parallelism")) {
-      new HashPartitioner(rdd.context.defaultParallelism)
+    val rdds = (Seq(rdd) ++ others)
+    val hashPartitioner = rdds.filter(_.partitioner.exists(_.numPartitions > 0))
+    if (hashPartitioner.nonEmpty) {
+      hashPartitioner.maxBy(_.partitions.length).partitioner.get
     } else {
-      new HashPartitioner(rdds.map(_.partitions.length).max)
+      if (rdd.context.conf.contains("spark.default.parallelism")) {
+        new HashPartitioner(rdd.context.defaultParallelism)
+      } else {
+        new HashPartitioner(rdds.map(_.partitions.length).max)
+      }
     }
   }
 }
