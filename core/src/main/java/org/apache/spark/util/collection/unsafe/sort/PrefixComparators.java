@@ -80,7 +80,6 @@ public class PrefixComparators {
    * ordering they define is compatible with radix sort.
    */
   public abstract static class RadixSortSupport extends PrefixComparator {
-
     /** @return Whether the sort should be descending in binary sort order. */
     public abstract boolean sortDescending();
 
