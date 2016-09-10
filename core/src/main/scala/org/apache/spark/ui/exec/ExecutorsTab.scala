@@ -68,7 +68,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
 
   private val maxTimelineExecutors = conf.getInt("spark.ui.timeline.executors.maximum", 1000)
   private val retainedDeadExecutors = conf.getInt("spark.ui.retainedDeadExecutors", 100)
-  private var deadExecutorCount: Int = 0
+  private var deadExecutorCount = 0
 
   def activeStorageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
 
@@ -88,9 +88,9 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
       executorEvents.remove(0)
     }
     if (deadExecutorCount > retainedDeadExecutors) {
-      val head = executorToTaskSummary.filter(t => !t._2.isAlive).head
+      val head = executorToTaskSummary.filter(e => !e._2.isAlive).head
       executorToTaskSummary.remove(head._1)
-      deadExecutorCount = deadExecutorCount - 1
+      deadExecutorCount -= 1
     }
   }
 
@@ -100,7 +100,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     if (executorEvents.size > maxTimelineExecutors) {
       executorEvents.remove(0)
     }
-    deadExecutorCount = deadExecutorCount + 1
+    deadExecutorCount += 1
     executorToTaskSummary(executorRemoved.executorId).isAlive = false
   }
 
@@ -125,7 +125,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     if (!executorToTaskSummary.contains(eid)) {
       executorToTaskSummary(eid) = ExecutorTaskSummary(eid)
     }
-    executorToTaskSummary(eid).tasksActive = executorToTaskSummary(eid).tasksActive + 1
+    executorToTaskSummary(eid).tasksActive += 1
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
@@ -143,33 +143,26 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
           // metrics added by each attempt, but this is much more complicated.
           return
         case e: ExceptionFailure =>
-          executorToTaskSummary(eid).tasksFailed = executorToTaskSummary(eid).tasksFailed + 1
+          executorToTaskSummary(eid).tasksFailed += 1
         case _ =>
-          executorToTaskSummary(eid).tasksComplete = executorToTaskSummary(eid).tasksComplete + 1
+          executorToTaskSummary(eid).tasksComplete += 1
       }
       if (executorToTaskSummary(eid).tasksActive >= 1) {
-        executorToTaskSummary(eid).tasksActive = executorToTaskSummary(eid).tasksActive - 1
+        executorToTaskSummary(eid).tasksActive -= 1
       }
-      executorToTaskSummary(eid).duration = executorToTaskSummary(eid).duration + info.duration
+      executorToTaskSummary(eid).duration += info.duration
 
       // Update shuffle read/write
       val metrics = taskEnd.taskMetrics
       if (metrics != null) {
-        executorToTaskSummary(eid).inputBytes =
-          executorToTaskSummary(eid).inputBytes + metrics.inputMetrics.bytesRead
-        executorToTaskSummary(eid).inputRecords =
-          executorToTaskSummary(eid).inputRecords + metrics.inputMetrics.recordsRead
-        executorToTaskSummary(eid).outputBytes =
-          executorToTaskSummary(eid).outputBytes + metrics.outputMetrics.bytesWritten
-        executorToTaskSummary(eid).outputRecords =
-          executorToTaskSummary(eid).outputRecords + metrics.outputMetrics.recordsWritten
+        executorToTaskSummary(eid).inputBytes += metrics.inputMetrics.bytesRead
+        executorToTaskSummary(eid).inputRecords += metrics.inputMetrics.recordsRead
+        executorToTaskSummary(eid).outputBytes += metrics.outputMetrics.bytesWritten
+        executorToTaskSummary(eid).outputRecords += metrics.outputMetrics.recordsWritten
 
-        executorToTaskSummary(eid).shuffleRead =
-          executorToTaskSummary(eid).shuffleRead + metrics.shuffleReadMetrics.remoteBytesRead
-        executorToTaskSummary(eid).shuffleWrite =
-          executorToTaskSummary(eid).shuffleWrite + metrics.shuffleWriteMetrics.bytesWritten
-        executorToTaskSummary(eid).jvmGCTime =
-          executorToTaskSummary(eid).jvmGCTime + metrics.jvmGCTime
+        executorToTaskSummary(eid).shuffleRead += metrics.shuffleReadMetrics.remoteBytesRead
+        executorToTaskSummary(eid).shuffleWrite += metrics.shuffleWriteMetrics.bytesWritten
+        executorToTaskSummary(eid).jvmGCTime += metrics.jvmGCTime
       }
     }
   }

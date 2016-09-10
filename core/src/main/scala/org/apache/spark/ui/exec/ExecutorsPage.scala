@@ -83,22 +83,7 @@ private[spark] object ExecutorsPage {
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed
-    val totalCores = listener.executorToTaskSummary.get(execId).map(_.totalCores).getOrElse(0)
-    val maxTasks = listener.executorToTaskSummary.get(execId).map(_.tasksMax).getOrElse(0)
-    val activeTasks = listener.executorToTaskSummary.get(execId).map(_.tasksActive).getOrElse(0)
-    val failedTasks = listener.executorToTaskSummary.get(execId).map(_.tasksFailed).getOrElse(0)
-    val completedTasks = listener.executorToTaskSummary.get(execId)
-      .map(_.tasksComplete).getOrElse(0)
-    val totalTasks = activeTasks + failedTasks + completedTasks
-    val totalDuration = listener.executorToTaskSummary.get(execId).map(_.duration).getOrElse(0L)
-    val totalGCTime = listener.executorToTaskSummary.get(execId).map(_.jvmGCTime).getOrElse(0L)
-    val totalInputBytes = listener.executorToTaskSummary.get(execId).map(_.inputBytes).getOrElse(0L)
-    val totalShuffleRead = listener.executorToTaskSummary.get(execId)
-      .map(_.shuffleRead).getOrElse(0L)
-    val totalShuffleWrite = listener.executorToTaskSummary.get(execId)
-      .map(_.shuffleWrite).getOrElse(0L)
-    val executorLogs = listener.executorToTaskSummary.get(execId)
-      .map(_.executorLogs).getOrElse(Map.empty)
+    val taskSummary = listener.executorToTaskSummary.getOrElse(execId, ExecutorTaskSummary(execId))
 
     new ExecutorSummary(
       execId,
@@ -107,19 +92,19 @@ private[spark] object ExecutorsPage {
       rddBlocks,
       memUsed,
       diskUsed,
-      totalCores,
-      maxTasks,
-      activeTasks,
-      failedTasks,
-      completedTasks,
-      totalTasks,
-      totalDuration,
-      totalGCTime,
-      totalInputBytes,
-      totalShuffleRead,
-      totalShuffleWrite,
+      taskSummary.totalCores,
+      taskSummary.tasksMax,
+      taskSummary.tasksActive,
+      taskSummary.tasksFailed,
+      taskSummary.tasksComplete,
+      taskSummary.tasksActive + taskSummary.tasksFailed + taskSummary.tasksComplete,
+      taskSummary.duration,
+      taskSummary.jvmGCTime,
+      taskSummary.inputBytes,
+      taskSummary.shuffleRead,
+      taskSummary.shuffleWrite,
       maxMem,
-      executorLogs
+      taskSummary.executorLogs
     )
   }
 }
