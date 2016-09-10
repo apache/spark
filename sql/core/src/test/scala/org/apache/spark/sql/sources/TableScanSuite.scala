@@ -395,6 +395,24 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
     }
   }
 
+  test("read the data source tables that do not extend SchemaRelationProvider") {
+    Seq("TEMPORARY VIEW", "TABLE").foreach { tableType =>
+      val tableName = "relationProvierWithSchema"
+      withTable (tableName) {
+        sql(
+          s"""
+             |CREATE $tableType $tableName
+             |USING org.apache.spark.sql.sources.SimpleScanSource
+             |OPTIONS (
+             |  From '1',
+             |  To '10'
+             |)
+           """.stripMargin)
+        checkAnswer(spark.table(tableName), spark.range(1, 11).toDF())
+      }
+    }
+  }
+
   test("SPARK-5196 schema field with comment") {
     sql(
       """
