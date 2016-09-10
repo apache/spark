@@ -42,6 +42,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.VersionUtils
 
 /**
  * Params for logistic regression.
@@ -298,6 +299,7 @@ class LogisticRegression @Since("1.2.0") (
    * If the dimensions of features or the number of partitions are large,
    * this param could be adjusted to a larger size.
    * Default is 2.
+ *
    * @group expertSetParam
    */
   @Since("2.1.0")
@@ -966,8 +968,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
 
     override def load(path: String): LogisticRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-      val versionRegex = "([0-9]+)\\.([0-9]+)\\.(.+)".r
-      val versionRegex(major, minor, _) = metadata.sparkVersion
+      val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
@@ -1385,6 +1386,7 @@ class BinaryLogisticRegressionSummary private[classification] (
  *       e^{\vec{x}_i \cdot \vec{\beta}_{k'} - maxMargin}} - I_{y=k}\right)
  *    $$
  * </blockquote></p>
+ *
  *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
