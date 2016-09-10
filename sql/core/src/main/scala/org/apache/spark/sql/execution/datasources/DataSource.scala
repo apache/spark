@@ -314,21 +314,6 @@ case class DataSource(
   }
 
   /**
-   * Check whether users are allowed to provide schema for this data source.
-   */
-  def checkSchemaAssignable(): Unit = {
-    val notExtendedSchemaRelationProvider = try {
-      !classOf[SchemaRelationProvider].isAssignableFrom(providingClass)
-    } catch {
-      case NonFatal(e) => false
-    }
-    if (notExtendedSchemaRelationProvider) {
-      throw new AnalysisException(s"$providingClass does not allow user-specified schemas")
-    }
-  }
-
-
-  /**
    * Create a resolved [[BaseRelation]] that can be used to read data from or write data into this
    * [[DataSource]]
    */
