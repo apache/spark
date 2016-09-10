@@ -76,13 +76,10 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
-    if (!executorToTaskSummary.contains(eid)) {
-      executorToTaskSummary(eid) = ExecutorTaskSummary(eid)
-    }
-    executorToTaskSummary(eid).executorLogs = executorAdded.executorInfo.logUrlMap
-    executorToTaskSummary(eid).totalCores = executorAdded.executorInfo.totalCores
-    executorToTaskSummary(eid).tasksMax =
-      executorToTaskSummary(eid).totalCores / conf.getInt("spark.task.cpus", 1)
+    val taskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
+    taskSummary.executorLogs = executorAdded.executorInfo.logUrlMap
+    taskSummary.totalCores = executorAdded.executorInfo.totalCores
+    taskSummary.tasksMax = taskSummary.totalCores / conf.getInt("spark.task.cpus", 1)
     executorEvents += executorAdded
     if (executorEvents.size > maxTimelineExecutors) {
       executorEvents.remove(0)
@@ -101,7 +98,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
       executorEvents.remove(0)
     }
     deadExecutorCount += 1
-    executorToTaskSummary(executorRemoved.executorId).isAlive = false
+    executorToTaskSummary.get(executorRemoved.executorId).map(e => e.isAlive = false)
   }
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
@@ -112,29 +109,23 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
       }
       storageStatus.foreach { s =>
         val eid = s.blockManagerId.executorId
-        if (!executorToTaskSummary.contains(eid)) {
-          executorToTaskSummary(eid) = ExecutorTaskSummary(eid)
-        }
-        executorToTaskSummary(eid).executorLogs = logs.toMap
+        val taskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
+        taskSummary.executorLogs = logs.toMap
       }
     }
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
     val eid = taskStart.taskInfo.executorId
-    if (!executorToTaskSummary.contains(eid)) {
-      executorToTaskSummary(eid) = ExecutorTaskSummary(eid)
-    }
-    executorToTaskSummary(eid).tasksActive += 1
+    val taskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
+    taskSummary.tasksActive += 1
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     val info = taskEnd.taskInfo
     if (info != null) {
       val eid = info.executorId
-      if (!executorToTaskSummary.contains(eid)) {
-        executorToTaskSummary(eid) = ExecutorTaskSummary(eid)
-      }
+      val taskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
       taskEnd.reason match {
         case Resubmitted =>
           // Note: For resubmitted tasks, we continue to use the metrics that belong to the
@@ -143,26 +134,26 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
           // metrics added by each attempt, but this is much more complicated.
           return
         case e: ExceptionFailure =>
-          executorToTaskSummary(eid).tasksFailed += 1
+          taskSummary.tasksFailed += 1
         case _ =>
-          executorToTaskSummary(eid).tasksComplete += 1
+          taskSummary.tasksComplete += 1
       }
-      if (executorToTaskSummary(eid).tasksActive >= 1) {
-        executorToTaskSummary(eid).tasksActive -= 1
+      if (taskSummary.tasksActive >= 1) {
+        taskSummary.tasksActive -= 1
       }
-      executorToTaskSummary(eid).duration += info.duration
+      taskSummary.duration += info.duration
 
       // Update shuffle read/write
       val metrics = taskEnd.taskMetrics
       if (metrics != null) {
-        executorToTaskSummary(eid).inputBytes += metrics.inputMetrics.bytesRead
-        executorToTaskSummary(eid).inputRecords += metrics.inputMetrics.recordsRead
-        executorToTaskSummary(eid).outputBytes += metrics.outputMetrics.bytesWritten
-        executorToTaskSummary(eid).outputRecords += metrics.outputMetrics.recordsWritten
+        taskSummary.inputBytes += metrics.inputMetrics.bytesRead
+        taskSummary.inputRecords += metrics.inputMetrics.recordsRead
+        taskSummary.outputBytes += metrics.outputMetrics.bytesWritten
+        taskSummary.outputRecords += metrics.outputMetrics.recordsWritten
 
-        executorToTaskSummary(eid).shuffleRead += metrics.shuffleReadMetrics.remoteBytesRead
-        executorToTaskSummary(eid).shuffleWrite += metrics.shuffleWriteMetrics.bytesWritten
-        executorToTaskSummary(eid).jvmGCTime += metrics.jvmGCTime
+        taskSummary.shuffleRead += metrics.shuffleReadMetrics.remoteBytesRead
+        taskSummary.shuffleWrite += metrics.shuffleWriteMetrics.bytesWritten
+        taskSummary.jvmGCTime += metrics.jvmGCTime
       }
     }
   }
