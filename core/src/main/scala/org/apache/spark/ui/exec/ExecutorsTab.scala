@@ -37,7 +37,7 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
   }
 }
 
-case class ExecutorTaskSummary(
+private[ui] case class ExecutorTaskSummary(
     var executorId: String,
     var totalCores: Int = 0,
     var tasksMax: Int = 0,

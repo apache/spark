@@ -17,14 +17,12 @@
 
 package org.apache.spark.ui.exec
 
-import java.net.URLEncoder
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
 import org.apache.spark.status.api.v1.ExecutorSummary
-import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
-import org.apache.spark.util.Utils
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 // This isn't even used anymore -- but we need to keep it b/c of a MiMa false positive
 private[ui] case class ExecutorSummaryInfo(
