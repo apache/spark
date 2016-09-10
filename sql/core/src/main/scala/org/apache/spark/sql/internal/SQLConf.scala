@@ -116,6 +116,14 @@ object SQLConf {
     .longConf
     .createWithDefault(10L * 1024 * 1024)
 
+  val LIMIT_SCALE_UP_FACTOR = SQLConfigBuilder("spark.sql.limit.scaleUpFactor")
+    .internal()
+    .doc("Minimal increase rate in number of partitions between attempts when executing a take " +
+      "on a query. Higher values lead to more partitions read. Lower values might lead to " +
+      "longer execution times as more jobs will be run")
+    .intConf
+    .createWithDefault(4)
+
   val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS =
     SQLConfigBuilder("spark.sql.statistics.fallBackToHdfs")
     .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
@@ -310,6 +318,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val GATHER_FASTSTAT = SQLConfigBuilder("spark.sql.hive.gatherFastStats")
+      .internal()
+      .doc("When true, fast stats (number of files and total size of all files) will be gathered" +
+        " in parallel while repairing table partitions to avoid the sequential listing in Hive" +
+        " metastore.")
+      .booleanConf
+      .createWithDefault(true)
+
   // This is used to control the when we will split a schema's JSON string to multiple pieces
   // in order to fit the JSON string in metastore's table property (by default, the value has
   // a length restriction of 4000 characters). We will split the JSON string of a schema
@@ -346,7 +362,8 @@ object SQLConf {
     .createWithDefault(true)
 
   val CROSS_JOINS_ENABLED = SQLConfigBuilder("spark.sql.crossJoin.enabled")
-    .doc("When false, we will throw an error if a query contains a cross join")
+    .doc("When false, we will throw an error if a query contains a cartesian product without " +
+        "explicit CROSS JOIN syntax.")
     .booleanConf
     .createWithDefault(false)
 
@@ -501,14 +518,15 @@ object SQLConf {
       .intConf
       .createWithDefault(40)
 
-  val VECTORIZED_AGG_MAP_MAX_COLUMNS =
-    SQLConfigBuilder("spark.sql.codegen.aggregate.map.columns.max")
+  val ENABLE_TWOLEVEL_AGG_MAP =
+    SQLConfigBuilder("spark.sql.codegen.aggregate.map.twolevel.enable")
       .internal()
-      .doc("Sets the maximum width of schema (aggregate keys + values) for which aggregate with" +
-        "keys uses an in-memory columnar map to speed up execution. Setting this to 0 effectively" +
-        "disables the columnar map")
-      .intConf
-      .createWithDefault(3)
+      .doc("Enable two-level aggregate hash map. When enabled, records will first be " +
+        "inserted/looked-up at a 1st-level, small, fast map, and then fallback to a " +
+        "2nd-level, larger, slower map when 1st level is full or keys cannot be found. " +
+        "When disabled, records go directly to the 2nd level. Defaults to true.")
+      .booleanConf
+      .createWithDefault(true)
 
   val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -608,6 +626,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
+  def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
+
   def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
@@ -626,6 +646,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 
@@ -662,8 +684,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
-  def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
-
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
   def schemaStringLengthThreshold: Int = getConf(SCHEMA_STRING_LENGTH_THRESHOLD)
@@ -677,7 +697,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   override def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
-  def vectorizedAggregateMapMaxColumns: Int = getConf(VECTORIZED_AGG_MAP_MAX_COLUMNS)
+  def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
 
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
 
@@ -688,6 +708,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
   override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
+
+  override def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

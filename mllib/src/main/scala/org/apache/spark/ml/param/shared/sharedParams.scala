@@ -397,13 +397,13 @@ private[ml] trait HasAggregationDepth extends Params {
 
   /**
    * Param for suggested depth for treeAggregate (>= 2).
-   * @group param
+   * @group expertParam
    */
   final val aggregationDepth: IntParam = new IntParam(this, "aggregationDepth", "suggested depth for treeAggregate (>= 2)", ParamValidators.gtEq(2))
 
   setDefault(aggregationDepth, 2)
 
-  /** @group getParam */
+  /** @group expertGetParam */
   final def getAggregationDepth: Int = $(aggregationDepth)
 }
 // scalastyle:on

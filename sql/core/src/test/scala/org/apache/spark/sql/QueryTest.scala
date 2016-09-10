@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.streaming.MemoryPlan
-import org.apache.spark.sql.types.ObjectType
+import org.apache.spark.sql.types.{Metadata, ObjectType}
 
 
 abstract class QueryTest extends PlanTest {
@@ -274,6 +274,14 @@ abstract class QueryTest extends PlanTest {
     val normalized1 = logicalPlan.transformAllExpressions {
       case udf: ScalaUDF => udf.copy(function = null)
       case gen: UserDefinedGenerator => gen.copy(function = null)
+      // After SPARK-17356: the JSON representation no longer has the Metadata. We need to remove
+      // the Metadata from the normalized plan so that we can compare this plan with the
+      // JSON-deserialzed plan.
+      case a @ Alias(child, name) if a.explicitMetadata.isDefined =>
+        Alias(child, name)(a.exprId, a.qualifier, Some(Metadata.empty), a.isGenerated)
+      case a: AttributeReference if a.metadata != Metadata.empty =>
+        AttributeReference(a.name, a.dataType, a.nullable, Metadata.empty)(a.exprId, a.qualifier,
+          a.isGenerated)
     }
 
     // RDDs/data are not serializable to JSON, so we need to collect LogicalPlans that contains
@@ -358,11 +366,11 @@ abstract class QueryTest extends PlanTest {
    */
   def assertEmptyMissingInput(query: Dataset[_]): Unit = {
     assert(query.queryExecution.analyzed.missingInput.isEmpty,
-      s"The analyzed logical plan has missing inputs: ${query.queryExecution.analyzed}")
+      s"The analyzed logical plan has missing inputs:\n${query.queryExecution.analyzed}")
     assert(query.queryExecution.optimizedPlan.missingInput.isEmpty,
-      s"The optimized logical plan has missing inputs: ${query.queryExecution.optimizedPlan}")
+      s"The optimized logical plan has missing inputs:\n${query.queryExecution.optimizedPlan}")
     assert(query.queryExecution.executedPlan.missingInput.isEmpty,
-      s"The physical plan has missing inputs: ${query.queryExecution.executedPlan}")
+      s"The physical plan has missing inputs:\n${query.queryExecution.executedPlan}")
   }
 }
 
