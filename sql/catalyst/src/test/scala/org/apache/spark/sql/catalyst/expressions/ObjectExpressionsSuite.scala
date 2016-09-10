@@ -39,7 +39,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // test UnsafeRow-backed data
     val structEncoder = ExpressionEncoder[Array[Tuple2[java.lang.Integer, java.lang.Integer]]]
     val structInputRow = InternalRow.fromSeq(Seq(Array((1, 2), (3, 4))))
-    val structExpected = new GenericArrayData(
+    val structExpected = GenericArrayData.allocate(
       Array(InternalRow.fromSeq(Seq(1, 2)), InternalRow.fromSeq(Seq(3, 4))))
     checkEvalutionWithUnsafeProjection(
       structEncoder.serializer.head, structExpected, structInputRow)
@@ -47,8 +47,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // test UnsafeArray-backed data
     val arrayEncoder = ExpressionEncoder[Array[Array[Int]]]
     val arrayInputRow = InternalRow.fromSeq(Seq(Array(Array(1, 2), Array(3, 4))))
-    val arrayExpected = new GenericArrayData(
-      Array(new GenericArrayData(Array(1, 2)), new GenericArrayData(Array(3, 4))))
+    val arrayExpected = GenericArrayData.allocate(
+      Array(GenericArrayData.allocate(Array(1, 2)), GenericArrayData.allocate(Array(3, 4))))
     checkEvalutionWithUnsafeProjection(
       arrayEncoder.serializer.head, arrayExpected, arrayInputRow)
 
@@ -56,13 +56,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val mapEncoder = ExpressionEncoder[Array[Map[Int, Int]]]
     val mapInputRow = InternalRow.fromSeq(Seq(Array(
       Map(1 -> 100, 2 -> 200), Map(3 -> 300, 4 -> 400))))
-    val mapExpected = new GenericArrayData(Seq(
+    val mapExpected = GenericArrayData.allocate(Seq(
       new ArrayBasedMapData(
-        new GenericArrayData(Array(1, 2)),
-        new GenericArrayData(Array(100, 200))),
+        GenericArrayData.allocate(Array(1, 2)),
+        GenericArrayData.allocate(Array(100, 200))),
       new ArrayBasedMapData(
-        new GenericArrayData(Array(3, 4)),
-        new GenericArrayData(Array(300, 400)))))
+        GenericArrayData.allocate(Array(3, 4)),
+        GenericArrayData.allocate(Array(300, 400)))))
     checkEvalutionWithUnsafeProjection(
       mapEncoder.serializer.head, mapExpected, mapInputRow)
   }
