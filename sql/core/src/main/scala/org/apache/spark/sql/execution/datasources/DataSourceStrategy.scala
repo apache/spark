@@ -201,7 +201,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     val dataSource =
       DataSource(
         sparkSession,
-        userSpecifiedSchema = Some(table.schema),
+        inputSchema = Some(table.schema),
         partitionColumns = table.partitionColumnNames,
         bucketSpec = table.bucketSpec,
         className = table.provider.get,

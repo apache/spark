@@ -65,6 +65,26 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     )
   }
 
+  test("insert into a temp view that does not point to an insertable data source") {
+    import testImplicits._
+    withTempView("t1", "t2") {
+      sql(
+        """
+          |CREATE TEMPORARY TABLE t1
+          |USING org.apache.spark.sql.sources.SimpleScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10')
+        """.stripMargin)
+      sparkContext.parallelize(1 to 10).toDF("a").createOrReplaceTempView("t2")
+
+      val message = intercept[AnalysisException] {
+        sql("INSERT INTO TABLE t1 SELECT a FROM t2")
+      }.getMessage
+      assert(message.contains("does not allow insertion"))
+    }
+  }
+
   test("PreInsert casting and renaming") {
     sql(
       s"""

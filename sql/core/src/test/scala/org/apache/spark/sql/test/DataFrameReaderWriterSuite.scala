@@ -292,6 +292,39 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     Option(dir).map(spark.read.format("org.apache.spark.sql.test").load)
   }
 
+  test("read a data source that does not extend SchemaRelationProvider") {
+    val dfReader = spark.read
+      .option("from", "1")
+      .option("TO", "10")
+      .format("org.apache.spark.sql.sources.SimpleScanSource")
+
+    // when users do not specify the schema
+    checkAnswer(dfReader.load(), spark.range(1, 11).toDF())
+
+    // when users specify the schema
+    val inputSchema = new StructType().add("s", IntegerType, nullable = false)
+    val e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
+    assert(e.getMessage.contains(
+      "org.apache.spark.sql.sources.SimpleScanSource does not allow user-specified schemas"))
+  }
+
+  test("read a data source that does not extend RelationProvider") {
+    val dfReader = spark.read
+      .option("from", "1")
+      .option("TO", "10")
+      .option("option_with_underscores", "someval")
+      .option("option.with.dots", "someval")
+      .format("org.apache.spark.sql.sources.AllDataTypesScanSource")
+
+    // when users do not specify the schema
+    val e = intercept[AnalysisException] { dfReader.load() }
+    assert(e.getMessage.contains("A schema needs to be specified when using"))
+
+    // when users specify the schema
+    val inputSchema = new StructType().add("s", StringType, nullable = false)
+    assert(dfReader.schema(inputSchema).load().count() == 10)
+  }
+
   test("text - API and behavior regarding schema") {
     // Writer
     spark.createDataset(data).write.mode(SaveMode.Overwrite).text(dir)

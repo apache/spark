@@ -55,7 +55,8 @@ case class CreateTempViewUsing(
   def run(sparkSession: SparkSession): Seq[Row] = {
     val dataSource = DataSource(
       sparkSession,
-      userSpecifiedSchema = userSpecifiedSchema,
+      inputSchema = userSpecifiedSchema,
+      isSchemaFromUsers = true,
       className = provider,
       options = options)
     sparkSession.sessionState.catalog.createTempView(

@@ -1248,6 +1248,21 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
+  test("create a temp table that does not have a path in the option") {
+    withTable("t1") {
+      sql(
+        """
+          |CREATE TABLE t1 (i int)
+          |USING org.apache.spark.sql.sources.SimpleScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10')
+        """.stripMargin)
+
+      spark.table("t1").show()
+    }
+  }
+
   test("read table with corrupted schema") {
     try {
       val schema = StructType(StructField("int", IntegerType, true) :: Nil)
