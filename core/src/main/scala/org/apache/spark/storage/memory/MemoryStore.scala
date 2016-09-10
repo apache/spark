@@ -394,7 +394,7 @@ private[spark] class MemoryStore(
           redirectableStream,
           unrollMemoryUsedByThisBlock,
           memoryMode,
-          bbos.toChunkedByteBuffer,
+          bbos,
           values,
           classTag))
     }
@@ -714,7 +714,8 @@ private class RedirectableOutputStream extends OutputStream {
  * @param redirectableOutputStream an OutputStream which can be redirected to a different sink.
  * @param unrollMemory the amount of unroll memory used by the values in `unrolled`.
  * @param memoryMode whether the unroll memory is on- or off-heap
- * @param unrolled a byte buffer containing the partially-serialized values.
+ * @param unrolledBbos a byte buffer containing the partially-serialized values.
+ *                     [[redirectableOutputStream]] initially points to this output stream.
  * @param rest         the rest of the original iterator passed to
  *                     [[MemoryStore.putIteratorAsValues()]].
  * @param classTag the [[ClassTag]] for the block.
@@ -727,9 +728,11 @@ private[storage] class PartiallySerializedBlock[T](
     redirectableOutputStream: RedirectableOutputStream,
     unrollMemory: Long,
     memoryMode: MemoryMode,
-    unrolled: ChunkedByteBuffer,
+    unrolledBbos: ChunkedByteBufferOutputStream,
     rest: Iterator[T],
     classTag: ClassTag[T]) {
+
+  private lazy val unrolled: ChunkedByteBuffer = unrolledBbos.toChunkedByteBuffer
 
   // If the task does not fully consume `valuesIterator` or otherwise fails to consume or dispose of
   // this PartiallySerializedBlock then we risk leaking of direct buffers, so we use a task
@@ -782,6 +785,9 @@ private[storage] class PartiallySerializedBlock[T](
    * `close()` on it to free its resources.
    */
   def valuesIterator: PartiallyUnrolledIterator[T] = {
+    // Close the serialization stream so that the serializer's internal buffers are freed and any
+    // "end-of-stream" markers can be written out so that `unrolled` is a valid serialized stream.
+    serializationStream.close()
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
     val unrolledIter = serializerManager.dataDeserializeStream(
       blockId, unrolled.toInputStream(dispose = true))(classTag)
