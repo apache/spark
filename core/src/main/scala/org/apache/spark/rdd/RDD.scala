@@ -494,7 +494,8 @@ abstract class RDD[T: ClassTag](
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1
    * @param seed random seed
-    * @return split RDDs in an array
+   *
+   * @return split RDDs in an array
    */
   def randomSplit(
       weights: Array[Double],
@@ -517,8 +518,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Internal method exposed for Random Splits in DataFrames. Samples an RDD given a probability
    * range.
-    *
-    * @param lb lower bound to use for the Bernoulli sampler
+   * @param lb lower bound to use for the Bernoulli sampler
    * @param ub upper bound to use for the Bernoulli sampler
    * @param seed the seed for the Random number generator
    * @return A random sub-sample of the RDD without replacement.
@@ -536,7 +536,8 @@ abstract class RDD[T: ClassTag](
    *
    * @note this method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
-    * @param withReplacement whether sampling is done with replacement
+   *
+   * @param withReplacement whether sampling is done with replacement
    * @param num size of the returned sample
    * @param seed seed for the random number generator
    * @return sample of specified size in an array
@@ -1291,7 +1292,8 @@ abstract class RDD[T: ClassTag](
    *
    * @note this method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
-    * @note due to complications in the internal implementation, this method will raise
+   *
+   * @note due to complications in the internal implementation, this method will raise
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
   def take(num: Int): Array[T] = withScope {
@@ -1355,7 +1357,8 @@ abstract class RDD[T: ClassTag](
    *
    * @note this method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
-    * @param num k, the number of top elements to return
+   *
+   * @param num k, the number of top elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
@@ -1377,7 +1380,8 @@ abstract class RDD[T: ClassTag](
    *
    * @note this method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
-    * @param num k, the number of elements to return
+   *
+   * @param num k, the number of elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
@@ -1405,8 +1409,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Returns the max of this RDD as defined by the implicit Ordering[T].
-    *
-    * @return the maximum element of the RDD
+   * @return the maximum element of the RDD
    * */
   def max()(implicit ord: Ordering[T]): T = withScope {
     this.reduce(ord.max)
@@ -1414,8 +1417,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Returns the min of this RDD as defined by the implicit Ordering[T].
-    *
-    * @return the minimum element of the RDD
+   * @return the minimum element of the RDD
    * */
   def min()(implicit ord: Ordering[T]): T = withScope {
     this.reduce(ord.min)
