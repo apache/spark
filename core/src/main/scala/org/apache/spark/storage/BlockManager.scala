@@ -804,9 +804,7 @@ private[spark] class BlockManager(
         if (tellMaster && info.tellMaster) {
           reportBlockStatus(blockId, putBlockStatus)
         }
-        Option(TaskContext.get()).foreach { c =>
-          c.taskMetrics().incUpdatedBlockStatuses(blockId -> putBlockStatus)
-        }
+        addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
       }
       logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
       if (level.replication > 1) {
@@ -960,9 +958,7 @@ private[spark] class BlockManager(
         if (tellMaster && info.tellMaster) {
           reportBlockStatus(blockId, putBlockStatus)
         }
-        Option(TaskContext.get()).foreach { c =>
-          c.taskMetrics().incUpdatedBlockStatuses(blockId -> putBlockStatus)
-        }
+        addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
         logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
         if (level.replication > 1) {
           val remoteStartTime = System.currentTimeMillis
@@ -1267,9 +1263,7 @@ private[spark] class BlockManager(
       reportBlockStatus(blockId, status, droppedMemorySize)
     }
     if (blockIsUpdated) {
-      Option(TaskContext.get()).foreach { c =>
-        c.taskMetrics().incUpdatedBlockStatuses(blockId -> status)
-      }
+      addUpdatedBlockStatusToTaskMetrics(blockId, status)
     }
     status.storageLevel
   }
@@ -1310,6 +1304,7 @@ private[spark] class BlockManager(
         logWarning(s"Asked to remove block $blockId, which does not exist")
       case Some(info) =>
         removeBlockInternal(blockId, tellMaster = tellMaster && info.tellMaster)
+        addUpdatedBlockStatusToTaskMetrics(blockId, BlockStatus.empty)
     }
   }
 
@@ -1328,8 +1323,11 @@ private[spark] class BlockManager(
     if (tellMaster) {
       reportBlockStatus(blockId, BlockStatus.empty)
     }
+  }
+
+  private def addUpdatedBlockStatusToTaskMetrics(blockId: BlockId, status: BlockStatus): Unit = {
     Option(TaskContext.get()).foreach { c =>
-      c.taskMetrics().incUpdatedBlockStatuses(blockId -> BlockStatus.empty)
+      c.taskMetrics().incUpdatedBlockStatuses(blockId -> status)
     }
   }
 
