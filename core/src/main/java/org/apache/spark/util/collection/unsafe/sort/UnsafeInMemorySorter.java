@@ -335,7 +335,7 @@ public final class UnsafeInMemorySorter {
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
 
       // The null order is either LAST or FIRST, regardless of sorting direction (ASC|DESC)
-      if (radixSortSupport.nullFirst()) {
+      if (radixSortSupport.nullsFirst()) {
         queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
         queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
       } else {

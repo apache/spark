@@ -40,53 +40,67 @@ object SortPrefixUtils {
 
   def getPrefixComparator(sortOrder: SortOrder): PrefixComparator = {
     sortOrder.dataType match {
-      case StringType => getPrefixComparatorWithNullOrder(sortOrder, "STRING")
-      case BinaryType => getPrefixComparatorWithNullOrder(sortOrder, "BINARY")
+      case StringType => stringPrefixComparator(sortOrder)
+      case BinaryType => binaryPrefixComparator(sortOrder)
       case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
-        getPrefixComparatorWithNullOrder(sortOrder, "LONG")
+        longPrefixComparator(sortOrder)
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-        getPrefixComparatorWithNullOrder(sortOrder, "LONG")
-      case FloatType | DoubleType => getPrefixComparatorWithNullOrder(sortOrder, "DOUBLE")
-      case dt: DecimalType => getPrefixComparatorWithNullOrder(sortOrder, "DOUBLE")
+        longPrefixComparator(sortOrder)
+      case FloatType | DoubleType => doublePrefixComparator(sortOrder)
+      case dt: DecimalType => doublePrefixComparator(sortOrder)
       case _ => NoOpPrefixComparator
     }
   }
 
-  private def getPrefixComparatorWithNullOrder(
-     sortOrder: SortOrder, signedType: String): PrefixComparator = {
+  private def stringPrefixComparator(sortOrder: SortOrder): PrefixComparator = {
     sortOrder.direction match {
-      case Ascending if (sortOrder.nullOrdering == NullLast) =>
-        signedType match {
-          case "LONG" => PrefixComparators.LONG_NULLLAST
-          case "STRING" => PrefixComparators.STRING_NULLLAST
-          case "BINARY" => PrefixComparators.BINARY_NULLLAST
-          case "DOUBLE" => PrefixComparators.DOUBLE_NULLLAST
-        }
+      case Ascending if (sortOrder.nullOrdering == NullsLast) =>
+        PrefixComparators.STRING_NULLS_LAST
       case Ascending =>
-        // or the default NULLS FIRST
-        signedType match {
-          case "LONG" => PrefixComparators.LONG
-          case "STRING" => PrefixComparators.STRING
-          case "BINARY" => PrefixComparators.BINARY
-          case "DOUBLE" => PrefixComparators.DOUBLE
-        }
-      case Descending if (sortOrder.nullOrdering == NullFirst) =>
-        signedType match {
-          case "LONG" => PrefixComparators.LONG_DESC_NULLFIRST
-          case "STRING" => PrefixComparators.STRING_DESC_NULLFIRST
-          case "BINARY" => PrefixComparators.BINARY_DESC_NULLFIRST
-          case "DOUBLE" => PrefixComparators.DOUBLE_DESC_NULLFIRST
-        }
+        PrefixComparators.STRING
+      case Descending if (sortOrder.nullOrdering == NullsFirst) =>
+        PrefixComparators.STRING_DESC_NULLS_FIRST
       case Descending =>
-        // or the default NULLS LAST
-        signedType match {
-          case "LONG" => PrefixComparators.LONG_DESC
-          case "STRING" => PrefixComparators.STRING_DESC
-          case "BINARY" => PrefixComparators.BINARY_DESC
-          case "DOUBLE" => PrefixComparators.DOUBLE_DESC
-        }
-      case _ => throw new IllegalArgumentException(
-        "This should not happen. Contact Spark contributors for this error.")
+        PrefixComparators.STRING_DESC
+    }
+  }
+
+  private def binaryPrefixComparator(sortOrder: SortOrder): PrefixComparator = {
+    sortOrder.direction match {
+      case Ascending if (sortOrder.nullOrdering == NullsLast) =>
+        PrefixComparators.BINARY_NULLS_LAST
+      case Ascending =>
+        PrefixComparators.BINARY
+      case Descending if (sortOrder.nullOrdering == NullsFirst) =>
+        PrefixComparators.BINARY_DESC_NULLS_FIRST
+      case Descending =>
+        PrefixComparators.BINARY_DESC
+    }
+  }
+
+  private def longPrefixComparator(sortOrder: SortOrder): PrefixComparator = {
+    sortOrder.direction match {
+      case Ascending if (sortOrder.nullOrdering == NullsLast) =>
+        PrefixComparators.LONG_NULLS_LAST
+      case Ascending =>
+        PrefixComparators.LONG
+      case Descending if (sortOrder.nullOrdering == NullsFirst) =>
+        PrefixComparators.LONG_DESC_NULLS_FIRST
+      case Descending =>
+        PrefixComparators.LONG_DESC
+    }
+  }
+
+  private def doublePrefixComparator(sortOrder: SortOrder): PrefixComparator = {
+    sortOrder.direction match {
+      case Ascending if (sortOrder.nullOrdering == NullsLast) =>
+        PrefixComparators.DOUBLE_NULLS_LAST
+      case Ascending =>
+        PrefixComparators.DOUBLE
+      case Descending if (sortOrder.nullOrdering == NullsFirst) =>
+        PrefixComparators.DOUBLE_DESC_NULLS_FIRST
+      case Descending =>
+        PrefixComparators.DOUBLE_DESC
     }
   }
 

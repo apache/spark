@@ -1212,9 +1212,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       Ascending
     }
     val nullOrdering = if (ctx.FIRST != null) {
-      NullFirst
+      NullsFirst
     } else if (ctx.LAST != null) {
-      NullLast
+      NullsLast
     } else {
       direction.defaultNullOrdering
     }

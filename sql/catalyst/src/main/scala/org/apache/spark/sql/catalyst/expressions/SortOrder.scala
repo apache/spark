@@ -34,20 +34,20 @@ abstract sealed class NullOrdering {
 
 case object Ascending extends SortDirection {
   override def sql: String = "ASC"
-  override def defaultNullOrdering: NullOrdering = NullFirst
+  override def defaultNullOrdering: NullOrdering = NullsFirst
 }
 
 // default null order is last for desc
 case object Descending extends SortDirection {
   override def sql: String = "DESC"
-  override def defaultNullOrdering: NullOrdering = NullLast
+  override def defaultNullOrdering: NullOrdering = NullsLast
 }
 
-case object NullFirst extends NullOrdering{
+case object NullsFirst extends NullOrdering{
   override def sql: String = "NULLS FIRST"
 }
 
-case object NullLast extends NullOrdering{
+case object NullsLast extends NullOrdering{
   override def sql: String = "NULLS LAST"
 }
 
@@ -95,33 +95,38 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   val nullValue = child.child.dataType match {
     case BooleanType | DateType | TimestampType | _: IntegralType =>
-      if ((child.isAscending && child.nullOrdering == NullFirst) ||
-        (!child.isAscending && child.nullOrdering == NullLast)) {
+      if (nullAsSmallest) {
           Long.MinValue
       } else {
         Long.MaxValue
       }
     case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-      if ((child.isAscending && child.nullOrdering == NullFirst) ||
-        (!child.isAscending && child.nullOrdering == NullLast)) {
+      if (nullAsSmallest) {
         Long.MinValue
       } else {
         Long.MaxValue
       }
     case _: DecimalType =>
-      if ((child.isAscending && child.nullOrdering == NullFirst) ||
-        (!child.isAscending && child.nullOrdering == NullLast)) {
+      if (nullAsSmallest) {
         DoublePrefixComparator.computePrefix(Double.NegativeInfinity)
       } else {
         DoublePrefixComparator.computePrefix(Double.NaN)
       }
     case _ =>
-      if ((child.isAscending && child.nullOrdering == NullFirst) ||
-        (!child.isAscending && child.nullOrdering == NullLast)) {
+      if (nullAsSmallest) {
         0L
       } else {
         -1L
       }
+  }
+
+  def nullAsSmallest: Boolean = {
+    if ((child.isAscending && child.nullOrdering == NullsFirst) ||
+      (!child.isAscending && child.nullOrdering == NullsLast)) {
+      true
+    } else {
+      false
+    }
   }
 
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
