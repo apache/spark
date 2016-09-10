@@ -530,7 +530,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def partitionBy(partitioner: Partitioner): RDD[(K, V)] = self.withScope {
     if (keyClass.isArray && partitioner.isInstanceOf[HashPartitioner]) {
-      throw new SparkException("Specified partitioner cannot partition array keys.")
+      throw new SparkException("HashPartitioner cannot partition array keys.")
     }
     if (self.partitioner == Some(partitioner)) {
       self
