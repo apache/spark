@@ -81,7 +81,7 @@ class Broadcast(object):
             raise
         except Exception as e:
             msg = "Could not serialize broadcast: " + e.__class__.__name__ + ": " + e.message
-            raise pickle.PicklingError, pickle.PicklingError(msg), sys.exc_info()[2]  # noqa
+            raise pickle.PicklingError(msg)
         f.close()
         return f.name
 
