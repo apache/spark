@@ -358,7 +358,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     }
   }
 
-  test("lookup table relation") {
+  test("lookupTempViewOrRelation") {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
     val tempTable1 = Range(1, 10, 1, 10)
@@ -366,14 +366,14 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
     sessionCatalog.setCurrentDatabase("db2")
     // If we explicitly specify the database, we'll look up the relation in that database
-    assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1", Some("db2")))
+    assert(sessionCatalog.lookupTempViewOrRelation(TableIdentifier("tbl1", Some("db2")))
       == SubqueryAlias("tbl1", SimpleCatalogRelation("db2", metastoreTable1), None))
     // Otherwise, we'll first look up a temporary table with the same name
-    assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
+    assert(sessionCatalog.lookupTempViewOrRelation(TableIdentifier("tbl1"))
       == SubqueryAlias("tbl1", tempTable1, Some(TableIdentifier("tbl1"))))
     // Then, if that does not exist, look up the relation in the current database
     sessionCatalog.dropTempView("tbl1")
-    assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
+    assert(sessionCatalog.lookupTempViewOrRelation(TableIdentifier("tbl1"))
       == SubqueryAlias("tbl1", SimpleCatalogRelation("db2", metastoreTable1), None))
   }
 
@@ -395,7 +395,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     val catalog = new SessionCatalog(newBasicCatalog())
     val tmpView = Range(1, 10, 2, 10)
     catalog.createTempView("vw1", tmpView, overrideIfExists = false)
-    val plan = catalog.lookupRelation(TableIdentifier("vw1"), Option("range"))
+    val plan = catalog.lookupTempViewOrRelation(TableIdentifier("vw1"), Option("range"))
     assert(plan == SubqueryAlias("range", tmpView, Option(TableIdentifier("vw1"))))
   }
 

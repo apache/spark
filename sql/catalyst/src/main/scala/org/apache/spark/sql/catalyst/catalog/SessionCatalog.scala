@@ -387,14 +387,9 @@ class SessionCatalog(
   }
 
   /**
-   * Return a [[LogicalPlan]] that represents the given temporary view.
+   * Return a temporary view exactly as it was stored.
    */
-  def lookupTempView(name: String, alias: Option[String] = None): Option[LogicalPlan] = {
-    val viewName = formatTableName(name)
-    tempViews.get(viewName).map { viewDef =>
-      SubqueryAlias(alias.getOrElse(viewName), viewDef, Some(TableIdentifier(viewName)))
-    }
-  }
+  def lookupTempView(name: String): Option[LogicalPlan] = tempViews.get(formatTableName(name))
 
   /**
    * Rename a temporary view, and returns true if it succeeds, false otherwise.
@@ -423,9 +418,32 @@ class SessionCatalog(
     tempViews.update(viewName, viewDefinition)
   }
 
-  // -------------------------------------------------------------------------
-  // | Methods that interact with temporary views and metastore tables/views |
-  // -------------------------------------------------------------------------
+  // ------------------------------------------------------------------------------
+  // | Methods that interact with both temporary views and metastore tables/views |
+  // ------------------------------------------------------------------------------
+
+  /**
+   * Return a [[LogicalPlan]] that represents the given table/view.
+   *
+   * If a database is specified in `name`, this will return the table/view from that database.
+   * If no database is specified, this will first attempt to return a temporary view with
+   * the same name, then, if that does not exist, return the table/view from the current database.
+   *
+   * If the relation is a view, the relation will be wrapped in a [[SubqueryAlias]] which will
+   * track the name of the view.
+   */
+  def lookupTempViewOrRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
+    if (name.database.isDefined) {
+      lookupRelation(name, alias)
+    } else {
+      val maybeTempView = lookupTempView(name.table)
+      if (maybeTempView.isDefined) {
+        SubqueryAlias(alias.getOrElse(name.table), maybeTempView.get, Some(name))
+      } else {
+        lookupRelation(name, alias)
+      }
+    }
+  }
 
   /**
    * List all tables/views in the specified database, including temporary views.
