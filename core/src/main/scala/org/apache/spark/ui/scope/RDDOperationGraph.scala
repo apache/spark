@@ -125,19 +125,18 @@ private[ui] object RDDOperationGraph extends Logging {
 
     // Find nodes, edges, and operation scopes that belong to this stage
     stage.rddInfos.sortBy(_.id).foreach { rdd =>
-      var isAllowed = true
       val parentIds = rdd.parentIds
-      if (parentIds.isEmpty) {
-        isAllowed = rootNodeCount < retainedNodes
-        rootNodeCount += 1
-      } else {
-        isAllowed = parentIds.exists(id => addRDDIds.contains(id) || !dropRDDIds.contains(id))
-      }
+      val isAllowed =
+        if (parentIds.isEmpty) {
+          rootNodeCount += 1
+          rootNodeCount <= retainedNodes
+        } else {
+          parentIds.exists(id => addRDDIds.contains(id) || !dropRDDIds.contains(id))
+        }
 
       if (isAllowed) {
         addRDDIds += rdd.id
-        edges ++= parentIds.filter(id => !dropRDDIds.contains(id))
-          .map { parentId => RDDOperationEdge(parentId, rdd.id) }
+        edges ++= parentIds.filter(id => !dropRDDIds.contains(id)).map(RDDOperationEdge(_, rdd.id))
       } else {
         dropRDDIds += rdd.id
       }
