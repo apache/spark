@@ -56,7 +56,6 @@ object Partitioner {
    */
   def defaultPartitioner(rdd: RDD[_], others: RDD[_]*): Partitioner = {
     val rdds = Seq(rdd) ++ others
-
     val filteredRdds = rdds.filter( _.partitioner.exists(_.numPartitions > 0 ))
     if(filteredRdds.nonEmpty) {
       return filteredRdds.maxBy( _.partitions.length).partitioner.get
