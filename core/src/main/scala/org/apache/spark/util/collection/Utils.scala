@@ -17,9 +17,11 @@
 
 package org.apache.spark.util.collection
 
-import scala.collection.JavaConverters._
+import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.serializer.Serializer
+import org.apache.spark.InternalAccumulator
+import org.apache.spark.util.CompletionIterator
 
-import com.google.common.collect.{Ordering => GuavaOrdering}
 
 /**
  * Utility functions for collections.
@@ -30,10 +32,17 @@ private[spark] object Utils {
    * Returns the first K elements from the input as defined by the specified implicit Ordering[T]
    * and maintains the ordering.
    */
-  def takeOrdered[T](input: Iterator[T], num: Int)(implicit ord: Ordering[T]): Iterator[T] = {
-    val ordering = new GuavaOrdering[T] {
-      override def compare(l: T, r: T): Int = ord.compare(l, r)
-    }
-    ordering.leastOf(input.asJava, num).iterator.asScala
+  def takeOrdered[T](input: Iterator[T], num: Int,
+      ser: Serializer = SparkEnv.get.serializer)(implicit ord: Ordering[T]): Iterator[T] = {
+    val context = TaskContext.get()
+    val sorter =
+      new ExternalSorter[T, Any, Any](context, None, None, Some(ord), Some(ser))
+    sorter.insertAll(input.map(x => (x, null)))
+    context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
+    context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
+    context.taskMetrics().incSpillTime(sorter.spillTime)
+    context.internalMetricsToAccumulators(
+      InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsedBytes)
+    CompletionIterator[T, Iterator[T]](sorter.iterator.map(_._1).take(num), sorter.stop())
   }
 }
