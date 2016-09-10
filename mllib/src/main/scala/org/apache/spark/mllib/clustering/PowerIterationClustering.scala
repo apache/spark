@@ -395,7 +395,7 @@ object PowerIterationClustering extends Logging {
     val points = v.mapValues(x => Vectors.dense(x)).cache()
     val model = new KMeans()
       .setK(k)
-      .setSeed(5L)
+      .setSeed(0L)
       .run(points.values)
     points.mapValues(p => model.predict(p)).cache()
   }
