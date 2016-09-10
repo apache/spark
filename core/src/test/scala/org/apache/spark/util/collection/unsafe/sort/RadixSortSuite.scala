@@ -40,7 +40,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
   case class RadixSortType(
     name: String,
     referenceComparator: PrefixComparator,
-    startByteIdx: Int, endByteIdx: Int, descending: Boolean, signed: Boolean, nullFirst: Boolean)
+    startByteIdx: Int, endByteIdx: Int, descending: Boolean, signed: Boolean, nullsFirst: Boolean)
 
   val SORT_TYPES_TO_TEST = Seq(
     RadixSortType("unsigned binary data asc nulls first",
