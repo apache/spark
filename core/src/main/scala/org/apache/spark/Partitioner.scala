@@ -56,9 +56,9 @@ object Partitioner {
    */
   def defaultPartitioner(rdd: RDD[_], others: RDD[_]*): Partitioner = {
     val rdds = (Seq(rdd) ++ others)
-    val hashPartitioner = rdds.filter(_.partitioner.exists(_.numPartitions > 0))
-    if (hashPartitioner.nonEmpty) {
-      hashPartitioner.maxBy(_.partitions.length).partitioner.get
+    val hasPartitioner = rdds.filter(_.partitioner.exists(_.numPartitions > 0))
+    if (hasPartitioner.nonEmpty) {
+      hasPartitioner.maxBy(_.partitions.length).partitioner.get
     } else {
       if (rdd.context.conf.contains("spark.default.parallelism")) {
         new HashPartitioner(rdd.context.defaultParallelism)
