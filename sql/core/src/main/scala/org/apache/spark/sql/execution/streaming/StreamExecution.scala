@@ -295,7 +295,7 @@ class StreamExecution(
       // the previous batch, and it is safe to discard the old metadata.
       // NOTE: If StreamExecution implements pipeline parallelism (multiple batches in
       // flight at the same time), this cleanup logic will need to change.
-      offsetLog.purge(currentBatchId - 1)
+      offsetLog.purge(currentBatchId)
     } else {
       awaitBatchLock.lock()
       try {
