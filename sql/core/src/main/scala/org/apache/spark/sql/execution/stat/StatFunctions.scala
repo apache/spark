@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.stat
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
@@ -119,7 +119,7 @@ object StatFunctions extends Logging {
   class QuantileSummaries(
       val compressThreshold: Int,
       val relativeError: Double,
-      val sampled: ArrayBuffer[Stats] = ArrayBuffer.empty,
+      val sampled: Array[Stats] = Array.empty,
       private[stat] var count: Long = 0L,
       val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty) extends Serializable {
 
@@ -134,7 +134,12 @@ object StatFunctions extends Logging {
     def insert(x: Double): QuantileSummaries = {
       headSampled.append(x)
       if (headSampled.size >= defaultHeadSize) {
-        this.withHeadBufferInserted
+        val result = this.withHeadBufferInserted
+        if (result.sampled.length >= compressThreshold) {
+          result.compress()
+        } else {
+          result
+        }
       } else {
         this
       }
@@ -186,7 +191,7 @@ object StatFunctions extends Logging {
         newSamples.append(sampled(sampleIdx))
         sampleIdx += 1
       }
-      new QuantileSummaries(compressThreshold, relativeError, newSamples, currentCount)
+      new QuantileSummaries(compressThreshold, relativeError, newSamples.toArray, currentCount)
     }
 
     /**
@@ -305,10 +310,10 @@ object StatFunctions extends Logging {
 
     private def compressImmut(
         currentSamples: IndexedSeq[Stats],
-        mergeThreshold: Double): ArrayBuffer[Stats] = {
-      val res: ArrayBuffer[Stats] = ArrayBuffer.empty
+        mergeThreshold: Double): Array[Stats] = {
+      val res = ListBuffer.empty[Stats]
       if (currentSamples.isEmpty) {
-        return res
+        return res.toArray
       }
       // Start for the last element, which is always part of the set.
       // The head contains the current new head, that may be merged with the current element.
@@ -331,8 +336,11 @@ object StatFunctions extends Logging {
       }
       res.prepend(head)
       // If necessary, add the minimum element:
-      res.prepend(currentSamples.head)
-      res
+      val currHead = currentSamples.head
+      if (currHead.value < head.value) {
+        res.prepend(currentSamples.head)
+      }
+      res.toArray
     }
   }
 
