@@ -444,11 +444,20 @@ object ScalaReflection extends ScalaReflection {
         case dt @ (IntegerType | DoubleType) =>
         // case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
         //            FloatType | DoubleType) =>
-          StaticInvoke(
-            classOf[UnsafeArrayData],
-            ArrayType(dt, false),
-            "fromPrimitiveArray",
-            input :: Nil)
+          val cls = input.dataType.asInstanceOf[ObjectType].cls
+          if (cls.isAssignableFrom(classOf[Array[Int]]) ||
+              cls.isAssignableFrom(classOf[Array[Double]])) {
+            StaticInvoke(
+              classOf[UnsafeArrayData],
+              ArrayType(dt, false),
+              "fromPrimitiveArray",
+              input :: Nil)
+          } else {
+            NewInstance(
+              classOf[GenericArrayData],
+              input :: Nil,
+              dataType = ArrayType(dt, schemaFor(elementType).nullable))
+          }
 
         case dt =>
           NewInstance(
