@@ -17,17 +17,16 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Strategy}
+import org.apache.spark.sql.{execution, SaveMode, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
@@ -43,13 +42,12 @@ import org.apache.spark.sql.streaming.StreamingQuery
  * writing libraries should instead consider using the stable APIs provided in
  * [[org.apache.spark.sql.sources]]
  */
-@DeveloperApi
 abstract class SparkStrategy extends GenericStrategy[SparkPlan] {
 
   override protected def planLater(plan: LogicalPlan): SparkPlan = PlanLater(plan)
 }
 
-private[sql] case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
+case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
 
   override def output: Seq[Attribute] = plan.output
 
@@ -58,7 +56,7 @@ private[sql] case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
   }
 }
 
-private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
+abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
 
   /**
@@ -142,13 +140,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     private def canBuildRight(joinType: JoinType): Boolean = joinType match {
-      case Inner | LeftOuter | LeftSemi | LeftAnti => true
+      case _: InnerLike | LeftOuter | LeftSemi | LeftAnti => true
       case j: ExistenceJoin => true
       case _ => false
     }
 
     private def canBuildLeft(joinType: JoinType): Boolean = joinType match {
-      case Inner | RightOuter => true
+      case _: InnerLike | RightOuter => true
       case _ => false
     }
 
@@ -202,7 +200,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           planLater(left), planLater(right), BuildLeft, joinType, condition) :: Nil
 
       // Pick CartesianProduct for InnerJoin
-      case logical.Join(left, right, Inner, condition) =>
+      case logical.Join(left, right, _: InnerLike, condition) =>
         joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
 
       case logical.Join(left, right, joinType, condition) =>
@@ -214,8 +212,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         // This join could be very slow or OOM
         joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), buildSide, joinType, condition,
-          withinBroadcastThreshold = false) :: Nil
+          planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
       // --- Cases where this strategy does not apply ---------------------------------------------
 
@@ -356,9 +353,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.FlatMapGroupsInR(f, p, b, is, os, key, value, grouping, data, objAttr, child) =>
         execution.FlatMapGroupsInRExec(f, p, b, is, os, key, value, grouping,
           data, objAttr, planLater(child)) :: Nil
-      case logical.MapElements(f, objAttr, child) =>
+      case logical.MapElements(f, _, _, objAttr, child) =>
         execution.MapElementsExec(f, objAttr, planLater(child)) :: Nil
-      case logical.AppendColumns(f, in, out, child) =>
+      case logical.AppendColumns(f, _, _, in, out, child) =>
         execution.AppendColumnsExec(f, in, out, planLater(child)) :: Nil
       case logical.AppendColumnsWithObject(f, childSer, newSer, child) =>
         execution.AppendColumnsWithObjectExec(f, childSer, newSer, planLater(child)) :: Nil
@@ -411,6 +408,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.RepartitionByExpression(expressions, child, nPartitions) =>
         exchange.ShuffleExchange(HashPartitioning(
           expressions, nPartitions.getOrElse(numPartitions)), planLater(child)) :: Nil
+      case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case LogicalRDD(output, rdd) => RDDScanExec(output, rdd, "ExistingRDD") :: Nil
       case BroadcastHint(child) => planLater(child) :: Nil
       case _ => Nil
@@ -419,45 +417,28 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case c: CreateTableUsing if c.temporary && !c.allowExisting =>
-        logWarning(
-          s"CREATE TEMPORARY TABLE ${c.tableIdent.identifier} USING... is deprecated, " +
-            s"please use CREATE TEMPORARY VIEW viewName USING... instead")
-        ExecutedCommandExec(
-          CreateTempViewUsing(
-            c.tableIdent, c.userSpecifiedSchema, replace = true, c.provider, c.options)) :: Nil
-
-      case c: CreateTableUsing if !c.temporary =>
-        val cmd =
-          CreateDataSourceTableCommand(
-            c.tableIdent,
-            c.userSpecifiedSchema,
-            c.provider,
-            c.options,
-            c.partitionColumns,
-            c.bucketSpec,
-            c.allowExisting,
-            c.managedIfNoPath)
+      case CreateTable(tableDesc, mode, None) if tableDesc.provider.get == "hive" =>
+        val cmd = CreateTableCommand(tableDesc, ifNotExists = mode == SaveMode.Ignore)
         ExecutedCommandExec(cmd) :: Nil
 
-      case c: CreateTableUsing if c.temporary && c.allowExisting =>
-        throw new AnalysisException(
-          "allowExisting should be set to false when creating a temporary table.")
+      case CreateTable(tableDesc, mode, None) =>
+        val cmd =
+          CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
+        ExecutedCommandExec(cmd) :: Nil
 
-      case c: CreateTableUsingAsSelect =>
+      // CREATE TABLE ... AS SELECT ... for hive serde table is handled in hive module, by rule
+      // `CreateTables`
+
+      case CreateTable(tableDesc, mode, Some(query)) if tableDesc.provider.get != "hive" =>
         val cmd =
           CreateDataSourceTableAsSelectCommand(
-            c.tableIdent,
-            c.provider,
-            c.partitionColumns,
-            c.bucketSpec,
-            c.mode,
-            c.options,
-            c.child)
+            tableDesc,
+            mode,
+            query)
         ExecutedCommandExec(cmd) :: Nil
 
-      case c: CreateTempViewUsing =>
-        ExecutedCommandExec(c) :: Nil
+      case c: CreateTempViewUsing => ExecutedCommandExec(c) :: Nil
+
       case _ => Nil
     }
   }

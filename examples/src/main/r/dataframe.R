@@ -18,7 +18,7 @@
 library(SparkR)
 
 # Initialize SparkSession
-sc <- sparkR.session(appName="SparkR-DataFrame-example")
+sparkR.session(appName = "SparkR-DataFrame-example")
 
 # Create a simple local data.frame
 localDF <- data.frame(name=c("John", "Smith", "Sarah"), age=c(19, 23, 18))

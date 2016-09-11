@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
@@ -64,7 +64,6 @@ private[feature] trait QuantileDiscretizerBase extends Params
 }
 
 /**
- * :: Experimental ::
  * `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
  * categorical features. The number of bins can be set using the `numBuckets` parameter.
  * The bin ranges are chosen using an approximate algorithm (see the documentation for
@@ -73,7 +72,6 @@ private[feature] trait QuantileDiscretizerBase extends Params
  * `relativeError` parameter. The lower and upper bin bounds will be `-Infinity` and `+Infinity`,
  * covering all real values.
  */
-@Experimental
 @Since("1.6.0")
 final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val uid: String)
   extends Estimator[Bucketizer] with QuantileDiscretizerBase with DefaultParamsWritable {
@@ -99,7 +97,7 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
+    SchemaUtils.checkNumericType(schema, $(inputCol))
     val inputFields = schema.fields
     require(inputFields.forall(_.name != $(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
@@ -110,12 +108,18 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): Bucketizer = {
+    transformSchema(dataset.schema, logging = true)
     val splits = dataset.stat.approxQuantile($(inputCol),
       (0.0 to 1.0 by 1.0/$(numBuckets)).toArray, $(relativeError))
     splits(0) = Double.NegativeInfinity
     splits(splits.length - 1) = Double.PositiveInfinity
 
-    val bucketizer = new Bucketizer(uid).setSplits(splits)
+    val distinctSplits = splits.distinct
+    if (splits.length != distinctSplits.length) {
+      log.warn(s"Some quantiles were identical. Bucketing to ${distinctSplits.length - 1}" +
+        s" buckets as a result.")
+    }
+    val bucketizer = new Bucketizer(uid).setSplits(distinctSplits.sorted)
     copyValues(bucketizer.setParent(this))
   }
 

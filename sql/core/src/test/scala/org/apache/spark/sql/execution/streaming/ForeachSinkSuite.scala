@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.ForeachWriter
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
@@ -35,35 +35,103 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
     sqlContext.streams.active.foreach(_.stop())
   }
 
-  test("foreach") {
+  test("foreach() with `append` output mode") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
       val query = input.toDS().repartition(2).writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .outputMode(OutputMode.Append)
         .foreach(new TestForeachWriter())
         .start()
+
+      // -- batch 0 ---------------------------------------
       input.addData(1, 2, 3, 4)
       query.processAllAvailable()
 
-      val expectedEventsForPartition0 = Seq(
+      var expectedEventsForPartition0 = Seq(
         ForeachSinkSuite.Open(partition = 0, version = 0),
         ForeachSinkSuite.Process(value = 1),
         ForeachSinkSuite.Process(value = 3),
         ForeachSinkSuite.Close(None)
       )
-      val expectedEventsForPartition1 = Seq(
+      var expectedEventsForPartition1 = Seq(
         ForeachSinkSuite.Open(partition = 1, version = 0),
         ForeachSinkSuite.Process(value = 2),
         ForeachSinkSuite.Process(value = 4),
         ForeachSinkSuite.Close(None)
       )
 
-      val allEvents = ForeachSinkSuite.allEvents()
+      var allEvents = ForeachSinkSuite.allEvents()
       assert(allEvents.size === 2)
-      assert {
-        allEvents === Seq(expectedEventsForPartition0, expectedEventsForPartition1) ||
-          allEvents === Seq(expectedEventsForPartition1, expectedEventsForPartition0)
-      }
+      assert(allEvents.toSet === Set(expectedEventsForPartition0, expectedEventsForPartition1))
+
+      ForeachSinkSuite.clear()
+
+      // -- batch 1 ---------------------------------------
+      input.addData(5, 6, 7, 8)
+      query.processAllAvailable()
+
+      expectedEventsForPartition0 = Seq(
+        ForeachSinkSuite.Open(partition = 0, version = 1),
+        ForeachSinkSuite.Process(value = 5),
+        ForeachSinkSuite.Process(value = 7),
+        ForeachSinkSuite.Close(None)
+      )
+      expectedEventsForPartition1 = Seq(
+        ForeachSinkSuite.Open(partition = 1, version = 1),
+        ForeachSinkSuite.Process(value = 6),
+        ForeachSinkSuite.Process(value = 8),
+        ForeachSinkSuite.Close(None)
+      )
+
+      allEvents = ForeachSinkSuite.allEvents()
+      assert(allEvents.size === 2)
+      assert(allEvents.toSet === Set(expectedEventsForPartition0, expectedEventsForPartition1))
+
+      query.stop()
+    }
+  }
+
+  test("foreach() with `complete` output mode") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[Int]
+
+      val query = input.toDS()
+        .groupBy().count().as[Long].map(_.toInt)
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .outputMode(OutputMode.Complete)
+        .foreach(new TestForeachWriter())
+        .start()
+
+      // -- batch 0 ---------------------------------------
+      input.addData(1, 2, 3, 4)
+      query.processAllAvailable()
+
+      var allEvents = ForeachSinkSuite.allEvents()
+      assert(allEvents.size === 1)
+      var expectedEvents = Seq(
+        ForeachSinkSuite.Open(partition = 0, version = 0),
+        ForeachSinkSuite.Process(value = 4),
+        ForeachSinkSuite.Close(None)
+      )
+      assert(allEvents === Seq(expectedEvents))
+
+      ForeachSinkSuite.clear()
+
+      // -- batch 1 ---------------------------------------
+      input.addData(5, 6, 7, 8)
+      query.processAllAvailable()
+
+      allEvents = ForeachSinkSuite.allEvents()
+      assert(allEvents.size === 1)
+      expectedEvents = Seq(
+        ForeachSinkSuite.Open(partition = 0, version = 1),
+        ForeachSinkSuite.Process(value = 8),
+        ForeachSinkSuite.Close(None)
+      )
+      assert(allEvents === Seq(expectedEvents))
+
       query.stop()
     }
   }

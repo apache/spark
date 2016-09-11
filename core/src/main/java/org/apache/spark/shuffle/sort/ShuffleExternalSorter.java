@@ -37,6 +37,7 @@ import org.apache.spark.serializer.DummySerializerInstance;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
+import org.apache.spark.storage.FileSegment;
 import org.apache.spark.storage.TempShuffleBlockId;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
@@ -61,7 +62,7 @@ import org.apache.spark.util.Utils;
  */
 final class ShuffleExternalSorter extends MemoryConsumer {
 
-  private final Logger logger = LoggerFactory.getLogger(ShuffleExternalSorter.class);
+  private static final Logger logger = LoggerFactory.getLogger(ShuffleExternalSorter.class);
 
   @VisibleForTesting
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
@@ -150,10 +151,6 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     final ShuffleInMemorySorter.ShuffleSorterIterator sortedRecords =
       inMemSorter.getSortedIterator();
 
-    // Currently, we need to open a new DiskBlockObjectWriter for each partition; we can avoid this
-    // after SPARK-5581 is fixed.
-    DiskBlockObjectWriter writer;
-
     // Small writes to DiskBlockObjectWriter will be fairly inefficient. Since there doesn't seem to
     // be an API to directly transfer bytes from managed memory to the disk writer, we buffer
     // data through a byte array. This array does not need to be large enough to hold a single
@@ -175,7 +172,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     // around this, we pass a dummy no-op serializer.
     final SerializerInstance ser = DummySerializerInstance.INSTANCE;
 
-    writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse);
+    final DiskBlockObjectWriter writer =
+      blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse);
 
     int currentPartition = -1;
     while (sortedRecords.hasNext()) {
@@ -185,12 +183,10 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       if (partition != currentPartition) {
         // Switch to the new partition
         if (currentPartition != -1) {
-          writer.commitAndClose();
-          spillInfo.partitionLengths[currentPartition] = writer.fileSegment().length();
+          final FileSegment fileSegment = writer.commitAndGet();
+          spillInfo.partitionLengths[currentPartition] = fileSegment.length();
         }
         currentPartition = partition;
-        writer =
-          blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse);
       }
 
       final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
@@ -209,15 +205,14 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       writer.recordWritten();
     }
 
-    if (writer != null) {
-      writer.commitAndClose();
-      // If `writeSortedFile()` was called from `closeAndGetSpills()` and no records were inserted,
-      // then the file might be empty. Note that it might be better to avoid calling
-      // writeSortedFile() in that case.
-      if (currentPartition != -1) {
-        spillInfo.partitionLengths[currentPartition] = writer.fileSegment().length();
-        spills.add(spillInfo);
-      }
+    final FileSegment committedSegment = writer.commitAndGet();
+    writer.close();
+    // If `writeSortedFile()` was called from `closeAndGetSpills()` and no records were inserted,
+    // then the file might be empty. Note that it might be better to avoid calling
+    // writeSortedFile() in that case.
+    if (currentPartition != -1) {
+      spillInfo.partitionLengths[currentPartition] = committedSegment.length();
+      spills.add(spillInfo);
     }
 
     if (!isLastFile) {  // i.e. this is a spill file

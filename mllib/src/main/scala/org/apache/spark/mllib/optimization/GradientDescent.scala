@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{norm, DenseVector => BDV}
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
@@ -53,11 +53,9 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
   }
 
   /**
-   * :: Experimental ::
    * Set fraction of data to be used for each SGD iteration.
    * Default 1.0 (corresponding to deterministic/classical gradient descent)
    */
-  @Experimental
   def setMiniBatchFraction(fraction: Double): this.type = {
     require(fraction > 0 && fraction <= 1.0,
       s"Fraction for mini-batch SGD must be in range (0, 1] but got ${fraction}")
@@ -254,7 +252,7 @@ object GradientDescent extends Logging {
          * lossSum is computed using the weights from the previous iteration
          * and regVal is the regularization value computed in the previous iteration as well.
          */
-        stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
+        stochasticLossHistory += lossSum / miniBatchSize + regVal
         val update = updater.compute(
           weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble),
           stepSize, i, regParam)

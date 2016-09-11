@@ -64,7 +64,7 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
  */
 public final class BytesToBytesMap extends MemoryConsumer {
 
-  private final Logger logger = LoggerFactory.getLogger(BytesToBytesMap.class);
+  private static final Logger logger = LoggerFactory.getLogger(BytesToBytesMap.class);
 
   private static final HashMapGrowthStrategy growthStrategy = HashMapGrowthStrategy.DOUBLING;
 

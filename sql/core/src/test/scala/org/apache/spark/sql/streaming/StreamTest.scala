@@ -189,7 +189,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     }
 
     def apply(message: String)(condition: StreamExecution => Unit): AssertOnQuery = {
-      new AssertOnQuery(s => { condition; true }, message)
+      new AssertOnQuery(s => { condition(s); true }, message)
     }
   }
 

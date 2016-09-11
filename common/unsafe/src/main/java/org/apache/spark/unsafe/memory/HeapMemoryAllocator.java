@@ -24,7 +24,6 @@ import java.util.LinkedList;
 import java.util.Map;
 
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.memory.MemoryAllocator;
 
 /**
  * A simple {@link MemoryAllocator} that can allocate up to 16GB using a JVM long primitive array.

@@ -16,7 +16,7 @@
 #
 
 """
- Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
+ Counts words in UTF8 encoded, '\n' delimited text received from the network.
  Usage: structured_network_wordcount.py <hostname> <port>
    <hostname> and <port> describe the TCP server that Structured Streaming
    would connect to receive data.
@@ -58,6 +58,7 @@ if __name__ == "__main__":
 
     # Split the lines into words
     words = lines.select(
+        # explode turns each item in an array into a separate row
         explode(
             split(lines.value, ' ')
         ).alias('word')

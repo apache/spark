@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
-import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -30,6 +29,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.FileRelation
@@ -76,7 +76,7 @@ abstract class OutputWriterFactory extends Serializable {
    * through the [[OutputWriterFactory]] implementation.
    * @since 2.0.0
    */
-  private[sql] def newWriter(path: String): OutputWriter = {
+  def newWriter(path: String): OutputWriter = {
     throw new UnsupportedOperationException("newInstance with just path not supported")
   }
 }
@@ -134,13 +134,13 @@ abstract class OutputWriter {
  * @param options Configuration used when reading / writing data.
  */
 case class HadoopFsRelation(
-    sparkSession: SparkSession,
     location: FileCatalog,
     partitionSchema: StructType,
     dataSchema: StructType,
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
-    options: Map[String, String]) extends BaseRelation with FileRelation {
+    options: Map[String, String])(val sparkSession: SparkSession)
+  extends BaseRelation with FileRelation {
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
@@ -263,7 +263,7 @@ trait FileFormat {
    * appends partition values to [[InternalRow]]s produced by the reader function [[buildReader]]
    * returns.
    */
-  private[sql] def buildReaderWithPartitionValues(
+  def buildReaderWithPartitionValues(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -357,14 +357,14 @@ trait FileCatalog {
 /**
  * Helper methods for gathering metadata from HDFS.
  */
-private[sql] object HadoopFsRelation extends Logging {
+object HadoopFsRelation extends Logging {
 
   /** Checks if we should filter out this path name. */
   def shouldFilterOut(pathName: String): Boolean = {
     // We filter everything that starts with _ and ., except _common_metadata and _metadata
     // because Parquet needs to find those metadata files from leaf files returned by this method.
     // We should refactor this logic to not mix metadata files with data files.
-    (pathName.startsWith("_") || pathName.startsWith(".")) &&
+    ((pathName.startsWith("_") && !pathName.contains("=")) || pathName.startsWith(".")) &&
       !pathName.startsWith("_common_metadata") && !pathName.startsWith("_metadata")
   }
 
@@ -440,8 +440,7 @@ private[sql] object HadoopFsRelation extends Logging {
   def listLeafFilesInParallel(
       paths: Seq[Path],
       hadoopConf: Configuration,
-      sparkSession: SparkSession,
-      ignoreFileNotFound: Boolean): mutable.LinkedHashSet[FileStatus] = {
+      sparkSession: SparkSession): mutable.LinkedHashSet[FileStatus] = {
     assert(paths.size >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold)
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
@@ -462,11 +461,7 @@ private[sql] object HadoopFsRelation extends Logging {
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
       paths.map(new Path(_)).flatMap { path =>
         val fs = path.getFileSystem(serializableConfiguration.value)
-        try {
-          listLeafFiles(fs, fs.getFileStatus(path), pathFilter)
-        } catch {
-          case e: java.io.FileNotFoundException if ignoreFileNotFound => Array.empty[FileStatus]
-        }
+        listLeafFiles(fs, fs.getFileStatus(path), pathFilter)
       }
     }.map { status =>
       val blockLocations = status match {

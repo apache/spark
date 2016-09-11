@@ -25,7 +25,7 @@ import scala.language.existentials
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
@@ -54,14 +54,12 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
 }
 
 /**
- * :: Experimental ::
  * Validation for hyper-parameter tuning.
  * Randomly splits the input dataset into train and validation sets,
  * and uses evaluation metric on the validation set to select the best model.
  * Similar to [[CrossValidator]], but only splits the set once.
  */
 @Since("1.5.0")
-@Experimental
 class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[TrainValidationSplitModel]
   with TrainValidationSplitParams with MLWritable with Logging {
@@ -188,7 +186,6 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
 }
 
 /**
- * :: Experimental ::
  * Model from train validation split.
  *
  * @param uid Id.
@@ -196,7 +193,6 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
  * @param validationMetrics Evaluated validation metrics.
  */
 @Since("1.5.0")
-@Experimental
 class TrainValidationSplitModel private[ml] (
     @Since("1.5.0") override val uid: String,
     @Since("1.5.0") val bestModel: Model[_],

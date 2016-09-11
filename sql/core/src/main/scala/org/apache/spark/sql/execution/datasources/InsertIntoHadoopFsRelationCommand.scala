@@ -19,13 +19,13 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.IOException
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.InternalRow
@@ -55,7 +55,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   4. If all tasks are committed, commit the job, otherwise aborts the job;  If any exception is
  *      thrown during job commitment, also aborts the job.
  */
-private[sql] case class InsertIntoHadoopFsRelationCommand(
+case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
@@ -66,7 +66,7 @@ private[sql] case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode)
   extends RunnableCommand {
 
-  override def children: Seq[LogicalPlan] = query :: Nil
+  override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that

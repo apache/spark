@@ -23,11 +23,14 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.command.AnalyzeTableCommand
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.execution.command.{AnalyzeTableCommand, DDLUtils}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.StructType
 
 class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
@@ -165,7 +168,174 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       sql("ANALYZE TABLE tempTable COMPUTE STATISTICS")
     }
     spark.sessionState.catalog.dropTable(
-      TableIdentifier("tempTable"), ignoreIfNotExists = true)
+      TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
+  }
+
+  private def checkStats(
+      stats: Option[Statistics],
+      hasSizeInBytes: Boolean,
+      expectedRowCounts: Option[Int]): Unit = {
+    if (hasSizeInBytes || expectedRowCounts.nonEmpty) {
+      assert(stats.isDefined)
+      assert(stats.get.sizeInBytes > 0)
+      assert(stats.get.rowCount === expectedRowCounts)
+    } else {
+      assert(stats.isEmpty)
+    }
+  }
+
+  private def checkStats(
+      tableName: String,
+      isDataSourceTable: Boolean,
+      hasSizeInBytes: Boolean,
+      expectedRowCounts: Option[Int]): Option[Statistics] = {
+    val df = sql(s"SELECT * FROM $tableName")
+    val stats = df.queryExecution.analyzed.collect {
+      case rel: MetastoreRelation =>
+        checkStats(rel.catalogTable.stats, hasSizeInBytes, expectedRowCounts)
+        assert(!isDataSourceTable, "Expected a data source table, but got a Hive serde table")
+        rel.catalogTable.stats
+      case rel: LogicalRelation =>
+        checkStats(rel.catalogTable.get.stats, hasSizeInBytes, expectedRowCounts)
+        assert(isDataSourceTable, "Expected a Hive serde table, but got a data source table")
+        rel.catalogTable.get.stats
+    }
+    assert(stats.size == 1)
+    stats.head
+  }
+
+  test("test table-level statistics for hive tables created in HiveExternalCatalog") {
+    val textTable = "textTable"
+    withTable(textTable) {
+      // Currently Spark's statistics are self-contained, we don't have statistics until we use
+      // the `ANALYZE TABLE` command.
+      sql(s"CREATE TABLE $textTable (key STRING, value STRING) STORED AS TEXTFILE")
+      checkStats(
+        textTable,
+        isDataSourceTable = false,
+        hasSizeInBytes = false,
+        expectedRowCounts = None)
+      sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
+      checkStats(
+        textTable,
+        isDataSourceTable = false,
+        hasSizeInBytes = false,
+        expectedRowCounts = None)
+
+      // noscan won't count the number of rows
+      sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
+      val fetchedStats1 = checkStats(
+        textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = None)
+
+      // without noscan, we count the number of rows
+      sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS")
+      val fetchedStats2 = checkStats(
+        textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = Some(500))
+      assert(fetchedStats1.get.sizeInBytes == fetchedStats2.get.sizeInBytes)
+    }
+  }
+
+  test("test elimination of the influences of the old stats") {
+    val textTable = "textTable"
+    withTable(textTable) {
+      sql(s"CREATE TABLE $textTable (key STRING, value STRING) STORED AS TEXTFILE")
+      sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
+      sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS")
+      val fetchedStats1 = checkStats(
+        textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = Some(500))
+
+      sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
+      // when the total size is not changed, the old row count is kept
+      val fetchedStats2 = checkStats(
+        textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = Some(500))
+      assert(fetchedStats1 == fetchedStats2)
+
+      sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
+      sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
+      // update total size and remove the old and invalid row count
+      val fetchedStats3 = checkStats(
+        textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = None)
+      assert(fetchedStats3.get.sizeInBytes > fetchedStats2.get.sizeInBytes)
+    }
+  }
+
+  test("test statistics of LogicalRelation converted from MetastoreRelation") {
+    val parquetTable = "parquetTable"
+    val orcTable = "orcTable"
+    withTable(parquetTable, orcTable) {
+      sql(s"CREATE TABLE $parquetTable (key STRING, value STRING) STORED AS PARQUET")
+      sql(s"CREATE TABLE $orcTable (key STRING, value STRING) STORED AS ORC")
+      sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
+      sql(s"INSERT INTO TABLE $orcTable SELECT * FROM src")
+
+      // the default value for `spark.sql.hive.convertMetastoreParquet` is true, here we just set it
+      // for robustness
+      withSQLConf("spark.sql.hive.convertMetastoreParquet" -> "true") {
+        checkStats(
+          parquetTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
+        sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
+        checkStats(
+          parquetTable,
+          isDataSourceTable = true,
+          hasSizeInBytes = true,
+          expectedRowCounts = Some(500))
+      }
+      withSQLConf("spark.sql.hive.convertMetastoreOrc" -> "true") {
+        checkStats(
+          orcTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
+        sql(s"ANALYZE TABLE $orcTable COMPUTE STATISTICS")
+        checkStats(
+          orcTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = Some(500))
+      }
+    }
+  }
+
+  test("test table-level statistics for data source table created in HiveExternalCatalog") {
+    val parquetTable = "parquetTable"
+    withTable(parquetTable) {
+      sql(s"CREATE TABLE $parquetTable (key STRING, value STRING) USING PARQUET")
+      val catalogTable = spark.sessionState.catalog.getTableMetadata(TableIdentifier(parquetTable))
+      assert(DDLUtils.isDatasourceTable(catalogTable))
+
+      sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
+      checkStats(
+        parquetTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
+
+      // noscan won't count the number of rows
+      sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
+      val fetchedStats1 = checkStats(
+        parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
+
+      sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
+      sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
+      val fetchedStats2 = checkStats(
+        parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
+      assert(fetchedStats2.get.sizeInBytes > fetchedStats1.get.sizeInBytes)
+
+      // without noscan, we count the number of rows
+      sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
+      val fetchedStats3 = checkStats(
+        parquetTable,
+        isDataSourceTable = true,
+        hasSizeInBytes = true,
+        expectedRowCounts = Some(1000))
+      assert(fetchedStats3.get.sizeInBytes == fetchedStats2.get.sizeInBytes)
+    }
+  }
+
+  test("statistics collection of a table with zero column") {
+    val table_no_cols = "table_no_cols"
+    withTable(table_no_cols) {
+      val rddNoCols = sparkContext.parallelize(1 to 10).map(_ => Row.empty)
+      val dfNoCols = spark.createDataFrame(rddNoCols, StructType(Seq.empty))
+      dfNoCols.write.format("json").saveAsTable(table_no_cols)
+      sql(s"ANALYZE TABLE $table_no_cols COMPUTE STATISTICS")
+      checkStats(
+        table_no_cols,
+        isDataSourceTable = true,
+        hasSizeInBytes = true,
+        expectedRowCounts = Some(10))
+    }
   }
 
   test("estimates the size of a test MetastoreRelation") {

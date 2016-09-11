@@ -28,12 +28,12 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.streaming.MemoryPlan
-import org.apache.spark.sql.types.ObjectType
+import org.apache.spark.sql.types.{Metadata, ObjectType}
 
 
 abstract class QueryTest extends PlanTest {
@@ -242,10 +242,17 @@ abstract class QueryTest extends PlanTest {
       case _: LogicalRelation => return
       case p if p.getClass.getSimpleName == "MetastoreRelation" => return
       case _: MemoryPlan => return
+      case p: InMemoryRelation =>
+        p.child.transform {
+          case _: ObjectConsumerExec => return
+          case _: ObjectProducerExec => return
+        }
+        p
     }.transformAllExpressions {
-      case a: ImperativeAggregate => return
+      case _: ImperativeAggregate => return
       case _: TypedAggregateExpression => return
       case Literal(_, _: ObjectType) => return
+      case _: UserDefinedGenerator => return
     }
 
     // bypass hive tests before we fix all corner cases in hive module.
@@ -267,6 +274,14 @@ abstract class QueryTest extends PlanTest {
     val normalized1 = logicalPlan.transformAllExpressions {
       case udf: ScalaUDF => udf.copy(function = null)
       case gen: UserDefinedGenerator => gen.copy(function = null)
+      // After SPARK-17356: the JSON representation no longer has the Metadata. We need to remove
+      // the Metadata from the normalized plan so that we can compare this plan with the
+      // JSON-deserialzed plan.
+      case a @ Alias(child, name) if a.explicitMetadata.isDefined =>
+        Alias(child, name)(a.exprId, a.qualifier, Some(Metadata.empty), a.isGenerated)
+      case a: AttributeReference if a.metadata != Metadata.empty =>
+        AttributeReference(a.name, a.dataType, a.nullable, Metadata.empty)(a.exprId, a.qualifier,
+          a.isGenerated)
     }
 
     // RDDs/data are not serializable to JSON, so we need to collect LogicalPlans that contains
@@ -286,7 +301,7 @@ abstract class QueryTest extends PlanTest {
         p.expressions.foreach {
           _.foreach {
             case s: SubqueryExpression =>
-              s.query.foreach(collectData)
+              s.plan.foreach(collectData)
             case _ =>
           }
         }
@@ -328,7 +343,7 @@ abstract class QueryTest extends PlanTest {
       case p =>
         p.transformExpressions {
           case s: SubqueryExpression =>
-            s.withNewPlan(s.query.transformDown(renormalize))
+            s.withNewPlan(s.plan.transformDown(renormalize))
         }
     }
     val normalized2 = jsonBackPlan.transformDown(renormalize)
@@ -351,11 +366,11 @@ abstract class QueryTest extends PlanTest {
    */
   def assertEmptyMissingInput(query: Dataset[_]): Unit = {
     assert(query.queryExecution.analyzed.missingInput.isEmpty,
-      s"The analyzed logical plan has missing inputs: ${query.queryExecution.analyzed}")
+      s"The analyzed logical plan has missing inputs:\n${query.queryExecution.analyzed}")
     assert(query.queryExecution.optimizedPlan.missingInput.isEmpty,
-      s"The optimized logical plan has missing inputs: ${query.queryExecution.optimizedPlan}")
+      s"The optimized logical plan has missing inputs:\n${query.queryExecution.optimizedPlan}")
     assert(query.queryExecution.executedPlan.missingInput.isEmpty,
-      s"The physical plan has missing inputs: ${query.queryExecution.executedPlan}")
+      s"The physical plan has missing inputs:\n${query.queryExecution.executedPlan}")
   }
 }
 
@@ -395,6 +410,9 @@ object QueryTest {
     sameRows(expectedAnswer, sparkAnswer, isSorted).map { results =>
         s"""
         |Results do not match for query:
+        |Timezone: ${TimeZone.getDefault}
+        |Timezone Env: ${sys.env.getOrElse("TZ", "")}
+        |
         |${df.queryExecution}
         |== Results ==
         |$results
@@ -471,6 +489,14 @@ object QueryTest {
     checkAnswer(df, expectedAnswer.asScala) match {
       case Some(errorMessage) => errorMessage
       case None => null
+    }
+  }
+}
+
+class QueryTestSuite extends QueryTest with test.SharedSQLContext {
+  test("SPARK-16940: checkAnswer should raise TestFailedException for wrong results") {
+    intercept[org.scalatest.exceptions.TestFailedException] {
+      checkAnswer(sql("SELECT 1"), Row(2) :: Nil)
     }
   }
 }

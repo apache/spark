@@ -23,12 +23,12 @@ public interface MemoryAllocator {
    * Whether to fill newly allocated and deallocated memory with 0xa5 and 0x5a bytes respectively.
    * This helps catch misuse of uninitialized or freed memory, but imposes some overhead.
    */
-  public static final boolean MEMORY_DEBUG_FILL_ENABLED = Boolean.parseBoolean(
+  boolean MEMORY_DEBUG_FILL_ENABLED = Boolean.parseBoolean(
     System.getProperty("spark.memory.debugFill", "false"));
 
   // Same as jemalloc's debug fill values.
-  public static final byte MEMORY_DEBUG_FILL_CLEAN_VALUE = (byte)0xa5;
-  public static final byte MEMORY_DEBUG_FILL_FREED_VALUE = (byte)0x5a;
+  byte MEMORY_DEBUG_FILL_CLEAN_VALUE = (byte)0xa5;
+  byte MEMORY_DEBUG_FILL_FREED_VALUE = (byte)0x5a;
 
   /**
    * Allocates a contiguous block of memory. Note that the allocated memory is not guaranteed

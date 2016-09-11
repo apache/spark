@@ -95,7 +95,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
       Row("listtablessuitetable", true) :: Nil)
 
     sqlContext.sessionState.catalog.dropTable(
-      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true)
+      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true, purge = false)
     assert(sqlContext.tables().filter("tableName = 'listtablessuitetable'").count() === 0)
   }
 
@@ -112,7 +112,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
         .collect().toSeq == Row("listtablessuitetable", true) :: Nil)
 
     sqlContext.sessionState.catalog.dropTable(
-      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true)
+      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true, purge = false)
     assert(sqlContext.tables().filter("tableName = 'listtablessuitetable'").count() === 0)
   }
 
