@@ -121,6 +121,7 @@ class StreamingQueryManager(object):
     def active(self):
         """Returns a list of active queries associated with this SQLContext
 
+        >>> sdf = spark.readStream.format('text').load('python/test_support/sql/streaming')
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sqm = spark.streams
         >>> # get the list of active streaming queries
@@ -136,6 +137,7 @@ class StreamingQueryManager(object):
         """Returns an active query from this SQLContext or throws exception if an active query
         with this name doesn't exist.
 
+        >>> sdf = spark.readStream.format('text').load('python/test_support/sql/streaming')
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.name
         u'this_query'
@@ -568,6 +570,8 @@ class DataStreamReader(OptionUtils):
 
         :param schema: a :class:`pyspark.sql.types.StructType` object
 
+        >>> from pyspark.sql.types import StructType, StructField, StringType
+        >>> sdf_schema = StructType([StructField("data", StringType(), False)])
         >>> s = spark.readStream.schema(sdf_schema)
         """
         from pyspark.sql import SparkSession
@@ -612,9 +616,12 @@ class DataStreamReader(OptionUtils):
         :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema.
         :param options: all other string options
 
-        >>> json_sdf = spark.readStream.format("json") \\
-        ...     .schema(sdf_schema) \\
-        ...     .load(tempfile.mkdtemp())
+        >>> import tempfile
+        >>> from pyspark.sql.types import StructType, StructField, StringType
+        >>> sdf_schema = StructType([StructField("data", StringType(), False)])
+        >>> json_sdf = (spark.readStream.format("json")
+        ...             .schema(sdf_schema)
+        ...             .load(tempfile.mkdtemp()))
         >>> json_sdf.isStreaming
         True
         >>> json_sdf.schema == sdf_schema
@@ -690,7 +697,10 @@ class DataStreamReader(OptionUtils):
                                 This applies to timestamp type. If None is set, it uses the
                                 default value value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
 
-        >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
+        >>> import tempfile
+        >>> from pyspark.sql.types import StructType, StructField, StringType
+        >>> sdf_schema = StructType([StructField("data", StringType(), False)])
+        >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema=sdf_schema)
         >>> json_sdf.isStreaming
         True
         >>> json_sdf.schema == sdf_schema
@@ -719,6 +729,9 @@ class DataStreamReader(OptionUtils):
 
         .. note:: Experimental.
 
+        >>> import tempfile
+        >>> from pyspark.sql.types import StructType, StructField, StringType
+        >>> sdf_schema = StructType([StructField("data", StringType(), False)])
         >>> parquet_sdf = spark.readStream.schema(sdf_schema).parquet(tempfile.mkdtemp())
         >>> parquet_sdf.isStreaming
         True
@@ -823,6 +836,9 @@ class DataStreamReader(OptionUtils):
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
 
+        >>> import tempfile
+        >>> from pyspark.sql.types import StructType, StructField, StringType
+        >>> sdf_schema = StructType([StructField("data", StringType(), False)])
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
         True
@@ -876,6 +892,7 @@ class DataStreamWriter(object):
 
        .. note:: Experimental.
 
+        >>> sdf = spark.readStream.format('text').load('python/test_support/sql/streaming')
         >>> writer = sdf.writeStream.outputMode('append')
         """
         if not outputMode or type(outputMode) != str or len(outputMode.strip()) == 0:
@@ -891,6 +908,7 @@ class DataStreamWriter(object):
 
         :param source: string, name of the data source, which for now can be 'parquet'.
 
+        >>> sdf = spark.readStream.format('text').load('python/test_support/sql/streaming')
         >>> writer = sdf.writeStream.format('json')
         """
         self._jwrite = self._jwrite.format(source)
@@ -942,6 +960,7 @@ class DataStreamWriter(object):
 
         :param queryName: unique name for the query
 
+        >>> sdf = spark.readStream.format('text').load('python/test_support/sql/streaming')
         >>> writer = sdf.writeStream.queryName('streaming_query')
         """
         if not queryName or type(queryName) != str or len(queryName.strip()) == 0:
@@ -959,6 +978,7 @@ class DataStreamWriter(object):
 
         :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
 
+        >>> sdf = spark.readStream.format('text').load('python/test_support/sql/streaming')
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(processingTime='5 seconds')
         """
@@ -997,6 +1017,7 @@ class DataStreamWriter(object):
         :param options: All other string options. You may want to provide a `checkpointLocation`
             for most streams, however it is not required for a `memory` stream.
 
+        >>> sdf = spark.readStream.format('text').load('python/test_support/sql/streaming')
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.isActive
         True
@@ -1041,15 +1062,8 @@ def _test():
     except py4j.protocol.Py4JError:
         spark = SparkSession(sc)
 
-    globs['tempfile'] = tempfile
-    globs['os'] = os
     globs['spark'] = spark
     globs['sqlContext'] = SQLContext.getOrCreate(spark.sparkContext)
-    globs['sdf'] = \
-        spark.readStream.format('text').load('python/test_support/sql/streaming')
-    globs['sdf_schema'] = StructType([StructField("data", StringType(), False)])
-    globs['df'] = \
-        globs['spark'].readStream.format('text').load('python/test_support/sql/streaming')
     globs['sqs'] = StreamingQueryStatus(
         spark.sparkContext._jvm.org.apache.spark.sql.streaming.StreamingQueryStatus.testStatus())
 

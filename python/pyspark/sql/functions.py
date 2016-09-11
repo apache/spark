@@ -204,6 +204,7 @@ def approxCountDistinct(col, rsd=None):
 def approx_count_distinct(col, rsd=None):
     """Returns a new :class:`Column` for approximate distinct count of ``col``.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.agg(approx_count_distinct(df.age).alias('c')).collect()
     [Row(c=2)]
     """
@@ -309,6 +310,7 @@ def covar_samp(col1, col2):
 def countDistinct(col, *cols):
     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
     [Row(c=2)]
 
@@ -338,6 +340,7 @@ def grouping(col):
     Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
     or not, returns 1 for aggregated or 0 for not aggregated in the result set.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.cube("name").agg(grouping("name"), sum("age")).orderBy("name").show()
     +-----+--------------+--------+
     | name|grouping(name)|sum(age)|
@@ -362,6 +365,7 @@ def grouping_id(*cols):
     Note: the list of columns should match with grouping columns exactly, or empty (means all the
     grouping columns).
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.cube("name").agg(grouping_id(), sum("age")).orderBy("name").show()
     +-----+-------------+--------+
     | name|grouping_id()|sum(age)|
@@ -426,7 +430,7 @@ def monotonically_increasing_id():
 
     The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
     The current implementation puts the partition ID in the upper 31 bits, and the record number
-    within each partition in the lower 33 bits. The assumption is that the data frame has
+    within each partition in the lower 33 bits. The assumption is that the :class:`DataFrame` has
     less than 1 billion partitions, and each partition has less than 8 billion records.
 
     As an example, consider a :class:`DataFrame` with two partitions, each with 3 records.
@@ -558,6 +562,7 @@ def spark_partition_id():
 def expr(str):
     """Parses the expression string into the column that it represents
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(expr("length(name)")).collect()
     [Row(length(name)=5), Row(length(name)=3)]
     """
@@ -572,6 +577,7 @@ def struct(*cols):
 
     :param cols: list of column names (string) or list of :class:`Column` expressions
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(struct('age', 'name').alias("struct")).collect()
     [Row(struct=Row(age=2, name=u'Alice')), Row(struct=Row(age=5, name=u'Bob'))]
     >>> df.select(struct([df.age, df.name]).alias("struct")).collect()
@@ -618,12 +624,14 @@ def least(*cols):
 
 @since(1.4)
 def when(condition, value):
-    """Evaluates a list of conditions and returns one of multiple possible result expressions.
+    """
+    Evaluates a list of conditions and returns one of multiple possible result expressions.
     If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
 
     :param condition: a boolean :class:`Column` expression.
     :param value: a literal value, or a :class:`Column` expression.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(when(df['age'] == 2, 3).otherwise(4).alias("age")).collect()
     [Row(age=3), Row(age=4)]
 
@@ -644,6 +652,7 @@ def log(arg1, arg2=None):
 
     If there is only one argument, then this takes the natural logarithm of the argument.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(log(10.0, df.age).alias('ten')).rdd.map(lambda l: str(l.ten)[:7]).collect()
     ['0.30102', '0.69897']
 
@@ -777,7 +786,7 @@ def date_format(date, format):
     A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
     pattern letters of the Java class `java.text.SimpleDateFormat` can be used.
 
-    NOTE: Use when ever possible specialized functions like `year`. These benefit from a
+    NOTE: Whenever possible, use specialized functions like `year`. These benefit from a
     specialized implementation.
 
     >>> df = spark.createDataFrame([('2015-04-08',)], ['a'])
@@ -1137,7 +1146,7 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
 @ignore_unicode_prefix
 def crc32(col):
     """
-    Calculates the cyclic redundancy check value  (CRC32) of a binary column and
+    Calculates the cyclic redundancy check value (CRC32) of a binary column and
     returns the value as a bigint.
 
     >>> spark.createDataFrame([('ABC',)], ['a']).select(crc32('a').alias('crc32')).collect()
@@ -1180,6 +1189,7 @@ def sha2(col, numBits):
     and SHA-512). The numBits indicates the desired bit length of the result, which must have a
     value of 224, 256, 384, 512, or 0 (which is equivalent to 256).
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> digests = df.select(sha2(df.name, 256).alias('s')).collect()
     >>> digests[0]
     Row(s=u'3bc51062973c458d5a6f2d8d64a023246354ad7e064b1e4e009ec8a0699a3043')
@@ -1518,6 +1528,7 @@ def soundex(col):
 def bin(col):
     """Returns the string representation of the binary value of the given column.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(bin(df.age).alias('c')).collect()
     [Row(c=u'10'), Row(c=u'101')]
     """
@@ -1592,6 +1603,7 @@ def create_map(*cols):
     :param cols: list of column names (string) or list of :class:`Column` expressions that grouped
         as key-value pairs, e.g. (key1, value1, key2, value2, ...).
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(create_map('name', 'age').alias("map")).collect()
     [Row(map={u'Alice': 2}), Row(map={u'Bob': 5})]
     >>> df.select(create_map([df.name, df.age]).alias("map")).collect()
@@ -1611,6 +1623,7 @@ def array(*cols):
     :param cols: list of column names (string) or list of :class:`Column` expressions that have
         the same data type.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(array('age', 'age').alias("arr")).collect()
     [Row(arr=[2, 2]), Row(arr=[5, 5])]
     >>> df.select(array([df.age, df.age]).alias("arr")).collect()
@@ -1833,6 +1846,7 @@ def udf(f, returnType=StringType()):
 
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(slen(df.name).alias('slen')).collect()
     [Row(slen=5), Row(slen=3)]
     """
@@ -1856,7 +1870,6 @@ def _test():
     sc = spark.sparkContext
     globs['sc'] = sc
     globs['spark'] = spark
-    globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
