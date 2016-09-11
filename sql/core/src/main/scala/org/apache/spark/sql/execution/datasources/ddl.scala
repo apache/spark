@@ -21,6 +21,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.types._
@@ -37,7 +38,9 @@ case class CreateTable(tableDesc: CatalogTable, mode: SaveMode, query: Option[Lo
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
-  override def children: Seq[LogicalPlan] = query.toSeq
+  override def children: Seq[LogicalPlan] = Seq.empty[LogicalPlan]
+
+  override def innerChildren: Seq[QueryPlan[_]] = query.toSeq
 }
 
 case class CreateTempViewUsing(
