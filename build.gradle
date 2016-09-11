@@ -245,15 +245,15 @@ subprojects {
 
       def result = new StringBuilder()
       extensions.add(com.github.maiflai.ScalaTestAction.TESTRESULT, result)
-      extensions.add('testResult', { String name -> result.append(name) } )
+      extensions.add('testResult', { String name -> result.setLength(0); result.append(name) } )
 
       def output = new StringBuilder()
       extensions.add(com.github.maiflai.ScalaTestAction.TESTOUTPUT, output)
-      extensions.add('testOutput', { String name -> output.append(name) } )
+      extensions.add('testOutput', { String name -> output.setLength(0); output.append(name) } )
 
       def errorOutput = new StringBuilder()
       extensions.add(com.github.maiflai.ScalaTestAction.TESTERROR, errorOutput)
-      extensions.add('testError', { String name -> errorOutput.append(name) } )
+      extensions.add('testError', { String name -> errorOutput.setLength(0); errorOutput.append(name) } )
 
       // running a single scala suite
       if (rootProject.hasProperty('singleSuite')) {
@@ -295,8 +295,10 @@ subprojects {
       test.configure {
         onlyIf { ! Boolean.getBoolean('skip.tests') }
 
-        jvmArgs '-XX:+HeapDumpOnOutOfMemoryError', '-XX:MaxPermSize=512m', '-XX:ReservedCodeCacheSize=512m'
-        maxHeapSize '3g'
+        jvmArgs '-ea', '-XX:+HeapDumpOnOutOfMemoryError','-XX:+UseConcMarkSweepGC',
+                '-XX:+UseParNewGC', '-XX:+CMSClassUnloadingEnabled', '-XX:MaxPermSize=512m'
+        minHeapSize '4g'
+        maxHeapSize '4g'
         // disable assertions for hive tests as in Spark's pom.xml because HiveCompatibilitySuite currently fails (SPARK-4814)
         if (test.project.name.contains('snappy-spark-hive_')) {
           jvmArgs '-da'
