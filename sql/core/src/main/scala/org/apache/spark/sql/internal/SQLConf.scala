@@ -116,6 +116,14 @@ object SQLConf {
     .longConf
     .createWithDefault(10L * 1024 * 1024)
 
+  val LIMIT_SCALE_UP_FACTOR = SQLConfigBuilder("spark.sql.limit.scaleUpFactor")
+    .internal()
+    .doc("Minimal increase rate in number of partitions between attempts when executing a take " +
+      "on a query. Higher values lead to more partitions read. Lower values might lead to " +
+      "longer execution times as more jobs will be run")
+    .intConf
+    .createWithDefault(4)
+
   val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS =
     SQLConfigBuilder("spark.sql.statistics.fallBackToHdfs")
     .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
@@ -354,7 +362,8 @@ object SQLConf {
     .createWithDefault(true)
 
   val CROSS_JOINS_ENABLED = SQLConfigBuilder("spark.sql.crossJoin.enabled")
-    .doc("When false, we will throw an error if a query contains a cross join")
+    .doc("When false, we will throw an error if a query contains a cartesian product without " +
+        "explicit CROSS JOIN syntax.")
     .booleanConf
     .createWithDefault(false)
 
@@ -638,6 +647,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
+  def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
+
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
@@ -673,8 +684,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
-  def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
-
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
   def schemaStringLengthThreshold: Int = getConf(SCHEMA_STRING_LENGTH_THRESHOLD)
@@ -699,6 +708,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
   override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
+
+  override def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

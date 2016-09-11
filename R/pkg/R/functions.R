@@ -444,7 +444,8 @@ setMethod("cosh",
 
 #' Returns the number of items in a group
 #'
-#' Returns the number of items in a group. This is a column aggregate function.
+#' This can be used as a column aggregate function with \code{Column} as input,
+#' and returns the number of items in a group.
 #'
 #' @rdname count
 #' @name count
@@ -2876,7 +2877,8 @@ setMethod("randn", signature(seed = "numeric"),
 
 #' regexp_extract
 #'
-#' Extract a specific(idx) group identified by a java regex, from the specified string column.
+#' Extract a specific \code{idx} group identified by a Java regex, from the specified string column.
+#' If the regex did not match, or the specified group did not match, an empty string is returned.
 #'
 #' @param x a string Column.
 #' @param pattern a regular expression.

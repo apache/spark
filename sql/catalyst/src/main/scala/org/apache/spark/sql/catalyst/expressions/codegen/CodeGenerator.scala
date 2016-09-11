@@ -596,12 +596,12 @@ class CodegenContext {
       // also not be too small, or it will have many function calls (for wide table), see the
       // results in BenchmarkWideTable.
       if (blockBuilder.length > 1024) {
-        blocks.append(blockBuilder.toString())
+        blocks += blockBuilder.toString()
         blockBuilder.clear()
       }
       blockBuilder.append(code)
     }
-    blocks.append(blockBuilder.toString())
+    blocks += blockBuilder.toString()
 
     if (blocks.length == 1) {
       // inline execution if only one block

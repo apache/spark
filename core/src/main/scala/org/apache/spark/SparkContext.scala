@@ -505,6 +505,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
+    if (_conf.getBoolean("spark.ui.reverseProxy", false)) {
+      System.setProperty("spark.ui.proxyBase", "/proxy/" + _applicationId)
+    }
     _ui.foreach(_.setAppId(_applicationId))
     _env.blockManager.initialize(_applicationId)
 
@@ -992,7 +995,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // This is a hack to enforce loading hdfs-site.xml.
     // See SPARK-11227 for details.
-    FileSystem.get(new URI(path), hadoopConfiguration)
+    FileSystem.getLocal(hadoopConfiguration)
 
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
     val confBroadcast = broadcast(new SerializableConfiguration(hadoopConfiguration))
@@ -1081,7 +1084,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // This is a hack to enforce loading hdfs-site.xml.
     // See SPARK-11227 for details.
-    FileSystem.get(new URI(path), hadoopConfiguration)
+    FileSystem.getLocal(hadoopConfiguration)
 
     // The call to NewHadoopJob automatically adds security credentials to conf,
     // so we don't need to explicitly add them ourselves

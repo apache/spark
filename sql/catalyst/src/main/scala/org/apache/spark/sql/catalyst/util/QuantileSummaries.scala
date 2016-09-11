@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
 
@@ -59,9 +59,14 @@ class QuantileSummaries(
    * @param x the new observation to insert into the summary
    */
   def insert(x: Double): QuantileSummaries = {
-    headSampled.append(x)
+    headSampled += x
     if (headSampled.size >= defaultHeadSize) {
-      this.withHeadBufferInserted
+      val result = this.withHeadBufferInserted
+      if (result.sampled.length >= compressThreshold) {
+        result.compress()
+      } else {
+        result
+      }
     } else {
       this
     }
@@ -90,7 +95,7 @@ class QuantileSummaries(
       val currentSample = sorted(opsIdx)
       // Add all the samples before the next observation.
       while(sampleIdx < sampled.size && sampled(sampleIdx).value <= currentSample) {
-        newSamples.append(sampled(sampleIdx))
+        newSamples += sampled(sampleIdx)
         sampleIdx += 1
       }
 
@@ -104,13 +109,13 @@ class QuantileSummaries(
         }
 
       val tuple = Stats(currentSample, 1, delta)
-      newSamples.append(tuple)
+      newSamples += tuple
       opsIdx += 1
     }
 
     // Add all the remaining existing samples
     while(sampleIdx < sampled.size) {
-      newSamples.append(sampled(sampleIdx))
+      newSamples += sampled(sampleIdx)
       sampleIdx += 1
     }
     new QuantileSummaries(compressThreshold, relativeError, newSamples.toArray, currentCount)
@@ -236,7 +241,7 @@ object QuantileSummaries {
     if (currentSamples.isEmpty) {
       return Array.empty[Stats]
     }
-    val res: ArrayBuffer[Stats] = ArrayBuffer.empty
+    val res = ListBuffer.empty[Stats]
     // Start for the last element, which is always part of the set.
     // The head contains the current new head, that may be merged with the current element.
     var head = currentSamples.last
@@ -258,7 +263,10 @@ object QuantileSummaries {
     }
     res.prepend(head)
     // If necessary, add the minimum element:
-    res.prepend(currentSamples.head)
+    val currHead = currentSamples.head
+    if (currHead.value < head.value) {
+      res.prepend(currentSamples.head)
+    }
     res.toArray
   }
 }

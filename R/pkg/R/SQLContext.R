@@ -156,6 +156,25 @@ sparkR.conf <- function(key, defaultValue) {
   }
 }
 
+#' Get version of Spark on which this application is running
+#'
+#' Get version of Spark on which this application is running.
+#'
+#' @return a character string of the Spark version
+#' @rdname sparkR.version
+#' @name sparkR.version
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' version <- sparkR.version()
+#' }
+#' @note sparkR.version since 2.0.1
+sparkR.version <- function() {
+  sparkSession <- getSparkSession()
+  callJMethod(sparkSession, "version")
+}
+
 getDefaultSqlSource <- function() {
   l <- sparkR.conf("spark.sql.sources.default", "org.apache.spark.sql.parquet")
   l[["spark.sql.sources.default"]]
@@ -183,7 +202,10 @@ getDefaultSqlSource <- function() {
 # TODO(davies): support sampling and infer type from NA
 createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   sparkSession <- getSparkSession()
+
   if (is.data.frame(data)) {
+      # Convert data into a list of rows. Each row is a list.
+
       # get the names of columns, they will be put into RDD
       if (is.null(schema)) {
         schema <- names(data)
@@ -208,6 +230,7 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
       args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
       data <- do.call(mapply, append(args, data))
   }
+
   if (is.list(data)) {
     sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
     rdd <- parallelize(sc, data)
