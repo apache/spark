@@ -371,6 +371,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("CREATE TABLE tbl(a int, a string) USING json")
     }
     assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val e2 = intercept[AnalysisException] {
+        sql("CREATE TABLE tbl(a int, A string) USING json")
+      }
+      assert(e2.message == "Found duplicate column(s) in table definition of `tbl`: a")
+    }
   }
 
   test("create table - partition column names not in table definition") {

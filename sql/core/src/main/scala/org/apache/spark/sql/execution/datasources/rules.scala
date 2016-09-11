@@ -107,7 +107,12 @@ case class PreprocessDDL(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       } else {
         tableDesc.schema
       }
-      checkDuplication(schema.map(_.name), "table definition of " + tableDesc.identifier)
+      val columnNames = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
+        schema.map(_.name)
+      } else {
+        schema.map(_.name.toLowerCase)
+      }
+      checkDuplication(columnNames, "table definition of " + tableDesc.identifier)
 
       val partitionColsChecked = checkPartitionColumns(schema, tableDesc)
       val bucketColsChecked = checkBucketColumns(schema, partitionColsChecked)
