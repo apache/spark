@@ -137,9 +137,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     }
   }
 
-  private[this] lazy val childAttributeResolver = new AttributeResolver(children.flatMap(_.output))
+  private[this] lazy val childAttributes = AttributeSeq(children.flatMap(_.output))
 
-  private[this] lazy val outputAttributeResolver = new AttributeResolver(output)
+  private[this] lazy val outputAttributes = AttributeSeq(output)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
@@ -149,7 +149,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   def resolveChildren(
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
-    childAttributeResolver.resolve(nameParts, resolver)
+    childAttributes.resolve(nameParts, resolver)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
@@ -159,7 +159,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   def resolve(
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
-    outputAttributeResolver.resolve(nameParts, resolver)
+    outputAttributes.resolve(nameParts, resolver)
 
   /**
    * Given an attribute name, split it to name parts by dot, but
@@ -169,103 +169,13 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   def resolveQuoted(
       name: String,
       resolver: Resolver): Option[NamedExpression] = {
-    outputAttributeResolver.resolve(UnresolvedAttribute.parseAttributeName(name), resolver)
+    outputAttributes.resolve(UnresolvedAttribute.parseAttributeName(name), resolver)
   }
 
   /**
    * Refreshes (or invalidates) any metadata/data cached in the plan recursively.
    */
   def refresh(): Unit = children.foreach(_.refresh())
-}
-
-/**
- * Helper class for (LogicalPlan) attribute resolution. This class indexes attributes by their
- * case-in-sensitive name, and checks potential candidates using the [[Resolver]] passed to the
- * resolve(...) function. Both qualified and direct resolution are supported.
- */
-private[catalyst] class AttributeResolver(attributes: Seq[Attribute]) extends Logging {
-  private def unique[T](m: Map[T, Seq[Attribute]]): Map[T, Seq[Attribute]] = {
-    m.mapValues(_.distinct).map(identity)
-  }
-
-  /** Map to use for direct case insensitive attribute lookups. */
-  private lazy val direct: Map[String, Seq[Attribute]] = {
-    unique(attributes.groupBy(_.name.toLowerCase))
-  }
-
-  /** Map to use for qualified case insensitive attribute lookups. */
-  private val qualified: Map[(String, String), Seq[Attribute]] = {
-    val grouped = attributes.filter(_.qualifier.isDefined).groupBy { a =>
-      (a.qualifier.get.toLowerCase, a.name.toLowerCase)
-    }
-    unique(grouped)
-  }
-
-  /** Perform attribute resolution given a name and a resolver. */
-  def resolve(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] = {
-    // Collect matching attributes given a name and a lookup.
-    def collectMatches(name: String, candidates: Option[Seq[Attribute]]): Seq[Attribute] = {
-      candidates.toSeq.flatMap(_.collect {
-        case a if !a.isGenerated && resolver(a.name, name) => a.withName(name)
-      })
-    }
-
-    // Find matches for the given name assuming that the 1st part is a qualifier (i.e. table name,
-    // alias, or subquery alias) and the 2nd part is the actual name. This returns a tuple of
-    // matched attributes and a list of parts that are to be resolved.
-    //
-    // For example, consider an example where "a" is the table name, "b" is the column name,
-    // and "c" is the struct field name, i.e. "a.b.c". In this case, Attribute will be "a.b",
-    // and the second element will be List("c").
-    val matches = nameParts match {
-      case qualifier +: name +: nestedFields =>
-        val key = (qualifier.toLowerCase, name.toLowerCase)
-        val attributes = collectMatches(name, qualified.get(key)).filter { a =>
-          resolver(qualifier, a.qualifier.get)
-        }
-        (attributes, nestedFields)
-      case all =>
-        (Nil, all)
-    }
-
-    // If none of attributes match `table.column` pattern, we try to resolve it as a column.
-    val (candidates, nestedFields) = matches match {
-      case (Seq(), _) =>
-        val name = nameParts.head
-        val attributes = collectMatches(name, direct.get(name.toLowerCase))
-        (attributes, nameParts.tail)
-      case _ => matches
-    }
-
-    def name = UnresolvedAttribute(nameParts).name
-    candidates match {
-      case Seq(a) if nestedFields.nonEmpty =>
-        // One match, but we also need to extract the requested nested field.
-        // The foldLeft adds ExtractValues for every remaining parts of the identifier,
-        // and aliased it with the last part of the name.
-        // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
-        // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias the final
-        // expression as "c".
-        val fieldExprs = nestedFields.foldLeft(a: Expression) { (e, name) =>
-          ExtractValue(e, Literal(name), resolver)
-        }
-        Some(Alias(fieldExprs, nestedFields.last)())
-
-      case Seq(a) =>
-        // One match, no nested fields, use it.
-        Some(a)
-
-      case Seq() =>
-        // No matches.
-        logTrace(s"Could not find $name in ${attributes.mkString(", ")}")
-        None
-
-      case ambiguousReferences =>
-        // More than one match.
-        val referenceNames = ambiguousReferences.mkString(", ")
-        throw new AnalysisException(s"Reference '$name' is ambiguous, could be: $referenceNames.")
-    }
-  }
 }
 
 /**
