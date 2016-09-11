@@ -308,8 +308,8 @@ object PartitioningUtils {
 
   /**
    * Converts a string to a [[Literal]] with automatic type inference.  Currently only supports
-   * [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType.SYSTEM_DEFAULT]], and
-   * [[StringType]].
+   * [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType.SYSTEM_DEFAULT]], [[DateType]]
+   * [[TimestampType]], and [[StringType]].
    */
   private[datasources] def inferPartitionColumnValue(
       raw: String,
