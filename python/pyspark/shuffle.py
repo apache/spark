@@ -322,13 +322,15 @@ class ExternalMerger(Merger):
             self.pdata.extend([{} for i in range(self.partitions)])
 
         else:
+            diskBytesSpilled = 0
             for i in range(self.partitions):
                 p = os.path.join(path, str(i))
                 with open(p, "wb") as f:
                     # dump items in batch
                     self.serializer.dump_stream(iter(self.pdata[i].items()), f)
                 self.pdata[i].clear()
-                DiskBytesSpilled += os.path.getsize(p)
+                diskBytesSpilled += os.path.getsize(p)
+            DiskBytesSpilled = diskBytesSpilled
 
         self.spills += 1
         gc.collect()  # release the memory as much as possible
@@ -746,6 +748,7 @@ class ExternalGroupBy(ExternalMerger):
             self.pdata.extend([{} for i in range(self.partitions)])
 
         else:
+            diskBytesSpilled = 0
             for i in range(self.partitions):
                 p = os.path.join(path, str(i))
                 with open(p, "wb") as f:
@@ -757,7 +760,8 @@ class ExternalGroupBy(ExternalMerger):
                     else:
                         self.serializer.dump_stream(self.pdata[i].items(), f)
                 self.pdata[i].clear()
-                DiskBytesSpilled += os.path.getsize(p)
+                diskBytesSpilled += os.path.getsize(p)
+            DiskBytesSpilled = diskBytesSpilled
 
         self.spills += 1
         gc.collect()  # release the memory as much as possible
