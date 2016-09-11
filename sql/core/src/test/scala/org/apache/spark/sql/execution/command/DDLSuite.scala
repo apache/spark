@@ -43,6 +43,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       // drop all databases, tables and functions after each test
       spark.sessionState.catalog.reset()
     } finally {
+      val path = System.getProperty("user.dir") + "/spark-warehouse"
+      Utils.deleteRecursively(new File(path))
       super.afterEach()
     }
   }
