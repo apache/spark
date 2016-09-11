@@ -319,14 +319,11 @@ object PartitioningUtils {
       // `BigDecimal` conversion can fail when the `field` is not a form of number.
       val bigDecimal = new JBigDecimal(raw)
       // It reduces the cases for decimals by disallowing values having scale (eg. `1.1`).
-      if (bigDecimal.scale <= 0) {
-        // `DecimalType` conversion can fail when
-        //   1. The precision is bigger than 38.
-        //   2. scale is bigger than precision.
-        Literal(bigDecimal)
-      } else {
-        throw new RuntimeException
-      }
+      require(bigDecimal.scale <= 0)
+      // `DecimalType` conversion can fail when
+      //   1. The precision is bigger than 38.
+      //   2. scale is bigger than precision.
+      Literal(bigDecimal)
     }
 
     if (typeInference) {
