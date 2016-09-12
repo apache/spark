@@ -193,6 +193,34 @@ class CoreTest(unittest.TestCase):
         assert dag_run2 is None
         dag.clear()
 
+    def test_fractional_seconds(self):
+        """
+        Tests if fractional seconds are stored in the database
+        """
+        dag = DAG(TEST_DAG_ID + 'test_fractional_seconds')
+        dag.schedule_interval = '@once'
+        dag.add_task(models.BaseOperator(
+            task_id="faketastic",
+            owner='Also fake',
+            start_date=datetime(2015, 1, 2, 0, 0)))
+
+        start_date = datetime.now()
+
+        run = dag.create_dagrun(
+            run_id='test_' + start_date.isoformat(),
+            execution_date=start_date,
+            start_date=start_date,
+            state=State.RUNNING,
+            external_trigger=False
+        )
+
+        run.refresh_from_db()
+
+        self.assertEqual(start_date, run.execution_date,
+                         "dag run execution_date loses precision")
+        self.assertEqual(start_date, run.start_date,
+                         "dag run start_date loses precision ")
+
     def test_schedule_dag_start_end_dates(self):
         """
         Tests that an attempt to schedule a task after the Dag's end_date
