@@ -68,7 +68,6 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
 
   private val maxTimelineExecutors = conf.getInt("spark.ui.timeline.executors.maximum", 1000)
   private val retainedDeadExecutors = conf.getInt("spark.ui.retainedDeadExecutors", 100)
-  private var deadExecutorCount = 0
 
   def activeStorageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
 
@@ -84,10 +83,11 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     if (executorEvents.size > maxTimelineExecutors) {
       executorEvents.remove(0)
     }
-    if (deadExecutorCount > retainedDeadExecutors) {
-      val head = executorToTaskSummary.filter(e => !e._2.isAlive).head
+
+    val deadExecutors = executorToTaskSummary.filter(e => !e._2.isAlive)
+    if (deadExecutors.size > retainedDeadExecutors) {
+      val head = deadExecutors.head
       executorToTaskSummary.remove(head._1)
-      deadExecutorCount -= 1
     }
   }
 
@@ -97,8 +97,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     if (executorEvents.size > maxTimelineExecutors) {
       executorEvents.remove(0)
     }
-    deadExecutorCount += 1
-    executorToTaskSummary.get(executorRemoved.executorId).map(e => e.isAlive = false)
+    executorToTaskSummary.get(executorRemoved.executorId).foreach(e => e.isAlive = false)
   }
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
