@@ -17,24 +17,17 @@
 
 package org.apache.spark.sql.streaming
 
-<<<<<<< 8f2fdce1b015c829b6d0c398213991c7f15575c9
-<<<<<<< 92ce8d4849a0341c4636e70821b7be57ad3055b1
+import java.io.{File, FilenameFilter}
 import java.io.File
 
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.time.SpanSugar._
-=======
-import java.io.{File, FilenameFilter}
-=======
-import java.io.File
->>>>>>> Fix flaky test
-
 import org.scalatest.PrivateMethodTester
->>>>>>> Add the ability to remove the old MetadataLog in FileStreamSource
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.FileStreamSource.FileStreamSourceLog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -633,7 +626,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-<<<<<<< 92ce8d4849a0341c4636e70821b7be57ad3055b1
   test("max files per trigger") {
     withTempDir { case src =>
       var lastFileModTime: Option[Long] = None
@@ -812,15 +804,33 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       )
     }
   }
-=======
-  test("clean obsolete metadata log") {
+
+  test("compacat metadata log") {
     val _sources = PrivateMethod[Seq[Source]]('sources)
     val _metadataLog = PrivateMethod[FileStreamSourceLog]('metadataLog)
 
     def verify(execution: StreamExecution)
       (batchId: Long, expectedBatches: Int): Boolean = {
+      import CompactibleFileStreamLog._
+
       val fileSource = (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
       val metadataLog = fileSource invokePrivate _metadataLog()
+
+      if (isCompactionBatch(batchId, 2)) {
+        val path = metadataLog.batchIdToPath(batchId)
+
+        // Assert path name should be ended with compact suffix.
+        assert(path.getName.endsWith(COMPACT_FILE_SUFFIX))
+
+        // Compact batch should include all entries from start.
+        val entries = metadataLog.get(batchId)
+        assert(entries.isDefined)
+        assert(entries.get.length === metadataLog.allFiles().length)
+        assert(metadataLog.get(None, Some(batchId)).flatMap(_._2).length === entries.get.length)
+      }
+
+      assert(metadataLog.allFiles().length ===
+        metadataLog.get(None, Some(batchId)).flatMap(_._2).length)
 
       metadataLog.get(None, Some(batchId)).flatMap(_._2).toSet.size === expectedBatches
     }
@@ -855,7 +865,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       }
     }
   }
->>>>>>> Add the ability to remove the old MetadataLog in FileStreamSource
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {

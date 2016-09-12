@@ -17,36 +17,21 @@
 
 package org.apache.spark.sql.execution.streaming
 
-<<<<<<< 92ce8d4849a0341c4636e70821b7be57ad3055b1
 import scala.collection.JavaConverters._
-=======
-import java.util.UUID
 
-import scala.collection.mutable.ArrayBuffer
-import scala.util.control.NonFatal
->>>>>>> Add the ability to remove the old MetadataLog in FileStreamSource
-
-import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.hadoop.fs.Path
+import org.json4s.NoTypeHints
+import org.json4s.jackson.Serialization
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-<<<<<<< 92ce8d4849a0341c4636e70821b7be57ad3055b1
 import org.apache.spark.sql.execution.datasources.{DataSource, ListingFileCatalog, LogicalRelation}
-=======
-import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, DataSource, ListingFileCatalog, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
->>>>>>> Add the ability to remove the old MetadataLog in FileStreamSource
 import org.apache.spark.sql.types.StructType
 
 /**
-<<<<<<< 92ce8d4849a0341c4636e70821b7be57ad3055b1
  * A very simple source that reads files from the given directory as they appear.
- *
- * TODO: Clean up the metadata log files periodically.
-=======
- * A very simple source that reads text files from the given directory as they appear.
->>>>>>> Add the ability to remove the old MetadataLog in FileStreamSource
  */
 class FileStreamSource(
     sparkSession: SparkSession,
@@ -56,7 +41,6 @@ class FileStreamSource(
     metadataPath: String,
     options: Map[String, String]) extends Source with Logging {
 
-<<<<<<< 92ce8d4849a0341c4636e70821b7be57ad3055b1
   import FileStreamSource._
 
   private val sourceOptions = new FileStreamOptions(options)
@@ -66,13 +50,7 @@ class FileStreamSource(
     fs.makeQualified(new Path(path))  // can contains glob patterns
   }
 
-  private val metadataLog = new HDFSMetadataLog[Array[FileEntry]](sparkSession, metadataPath)
-
-=======
-  private val fs = new Path(path).getFileSystem(sparkSession.sessionState.newHadoopConf())
-  private val qualifiedBasePath = fs.makeQualified(new Path(path)) // can contains glob patterns
   private val metadataLog = new FileStreamSourceLog(sparkSession, metadataPath)
->>>>>>> Add the ability to remove the old MetadataLog in FileStreamSource
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   /** Maximum number of new files to be considered in each batch */
@@ -82,11 +60,10 @@ class FileStreamSource(
   // Visible for testing and debugging in production.
   val seenFiles = new SeenFilesMap(sourceOptions.maxFileAgeMs)
 
-  metadataLog.get(None, Some(maxBatchId)).foreach { case (batchId, entry) =>
-    entry.foreach(seenFiles.add)
-    // TODO: move purge call out of the loop once we truncate logs.
-    seenFiles.purge()
+  metadataLog.allFiles().foreach { entry =>
+    seenFiles.add(entry)
   }
+  seenFiles.purge()
 
   logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, maxFileAge = ${sourceOptions.maxFileAgeMs}")
 
@@ -196,7 +173,14 @@ object FileStreamSource {
   /** Timestamp for file modification time, in ms since January 1, 1970 UTC. */
   type Timestamp = Long
 
-  case class FileEntry(path: String, timestamp: Timestamp) extends Serializable
+  // Default action when `FileEntry` is persisted into log.
+  val ADD_ACTION = "add"
+  // Action when `FileEntry` is compacted.
+  val COMPACT_ACTION = "compact"
+
+
+  case class FileEntry(path: String, timestamp: Timestamp, action: String = ADD_ACTION)
+    extends Serializable
 
   /**
    * A custom hash map used to track the list of files seen. This map is not thread-safe.
@@ -255,86 +239,47 @@ object FileStreamSource {
       map.entrySet().asScala.map(entry => FileEntry(entry.getKey, entry.getValue)).toSeq
     }
   }
-}
 
-class FileStreamSourceLog(sparkSession: SparkSession, path: String)
-  extends HDFSMetadataLog[Seq[String]](sparkSession, path) {
+  class FileStreamSourceLog(sparkSession: SparkSession, path: String)
+    extends CompactibleFileStreamLog[FileEntry](sparkSession, path) {
 
-  // Configurations about metadata compaction
-  private val compactInterval = sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL)
-  require(compactInterval > 0,
-    s"Please set ${SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key} (was $compactInterval) to a " +
-      s"positive value.")
+    // Configurations about metadata compaction
+    protected override val compactInterval =
+    sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL)
+    require(compactInterval > 0,
+      s"Please set ${SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key} (was $compactInterval) to a " +
+        s"positive value.")
 
-  private val fileCleanupDelayMs = sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY)
+    protected override val fileCleanupDelayMs =
+      sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY)
 
-  private val isDeletingExpiredLog = sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_DELETION)
+    protected override val isDeletingExpiredLog =
+      sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_DELETION)
 
-  private var compactBatchId: Long = -1L
+    private implicit val formats = Serialization.formats(NoTypeHints)
 
-  private def isCompactionBatch(batchId: Long, compactInterval: Long): Boolean = {
-    batchId % compactInterval == 0
-  }
-
-  override def add(batchId: Long, metadata: Seq[String]): Boolean = {
-    if (isCompactionBatch(batchId, compactInterval)) {
-      compactMetadataLog(batchId - 1)
+    protected override def serializeData(data: FileEntry): String = {
+      Serialization.write(data)
     }
 
-    super.add(batchId, metadata)
-  }
-
-  private def compactMetadataLog(batchId: Long): Unit = {
-    // read out compact metadata and merge with new metadata.
-    val batches = super.get(Some(compactBatchId), Some(batchId))
-    val totalMetadata = batches.flatMap(_._2)
-    if (totalMetadata.isEmpty) {
-      return
+    def deserializeData(encodedString: String): FileEntry = {
+      Serialization.read[FileEntry](encodedString)
     }
 
-    // Remove old compact metadata file and rewrite.
-    val renamedPath = new Path(path, s".${batchId.toString}-${UUID.randomUUID.toString}.tmp")
-    fileManager.rename(batchIdToPath(batchId), renamedPath)
-
-    var isSuccess = false
-    try {
-      isSuccess = super.add(batchId, totalMetadata)
-    } catch {
-      case NonFatal(e) => isSuccess = false
-    } finally {
-      if (!isSuccess) {
-        // Rollback to the previous status if compaction is failed.
-        fileManager.delete(batchIdToPath(batchId))
-        fileManager.rename(renamedPath, batchIdToPath(batchId))
-        return
-      } else {
-        fileManager.delete(renamedPath)
-      }
+    protected override def compactLogs(
+        oldLogs: Seq[FileEntry], newLogs: Seq[FileEntry]): Seq[FileEntry] = {
+      // Change the action of old file entry into COMPACT, so when fetching these out, they will
+      // be filtered out to avoid processing again.
+      oldLogs.map(e => FileEntry(e.path, e.timestamp, COMPACT_ACTION)) ++ newLogs
     }
 
-    compactBatchId = batchId
-
-    // Remove expired metadata log
-    if (isDeletingExpiredLog) {
-      removeOlderThan(compactBatchId)
-    }
-  }
-
-  private def removeOlderThan(batchId: Long): Unit = {
-    val expiredTime = System.currentTimeMillis() - fileCleanupDelayMs
-    fileManager.list(metadataPath, new PathFilter {
-      override def accept(path: Path): Boolean = {
-        try {
-          val id = pathToBatchId(path)
-          id < batchId
-        } catch {
-          case _: NumberFormatException =>
-            false
-        }
-      }
-    }).foreach { f =>
-      if (f.getModificationTime <= expiredTime) {
-        fileManager.delete(f.getPath)
+    override def get(
+        startId: Option[Long], endId: Option[Long]): Array[(Long, Array[FileEntry])] = {
+      super.get(startId, endId).map { case (id, entries) =>
+        // Keep only the file entries in which the action is ADD, this will keep the consistency
+        // while retrieving again after compaction.
+        val addedEntries = entries.filter(_.action == ADD_ACTION)
+        (id, addedEntries)
       }
     }
   }

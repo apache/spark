@@ -544,7 +544,7 @@ object SQLConf {
       .internal()
       .doc("How long that a file is guaranteed to be visible for all readers.")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefault(60 * 10 * 1000L) // 10 minutes
+      .createWithDefault(TimeUnit.MINUTES.toMillis(10)) // 10 minutes
 
   val FILE_SOURCE_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSource.log.deletion")
     .internal()
@@ -565,7 +565,7 @@ object SQLConf {
       .internal()
       .doc("How long in milliseconds a file is guaranteed to be visible for all readers.")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefault(60 * 10 * 1000L) // 10 minutes
+      .createWithDefault(TimeUnit.MINUTES.toMillis(10)) // 10 minutes
 
   val STREAMING_SCHEMA_INFERENCE =
     SQLConfigBuilder("spark.sql.streaming.schemaInference")
