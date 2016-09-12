@@ -29,8 +29,8 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   // We may use -1 as initial value of the accumulator, if the accumulator is valid, we will
   // update it at the end of task and the value will be at least 0. Then we can filter out the -1
   // values before calculate max, min, etc.
-  private[this] var _value = initValue
-  private var _zeroValue = initValue
+  @volatile private[this] var _value = initValue
+  @volatile private var _zeroValue = initValue
 
   override def copy(): SQLMetric = {
     val newAcc = new SQLMetric(metricType, _value)

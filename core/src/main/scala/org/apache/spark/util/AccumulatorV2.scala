@@ -280,8 +280,8 @@ private[spark] object AccumulatorContext {
  * @since 2.0.0
  */
 class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
-  private var _sum = 0L
-  private var _count = 0L
+  @volatile private var _sum = 0L
+  @volatile private var _count = 0L
 
   /**
    * Adds v to the accumulator, i.e. increment sum by v and count by 1.
@@ -359,8 +359,8 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
  * @since 2.0.0
  */
 class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
-  private var _sum = 0.0
-  private var _count = 0L
+  @volatile private var _sum = 0.0
+  @volatile private var _count = 0L
 
   override def isZero: Boolean = _sum == 0.0 && _count == 0
 
@@ -469,7 +469,7 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
 class LegacyAccumulatorWrapper[R, T](
     initialValue: R,
     param: org.apache.spark.AccumulableParam[R, T]) extends AccumulatorV2[T, R] {
-  private[spark] var _value = initialValue  // Current value on driver
+  @volatile private[spark] var _value = initialValue  // Current value on driver
 
   override def isZero: Boolean = _value == param.zero(initialValue)
 
