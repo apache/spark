@@ -225,11 +225,6 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
       Literal(a.name), a,
       Literal("a+1"), (a + 1))).as("col"))
     checkAnalysis(plan, expected)
-    plan = testRelation.select(CreateStruct(Seq(a, (a + 1).as("a+1"))).as("col"))
-    expected = testRelation.select(CreateNamedStruct(Seq(
-      Literal(a.name), a,
-      Literal("a+1"), (a + 1))).as("col"))
-    checkAnalysis(plan, expected)
   }
 
   test("Analysis may leave unnecassary aliases") {
