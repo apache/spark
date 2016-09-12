@@ -126,7 +126,7 @@ case class TakeOrderedAndProjectExec(
   override def executeCollect(): Array[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
-    if (AttributeSet(projectList) != child.outputSet) {
+    if (projectList != child.output) {
       val proj = UnsafeProjection.create(projectList, child.output)
       data.map(r => proj(r).copy())
     } else {
@@ -148,7 +148,7 @@ case class TakeOrderedAndProjectExec(
         localTopK, child.output, SinglePartition, serializer))
     shuffled.mapPartitions { iter =>
       val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
-      if (AttributeSet(projectList) != child.outputSet) {
+      if (projectList != child.output) {
         val proj = UnsafeProjection.create(projectList, child.output)
         topK.map(r => proj(r))
       } else {
