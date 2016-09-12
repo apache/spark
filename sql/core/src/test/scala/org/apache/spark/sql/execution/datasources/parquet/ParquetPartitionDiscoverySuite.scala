@@ -693,6 +693,40 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     }
   }
 
+  test("Various inferred partition value types") {
+    val row =
+      Row(
+        Long.MaxValue,
+        4.5,
+        new java.math.BigDecimal(new BigInteger("1" * 20)),
+        java.sql.Date.valueOf("2015-05-23"),
+        java.sql.Timestamp.valueOf("1990-02-24 12:00:30"),
+        "This is a string, /[]?=:",
+        "This is not a partition column")
+
+    val partitionColumnTypes =
+      Seq(
+        LongType,
+        DoubleType,
+        DecimalType(20, 0),
+        DateType,
+        TimestampType,
+        StringType)
+
+    val partitionColumns = partitionColumnTypes.zipWithIndex.map {
+      case (t, index) => StructField(s"p_$index", t)
+    }
+
+    val schema = StructType(partitionColumns :+ StructField(s"i", StringType))
+    val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+
+    withTempPath { dir =>
+      df.write.format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
+      val fields = schema.map(f => Column(f.name))
+      checkAnswer(spark.read.load(dir.toString).select(fields: _*), row)
+    }
+  }
+
   test("SPARK-8037: Ignores files whose name starts with dot") {
     withTempPath { dir =>
       val df = (1 to 3).map(i => (i, i, i, i)).toDF("a", "b", "c", "d")

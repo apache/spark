@@ -308,7 +308,7 @@ object PartitioningUtils {
 
   /**
    * Converts a string to a [[Literal]] with automatic type inference.  Currently only supports
-   * [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType.SYSTEM_DEFAULT]], [[DateType]]
+   * [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType]], [[DateType]]
    * [[TimestampType]], and [[StringType]].
    */
   private[datasources] def inferPartitionColumnValue(
@@ -335,7 +335,7 @@ object PartitioningUtils {
         .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
         // Then falls back to date/timestamp types
         .orElse(Try(Literal(JDate.valueOf(raw))))
-        .orElse(Try(Literal(JTimestamp.valueOf(raw))))
+        .orElse(Try(Literal(JTimestamp.valueOf(unescapePathName(raw)))))
         // Then falls back to string
         .getOrElse {
           if (raw == defaultPartitionName) {
