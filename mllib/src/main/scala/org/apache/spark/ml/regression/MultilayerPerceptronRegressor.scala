@@ -95,6 +95,23 @@ private[regression] trait MultilayerPerceptronParams extends PredictorParams
   final def getSolver: String = $(solver)
 
   /**
+   * Param indicating whether to scale the labels to be between 0 and 1.
+   *
+   * @group param
+   */
+  @Since("2.0.0")
+  final val stdLabels: BooleanParam = new BooleanParam(
+    this, "stdLabels", "Whether to standardize the dataset's labels to between 0 and 1.")
+
+  /** @group getParam */
+  @Since("2.0.0")
+  def setStandardizeLabels(value: Boolean): this.type = set(stdLabels, value)
+
+  /** @group getParam */
+  @Since("2.0.0")
+  def getStandardizeLabels: Boolean = $(stdLabels)
+
+  /**
    * Set the maximum number of iterations.
    * Default is 100.
    *
@@ -135,7 +152,7 @@ private[regression] trait MultilayerPerceptronParams extends PredictorParams
   @Since("2.0.0")
   final def getInitialWeights: Vector = $(initialWeights)
 
-  setDefault(seed -> 11L, maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1),
+  setDefault(seed -> 11L, maxIter -> 100, stdLabels -> true, tol -> 1e-4, layers -> Array(1, 1),
     solver -> MultilayerPerceptronRegressor.LBFGS, stepSize -> 0.03, blockSize -> 128)
 }
 
@@ -176,6 +193,8 @@ private[regression] trait MultilayerPerceptronRegressorParams extends PredictorP
   /** @group getParam */
   @Since("2.0.0")
   final def getMax: Double = $(maximum)
+
+  setDefault(minimum -> 0.0, maximum -> 0.0)
 }
 
 /** Label to vector converter. */
@@ -196,6 +215,7 @@ private object LabelConverter {
     else {
     // When min and max are equal, cannot min-max scale due to divide by zero error. Setting scaled
     // result to zero will lead to consistent predictions, as the min will be added during decoding.
+    // Min and max will both be 0 if label scaling is turned off, and this code branch will run.
       output(0) = labeledPoint.label - min
     }
     (labeledPoint.features, Vectors.dense(output))
@@ -209,7 +229,11 @@ private object LabelConverter {
    * @return label
    */
   def decodeLabel(output: Vector, min: Double, max: Double): Double = {
-     (output(0)*(max-min)) + min
+    if (max-min != 0.0) {
+      (output(0) * (max - min)) + min
+    } else {
+      output(0)
+    }
   }
 }
 
@@ -268,11 +292,13 @@ class MultilayerPerceptronRegressor @Since("2.0.0") (
   override protected def train(dataset: Dataset[_]): MultilayerPerceptronRegressorModel = {
     val myLayers = getLayers
     val lpData: RDD[LabeledPoint] = extractLabeledPoints(dataset)
-    // Compute minimum and maximum values in the training labels for scaling.
-    val minmax = dataset
-      .agg(max("label").cast(DoubleType), min("label").cast(DoubleType)).collect()(0)
-    setMin(minmax(1).asInstanceOf[Double])
-    setMax(minmax(0).asInstanceOf[Double])
+    if (getStandardizeLabels) {
+      // Compute minimum and maximum values in the training labels for scaling.
+      val minmax = dataset
+        .agg(max("label").cast(DoubleType), min("label").cast(DoubleType)).collect()(0)
+      setMin(minmax(1).asInstanceOf[Double])
+      setMax(minmax(0).asInstanceOf[Double])
+    }
     // Encode and scale labels to prepare for training.
     val data = lpData.map(lp => LabelConverter.encodeLabeledPoint(lp, $(minimum), $(maximum)))
     // Initialize the network architecture with the specified layer count and sizes.
