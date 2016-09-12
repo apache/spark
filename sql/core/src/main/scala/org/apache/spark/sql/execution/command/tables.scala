@@ -219,7 +219,7 @@ case class LoadDataCommand(
       throw new AnalysisException(s"Target table in LOAD DATA does not exist: $table")
     }
     val targetTable = catalog.getTableMetadataOption(table).getOrElse {
-      throw new AnalysisException(s"Target table in LOAD DATA cannot be temporary: $table")
+      throw new AnalysisException(s"Operation not allowed: LOAD DATA on temporary tables: $table")
     }
     if (targetTable.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $table")
@@ -644,7 +644,7 @@ case class ShowPartitionsCommand(
 
     if (catalog.isTemporaryTable(table)) {
       throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a temporary table: ${table.unquotedString}")
+        s"Operation not allowed: SHOW PARTITIONS on temporary tables: $table")
     }
 
     val tab = catalog.getTableMetadata(table)
@@ -702,7 +702,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
     if (catalog.isTemporaryTable(table)) {
       throw new AnalysisException(
-        s"SHOW CREATE TABLE cannot be applied to temporary table")
+        s"Operation not allowed: SHOW CREATE TABLE on temporary tables: $table")
     }
 
     if (!catalog.tableExists(table)) {

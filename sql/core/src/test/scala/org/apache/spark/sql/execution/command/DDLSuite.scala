@@ -729,6 +729,100 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("Issue exceptions for ALTER VIEW on the temporary view") {
+    val sourceViewName = "testView"
+    withTempView(sourceViewName) {
+      createTempView(sourceViewName)
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER VIEW $sourceViewName SET TBLPROPERTIES ('p' = 'an')")
+      }
+      intercept[NoSuchTableException] {
+        sql(s"ALTER VIEW $sourceViewName UNSET TBLPROPERTIES ('p')")
+      }
+    }
+  }
+
+  test("Issue exceptions for ALTER TABLE on the temporary view") {
+    val sourceViewName = "testView"
+    withTempView(sourceViewName) {
+      createTempView(sourceViewName)
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $sourceViewName SET SERDE 'whatever'")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $sourceViewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $sourceViewName SET SERDEPROPERTIES ('p' = 'an')")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $sourceViewName SET LOCATION '/path/to/your/lovely/heart'")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $sourceViewName PARTITION (a='4') SET LOCATION '/path/to/home'")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $sourceViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $sourceViewName DROP PARTITION (a='4', b='8')")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $sourceViewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
+      }
+
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $sourceViewName RECOVER PARTITIONS")
+      }.getMessage
+      assert(e.contains(
+        "Operation not allowed: ALTER TABLE RECOVER PARTITIONS on temporary tables: `testView`"))
+    }
+  }
+
+  test("Issue exceptions for other table DDL on the temporary view") {
+    val sourceViewName = "testView"
+    withTempView(sourceViewName) {
+      createTempView(sourceViewName)
+
+      var e = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $sourceViewName")
+      }.getMessage
+      assert(e.contains("Operation not allowed: TRUNCATE TABLE on temporary tables: `testView`"))
+
+      e = intercept[AnalysisException] {
+        sql(s"LOAD DATA LOCAL INPATH '/path/to/home' INTO TABLE $sourceViewName")
+      }.getMessage
+      assert(e.contains("Operation not allowed: LOAD DATA on temporary tables: `testView`"))
+
+      e = intercept[AnalysisException] {
+        sql(s"SHOW CREATE TABLE $sourceViewName")
+      }.getMessage
+      assert(e.contains("Operation not allowed: SHOW CREATE TABLE on temporary tables: `testView`"))
+
+      e = intercept[AnalysisException] {
+        sql(s"SHOW PARTITIONS $sourceViewName")
+      }.getMessage
+      assert(e.contains("Operation not allowed: SHOW PARTITIONS on temporary tables: `testView`"))
+    }
+  }
+
+  private def createTempView(viewName: String): Unit = {
+    sql(
+      s"""
+         |CREATE TEMPORARY VIEW $viewName
+         |AS SELECT 1, 2, 3
+       """.stripMargin)
+  }
+
   test("alter table: set location") {
     testSetLocation(isDatasourceTable = false)
   }
@@ -911,7 +1005,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     withTempView("show1a", "show2b") {
       sql(
         """
-          |CREATE TEMPORARY TABLE show1a
+          |CREATE TEMPORARY VIEW show1a
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
           |  From '1',
@@ -922,7 +1016,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         """.stripMargin)
       sql(
         """
-          |CREATE TEMPORARY TABLE show2b
+          |CREATE TEMPORARY VIEW show2b
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
           |  From '1',
@@ -976,11 +1070,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       Nil)
   }
 
-  test("drop table - temporary table") {
+  test("drop table - temporary view") {
     val catalog = spark.sessionState.catalog
     sql(
       """
-        |CREATE TEMPORARY TABLE tab1
+        |CREATE TEMPORARY VIEW tab1
         |USING org.apache.spark.sql.sources.DDLScanSource
         |OPTIONS (
         |  From '1',
@@ -1603,7 +1697,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("truncate table - external table, temporary table, view (not allowed)") {
+  test("truncate table - external table, temporary view, view (not allowed)") {
     import testImplicits._
     val path = Utils.createTempDir().getAbsolutePath
     (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
