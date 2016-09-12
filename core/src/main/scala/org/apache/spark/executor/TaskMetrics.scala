@@ -121,6 +121,8 @@ class TaskMetrics private[spark] () extends Serializable {
   private[spark] def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
   private[spark] def incUpdatedBlockStatuses(v: (BlockId, BlockStatus)): Unit =
     _updatedBlockStatuses.add(v)
+  private[spark] def setUpdatedBlockStatuses(v: java.util.List[(BlockId, BlockStatus)]): Unit =
+    _updatedBlockStatuses.setValue(v)
   private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit =
     _updatedBlockStatuses.setValue(v.asJava)
 
@@ -275,7 +277,7 @@ private[spark] object TaskMetrics extends Logging {
       val name = info.name.get
       val value = info.update.get
       if (name == UPDATED_BLOCK_STATUSES) {
-        tm.setUpdatedBlockStatuses(value.asInstanceOf[Seq[(BlockId, BlockStatus)]])
+        tm.setUpdatedBlockStatuses(value.asInstanceOf[java.util.List[(BlockId, BlockStatus)]])
       } else {
         tm.nameToAccums.get(name).foreach(
           _.asInstanceOf[LongAccumulator].setValue(value.asInstanceOf[Long])
