@@ -604,7 +604,9 @@ class LogisticRegressionSuite
     val coefficientsR2 = Vectors.dense(0.0, 0.0, -0.1665453, 0.0)
 
     assert(model2.intercept ~== interceptR2 relTol 1E-2)
-    assert(model2.coefficients ~= coefficientsR2 absTol 1E-3)
+    assert(model2.coefficients ~== coefficientsR2 absTol 1E-3)
+    // TODO: move this to a standalone test of compression after SPARK-17471
+    assert(model2.coefficients.isInstanceOf[SparseVector])
   }
 
   test("binary logistic regression without intercept with L1 regularization") {

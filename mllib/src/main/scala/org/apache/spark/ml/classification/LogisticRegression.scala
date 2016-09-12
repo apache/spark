@@ -299,7 +299,7 @@ class LogisticRegression @Since("1.2.0") (
    * If the dimensions of features or the number of partitions are large,
    * this param could be adjusted to a larger size.
    * Default is 2.
- *
+   *
    * @group expertSetParam
    */
   @Since("2.1.0")
@@ -361,14 +361,13 @@ class LogisticRegression @Since("1.2.0") (
       case None => histogram.length
     }
 
-    val isBinaryClassification = numClasses == 1 || numClasses == 2
     val isMultinomial = $(family) match {
       case "binomial" =>
-        require(isBinaryClassification, s"Binomial family only supports 1 or 2 " +
+        require(numClasses == 1 || numClasses == 2, s"Binomial family only supports 1 or 2 " +
         s"outcome classes but found $numClasses.")
         false
       case "multinomial" => true
-      case "auto" => !isBinaryClassification
+      case "auto" => numClasses > 2
       case other => throw new IllegalArgumentException(s"Unsupported family: $other")
     }
     val numCoefficientSets = if (isMultinomial) numClasses else 1
@@ -396,6 +395,7 @@ class LogisticRegression @Since("1.2.0") (
         logWarning(s"All labels are the same value and fitIntercept=true, so the coefficients " +
           s"will be zeros. Training is not needed.")
         val constantLabelIndex = Vectors.dense(histogram).argmax
+        // TODO: use `compressed` after SPARK-17471
         val coefMatrix = if (numFeatures < numCoefficientSets) {
           new SparseMatrix(numCoefficientSets, numFeatures,
             Array.fill(numFeatures + 1)(0), Array.empty[Int], Array.empty[Double])
@@ -587,21 +587,34 @@ class LogisticRegression @Since("1.2.0") (
             0.0
           }
         }
-        val coefficientMatrix =
-          new DenseMatrix(numCoefficientSets, numFeatures, coefficientArray, isTransposed = true)
 
         if ($(regParam) == 0.0 && isMultinomial) {
           /*
-            When no regularization is applied, the coefficients lack identifiability because
-            we do not use a pivot class. We can add any constant value to the coefficients and
-            get the same likelihood. So here, we choose the mean centered coefficients for
+            When no regularization is applied, the multinomial coefficients lack identifiability
+            because we do not use a pivot class. We can add any constant value to the coefficients
+            and get the same likelihood. So here, we choose the mean centered coefficients for
             reproducibility. This method follows the approach in glmnet, described here:
 
             Friedman, et al. "Regularization Paths for Generalized Linear Models via
               Coordinate Descent," https://core.ac.uk/download/files/153/6287975.pdf
            */
-          val coefficientMean = coefficientMatrix.values.sum / coefficientMatrix.values.length
-          coefficientMatrix.update(_ - coefficientMean)
+          val coefficientMean = coefficientArray.sum / coefficientArray.length
+          coefficientArray.indices.foreach { i => coefficientArray(i) -= coefficientMean}
+        }
+
+        val denseCoefficientMatrix =
+          new DenseMatrix(numCoefficientSets, numFeatures, coefficientArray, isTransposed = true)
+        // TODO: use `denseCoefficientMatrix.compressed` after SPARK-17471
+        val compressedCoefficientMatrix = if (isMultinomial) {
+          denseCoefficientMatrix
+        } else {
+          val compressedVector = Vectors.dense(coefficientArray).compressed
+          compressedVector match {
+            case dv: DenseVector => denseCoefficientMatrix
+            case sv: SparseVector =>
+              new SparseMatrix(1, numFeatures, Array(0, sv.indices.length), sv.indices, sv.values,
+                isTransposed = true)
+          }
         }
 
         val interceptsArray: Array[Double] = if ($(fitIntercept)) {
@@ -612,10 +625,8 @@ class LogisticRegression @Since("1.2.0") (
         } else {
           Array[Double]()
         }
-        /*
-          The intercepts are never regularized, so we always center the mean.
-         */
         val interceptVector = if (interceptsArray.nonEmpty && isMultinomial) {
+          // The intercepts are never regularized, so we always center the mean.
           val interceptMean = interceptsArray.sum / numClasses
           interceptsArray.indices.foreach { i => interceptsArray(i) -= interceptMean }
           Vectors.dense(interceptsArray)
@@ -624,7 +635,7 @@ class LogisticRegression @Since("1.2.0") (
         } else {
           Vectors.sparse(numCoefficientSets, Seq())
         }
-        (coefficientMatrix, interceptVector, arrayBuilder.result())
+        (compressedCoefficientMatrix, interceptVector.compressed, arrayBuilder.result())
       }
     }
 
@@ -687,8 +698,12 @@ class LogisticRegressionModel private[spark] (
   // convert to appropriate vector representation without replicating data
   private lazy val _coefficients: Vector = coefficientMatrix match {
     case dm: DenseMatrix => Vectors.dense(dm.values)
-    // TODO: better way to flatten sparse matrix?
-    case sm: SparseMatrix => Vectors.fromBreeze(sm.asBreeze.flatten(View.Require))
+    case sm: SparseMatrix =>
+      if (coefficientMatrix.isTransposed) {
+        Vectors.sparse(coefficientMatrix.numCols, sm.rowIndices, sm.values)
+      } else {
+        throw new IllegalStateException("LogisticRegressionModel coefficients should be row major.")
+      }
   }
 
   @Since("1.3.0")
