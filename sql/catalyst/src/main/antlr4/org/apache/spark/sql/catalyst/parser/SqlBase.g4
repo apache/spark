@@ -629,7 +629,6 @@ quotedIdentifier
 
 number
     : MINUS? DECIMAL_VALUE            #decimalLiteral
-    | MINUS? SCIENTIFIC_DECIMAL_VALUE #scientificDecimalLiteral
     | MINUS? INTEGER_VALUE            #integerLiteral
     | MINUS? BIGINT_LITERAL           #bigIntLiteral
     | MINUS? SMALLINT_LITERAL         #smallIntLiteral
@@ -918,22 +917,17 @@ INTEGER_VALUE
 
 DECIMAL_VALUE
     : DIGIT+ '.' DIGIT*
-    | '.' DIGIT+
-    ;
-
-SCIENTIFIC_DECIMAL_VALUE
-    : DIGIT+ ('.' DIGIT*)? EXPONENT
-    | '.' DIGIT+ EXPONENT
+    | DIGIT+ ('.' DIGIT*)? EXPONENT
+    | '.' DIGIT+ EXPONENT?
     ;
 
 DOUBLE_LITERAL
-    :
-    (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'D'
+    : (INTEGER_VALUE | DECIMAL_VALUE) 'D'
     ;
 
 BIGDECIMAL_LITERAL
     :
-    (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'BD'
+    (INTEGER_VALUE | DECIMAL_VALUE) 'BD'
     ;
 
 IDENTIFIER

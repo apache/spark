@@ -38,12 +38,14 @@ import org.apache.spark.util.Utils
 case class HashAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
+    isGrouped: Boolean,
     aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
+  assert(isGrouped || groupingExpressions.isEmpty)
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -95,7 +97,7 @@ case class HashAggregateExec(
     child.execute().mapPartitions { iter =>
 
       val hasInput = iter.hasNext
-      if (!hasInput && groupingExpressions.nonEmpty) {
+      if (!hasInput && isGrouped) {
         // This is a grouped aggregate and the input iterator is empty,
         // so return an empty iterator.
         Iterator.empty
@@ -115,7 +117,7 @@ case class HashAggregateExec(
             numOutputRows,
             peakMemory,
             spillSize)
-        if (!hasInput && groupingExpressions.isEmpty) {
+        if (!hasInput && !isGrouped) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
         } else {
@@ -140,7 +142,7 @@ case class HashAggregateExec(
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
-    if (groupingExpressions.isEmpty) {
+    if (!isGrouped) {
       doProduceWithoutKeys(ctx)
     } else {
       doProduceWithKeys(ctx)
@@ -148,7 +150,7 @@ case class HashAggregateExec(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    if (groupingExpressions.isEmpty) {
+    if (!isGrouped) {
       doConsumeWithoutKeys(ctx, input)
     } else {
       doConsumeWithKeys(ctx, input)
@@ -484,7 +486,8 @@ case class HashAggregateExec(
     val isSupported =
       (groupingKeySchema ++ bufferSchema).forall(f => ctx.isPrimitiveType(f.dataType) ||
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType]) &&
-        bufferSchema.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
+        bufferSchema.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge) &&
+        groupingExpressions.nonEmpty
 
     // For vectorized hash map, We do not support byte array based decimal type for aggregate values
     // as ColumnVector.putDecimal for high-precision decimals doesn't currently support in-place
@@ -495,7 +498,7 @@ case class HashAggregateExec(
     val isNotByteArrayDecimalType = bufferSchema.map(_.dataType).filter(_.isInstanceOf[DecimalType])
       .forall(!DecimalType.isByteArrayDecimalType(_))
 
-    isSupported  && isNotByteArrayDecimalType
+    isSupported && isNotByteArrayDecimalType
   }
 
   private def enableTwoLevelHashMap(ctx: CodegenContext) = {

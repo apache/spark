@@ -126,7 +126,7 @@ class SQLBuilder private (
     case p: Project =>
       projectToSQL(p, isDistinct = false)
 
-    case a @ Aggregate(_, _, e @ Expand(_, _, p: Project)) if isGroupingSet(a, e, p) =>
+    case a @ Aggregate(_, _, e @ Expand(_, _, p: Project), _) if isGroupingSet(a, e, p) =>
       groupingSetToSQL(a, e, p)
 
     case p: Aggregate =>

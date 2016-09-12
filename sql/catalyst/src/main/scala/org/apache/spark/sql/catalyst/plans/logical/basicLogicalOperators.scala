@@ -472,10 +472,20 @@ case class Range(
   }
 }
 
+object Aggregate {
+  def apply(
+      groupingExpressions: Seq[Expression],
+      aggregateExpressions: Seq[NamedExpression],
+      child: LogicalPlan): Aggregate = {
+    Aggregate(groupingExpressions, aggregateExpressions, child, groupingExpressions.nonEmpty)
+  }
+}
+
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
-    child: LogicalPlan)
+    child: LogicalPlan,
+    isGrouped: Boolean)
   extends UnaryNode {
 
   override lazy val resolved: Boolean = {
@@ -484,7 +494,10 @@ case class Aggregate(
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
+    !expressions.exists(!_.resolved) &&
+      childrenResolved &&
+      !hasWindowExpressions &&
+      (isGrouped || groupingExpressions.isEmpty)
   }
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)

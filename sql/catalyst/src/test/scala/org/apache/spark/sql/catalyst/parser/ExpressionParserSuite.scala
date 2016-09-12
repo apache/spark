@@ -348,6 +348,10 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("literals") {
+    def testDecimal(value: String): Unit = {
+      assertEqual(value, Literal(BigDecimal(value).underlying))
+    }
+
     // NULL
     assertEqual("null", Literal(null))
 
@@ -358,20 +362,18 @@ class ExpressionParserSuite extends PlanTest {
     // Integral should have the narrowest possible type
     assertEqual("787324", Literal(787324))
     assertEqual("7873247234798249234", Literal(7873247234798249234L))
-    assertEqual("78732472347982492793712334",
-      Literal(BigDecimal("78732472347982492793712334").underlying()))
+    testDecimal("78732472347982492793712334")
 
     // Decimal
-    assertEqual("7873247234798249279371.2334",
-      Literal(BigDecimal("7873247234798249279371.2334").underlying()))
+    testDecimal("7873247234798249279371.2334")
 
     // Scientific Decimal
-    assertEqual("9.0e1", 90d)
-    assertEqual(".9e+2", 90d)
-    assertEqual("0.9e+2", 90d)
-    assertEqual("900e-1", 90d)
-    assertEqual("900.0E-1", 90d)
-    assertEqual("9.e+1", 90d)
+    testDecimal("9.0e1")
+    testDecimal(".9e+2")
+    testDecimal("0.9e+2")
+    testDecimal("900e-1")
+    testDecimal("900.0E-1")
+    testDecimal("9.e+1")
     intercept(".e3")
 
     // Tiny Int Literal
@@ -391,8 +393,6 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("10.0D", Literal(10.0D))
     intercept("-1.8E308D", s"does not fit in range")
     intercept("1.8E308D", s"does not fit in range")
-    // TODO we need to figure out if we should throw an exception here!
-    assertEqual("1E309", Literal(Double.PositiveInfinity))
 
     // BigDecimal Literal
     assertEqual("90912830918230182310293801923652346786BD",
