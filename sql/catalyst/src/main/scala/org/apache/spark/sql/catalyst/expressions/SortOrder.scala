@@ -37,7 +37,6 @@ case object Ascending extends SortDirection {
   override def defaultNullOrdering: NullOrdering = NullsFirst
 }
 
-// default null order is last for desc
 case object Descending extends SortDirection {
   override def sql: String = "DESC"
   override def defaultNullOrdering: NullOrdering = NullsLast
@@ -96,7 +95,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
   val nullValue = child.child.dataType match {
     case BooleanType | DateType | TimestampType | _: IntegralType =>
       if (nullAsSmallest) {
-          Long.MinValue
+        Long.MinValue
       } else {
         Long.MaxValue
       }
@@ -120,14 +119,10 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       }
   }
 
-  def nullAsSmallest: Boolean = {
-    if ((child.isAscending && child.nullOrdering == NullsFirst) ||
-      (!child.isAscending && child.nullOrdering == NullsLast)) {
-      true
-    } else {
-      false
-    }
-  }
+  private def nullAsSmallest: Boolean =
+    ((child.isAscending && child.nullOrdering == NullsFirst) ||
+      (!child.isAscending && child.nullOrdering == NullsLast))
+
 
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 
