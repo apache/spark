@@ -23,6 +23,10 @@ import com.google.common.primitives.Ints;
  * A central location that tracks all the settings we expose to users.
  */
 public class TransportConf {
+  
+  static {
+    System.setProperty("io.netty.recycler.maxCapacity", "0");
+  }
 
   private final String SPARK_NETWORK_IO_MODE_KEY;
   private final String SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY;
