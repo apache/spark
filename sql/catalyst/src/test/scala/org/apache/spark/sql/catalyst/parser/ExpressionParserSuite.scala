@@ -331,16 +331,17 @@ class ExpressionParserSuite extends PlanTest {
   test("type constructors") {
     // Dates.
     assertEqual("dAte '2016-03-11'", Literal(Date.valueOf("2016-03-11")))
-    intercept[IllegalArgumentException] {
-      parseExpression("DAtE 'mar 11 2016'")
-    }
+    intercept("DAtE 'mar 11 2016'")
 
     // Timestamps.
     assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
-    intercept[IllegalArgumentException] {
-      parseExpression("timestamP '2016-33-11 20:54:00.000'")
-    }
+    intercept("timestamP '2016-33-11 20:54:00.000'")
+
+    // Binary.
+    assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
+    assertEqual("x'A10C'", Literal(Array(0xa1, 0x0c).map(_.toByte)))
+    intercept("x'A1OC'")
 
     // Unsupported datatype.
     intercept("GEO '(10,-6)'", "Literals of type 'GEO' are currently not supported.")
@@ -392,6 +393,13 @@ class ExpressionParserSuite extends PlanTest {
     intercept("1.8E308D", s"does not fit in range")
     // TODO we need to figure out if we should throw an exception here!
     assertEqual("1E309", Literal(Double.PositiveInfinity))
+
+    // BigDecimal Literal
+    assertEqual("90912830918230182310293801923652346786BD",
+      Literal(BigDecimal("90912830918230182310293801923652346786").underlying()))
+    assertEqual("123.0E-28BD", Literal(BigDecimal("123.0E-28").underlying()))
+    assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
+    intercept("1.20E-38BD", "DecimalType can only support precision up to 38")
   }
 
   test("strings") {

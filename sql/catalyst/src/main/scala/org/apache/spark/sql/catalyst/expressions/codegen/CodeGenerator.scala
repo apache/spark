@@ -596,12 +596,12 @@ class CodegenContext {
       // also not be too small, or it will have many function calls (for wide table), see the
       // results in BenchmarkWideTable.
       if (blockBuilder.length > 1024) {
-        blocks.append(blockBuilder.toString())
+        blocks += blockBuilder.toString()
         blockBuilder.clear()
       }
       blockBuilder.append(code)
     }
-    blocks.append(blockBuilder.toString())
+    blocks += blockBuilder.toString()
 
     if (blocks.length == 1) {
       // inline execution if only one block
@@ -662,10 +662,6 @@ class CodegenContext {
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
     val codes = commonExprs.map { e =>
       val expr = e.head
-      val fnName = freshName("evalExpr")
-      val isNull = s"${fnName}IsNull"
-      val value = s"${fnName}Value"
-
       // Generate the code for this expression tree.
       val code = expr.genCode(this)
       val state = SubExprEliminationState(code.isNull, code.value)

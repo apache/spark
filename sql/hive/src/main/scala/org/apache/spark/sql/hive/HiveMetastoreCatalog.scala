@@ -81,8 +81,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             options = table.storage.properties)
 
         LogicalRelation(
-          dataSource.resolveRelation(checkPathExist = true),
-          metastoreTableIdentifier = Some(TableIdentifier(in.name, Some(in.database))))
+          dataSource.resolveRelation(),
+          catalogTable = Some(table))
       }
     }
 
@@ -249,18 +249,14 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         }
 
         val relation = HadoopFsRelation(
-          sparkSession = sparkSession,
           location = fileCatalog,
           partitionSchema = partitionSchema,
           dataSchema = inferredSchema,
           bucketSpec = bucketSpec,
           fileFormat = defaultSource,
-          options = options)
+          options = options)(sparkSession = sparkSession)
 
-        val created = LogicalRelation(
-          relation,
-          metastoreTableIdentifier =
-            Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
+        val created = LogicalRelation(relation, catalogTable = Some(metastoreRelation.catalogTable))
         cachedDataSourceTables.put(tableIdentifier, created)
         created
       }
@@ -286,8 +282,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
               bucketSpec = bucketSpec,
               options = options,
               className = fileType).resolveRelation(),
-              metastoreTableIdentifier =
-                Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
+              catalogTable = Some(metastoreRelation.catalogTable))
 
 
         cachedDataSourceTables.put(tableIdentifier, created)
@@ -374,41 +369,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           val orcRelation = convertToOrcRelation(relation)
           SubqueryAlias(relation.tableName, orcRelation, None)
       }
-    }
-  }
-
-  /**
-   * Creates any tables required for query execution.
-   * For example, because of a CREATE TABLE X AS statement.
-   */
-  object CreateTables extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      // Wait until children are resolved.
-      case p: LogicalPlan if !p.childrenResolved => p
-
-      case CreateTable(tableDesc, mode, Some(query)) if tableDesc.provider.get == "hive" =>
-        val newTableDesc = if (tableDesc.storage.serde.isEmpty) {
-          // add default serde
-          tableDesc.withNewStorage(
-            serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-        } else {
-          tableDesc
-        }
-
-        val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableDesc)
-
-        // Currently we will never hit this branch, as SQL string API can only use `Ignore` or
-        // `ErrorIfExists` mode, and `DataFrameWriter.saveAsTable` doesn't support hive serde
-        // tables yet.
-        if (mode == SaveMode.Append || mode == SaveMode.Overwrite) {
-          throw new AnalysisException("" +
-            "CTAS for hive serde tables does not support append or overwrite semantics.")
-        }
-
-        execution.CreateHiveTableAsSelectCommand(
-          newTableDesc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
-          query,
-          mode == SaveMode.Ignore)
     }
   }
 }

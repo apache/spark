@@ -49,9 +49,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    sql("DROP TABLE IF EXISTS parquet_t0")
-    sql("DROP TABLE IF EXISTS parquet_t1")
-    sql("DROP TABLE IF EXISTS parquet_t2")
+    (0 to 3).foreach { i =>
+      sql(s"DROP TABLE IF EXISTS parquet_t$i")
+    }
     sql("DROP TABLE IF EXISTS t0")
 
     spark.range(10).write.saveAsTable("parquet_t0")
@@ -87,10 +87,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   override protected def afterAll(): Unit = {
     try {
-      sql("DROP TABLE IF EXISTS parquet_t0")
-      sql("DROP TABLE IF EXISTS parquet_t1")
-      sql("DROP TABLE IF EXISTS parquet_t2")
-      sql("DROP TABLE IF EXISTS parquet_t3")
+      (0 to 3).foreach { i =>
+        sql(s"DROP TABLE IF EXISTS parquet_t$i")
+      }
       sql("DROP TABLE IF EXISTS t0")
     } finally {
       super.afterAll()
@@ -642,7 +641,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkColumnNames(
       """SELECT x.a, y.a, x.b, y.b
         |FROM (SELECT 1 AS a, 2 AS b) x
-        |INNER JOIN (SELECT 1 AS a, 2 AS b) y
+        |CROSS JOIN (SELECT 1 AS a, 2 AS b) y
         |ON x.a = y.a
       """.stripMargin,
       "a", "a", "b", "b"
@@ -810,7 +809,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSQL(
       """
         |SELECT COUNT(a.value), b.KEY, a.KEY
-        |FROM parquet_t1 a, parquet_t1 b
+        |FROM parquet_t1 a CROSS JOIN parquet_t1 b
         |GROUP BY a.KEY, b.KEY
         |HAVING MAX(a.KEY) > 0
       """.stripMargin,

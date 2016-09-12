@@ -45,7 +45,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   override lazy val catalog = {
     new HiveSessionCatalog(
       sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
-      metadataHive,
       sparkSession,
       functionResourceLoader,
       functionRegistry,
@@ -61,7 +60,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
         catalog.OrcConversions ::
-        catalog.CreateTables ::
         PreprocessDDL(conf) ::
         PreprocessTableInsertion(conf) ::
         DataSourceAnalysis(conf) ::

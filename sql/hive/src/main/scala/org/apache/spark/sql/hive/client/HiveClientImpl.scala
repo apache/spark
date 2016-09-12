@@ -347,6 +347,10 @@ private[hive] class HiveClientImpl(
     client.getDatabasesByPattern(pattern).asScala
   }
 
+  override def tableExists(dbName: String, tableName: String): Boolean = withHiveState {
+    Option(client.getTable(dbName, tableName, false /* do not throw exception */)).nonEmpty
+  }
+
   override def getTableOption(
       dbName: String,
       tableName: String): Option[CatalogTable] = withHiveState {
@@ -400,7 +404,9 @@ private[hive] class HiveClientImpl(
           properties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)
             .map(_.asScala.toMap).orNull
         ),
-        properties = properties.filter(kv => kv._1 != "comment"),
+        // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
+        // in the function toHiveTable.
+        properties = properties.filter(kv => kv._1 != "comment" && kv._1 != "EXTERNAL"),
         comment = properties.get("comment"),
         viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
@@ -609,21 +615,22 @@ private[hive] class HiveClientImpl(
 
   def loadPartition(
       loadPath: String,
+      dbName: String,
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String],
       replace: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit = withHiveState {
+      inheritTableSpecs: Boolean): Unit = withHiveState {
+    val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
     shim.loadPartition(
       client,
       new Path(loadPath), // TODO: Use URI
-      tableName,
+      s"$dbName.$tableName",
       partSpec,
       replace,
       holdDDLTime,
       inheritTableSpecs,
-      isSkewedStoreAsSubdir)
+      isSkewedStoreAsSubdir = hiveTable.isStoredAsSubDirectories)
   }
 
   def loadTable(
@@ -641,21 +648,22 @@ private[hive] class HiveClientImpl(
 
   def loadDynamicPartitions(
       loadPath: String,
+      dbName: String,
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String],
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
-      listBucketingEnabled: Boolean): Unit = withHiveState {
+      holdDDLTime: Boolean): Unit = withHiveState {
+    val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
     shim.loadDynamicPartitions(
       client,
       new Path(loadPath),
-      tableName,
+      s"$dbName.$tableName",
       partSpec,
       replace,
       numDP,
       holdDDLTime,
-      listBucketingEnabled)
+      listBucketingEnabled = hiveTable.isStoredAsSubDirectories)
   }
 
   override def createFunction(db: String, func: CatalogFunction): Unit = withHiveState {
@@ -829,6 +837,8 @@ private[hive] class HiveClientImpl(
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
         compressed = apiPartition.getSd.isCompressed,
         properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
-          .map(_.asScala.toMap).orNull))
+          .map(_.asScala.toMap).orNull),
+        parameters =
+          if (hp.getParameters() != null) hp.getParameters().asScala.toMap else Map.empty)
   }
 }

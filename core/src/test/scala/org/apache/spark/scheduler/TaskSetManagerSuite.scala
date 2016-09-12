@@ -46,7 +46,7 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
 
   override def executorAdded(execId: String, host: String) {}
 
-  override def executorLost(execId: String) {}
+  override def executorLost(execId: String, reason: ExecutorLossReason) {}
 
   override def taskSetFailed(
       taskSet: TaskSet,

@@ -559,6 +559,29 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.io.compression.codec</code>.
   </td>
 </tr>
+<tr>
+  <td><code>spark.io.encryption.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enable IO encryption. Only supported in YARN mode.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.encryption.keySizeBits</code></td>
+  <td>128</td>
+  <td>
+    IO encryption key size in bits. Supported values are 128, 192 and 256.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.encryption.keygen.algorithm</code></td>
+  <td>HmacSHA1</td>
+  <td>
+    The algorithm to use when generating the IO encryption key. The supported algorithms are
+    described in the KeyGenerator section of the Java Cryptography Architecture Standard Algorithm
+    Name Documentation.
+  </td>
+</tr>
 </table>
 
 #### Spark UI
@@ -632,6 +655,20 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many tasks the Spark UI and status APIs remember before garbage
     collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.reverseProxy</code></td>
+  <td>false</td>
+  <td>
+    Enable running Spark Master as reverse proxy for worker and application UIs. In this mode, Spark master will reverse proxy the worker and application UIs to enable access without requiring direct access to their hosts. Use it with caution, as worker and application UI will not be accessible directly, you will only be able to access them through spark master/proxy public URL. This setting affects all the workers and application UIs running in the cluster and must be set on all the workers, drivers and masters.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.reverseProxyUrl</code></td>
+  <td></td>
+  <td>
+    This is the URL where your proxy is running. This URL is for proxy which is running in front of Spark Master. This is useful when running proxy for authentication e.g. OAuth proxy. Make sure this is a complete URL including scheme (http/https) and port to reach your proxy.
   </td>
 </tr>
 <tr>
@@ -1763,6 +1800,14 @@ showDF(properties, numRows = 200, truncate = FALSE)
     Executable for executing R scripts in client modes for driver. Ignored in cluster modes.
   </td>
 </tr>
+<tr>
+  <td><code>spark.r.shell.command</code></td>
+  <td>R</td>
+  <td>
+    Executable for executing sparkR shell in client modes for driver. Ignored in cluster modes. It is the same as environment variable <code>SPARKR_DRIVER_R</code>, but take precedence over it.
+    <code>spark.r.shell.command</code> is used for sparkR shell while <code>spark.r.driver.command</code> is used for running R script.
+  </td>
+</tr>
 </table>
 
 #### Deploy
@@ -1829,7 +1874,8 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>SPARKR_DRIVER_R</code></td>
-    <td>R binary executable to use for SparkR shell (default is <code>R</code>).</td>
+    <td>R binary executable to use for SparkR shell (default is <code>R</code>).
+    Property <code>spark.r.shell.command</code> take precedence if it is set</td>
   </tr>
   <tr>
     <td><code>SPARK_LOCAL_IP</code></td>
