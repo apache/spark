@@ -332,8 +332,8 @@ class KMeans @Since("1.5.0") (
     value match {
       case m: KMeansModel => setInitialModel(m)
       case other =>
-        logWarning(s"KMeansModel required but ${other.getClass.getSimpleName} found.")
-        this
+        throw new IllegalArgumentException(
+          s"KMeansModel required but ${other.getClass.getSimpleName} found.")
     }
   }
 

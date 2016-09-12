@@ -160,16 +160,27 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
   test("Initialize using wrong model") {
     val kmeans = new KMeans().setK(k).setSeed(1).setMaxIter(10)
     val wrongTypeModel = new KMeansSuite.MockModel()
-    assert(!kmeans.setInitialModel(wrongTypeModel).isSet(kmeans.initialModel))
 
-    val wrongKModel = KMeansSuite.generateKMeansModel(3, k + 1)
-    intercept[IllegalArgumentException] {
-      kmeans.setInitialModel(wrongKModel).fit(dataset)
+    withClue("The type of an initial model should only be a KMeansModel.") {
+      intercept[IllegalArgumentException] {
+        kmeans.setInitialModel(wrongTypeModel).fit(dataset)
+      }
     }
 
-    val wrongDimModel = KMeansSuite.generateKMeansModel(4, k)
-    intercept[IllegalArgumentException] {
-      kmeans.setInitialModel(wrongDimModel).fit(dataset)
+    val wrongKModel = KMeansSuite.generateRandomKMeansModel(3, k + 1)
+    withClue("The number of clusters set in the given model should be the same with the one set" +
+      " in the KMeans estimator.") {
+      intercept[IllegalArgumentException] {
+        kmeans.setInitialModel(wrongKModel).fit(dataset)
+      }
+    }
+
+    val wrongDimModel = KMeansSuite.generateRandomKMeansModel(4, k)
+    withClue("The dimension of points in the model should be the same with the dimension of the" +
+      " training data.") {
+      intercept[IllegalArgumentException] {
+        kmeans.setInitialModel(wrongDimModel).fit(dataset)
+      }
     }
   }
 }
@@ -194,7 +205,7 @@ object KMeansSuite {
     spark.createDataFrame(rdd)
   }
 
-  def generateKMeansModel(dim: Int, k: Int, seed: Int = 42): KMeansModel = {
+  def generateRandomKMeansModel(dim: Int, k: Int, seed: Int = 42): KMeansModel = {
     val rng = new Random(seed)
     val clusterCenters = (1 to k)
       .map(i => MLlibVectors.dense(Array.fill(dim)(rng.nextDouble)))
@@ -211,6 +222,6 @@ object KMeansSuite {
     "k" -> 3,
     "maxIter" -> 2,
     "tol" -> 0.01,
-    "initialModel" -> generateKMeansModel(3, 3)
+    "initialModel" -> generateRandomKMeansModel(3, 3)
   )
 }

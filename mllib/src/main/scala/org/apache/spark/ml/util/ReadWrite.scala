@@ -329,10 +329,10 @@ private[ml] object DefaultParamsWriter {
   }
 
   def saveInitialModel[T <: HasInitialModel[_ <: MLWritable]](instance: T, path: String): Unit = {
-    if (instance.isDefined(instance.getParam("initialModel"))) {
+    if (instance.isDefined(instance.initialModel)) {
       val initialModelPath = new Path(path, "initialModel").toString
-      val initialModel = instance.getOrDefault(instance.getParam("initialModel"))
-      initialModel.asInstanceOf[MLWritable].save(initialModelPath)
+      val initialModel = instance.getOrDefault(instance.initialModel)
+      initialModel.save(initialModelPath)
     }
   }
 }
@@ -472,8 +472,8 @@ private[ml] object DefaultParamsReader {
       val hasInitialModel = (metadata.metadata \ "initialModel").extract[Boolean]
       if (hasInitialModel) {
         val initialModelPath = new Path(path, "initialModel").toString
-        val initialModel = loadParamsInstance[Model[M]](initialModelPath, sc)
-        instance.set(instance.getParam("initialModel"), initialModel)
+        val initialModel = loadParamsInstance[M](initialModelPath, sc)
+        instance.set(instance.initialModel, initialModel)
       }
     }
   }
