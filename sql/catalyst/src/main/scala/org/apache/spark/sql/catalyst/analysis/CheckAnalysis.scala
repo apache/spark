@@ -195,7 +195,7 @@ trait CheckAnalysis extends PredicateHelper {
 
             checkValidJoinConditionExprs(condition)
 
-          case Aggregate(groupingExprs, aggregateExprs, child) =>
+          case Aggregate(groupingExprs, aggregateExprs, child, _) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case aggExpr: AggregateExpression =>
                 aggExpr.aggregateFunction.children.foreach { child =>

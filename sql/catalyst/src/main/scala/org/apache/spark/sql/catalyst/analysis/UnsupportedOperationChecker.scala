@@ -44,7 +44,7 @@ object UnsupportedOperationChecker {
     }
 
     // Disallow multiple streaming aggregations
-    val aggregates = plan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+    val aggregates = plan.collect { case a@Aggregate(_, _, _, _) if a.isStreaming => a }
 
     if (aggregates.size > 1) {
       throwError(
@@ -73,7 +73,7 @@ object UnsupportedOperationChecker {
      * data.
      */
     def containsCompleteData(subplan: LogicalPlan): Boolean = {
-      val aggs = plan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+      val aggs = plan.collect { case a @ Aggregate(_, _, _, _) if a.isStreaming => a }
       // Either the subplan has no streaming source, or it has aggregation with Complete mode
       !subplan.isStreaming || (aggs.nonEmpty && outputMode == InternalOutputModes.Complete)
     }

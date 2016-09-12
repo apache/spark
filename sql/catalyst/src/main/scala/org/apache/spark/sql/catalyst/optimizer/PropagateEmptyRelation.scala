@@ -69,7 +69,7 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
       case _: Repartition => empty(p)
       case _: RepartitionByExpression => empty(p)
       // AggregateExpressions like COUNT(*) return their results like 0.
-      case Aggregate(_, ae, _) if !ae.exists(containsAggregateExpression) => empty(p)
+      case Aggregate(_, ae, _, _) if !ae.exists(containsAggregateExpression) => empty(p)
       // Generators like Hive-style UDTF may return their records within `close`.
       case Generate(_: Explode, _, _, _, _, _) => empty(p)
       case _ => p
