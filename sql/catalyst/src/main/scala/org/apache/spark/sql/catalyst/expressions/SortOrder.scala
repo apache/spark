@@ -119,9 +119,8 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       }
   }
 
-  private def nullAsSmallest: Boolean =
-    ((child.isAscending && child.nullOrdering == NullsFirst) ||
-      (!child.isAscending && child.nullOrdering == NullsLast))
+  private def nullAsSmallest: Boolean = (child.isAscending && child.nullOrdering == NullsFirst) ||
+      (!child.isAscending && child.nullOrdering == NullsLast)
 
 
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
