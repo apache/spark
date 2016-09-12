@@ -142,6 +142,8 @@ package object debug {
       debugPrint(s"== ${child.simpleString} ==")
       debugPrint(s"Tuples output: ${tupleCount.value}")
       child.output.zip(columnStats).foreach { case (attr, metric) =>
+        // This is called on driver. All accumulator updates have a fixed value. So it's safe to use
+        // `asScala` which accesses the internal values using `java.util.Iterator`.
         val actualDataTypes = metric.elementTypes.value.asScala.mkString("{", ",", "}")
         debugPrint(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
       }
