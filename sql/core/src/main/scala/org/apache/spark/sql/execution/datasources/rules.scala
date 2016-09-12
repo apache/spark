@@ -66,9 +66,10 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 }
 
 /**
- * Preprocess some DDL plans, e.g. [[CreateTable]], to do some normalization and checking.
+ * Analyze [[CreateTable]] and do some normalization and checking.
+ * For CREATE TABLE AS SELECT, the SELECT query is also analyzed.
  */
-case class PreprocessDDL(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
