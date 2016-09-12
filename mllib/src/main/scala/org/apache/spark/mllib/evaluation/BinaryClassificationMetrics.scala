@@ -43,7 +43,7 @@ import org.apache.spark.sql.DataFrame
 @Since("1.0.0")
 class BinaryClassificationMetrics @Since("1.3.0") (
     @Since("1.3.0") val scoreAndLabels: RDD[(Double, Double)],
-    @Since("1.3.0") val numBins: Int) extends Logging {
+    @Since("1.3.0") var numBins: Int) extends Logging {
 
   require(numBins >= 0, "numBins must be nonnegative")
 
@@ -64,9 +64,9 @@ class BinaryClassificationMetrics @Since("1.3.0") (
     this(scoreAndLabels.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /**
-    * Set the number of bins, Default 'numBins' is 0.
-    * @param numBins the number of bins to set.
-    */
+   * Set the number of bins, Default 'numBins' is 0.
+   * @param numBins the number of bins to set.
+   */
   @Since("2.1.0")
   def setBins(numBins: Int): this.type = {
     require(numBins >= 0, "numBins must be nonnegative")
@@ -79,9 +79,9 @@ class BinaryClassificationMetrics @Since("1.3.0") (
   }
 
   /**
-    * Return cumulativeCountsRDD.
-    * If cumulativeCountsRDD is null, initialize it first.
-    */
+   * Return cumulativeCountsRDD.
+   * If cumulativeCountsRDD is null, initialize it first.
+   */
   @Since("2.1.0")
   private[mllib] def cumulativeCounts: RDD[(Double, BinaryLabelCounter)] = {
     if (cumulativeCountsRDD == null) {
@@ -91,9 +91,9 @@ class BinaryClassificationMetrics @Since("1.3.0") (
   }
 
   /**
-    * Return confusionsRDD.
-    * If confusionsRDD is null, initialize it first.
-    */
+   * Return confusionsRDD.
+   * If confusionsRDD is null, initialize it first.
+   */
   @Since("2.1.0")
   private[mllib] def confusions: RDD[(Double, BinaryConfusionMatrix)] = {
     if (confusionsRDD == null) {
@@ -184,8 +184,8 @@ class BinaryClassificationMetrics @Since("1.3.0") (
   def recallByThreshold(): RDD[(Double, Double)] = createCurve(Recall)
 
   /**
-    * initialize confusionsRDD and cumulativeCountsRDD
-    */
+   * initialize confusionsRDD and cumulativeCountsRDD
+   */
   @Since("2.1.0")
   private[mllib] def initialize () {
     // Create a bin for each distinct score value, count positives and negatives within each bin,
@@ -196,8 +196,8 @@ class BinaryClassificationMetrics @Since("1.3.0") (
       mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
     ).sortByKey(ascending = false)
 
-    val binnedCounts: RDD[(Double, BinaryLabelCounter)] =
-    // Only down-sample if bins is > 0
+    val binnedCounts =
+      // Only down-sample if bins is > 0
       if (numBins == 0) {
         // Use original directly
         counts
