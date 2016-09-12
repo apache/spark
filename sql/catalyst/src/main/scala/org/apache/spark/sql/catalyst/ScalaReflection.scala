@@ -785,8 +785,16 @@ trait ScalaReflection {
   def getConstructorParameters(tpe: Type): Seq[(String, Type)] = {
     val formalTypeArgs = tpe.typeSymbol.asClass.typeParams
     val TypeRef(_, _, actualTypeArgs) = tpe
-    constructParams(tpe).map { p =>
-      p.name.toString -> p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
+    val params = constructParams(tpe)
+    // if there are type variables to fill in, do the substitution (SomeClass[T] -> SomeClass[Int])
+    if (actualTypeArgs.nonEmpty) {
+      params.map { p =>
+        p.name.toString -> p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
+      }
+    } else {
+      params.map { p =>
+        p.name.toString -> p.typeSignature
+      }
     }
   }
 
