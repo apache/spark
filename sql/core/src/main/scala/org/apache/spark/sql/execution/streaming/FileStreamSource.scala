@@ -178,7 +178,6 @@ object FileStreamSource {
   // Action when `FileEntry` is compacted.
   val COMPACT_ACTION = "compact"
 
-
   case class FileEntry(path: String, timestamp: Timestamp, action: String = ADD_ACTION)
     extends Serializable
 
