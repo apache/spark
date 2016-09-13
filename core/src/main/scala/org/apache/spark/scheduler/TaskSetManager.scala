@@ -418,7 +418,8 @@ private[spark] class TaskSetManager(
   def resourceOffer(
       execId: String,
       host: String,
-      maxLocality: TaskLocality.TaskLocality)
+      maxLocality: TaskLocality.TaskLocality,
+      logUrlMap: Option[Map[String, String]] = None)
     : Option[TaskDescription] =
   {
     if (!isZombie) {
@@ -443,7 +444,7 @@ private[spark] class TaskSetManager(
           copiesRunning(index) += 1
           val attemptNum = taskAttempts(index).size
           val info = new TaskInfo(taskId, index, attemptNum, curTime,
-            execId, host, taskLocality, speculative)
+            execId, host, taskLocality, speculative, logUrlMap)
           taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
           // Update our locality level for delay scheduling
@@ -701,6 +702,8 @@ private[spark] class TaskSetManager(
     if (info.failed || info.killed) {
       return
     }
+    lazy val urlString = info.logUrlMap.map(_.map(x =>
+      s"""${x._1}:  ${x._2}""")).map(_.mkString(" ")).getOrElse(" ")
     removeRunningTask(tid)
     info.markFinished(state)
     val index = info.index
@@ -790,19 +793,21 @@ private[spark] class TaskSetManager(
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
-        logError("Task %d in stage %s failed %d times; aborting job".format(
+        logError(s"Task %d in stage %s failed %d times; ${urlString}; aborting job".format(
           index, taskSet.id, maxTaskFailures))
         abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
-          .format(index, taskSet.id, maxTaskFailures, failureReason), failureException)
+          .format(index, taskSet.id, maxTaskFailures, failureReason), failureException,
+          info.logUrlMap)
         return
       }
     }
     maybeFinishTaskSet()
   }
 
-  def abort(message: String, exception: Option[Throwable] = None): Unit = sched.synchronized {
+  def abort(message: String, exception: Option[Throwable] = None,
+      logUrlMap: Option[Map[String, String]] = None): Unit = sched.synchronized {
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
-    sched.dagScheduler.taskSetFailed(taskSet, message, exception)
+    sched.dagScheduler.taskSetFailed(taskSet, message, exception, logUrlMap)
     isZombie = true
     maybeFinishTaskSet()
   }

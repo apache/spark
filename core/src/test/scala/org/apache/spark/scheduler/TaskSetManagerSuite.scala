@@ -51,7 +51,8 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   override def taskSetFailed(
       taskSet: TaskSet,
       reason: String,
-      exception: Option[Throwable]): Unit = {
+      exception: Option[Throwable],
+      logUrlMap: Option[scala.collection.immutable.Map[String, String]] = None): Unit = {
     taskScheduler.taskSetsFailed += taskSet.id
   }
 }

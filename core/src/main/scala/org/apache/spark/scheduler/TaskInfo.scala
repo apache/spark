@@ -40,7 +40,8 @@ class TaskInfo(
     val executorId: String,
     val host: String,
     val taskLocality: TaskLocality.TaskLocality,
-    val speculative: Boolean) {
+    val speculative: Boolean,
+    val logUrlMap: Option[Map[String, String]] = None) {
 
   /**
    * The time when the task started remotely getting the result. Will not be set if the

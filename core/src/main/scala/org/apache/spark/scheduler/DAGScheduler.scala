@@ -254,8 +254,9 @@ class DAGScheduler(
    * Called by the TaskSetManager to cancel an entire TaskSet due to either repeated failures or
    * cancellation of the job itself.
    */
-  def taskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable]): Unit = {
-    eventProcessLoop.post(TaskSetFailed(taskSet, reason, exception))
+  def taskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable],
+      logUrlMap: Option[scala.collection.immutable.Map[String, String]] = None): Unit = {
+    eventProcessLoop.post(TaskSetFailed(taskSet, reason, exception, logUrlMap))
   }
 
   private[scheduler]
@@ -798,8 +799,9 @@ class DAGScheduler(
   private[scheduler] def handleTaskSetFailed(
       taskSet: TaskSet,
       reason: String,
-      exception: Option[Throwable]): Unit = {
-    stageIdToStage.get(taskSet.stageId).foreach { abortStage(_, reason, exception) }
+      exception: Option[Throwable],
+      logUrlMap: Option[scala.collection.immutable.Map[String, String]] = None): Unit = {
+    stageIdToStage.get(taskSet.stageId).foreach { abortStage(_, reason, exception, logUrlMap) }
   }
 
   private[scheduler] def cleanUpAfterSchedulerStop() {
@@ -1376,7 +1378,8 @@ class DAGScheduler(
   /**
    * Marks a stage as finished and removes it from the list of running stages.
    */
-  private def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None): Unit = {
+  private def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None,
+      logUrlMap: Option[scala.collection.immutable.Map[String, String]] = None): Unit = {
     val serviceTime = stage.latestInfo.submissionTime match {
       case Some(t) => "%.03f".format((clock.getTimeMillis() - t) / 1000.0)
       case _ => "Unknown"
@@ -1391,7 +1394,7 @@ class DAGScheduler(
       // stage to be aborted.
       stage.clearFailures()
     } else {
-      stage.latestInfo.stageFailed(errorMessage.get)
+      stage.latestInfo.stageFailed(errorMessage.get, logUrlMap)
       logInfo(s"$stage (${stage.name}) failed in $serviceTime s due to ${errorMessage.get}")
     }
 
@@ -1407,7 +1410,8 @@ class DAGScheduler(
   private[scheduler] def abortStage(
       failedStage: Stage,
       reason: String,
-      exception: Option[Throwable]): Unit = {
+      exception: Option[Throwable],
+      logUrlMap: Option[scala.collection.immutable.Map[String, String]] = None): Unit = {
     if (!stageIdToStage.contains(failedStage.id)) {
       // Skip all the actions if the stage has been removed.
       return
@@ -1416,7 +1420,8 @@ class DAGScheduler(
       activeJobs.filter(job => stageDependsOn(job.finalStage, failedStage)).toSeq
     failedStage.latestInfo.completionTime = Some(clock.getTimeMillis())
     for (job <- dependentJobs) {
-      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason", exception)
+      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason", exception,
+        logUrlMap)
     }
     if (dependentJobs.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
@@ -1427,7 +1432,8 @@ class DAGScheduler(
   private def failJobAndIndependentStages(
       job: ActiveJob,
       failureReason: String,
-      exception: Option[Throwable] = None): Unit = {
+      exception: Option[Throwable] = None,
+      logUrlMap: Option[scala.collection.immutable.Map[String, String]] = None): Unit = {
     val error = new SparkException(failureReason, exception.getOrElse(null))
     var ableToCancelStages = true
 
@@ -1455,7 +1461,7 @@ class DAGScheduler(
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptThread)
-              markStageAsFinished(stage, Some(failureReason))
+              markStageAsFinished(stage, Some(failureReason), logUrlMap)
             } catch {
               case e: UnsupportedOperationException =>
                 logInfo(s"Could not cancel tasks for stage $stageId", e)
@@ -1642,8 +1648,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case completion: CompletionEvent =>
       dagScheduler.handleTaskCompletion(completion)
 
-    case TaskSetFailed(taskSet, reason, exception) =>
-      dagScheduler.handleTaskSetFailed(taskSet, reason, exception)
+    case TaskSetFailed(taskSet, reason, exception, logUrlMap) =>
+      dagScheduler.handleTaskSetFailed(taskSet, reason, exception, logUrlMap)
 
     case ResubmitFailedStages =>
       dagScheduler.resubmitFailedStages()

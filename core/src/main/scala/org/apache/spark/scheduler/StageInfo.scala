@@ -44,6 +44,8 @@ class StageInfo(
   var completionTime: Option[Long] = None
   /** If the stage failed, the reason why. */
   var failureReason: Option[String] = None
+  /** if the stage failed, the log url maps */
+  var logUrlMap: Option[Map[String, String]] = None
 
   /**
    * Terminal values of accumulables updated during this stage, including all the user-defined
@@ -51,9 +53,10 @@ class StageInfo(
    */
   val accumulables = HashMap[Long, AccumulableInfo]()
 
-  def stageFailed(reason: String) {
+  def stageFailed(reason: String, url: Option[Map[String, String]] = None) {
     failureReason = Some(reason)
     completionTime = Some(System.currentTimeMillis)
+    logUrlMap = url
   }
 
   private[spark] def getStatusString: String = {

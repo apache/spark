@@ -81,7 +81,8 @@ private[scheduler] case class ExecutorLost(execId: String, reason: ExecutorLossR
   extends DAGSchedulerEvent
 
 private[scheduler]
-case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable])
+case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable],
+    logUrlMap: Option[scala.collection.immutable.Map[String, String]] = None)
   extends DAGSchedulerEvent
 
 private[scheduler] case object ResubmitFailedStages extends DAGSchedulerEvent
