@@ -23,7 +23,7 @@ import scala.util.Random
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.{Edge, Graph}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkContext {

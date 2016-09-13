@@ -19,8 +19,8 @@ package org.apache.spark.mllib.recommendation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 class MatrixFactorizationModelSuite extends SparkFunSuite with MLlibTestSparkContext {

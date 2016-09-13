@@ -20,6 +20,7 @@ package org.apache.spark.mllib.linalg
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.TestingUtils._
 
 class BLASSuite extends SparkFunSuite {
 

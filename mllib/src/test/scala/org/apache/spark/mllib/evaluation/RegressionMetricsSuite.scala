@@ -19,7 +19,7 @@ package org.apache.spark.mllib.evaluation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.TestingUtils._
 
 class RegressionMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
   val obs = List[Double](77, 85, 62, 55, 63, 88, 57, 81, 51)

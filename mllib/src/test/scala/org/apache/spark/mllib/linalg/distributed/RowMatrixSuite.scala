@@ -29,6 +29,7 @@ import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.mllib.random.RandomRDDs
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.TestingUtils._
 
 class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 

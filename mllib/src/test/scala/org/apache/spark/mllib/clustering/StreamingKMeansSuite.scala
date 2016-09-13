@@ -23,6 +23,7 @@ import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.util.TestingUtils._
 
 class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
 

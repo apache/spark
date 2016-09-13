@@ -27,7 +27,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
-import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 object NaiveBayesSuite {

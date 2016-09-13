@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
