@@ -47,13 +47,23 @@ case class BroadcastHashJoinExec(
     right: SparkPlan)
   extends BinaryExecNode with HashJoin with CodegenSupport {
 
-  private val canAvoidWrite = joinType match {
+  /**
+    * Decide whether support avoiding repeatedly stream side fields writing
+    */
+  private val avoidRepeatedlyWriting = joinType match {
     case LeftOuter => true
-    case RightOuter if !left.output.exists(p => !UnsafeRow.isFixedLength(p.dataType)) => true
+    case RightOuter if left.output.forall(p => UnsafeRow.isFixedLength(p.dataType)) => true
     case Inner => buildSide match {
       case BuildRight => true
-      case BuildLeft if !left.output.exists(p => !UnsafeRow.isFixedLength(p.dataType)) => true
+      case BuildLeft if !left.output.forall(p => UnsafeRow.isFixedLength(p.dataType)) => true
     }
+    case _ => false
+  }
+  /**
+    * Using this to mark which side is need not to be written repeatedly
+    */
+  private val sequential = buildSide match {
+    case BuildRight => true
     case _ => false
   }
 
@@ -215,7 +225,6 @@ case class BroadcastHashJoinExec(
       case BuildLeft => buildVars ++ input
       case BuildRight => input ++ buildVars
     }
-
     if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side
@@ -227,16 +236,12 @@ case class BroadcastHashJoinExec(
          |$numOutput.add(1);
          |${consume(ctx, resultVars)}
        """.stripMargin
+
     } else {
       ctx.copyResult = true
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
-      val str = if (canAvoidWrite) {
-        val sequential = buildSide match {
-          case BuildRight => true
-          case _ => false
-        }
-
+      val str = if (avoidRepeatedlyWriting) {
         val findMatch = ArrayBuffer(matches, matched, checkCondition, numOutput)
         s"""
           |// generate join key for stream side
