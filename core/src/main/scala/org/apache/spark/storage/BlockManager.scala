@@ -1170,7 +1170,7 @@ private[spark] class BlockManager(
               done = true  // specified number of peers have been replicated to
             }
           } catch {
-            case e: Exception =>
+            case NonFatal(e) =>
               logWarning(s"Failed to replicate $blockId to $peer, failure #$failures", e)
               failures += 1
               replicationFailed = true
