@@ -468,6 +468,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     append(buffer, "Last Access Time:", new Date(table.lastAccessTime).toString, "")
     append(buffer, "Location:", table.storage.locationUri.getOrElse(""), "")
     append(buffer, "Table Type:", table.tableType.name, "")
+    table.stats.foreach(s => append(buffer, "Statistics:", s.simpleString, ""))
 
     append(buffer, "Table Parameters:", "", "")
     table.properties.foreach { case (key, value) =>
