@@ -2572,7 +2572,7 @@ class Dataset[T] private[sql](
       val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
       val iter = new SerDeUtil.AutoBatchedPickler(
         queryExecution.executedPlan.executeCollect().iterator.map(toJava))
-      PythonRDD.serveIterator(iter, s"serve-DataFrame")
+      PythonRDD.serveIterator(iter, "serve-DataFrame")
     }
   }
 
