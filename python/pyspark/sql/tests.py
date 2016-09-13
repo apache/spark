@@ -376,6 +376,14 @@ class SQLTests(ReusedPySparkTestCase):
         row = df.select(explode(f(*df))).groupBy().sum().first()
         self.assertEqual(row[0], 10)
 
+    def test_udf_with_order_by_and_limit(self):
+        from pyspark.sql.functions import udf
+        my_copy = udf(lambda x: x, IntegerType())
+        df = self.spark.range(10).orderBy("id")
+        res = df.select(df.id, my_copy(df.id).alias("copy")).limit(1)
+        res.explain(True)
+        self.assertEqual(res.collect(), [Row(id=0, copy=0)])
+
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.spark.read.json(rdd)
@@ -574,7 +582,7 @@ class SQLTests(ReusedPySparkTestCase):
         def check_datatype(datatype):
             pickled = pickle.loads(pickle.dumps(datatype))
             assert datatype == pickled
-            scala_datatype = self.spark._wrapped._ssql_ctx.parseDataType(datatype.json())
+            scala_datatype = self.spark._jsparkSession.parseDataType(datatype.json())
             python_datatype = _parse_datatype_json_string(scala_datatype.json())
             assert datatype == python_datatype
 

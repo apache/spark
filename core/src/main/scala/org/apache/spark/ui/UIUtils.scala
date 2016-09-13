@@ -510,4 +510,16 @@ private[spark] object UIUtils extends Logging {
 
   def getTimeZoneOffset() : Int =
     TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
+
+  /**
+  * Return the correct Href after checking if master is running in the
+  * reverse proxy mode or not.
+  */
+  def makeHref(proxy: Boolean, id: String, origHref: String): String = {
+    if (proxy) {
+      s"/proxy/$id"
+    } else {
+      origHref
+    }
+  }
 }

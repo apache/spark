@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.json
 import java.io.ByteArrayOutputStream
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 import com.fasterxml.jackson.core._
 
@@ -27,6 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.datasources.ParseModes.{DROP_MALFORMED_MODE, PERMISSIVE_MODE}
 import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -51,6 +53,11 @@ class JacksonParser(
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
 
+  private val emptyRow: Seq[InternalRow] = Seq(new GenericInternalRow(schema.length))
+
+  @transient
+  private[this] var isWarningPrintedForMalformedRecord: Boolean = false
+
   /**
    * This function deals with the cases it fails to parse. This function will be called
    * when exceptions are caught during converting. This functions also deals with `mode` option.
@@ -61,8 +68,39 @@ class JacksonParser(
       throw new RuntimeException(s"Malformed line in FAILFAST mode: $record")
     }
     if (options.dropMalformed) {
-      logWarning(s"Dropping malformed line: $record")
+      if (!isWarningPrintedForMalformedRecord) {
+        logWarning(
+          s"""Found at least one malformed records (sample: $record). The JSON reader will drop
+             |all malformed records in current $DROP_MALFORMED_MODE parser mode. To find out which
+             |corrupted records have been dropped, please switch the parser mode to $PERMISSIVE_MODE
+             |mode and use the default inferred schema.
+             |
+             |Code example to print all malformed records (scala):
+             |===================================================
+             |// The corrupted record exists in column ${columnNameOfCorruptRecord}
+             |val parsedJson = spark.read.json("/path/to/json/file/test.json")
+             |
+           """.stripMargin)
+        isWarningPrintedForMalformedRecord = true
+      }
       Nil
+    } else if (schema.getFieldIndex(columnNameOfCorruptRecord).isEmpty) {
+      if (!isWarningPrintedForMalformedRecord) {
+        logWarning(
+          s"""Found at least one malformed records (sample: $record). The JSON reader will replace
+             |all malformed records with placeholder null in current $PERMISSIVE_MODE parser mode.
+             |To find out which corrupted records have been replaced with null, please use the
+             |default inferred schema instead of providing a custom schema.
+             |
+             |Code example to print all malformed records (scala):
+             |===================================================
+             |// The corrupted record exists in column ${columnNameOfCorruptRecord}.
+             |val parsedJson = spark.read.json("/path/to/json/file/test.json")
+             |
+           """.stripMargin)
+        isWarningPrintedForMalformedRecord = true
+      }
+      emptyRow
     } else {
       val row = new GenericMutableRow(schema.length)
       for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecord)) {
@@ -204,7 +242,12 @@ class JacksonParser(
         case VALUE_STRING =>
           // This one will lose microseconds parts.
           // See https://issues.apache.org/jira/browse/SPARK-10681.
-          DateTimeUtils.stringToTime(parser.getText).getTime * 1000L
+          Try(options.timestampFormat.parse(parser.getText).getTime * 1000L)
+            .getOrElse {
+              // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility.
+              DateTimeUtils.stringToTime(parser.getText).getTime * 1000L
+            }
 
         case VALUE_NUMBER_INT =>
           parser.getLongValue * 1000000L
@@ -214,13 +257,18 @@ class JacksonParser(
       (parser: JsonParser) => parseJsonToken(parser, dataType) {
         case VALUE_STRING =>
           val stringValue = parser.getText
-          if (stringValue.contains("-")) {
-            // The format of this string will probably be "yyyy-mm-dd".
-            DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(parser.getText).getTime)
-          } else {
-            // In Spark 1.5.0, we store the data as number of days since epoch in string.
-            // So, we just convert it to Int.
-            stringValue.toInt
+          // This one will lose microseconds parts.
+          // See https://issues.apache.org/jira/browse/SPARK-10681.x
+          Try(DateTimeUtils.millisToDays(options.dateFormat.parse(parser.getText).getTime))
+            .getOrElse {
+            // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility.
+            Try(DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(parser.getText).getTime))
+              .getOrElse {
+              // In Spark 1.5.0, we store the data as number of days since epoch in string.
+              // So, we just convert it to Int.
+              stringValue.toInt
+            }
           }
       }
 

@@ -56,9 +56,9 @@ object BuildCommons {
     "tags", "sketch"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
-  val optionallyEnabledProjects@Seq(yarn, java8Tests, sparkGangliaLgpl,
+  val optionallyEnabledProjects@Seq(mesos, yarn, java8Tests, sparkGangliaLgpl,
     streamingKinesisAsl, dockerIntegrationTests) =
-    Seq("yarn", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
+    Seq("mesos", "yarn", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =
@@ -212,9 +212,10 @@ object SparkBuild extends PomBuild {
     cachedFun(findFiles(scalaSource.in(config).value))
   }
 
-  private def findFiles(file: File): Set[File] = file.isDirectory match {
-    case true => file.listFiles().toSet.flatMap(findFiles) + file
-    case false => Set(file)
+  private def findFiles(file: File): Set[File] = if (file.isDirectory) {
+    file.listFiles().toSet.flatMap(findFiles) + file
+  } else {
+    Set(file)
   }
 
   def enableScalaStyle: Seq[sbt.Def.Setting[_]] = Seq(
@@ -352,7 +353,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, sketch, mllibLocal, streamingKafka010
+      unsafe, tags
     ).contains(x)
   }
 

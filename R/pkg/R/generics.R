@@ -438,17 +438,17 @@ setGeneric("columns", function(x) {standardGeneric("columns") })
 setGeneric("count", function(x) { standardGeneric("count") })
 
 #' @rdname cov
-#' @param x a Column object or a SparkDataFrame.
-#' @param ... additional argument(s). If `x` is a Column object, a Column object
-#'        should be provided. If `x` is a SparkDataFrame, two column names should
+#' @param x a Column or a SparkDataFrame.
+#' @param ... additional argument(s). If \code{x} is a Column, a Column
+#'        should be provided. If \code{x} is a SparkDataFrame, two column names should
 #'        be provided.
 #' @export
 setGeneric("cov", function(x, ...) {standardGeneric("cov") })
 
 #' @rdname corr
-#' @param x a Column object or a SparkDataFrame.
-#' @param ... additional argument(s). If `x` is a Column object, a Column object
-#'        should be provided. If `x` is a SparkDataFrame, two column names should
+#' @param x a Column or a SparkDataFrame.
+#' @param ... additional argument(s). If \code{x} is a Column, a Column
+#'        should be provided. If \code{x} is a SparkDataFrame, two column names should
 #'        be provided.
 #' @export
 setGeneric("corr", function(x, ...) {standardGeneric("corr") })
@@ -851,7 +851,7 @@ setGeneric("array_contains", function(x, value) { standardGeneric("array_contain
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
 
 #' @param x Column to compute on or a GroupedData object.
-#' @param ... additional argument(s) when `x` is a GroupedData object.
+#' @param ... additional argument(s) when \code{x} is a GroupedData object.
 #' @rdname avg
 #' @export
 setGeneric("avg", function(x, ...) { standardGeneric("avg") })
@@ -1330,6 +1330,10 @@ setGeneric("spark.kmeans", function(data, formula, ...) { standardGeneric("spark
 #' @export
 setGeneric("fitted")
 
+#' @rdname spark.mlp
+#' @export
+setGeneric("spark.mlp", function(data, ...) { standardGeneric("spark.mlp") })
+
 #' @rdname spark.naiveBayes
 #' @export
 setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("spark.naiveBayes") })
@@ -1339,7 +1343,6 @@ setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("s
 setGeneric("spark.survreg", function(data, formula) { standardGeneric("spark.survreg") })
 
 #' @rdname spark.lda
-#' @param ... Additional parameters to tune LDA.
 #' @export
 setGeneric("spark.lda", function(data, ...) { standardGeneric("spark.lda") })
 
@@ -1372,3 +1375,7 @@ setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml")
 #' @rdname spark.als
 #' @export
 setGeneric("spark.als", function(data, ...) { standardGeneric("spark.als") })
+
+#' @rdname spark.kstest
+#' @export
+setGeneric("spark.kstest", function(data, ...) { standardGeneric("spark.kstest") })

@@ -18,12 +18,11 @@
 package org.apache.spark.ui.jobs
 
 import scala.collection.mutable
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap, LinkedHashMap}
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ShuffleReadMetrics, ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
-import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util.AccumulatorContext
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -97,7 +96,7 @@ private[spark] object UIData {
     var description: Option[String] = None
 
     var accumulables = new HashMap[Long, AccumulableInfo]
-    var taskData = new HashMap[Long, TaskUIData]
+    var taskData = new LinkedHashMap[Long, TaskUIData]
     var executorSummary = new HashMap[String, ExecutorSummary]
 
     def hasInput: Boolean = inputBytes > 0
@@ -145,7 +144,6 @@ private[spark] object UIData {
           memoryBytesSpilled = m.memoryBytesSpilled,
           diskBytesSpilled = m.diskBytesSpilled,
           peakExecutionMemory = m.peakExecutionMemory,
-          updatedBlockStatuses = m.updatedBlockStatuses.toList,
           inputMetrics = InputMetricsUIData(m.inputMetrics.bytesRead, m.inputMetrics.recordsRead),
           outputMetrics =
             OutputMetricsUIData(m.outputMetrics.bytesWritten, m.outputMetrics.recordsWritten),
@@ -193,7 +191,6 @@ private[spark] object UIData {
       memoryBytesSpilled: Long,
       diskBytesSpilled: Long,
       peakExecutionMemory: Long,
-      updatedBlockStatuses: Seq[(BlockId, BlockStatus)],
       inputMetrics: InputMetricsUIData,
       outputMetrics: OutputMetricsUIData,
       shuffleReadMetrics: ShuffleReadMetricsUIData,

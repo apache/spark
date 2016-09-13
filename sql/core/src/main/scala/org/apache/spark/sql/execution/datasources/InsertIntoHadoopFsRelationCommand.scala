@@ -66,7 +66,7 @@ case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode)
   extends RunnableCommand {
 
-  override def children: Seq[LogicalPlan] = query :: Nil
+  override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that

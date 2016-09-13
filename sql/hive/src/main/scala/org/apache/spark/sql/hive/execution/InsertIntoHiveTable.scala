@@ -51,7 +51,7 @@ case class InsertIntoHiveTable(
     ifNotExists: Boolean) extends UnaryExecNode {
 
   @transient private val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
-  @transient private val client = sessionState.metadataHive
+  @transient private val externalCatalog = sqlContext.sharedState.externalCatalog
 
   def output: Seq[Attribute] = Seq.empty
 
@@ -240,54 +240,45 @@ case class InsertIntoHiveTable(
     // holdDDLTime will be true when TOK_HOLD_DDLTIME presents in the query as a hint.
     val holdDDLTime = false
     if (partition.nonEmpty) {
-
-      // loadPartition call orders directories created on the iteration order of the this map
-      val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
-      table.hiveQlTable.getPartCols.asScala.foreach { entry =>
-        orderedPartitionSpec.put(entry.getName, partitionSpec.getOrElse(entry.getName, ""))
-      }
-
-      // inheritTableSpecs is set to true. It should be set to false for an IMPORT query
-      // which is currently considered as a Hive native command.
-      val inheritTableSpecs = true
-      // TODO: Correctly set isSkewedStoreAsSubdir.
-      val isSkewedStoreAsSubdir = false
       if (numDynamicPartitions > 0) {
-        client.synchronized {
-          client.loadDynamicPartitions(
-            outputPath.toString,
-            table.catalogTable.qualifiedName,
-            orderedPartitionSpec,
-            overwrite,
-            numDynamicPartitions,
-            holdDDLTime,
-            isSkewedStoreAsSubdir)
-        }
+        externalCatalog.loadDynamicPartitions(
+          db = table.catalogTable.database,
+          table = table.catalogTable.identifier.table,
+          outputPath.toString,
+          partitionSpec,
+          overwrite,
+          numDynamicPartitions,
+          holdDDLTime = holdDDLTime)
       } else {
         // scalastyle:off
         // ifNotExists is only valid with static partition, refer to
         // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DML#LanguageManualDML-InsertingdataintoHiveTablesfromqueries
         // scalastyle:on
         val oldPart =
-          client.getPartitionOption(
-            table.catalogTable,
+          externalCatalog.getPartitionOption(
+            table.catalogTable.database,
+            table.catalogTable.identifier.table,
             partitionSpec)
 
         if (oldPart.isEmpty || !ifNotExists) {
-            client.loadPartition(
-              outputPath.toString,
-              table.catalogTable.qualifiedName,
-              orderedPartitionSpec,
-              overwrite,
-              holdDDLTime,
-              inheritTableSpecs,
-              isSkewedStoreAsSubdir)
+          // inheritTableSpecs is set to true. It should be set to false for an IMPORT query
+          // which is currently considered as a Hive native command.
+          val inheritTableSpecs = true
+          externalCatalog.loadPartition(
+            table.catalogTable.database,
+            table.catalogTable.identifier.table,
+            outputPath.toString,
+            partitionSpec,
+            isOverwrite = overwrite,
+            holdDDLTime = holdDDLTime,
+            inheritTableSpecs = inheritTableSpecs)
         }
       }
     } else {
-      client.loadTable(
+      externalCatalog.loadTable(
+        table.catalogTable.database,
+        table.catalogTable.identifier.table,
         outputPath.toString, // TODO: URI
-        table.catalogTable.qualifiedName,
         overwrite,
         holdDDLTime)
     }

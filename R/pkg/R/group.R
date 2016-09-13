@@ -48,6 +48,7 @@ groupedData <- function(sgd) {
 
 #' @rdname show
 #' @aliases show,GroupedData-method
+#' @export
 #' @note show(GroupedData) since 1.4.0
 setMethod("show", "GroupedData",
           function(object) {
@@ -56,7 +57,7 @@ setMethod("show", "GroupedData",
 
 #' Count
 #'
-#' Count the number of rows for each group.
+#' Count the number of rows for each group when we have \code{GroupedData} input.
 #' The resulting SparkDataFrame will also contain the grouping columns.
 #'
 #' @return A SparkDataFrame.
