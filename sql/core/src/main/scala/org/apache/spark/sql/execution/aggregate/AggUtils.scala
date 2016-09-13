@@ -31,7 +31,8 @@ object AggUtils {
       groupingExpressions: Seq[NamedExpression],
       aggregateExpressions: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
-      child: SparkPlan): Seq[SparkPlan] = {
+      child: SparkPlan,
+      isGrouped: Boolean): Seq[SparkPlan] = {
 
     val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
     val completeAggregateAttributes = completeAggregateExpressions.map(_.resultAttribute)
@@ -42,7 +43,8 @@ object AggUtils {
       aggregateAttributes = completeAggregateAttributes,
       initialInputBufferOffset = 0,
       resultExpressions = resultExpressions,
-      child = child
+      child = child,
+      isGrouped = isGrouped
     ) :: Nil
   }
 
@@ -53,7 +55,8 @@ object AggUtils {
       aggregateAttributes: Seq[Attribute] = Nil,
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
-      child: SparkPlan): SparkPlan = {
+      child: SparkPlan,
+      isGrouped: Boolean): SparkPlan = {
     val useHash = HashAggregateExec.supportsAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
     if (useHash) {
@@ -64,7 +67,8 @@ object AggUtils {
         aggregateAttributes = aggregateAttributes,
         initialInputBufferOffset = initialInputBufferOffset,
         resultExpressions = resultExpressions,
-        child = child)
+        child = child,
+        isGrouped = isGrouped)
     } else {
       SortAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
@@ -73,7 +77,8 @@ object AggUtils {
         aggregateAttributes = aggregateAttributes,
         initialInputBufferOffset = initialInputBufferOffset,
         resultExpressions = resultExpressions,
-        child = child)
+        child = child,
+        isGrouped = isGrouped)
     }
   }
 
@@ -81,7 +86,8 @@ object AggUtils {
       groupingExpressions: Seq[NamedExpression],
       aggregateExpressions: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
-      child: SparkPlan): Seq[SparkPlan] = {
+      child: SparkPlan,
+      isGrouped: Boolean): Seq[SparkPlan] = {
     // Check if we can use HashAggregate.
 
     // 1. Create an Aggregate Operator for partial aggregations.
@@ -101,7 +107,8 @@ object AggUtils {
         aggregateAttributes = partialAggregateAttributes,
         initialInputBufferOffset = 0,
         resultExpressions = partialResultExpressions,
-        child = child)
+        child = child,
+        isGrouped = isGrouped)
 
     // 2. Create an Aggregate Operator for final aggregations.
     val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Final))
@@ -116,7 +123,8 @@ object AggUtils {
         aggregateAttributes = finalAggregateAttributes,
         initialInputBufferOffset = groupingExpressions.length,
         resultExpressions = resultExpressions,
-        child = partialAggregate)
+        child = partialAggregate,
+        isGrouped = isGrouped)
 
     finalAggregate :: Nil
   }
@@ -126,7 +134,8 @@ object AggUtils {
       functionsWithDistinct: Seq[AggregateExpression],
       functionsWithoutDistinct: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
-      child: SparkPlan): Seq[SparkPlan] = {
+      child: SparkPlan,
+      isGrouped: Boolean): Seq[SparkPlan] = {
 
     // functionsWithDistinct is guaranteed to be non-empty. Even though it may contain more than one
     // DISTINCT aggregate function, all of those functions will have the same column expressions.
@@ -154,7 +163,8 @@ object AggUtils {
         aggregateAttributes = aggregateAttributes,
         resultExpressions = groupingAttributes ++ distinctAttributes ++
           aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = child)
+        child = child,
+        isGrouped = true)
     }
 
     // 2. Create an Aggregate Operator for partial merge aggregations.
@@ -170,7 +180,8 @@ object AggUtils {
         initialInputBufferOffset = (groupingAttributes ++ distinctAttributes).length,
         resultExpressions = groupingAttributes ++ distinctAttributes ++
           aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = partialAggregate)
+        child = partialAggregate,
+        isGrouped = true)
     }
 
     // 3. Create an Aggregate operator for partial aggregation (for distinct)
@@ -211,7 +222,8 @@ object AggUtils {
         aggregateAttributes = mergeAggregateAttributes ++ distinctAggregateAttributes,
         initialInputBufferOffset = (groupingAttributes ++ distinctAttributes).length,
         resultExpressions = partialAggregateResult,
-        child = partialMergeAggregate)
+        child = partialMergeAggregate,
+        isGrouped = isGrouped)
     }
 
     // 4. Create an Aggregate Operator for the final aggregation.
@@ -241,7 +253,8 @@ object AggUtils {
         aggregateAttributes = finalAggregateAttributes ++ distinctAggregateAttributes,
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = resultExpressions,
-        child = partialDistinctAggregate)
+        child = partialDistinctAggregate,
+        isGrouped = isGrouped)
     }
 
     finalAndCompleteAggregate :: Nil
@@ -261,7 +274,8 @@ object AggUtils {
       groupingExpressions: Seq[NamedExpression],
       functionsWithoutDistinct: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
-      child: SparkPlan): Seq[SparkPlan] = {
+      child: SparkPlan,
+      isGrouped: Boolean): Seq[SparkPlan] = {
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
@@ -277,7 +291,8 @@ object AggUtils {
         aggregateAttributes = aggregateAttributes,
         resultExpressions = groupingAttributes ++
             aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = child)
+        child = child,
+        isGrouped = isGrouped)
     }
 
     val partialMerged1: SparkPlan = {
@@ -292,7 +307,8 @@ object AggUtils {
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = groupingAttributes ++
             aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = partialAggregate)
+        child = partialAggregate,
+        isGrouped = isGrouped)
     }
 
     val restored = StateStoreRestoreExec(groupingAttributes, None, partialMerged1)
@@ -309,7 +325,8 @@ object AggUtils {
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = groupingAttributes ++
             aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = restored)
+        child = restored,
+        isGrouped = isGrouped)
     }
     // Note: stateId and returnAllStates are filled in later with preparation rules
     // in IncrementalExecution.
@@ -329,7 +346,8 @@ object AggUtils {
         aggregateAttributes = finalAggregateAttributes,
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = resultExpressions,
-        child = saved)
+        child = saved,
+        isGrouped = isGrouped)
     }
 
     finalAndCompleteAggregate :: Nil
