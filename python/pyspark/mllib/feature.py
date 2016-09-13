@@ -271,11 +271,13 @@ class ChiSqSelectorModel(JavaVectorTransformer):
         """
         return JavaVectorTransformer.transform(self, vector)
 
+
 class ChiSqSelectorType:
     """
     This class defines the selector types of Chi Square Selector.
     """
     KBest, Percentile, FPR = range(3)
+
 
 class ChiSqSelector(object):
     """
