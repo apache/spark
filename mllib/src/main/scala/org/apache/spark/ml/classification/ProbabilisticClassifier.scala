@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -193,19 +193,24 @@ abstract class ProbabilisticClassificationModel[
 
   /**
    * Given a vector of class conditional probabilities, select the predicted label.
-   * This supports thresholds which favor particular labels.
-   * @return  predicted label
+   * This returns the class, if any, whose probability is equal to or greater than its
+   * threshold (if specified), and whose probability is highest. If several classes meet
+   * their thresholds and are equally probable, the one with lower threshold is selected.
+   * If several have equal thresholds, the one with lower class index is selected.
+   *
+   * @return predicted label, or NaN if no label is predicted
    */
   protected def probability2prediction(probability: Vector): Double = {
-    if (!isDefined(thresholds)) {
-      probability.argmax
+    val prob = probability.toArray
+    if (isDefined(thresholds)) {
+      val candidates = prob.zip(getThresholds).zipWithIndex.filter { case ((p, t), _) => p >= t }
+      if (candidates.isEmpty) {
+        Double.NaN
+      } else {
+        candidates.maxBy { case ((p, t), i) => (p, -t, -i) }._2
+      }
     } else {
-      val thresholds: Array[Double] = getThresholds
-      val scaledProbability: Array[Double] =
-        probability.toArray.zip(thresholds).map { case (p, t) =>
-          if (t == 0.0) Double.PositiveInfinity else p / t
-        }
-      Vectors.dense(scaledProbability).argmax
+      prob.zipWithIndex.maxBy { case (p, i) => (p, -i) }._2
     }
   }
 }

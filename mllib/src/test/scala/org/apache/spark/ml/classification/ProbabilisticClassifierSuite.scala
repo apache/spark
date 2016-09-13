@@ -36,8 +36,8 @@ final class TestProbabilisticClassificationModel(
     rawPrediction
   }
 
-  def friendlyPredict(input: Vector): Double = {
-    predict(input)
+  def friendlyPredict(input: Double*): Double = {
+    predict(Vectors.dense(input.toArray))
   }
 }
 
@@ -45,17 +45,44 @@ final class TestProbabilisticClassificationModel(
 class ProbabilisticClassifierSuite extends SparkFunSuite {
 
   test("test thresholding") {
-    val thresholds = Array(0.5, 0.2)
     val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2)
-      .setThresholds(thresholds)
-    assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 1.0))) === 1.0)
-    assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 0.2))) === 0.0)
+      .setThresholds(Array(0.5, 0.2))
+    // Both exceed threshold; pick more probable one
+    assert(testModel.friendlyPredict(0.8, 0.9) === 1.0)
+    assert(testModel.friendlyPredict(1.0, 0.2) === 0.0)
+    // Tie; take one with lower threshold
+    assert(testModel.friendlyPredict(0.8, 0.8) === 1.0)
+    // Tie at 1
+    assert(testModel.friendlyPredict(1.0, 1.0) === 1.0)
+    // Class 0 more probable but doesn't meet threshold
+    assert(testModel.friendlyPredict(0.4, 0.3) === 1.0)
+    // Neither meets threshold
+    assert(testModel.friendlyPredict(0.4, 0.1).isNaN)
+    assert(testModel.friendlyPredict(0.0, 0.0).isNaN)
   }
 
-  test("test thresholding not required") {
+  test("test equals thresholds") {
     val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2)
-    assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 2.0))) === 1.0)
+      .setThresholds(Array(0.5, 0.5))
+    // Both exceed threshold; pick more probable one
+    assert(testModel.friendlyPredict(0.8, 0.9) === 1.0)
+    // Tie; take one with lower class
+    assert(testModel.friendlyPredict(0.8, 0.8) === 0.0)
+    assert(testModel.friendlyPredict(0.5, 0.5) === 0.0)
+    // Neither meets threshold
+    assert(testModel.friendlyPredict(0.4, 0.1).isNaN)
   }
+
+  test("test no thresholding") {
+    val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2)
+    // Pick more probable class
+    assert(testModel.friendlyPredict(1.0, 2.0) === 1.0)
+    // Tie, pick first class
+    assert(testModel.friendlyPredict(1.0, 1.0) === 0.0)
+    assert(testModel.friendlyPredict(0.5, 0.5) === 0.0)
+    assert(testModel.friendlyPredict(0.0, 0.0) === 0.0)
+  }
+
 }
 
 object ProbabilisticClassifierSuite {
