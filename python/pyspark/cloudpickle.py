@@ -116,6 +116,7 @@ class CloudPickler(Pickler):
                 msg = "Object too large to serialize: " + e.message
             else:
                 msg = "Could not serialize object: " + e.__class__.__name__ + ": " + e.message
+            print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
             
 

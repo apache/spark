@@ -18,6 +18,7 @@
 import os
 import sys
 import gc
+from cloudpickle import print_exec
 from tempfile import NamedTemporaryFile
 
 if sys.version < '3':
@@ -81,6 +82,7 @@ class Broadcast(object):
             raise
         except Exception as e:
             msg = "Could not serialize broadcast: " + e.__class__.__name__ + ": " + e.message
+            print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
         f.close()
         return f.name
