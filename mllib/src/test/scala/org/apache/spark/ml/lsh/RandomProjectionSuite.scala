@@ -38,5 +38,6 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model = rp.fit(df)
 
     model.getModelDataset.show()
+    model.approxNearestNeighbors(Vectors.dense(1.2, 3.4), k = 20).show()
   }
 }

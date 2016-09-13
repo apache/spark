@@ -19,6 +19,7 @@ package org.apache.spark.ml.lsh
 
 import scala.util.Random
 
+import breeze.linalg.functions.euclideanDistance
 import breeze.linalg.normalize
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -45,6 +46,10 @@ class RandomProjectionModel(
       })
       Vectors.dense(hashValues)
     }
+  }
+
+  override protected[this] def keyDistance(x: Vector, y: Vector): Double = {
+    euclideanDistance(x.asBreeze, y.asBreeze)
   }
 }
 

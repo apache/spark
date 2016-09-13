@@ -19,11 +19,11 @@ package org.apache.spark.ml.lsh
 
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
-import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{DataTypes, StructField, StructType}
 
 /**
  * Params for [[LSH]].
@@ -37,12 +37,24 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
   final val outputDim: IntParam = new IntParam(this, "outputDim", "output dimension",
     ParamValidators.gt(0))
 
+  /**
+   * Param for distance column name.
+   *
+   * @group param
+   */
+  final val distCol: Param[String] = new Param[String](this, "distCol", "distance column name")
+
   /** @group getParam */
   final def getOutputDim: Int = $(outputDim)
+
+  /** @group getParam */
+  final def getDistCol: String = $(distCol)
 
   setDefault(outputDim -> 1)
 
   setDefault(outputCol -> "lsh_output")
+
+  setDefault(distCol -> "lsh_distance")
 
   /**
    * Transform the Schema for LSH
@@ -73,6 +85,30 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
    */
   protected[this] val hashFunction: KeyType => Vector
 
+  /**
+   * :: DeveloperApi ::
+   *
+   * Calculate the distance between two different keys using the distance metric corresponding
+   * to the hashFunction
+   * @param x One of the point in the metric space
+   * @param y Another the point in the metric space
+   * @return The distance between x and y in double
+   */
+  protected[this] def keyDistance(x: KeyType, y: KeyType): Double
+
+  /**
+   * :: DeveloperApi ::
+   *
+   * Calculate the distance between two different hash Vectors. By default, the distance is the
+   * minimum distance of two hash values in any dimension.
+   *
+   * @param x One of the hash vector
+   * @param y Another hash vector
+   * @return The distance between hash vectors x and y in double
+   */
+  protected[this] def hashDistance(x: Vector, y: Vector): Double = {
+    (x.asBreeze - y.asBreeze).toArray.map(math.abs).min
+  }
 
   /**
    * Transforms the input dataset.
@@ -102,6 +138,34 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
    * @return The dataset inside the model
    */
   def getModelDataset: Dataset[_] = modelDataset
+
+  /**
+   * Given a large dataset and an item, approximately find at most k items which have the closest
+   * distance to the item.
+   * @param key The key to hash for the item
+   * @param k The maximum number of items closest to the key
+   * @return A dataset containing at most k items closest to the key.
+   */
+  def approxNearestNeighbors(key: KeyType, k: Int = 1): Dataset[_] = {
+    if (k < 1) {
+      throw new Exception(s"Invalid number of nearest neighbors $k")
+    }
+    // Get Hash Value of the key v
+    val keyHash = hashFunction(key)
+
+    // In the origin dataset, find the hash value u that is closest to v
+    val hashDistUDF = udf((x: Vector) => hashDistance(x, keyHash), DataTypes.DoubleType)
+    val nearestHashDataset = modelDataset.select(min(hashDistUDF(col($(outputCol)))))
+    val nearestHashValue = nearestHashDataset.collect()(0)(0).asInstanceOf[Double]
+
+    // Filter the dataset where the hash value equals to u
+    val modelSubset = modelDataset.filter(hashDistUDF(col($(outputCol))) === nearestHashValue)
+
+    // Get the top k nearest neighbor by their distance to the key
+    val keyDistUDF = udf((x: KeyType) => keyDistance(x, key), DataTypes.DoubleType)
+    val modelSubsetWithDistCol = modelSubset.withColumn($(distCol), keyDistUDF(col($(inputCol))))
+    modelSubsetWithDistCol.sort($(distCol)).limit(k)
+  }
 }
 
 abstract class LSH[KeyType, T <: LSHModel[KeyType, T]] extends Estimator[T] with LSHParams {
@@ -113,6 +177,9 @@ abstract class LSH[KeyType, T <: LSHModel[KeyType, T]] extends Estimator[T] with
 
   /** @group setParam */
   def setOutputDim(value: Int): this.type = set(outputDim, value)
+
+  /** @group setParam */
+  def setDistCol(value: String): this.type = set(distCol, value)
 
   /**
    * :: DeveloperApi ::
