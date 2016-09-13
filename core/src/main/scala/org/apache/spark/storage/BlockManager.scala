@@ -888,7 +888,7 @@ private[spark] class BlockManager(
           // a memory shortage (which is an expected failure, unlike an uncaught exception).
           addUpdatedBlockStatusToTaskMetrics(blockId, BlockStatus.empty)
         } else {
-          removeBlock(blockId, tellMaster = false)
+          removeBlockInternal(blockId, tellMaster = false)
         }
         logWarning(s"Putting block $blockId failed")
       }
