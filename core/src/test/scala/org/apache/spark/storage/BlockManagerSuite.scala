@@ -1228,6 +1228,17 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store2.getRemoteBytes("item").isEmpty)
   }
 
+  test("SPARK-17484: master block locations are updated following an invalid remote block fetch") {
+    store = makeBlockManager(8000, "executor1")
+    store2 = makeBlockManager(8000, "executor2")
+    store.putSingle("item", "value", StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(master.getLocations("item").nonEmpty)
+    store.removeBlock("item", tellMaster = false)
+    assert(master.getLocations("item").nonEmpty)
+    assert(store2.getRemoteBytes("item").isEmpty)
+    assert(master.getLocations("item").isEmpty)
+  }
+
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {
     var numCalls = 0
 
