@@ -25,7 +25,7 @@ import com.google.common.primitives.Ints;
 public class TransportConf {
   
   static {
-    System.setProperty("io.netty.recycler.maxCapacity", "0");
+    System.setProperty("io.netty.allocator.type", "unpooled");
   }
 
   private final String SPARK_NETWORK_IO_MODE_KEY;
