@@ -394,7 +394,7 @@ private[spark] class MemoryStore(
           redirectableStream,
           unrollMemoryUsedByThisBlock,
           memoryMode,
-          bbos,
+          bbos.toChunkedByteBuffer,
           values,
           classTag))
     }
@@ -706,7 +706,7 @@ private[storage] class PartiallyUnrolledIterator[T](
 /**
  * A wrapper which allows an open [[OutputStream]] to be redirected to a different sink.
  */
-private class RedirectableOutputStream extends OutputStream {
+private[storage] class RedirectableOutputStream extends OutputStream {
   private[this] var os: OutputStream = _
   def setOutputStream(s: OutputStream): Unit = { os = s }
   override def write(b: Int): Unit = os.write(b)
@@ -726,7 +726,7 @@ private class RedirectableOutputStream extends OutputStream {
  * @param redirectableOutputStream an OutputStream which can be redirected to a different sink.
  * @param unrollMemory the amount of unroll memory used by the values in `unrolled`.
  * @param memoryMode whether the unroll memory is on- or off-heap
- * @param unrolledBbos a byte buffer containing the partially-serialized values.
+ * @param unrolled a byte buffer containing the partially-serialized values.
  *                     [[redirectableOutputStream]] initially points to this output stream.
  * @param rest         the rest of the original iterator passed to
  *                     [[MemoryStore.putIteratorAsValues()]].
@@ -736,15 +736,13 @@ private[storage] class PartiallySerializedBlock[T](
     memoryStore: MemoryStore,
     serializerManager: SerializerManager,
     blockId: BlockId,
-    serializationStream: SerializationStream,
-    redirectableOutputStream: RedirectableOutputStream,
-    unrollMemory: Long,
+    private val serializationStream: SerializationStream,
+    private val redirectableOutputStream: RedirectableOutputStream,
+    val unrollMemory: Long,
     memoryMode: MemoryMode,
-    unrolledBbos: ChunkedByteBufferOutputStream,
+    unrolled: => ChunkedByteBuffer,
     rest: Iterator[T],
     classTag: ClassTag[T]) {
-
-  private lazy val unrolled: ChunkedByteBuffer = unrolledBbos.toChunkedByteBuffer
 
   // If the task does not fully consume `valuesIterator` or otherwise fails to consume or dispose of
   // this PartiallySerializedBlock then we risk leaking of direct buffers, so we use a task
@@ -757,6 +755,9 @@ private[storage] class PartiallySerializedBlock[T](
       unrolled.dispose()
     }
   }
+
+  // Exposed for testing
+  private[storage] def getUnrolledChunkedByteBuffer: ChunkedByteBuffer = unrolled
 
   /**
    * Called to dispose of this block and free its memory.
