@@ -1296,9 +1296,19 @@ class SparseMatrix(Matrix):
         return newlinalg.SparseMatrix(self.numRows, self.numCols, self.colPtrs, self.rowIndices,
                                       self.values, self.isTransposed)
 
-    # TODO: More efficient implementation:
     def __eq__(self, other):
-        return np.all(self.toArray() == other.toArray())
+        if ((type(other) is not type(self)) or
+            self.isTransposed != other.isTransposed or
+            self.numRows != other.numRows or
+            self.numCols != other.numCols):
+            return False
+        if not np.array_equal(self.colPtrs, other.colPtrs):
+            return False
+        if not np.array_equal(self.rowIndices, other.rowIndices):
+            return False
+        if not np.array_equal(self.values, other.values):
+            return False
+        return True
 
 
 class Matrices(object):
