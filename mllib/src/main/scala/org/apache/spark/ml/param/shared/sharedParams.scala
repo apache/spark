@@ -405,5 +405,9 @@ private[ml] trait HasAggregationDepth extends Params {
 
   /** @group expertGetParam */
   final def getAggregationDepth: Int = $(aggregationDepth)
+
+  def getAggregationDepthByFormula(driverMemory: Long, dimension: Int, partitionNum: Int): Int = {
+    if (dimension > 200) 2 else 1
+  }
 }
 // scalastyle:on
