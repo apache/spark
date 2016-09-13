@@ -30,7 +30,7 @@ import scala.io.Source
 
 import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkConfigParseUtils, Utils}
 
 /**
  * Parses and encapsulates arguments from the spark-submit script.
@@ -412,10 +412,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         repositories = value
 
       case CONF =>
-        value.split("=", 2).toSeq match {
-          case Seq(k, v) => sparkProperties(k) = v
-          case _ => SparkSubmit.printErrorAndExit(s"Spark config without '=': $value")
-        }
+        SparkSubmit.parseSparkConfProperty(value, (k: String, v: String) => sparkProperties(k) = v)
 
       case PROXY_USER =>
         proxyUser = value

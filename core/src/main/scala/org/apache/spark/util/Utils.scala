@@ -1966,20 +1966,14 @@ private[spark] object Utils extends Logging {
    * Updates Spark config with properties from a set of Properties.
    * Provided properties have the highest priority.
    */
-  def updateSparkConfigFromProperties(conf: SparkConf, properties: Properties): Unit = {
-    properties.asScala.filter { case (k, v) =>
+  def updateSparkConfigFromProperties(conf: SparkConf, properties: Map[String, String])
+    : Unit = {
+    properties.filter { case (k, v) =>
       k.startsWith("spark.")
     }.foreach { case (k, v) =>
       conf.set(k, v)
       sys.props.getOrElseUpdate(k, v)
     }
-  }
-
-  /** Loads properties from a String */
-  def loadPropertiesFromString(input: String) : Properties = {
-    val properties = new Properties()
-    properties.load(new StringReader(input))
-    properties
   }
 
   /** Load properties present in the given file. */
