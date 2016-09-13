@@ -65,7 +65,7 @@ abstract class Collect extends ImperativeAggregate {
   }
 
   override def update(b: MutableRow, input: InternalRow): Unit = {
-    buffer += child.eval(input)
+    buffer += InternalRow.copyValue(child.eval(input))
   }
 
   override def merge(buffer: MutableRow, input: InternalRow): Unit = {
