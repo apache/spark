@@ -338,9 +338,8 @@ public class RowBasedKeyValueBatchSuite {
 
   @Test
   public void appendRowUntilExceedingPageSize() throws Exception {
-    // Use of this property prevents issues when running on a two core machine
-    // A developer may override this size to 1 MB not 64 MB, so use that if so
-    int pageSizeToUse = Integer.parseInt(System.getProperty("spark.buffer.pageSize"));
+    // Use default size or spark.buffer.pageSize if specified
+    int pageSizeToUse = (int) memoryManager.pageSizeBytes();
     RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
             valueSchema, taskMemoryManager, pageSizeToUse); //enough capacity
     try {
