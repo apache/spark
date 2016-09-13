@@ -586,24 +586,10 @@ object CombineUnions extends Rule[LogicalPlan] {
  * one conjunctive predicate.
  */
 object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
-  private def toCNF(predicate: Expression): Expression = {
-    val disjunctives = splitDisjunctivePredicates(predicate)
-    var finalPredicates = splitConjunctivePredicates(disjunctives.head)
-    disjunctives.tail.foreach { cond =>
-      val predicates = new ArrayBuffer[Expression]()
-      splitConjunctivePredicates(cond).map { p =>
-        predicates ++= finalPredicates.map(Or(_, p))
-      }
-      finalPredicates = predicates.toSeq
-    }
-    finalPredicates.reduce(And)
-  }
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Filter(fc, nf @ Filter(nc, grandChild)) =>
-      val fcCNF = toCNF(fc)
-      val ncCNF = toCNF(nc)
-      val combinedFilter = (ExpressionSet(splitConjunctivePredicates(fcCNF)) --
-        ExpressionSet(splitConjunctivePredicates(ncCNF))).reduceOption(And) match {
+      val combinedFilter = (ExpressionSet(splitConjunctivePredicates(fc)) --
+        ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
         case None =>

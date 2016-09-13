@@ -192,7 +192,9 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("disjunctive predicates which are able to pushdown should be pushed down after converted") {
+  // TODO: currently predicate pushdown doesn't convert predicates to pushdown-able form.
+  // We should do it to push down more predicates.
+  ignore("predicates which are able to pushdown should be pushed down after converted") {
     // (('a === 2) || ('c > 10 || 'a === 3)) can't be pushdown due to the disjunctive form.
     // However, its conjunctive normal form can be pushdown.
     val originalQuery = testRelation
