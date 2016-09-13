@@ -58,7 +58,7 @@ carsGPDF <- summarize(groupBy(carsDF, carsDF$gear), count = n(carsDF$gear))
 head(carsGPDF)
 ```
 
-The results `carsDF` and `carsSubDF` are `SparkDataFrame` objects. To convert back to R `data.frame`, we can use `collect`. **Caution**: This can cause the driver to run out of memory, though, because `collect()` fetches the entire distributed `DataFrame` to a single machine;
+The results `carsDF` and `carsSubDF` are `SparkDataFrame` objects. To convert back to R `data.frame`, we can use `collect`. **Caution**: This can cause your interactive environment to run out of memory, though, because `collect()` fetches the entire distributed `DataFrame` to your client, which is acting as a Spark driver.
 ```{r}
 carsGP <- collect(carsGPDF)
 class(carsGP)
@@ -385,22 +385,29 @@ head(result[order(result$max_mpg, decreasing = TRUE), ])
 
 Similar to `lapply` in native R, `spark.lapply` runs a function over a list of elements and distributes the computations with Spark. `spark.lapply` works in a manner that is similar to `doParallel` or `lapply` to elements of a list. The results of all the computations should fit in a single machine. If that is not the case you can do something like `df <- createDataFrame(list)` and then use `dapply`.
 
+We use `svm` in package `e1071` as an example. We use all default settings except for varying costs of constraints violation. `spark.lapply` can train those different models in parallel.
+
 ```{r}
-families <- c("gaussian", "poisson")
-train <- function(family) {
-  model <- glm(mpg ~ hp, mtcars, family = family)
+costs <- exp(seq(from = log(1), to = log(1000), length.out = 5))
+train <- function(cost) {
+  model <- e1071::svm(Species ~ ., data = iris, cost = cost)
   summary(model)
 }
 ```
 
 Return a list of model's summaries.
 ```{r}
-model.summaries <- spark.lapply(families, train)
+model.summaries <- spark.lapply(costs, train)
 ```
 
-Print the summary of each model.
 ```{r}
-print(model.summaries)
+class(model.summaries)
+```
+
+
+To avoid lengthy display, we only present the result of the second fitted model. You are free to inspect other models as well.
+```{r}
+print(model.summaries[[2]])
 ```
 
 
