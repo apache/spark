@@ -457,9 +457,12 @@ object SparkBuild extends PomBuild {
 object Core {
   lazy val settings = Seq(
     resourceGenerators in Compile += Def.task {
-      val buildScript = baseDirectory.value + "/../build/spark-build-info"
+      val isWindows = if (sys.props("os.name").startsWith("Windows")) true else false
+      val buildScript = baseDirectory.value + (if (isWindows) "/../build/spark-build-info.ps1" else "/../build/spark-build-info")
       val targetDir = baseDirectory.value + "/target/extra-resources/"
-      val command = Seq("bash", buildScript, targetDir, version.value)
+      val command = if (isWindows) {
+        Seq("powershell.exe", buildScript, targetDir, version.value)
+      } else Seq("bash", buildScript, targetDir, version.value)
       Process(command).!!
       val propsFile = baseDirectory.value / "target" / "extra-resources" / "spark-version-info.properties"
       Seq(propsFile)

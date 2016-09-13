@@ -370,6 +370,11 @@
                   <arg value="${project.build.directory}/extra-resources"/>
                   <arg value="${project.version}"/>
                 </exec>
+                <exec executable="powershell.exe">
+                  <arg value="${project.basedir}/../build/spark-build-info.ps1"/>
+                  <arg value="${project.build.directory}/extra-resources"/>
+                  <arg value="${project.version}"/>
+                </exec>
               </target>
             </configuration>
             <goals>
