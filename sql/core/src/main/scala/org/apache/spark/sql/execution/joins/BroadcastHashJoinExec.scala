@@ -55,7 +55,7 @@ case class BroadcastHashJoinExec(
     case RightOuter if left.output.forall(p => UnsafeRow.isFixedLength(p.dataType)) => true
     case Inner => buildSide match {
       case BuildRight => true
-      case BuildLeft if !left.output.forall(p => UnsafeRow.isFixedLength(p.dataType)) => true
+      case BuildLeft if left.output.forall(p => UnsafeRow.isFixedLength(p.dataType)) => true
     }
     case _ => false
   }
