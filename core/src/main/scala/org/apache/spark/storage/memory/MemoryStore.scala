@@ -759,6 +759,20 @@ private[storage] class PartiallySerializedBlock[T](
   // Exposed for testing
   private[storage] def getUnrolledChunkedByteBuffer: ChunkedByteBuffer = unrolled
 
+  private[this] var discarded = false
+  private[this] var consumed = false
+
+  private def verifyNotConsumedAndNotDiscarded(): Unit = {
+    if (consumed) {
+      throw new IllegalStateException(
+        "Can only call one of finishWritingToStream() or valuesIterator() and can only call once.")
+    }
+    if (discarded) {
+      throw new IllegalStateException("Cannot call methods on a discarded PartiallySerializedBlock")
+    }
+    consumed = true
+  }
+
   /**
    * Called to dispose of this block and free its memory.
    */
@@ -770,6 +784,7 @@ private[storage] class PartiallySerializedBlock[T](
       redirectableOutputStream.setOutputStream(ByteStreams.nullOutputStream())
       serializationStream.close()
     } finally {
+      discarded = true
       unrolled.dispose()
       memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
     }
@@ -780,6 +795,7 @@ private[storage] class PartiallySerializedBlock[T](
    * and then serializing the values from the original input iterator.
    */
   def finishWritingToStream(os: OutputStream): Unit = {
+    verifyNotConsumedAndNotDiscarded()
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
     ByteStreams.copy(unrolled.toInputStream(dispose = true), os)
     memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
@@ -798,6 +814,7 @@ private[storage] class PartiallySerializedBlock[T](
    * `close()` on it to free its resources.
    */
   def valuesIterator: PartiallyUnrolledIterator[T] = {
+    verifyNotConsumedAndNotDiscarded()
     // Close the serialization stream so that the serializer's internal buffers are freed and any
     // "end-of-stream" markers can be written out so that `unrolled` is a valid serialized stream.
     serializationStream.close()
