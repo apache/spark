@@ -409,7 +409,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       val message1 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_temp")
       }.getMessage
-      assert(message1.contains("is not allowed on a temporary table"))
+      assert(message1.contains("Operation not allowed: SHOW PARTITIONS on temporary tables"))
 
       val message2 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_tab3")

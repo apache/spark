@@ -82,10 +82,70 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("error handling: insert/load/truncate table commands against a temp view") {
+  test("Issue exceptions for ALTER VIEW on the temporary view") {
     val viewName = "testView"
     withTempView(viewName) {
-      sql(s"CREATE TEMPORARY VIEW $viewName AS SELECT id FROM jt")
+      createTempView(viewName)
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
+      }
+      intercept[NoSuchTableException] {
+        sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
+      }
+    }
+  }
+
+  test("Issue exceptions for ALTER TABLE on the temporary view") {
+    val viewName = "testView"
+    withTempView(viewName) {
+      createTempView(viewName)
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $viewName SET SERDE 'whatever'")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')")
+      }
+
+      intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
+      }
+
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $viewName RECOVER PARTITIONS")
+      }.getMessage
+      assert(e.contains(
+        "Operation not allowed: ALTER TABLE RECOVER PARTITIONS on temporary tables: `testView`"))
+    }
+  }
+
+  test("Issue exceptions for other table DDL on the temporary view") {
+    val viewName = "testView"
+    withTempView(viewName) {
+      createTempView(viewName)
+
       var e = intercept[AnalysisException] {
         sql(s"INSERT INTO TABLE $viewName SELECT 1")
       }.getMessage
@@ -95,13 +155,37 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       e = intercept[AnalysisException] {
         sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE $viewName""")
       }.getMessage
-      assert(e.contains(s"Target table in LOAD DATA cannot be temporary: `$viewName`"))
+      assert(e.contains(s"Operation not allowed: LOAD DATA on temporary tables: `$viewName`"))
 
       e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $viewName")
       }.getMessage
       assert(e.contains(s"Operation not allowed: TRUNCATE TABLE on temporary tables: `$viewName`"))
+
+      e = intercept[AnalysisException] {
+        sql(s"SHOW CREATE TABLE $viewName")
+      }.getMessage
+      assert(e.contains(
+        s"Operation not allowed: SHOW CREATE TABLE on temporary tables: `$viewName`"))
+
+      e = intercept[AnalysisException] {
+        sql(s"SHOW PARTITIONS $viewName")
+      }.getMessage
+      assert(e.contains(s"Operation not allowed: SHOW PARTITIONS on temporary tables: `$viewName`"))
+
+      e = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+      }.getMessage
+      assert(e.contains(s"Operation not allowed: ANALYZE TABLE on views: `$viewName`"))
     }
+  }
+
+  private def createTempView(viewName: String): Unit = {
+    sql(
+      s"""
+         |CREATE TEMPORARY VIEW $viewName
+         |AS SELECT 1, 2, 3
+       """.stripMargin)
   }
 
   test("error handling: insert/load/truncate table commands against a view") {
