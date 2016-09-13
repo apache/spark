@@ -63,7 +63,10 @@ class CatalogSuite
   }
 
   private def dropTable(name: String, db: Option[String] = None): Unit = {
-    sessionCatalog.dropTable(TableIdentifier(name, db), ignoreIfNotExists = false, purge = false)
+    val dropMetastoreTable = db.isDefined || !sessionCatalog.dropTempView(name)
+    if (dropMetastoreTable) {
+      sessionCatalog.dropTable(TableIdentifier(name, db), ignoreIfNotExists = false, purge = false)
+    }
   }
 
   private def createFunction(name: String, db: Option[String] = None): Unit = {
@@ -320,6 +323,14 @@ class CatalogSuite
         Map.empty[String, String])
     }
     assert(e2.message == "Cannot create a file-based external data source table without path")
+  }
+
+  test("dropTempView if a same-name table exists") {
+    withTable("same_name") {
+      sql("CREATE TABLE same_name(i int) USING json")
+      spark.catalog.dropTempView("same_name")
+      assert(spark.sessionState.catalog.tableExists(TableIdentifier("same_name")))
+    }
   }
 
   // TODO: add tests for the rest of them

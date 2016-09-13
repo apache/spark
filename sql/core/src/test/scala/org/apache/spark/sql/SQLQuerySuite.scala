@@ -2661,4 +2661,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         data.selectExpr("`part.col1`", "`col.1`"))
     }
   }
+
+  test("CREATE TABLE USING if a same-name temp view exists") {
+    withTable("same_name") {
+      withTempView("same_name") {
+        spark.range(10).createTempView("same_name")
+        sql("CREATE TABLE same_name(i int) USING json")
+        checkAnswer(spark.table("same_name"), spark.range(10).toDF())
+        assert(spark.table("default.same_name").collect().isEmpty)
+      }
+    }
+  }
 }

@@ -457,6 +457,20 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     checkAnswer(df2, df)
   }
 
+  test("save as table if a same-name temp view exists") {
+    import SaveMode._
+    for (mode <- Seq(Append, ErrorIfExists, Overwrite, Ignore)) {
+      withTable("same_name") {
+        withTempView("same_name") {
+          spark.range(10).createTempView("same_name")
+          spark.range(20).write.mode(mode).saveAsTable("same_name")
+          checkAnswer(spark.table("same_name"), spark.range(10).toDF())
+          checkAnswer(spark.table("default.same_name"), spark.range(20).toDF())
+        }
+      }
+    }
+  }
+
   private def testRead(
       df: => DataFrame,
       expectedResult: Seq[String],

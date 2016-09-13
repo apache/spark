@@ -53,19 +53,10 @@ private[sql] class HiveSessionCatalog(
     conf,
     hadoopConf) {
 
-  override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
+  override def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
-    if (name.database.isDefined || !tempTables.contains(table)) {
-      val database = name.database.map(formatDatabaseName)
-      val newName = name.copy(database = database, table = table)
-      metastoreCatalog.lookupRelation(newName, alias)
-    } else {
-      val relation = tempTables(table)
-      val tableWithQualifiers = SubqueryAlias(table, relation, None)
-      // If an alias was specified by the lookup, wrap the plan in a subquery so that
-      // attributes are properly qualified with this alias.
-      alias.map(a => SubqueryAlias(a, tableWithQualifiers, None)).getOrElse(tableWithQualifiers)
-    }
+    metastoreCatalog.lookupRelation(TableIdentifier(table, Some(db)), alias)
   }
 
   // ----------------------------------------------------------------

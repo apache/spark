@@ -337,9 +337,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - non-partitioned table - ErrorIfExists") {
-    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
-
-    withTempView("t") {
+    withTable("t") {
+      Seq.empty[(Int, String)].toDF().write.mode(SaveMode.Overwrite).saveAsTable("t")
       intercept[AnalysisException] {
         testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).saveAsTable("t")
       }
@@ -347,9 +346,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - non-partitioned table - Ignore") {
-    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
-
-    withTempView("t") {
+    withTable("t") {
+      Seq.empty[(Int, String)].toDF().write.mode(SaveMode.Overwrite).saveAsTable("t")
       testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
       assert(spark.table("t").collect().isEmpty)
     }
@@ -459,9 +457,9 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - partitioned table - ErrorIfExists") {
-    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
+    withTable("t") {
+      Seq.empty[(Int, String)].toDF().write.mode(SaveMode.Overwrite).saveAsTable("t")
 
-    withTempView("t") {
       intercept[AnalysisException] {
         partitionedTestDF.write
           .format(dataSourceName)
@@ -474,9 +472,9 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - partitioned table - Ignore") {
-    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
+    withTable("t") {
+      Seq.empty[(Int, String)].toDF().write.mode(SaveMode.Overwrite).saveAsTable("t")
 
-    withTempView("t") {
       partitionedTestDF.write
         .format(dataSourceName)
         .mode(SaveMode.Ignore)

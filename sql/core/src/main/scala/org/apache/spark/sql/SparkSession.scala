@@ -556,7 +556,7 @@ class SparkSession private(
   }
 
   private[sql] def table(tableIdent: TableIdentifier): DataFrame = {
-    Dataset.ofRows(self, sessionState.catalog.lookupRelation(tableIdent))
+    Dataset.ofRows(self, sessionState.catalog.lookupTempViewOrRelation(tableIdent))
   }
 
   /* ----------------- *

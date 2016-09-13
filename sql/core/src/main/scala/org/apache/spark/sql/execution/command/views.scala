@@ -104,18 +104,13 @@ case class CreateViewCommand(
     if (isTemporary) {
       createTemporaryView(sparkSession, analyzedPlan)
     } else {
-      // Adds default database for permanent table if it doesn't exist, so that tableExists()
-      // only check permanent tables.
-      val database = name.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-      val qualifiedName = name.copy(database = Option(database))
-
-      if (sessionState.catalog.tableExists(qualifiedName)) {
-        val tableMetadata = sessionState.catalog.getTableMetadata(qualifiedName)
+      if (sessionState.catalog.tableExists(name)) {
+        val tableMetadata = sessionState.catalog.getTableMetadata(name)
         if (allowExisting) {
           // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
           // already exists.
         } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
-          throw new AnalysisException(s"$qualifiedName is not a view")
+          throw new AnalysisException(s"$name is not a view")
         } else if (replace) {
           // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
           sessionState.catalog.alterTable(prepareTable(sparkSession, analyzedPlan))
@@ -123,7 +118,7 @@ case class CreateViewCommand(
           // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
           // exists.
           throw new AnalysisException(
-            s"View $qualifiedName already exists. If you want to update the view definition, " +
+            s"View $name already exists. If you want to update the view definition, " +
               "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
         }
       } else {
@@ -217,41 +212,40 @@ case class AlterViewAsCommand(
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(session: SparkSession): Seq[Row] = {
+    val catalog = session.sessionState.catalog
     // If the plan cannot be analyzed, throw an exception and don't proceed.
     val qe = session.sessionState.executePlan(query)
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
 
-    if (session.sessionState.catalog.isTemporaryTable(name)) {
-      session.sessionState.catalog.createTempView(name.table, analyzedPlan, overrideIfExists = true)
-    } else {
-      alterPermanentView(session, analyzedPlan)
-    }
+    // If view name contains database part, alter a permanent view directly, otherwise, try to alter
+    // a temp view first, if that not exist, alter a permanent view.
+    val alterPermanentView =
+      name.database.isDefined || !catalog.alterTempView(name.table, analyzedPlan)
 
+    if (alterPermanentView) {
+      val viewMeta = catalog.getTableMetadata(name)
+      if (viewMeta.tableType != CatalogTableType.VIEW) {
+        throw new AnalysisException(s"${viewMeta.identifier} is not a view.")
+      }
+
+      val viewSQL: String = new SQLBuilder(analyzedPlan).toSQL
+      // Validate the view SQL - make sure we can parse it and analyze it.
+      // If we cannot analyze the generated query, there is probably a bug in SQL generation.
+      try {
+        session.sql(viewSQL).queryExecution.assertAnalyzed()
+      } catch {
+        case NonFatal(e) =>
+          throw new RuntimeException(s"Failed to analyze the canonicalized SQL: $viewSQL", e)
+      }
+
+      val updatedViewMeta = viewMeta.copy(
+        schema = analyzedPlan.schema,
+        viewOriginalText = Some(originalText),
+        viewText = Some(viewSQL))
+
+      catalog.alterTable(updatedViewMeta)
+    }
     Seq.empty[Row]
-  }
-
-  private def alterPermanentView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
-    val viewMeta = session.sessionState.catalog.getTableMetadata(name)
-    if (viewMeta.tableType != CatalogTableType.VIEW) {
-      throw new AnalysisException(s"${viewMeta.identifier} is not a view.")
-    }
-
-    val viewSQL: String = new SQLBuilder(analyzedPlan).toSQL
-    // Validate the view SQL - make sure we can parse it and analyze it.
-    // If we cannot analyze the generated query, there is probably a bug in SQL generation.
-    try {
-      session.sql(viewSQL).queryExecution.assertAnalyzed()
-    } catch {
-      case NonFatal(e) =>
-        throw new RuntimeException(s"Failed to analyze the canonicalized SQL: $viewSQL", e)
-    }
-
-    val updatedViewMeta = viewMeta.copy(
-      schema = analyzedPlan.schema,
-      viewOriginalText = Some(originalText),
-      viewText = Some(viewSQL))
-
-    session.sessionState.catalog.alterTable(updatedViewMeta)
   }
 }

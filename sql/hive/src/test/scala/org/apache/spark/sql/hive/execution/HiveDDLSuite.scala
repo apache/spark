@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
@@ -671,8 +671,11 @@ class HiveDDLSuite
           .createTempView(sourceViewName)
         sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName")
 
-        val sourceTable = spark.sessionState.catalog.getTableMetadata(
-          TableIdentifier(sourceViewName, None))
+        val sourceTable = CatalogTable(
+          identifier = TableIdentifier(sourceViewName),
+          tableType = CatalogTableType.VIEW,
+          storage = CatalogStorageFormat.empty,
+          schema = spark.sessionState.catalog.lookupTempView(sourceViewName).get.schema)
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
 

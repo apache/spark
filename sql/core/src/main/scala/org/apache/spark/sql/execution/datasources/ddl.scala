@@ -49,7 +49,7 @@ case class CreateTempViewUsing(
 
   if (tableIdent.database.isDefined) {
     throw new AnalysisException(
-      s"Temporary table '$tableIdent' should not have specified a database")
+      s"Temporary view '$tableIdent' should not have specified a database")
   }
 
   def run(sparkSession: SparkSession): Seq[Row] = {

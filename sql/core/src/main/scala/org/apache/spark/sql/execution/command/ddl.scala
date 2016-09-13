@@ -189,31 +189,39 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (!catalog.tableExists(tableName)) {
-      if (!ifExists) {
-        val objectName = if (isView) "View" else "Table"
-        throw new AnalysisException(s"$objectName to drop '$tableName' does not exist")
+
+    // If the table name contains database part, we should drop a metastore table directly,
+    // otherwise, try to drop a temp view first, if that not exist, drop metastore table.
+    val dropMetastoreTable =
+      tableName.database.isDefined || !catalog.dropTempView(tableName.table)
+
+    if (dropMetastoreTable) {
+      if (!catalog.tableExists(tableName)) {
+        if (!ifExists) {
+          val objectName = if (isView) "View" else "Table"
+          throw new AnalysisException(s"$objectName to drop '$tableName' does not exist")
+        }
+      } else {
+        // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
+        // issue an exception.
+        catalog.getTableMetadataOption(tableName).map(_.tableType match {
+          case CatalogTableType.VIEW if !isView =>
+            throw new AnalysisException(
+              "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+          case o if o != CatalogTableType.VIEW && isView =>
+            throw new AnalysisException(
+              s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
+          case _ =>
+        })
+        try {
+          sparkSession.sharedState.cacheManager.uncacheQuery(
+            sparkSession.table(tableName.quotedString))
+        } catch {
+          case NonFatal(e) => log.warn(e.toString, e)
+        }
+        catalog.refreshTable(tableName)
+        catalog.dropTable(tableName, ifExists, purge)
       }
-    } else {
-      // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
-      // issue an exception.
-      catalog.getTableMetadataOption(tableName).map(_.tableType match {
-        case CatalogTableType.VIEW if !isView =>
-          throw new AnalysisException(
-            "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
-        case o if o != CatalogTableType.VIEW && isView =>
-          throw new AnalysisException(
-            s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
-        case _ =>
-      })
-      try {
-        sparkSession.sharedState.cacheManager.uncacheQuery(
-          sparkSession.table(tableName.quotedString))
-      } catch {
-        case NonFatal(e) => log.warn(e.toString, e)
-      }
-      catalog.refreshTable(tableName)
-      catalog.dropTable(tableName, ifExists, purge)
     }
     Seq.empty[Row]
   }
@@ -469,10 +477,6 @@ case class AlterTableRecoverPartitionsCommand(
     val catalog = spark.sessionState.catalog
     if (!catalog.tableExists(tableName)) {
       throw new AnalysisException(s"Table $tableName in $cmd does not exist.")
-    }
-    if (catalog.isTemporaryTable(tableName)) {
-      throw new AnalysisException(
-        s"Operation not allowed: $cmd on temporary tables: $tableName")
     }
     val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {

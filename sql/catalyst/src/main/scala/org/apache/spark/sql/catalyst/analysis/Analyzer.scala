@@ -439,7 +439,7 @@ class Analyzer(
   object ResolveRelations extends Rule[LogicalPlan] {
     private def lookupTableFromCatalog(u: UnresolvedRelation): LogicalPlan = {
       try {
-        catalog.lookupRelation(u.tableIdentifier, u.alias)
+        catalog.lookupTempViewOrRelation(u.tableIdentifier, u.alias)
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"Table or view not found: ${u.tableName}")

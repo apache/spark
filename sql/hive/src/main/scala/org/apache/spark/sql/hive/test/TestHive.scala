@@ -424,7 +424,7 @@ private[hive] class TestHiveSparkSession(
 
       sharedState.cacheManager.clearCache()
       loadedTables.clear()
-      sessionState.catalog.clearTempTables()
+      sessionState.catalog.clearTempViews()
       sessionState.catalog.invalidateCache()
 
       sessionState.metadataHive.reset()
