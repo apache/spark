@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{broadcast, TaskContext}
+import org.apache.spark.{TaskContext, broadcast}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -25,11 +25,13 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * An interface for those physical operators that support codegen.
@@ -146,6 +148,49 @@ trait CodegenSupport extends SparkPlan {
     }
 
     ctx.freshNamePrefix = parent.variablePrefix
+    val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
+    s"""
+       |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}
+       |$evaluated
+       |${parent.doConsume(ctx, inputVars, rowVar)}
+     """.stripMargin
+  }
+
+  final def consumeForJoin(
+      ctx: CodegenContext,
+      outputVars: Seq[ExprCode],
+      findMatch: ArrayBuffer[String],
+      streamedLen: Int,
+      sequential: Boolean): String = {
+    assert(outputVars != null)
+    assert(outputVars.length == output.length)
+    assert(outputVars.length > 1)
+
+    ctx.INPUT_ROW = null
+    ctx.currentVars = outputVars
+    ctx.freshNamePrefix = parent.variablePrefix
+
+    // outputVars will be used to generate the code for UnsafeRow, so we should copy them
+    val inputVars = outputVars.map(_.copy())
+    val colExprs = output.zipWithIndex.map { case (attr, i) =>
+      BoundReference(i, attr.dataType, attr.nullable)
+    }
+    val (streamedVars, buildVars) =
+      if (sequential) inputVars.splitAt(streamedLen) else inputVars.splitAt(streamedLen).swap
+
+    val evaluateStreamed = evaluateVariables(streamedVars)
+    val evaluateBuild = evaluateVariables(buildVars)
+    findMatch.append(evaluateBuild)
+    // generate the code to create a UnsafeRow
+    val ev = GenerateUnsafeProjection.createCodeForJoin(
+      ctx, colExprs, findMatch, streamedLen, sequential)
+    val code =
+      s"""
+        |$evaluateStreamed
+        |${ev.code.trim}
+       """.stripMargin.trim
+    val rowVar = ExprCode(code, "false", ev.value)
+
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
     s"""
        |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}

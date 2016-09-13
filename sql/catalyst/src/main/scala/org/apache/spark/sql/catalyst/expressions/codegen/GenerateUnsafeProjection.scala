@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
  * Generates a [[Projection]] that returns an [[UnsafeRow]].
  *
@@ -94,78 +96,132 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val writeFields = inputs.zip(inputTypes).zipWithIndex.map {
       case ((input, dataType), index) =>
-        val dt = dataType match {
-          case udt: UserDefinedType[_] => udt.sqlType
-          case other => other
-        }
-        val tmpCursor = ctx.freshName("tmpCursor")
-
-        val setNull = dt match {
-          case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
-            // Can't call setNullAt() for DecimalType with precision larger than 18.
-            s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
-          case _ => s"$rowWriter.setNullAt($index);"
-        }
-
-        val writeField = dt match {
-          case t: StructType =>
-            s"""
-              // Remember the current cursor so that we can calculate how many bytes are
-              // written later.
-              final int $tmpCursor = $bufferHolder.cursor;
-              ${writeStructToBuffer(ctx, input.value, t.map(_.dataType), bufferHolder)}
-              $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
-            """
-
-          case a @ ArrayType(et, _) =>
-            s"""
-              // Remember the current cursor so that we can calculate how many bytes are
-              // written later.
-              final int $tmpCursor = $bufferHolder.cursor;
-              ${writeArrayToBuffer(ctx, input.value, et, bufferHolder)}
-              $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
-              $rowWriter.alignToWords($bufferHolder.cursor - $tmpCursor);
-            """
-
-          case m @ MapType(kt, vt, _) =>
-            s"""
-              // Remember the current cursor so that we can calculate how many bytes are
-              // written later.
-              final int $tmpCursor = $bufferHolder.cursor;
-              ${writeMapToBuffer(ctx, input.value, kt, vt, bufferHolder)}
-              $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
-              $rowWriter.alignToWords($bufferHolder.cursor - $tmpCursor);
-            """
-
-          case t: DecimalType =>
-            s"$rowWriter.write($index, ${input.value}, ${t.precision}, ${t.scale});"
-
-          case NullType => ""
-
-          case _ => s"$rowWriter.write($index, ${input.value});"
-        }
-
-        if (input.isNull == "false") {
-          s"""
-            ${input.code}
-            ${writeField.trim}
-          """
-        } else {
-          s"""
-            ${input.code}
-            if (${input.isNull}) {
-              ${setNull.trim}
-            } else {
-              ${writeField.trim}
-            }
-          """
-        }
+        writeFieldToBuffer(ctx, input, dataType, index, rowWriter, bufferHolder)
     }
 
     s"""
       $resetWriter
       ${ctx.splitExpressions(row, writeFields)}
     """.trim
+  }
+
+  private def writeExpressionsToBufferForJoin(
+      ctx: CodegenContext,
+      inputs: Seq[ExprCode],
+      inputTypes: Seq[DataType],
+      findMatch: ArrayBuffer[String],
+      bufferHolder: String,
+      streamedLen: Int,
+      sequential: Boolean): String = {
+    val rowWriterClass = classOf[UnsafeRowWriter].getName
+    val rowWriter = ctx.freshName("rowWriter")
+    ctx.addMutableState(rowWriterClass, rowWriter,
+      s"this.$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});")
+
+    val resetWriter = if (inputs.map(_.isNull).forall(_ == "false")) {
+      // If all fields are not nullable, which means the null bits never changes, then we don't
+      // need to clear it out every time.
+        ""
+    } else {
+      s"$rowWriter.zeroOutNullBytes();"
+    }
+
+    val writeFields = inputs.zip(inputTypes).zipWithIndex.map {
+      case ((input, dataType), index) =>
+        writeFieldToBuffer(ctx, input, dataType, index, rowWriter, bufferHolder)
+    }
+
+    val (streamFields, buildFields) = if (sequential) {
+      writeFields.splitAt(streamedLen)
+    } else {
+      writeFields.splitAt(streamedLen).swap
+    }
+    s"""
+      |$resetWriter
+      |${streamFields.mkString("\n")}
+      |while (${findMatch(0)}.hasNext()) {
+      |   UnsafeRow ${findMatch(1)} = (UnsafeRow) ${findMatch(0)}.next();
+      |   ${findMatch(2)}
+      |   ${findMatch(3)}.add(1);
+      |   ${findMatch(4)}
+      |   ${buildFields.mkString("\n")}
+      |}
+    """.stripMargin.trim
+  }
+
+  private def writeFieldToBuffer(
+      ctx: CodegenContext,
+      input: ExprCode,
+      dataType: DataType,
+      index: Int,
+      rowWriter: String,
+      bufferHolder: String): String = {
+    val dt = dataType match {
+      case udt: UserDefinedType[_] => udt.sqlType
+      case other => other
+    }
+    val tmpCursor = ctx.freshName("tmpCursor")
+
+    val setNull = dt match {
+      case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
+        // Can't call setNullAt() for DecimalType with precision larger than 18.
+        s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
+      case _ => s"$rowWriter.setNullAt($index);"
+    }
+
+    val writeField = dt match {
+      case t: StructType =>
+        s"""
+          // Remember the current cursor so that we can calculate how many bytes are
+          // written later.
+          final int $tmpCursor = $bufferHolder.cursor;
+          ${writeStructToBuffer(ctx, input.value, t.map(_.dataType), bufferHolder)}
+          $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
+        """
+
+      case a @ ArrayType(et, _) =>
+        s"""
+          // Remember the current cursor so that we can calculate how many bytes are
+          // written later.
+          final int $tmpCursor = $bufferHolder.cursor;
+          ${writeArrayToBuffer(ctx, input.value, et, bufferHolder)}
+          $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
+          $rowWriter.alignToWords($bufferHolder.cursor - $tmpCursor);
+        """
+
+      case m @ MapType(kt, vt, _) =>
+        s"""
+          // Remember the current cursor so that we can calculate how many bytes are
+          // written later.
+          final int $tmpCursor = $bufferHolder.cursor;
+          ${writeMapToBuffer(ctx, input.value, kt, vt, bufferHolder)}
+          $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
+          $rowWriter.alignToWords($bufferHolder.cursor - $tmpCursor);
+        """
+
+      case t: DecimalType =>
+        s"$rowWriter.write($index, ${input.value}, ${t.precision}, ${t.scale});"
+
+      case NullType => ""
+
+      case _ => s"$rowWriter.write($index, ${input.value});"
+    }
+
+    if (input.isNull == "false") {
+      s"""
+        ${input.code}
+        ${writeField.trim}
+      """
+    } else {
+      s"""
+        ${input.code}
+        if (${input.isNull}) {
+          ${setNull.trim}
+        } else {
+          ${writeField.trim}
+        }
+      """
+    }
   }
 
   // TODO: if the nullability of array element is correct, we can use it to save null check.
@@ -329,6 +385,62 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val writeExpressions =
       writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, holder, isTopLevel = true)
+
+    val code =
+      s"""
+        $resetBufferHolder
+        $evalSubexpr
+        $writeExpressions
+        $updateRowSize
+      """
+    ExprCode(code, "false", result)
+  }
+
+  def createCodeForJoin(
+    ctx: CodegenContext,
+    expressions: Seq[Expression],
+    findMatch: ArrayBuffer[String],
+    streamedLen: Int,
+    sequential: Boolean): ExprCode = {
+    val exprEvals = ctx.generateExpressions(expressions, false)
+    val exprTypes = expressions.map(_.dataType)
+
+    val numVarLenFields = exprTypes.count {
+      case dt if UnsafeRow.isFixedLength(dt) => false
+      // TODO: consider large decimal and interval type
+      case _ => true
+    }
+
+    val result = ctx.freshName("result")
+    ctx.addMutableState("UnsafeRow", result, s"$result = new UnsafeRow(${expressions.length});")
+
+    val holder = ctx.freshName("holder")
+    val holderClass = classOf[BufferHolder].getName
+    ctx.addMutableState(holderClass, holder,
+      s"this.$holder = new $holderClass($result, ${numVarLenFields * 32});")
+
+    val resetBufferHolder = if (numVarLenFields == 0) {
+      ""
+    } else {
+      s"$holder.reset();"
+    }
+    val updateRowSize = if (numVarLenFields == 0) {
+      ""
+    } else {
+      s"$result.setTotalSize($holder.totalSize());"
+    }
+
+    // Evaluate all the subexpression.
+    val evalSubexpr = ctx.subexprFunctions.mkString("\n")
+
+    val writeExpressions = writeExpressionsToBufferForJoin(
+      ctx,
+      exprEvals,
+      exprTypes,
+      findMatch,
+      holder,
+      streamedLen,
+      sequential)
 
     val code =
       s"""

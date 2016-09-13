@@ -29,6 +29,8 @@ import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport, SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.LongType
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
  * Performs an inner hash join of two child relations.  When the output RDD of this operator is
  * being constructed, a Spark job is asynchronously started to calculate the values for the
@@ -44,6 +46,16 @@ case class BroadcastHashJoinExec(
     left: SparkPlan,
     right: SparkPlan)
   extends BinaryExecNode with HashJoin with CodegenSupport {
+
+  private val canAvoidWrite = joinType match {
+    case LeftOuter => true
+    case RightOuter if !left.output.exists(p => !UnsafeRow.isFixedLength(p.dataType)) => true
+    case Inner => buildSide match {
+      case BuildRight => true
+      case BuildLeft if !left.output.exists(p => !UnsafeRow.isFixedLength(p.dataType)) => true
+    }
+    case _ => false
+  }
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -203,6 +215,7 @@ case class BroadcastHashJoinExec(
       case BuildLeft => buildVars ++ input
       case BuildRight => input ++ buildVars
     }
+
     if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side
@@ -214,24 +227,44 @@ case class BroadcastHashJoinExec(
          |$numOutput.add(1);
          |${consume(ctx, resultVars)}
        """.stripMargin
-
     } else {
       ctx.copyResult = true
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
-      s"""
-         |// generate join key for stream side
-         |${keyEv.code}
-         |// find matches from HashRelation
-         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |if ($matches == null) continue;
-         |while ($matches.hasNext()) {
-         |  UnsafeRow $matched = (UnsafeRow) $matches.next();
-         |  $checkCondition
-         |  $numOutput.add(1);
-         |  ${consume(ctx, resultVars)}
-         |}
-       """.stripMargin
+      val str = if (canAvoidWrite) {
+        val sequential = buildSide match {
+          case BuildRight => true
+          case _ => false
+        }
+
+        val findMatch = ArrayBuffer(matches, matched, checkCondition, numOutput)
+        s"""
+          |// generate join key for stream side
+          |${keyEv.code}
+          |// find matches from HashRelation
+          |$iteratorCls $matches =
+          |  $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
+          |if ($matches == null) continue;
+          |$checkCondition
+          |${consumeForJoin(ctx, resultVars, findMatch, input.length, sequential)}
+        """.stripMargin
+      } else {
+        s"""
+           |// generate join key for stream side
+           |${keyEv.code}
+           |// find matches from HashRelation
+           |$iteratorCls $matches =
+           |   $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
+           |if ($matches == null) continue;
+           |while ($matches.hasNext()) {
+           |  UnsafeRow $matched = (UnsafeRow) $matches.next();
+           |  $checkCondition
+           |  $numOutput.add(1);
+           |  ${consume(ctx, resultVars)}
+           |}
+        """.stripMargin
+      }
+      str
     }
   }
 
