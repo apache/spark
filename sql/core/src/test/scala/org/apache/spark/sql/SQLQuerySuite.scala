@@ -2615,4 +2615,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         data.selectExpr("`part.col1`", "`col.1`"))
     }
   }
+
+  test("SPARK-17515: CollectLimit.execute() should perform per-partition limits") {
+    val numRecordsRead = spark.sparkContext.longAccumulator
+    spark.range(1, 100, 1, numPartitions = 10).map { x =>
+      numRecordsRead.add(1)
+      x
+    }.limit(1).queryExecution.toRdd.count()
+    assert(numRecordsRead.value === 10)
+  }
 }
