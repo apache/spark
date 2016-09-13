@@ -30,7 +30,7 @@ import org.apache.spark.mllib.tree.impurity._
  * Class for calculating variance during regression.
  */
 @Since("2.1")
-object ApproxBernoulliImpurity extends Impurity {
+private[spark] object ApproxBernoulliImpurity extends Impurity {
 
   /**
    * :: DeveloperApi ::
@@ -57,13 +57,6 @@ object ApproxBernoulliImpurity extends Impurity {
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double = {
     Variance.calculate(count, sum, sumSquares)
   }
-
-  /**
-   * Get this impurity instance.
-   * This is useful for passing impurity parameters to a Strategy in Java.
-   */
-  @Since("2.1")
-  def instance: this.type = this
 }
 
 /**

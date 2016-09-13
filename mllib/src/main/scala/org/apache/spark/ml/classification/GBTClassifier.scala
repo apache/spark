@@ -40,7 +40,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
+ * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * learning algorithm for classification.
  * Note: Multiclass labels are not currently supported.
  * It supports both continuous and categorical features.
@@ -61,10 +61,10 @@ import org.apache.spark.sql.types.DoubleType
  *
  * [[GBTClassifier]] will use the usual `"loss-based"` impurity by default, conforming to
  * TreeBoost behavior. For SGB, set impurity to `"variance"`.
- * use of TreeBoost, set impurity to `"loss-based"`.
+ * To use of TreeBoost, set impurity to `"loss-based"`.
  *
  * Currently, however, even TreeBoost behavior uses variance impurity for split selection for
- * ease and speed. Leaf selection is aligned with theory. This is the approach `R`'s
+ * ease and speed. This is the approach `R`'s
  * [[https://cran.r-project.org/web/packages/gbm/index.html gbm package]] takes.
  */
 @Since("1.4.0")
@@ -163,7 +163,7 @@ object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {
   @Since("1.4.0")
   final val supportedLossTypes: Array[String] = GBTClassifierParams.supportedLossTypes
 
-  /** Accessor for support entropy settings: loss-based or variance */
+  /** Accessor for supported entropy settings: loss-based or variance */
   @Since("2.1")
   final val supportedImpurities: Array[String] = GBTClassifierParams.supportedImpurities
 

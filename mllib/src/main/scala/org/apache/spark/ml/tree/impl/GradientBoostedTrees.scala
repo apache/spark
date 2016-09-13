@@ -259,12 +259,10 @@ private[spark] object GradientBoostedTrees extends Logging {
     val loss = boostingStrategy.loss
     val learningRate = boostingStrategy.learningRate
     // Prepare strategy for individual trees, which all use regression.
-    // TODO(vlad17): Changing the strategy here is confusing (especially using regression for
-    // classification). With the resolution of SPARK-16728, this shouldn't be necessary.
+    // TODO(SPARK-16728): changing the strategy here is confusing and should be avoided
     val treeStrategy = boostingStrategy.treeStrategy.copy
     val validationTol = boostingStrategy.validationTol
     treeStrategy.algo = OldAlgo.Regression
-    treeStrategy.impurity = boostingStrategy.treeStrategy.impurity
     treeStrategy.assertValid()
 
     // Cache input

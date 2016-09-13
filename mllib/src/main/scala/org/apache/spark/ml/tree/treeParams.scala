@@ -191,7 +191,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
  */
 private[ml] trait TreeClassifierParams extends Params {
 
-  // Impurity should be overriden when setting a default. This should be a def, but has
+  // Impurity should be overridden when setting a default. This should be a def, but has
   // to be a val to maintain the proper documentation.
   /**
    * @group param
@@ -202,7 +202,7 @@ private[ml] trait TreeClassifierParams extends Params {
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  def getImpurity: String = $(impurity).toLowerCase
+  final def getImpurity: String = $(impurity).toLowerCase
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -246,7 +246,7 @@ private[ml] trait DecisionTreeClassifierParams
  */
 private[ml] trait TreeRegressorParams extends Params {
 
-  // Impurity should be overriden when setting a default. This should be a def, but has
+  // Impurity should be overridden when setting a default. This should be a def, but has
   // to be a val to maintain the proper documentation.
   /**
    * @group param
@@ -257,7 +257,7 @@ private[ml] trait TreeRegressorParams extends Params {
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  def getImpurity: String = $(impurity).toLowerCase
+  final def getImpurity: String = $(impurity).toLowerCase
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -537,7 +537,7 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
-   * Supported: "bernoulli" (default), "logistic" (alias for "bernoulli")
+   * Supported: "logistic" (default), "bernoulli" (alias for "logistic")
    *
    * @group param
    */
@@ -546,7 +546,7 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
     s" ${GBTClassifierParams.supportedLossTypes.mkString(", ")}",
     (value: String) => GBTClassifierParams.supportedLossTypes.contains(value.toLowerCase))
 
-  setDefault(lossType -> "bernoulli", impurity -> "loss-based")
+  setDefault(lossType -> "logistic", impurity -> "loss-based")
 
   /** @group getParam */
   def getLossType: String = $(lossType).toLowerCase
@@ -564,18 +564,20 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
 
 private[ml] object GBTRegressorParams {
   // The losses below should be lowercase.
-  /** Accessor for supported loss settings: squared (L2), absolute (L1), gaussian (squared),
-   * laplace (absolute) */
+  /**
+   * Accessor for supported loss settings: squared (L2), absolute (L1),
+   * gaussian (alias for squared), laplace (alias for absolute)
+   * */
   final val supportedLossTypes: Array[String] = Array(
     "squared", "absolute", "gaussian", "laplace")
-  /** Accessor for support entropy settings: loss-based or variance */
+  /** Accessor for supported impurity settings: loss-based or variance */
   final val supportedImpurities: Array[String] = Array("loss-based", "variance")
 
   final def getLossBasedImpurity(loss: String): OldImpurity = loss match {
     case "gaussian" | "squared" => OldVariance
     case "laplace" | "absolute" => throw new RuntimeException(
       "GBTRegressor does not yet support loss-based impurity for absolute or laplace loss")
-    // TODO(vlad17) use ApproxLaplaceImpurity here once it is implemented.
+    // TODO(SPARK-4240) use ApproxLaplaceImpurity here once it is implemented.
     case _ => throw new RuntimeException(
       s"GBTRegressor does not have loss-based impurity for loss ${loss}")
   }
@@ -595,7 +597,6 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
     s" ${GBTRegressorParams.supportedImpurities.mkString(", ")}",
     (value: String) => GBTRegressorParams.supportedImpurities.contains(value.toLowerCase))
 
-  /** (private[ml]) convert new impurity to old impurity */
   override private[ml] def getOldImpurity: OldImpurity = {
     getImpurity match {
       case "loss-based" => GBTRegressorParams.getLossBasedImpurity($(lossType))
@@ -635,4 +636,3 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
     }
   }
 }
-

@@ -147,7 +147,7 @@ class Strategy @Since("1.3.0") (
       case Regression =>
         // Regression is used under-the-hood in the GBTClassifier, so all of its impurities
         // could be valid as regression impurities.
-        // TODO(vlad17): the above is confusing and only necessary since mllib.tree doesn't have
+        // TODO(SPARK-16728): the above is only necessary since mllib.tree doesn't have
         // spark.ml's usual Param.isValid()-checking mechanism. It should be removed with
         // the resolution of SPARK-16728.
         require(Set(Variance, ApproxBernoulliImpurity).contains(impurity),

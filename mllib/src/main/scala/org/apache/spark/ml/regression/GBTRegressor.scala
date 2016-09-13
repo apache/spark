@@ -37,7 +37,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 
 /**
- * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
+ * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * learning algorithm for regression.
  * It supports both continuous and categorical features.
  *
@@ -152,8 +152,10 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
 @Since("1.4.0")
 object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
-  /** Accessor for supported loss settings: squared (L2), absolute (L1), gaussian (squared),
-   * laplace (absolute) */
+  /**
+   * Accessor for supported loss settings: squared (L2), absolute (L1),
+   * gaussian (alias for squared), laplace (alias for absolute)
+   * */
   @Since("1.4.0")
   final val supportedLossTypes: Array[String] = GBTRegressorParams.supportedLossTypes
 

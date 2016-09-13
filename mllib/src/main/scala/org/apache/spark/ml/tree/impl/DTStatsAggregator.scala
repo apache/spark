@@ -36,7 +36,7 @@ private[spark] class DTStatsAggregator(
    * [[ImpurityAggregator]] instance specifying the impurity type.
   */
   private val impurityAggregator: ImpurityAggregator = metadata.impurity match {
-    // TODO(vlad17): this is a ridiculous coupling. Impurity should have a getAggregator() method
+    // TODO(SPARK-16728): this switch should be replaced by a virtual call
     case Gini => new GiniAggregator(metadata.numClasses)
     case Entropy => new EntropyAggregator(metadata.numClasses)
     case Variance => new VarianceAggregator()

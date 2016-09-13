@@ -76,7 +76,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   test("GBT-specific param defaults") {
     val gbt = new GBTClassifier()
     assert(gbt.getImpurity === "loss-based")
-    assert(gbt.getLossType === "bernoulli")
+    assert(gbt.getLossType === "logistic")
   }
 
   test("GBT-specific param support") {
