@@ -375,6 +375,16 @@ class CodegenContext {
     }
   }
 
+  def copyValue(value: String, dataType: DataType): String = {
+    val jt = javaType(dataType)
+    val safeCopy = s"$value == null ? null :"
+    dataType match {
+      case _ if isPrimitiveType(jt) => value
+      case _: StructType => s"$safeCopy $value.copy()"
+      case _ => s"$safeCopy $value.clone()"
+    }
+  }
+
   /**
    * Returns the name used in accessor and setter for a Java primitive type.
    */
