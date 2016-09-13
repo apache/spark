@@ -66,22 +66,22 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.ReturnAnswer(rootPlan) => rootPlan match {
         case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
-          execution.TakeOrderedAndProjectExec(limit, order, None, planLater(child)) :: Nil
+          execution.TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
         case logical.Limit(
             IntegerLiteral(limit),
             logical.Project(projectList, logical.Sort(order, true, child))) =>
           execution.TakeOrderedAndProjectExec(
-            limit, order, Some(projectList), planLater(child)) :: Nil
+            limit, order, projectList, planLater(child)) :: Nil
         case logical.Limit(IntegerLiteral(limit), child) =>
           execution.CollectLimitExec(limit, planLater(child)) :: Nil
         case other => planLater(other) :: Nil
       }
       case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
-        execution.TakeOrderedAndProjectExec(limit, order, None, planLater(child)) :: Nil
+        execution.TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
       case logical.Limit(
           IntegerLiteral(limit), logical.Project(projectList, logical.Sort(order, true, child))) =>
         execution.TakeOrderedAndProjectExec(
-          limit, order, Some(projectList), planLater(child)) :: Nil
+          limit, order, projectList, planLater(child)) :: Nil
       case _ => Nil
     }
   }
