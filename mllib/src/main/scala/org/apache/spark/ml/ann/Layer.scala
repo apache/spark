@@ -395,14 +395,6 @@ private[ann] class FeedForwardTopology private(val layers: Array[Layer]) extends
   override def model(weights: Vector): TopologyModel = FeedForwardModel(this, weights)
 
   override def model(seed: Long): TopologyModel = FeedForwardModel(this, seed)
-
-  def weightSize: Int = {
-    var totalSize = 0
-    for (i <- 0 until layers.length) {
-      totalSize += layers(i).weightSize
-    }
-    totalSize
-  }
 }
 
 /**
@@ -553,9 +545,8 @@ private[ann] object FeedForwardModel {
    * @return model
    */
   def apply(topology: FeedForwardTopology, weights: Vector): FeedForwardModel = {
-    if (weights.size != topology.weightSize) {
-      throw new Exception("Input weight vector has illegal size.")
-    }
+    require(weights.size == topology.layers.map(_.weightSize).sum,
+      "Input weight vector has illegal size.")
     new FeedForwardModel(weights, topology)
   }
 
@@ -569,7 +560,7 @@ private[ann] object FeedForwardModel {
   def apply(topology: FeedForwardTopology, seed: Long = 11L): FeedForwardModel = {
     val layers = topology.layers
     val layerModels = new Array[LayerModel](layers.length)
-    val weights = BDV.zeros[Double](topology.weightSize)
+    val weights = BDV.zeros[Double](topology.layers.map(_.weightSize).sum)
     var offset = 0
     val random = new XORShiftRandom(seed)
     for (i <- 0 until layers.length) {
