@@ -160,37 +160,39 @@ trait CodegenSupport extends SparkPlan {
       ctx: CodegenContext,
       outputVars: Seq[ExprCode],
       findMatch: ArrayBuffer[String],
-      streamedLen: Int,
+      streamLen: Int,
       sequential: Boolean): String = {
     assert(outputVars != null)
     assert(outputVars.length == output.length)
     assert(outputVars.length > 1)
 
     ctx.INPUT_ROW = null
-    ctx.currentVars = outputVars
-    ctx.freshNamePrefix = parent.variablePrefix
 
     // outputVars will be used to generate the code for UnsafeRow, so we should copy them
     val inputVars = outputVars.map(_.copy())
     val colExprs = output.zipWithIndex.map { case (attr, i) =>
       BoundReference(i, attr.dataType, attr.nullable)
     }
-    val (streamedVars, buildVars) =
-      if (sequential) inputVars.splitAt(streamedLen) else inputVars.splitAt(streamedLen).swap
 
-    val evaluateStreamed = evaluateVariables(streamedVars)
-    val evaluateBuild = evaluateVariables(buildVars)
+    val evaluateInputs = evaluateVariables(outputVars)
+
+    val (evaluateStreamed, evaluateBuild) =
+    if (sequential) evaluateInputs.splitAt(streamLen) else evaluateInputs.splitAt(streamLen).swap
+    ctx.currentVars = outputVars
+
     findMatch.append(evaluateBuild)
     // generate the code to create a UnsafeRow
     val ev = GenerateUnsafeProjection.createCodeForJoin(
-      ctx, colExprs, findMatch, streamedLen, sequential)
+        ctx, colExprs, findMatch, streamLen, sequential)
     val code =
-      s"""
-        |$evaluateStreamed
-        |${ev.code.trim}
+    s"""
+       |$evaluateStreamed
+       |${ev.code.trim}
        """.stripMargin.trim
+
     val rowVar = ExprCode(code, "false", ev.value)
 
+    ctx.freshNamePrefix = parent.variablePrefix
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
     s"""
        |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}

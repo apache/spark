@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -28,8 +30,6 @@ import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Dist
 import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.LongType
-
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * Performs an inner hash join of two child relations.  When the output RDD of this operator is
@@ -241,7 +241,7 @@ case class BroadcastHashJoinExec(
       ctx.copyResult = true
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
-      val str = if (avoidRepeatedlyWriting) {
+      val code = if (avoidRepeatedlyWriting) {
         val findMatch = ArrayBuffer(matches, matched, checkCondition, numOutput)
         s"""
           |// generate join key for stream side
@@ -269,7 +269,7 @@ case class BroadcastHashJoinExec(
            |}
         """.stripMargin
       }
-      str
+      code
     }
   }
 

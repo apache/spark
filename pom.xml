@@ -39,7 +39,7 @@
   </licenses>
   <scm>
     <connection>scm:git:git@github.com:apache/spark.git</connection>
-    <developerConnection>scm:git:http://git-wip-us.apache.org/repos/asf/spark.git</developerConnection>
+    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/spark.git</developerConnection>
     <url>scm:git:git@github.com:apache/spark.git</url>
     <tag>HEAD</tag>
   </scm>
@@ -55,7 +55,7 @@
   </developers>
   <issueManagement>
     <system>JIRA</system>
-    <url>http://issues.apache.org/jira/browse/SPARK</url>
+    <url>https://issues.apache.org/jira/browse/SPARK</url>
   </issueManagement>
 
   <prerequisites>
@@ -227,7 +227,7 @@
       <id>central</id>
       <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
-      <url>http://repo1.maven.org/maven2</url>
+      <url>https://repo1.maven.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -239,7 +239,7 @@
   <pluginRepositories>
     <pluginRepository>
       <id>central</id>
-      <url>http://repo1.maven.org/maven2</url>
+      <url>https://repo1.maven.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -303,7 +303,7 @@
         <version>${chill.version}</version>
       </dependency>
       <!-- This artifact is a shaded version of ASM 5.0.4. The POM that was used to produce this
-           is at http://github.com/apache/geronimo-xbean/tree/xbean-4.4/xbean-asm5-shaded
+           is at https://github.com/apache/geronimo-xbean/tree/xbean-4.4/xbean-asm5-shaded
            For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
       <dependency>
         <groupId>org.apache.xbean</groupId>

@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * Generates a [[Projection]] that returns an [[UnsafeRow]].
@@ -111,7 +111,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       inputTypes: Seq[DataType],
       findMatch: ArrayBuffer[String],
       bufferHolder: String,
-      streamedLen: Int,
+      streamLen: Int,
       sequential: Boolean): String = {
     val rowWriterClass = classOf[UnsafeRowWriter].getName
     val rowWriter = ctx.freshName("rowWriter")
@@ -132,9 +132,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }
 
     val (streamFields, buildFields) = if (sequential) {
-      writeFields.splitAt(streamedLen)
+      writeFields.splitAt(streamLen)
     } else {
-      writeFields.splitAt(streamedLen).swap
+      writeFields.splitAt(streamLen).swap
     }
     s"""
       |$resetWriter
@@ -400,7 +400,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     ctx: CodegenContext,
     expressions: Seq[Expression],
     findMatch: ArrayBuffer[String],
-    streamedLen: Int,
+    streamLen: Int,
     sequential: Boolean): ExprCode = {
     val exprEvals = ctx.generateExpressions(expressions, false)
     val exprTypes = expressions.map(_.dataType)
@@ -439,7 +439,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       exprTypes,
       findMatch,
       holder,
-      streamedLen,
+      streamLen,
       sequential)
 
     val code =
