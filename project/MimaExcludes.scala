@@ -37,10 +37,14 @@ object MimaExcludes {
   // Exclude rules for 2.1.x
   lazy val v21excludes = v20excludes ++ {
     Seq(
+      // [SPARK-14743] Improve delegation token handling in secure cluster
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.SparkHadoopUtil.getTimeFromNowToRenewal"),
       // [SPARK-16199][SQL] Add a method to list the referenced columns in data source Filter
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references"),
       // [SPARK-16853][SQL] Fixes encoder error in DataSet typed select
-      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.Dataset.select")
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.Dataset.select"),
+      // [SPARK-16967] Move Mesos to Module
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkMasterRegex.MESOS_REGEX")
     )
   }
 
@@ -49,12 +53,15 @@ object MimaExcludes {
     Seq(
       excludePackage("org.apache.spark.rpc"),
       excludePackage("org.spark-project.jetty"),
+      excludePackage("org.spark_project.jetty"),
+      excludePackage("org.apache.spark.internal"),
       excludePackage("org.apache.spark.unused"),
       excludePackage("org.apache.spark.unsafe"),
       excludePackage("org.apache.spark.memory"),
       excludePackage("org.apache.spark.util.collection.unsafe"),
       excludePackage("org.apache.spark.sql.catalyst"),
       excludePackage("org.apache.spark.sql.execution"),
+      excludePackage("org.apache.spark.sql.internal"),
       ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.feature.PCAModel.this"),
       ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.StageData.this"),
       ProblemFilters.exclude[MissingMethodProblem](
@@ -785,9 +792,10 @@ object MimaExcludes {
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.parquetFile"),
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.applySchema")
     ) ++ Seq(
-        // [SPARK-14743] Improve delegation token handling in secure cluster
-        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.SparkHadoopUtil.getTimeFromNowToRenewal")
-      )
+      // SPARK-17096: Improve exception string reported through the StreamingQueryListener
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryListener#QueryTerminated.stackTrace"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryListener#QueryTerminated.this")
+    )
   }
 
   def excludes(version: String) = version match {

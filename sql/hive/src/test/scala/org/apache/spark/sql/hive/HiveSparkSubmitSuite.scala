@@ -378,10 +378,9 @@ object SetMetastoreURLTest extends Logging {
         s"spark.sql.test.expectedMetastoreURL should be set.")
     }
 
-    // HiveSharedState is used when Hive support is enabled.
+    // HiveExternalCatalog is used when Hive support is enabled.
     val actualMetastoreURL =
-      spark.sharedState.asInstanceOf[HiveSharedState]
-        .metadataHive
+      spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
         .getConf("javax.jdo.option.ConnectionURL", "this_is_a_wrong_URL")
     logInfo(s"javax.jdo.option.ConnectionURL is $actualMetastoreURL")
 
@@ -591,7 +590,9 @@ object SparkSubmitClassLoaderTest extends Logging {
   def main(args: Array[String]) {
     Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
+    val hiveWarehouseLocation = Utils.createTempDir()
     conf.set("spark.ui.enabled", "false")
+    conf.set("spark.sql.warehouse.dir", hiveWarehouseLocation.toString)
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     val df = hiveContext.createDataFrame((1 to 100).map(i => (i, i))).toDF("i", "j")
@@ -700,11 +701,13 @@ object SPARK_9757 extends QueryTest {
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
 
+    val hiveWarehouseLocation = Utils.createTempDir()
     val sparkContext = new SparkContext(
       new SparkConf()
         .set("spark.sql.hive.metastore.version", "0.13.1")
         .set("spark.sql.hive.metastore.jars", "maven")
-        .set("spark.ui.enabled", "false"))
+        .set("spark.ui.enabled", "false")
+        .set("spark.sql.warehouse.dir", hiveWarehouseLocation.toString))
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession

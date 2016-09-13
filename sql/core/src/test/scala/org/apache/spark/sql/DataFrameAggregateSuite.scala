@@ -87,6 +87,16 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-17124 agg should be ordering preserving") {
+    val df = spark.range(2)
+    val ret = df.groupBy("id").agg("id" -> "sum", "id" -> "count", "id" -> "min")
+    assert(ret.schema.map(_.name) == Seq("id", "sum(id)", "count(id)", "min(id)"))
+    checkAnswer(
+      ret,
+      Row(0, 0, 1, 0) :: Row(1, 1, 1, 1) :: Nil
+    )
+  }
+
   test("rollup") {
     checkAnswer(
       courseSales.rollup("course", "year").sum("earnings"),
@@ -474,5 +484,13 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       spark.sql("select avg(a) over () from values 1.0, 2.0, 3.0 T(a)"),
       Row(2.0) :: Row(2.0) :: Row(2.0) :: Nil)
+  }
+
+  test("SQL decimal test (used for catching certain demical handling bugs in aggregates)") {
+    checkAnswer(
+      decimalData.groupBy('a cast DecimalType(10, 2)).agg(avg('b cast DecimalType(10, 2))),
+      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(1.5)),
+        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(1.5)),
+        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(1.5))))
   }
 }

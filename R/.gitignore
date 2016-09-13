@@ -4,3 +4,5 @@
 lib
 pkg/man
 pkg/html
+SparkR.Rcheck/
+SparkR_*.tar.gz
