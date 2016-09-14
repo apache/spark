@@ -557,7 +557,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val STREAMING_POLLING_MIN_DELAY =
-    SQLConfigBuilder("spark.sql.streaming.pollingDelay")
+    SQLConfigBuilder("spark.sql.streaming.minPollingDelay")
       .internal()
       .doc("Minimimum time to delay polling new data when no data is available")
       .timeConf(TimeUnit.MILLISECONDS)

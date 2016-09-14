@@ -70,7 +70,7 @@ class StreamExecution(
   }
   private val NUM_ADDITIVE_RATE_STEPS = 10
   private val pollingRateIncreaseHz =
-    ((1.0 / minPollingDelayMs) - (1.0 / maxPollingDelayMs)) / NUM_ADDITIVE_RATE_STEPS
+    ((1000.0 / minPollingDelayMs) - (1000.0 / maxPollingDelayMs)) / NUM_ADDITIVE_RATE_STEPS
   private val MULTIPLICATIVE_RATE_STEP_SZ = 2
 
   /**
@@ -79,20 +79,23 @@ class StreamExecution(
    * and is adjusted by the two methods that follow.
    */
   var curPollingDelayMs = minPollingDelayMs
+  var amPolling = false
 
   private def increasePollingRate() = {
+    val prevDelay = curPollingDelayMs
     curPollingDelayMs = math.max(minPollingDelayMs,
-      (1000.0 / (1000.0 / curPollingDelayMs) + pollingRateIncreaseHz).toInt)
-    if (curPollingDelayMs > minPollingDelayMs) {
-      logDebug(s"Polling delay decreased to $curPollingDelayMs msec")
+      (1000.0 / ((1000.0 / prevDelay) + pollingRateIncreaseHz)).toInt)
+    if (curPollingDelayMs != prevDelay) {
+      logDebug(s"Polling delay decreased from $prevDelay to $curPollingDelayMs msec")
     }
   }
 
   private def decreasePollingRate() = {
+    val prevDelay = curPollingDelayMs
     curPollingDelayMs =
-      math.min(maxPollingDelayMs, curPollingDelayMs * MULTIPLICATIVE_RATE_STEP_SZ)
-    if (curPollingDelayMs < maxPollingDelayMs) {
-      logDebug(s"Polling delay decreased to $curPollingDelayMs msec")
+      math.min(maxPollingDelayMs, prevDelay * MULTIPLICATIVE_RATE_STEP_SZ)
+    if (curPollingDelayMs != prevDelay) {
+      logDebug(s"Polling delay increased from $prevDelay to $curPollingDelayMs msec")
     }
   }
 
@@ -235,10 +238,15 @@ class StreamExecution(
             runBatch()
             // We'll increase currentBatchId after we complete processing current batch's data
             currentBatchId += 1
+            amPolling = false
           } else {
-            // No data ==> multiplicative decrease in rate of polling, then sleep
-            decreasePollingRate()
+            // No data ==> multiplicative decrease in rate of polling, provided that we
+            //             have waited for at least the current polling interval.
+            if (amPolling) {
+              decreasePollingRate()
+            }
             Thread.sleep(curPollingDelayMs)
+            amPolling = true
           }
           true
         } else {
