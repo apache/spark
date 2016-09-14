@@ -1659,7 +1659,8 @@ class Analyzer(
       // child of it.
       var currentChild = child
       var i = 0
-      while (i < groupedWindowExpressions.size) {
+      val size = groupedWindowExpressions.size
+      while (i < size) {
         val ((partitionSpec, orderSpec), windowExpressions) = groupedWindowExpressions(i)
         // Set currentChild to the newly created Window operator.
         currentChild =
