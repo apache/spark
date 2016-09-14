@@ -21,6 +21,13 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.List;
 
+/**
+ * This class used to by {@link SparkLauncher#startApplicationAsThread(SparkAppHandle.Listener...)}
+ * <p>
+ * This class to start Spark applications programmatically as a Thread. This uses reflection and relies
+ * on find SparkSubmit main class.
+ * </p>
+ */
 class SparkSubmitRunner implements Runnable {
   private Method main;
   private final List<String> args;
@@ -29,18 +36,24 @@ class SparkSubmitRunner implements Runnable {
     this.main = main;
     this.args = args;
   }
+
   /**
-   *  Trying to see if method is available in the classpath.
+   * It is important that spark-submit class is available in the classpath.
+   * Trying to see if "org.apache.spark.deploy.SparkSubmit#Main" method is available in the classpath.
+   *
+   * @return Method to execute for starting Spark Application
+   * @throws ClassNotFoundException
+   * @throws NoSuchMethodException
    */
   protected static Method getSparkSubmitMain() throws ClassNotFoundException, NoSuchMethodException {
-      Class<?> cls = Class.forName("org.apache.spark.deploy.SparkSubmit");
-      return cls.getDeclaredMethod("main", String[].class);
+    Class<?> cls = Class.forName("org.apache.spark.deploy.SparkSubmit");
+    return cls.getDeclaredMethod("main", String[].class);
   }
 
   @Override
   public void run() {
     try {
-      if(main == null) {
+      if (main == null) {
         main = getSparkSubmitMain();
       }
       Object argsObj = args.toArray(new String[args.size()]);
@@ -49,11 +62,10 @@ class SparkSubmitRunner implements Runnable {
       throw new RuntimeException(illAcEx);
     } catch (InvocationTargetException invokEx) {
       throw new RuntimeException(invokEx);
-    } catch (RuntimeException re) {
-      throw re;
-    } catch (Exception e) {
-      throw new RuntimeException(e);
+    } catch (ClassNotFoundException cnfEx) {
+      throw new RuntimeException(cnfEx);
+    } catch (NoSuchMethodException nsmEx) {
+      throw new RuntimeException(nsmEx);
     }
   }
-
 }

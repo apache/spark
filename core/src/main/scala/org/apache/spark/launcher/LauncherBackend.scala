@@ -146,7 +146,7 @@ private[spark] abstract class LauncherBackend extends Logging {
     override def close(): Unit = {
       try {
         super.close()
-        if (!_isConnected && stopFlag) {
+        if (stopFlag) {
           fireStopRequest()
         }
       } finally {

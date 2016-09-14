@@ -180,7 +180,7 @@ class LauncherServer implements Closeable {
   AbstractSparkAppHandle newAppHandle(String secret, boolean isThreadHandle) {
 
     AbstractSparkAppHandle handle;
-    if(isThreadHandle) {
+    if (isThreadHandle) {
       handle = new ChildThreadAppHandle(secret, this);
     } else {
       handle = new ChildProcAppHandle(secret, this);
