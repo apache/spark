@@ -742,7 +742,7 @@ object ParquetFileFormat extends Logging {
               s"Failed merging schema of file ${footer.getFile}:\n${schema.treeString}", cause)
           }
         }
-        some(mergedSchema)
+        Some(mergedSchema)
       }
     }
 
