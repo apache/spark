@@ -20,14 +20,11 @@ package org.apache.spark.sql.execution.streaming
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.datasources.{DataSource, ListingFileCatalog, LogicalRelation}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -50,7 +47,8 @@ class FileStreamSource(
     fs.makeQualified(new Path(path))  // can contains glob patterns
   }
 
-  private val metadataLog = new FileStreamSourceLog(sparkSession, metadataPath)
+  private val metadataLog =
+    new FileStreamSourceLog(FileStreamSourceLog.VERSION, sparkSession, metadataPath)
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   /** Maximum number of new files to be considered in each batch */
@@ -97,7 +95,7 @@ class FileStreamSource(
 
     if (batchFiles.nonEmpty) {
       maxBatchId += 1
-      metadataLog.add(maxBatchId, batchFiles.toArray)
+      metadataLog.add(maxBatchId, batchFiles.map(_.copy(batchId = maxBatchId)).toArray)
       logInfo(s"Max batch id increased to $maxBatchId with ${batchFiles.size} new files")
     }
 
@@ -173,12 +171,9 @@ object FileStreamSource {
   /** Timestamp for file modification time, in ms since January 1, 1970 UTC. */
   type Timestamp = Long
 
-  // Default action when `FileEntry` is persisted into log.
-  val ADD_ACTION = "add"
-  // Action when `FileEntry` is compacted.
-  val COMPACT_ACTION = "compact"
+  val NOT_SET = -1L
 
-  case class FileEntry(path: String, timestamp: Timestamp, action: String = ADD_ACTION)
+  case class FileEntry(path: String, timestamp: Timestamp, batchId: Long = NOT_SET)
     extends Serializable
 
   /**
@@ -236,50 +231,6 @@ object FileStreamSource {
 
     def allEntries: Seq[FileEntry] = {
       map.entrySet().asScala.map(entry => FileEntry(entry.getKey, entry.getValue)).toSeq
-    }
-  }
-
-  class FileStreamSourceLog(sparkSession: SparkSession, path: String)
-    extends CompactibleFileStreamLog[FileEntry](sparkSession, path) {
-
-    // Configurations about metadata compaction
-    protected override val compactInterval =
-    sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL)
-    require(compactInterval > 0,
-      s"Please set ${SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key} (was $compactInterval) to a " +
-        s"positive value.")
-
-    protected override val fileCleanupDelayMs =
-      sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY)
-
-    protected override val isDeletingExpiredLog =
-      sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_DELETION)
-
-    private implicit val formats = Serialization.formats(NoTypeHints)
-
-    protected override def serializeData(data: FileEntry): String = {
-      Serialization.write(data)
-    }
-
-    def deserializeData(encodedString: String): FileEntry = {
-      Serialization.read[FileEntry](encodedString)
-    }
-
-    protected override def compactLogs(
-        oldLogs: Seq[FileEntry], newLogs: Seq[FileEntry]): Seq[FileEntry] = {
-      // Change the action of old file entry into COMPACT, so when fetching these out, they will
-      // be filtered out to avoid processing again.
-      oldLogs.map(e => FileEntry(e.path, e.timestamp, COMPACT_ACTION)) ++ newLogs
-    }
-
-    override def get(
-        startId: Option[Long], endId: Option[Long]): Array[(Long, Array[FileEntry])] = {
-      super.get(startId, endId).map { case (id, entries) =>
-        // Keep only the file entries in which the action is ADD, this will keep the consistency
-        // while retrieving again after compaction.
-        val addedEntries = entries.filter(_.action == ADD_ACTION)
-        (id, addedEntries)
-      }
     }
   }
 }

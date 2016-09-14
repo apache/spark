@@ -84,17 +84,19 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("compactLogs") {
-    val logs = Seq(
-      newFakeSinkFileStatus("/a/b/x", FileStreamSinkLog.ADD_ACTION),
-      newFakeSinkFileStatus("/a/b/y", FileStreamSinkLog.ADD_ACTION),
-      newFakeSinkFileStatus("/a/b/z", FileStreamSinkLog.ADD_ACTION))
-    assert(logs === compactLogs(logs))
+    withFileStreamSinkLog { sinkLog =>
+      val logs = Seq(
+        newFakeSinkFileStatus("/a/b/x", FileStreamSinkLog.ADD_ACTION),
+        newFakeSinkFileStatus("/a/b/y", FileStreamSinkLog.ADD_ACTION),
+        newFakeSinkFileStatus("/a/b/z", FileStreamSinkLog.ADD_ACTION))
+      assert(logs === sinkLog.compactLogs(logs))
 
-    val logs2 = Seq(
-      newFakeSinkFileStatus("/a/b/m", FileStreamSinkLog.ADD_ACTION),
-      newFakeSinkFileStatus("/a/b/n", FileStreamSinkLog.ADD_ACTION),
-      newFakeSinkFileStatus("/a/b/z", FileStreamSinkLog.DELETE_ACTION))
-    assert(logs.dropRight(1) ++ logs2.dropRight(1) === compactLogs(logs ++ logs2))
+      val logs2 = Seq(
+        newFakeSinkFileStatus("/a/b/m", FileStreamSinkLog.ADD_ACTION),
+        newFakeSinkFileStatus("/a/b/n", FileStreamSinkLog.ADD_ACTION),
+        newFakeSinkFileStatus("/a/b/z", FileStreamSinkLog.DELETE_ACTION))
+      assert(logs.dropRight(1) ++ logs2.dropRight(1) === sinkLog.compactLogs(logs ++ logs2))
+    }
   }
 
   test("serialize") {
@@ -264,7 +266,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
 
   private def withFileStreamSinkLog(f: FileStreamSinkLog => Unit): Unit = {
     withTempDir { file =>
-      val sinkLog = new FileStreamSinkLog(spark, file.getCanonicalPath)
+      val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, file.getCanonicalPath)
       f(sinkLog)
     }
   }

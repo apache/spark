@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.IOException
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.concurrent.TimeUnit
 
 import scala.reflect.ClassTag
 
@@ -29,8 +28,8 @@ import org.apache.spark.sql.SparkSession
 
 /**
  * An abstract class for compactible metadata logs. It will write one log file for each batch.
- * The first line of the log file is the version number, and there are multiple JSON lines
- * following.
+ * The first line of the log file is the version number, and there are multiple serialized
+ * metadata lines following.
  *
  * As reading from many small files is usually pretty slow, also too many
  * small files in one folder will mess the FS, [[CompactibleFileStreamLog]] will
@@ -38,6 +37,7 @@ import org.apache.spark.sql.SparkSession
  * doing a compaction, it will read all old log files and merge them with the new batch.
  */
 abstract class CompactibleFileStreamLog[T: ClassTag](
+    metadataLogVersion: String,
     sparkSession: SparkSession,
     path: String)
   extends HDFSMetadataLog[Array[T]](sparkSession, path) {
@@ -51,11 +51,11 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
    * a live lock may happen if the compaction happens too frequently: one processing keeps deleting
    * old files while another one keeps retrying. Setting a reasonable cleanup delay could avoid it.
    */
-  protected val fileCleanupDelayMs = TimeUnit.MINUTES.toMillis(10)
+  protected def fileCleanupDelayMs: Long
 
-  protected val isDeletingExpiredLog = true
+  protected def isDeletingExpiredLog: Boolean
 
-  protected val compactInterval = 10
+  protected def compactInterval: Int
 
   /**
    * Serialize the data into encoded string.
@@ -68,12 +68,9 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
   protected def deserializeData(encodedString: String): T
 
   /**
-   * Filter out the unwanted logs, by default it filters out nothing, inherited class could
-   * override this method to do filtering.
+   * Filter out the obsolote logs.
    */
-  protected def compactLogs(oldLogs: Seq[T], newLogs: Seq[T]): Seq[T] = {
-    oldLogs ++ newLogs
-  }
+  def compactLogs(logs: Seq[T]): Seq[T]
 
   override def batchIdToPath(batchId: Long): Path = {
     if (isCompactionBatch(batchId, compactInterval)) {
@@ -97,7 +94,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
   }
 
   override def serialize(logData: Array[T]): Array[Byte] = {
-    (VERSION +: logData.map(serializeData)).mkString("\n").getBytes(UTF_8)
+    (metadataLogVersion +: logData.map(serializeData)).mkString("\n").getBytes(UTF_8)
   }
 
   override def deserialize(bytes: Array[Byte]): Array[T] = {
@@ -106,7 +103,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
       throw new IllegalStateException("Incomplete log file")
     }
     val version = lines(0)
-    if (version != VERSION) {
+    if (version != metadataLogVersion) {
       throw new IllegalStateException(s"Unknown log version: ${version}")
     }
     lines.slice(1, lines.length).map(deserializeData)
@@ -126,8 +123,8 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
    */
   private def compact(batchId: Long, logs: Array[T]): Boolean = {
     val validBatches = getValidBatchesBeforeCompactionBatch(batchId, compactInterval)
-    val allLogs = validBatches.flatMap(batchId => get(batchId)).flatten
-    if (super.add(batchId, compactLogs(allLogs, logs).toArray)) {
+    val allLogs = validBatches.flatMap(batchId => super.get(batchId)).flatten ++ logs
+    if (super.add(batchId, compactLogs(allLogs).toArray)) {
       if (isDeletingExpiredLog) {
         deleteExpiredLog(batchId)
       }
@@ -148,18 +145,18 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
     // race condition.
     while (true) {
       if (latestId >= 0) {
-        val startId = getAllValidBatches(latestId, compactInterval)(0)
         try {
-          val logs = super.get(Some(startId), Some(latestId)).flatMap(_._2)
-          return compactLogs(logs, Seq.empty).toArray
+          val logs =
+            getAllValidBatches(latestId, compactInterval).flatMap(id => super.get(id)).flatten
+          return compactLogs(logs).toArray
         } catch {
           case e: IOException =>
-            // Another process using `FileStreamSink` may delete the batch files when
+            // Another process using `CompactibleFileStreamLog` may delete the batch files when
             // `StreamFileCatalog` are reading. However, it only happens when a compaction is
             // deleting old files. If so, let's try the next compaction batch and we should find it.
             // Otherwise, this is a real IO issue and we should throw it.
             latestId = nextCompactionBatchId(latestId, compactInterval)
-            get(latestId).getOrElse {
+            super.get(latestId).getOrElse {
               throw e
             }
         }
@@ -197,7 +194,6 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
 }
 
 object CompactibleFileStreamLog {
-  val VERSION = "v1"
   val COMPACT_FILE_SUFFIX = ".compact"
 
   def getBatchIdFromFileName(fileName: String): Long = {

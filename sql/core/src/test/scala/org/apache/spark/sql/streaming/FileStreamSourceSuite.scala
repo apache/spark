@@ -17,17 +17,14 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.{File, FilenameFilter}
 import java.io.File
 
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.PrivateMethodTester
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.FileStreamSource.FileStreamSourceLog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -821,18 +818,12 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
         // Assert path name should be ended with compact suffix.
         assert(path.getName.endsWith(COMPACT_FILE_SUFFIX))
-
-        // Compact batch should include all entries from start.
-        val entries = metadataLog.get(batchId)
-        assert(entries.isDefined)
-        assert(entries.get.length === metadataLog.allFiles().length)
-        assert(metadataLog.get(None, Some(batchId)).flatMap(_._2).length === entries.get.length)
       }
 
-      assert(metadataLog.allFiles().length ===
-        metadataLog.get(None, Some(batchId)).flatMap(_._2).length)
+      assert(metadataLog.allFiles().sortBy(_.batchId) ===
+        metadataLog.get(None, Some(batchId)).flatMap(_._2).sortBy(_.batchId))
 
-      metadataLog.get(None, Some(batchId)).flatMap(_._2).toSet.size === expectedBatches
+      metadataLog.get(None, Some(batchId)).flatMap(_._2).length === expectedBatches
     }
 
     withTempDirs { case (src, tmp) =>
@@ -861,6 +852,39 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           AddTextFileData("drop12\nkeep13", src, tmp),
           CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9", "keep11", "keep13"),
           AssertOnQuery(verify(_)(4L, 5))
+        )
+      }
+    }
+  }
+
+  test("get arbitrary batch from FileStreamSource") {
+    withTempDirs { case (src, tmp) =>
+      withSQLConf(
+        SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
+        // Force deleting the old logs
+        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1"
+      ) {
+        val fileStream = createFileStream("text", src.getCanonicalPath)
+        val filtered = fileStream.filter($"value" contains "keep")
+
+        testStream(filtered)(
+          AddTextFileData("keep1", src, tmp),
+          CheckAnswer("keep1"),
+          AddTextFileData("keep2", src, tmp),
+          CheckAnswer("keep1", "keep2"),
+          AddTextFileData("keep3", src, tmp),
+          CheckAnswer("keep1", "keep2", "keep3"),
+          AssertOnQuery("check getBatch") { execution: StreamExecution =>
+            val _sources = PrivateMethod[Seq[Source]]('sources)
+            val fileSource =
+              (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
+            assert(fileSource.getBatch(None, LongOffset(2)).as[String].collect() ===
+              List("keep1", "keep2", "keep3"))
+            assert(fileSource.getBatch(Some(LongOffset(0)), LongOffset(2)).as[String].collect() ===
+              List("keep2", "keep3"))
+            assert(fileSource.getBatch(Some(LongOffset(1)), LongOffset(2)).as[String].collect() ===
+              List("keep3"))
+          }
         )
       }
     }
