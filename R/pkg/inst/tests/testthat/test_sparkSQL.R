@@ -1165,16 +1165,16 @@ test_that("column functions", {
   # Test struct()
   df <- createDataFrame(list(list(1L, 2L, 3L), list(4L, 5L, 6L)),
                         schema = c("a", "b", "c"))
-  result <- collect(select(df, struct("a", "c")))
+  result <- collect(select(df, alias(struct("a", "c"), "d")))
   expected <- data.frame(row.names = 1:2)
-  expected$"struct(a, c)" <- list(listToStruct(list(a = 1L, c = 3L)),
-                                 listToStruct(list(a = 4L, c = 6L)))
+  expected$"d" <- list(listToStruct(list(a = 1L, c = 3L)),
+                      listToStruct(list(a = 4L, c = 6L)))
   expect_equal(result, expected)
 
-  result <- collect(select(df, struct(df$a, df$b)))
+  result <- collect(select(df, alias(struct(df$a, df$b), "d")))
   expected <- data.frame(row.names = 1:2)
-  expected$"struct(a, b)" <- list(listToStruct(list(a = 1L, b = 2L)),
-                                 listToStruct(list(a = 4L, b = 5L)))
+  expected$"d" <- list(listToStruct(list(a = 1L, b = 2L)),
+                      listToStruct(list(a = 4L, b = 5L)))
   expect_equal(result, expected)
 
   # Test encode(), decode()
