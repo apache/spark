@@ -32,4 +32,32 @@ class MesosClusterDispatcherArgumentsSuite extends SparkFunSuite
     assert(conf.getOption("key1").isEmpty)
     assert(conf.get("spark.mesos.key2") == "value2")
   }
+
+  test("test non conf settings") {
+    val masterUrl = "mesos://localhost:5050"
+    val port = "1212"
+    val zookeeperUrl = "zk://localhost:2181"
+    val host = "localhost"
+    val webUiPort = "2323"
+    val name = "myFramework"
+
+    val args1 = Array("--master", masterUrl, "--verbose", "--name", name)
+    val args2 = Array("-p", port, "-h", host, "-z", zookeeperUrl)
+    val args3 = Array("--webui-port", webUiPort)
+
+    val args = args1 ++ args2 ++ args3
+    val conf = new SparkConf()
+    val mesosDispClusterArgs = new MesosClusterDispatcherArguments(args, conf)
+
+    assert(mesosDispClusterArgs.verbose)
+    assert(mesosDispClusterArgs.confProperties.isEmpty)
+    assert(mesosDispClusterArgs.host == host)
+    assert(Option(mesosDispClusterArgs.masterUrl).isDefined)
+    assert(mesosDispClusterArgs.masterUrl == masterUrl.stripPrefix("mesos://"))
+    assert(Option(mesosDispClusterArgs.zookeeperUrl).isDefined)
+    assert(mesosDispClusterArgs.zookeeperUrl contains zookeeperUrl)
+    assert(mesosDispClusterArgs.name == name)
+    assert(mesosDispClusterArgs.webUiPort == webUiPort.toInt)
+    assert(mesosDispClusterArgs.port == port.toInt)
+  }
 }

@@ -34,12 +34,7 @@ class MesosClusterDispatcherSuite extends SparkFunSuite
   }
 
   test("prints error with unrecognized options") {
-    testPrematureExit(Array("--blarg"), "Unrecognized option '--blarg'", MesosClusterDispatcher)
-    testPrematureExit(Array("-bleg"), "Unrecognized option '-bleg'", MesosClusterDispatcher)
-  }
-
-  test("prints error with unrecognized options") {
-    testPrematureExit(Array("--blarg"), "Unrecognized option '--blarg'", MesosClusterDispatcher)
-    testPrematureExit(Array("-bleg"), "Unrecognized option '-bleg'", MesosClusterDispatcher)
+    testPrematureExit(Array("--blarg"), "Unrecognized option: '--blarg'", MesosClusterDispatcher)
+    testPrematureExit(Array("-bleg"), "Unrecognized option: '-bleg'", MesosClusterDispatcher)
   }
 }

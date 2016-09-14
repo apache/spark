@@ -104,6 +104,7 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
 
     case ("--verbose") :: tail =>
       verbose = true
+      parse(tail)
 
     case Nil =>
       if (Option(masterUrl).isEmpty) {
@@ -113,9 +114,9 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
         printUsageAndExit(1)
       }
 
-    case value@_ =>
+    case value =>
       // scalastyle:off println
-      MesosClusterDispatcher.printStream.println(s"Unrecognized option: '$value'")
+      MesosClusterDispatcher.printStream.println(s"Unrecognized option: '${value.head}'")
       // scalastyle:on println
       printUsageAndExit(1)
   }

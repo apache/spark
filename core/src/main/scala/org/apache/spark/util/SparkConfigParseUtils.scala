@@ -25,7 +25,7 @@ import java.io.PrintStream
  * Facilitates the use of common error messages when spark conf parsing fails.
  *
  */
-trait SparkConfigParseUtils {
+private[spark] trait SparkConfigParseUtils {
 
   // scalastyle:off println
   // Exposed for testing
