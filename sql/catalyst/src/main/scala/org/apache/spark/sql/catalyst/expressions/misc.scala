@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.hash.Murmur3_x86_32
+import org.apache.spark.unsafe.hash.{HiveHasher, Murmur3_x86_32}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.unsafe.Platform
 
@@ -259,7 +259,7 @@ abstract class HashExpression[E] extends Expression {
       $childrenHash""")
   }
 
-  private def nullSafeElementHash(
+  protected def nullSafeElementHash(
       input: String,
       index: String,
       nullable: Boolean,
@@ -276,6 +276,97 @@ abstract class HashExpression[E] extends Expression {
     }
   }
 
+  protected def genHashInt(i: String, hasher: String, result: String): String =
+    s"$result = $hasher.hashInt($i, $result);"
+
+  protected def genHashLong(l: String, hasher: String, result: String): String =
+    s"$result = $hasher.hashLong($l, $result);"
+
+  protected def genHashBytes(b: String, hasher: String, result: String): String =
+    s"$result = $hasher.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length, $result);"
+
+  protected def genHashBoolean(input: String, hasher: String, result: String): String =
+    genHashInt(s"$input ? 1 : 0", hasher, result)
+
+  protected def genHashFloat(input: String, hasher: String, result: String): String =
+    genHashInt(s"Float.floatToIntBits($input)", hasher, result)
+
+  protected def genHashDouble(input: String, hasher: String, result: String): String =
+    genHashLong(s"Double.doubleToLongBits($input)", hasher, result)
+
+  protected def genHashDecimal(
+      ctx: CodegenContext,
+      d: DecimalType,
+      input: String,
+      hasher: String,
+      result: String): String = {
+    if (d.precision <= Decimal.MAX_LONG_DIGITS) {
+      genHashLong(s"$input.toUnscaledLong()", hasher, result)
+    } else {
+      val bytes = ctx.freshName("bytes")
+      s"""
+            final byte[] $bytes = $input.toJavaBigDecimal().unscaledValue().toByteArray();
+            ${genHashBytes(bytes, hasher, result)}
+          """
+    }
+  }
+
+  protected def genHashCalendarInterval(input: String, hasher: String, result: String): String = {
+    val microsecondsHash = s"$hasher.hashLong($input.microseconds, $result)"
+    s"$result = $hasher.hashInt($input.months, $microsecondsHash);"
+  }
+
+  protected def genHashString(input: String, hasher: String, result: String): String = {
+    val baseObject = s"$input.getBaseObject()"
+    val baseOffset = s"$input.getBaseOffset()"
+    val numBytes = s"$input.numBytes()"
+    s"$result = $hasher.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
+  }
+
+  protected def genHashForMap(
+      ctx: CodegenContext,
+      input: String,
+      result: String,
+      keyType: DataType,
+      valueType: DataType,
+      valueContainsNull: Boolean): String = {
+    val index = ctx.freshName("index")
+    val keys = ctx.freshName("keys")
+    val values = ctx.freshName("values")
+    s"""
+        final ArrayData $keys = $input.keyArray();
+        final ArrayData $values = $input.valueArray();
+        for (int $index = 0; $index < $input.numElements(); $index++) {
+          ${nullSafeElementHash(keys, index, false, keyType, result, ctx)}
+          ${nullSafeElementHash(values, index, valueContainsNull, valueType, result, ctx)}
+        }
+      """
+  }
+
+  protected def genHashForArray(
+      ctx: CodegenContext,
+      input: String,
+      result: String,
+      elementType: DataType,
+      containsNull: Boolean): String = {
+    val index = ctx.freshName("index")
+    s"""
+        for (int $index = 0; $index < $input.numElements(); $index++) {
+          ${nullSafeElementHash(input, index, containsNull, elementType, result, ctx)}
+        }
+      """
+  }
+
+  protected def genHashForStruct(
+      ctx: CodegenContext,
+      input: String,
+      result: String,
+      fields: Array[StructField]): String = {
+    fields.zipWithIndex.map { case (field, index) =>
+      nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
+    }.mkString("\n")
+  }
+
   @tailrec
   private def computeHash(
       input: String,
@@ -284,64 +375,21 @@ abstract class HashExpression[E] extends Expression {
       ctx: CodegenContext): String = {
     val hasher = hasherClassName
 
-    def hashInt(i: String): String = s"$result = $hasher.hashInt($i, $result);"
-    def hashLong(l: String): String = s"$result = $hasher.hashLong($l, $result);"
-    def hashBytes(b: String): String =
-      s"$result = $hasher.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length, $result);"
-
     dataType match {
       case NullType => ""
-      case BooleanType => hashInt(s"$input ? 1 : 0")
-      case ByteType | ShortType | IntegerType | DateType => hashInt(input)
-      case LongType | TimestampType => hashLong(input)
-      case FloatType => hashInt(s"Float.floatToIntBits($input)")
-      case DoubleType => hashLong(s"Double.doubleToLongBits($input)")
-      case d: DecimalType =>
-        if (d.precision <= Decimal.MAX_LONG_DIGITS) {
-          hashLong(s"$input.toUnscaledLong()")
-        } else {
-          val bytes = ctx.freshName("bytes")
-          s"""
-            final byte[] $bytes = $input.toJavaBigDecimal().unscaledValue().toByteArray();
-            ${hashBytes(bytes)}
-          """
-        }
-      case CalendarIntervalType =>
-        val microsecondsHash = s"$hasher.hashLong($input.microseconds, $result)"
-        s"$result = $hasher.hashInt($input.months, $microsecondsHash);"
-      case BinaryType => hashBytes(input)
-      case StringType =>
-        val baseObject = s"$input.getBaseObject()"
-        val baseOffset = s"$input.getBaseOffset()"
-        val numBytes = s"$input.numBytes()"
-        s"$result = $hasher.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
-
-      case ArrayType(et, containsNull) =>
-        val index = ctx.freshName("index")
-        s"""
-          for (int $index = 0; $index < $input.numElements(); $index++) {
-            ${nullSafeElementHash(input, index, containsNull, et, result, ctx)}
-          }
-        """
-
+      case BooleanType => genHashBoolean(input, hasher, result)
+      case ByteType | ShortType | IntegerType | DateType => genHashInt(input, hasher, result)
+      case LongType | TimestampType => genHashLong(input, hasher, result)
+      case FloatType => genHashFloat(input, hasher, result)
+      case DoubleType => genHashDouble(input, hasher, result)
+      case d: DecimalType => genHashDecimal(ctx, d, input, hasher, result)
+      case CalendarIntervalType => genHashCalendarInterval(input, hasher, result)
+      case BinaryType => genHashBytes(input, hasher, result)
+      case StringType => genHashString(input, hasher, result)
+      case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
       case MapType(kt, vt, valueContainsNull) =>
-        val index = ctx.freshName("index")
-        val keys = ctx.freshName("keys")
-        val values = ctx.freshName("values")
-        s"""
-          final ArrayData $keys = $input.keyArray();
-          final ArrayData $values = $input.valueArray();
-          for (int $index = 0; $index < $input.numElements(); $index++) {
-            ${nullSafeElementHash(keys, index, false, kt, result, ctx)}
-            ${nullSafeElementHash(values, index, valueContainsNull, vt, result, ctx)}
-          }
-        """
-
-      case StructType(fields) =>
-        fields.zipWithIndex.map { case (field, index) =>
-          nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
-        }.mkString("\n")
-
+        genHashForMap(ctx, input, result, kt, vt, valueContainsNull)
+      case StructType(fields) => genHashForStruct(ctx, input, result, fields)
       case udt: UserDefinedType[_] => computeHash(input, udt.sqlType, result, ctx)
     }
   }
@@ -564,4 +612,220 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def foldable: Boolean = true
   override def nullable: Boolean = false
+}
+
+/**
+ * Simulates Hive's hashing function at
+ * org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils#hashcode() in Hive
+ *
+ * We should use this hash function for both shuffle and bucket of Hive tables, so that
+ * we can guarantee shuffle and bucketing have same data distribution
+ *
+ * TODO: Support Decimal and date related types
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(a1, a2, ...) - Returns a hash value of the arguments.")
+case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
+  override val seed = 0
+
+  override def dataType: DataType = IntegerType
+
+  override def prettyName: String = "hive-hash"
+
+  override protected def hasherClassName: String = classOf[HiveHasher].getName
+
+  override protected def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
+    HiveHashFunction.hash(value, dataType, seed).toInt
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ev.isNull = "false"
+    val childHash = ctx.freshName("childHash")
+    val childrenHash = children.map { child =>
+      val childGen = child.genCode(ctx)
+      childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
+        computeHash(childGen.value, child.dataType, childHash, ctx)
+      } + s"${ev.value} = (31 * ${ev.value}) + $childHash;"
+    }.mkString(s"int $childHash = 0;", s"\n$childHash = 0;\n", "")
+
+    ev.copy(code = s"""
+      ${ctx.javaType(dataType)} ${ev.value} = $seed;
+      $childrenHash""")
+  }
+
+  @tailrec
+  private def computeHash(
+      input: String,
+      dataType: DataType,
+      result: String,
+      ctx: CodegenContext): String = {
+    val hasher = hasherClassName
+
+    dataType match {
+      case NullType => ""
+      case BooleanType => genHashBoolean(input, hasher, result)
+      case ByteType | ShortType | IntegerType | DateType => genHashInt(input, hasher, result)
+      case LongType | TimestampType => genHashLong(input, hasher, result)
+      case FloatType => genHashFloat(input, hasher, result)
+      case DoubleType => genHashDouble(input, hasher, result)
+      case d: DecimalType => genHashDecimal(ctx, d, input, hasher, result)
+      case CalendarIntervalType => genHashCalendarInterval(input, hasher, result)
+      case BinaryType => genHashBytes(input, hasher, result)
+      case StringType => genHashString(input, hasher, result)
+      case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
+      case MapType(kt, vt, valueContainsNull) =>
+        genHashForMap(ctx, input, result, kt, vt, valueContainsNull)
+      case StructType(fields) => genHashForStruct(ctx, input, result, fields)
+      case udt: UserDefinedType[_] => computeHash(input, udt.sqlType, result, ctx)
+    }
+  }
+
+  override def eval(input: InternalRow): Int = {
+    var hash = seed
+    var i = 0
+    val len = children.length
+    while (i < len) {
+      hash = (31 * hash) + computeHash(children(i).eval(input), children(i).dataType, hash)
+      i += 1
+    }
+    hash
+  }
+
+  override protected def genHashInt(i: String, hasher: String, result: String): String =
+    s"$result = $hasher.hashInt($i, 0);"
+
+  override protected def genHashLong(l: String, hasher: String, result: String): String =
+    s"$result = $hasher.hashLong($l, 0);"
+
+  override protected def genHashBytes(b: String, hasher: String, result: String): String =
+    s"$result = $hasher.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length, 0);"
+
+  override protected def genHashForArray(
+      ctx: CodegenContext,
+      input: String,
+      result: String,
+      elementType: DataType,
+      containsNull: Boolean): String = {
+    val index = ctx.freshName("index")
+    val childResult = ctx.freshName("childResult")
+    s"""
+        int $childResult = 0;
+        for (int $index = 0; $index < $input.numElements(); $index++) {
+          $childResult = 0;
+          ${nullSafeElementHash(input, index, containsNull, elementType, childResult, ctx)};
+          $result = (31 * $result) + $childResult;
+        }
+      """
+  }
+
+  override protected def genHashForMap(
+      ctx: CodegenContext,
+      input: String,
+      result: String,
+      keyType: DataType,
+      valueType: DataType,
+      valueContainsNull: Boolean): String = {
+    val index = ctx.freshName("index")
+    val keys = ctx.freshName("keys")
+    val values = ctx.freshName("values")
+    val keyResult = ctx.freshName("keyResult")
+    val valueResult = ctx.freshName("valueResult")
+    s"""
+        final ArrayData $keys = $input.keyArray();
+        final ArrayData $values = $input.valueArray();
+        int $keyResult = 0;
+        int $valueResult = 0;
+        for (int $index = 0; $index < $input.numElements(); $index++) {
+          $keyResult = 0;
+          ${nullSafeElementHash(keys, index, false, keyType, keyResult, ctx)}
+          $valueResult = 0;
+          ${nullSafeElementHash(values, index, valueContainsNull, valueType, valueResult, ctx)}
+          $result += $keyResult ^ $valueResult;
+        }
+      """
+  }
+
+  override protected def genHashForStruct(
+      ctx: CodegenContext,
+      input: String,
+      result: String,
+      fields: Array[StructField]): String = {
+    val localResult = ctx.freshName("localResult")
+    val childResult = ctx.freshName("childResult")
+    fields.zipWithIndex.map { case (field, index) =>
+      s"""
+         $childResult = 0;
+         ${nullSafeElementHash(input, index.toString, field.nullable, field.dataType,
+           childResult, ctx)}
+         $localResult = (31 * $localResult) + $childResult;
+       """
+    }.mkString(
+      s"""
+         int $localResult = 0;
+         int $childResult = 0;
+       """,
+      "",
+      s"$result = (31 * $result) + $localResult;"
+    )
+  }
+}
+
+object HiveHashFunction extends InterpretedHashFunction {
+  override protected def hashInt(i: Int, seed: Long): Long = {
+    HiveHasher.hashInt(i, seed)
+  }
+
+  override protected def hashLong(l: Long, seed: Long): Long = {
+    HiveHasher.hashLong(l, seed)
+  }
+
+  override protected def hashUnsafeBytes(base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
+    HiveHasher.hashUnsafeBytes(base, offset, len, seed)
+  }
+
+  override def hash(value: Any, dataType: DataType, seed: Long): Long = {
+    value match {
+      case null => 0
+      case array: ArrayData =>
+        val elementType = dataType match {
+          case udt: UserDefinedType[_] => udt.sqlType.asInstanceOf[ArrayType].elementType
+          case ArrayType(et, _) => et
+        }
+        var result: Int = 0
+        for (i <- 0 until array.numElements()) {
+          result = (31 * result) + hash(array.get(i, elementType), elementType, 0).toInt
+        }
+        result
+
+      case map: MapData =>
+        val (kt, vt) = dataType match {
+          case udt: UserDefinedType[_] =>
+            val mapType = udt.sqlType.asInstanceOf[MapType]
+            mapType.keyType -> mapType.valueType
+          case MapType(_kt, _vt, _) => _kt -> _vt
+        }
+        val keys = map.keyArray()
+        val values = map.valueArray()
+        var result: Int = 0
+        for (i <- 0 until map.numElements()) {
+          result += hash(keys.get(i, kt), kt, 0).toInt ^ hash(values.get(i, vt), vt, 0).toInt
+        }
+        result
+
+      case struct: InternalRow =>
+        val types: Array[DataType] = dataType match {
+          case udt: UserDefinedType[_] =>
+            udt.sqlType.asInstanceOf[StructType].map(_.dataType).toArray
+          case StructType(fields) => fields.map(_.dataType)
+        }
+
+        var result = 0
+        for (i <- 0 until struct.numFields) {
+          result = (31 * result) + hash(struct.get(i, types(i)), types(i), seed + 1).toInt
+        }
+        result
+
+      case _ => super.hash(value, dataType, seed)
+    }
+  }
 }
