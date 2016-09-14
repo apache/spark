@@ -23,10 +23,9 @@ import scala.reflect.ClassTag
 
 import org.mockito.Mockito
 import org.mockito.Mockito.atLeastOnce
-
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
-import org.apache.spark.{TaskContextImpl, TaskContext, SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.serializer.{JavaSerializer, SerializationStream, SerializerManager}
 import org.apache.spark.storage.memory.{MemoryStore, PartiallySerializedBlock, RedirectableOutputStream}
