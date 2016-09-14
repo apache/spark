@@ -322,6 +322,18 @@ class CatalogSuite
     assert(e2.message == "Cannot create a file-based external data source table without path")
   }
 
+  test("dropTempView should not un-cache and drop metastore table if a same-name table exists") {
+    withTable("same_name") {
+      spark.range(10).write.saveAsTable("same_name")
+      sql("CACHE TABLE same_name")
+      assert(spark.catalog.isCached("default.same_name"))
+      spark.catalog.dropTempView("same_name")
+      assert(spark.sessionState.catalog.tableExists(TableIdentifier("same_name", Some("default"))))
+      assert(spark.catalog.isCached("default.same_name"))
+    }
+  }
+
+
   // TODO: add tests for the rest of them
 
 }

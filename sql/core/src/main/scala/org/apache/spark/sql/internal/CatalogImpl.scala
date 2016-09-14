@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, SubqueryAlias}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.types.StructType
 
@@ -284,8 +284,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def dropTempView(viewName: String): Unit = {
-    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(viewName))
-    sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true, purge = false)
+    val maybeTempView = sparkSession.sessionState.catalog.getTempView(viewName)
+    if (maybeTempView.isDefined) {
+      val view = SubqueryAlias(viewName, maybeTempView.get, Some(TableIdentifier(viewName)))
+      sparkSession.sharedState.cacheManager.uncacheQuery(Dataset.ofRows(sparkSession, view))
+      sessionCatalog.dropTempView(viewName)
+    }
   }
 
   /**

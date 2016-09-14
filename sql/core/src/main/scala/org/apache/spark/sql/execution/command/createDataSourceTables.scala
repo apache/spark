@@ -47,7 +47,11 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
     assert(table.provider.isDefined)
 
     val sessionState = sparkSession.sessionState
-    if (sessionState.catalog.tableExists(table.identifier)) {
+    val db = table.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val tableIdentWithDB = table.identifier.copy(database = Some(db))
+    // Pass a table identifier with database part, so that `tableExists` won't check temp views
+    // unexpectedly.
+    if (sessionState.catalog.tableExists(tableIdentWithDB)) {
       if (ignoreIfExists) {
         return Seq.empty[Row]
       } else {
@@ -131,6 +135,8 @@ case class CreateDataSourceTableAsSelectCommand(
     val tableName = table.identifier.unquotedString
     val provider = table.provider.get
     val sessionState = sparkSession.sessionState
+    val db = table.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val tableIdentWithDB = table.identifier.copy(database = Some(db))
 
     val optionsWithPath = if (table.tableType == CatalogTableType.MANAGED) {
       table.storage.properties + ("path" -> sessionState.catalog.defaultTablePath(table.identifier))
@@ -140,7 +146,9 @@ case class CreateDataSourceTableAsSelectCommand(
 
     var createMetastoreTable = false
     var existingSchema = Option.empty[StructType]
-    if (sparkSession.sessionState.catalog.tableExists(table.identifier)) {
+    // Pass a table identifier with database part, so that `tableExists` won't check temp views
+    // unexpectedly.
+    if (sparkSession.sessionState.catalog.tableExists(tableIdentWithDB)) {
       // Check if we need to throw an exception or just return.
       mode match {
         case SaveMode.ErrorIfExists =>
@@ -165,7 +173,7 @@ case class CreateDataSourceTableAsSelectCommand(
           // inserting into (i.e. using the same compression).
 
           EliminateSubqueryAliases(
-            sessionState.catalog.lookupRelation(table.identifier)) match {
+            sessionState.catalog.lookupRelation(tableIdentWithDB)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
               // check if the file formats match
               l.relation match {
@@ -188,7 +196,7 @@ case class CreateDataSourceTableAsSelectCommand(
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
         case SaveMode.Overwrite =>
-          sparkSession.sql(s"DROP TABLE IF EXISTS $tableName")
+          sessionState.catalog.dropTable(tableIdentWithDB, ignoreIfNotExists = false, purge = false)
           // Need to create the table again.
           createMetastoreTable = true
       }
@@ -230,7 +238,7 @@ case class CreateDataSourceTableAsSelectCommand(
     }
 
     // Refresh the cache of the table in the catalog.
-    sessionState.catalog.refreshTable(table.identifier)
+    sessionState.catalog.refreshTable(tableIdentWithDB)
     Seq.empty[Row]
   }
 }
