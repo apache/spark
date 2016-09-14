@@ -81,6 +81,13 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   def getInitSteps: Int = $(initSteps)
 
   /**
+   * Param for KMeansModel to use for warm start.
+   * @group param
+   */
+  final val initialModel: Param[KMeansModel] =
+    new Param[KMeansModel](this, "initialModel", "A KMeansModel for warm start.")
+
+  /**
    * Validates and transforms the input schema.
    * @param schema input schema
    * @return output schema
@@ -219,7 +226,6 @@ object KMeansModel extends MLReadable[KMeansModel] {
 
   /** [[MLWriter]] instance for [[KMeansModel]] */
   private[KMeansModel] class KMeansModelWriter(instance: KMeansModel) extends MLWriter {
-    import org.json4s.JsonDSL._
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params

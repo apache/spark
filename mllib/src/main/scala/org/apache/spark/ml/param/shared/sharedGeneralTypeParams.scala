@@ -22,12 +22,7 @@ import org.apache.spark.ml.param._
 
 private[ml] trait HasInitialModel[T <: Model[T]] extends Params {
 
-  /**
-   * Param for initial model to warm start.
-   * @group param
-   */
-  final val initialModel: Param[T] =
-    new Param[T](this, "initialModel", "initial model to warm start")
+  def initialModel: Param[T]
 
   /** @group getParam */
   final def getInitialModel: T = $(initialModel)
