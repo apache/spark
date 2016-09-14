@@ -383,6 +383,10 @@ test_that("spark.mlp", {
 
   unlink(modelPath)
 
+  # Test default parameter
+  model <- spark.mlp(df, layers = c(4, 5, 4, 3))
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 10), c(1, 1, 1, 1, 0, 1, 2, 2, 1, 0))
 })
 
 test_that("spark.naiveBayes", {
