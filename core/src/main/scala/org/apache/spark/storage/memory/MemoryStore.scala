@@ -777,16 +777,18 @@ private[storage] class PartiallySerializedBlock[T](
    * Called to dispose of this block and free its memory.
    */
   def discard(): Unit = {
-    try {
-      // We want to close the output stream in order to free any resources associated with the
-      // serializer itself (such as Kryo's internal buffers). close() might cause data to be
-      // written, so redirect the output stream to discard that data.
-      redirectableOutputStream.setOutputStream(ByteStreams.nullOutputStream())
-      serializationStream.close()
-    } finally {
-      discarded = true
-      unrolled.dispose()
-      memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
+    if (!discarded) {
+      try {
+        // We want to close the output stream in order to free any resources associated with the
+        // serializer itself (such as Kryo's internal buffers). close() might cause data to be
+        // written, so redirect the output stream to discard that data.
+        redirectableOutputStream.setOutputStream(ByteStreams.nullOutputStream())
+        serializationStream.close()
+      } finally {
+        discarded = true
+        unrolled.dispose()
+        memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
+      }
     }
   }
 
@@ -824,7 +826,7 @@ private[storage] class PartiallySerializedBlock[T](
     new PartiallyUnrolledIterator(
       memoryStore,
       unrollMemory,
-      unrolled = CompletionIterator[T, Iterator[T]](unrolledIter, discard()),
+      unrolled = CompletionIterator[T, Iterator[T]](unrolledIter, unrolled.dispose()),
       rest = rest)
   }
 }

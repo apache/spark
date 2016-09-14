@@ -22,6 +22,8 @@ import java.nio.ByteBuffer
 import scala.reflect.ClassTag
 
 import org.mockito.Mockito
+import org.mockito.Mockito.atLeastOnce
+
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.{TaskContextImpl, TaskContext, SparkConf, SparkFunSuite}
@@ -156,7 +158,7 @@ class PartiallySerializedBlockSuite
       Mockito.verify(partiallySerializedBlock.invokePrivate(getSerializationStream())).close()
       Mockito.verify(partiallySerializedBlock.invokePrivate(getRedirectableOutputStream())).close()
       Mockito.verifyNoMoreInteractions(memoryStore)
-      Mockito.verify(partiallySerializedBlock.getUnrolledChunkedByteBuffer).dispose()
+      Mockito.verify(partiallySerializedBlock.getUnrolledChunkedByteBuffer, atLeastOnce).dispose()
     }
 
     test(s"$testCaseName with finishWritingToStream() and numBuffered = $numItemsToBuffer") {
@@ -170,7 +172,7 @@ class PartiallySerializedBlockSuite
       Mockito.verify(partiallySerializedBlock.invokePrivate(getRedirectableOutputStream())).close()
       Mockito.verify(bbos).close()
       Mockito.verifyNoMoreInteractions(memoryStore)
-      Mockito.verify(partiallySerializedBlock.getUnrolledChunkedByteBuffer).dispose()
+      Mockito.verify(partiallySerializedBlock.getUnrolledChunkedByteBuffer, atLeastOnce).dispose()
 
       val serializer = serializerManager.getSerializer(implicitly[ClassTag[T]]).newInstance()
       val deserialized =
@@ -188,7 +190,7 @@ class PartiallySerializedBlockSuite
       Mockito.verify(memoryStore).releaseUnrollMemoryForThisTask(
         MemoryMode.ON_HEAP, partiallySerializedBlock.unrollMemory)
       Mockito.verifyNoMoreInteractions(memoryStore)
-      Mockito.verify(partiallySerializedBlock.getUnrolledChunkedByteBuffer).dispose()
+      Mockito.verify(partiallySerializedBlock.getUnrolledChunkedByteBuffer, atLeastOnce).dispose()
       assert(deserializedItems === items)
     }
   }
