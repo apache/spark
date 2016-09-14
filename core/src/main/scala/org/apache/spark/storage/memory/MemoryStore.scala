@@ -170,11 +170,11 @@ private[spark] class MemoryStore(
    * so we won't acquire more memory than is actually needed to store the block.
    *
    * @return in case of success, the estimated size of the stored data. In case of failure, return
-   *         an iterator containing the values of the block. The returned iterator
-   *         will be backed by the combination of the partially-unrolled block and the remaining
-   *         elements of the original input iterator. The caller must either fully consume this
-   *         iterator or call `close()` on it in order to free the storage memory consumed by the
-   *         partially-unrolled block.
+   *         an iterator containing the values of the block. The returned iterator will be backed
+   *         by the combination of the partially-unrolled block and the remaining elements of the
+   *         original input iterator. The caller must either fully consume this iterator or call
+   *         `close()` on it in order to free the storage memory consumed by the partially-unrolled
+   *         block.
    */
   private[storage] def putIteratorAsValues[T](
       blockId: BlockId,
