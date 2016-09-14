@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.command
 
 import scala.util.control.NonFatal
+
 import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
