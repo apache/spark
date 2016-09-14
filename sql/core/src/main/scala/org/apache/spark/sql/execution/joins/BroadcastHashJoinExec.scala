@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.joins
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -26,7 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.LongType
@@ -50,7 +48,7 @@ case class BroadcastHashJoinExec(
   /**
     * Decide whether support avoiding repeatedly stream side fields writing
     */
-  override protected val avoidRepeatedlyWriting = joinType match {
+  private val avoidRepeatedlyWriting = joinType match {
     case LeftOuter => true
     case RightOuter if left.output.forall(p => UnsafeRow.isFixedLength(p.dataType)) => true
     case Inner => buildSide match {
@@ -241,9 +239,9 @@ case class BroadcastHashJoinExec(
       ctx.copyResult = true
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
-      val evaluateStreamed = evaluateVariables(input)
-      val code = if (avoidRepeatedlyWriting) {
-        val (writeStream, writeBuild) = consumeForJoin(ctx, resultVars, input.length, sequential)
+      if (avoidRepeatedlyWriting) {
+        val (writeStreamSideFields, writeBuildSideFields) =
+          consumeForJoin(ctx, resultVars, input.length, sequential)
         s"""
           |// generate join key for stream side
           |${keyEv.code}
@@ -251,13 +249,12 @@ case class BroadcastHashJoinExec(
           |$iteratorCls $matches =
           |  $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
           |if ($matches == null) continue;
-          |$evaluateStreamed
-          |$writeStream
+          |$writeStreamSideFields
           |while ($matches.hasNext()) {
           |  UnsafeRow $matched = (UnsafeRow) $matches.next();
           |  $checkCondition
           |  $numOutput.add(1);
-          |  $writeBuild
+          |  $writeBuildSideFields
           |}
         """.stripMargin
       } else {
@@ -276,7 +273,6 @@ case class BroadcastHashJoinExec(
            |}
         """.stripMargin
       }
-      code
     }
   }
 

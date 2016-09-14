@@ -136,7 +136,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("SPARK-17517: ") {
+  test("SPARK-17517: broadcast join with duplicated build side keys") {
     val df = Seq((1, 1), (1, 2)).toDF("key", "value")
     df.createOrReplaceTempView("kent")
     val query =
@@ -151,7 +151,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("SPARK-6851: Self-joined converted parquet tables") {
     val orders = Seq(
       Order(1, "Atlas", "MTB", 234, "2015-01-07", "John D", "Pacifica", "CA", 20151),
-      Order(1, "Atlas", "MTB", 234, "2015-01-07", "John D", "Pacifica", "CA", 20151),
       Order(3, "Swift", "MTB", 285, "2015-01-17", "John S", "Redwood City", "CA", 20151),
       Order(4, "Atlas", "Hybrid", 303, "2015-01-23", "Jones S", "San Mateo", "CA", 20151),
       Order(7, "Next", "MTB", 356, "2015-01-04", "Jane D", "Daly City", "CA", 20151),
@@ -164,8 +163,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       Order(9, "Atlas", "Split", 303, "2015-02-28", "Jones S", "San Mateo", "CA", 20152))
 
     val orderUpdates = Seq(
-      Order(1, "Atlas", "MTB", 434, "2015-01-07", "John D", "Pacifica", "CA", 20151),
-      Order(1, "Atlas", "MTB", 434, "2015-01-07", "John D", "Pacifica", "CA", 20151),
       Order(1, "Atlas", "MTB", 434, "2015-01-07", "John D", "Pacifica", "CA", 20151),
       Order(11, "Swift", "YFlikr", 137, "2015-01-23", "John D", "Hayward", "CA", 20151))
 
@@ -201,13 +198,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     sql("set hive.exec.dynamic.partition.mode=nonstrict")
     sql("INSERT INTO TABLE orders PARTITION(state, month) SELECT * FROM orders1")
     sql("INSERT INTO TABLE orderupdates PARTITION(state, month) SELECT * FROM orderupdates1")
-
-    val query = "select * from orders join orderupdates on orderupdates.id = orders.id " +
-      "where orderupdates.id = 1 "
-
-    println(sql(query).explain())
-
-    sql(query).queryExecution.executedPlan.executeCollect()
 
     checkAnswer(
       sql(

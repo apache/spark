@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.{broadcast, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -37,8 +35,6 @@ import org.apache.spark.util.Utils
  * An interface for those physical operators that support codegen.
  */
 trait CodegenSupport extends SparkPlan {
-
-  protected val avoidRepeatedlyWriting: Boolean = false
 
   /** Prefix used in the current operator's variable names. */
   private def variablePrefix: String = this match {
@@ -141,7 +137,7 @@ trait CodegenSupport extends SparkPlan {
         val code = s"""
           |$evaluateInputs
           |${ev.code.trim}
-         """.stripMargin.trim
+         """.stripMargin
         ExprCode(code, "false", ev.value)
       } else {
         // There is no columns
@@ -158,6 +154,13 @@ trait CodegenSupport extends SparkPlan {
      """.stripMargin
   }
 
+  /**
+    * Consume the generated columns or row from current HashJoin separated by stream side and build
+    * side. Because evaluating and writing the stream side fields sometimes may need only one time,
+    * when the matched build side key is not unique. In this case, the generated stream side code
+    * should be outside the while-iterating circle for better performance. while generating build
+    * side code, we call its parent's `doConsume()`.
+    */
   final def consumeForJoin(
       ctx: CodegenContext,
       outputVars: Seq[ExprCode],
@@ -171,39 +174,52 @@ trait CodegenSupport extends SparkPlan {
 
     // outputVars will be used to generate the code for UnsafeRow, so we should copy them
     val inputVars = outputVars.map(_.copy())
+
     val colExprs = output.zipWithIndex.map { case (attr, i) =>
       BoundReference(i, attr.dataType, attr.nullable)
     }
 
-    val (streamVars, buildVars) =
-      if (sequential) outputVars.splitAt(streamLen) else outputVars.splitAt(streamLen).swap
+    val (streamVars, buildVars) = if (sequential) {
+      outputVars.splitAt(streamLen)
+    } else {
+      outputVars.splitAt(outputVars.length - streamLen).swap
+    }
 
-    val evaluateBuild = evaluateVariables(buildVars)
-
+    val evaluateStreamSide = evaluateVariables(streamVars)
+    val evaluateBuildSide = evaluateVariables(buildVars)
     ctx.currentVars = if (sequential) streamVars ++ buildVars else buildVars ++ streamVars
 
-    // generate the code to create a UnsafeRow
+    // generate the code to create a UnsafeRow, and return two parts of code
+    // one is for initializing UnsafeRow and writing stream side fields, the other writing
+    // build side fields
     val (evStream, evBuild) = GenerateUnsafeProjection.createCodeForJoin(
         ctx, colExprs, streamLen, sequential)
-    val code =
-    s"""
-       |$evaluateBuild
-       |${evBuild.code.trim}
-       """.stripMargin.trim
 
-    val rowVar = ExprCode(code, "false", evBuild.value)
+    // generate the code for stream side
+    val streamSide =
+      s"""
+         |$evaluateStreamSide
+         |${evStream.code.trim}
+       """.stripMargin
+
+    // generate the code for steam side
+    val buildCode =
+      s"""
+       |$evaluateBuildSide
+       |${evBuild.code.trim}
+       """.stripMargin
+    val rowVar = ExprCode(buildCode, "false", evBuild.value)
 
     ctx.freshNamePrefix = parent.variablePrefix
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
-    val steamCode = evStream.code
-    val buildCode =
+    val buildSide =
       s"""
        |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}
        |$evaluated
        |${parent.doConsume(ctx, inputVars, rowVar)}
      """.stripMargin
 
-    (steamCode, buildCode)
+    (streamSide, buildSide)
   }
 
   /**

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -38,7 +36,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case NullType => true
     case t: AtomicType => true
     case _: CalendarIntervalType => true
-    case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
+    case t: StructType => t.forall(field => canSupport(field.dataType))
     case t: ArrayType if canSupport(t.elementType) => true
     case MapType(kt, vt, _) if canSupport(kt) && canSupport(vt) => true
     case udt: UserDefinedType[_] => canSupport(udt.sqlType)
@@ -133,20 +131,20 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val (streamFields, buildFields) = if (sequential) {
       writeFields.splitAt(streamLen)
     } else {
-      writeFields.splitAt(streamLen).swap
+      writeFields.splitAt(writeFields.length - streamLen).swap
     }
-    val writeStream =
+    val writeStreamSide =
     s"""
       |$resetWriter
       |${streamFields.mkString("\n")}
     """.stripMargin.trim
 
-    val writeBuild =
+    val writeBuildSide =
      s"""
        |${buildFields.mkString("\n")}
      """.stripMargin.trim
 
-    (writeStream, writeBuild)
+    (writeStreamSide, writeBuildSide)
   }
 
   private def writeFieldToBuffer(
@@ -432,27 +430,25 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     // Evaluate all the subexpression.
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
-    val (writeStream, writeBuild) = writeExpressionsToBufferForJoin(
-      ctx,
-      exprEvals,
-      exprTypes,
-      holder,
-      streamLen,
-      sequential)
+    val (writeStreamSide, writeBuildSide) =
+      writeExpressionsToBufferForJoin(ctx, exprEvals, exprTypes, holder, streamLen, sequential)
 
     val codeStream =
       s"""
         $resetBufferHolder
-        $evalSubexpr
-        $writeStream
+        $writeStreamSide
       """
+    val streamVar = ExprCode(codeStream, "false", result)
+
     val codeBuild =
       s"""
-        $writeBuild
+        $evalSubexpr
+        $writeBuildSide
         $updateRowSize
       """
+    val buildVar = ExprCode(codeBuild, "false", result)
 
-    (ExprCode(codeStream, "false", result), ExprCode(codeBuild, "false", result))
+    (streamVar, buildVar)
   }
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
