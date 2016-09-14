@@ -50,7 +50,7 @@ case class BroadcastHashJoinExec(
   /**
     * Decide whether support avoiding repeatedly stream side fields writing
     */
-  private val avoidRepeatedlyWriting = joinType match {
+  override protected val avoidRepeatedlyWriting = joinType match {
     case LeftOuter => true
     case RightOuter if left.output.forall(p => UnsafeRow.isFixedLength(p.dataType)) => true
     case Inner => buildSide match {
@@ -241,8 +241,9 @@ case class BroadcastHashJoinExec(
       ctx.copyResult = true
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
+      val evaluateStreamed = evaluateVariables(input)
       val code = if (avoidRepeatedlyWriting) {
-        val findMatch = ArrayBuffer(matches, matched, checkCondition, numOutput)
+        val (writeStream, writeBuild) = consumeForJoin(ctx, resultVars, input.length, sequential)
         s"""
           |// generate join key for stream side
           |${keyEv.code}
@@ -250,8 +251,14 @@ case class BroadcastHashJoinExec(
           |$iteratorCls $matches =
           |  $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
           |if ($matches == null) continue;
-          |$checkCondition
-          |${consumeForJoin(ctx, resultVars, findMatch, input.length, sequential)}
+          |$evaluateStreamed
+          |$writeStream
+          |while ($matches.hasNext()) {
+          |  UnsafeRow $matched = (UnsafeRow) $matches.next();
+          |  $checkCondition
+          |  $numOutput.add(1);
+          |  $writeBuild
+          |}
         """.stripMargin
       } else {
         s"""

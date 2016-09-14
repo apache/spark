@@ -131,7 +131,7 @@ class AggregateBenchmark extends BenchmarkBase {
     */
   }
 
-  ignore("aggregate with randomized keys") {
+  test("aggregate with randomized keys") {
     val N = 20 << 22
 
     val benchmark = new Benchmark("Aggregate w keys", N)

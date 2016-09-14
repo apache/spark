@@ -109,10 +109,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx: CodegenContext,
       inputs: Seq[ExprCode],
       inputTypes: Seq[DataType],
-      findMatch: ArrayBuffer[String],
       bufferHolder: String,
       streamLen: Int,
-      sequential: Boolean): String = {
+      sequential: Boolean): (String, String) = {
     val rowWriterClass = classOf[UnsafeRowWriter].getName
     val rowWriter = ctx.freshName("rowWriter")
     ctx.addMutableState(rowWriterClass, rowWriter,
@@ -136,17 +135,18 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     } else {
       writeFields.splitAt(streamLen).swap
     }
+    val writeStream =
     s"""
       |$resetWriter
       |${streamFields.mkString("\n")}
-      |while (${findMatch(0)}.hasNext()) {
-      |   UnsafeRow ${findMatch(1)} = (UnsafeRow) ${findMatch(0)}.next();
-      |   ${findMatch(2)}
-      |   ${findMatch(3)}.add(1);
-      |   ${findMatch(4)}
-      |   ${buildFields.mkString("\n")}
-      |}
     """.stripMargin.trim
+
+    val writeBuild =
+     s"""
+       |${buildFields.mkString("\n")}
+     """.stripMargin.trim
+
+    (writeStream, writeBuild)
   }
 
   private def writeFieldToBuffer(
@@ -399,9 +399,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   def createCodeForJoin(
     ctx: CodegenContext,
     expressions: Seq[Expression],
-    findMatch: ArrayBuffer[String],
     streamLen: Int,
-    sequential: Boolean): ExprCode = {
+    sequential: Boolean): (ExprCode, ExprCode) = {
     val exprEvals = ctx.generateExpressions(expressions, false)
     val exprTypes = expressions.map(_.dataType)
 
@@ -433,23 +432,27 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     // Evaluate all the subexpression.
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
-    val writeExpressions = writeExpressionsToBufferForJoin(
+    val (writeStream, writeBuild) = writeExpressionsToBufferForJoin(
       ctx,
       exprEvals,
       exprTypes,
-      findMatch,
       holder,
       streamLen,
       sequential)
 
-    val code =
+    val codeStream =
       s"""
         $resetBufferHolder
         $evalSubexpr
-        $writeExpressions
+        $writeStream
+      """
+    val codeBuild =
+      s"""
+        $writeBuild
         $updateRowSize
       """
-    ExprCode(code, "false", result)
+
+    (ExprCode(codeStream, "false", result), ExprCode(codeBuild, "false", result))
   }
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =

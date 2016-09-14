@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{TaskContext, broadcast}
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.{broadcast, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,12 +33,12 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-import scala.collection.mutable.ArrayBuffer
-
 /**
  * An interface for those physical operators that support codegen.
  */
 trait CodegenSupport extends SparkPlan {
+
+  protected val avoidRepeatedlyWriting: Boolean = false
 
   /** Prefix used in the current operator's variable names. */
   private def variablePrefix: String = this match {
@@ -159,9 +161,8 @@ trait CodegenSupport extends SparkPlan {
   final def consumeForJoin(
       ctx: CodegenContext,
       outputVars: Seq[ExprCode],
-      findMatch: ArrayBuffer[String],
       streamLen: Int,
-      sequential: Boolean): String = {
+      sequential: Boolean): (String, String) = {
     assert(outputVars != null)
     assert(outputVars.length == output.length)
     assert(outputVars.length > 1)
@@ -174,31 +175,35 @@ trait CodegenSupport extends SparkPlan {
       BoundReference(i, attr.dataType, attr.nullable)
     }
 
-    val evaluateInputs = evaluateVariables(outputVars)
+    val (streamVars, buildVars) =
+      if (sequential) outputVars.splitAt(streamLen) else outputVars.splitAt(streamLen).swap
 
-    val (evaluateStreamed, evaluateBuild) =
-    if (sequential) evaluateInputs.splitAt(streamLen) else evaluateInputs.splitAt(streamLen).swap
-    ctx.currentVars = outputVars
+    val evaluateBuild = evaluateVariables(buildVars)
 
-    findMatch.append(evaluateBuild)
+    ctx.currentVars = if (sequential) streamVars ++ buildVars else buildVars ++ streamVars
+
     // generate the code to create a UnsafeRow
-    val ev = GenerateUnsafeProjection.createCodeForJoin(
-        ctx, colExprs, findMatch, streamLen, sequential)
+    val (evStream, evBuild) = GenerateUnsafeProjection.createCodeForJoin(
+        ctx, colExprs, streamLen, sequential)
     val code =
     s"""
-       |$evaluateStreamed
-       |${ev.code.trim}
+       |$evaluateBuild
+       |${evBuild.code.trim}
        """.stripMargin.trim
 
-    val rowVar = ExprCode(code, "false", ev.value)
+    val rowVar = ExprCode(code, "false", evBuild.value)
 
     ctx.freshNamePrefix = parent.variablePrefix
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
-    s"""
+    val steamCode = evStream.code
+    val buildCode =
+      s"""
        |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}
        |$evaluated
        |${parent.doConsume(ctx, inputVars, rowVar)}
      """.stripMargin
+
+    (steamCode, buildCode)
   }
 
   /**
