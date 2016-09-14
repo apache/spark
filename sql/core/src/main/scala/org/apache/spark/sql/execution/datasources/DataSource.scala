@@ -142,12 +142,13 @@ case class DataSource(
                 } else if (provider.toLowerCase == "avro" ||
                   provider == "com.databricks.spark.avro") {
                   throw new AnalysisException(
-                    s"Failed to find data source: ${provider.toLowerCase}. Please use Spark " +
-                      "package http://spark-packages.org/package/databricks/spark-avro")
+                    s"Failed to find data source: ${provider.toLowerCase}. Please find an Avro " +
+                      "package at " +
+                      "https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider. Please find packages at " +
-                      "http://spark-packages.org",
+                      "https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects",
                     error)
                 }
             }
