@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
@@ -398,22 +399,48 @@ private[spark] class ExecutorAllocationManager(
 
   /**
    * Request the cluster manager to remove the given executors.
-   * Return whether the request is received.
+   * Return whether the request is acknowledged. Ideally we should be returning the list of
+   * executors which were removed as the requested executors and the one's actually removed can be
+   * different (CoarseGrainedSchedulerBackend can filter some executors). To avoid breaking the API
+   * we continue to return a Boolean.
    */
-  private def removeExecutors(executorIds: Seq[String]): Boolean = synchronized {
+  private def removeExecutors(executors: Seq[String]): Boolean = synchronized {
 
-    val executorIdsToBeRemoved = executorIds.filter(canBeKilled)
+    val executorIdsToBeRemoved = new ArrayBuffer[String]
 
-    // Send a request to the backend to kill this executor
-    val removeRequestAcknowledged = testing || client.killExecutors(executorIdsToBeRemoved)
-    if (removeRequestAcknowledged) {
+    logInfo("Request to remove executorIds: " + executors.mkString(", "))
+    val numExistingExecutors = executorIds.size - executorsPendingToRemove.size
+    for(executorId <- executors) {
+      // Do not kill the executor if we have already reached the lower bound
+      val newExecutorTotal = numExistingExecutors - executorIdsToBeRemoved.size
+      if (newExecutorTotal - 1 < minNumExecutors) {
+        logDebug(s"Not removing idle executor $executorId because there are only " +
+          s"$numExistingExecutors executor(s) left (limit $minNumExecutors)")
+      } else if (canBeKilled(executorId)) {
+        executorIdsToBeRemoved += executorId
+      }
+    }
+
+    if (executorIdsToBeRemoved.isEmpty) {
+      return false
+    }
+
+    // Send a request to the backend to kill this executor(s)
+    val executorsRemoved = if (testing) {
+      executorIdsToBeRemoved
+    } else {
+      client.killExecutors(executorIdsToBeRemoved)
+    }
+
+    if (testing || executorsRemoved.nonEmpty) {
       val numExistingExecutors = allocationManager.executorIds.size - executorsPendingToRemove.size
       var index = 0
-      for(index <- 0 until executorIdsToBeRemoved.size) {
-        logInfo(s"Removing executor " + executorIdsToBeRemoved(index) + " because it has been " +
-          s"idle for $executorIdleTimeoutS seconds (new desired total will be " +
-          (numExistingExecutors - (index + 1)) + ")")
-        executorsPendingToRemove.add(executorIdsToBeRemoved(index))
+      for(index <- 0 until executorsRemoved.size) {
+        val removedExecutorId = executorsRemoved(index)
+        val newExecutorTotal = numExistingExecutors - (index + 1)
+        logInfo(s"Removing executor $removedExecutorId because it has been idle for " +
+          s"$executorIdleTimeoutS seconds (new desired total will be $newExecutorTotal)")
+        executorsPendingToRemove.add(removedExecutorId)
       }
       true
     } else {
@@ -421,6 +448,14 @@ private[spark] class ExecutorAllocationManager(
         executorIdsToBeRemoved.mkString(",") + "or no executor eligible to kill!")
       false
     }
+  }
+
+  /**
+   * Request the cluster manager to remove the given executor.
+   * Return whether the request is acknowledged.
+   */
+  private def removeExecutor(executorId: String): Boolean = synchronized {
+    removeExecutors(Seq(executorId))
   }
 
   /**
@@ -440,17 +475,8 @@ private[spark] class ExecutorAllocationManager(
       return false
     }
 
-    // Do not kill the executor if we have already reached the lower bound
-    val numExistingExecutors = executorIds.size - executorsPendingToRemove.size
-    if (numExistingExecutors - 1 < minNumExecutors) {
-      logDebug(s"Not removing idle executor $executorId because there are only " +
-        s"$numExistingExecutors executor(s) left (limit $minNumExecutors)")
-      return false
-    }
     true
   }
-
-
 
   /**
    * Callback invoked when the specified executor has been added.
