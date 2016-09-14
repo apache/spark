@@ -22,9 +22,10 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 
 
@@ -37,7 +38,9 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
+    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val qualifiedName = TableIdentifier(tableIdent.table, Some(db))
+    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(qualifiedName))
 
     relation match {
       case relation: CatalogRelation =>
@@ -90,9 +93,6 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
       // data source tables have been converted into LogicalRelations
       case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
         updateTableStats(logicalRel.catalogTable.get, logicalRel.relation.sizeInBytes)
-
-      case o if !o.isInstanceOf[LeafNode] =>
-        throw new AnalysisException(s"Operation not allowed: ANALYZE TABLE on views: $tableName")
 
       case otherRelation =>
         throw new AnalysisException(s"ANALYZE TABLE is not supported for " +

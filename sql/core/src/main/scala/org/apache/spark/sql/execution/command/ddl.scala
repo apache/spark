@@ -28,7 +28,6 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -266,13 +265,10 @@ case class AlterTableUnsetPropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, tableName, isView)
-    val table = catalog.getTableMetadata(tableName)
+    val db = tableName.database.getOrElse(catalog.getCurrentDatabase)
+    val qualifiedName = TableIdentifier(tableName.table, Some(db))
+    val table = catalog.getTableMetadata(qualifiedName)
 
-    if (catalog.isTemporaryTable(tableName)) {
-      throw new NoSuchTableException(
-        db = tableName.database.getOrElse(catalog.getCurrentDatabase),
-        table = tableName.table)
-    }
     if (!ifExists) {
       propKeys.foreach { k =>
         if (!table.properties.contains(k)) {

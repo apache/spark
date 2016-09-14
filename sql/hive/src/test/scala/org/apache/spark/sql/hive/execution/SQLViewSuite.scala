@@ -173,10 +173,9 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }.getMessage
       assert(e.contains(s"Operation not allowed: SHOW PARTITIONS on temporary tables: `$viewName`"))
 
-      e = intercept[AnalysisException] {
+      intercept[NoSuchTableException] {
         sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
-      }.getMessage
-      assert(e.contains(s"Operation not allowed: ANALYZE TABLE on views: `$viewName`"))
+      }
     }
   }
 
