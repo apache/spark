@@ -1155,10 +1155,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("save API - format hive") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
-      val e = intercept[ClassNotFoundException] {
+      val e = intercept[AnalysisException] {
         spark.range(10).write.format("hive").mode(SaveMode.Ignore).save(path)
       }.getMessage
-      assert(e.contains("Failed to find data source: hive"))
+      assert(e.contains("Operation not allowed: write a Dataset to the format: hive"))
     }
   }
 
