@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.scalacheck.Gen
 import org.scalactic.TripleEqualsSupport.Spread
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 import org.apache.spark.SparkFunSuite
@@ -292,7 +293,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       case (result: Double, expected: Double) if result.isNaN && expected.isNaN =>
         true
       case (result: Double, expected: Double) =>
-        compareDoubles(result, expected)
+        relativeErrorComparison(result, expected)
       case (result: Float, expected: Float) if result.isNaN && expected.isNaN =>
         true
       case _ => result == expected
@@ -300,18 +301,21 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
   }
 
   /**
-   * Check the equality of two [[Double]] values, allows a tolerance within a certain percentage
-   * range.
+   * Private helper function for comparing two values using relative tolerance.
+   * Note that if x or y is extremely close to zero, i.e., smaller than Double.MinPositiveValue,
+   * the relative tolerance is meaningless, so the exception will be raised to warn users.
    */
-  private def compareDoubles(
-      result: Double,
-      expected: Double,
-      tolerance: Double = 1E-10): Boolean = {
-    if ((result.isNaN && expected.isNaN) || result == expected) {
-      return true
+  private def relativeErrorComparison(x: Double, y: Double, eps: Double = 1E-8): Boolean = {
+    val absX = math.abs(x)
+    val absY = math.abs(y)
+    val diff = math.abs(x - y)
+    if (x == y) {
+      true
+    } else if (absX < Double.MinPositiveValue || absY < Double.MinPositiveValue) {
+      throw new TestFailedException(
+        s"$x or $y is extremely close to zero, so the relative tolerance is meaningless.", 0)
+    } else {
+      diff < eps * math.min(absX, absY)
     }
-
-    val spread = Spread[Double](expected, expected.abs * tolerance)
-    spread.isWithin(result)
   }
 }
