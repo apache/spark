@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.types.DataType
+
 /**
  * Estimates of various statistics.  The default estimation logic simply lazily multiplies the
  * corresponding statistic produced by the children.  To override this behavior, override
@@ -32,19 +34,70 @@ package org.apache.spark.sql.catalyst.plans.logical
  * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
  *                    defaults to the product of children's `sizeInBytes`.
  * @param rowCount Estimated number of rows.
+ * @param basicColStats Basic column-level statistics.
  * @param isBroadcastable If true, output is small enough to be used in a broadcast join.
  */
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
+    basicColStats: Map[String, BasicColStats] = Map.empty,
     isBroadcastable: Boolean = false) {
+
   override def toString: String = "Statistics(" + simpleString + ")"
 
   /** Readable string representation for the Statistics. */
   def simpleString: String = {
     Seq(s"sizeInBytes=$sizeInBytes",
       if (rowCount.isDefined) s"rowCount=${rowCount.get}" else "",
+      if (basicColStats.nonEmpty) s"basicColStats=$basicColStats" else "",
       s"isBroadcastable=$isBroadcastable"
-    ).filter(_.nonEmpty).mkString("", ", ", "")
+    ).filter(_.nonEmpty).mkString(", ")
+  }
+}
+
+case class BasicColStats(
+    dataType: DataType,
+    numNulls: Long,
+    max: Option[Any] = None,
+    min: Option[Any] = None,
+    ndv: Option[Long] = None,
+    avgColLen: Option[Double] = None,
+    maxColLen: Option[Long] = None,
+    numTrues: Option[Long] = None,
+    numFalses: Option[Long] = None) {
+
+  override def toString: String = "BasicColStats(" + simpleString + ")"
+
+  def simpleString: String = {
+    Seq(s"numNulls=$numNulls",
+      if (max.isDefined) s"max=${max.get}" else "",
+      if (min.isDefined) s"min=${min.get}" else "",
+      if (ndv.isDefined) s"ndv=${ndv.get}" else "",
+      if (avgColLen.isDefined) s"avgColLen=${avgColLen.get}" else "",
+      if (maxColLen.isDefined) s"maxColLen=${maxColLen.get}" else "",
+      if (numTrues.isDefined) s"numTrues=${numTrues.get}" else "",
+      if (numFalses.isDefined) s"numFalses=${numFalses.get}" else ""
+    ).filter(_.nonEmpty).mkString(", ")
+  }
+}
+
+object BasicColStats {
+  def fromString(str: String, dataType: DataType): BasicColStats = {
+    val suffix = ",\\s|\\)"
+    BasicColStats(
+      dataType = dataType,
+      numNulls = findItem(source = str, prefix = "numNulls=", suffix = suffix).map(_.toLong).get,
+      max = findItem(source = str, prefix = "max=", suffix = suffix),
+      min = findItem(source = str, prefix = "min=", suffix = suffix),
+      ndv = findItem(source = str, prefix = "ndv=", suffix = suffix).map(_.toLong),
+      avgColLen = findItem(source = str, prefix = "avgColLen=", suffix = suffix).map(_.toDouble),
+      maxColLen = findItem(source = str, prefix = "maxColLen=", suffix = suffix).map(_.toLong),
+      numTrues = findItem(source = str, prefix = "numTrues=", suffix = suffix).map(_.toLong),
+      numFalses = findItem(source = str, prefix = "numFalses=", suffix = suffix).map(_.toLong))
+  }
+
+  private def findItem(source: String, prefix: String, suffix: String): Option[String] = {
+    val pattern = s"(?<=$prefix)(.+?)(?=$suffix)".r
+    pattern.findFirstIn(source)
   }
 }

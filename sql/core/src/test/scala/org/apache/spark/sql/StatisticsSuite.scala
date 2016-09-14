@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, Join, LocalLimit}
+import org.apache.spark.sql.catalyst.plans.logical.{BasicColStats, GlobalLimit, Join, LocalLimit}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -101,4 +101,47 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
       checkTableStats(tableName, expectedRowCount = Some(2))
     }
   }
+
+  test("test column-level statistics for data source table created in InMemoryCatalog") {
+    def checkColStats(colStats: BasicColStats, expectedColStats: BasicColStats): Unit = {
+      assert(colStats.dataType == expectedColStats.dataType)
+      assert(colStats.numNulls == expectedColStats.numNulls)
+      assert(colStats.max == expectedColStats.max)
+      assert(colStats.min == expectedColStats.min)
+      if (expectedColStats.ndv.isDefined) {
+        // ndv is an approximate value, so we just make sure we have the value
+        assert(colStats.ndv.get >= 0)
+      }
+      assert(colStats.avgColLen == expectedColStats.avgColLen)
+      assert(colStats.maxColLen == expectedColStats.maxColLen)
+      assert(colStats.numTrues == expectedColStats.numTrues)
+      assert(colStats.numFalses == expectedColStats.numFalses)
+    }
+
+    val tableName = "tbl"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(i INT, j STRING) USING parquet")
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
+
+      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS i, j")
+      val df = sql(s"SELECT * FROM $tableName")
+      val expectedRowCount = Some(2)
+      val expectedColStatsSeq: Seq[(String, BasicColStats)] = Seq(
+        ("i", BasicColStats(dataType = IntegerType, numNulls = 0, max = Some(2), min = Some(1),
+          ndv = Some(2))),
+        ("j", BasicColStats(dataType = StringType, numNulls = 0, maxColLen = Some(1),
+          avgColLen = Some(1), ndv = Some(2))))
+      val relations = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
+        val stats = rel.catalogTable.get.stats.get
+        assert(stats.rowCount == expectedRowCount)
+        expectedColStatsSeq.foreach { case (column, expectedColStats) =>
+          assert(stats.basicColStats.contains(column))
+          checkColStats(colStats = stats.basicColStats(column), expectedColStats = expectedColStats)
+        }
+        rel
+      }
+      assert(relations.size == 1)
+    }
+  }
+
 }

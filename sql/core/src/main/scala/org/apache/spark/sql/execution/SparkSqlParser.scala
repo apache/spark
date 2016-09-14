@@ -98,8 +98,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       ctx.identifier != null &&
       ctx.identifier.getText.toLowerCase == "noscan") {
       AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString)
-    } else {
+    } else if (ctx.identifierSeq() == null) {
       AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString, noscan = false)
+    } else {
+      AnalyzeColumnCommand(
+        visitTableIdentifier(ctx.tableIdentifier).toString,
+        visitIdentifierSeq(ctx.identifierSeq()))
     }
   }
 

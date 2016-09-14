@@ -18,9 +18,8 @@
 package org.apache.spark.sql.execution.command
 
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.fs.{FileSystem, Path}
-
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
@@ -44,51 +43,8 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
 
     relation match {
       case relation: CatalogRelation =>
-        val catalogTable: CatalogTable = relation.catalogTable
-        // This method is mainly based on
-        // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
-        // in Hive 0.13 (except that we do not use fs.getContentSummary).
-        // TODO: Generalize statistics collection.
-        // TODO: Why fs.getContentSummary returns wrong size on Jenkins?
-        // Can we use fs.getContentSummary in future?
-        // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
-        // countFileSize to count the table size.
-        val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
-
-        def calculateTableSize(fs: FileSystem, path: Path): Long = {
-          val fileStatus = fs.getFileStatus(path)
-          val size = if (fileStatus.isDirectory) {
-            fs.listStatus(path)
-              .map { status =>
-                if (!status.getPath.getName.startsWith(stagingDir)) {
-                  calculateTableSize(fs, status.getPath)
-                } else {
-                  0L
-                }
-              }.sum
-          } else {
-            fileStatus.getLen
-          }
-
-          size
-        }
-
-        val newTotalSize =
-          catalogTable.storage.locationUri.map { p =>
-            val path = new Path(p)
-            try {
-              val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
-              calculateTableSize(fs, path)
-            } catch {
-              case NonFatal(e) =>
-                logWarning(
-                  s"Failed to get the size of table ${catalogTable.identifier.table} in the " +
-                    s"database ${catalogTable.identifier.database} because of ${e.toString}", e)
-                0L
-            }
-          }.getOrElse(0L)
-
-        updateTableStats(catalogTable, newTotalSize)
+        updateTableStats(relation.catalogTable,
+          AnalyzeTableCommand.calculateTotalSize(sparkSession, relation.catalogTable))
 
       // data source tables have been converted into LogicalRelations
       case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
@@ -130,5 +86,53 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
     }
 
     Seq.empty[Row]
+  }
+}
+
+object AnalyzeTableCommand extends Logging {
+
+  def calculateTotalSize(sparkSession: SparkSession, catalogTable: CatalogTable): Long = {
+    // This method is mainly based on
+    // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
+    // in Hive 0.13 (except that we do not use fs.getContentSummary).
+    // TODO: Generalize statistics collection.
+    // TODO: Why fs.getContentSummary returns wrong size on Jenkins?
+    // Can we use fs.getContentSummary in future?
+    // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
+    // countFileSize to count the table size.
+    val stagingDir =
+    sparkSession.sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
+
+    def calculateTableSize(fs: FileSystem, path: Path): Long = {
+      val fileStatus = fs.getFileStatus(path)
+      val size = if (fileStatus.isDirectory) {
+        fs.listStatus(path)
+          .map { status =>
+            if (!status.getPath.getName.startsWith(stagingDir)) {
+              calculateTableSize(fs, status.getPath)
+            } else {
+              0L
+            }
+          }.sum
+      } else {
+        fileStatus.getLen
+      }
+
+      size
+    }
+
+    catalogTable.storage.locationUri.map { p =>
+      val path = new Path(p)
+      try {
+        val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+        calculateTableSize(fs, path)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(
+            s"Failed to get the size of table ${catalogTable.identifier.table} in the " +
+              s"database ${catalogTable.identifier.database} because of ${e.toString}", e)
+          0L
+      }
+    }.getOrElse(0L)
   }
 }
