@@ -545,8 +545,9 @@ private[ann] object FeedForwardModel {
    * @return model
    */
   def apply(topology: FeedForwardTopology, weights: Vector): FeedForwardModel = {
-    require(weights.size == topology.layers.map(_.weightSize).sum,
-      "Input weight vector has illegal size.")
+    val expectedWeightSize = topology.layers.map(_.weightSize).sum
+    require(weights.size == expectedWeightSize,
+      s"Expected weight vector of size ${expectedWeightSize} but got size ${weights.size}.")
     new FeedForwardModel(weights, topology)
   }
 

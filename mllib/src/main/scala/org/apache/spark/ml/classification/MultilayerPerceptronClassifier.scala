@@ -235,7 +235,6 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
    */
   override protected def train(dataset: Dataset[_]): MultilayerPerceptronClassificationModel = {
     val myLayers = $(layers)
-    require(myLayers != null, "layers parameter not set.")
     val labels = myLayers.last
     val lpData = extractLabeledPoints(dataset)
     val data = lpData.map(lp => LabelConverter.encodeLabeledPoint(lp, labels))
