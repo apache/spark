@@ -89,6 +89,7 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
         .option("kafka.group.id", s"group-stress-test")
         .option("subscribe", topics.mkString(","))
         .load()
+        .select("key", "value")
         .as[(Array[Byte], Array[Byte])]
 
     val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
@@ -139,7 +140,7 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
       .option("kafka.group.id", s"group-$topic")
       .option("kafka.auto.offset.reset", s"latest")
     options.foreach { case (k, v) => reader.option(k, v) }
-    val kafka = reader.load().as[(Array[Byte], Array[Byte])]
+    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
     val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
 
     testStream(mapped)(
@@ -169,7 +170,7 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
       .option("kafka.group.id", s"group-$topic")
       .option("kafka.auto.offset.reset", s"earliest")
     options.foreach { case (k, v) => reader.option(k, v) }
-    val kafka = reader.load().as[(Array[Byte], Array[Byte])]
+    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
     val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
 
     testStream(mapped)(

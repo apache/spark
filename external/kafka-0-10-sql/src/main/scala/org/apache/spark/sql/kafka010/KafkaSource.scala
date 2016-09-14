@@ -29,11 +29,10 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSource._
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.SparkContext
 
 /**
@@ -78,15 +77,12 @@ private[kafka010] case class KafkaSource(
     sourceOptions: Map[String, String])
   extends Source with Logging {
 
-  implicit private val encoder = ExpressionEncoder.tuple(
-    ExpressionEncoder[Array[Byte]](), ExpressionEncoder[Array[Byte]]())
-
   @transient private val consumer = consumerStrategy.createConsumer()
   @transient private val sc = sqlContext.sparkContext
   @transient private val initialPartitionOffsets = fetchPartitionOffsets(seekToLatest = false)
   logInfo(s"Initial offsets: " + initialPartitionOffsets)
 
-  override def schema: StructType = encoder.schema
+  override def schema: StructType = KafkaSource.kafkaSchema
 
   /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = {
@@ -134,11 +130,13 @@ private[kafka010] case class KafkaSource(
 
     // Create a RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD[Array[Byte], Array[Byte]](
-      sc, executorKafkaParams, offsetRanges, sourceOptions)
-      .map { r => (r.key, r.value) }
+      sc, executorKafkaParams, offsetRanges, sourceOptions).map { cr =>
+        Row(cr.checksum, cr.key, cr.offset, cr.partition, cr.serializedKeySize,
+          cr.serializedValueSize, cr.timestamp, cr.timestampType.id, cr.topic, cr.value)
+    }
 
     logInfo("GetBatch: " + offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))
-    sqlContext.createDataset(rdd).toDF("key", "value")
+    sqlContext.createDataFrame(rdd, schema)
   }
 
   /** Stop this source and free any resources it has allocated. */
@@ -171,6 +169,19 @@ private[kafka010] case class KafkaSource(
 
 /** Companion object for the [[KafkaSource]]. */
 private[kafka010] object KafkaSource {
+
+  def kafkaSchema: StructType = StructType(Seq(
+    StructField("checksum", LongType),
+    StructField("key", BinaryType),
+    StructField("offset", LongType),
+    StructField("partition", IntegerType),
+    StructField("serializedKeySize", IntegerType),
+    StructField("serializedValueSize", IntegerType),
+    StructField("timestamp", LongType),
+    StructField("timestampType", IntegerType),
+    StructField("topic", StringType),
+    StructField("value", BinaryType)
+  ))
 
   sealed trait ConsumerStrategy[K, V] {
     def createConsumer(): Consumer[K, V]
@@ -289,7 +300,6 @@ private[kafka010] object KafkaSourceOffset {
  */
 private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
   with DataSourceRegister with Logging {
-  private val structType = new StructType().add("key", "binary").add("value", "binary")
   private val strategyOptionNames = Set("subscribe", "subscribepattern")
 
   /** Class to conveniently update Kafka config params, while logging the changes */
@@ -322,7 +332,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
       providerName: String,
       parameters: Map[String, String]): (String, StructType) = {
     validateOptions(parameters)
-    ("kafka", structType)
+    ("kafka", KafkaSource.kafkaSchema)
   }
 
   override def createSource(

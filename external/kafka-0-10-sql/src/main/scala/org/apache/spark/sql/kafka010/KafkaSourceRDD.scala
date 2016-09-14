@@ -25,7 +25,7 @@ import scala.util.Try
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.{Partition, SparkContext, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.kafka010.KafkaSourceRDD._
@@ -151,11 +151,11 @@ private[kafka010] object KafkaSourceRDD {
 
     // Configurations for initializing the cache of KafkaConsumers.
     private val cacheInitialCapacity =
-      getInt(options, "consumer.cache.initialCapacity", 16)
+      SparkEnv.get.conf.getInt("kafka.consumer.cache.initialCapacity", 16)
     private val cacheMaxCapacity =
-      getInt(options, "consumer.cache.maxCapacity", 64)
+      SparkEnv.get.conf.getInt("kafka.consumer.cache.maxCapacity", 64)
     private val cacheLoadFactor =
-      getDouble(options, "consumer.cache.loadFactor", 0.75).toFloat
+      SparkEnv.get.conf.getDouble("kafka.consumer.cache.loadFactor", 0.75).toFloat
 
     // Initialize the cache if not already done, and get a cached KafkaConsumer
     CachedKafkaConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
