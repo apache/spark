@@ -369,7 +369,7 @@ object JdbcUtils extends Logging {
         val bytes = rs.getBytes(pos + 1)
         var ans = 0L
         var j = 0
-        while (j < bytes.size) {
+        while (j < bytes.length) {
           ans = 256 * ans + (255 & bytes(j))
           j = j + 1
         }
