@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.MapData
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 /**
@@ -293,10 +292,26 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       case (result: Double, expected: Double) if result.isNaN && expected.isNaN =>
         true
       case (result: Double, expected: Double) =>
-        result ~== expected relTol 1E-10
+        compareDoubles(result, expected)
       case (result: Float, expected: Float) if result.isNaN && expected.isNaN =>
         true
       case _ => result == expected
     }
+  }
+
+  /**
+   * Check the equality of two [[Double]] values, allows a tolerance within a certain percentage
+   * range.
+   */
+  private def compareDoubles(
+      result: Double,
+      expected: Double,
+      tolerance: Double = 1E-10): Boolean = {
+    if ((result.isNaN && expected.isNaN) || result == expected) {
+      return true
+    }
+
+    val spread = Spread[Double](expected, expected.abs * tolerance)
+    spread.isWithin(result)
   }
 }

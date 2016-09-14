@@ -29,7 +29,6 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.test.ChiSqTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.util.TestingUtils._
 
 class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
 

@@ -26,7 +26,6 @@ import org.apache.spark.graphx.Edge
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 class LDASuite extends SparkFunSuite with MLlibTestSparkContext {

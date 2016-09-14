@@ -22,7 +22,6 @@ import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {

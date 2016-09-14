@@ -19,7 +19,7 @@ package org.apache.spark.mllib.evaluation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.util.TestingUtils._
+import org.apache.spark.mllib.util.TestingUtils._
 
 class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
 

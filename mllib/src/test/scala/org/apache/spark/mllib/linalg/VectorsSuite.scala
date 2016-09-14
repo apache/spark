@@ -25,7 +25,7 @@ import org.json4s.jackson.JsonMethods.{parse => parseJson}
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{linalg => newlinalg}
-import org.apache.spark.util.TestingUtils._
+import org.apache.spark.mllib.util.TestingUtils._
 
 class VectorsSuite extends SparkFunSuite with Logging {
 

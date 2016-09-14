@@ -22,7 +22,7 @@ import scala.util.Random
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.util.TestingUtils._
+import org.apache.spark.mllib.util.TestingUtils._
 
 class NNLSSuite extends SparkFunSuite {
   /** Generate an NNLS problem whose optimal solution is the all-ones vector. */

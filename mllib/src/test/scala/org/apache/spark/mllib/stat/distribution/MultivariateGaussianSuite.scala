@@ -20,7 +20,7 @@ package org.apache.spark.mllib.stat.distribution
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.util.TestingUtils._
+import org.apache.spark.mllib.util.TestingUtils._
 
 class MultivariateGaussianSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("univariate") {
