@@ -92,8 +92,8 @@ private[spark] object ToolTips {
   "Shaded red when garbage collection (GC) time is over 10% of task time"
 
   val APPLICATION_EXECUTOR_LIMIT =
-    """The number of executors this application can have at any given time. This is set only when
-       dynamic allocation is enabled. Master assigns executors to an application only when the
-       number of its executors is less than this limit.
+    """Maximum number of executors that this application will use. This limit is finite only when
+       dynamic allocation is enabled. The number of granted executors may exceed the limit
+       ephemerally when executors are being killed.
     """
 }
