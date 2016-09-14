@@ -390,6 +390,7 @@ We use `svm` in package `e1071` as an example. We use all default settings excep
 ```{r}
 costs <- exp(seq(from = log(1), to = log(1000), length.out = 5))
 train <- function(cost) {
+  stopifnot(requireNamespace("e1071", quietly = TRUE))
   model <- e1071::svm(Species ~ ., data = iris, cost = cost)
   summary(model)
 }
