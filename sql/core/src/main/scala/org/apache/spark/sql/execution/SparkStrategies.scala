@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, SaveMode, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -228,13 +227,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object StatefulAggregationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(
-        namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
+        namedGroupingExpressions,
+        aggregateExpressions,
+        rewrittenResultExpressions,
+        child,
+        isGrouped) =>
 
         aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
           aggregateExpressions,
           rewrittenResultExpressions,
-          planLater(child))
+          planLater(child),
+          isGrouped)
 
       case _ => Nil
     }
@@ -246,7 +250,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(
-          groupingExpressions, aggregateExpressions, resultExpressions, child) =>
+          groupingExpressions, aggregateExpressions, resultExpressions, child, isGrouped) =>
 
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggregateExpressions.partition(_.isDistinct)
@@ -267,21 +271,24 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 groupingExpressions,
                 aggregateExpressions,
                 resultExpressions,
-                planLater(child))
+                planLater(child),
+                isGrouped)
             }
           } else if (functionsWithDistinct.isEmpty) {
             aggregate.AggUtils.planAggregateWithoutDistinct(
               groupingExpressions,
               aggregateExpressions,
               resultExpressions,
-              planLater(child))
+              planLater(child),
+              isGrouped)
           } else {
             aggregate.AggUtils.planAggregateWithOneDistinct(
               groupingExpressions,
               functionsWithDistinct,
               functionsWithoutDistinct,
               resultExpressions,
-              planLater(child))
+              planLater(child),
+              isGrouped)
           }
 
         aggregateOperator

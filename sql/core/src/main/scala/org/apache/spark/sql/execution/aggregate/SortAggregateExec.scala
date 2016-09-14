@@ -33,12 +33,14 @@ import org.apache.spark.util.Utils
 case class SortAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
+    isGrouped: Boolean,
     aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryExecNode {
+  assert(isGrouped || groupingExpressions.isEmpty)
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -76,7 +78,7 @@ case class SortAggregateExec(
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
       val hasInput = iter.hasNext
-      if (!hasInput && groupingExpressions.nonEmpty) {
+      if (!hasInput && isGrouped) {
         // This is a grouped aggregate and the input iterator is empty,
         // so return an empty iterator.
         Iterator[UnsafeRow]()
@@ -92,7 +94,7 @@ case class SortAggregateExec(
           (expressions, inputSchema) =>
             newMutableProjection(expressions, inputSchema, subexpressionEliminationEnabled),
           numOutputRows)
-        if (!hasInput && groupingExpressions.isEmpty) {
+        if (!hasInput && !isGrouped) {
           // There is no input and there is no grouping expressions.
           // We need to output a single row as the output.
           numOutputRows += 1
@@ -114,10 +116,11 @@ case class SortAggregateExec(
     val keyString = Utils.truncatedString(groupingExpressions, "[", ", ", "]")
     val functionString = Utils.truncatedString(allAggregateExpressions, "[", ", ", "]")
     val outputString = Utils.truncatedString(output, "[", ", ", "]")
-    if (verbose) {
-      s"SortAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+    val suffix = if (verbose) {
+      s", output=$outputString, isGrouped=$isGrouped"
     } else {
-      s"SortAggregate(key=$keyString, functions=$functionString)"
+      ""
     }
+    s"SortAggregate(key=$keyString, functions=$functionString$suffix)"
   }
 }
