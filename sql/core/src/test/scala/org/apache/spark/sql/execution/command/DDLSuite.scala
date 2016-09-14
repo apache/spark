@@ -913,7 +913,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     withTempView("show1a", "show2b") {
       sql(
         """
-          |CREATE TEMPORARY VIEW show1a
+          |CREATE TEMPORARY TABLE show1a
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
           |  From '1',
@@ -924,7 +924,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         """.stripMargin)
       sql(
         """
-          |CREATE TEMPORARY VIEW show2b
+          |CREATE TEMPORARY TABLE show2b
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
           |  From '1',
@@ -978,11 +978,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       Nil)
   }
 
-  test("drop table - temporary view") {
+  test("drop table - temporary table") {
     val catalog = spark.sessionState.catalog
     sql(
       """
-        |CREATE TEMPORARY VIEW tab1
+        |CREATE TEMPORARY TABLE tab1
         |USING org.apache.spark.sql.sources.DDLScanSource
         |OPTIONS (
         |  From '1',
@@ -1605,13 +1605,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("truncate table - external table, temporary view, view (not allowed)") {
+  test("truncate table - external table, temporary table, view (not allowed)") {
     import testImplicits._
     val path = Utils.createTempDir().getAbsolutePath
     (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
     sql(s"CREATE EXTERNAL TABLE my_ext_tab LOCATION '$path'")
     sql(s"CREATE VIEW my_view AS SELECT 1")
-    assertUnsupported("TRUNCATE TABLE my_temp_tab")
+    intercept[NoSuchTableException] {
+      sql("TRUNCATE TABLE my_temp_tab")
+    }
     assertUnsupported("TRUNCATE TABLE my_ext_tab")
     assertUnsupported("TRUNCATE TABLE my_view")
   }

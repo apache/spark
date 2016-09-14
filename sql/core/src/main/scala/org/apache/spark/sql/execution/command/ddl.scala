@@ -470,25 +470,20 @@ case class AlterTableRecoverPartitionsCommand(
 
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
-    if (!catalog.tableExists(tableName)) {
-      throw new AnalysisException(s"Table $tableName in $cmd does not exist.")
-    }
-    if (catalog.isTemporaryTable(tableName)) {
-      throw new AnalysisException(
-        s"Operation not allowed: $cmd on temporary tables: $tableName")
-    }
-    val table = catalog.getTableMetadata(tableName)
+    val db = tableName.database.getOrElse(catalog.getCurrentDatabase)
+    val qualifiedName = TableIdentifier(tableName.table, Some(db))
+    val table = catalog.getTableMetadata(qualifiedName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
-        s"Operation not allowed: $cmd on datasource tables: $tableName")
+        s"Operation not allowed: $cmd on datasource tables: $qualifiedName")
     }
     if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
-        s"Operation not allowed: $cmd only works on partitioned tables: $tableName")
+        s"Operation not allowed: $cmd only works on partitioned tables: $qualifiedName")
     }
     if (table.storage.locationUri.isEmpty) {
       throw new AnalysisException(
-        s"Operation not allowed: $cmd only works on table with location provided: $tableName")
+        s"Operation not allowed: $cmd only works on table with location provided: $qualifiedName")
     }
 
     val root = new Path(table.storage.locationUri.get)
