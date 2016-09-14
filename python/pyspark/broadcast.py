@@ -18,8 +18,9 @@
 import os
 import sys
 import gc
-from cloudpickle import print_exec
 from tempfile import NamedTemporaryFile
+
+from pyspark.cloudpickle import print_exec
 
 if sys.version < '3':
     import cPickle as pickle
