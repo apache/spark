@@ -214,9 +214,8 @@ case class LoadDataCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val db = table.database.getOrElse(catalog.getCurrentDatabase)
-    val qualifiedName = TableIdentifier(table.table, Some(db))
-    val targetTable = catalog.getTableMetadata(qualifiedName)
+    val targetTable = catalog.getNonTempTableMetadata(table)
+    val qualifiedName = targetTable.identifier.quotedString
 
     if (targetTable.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $qualifiedName")
@@ -334,9 +333,8 @@ case class TruncateTableCommand(
 
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
-    val db = tableName.database.getOrElse(catalog.getCurrentDatabase)
-    val qualifiedName = TableIdentifier(tableName.table, Some(db))
-    val table = catalog.getTableMetadata(qualifiedName)
+    val table = catalog.getNonTempTableMetadata(tableName)
+    val qualifiedName = table.identifier.quotedString
 
     if (table.tableType == CatalogTableType.EXTERNAL) {
       throw new AnalysisException(
@@ -363,7 +361,7 @@ case class TruncateTableCommand(
       } else if (table.partitionColumnNames.isEmpty) {
         Seq(table.storage.locationUri)
       } else {
-        catalog.listPartitions(qualifiedName, partitionSpec).map(_.storage.locationUri)
+        catalog.listPartitions(table.identifier, partitionSpec).map(_.storage.locationUri)
       }
     val hadoopConf = spark.sessionState.newHadoopConf()
     locations.foreach { location =>
@@ -386,7 +384,7 @@ case class TruncateTableCommand(
     spark.sessionState.refreshTable(tableName.unquotedString)
     // Also try to drop the contents of the table from the columnar cache
     try {
-      spark.sharedState.cacheManager.uncacheQuery(spark.table(qualifiedName.quotedString))
+      spark.sharedState.cacheManager.uncacheQuery(spark.table(table.identifier))
     } catch {
       case NonFatal(e) =>
         log.warn(s"Exception when attempting to uncache table $qualifiedName", e)
@@ -622,7 +620,7 @@ case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
  * }}}
  */
 case class ShowPartitionsCommand(
-    table: TableIdentifier,
+    tableName: TableIdentifier,
     spec: Option[TablePartitionSpec]) extends RunnableCommand {
   override val output: Seq[Attribute] = {
     AttributeReference("partition", StringType, nullable = false)() :: Nil
@@ -636,9 +634,8 @@ case class ShowPartitionsCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val db = table.database.getOrElse(catalog.getCurrentDatabase)
-    val qualifiedName = TableIdentifier(table.table, Some(db))
-    val tab = catalog.getTableMetadata(qualifiedName)
+    val table = catalog.getNonTempTableMetadata(tableName)
+    val qualifiedName = table.identifier.quotedString
 
     /**
      * Validate and throws an [[AnalysisException]] exception under the following conditions:
@@ -646,19 +643,18 @@ case class ShowPartitionsCommand(
      * 2. If it is a datasource table.
      * 3. If it is a view.
      */
-    if (tab.tableType == VIEW) {
-      throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a view: ${tab.qualifiedName}")
+    if (table.tableType == VIEW) {
+      throw new AnalysisException(s"SHOW PARTITIONS is not allowed on a view: $qualifiedName")
     }
 
-    if (tab.partitionColumnNames.isEmpty) {
+    if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${tab.qualifiedName}")
+        s"SHOW PARTITIONS is not allowed on a table that is not partitioned: $qualifiedName")
     }
 
-    if (DDLUtils.isDatasourceTable(tab)) {
+    if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a datasource table: ${tab.qualifiedName}")
+        s"SHOW PARTITIONS is not allowed on a datasource table: $qualifiedName")
     }
 
     /**
@@ -667,7 +663,7 @@ case class ShowPartitionsCommand(
      * thrown if the partitioning spec is invalid.
      */
     if (spec.isDefined) {
-      val badColumns = spec.get.keySet.filterNot(tab.partitionColumnNames.contains)
+      val badColumns = spec.get.keySet.filterNot(table.partitionColumnNames.contains)
       if (badColumns.nonEmpty) {
         val badCols = badColumns.mkString("[", ", ", "]")
         throw new AnalysisException(
@@ -675,8 +671,8 @@ case class ShowPartitionsCommand(
       }
     }
 
-    val partNames = catalog.listPartitions(table, spec).map { p =>
-      getPartName(p.spec, tab.partitionColumnNames)
+    val partNames = catalog.listPartitions(tableName, spec).map { p =>
+      getPartName(p.spec, table.partitionColumnNames)
     }
 
     partNames.map(Row(_))

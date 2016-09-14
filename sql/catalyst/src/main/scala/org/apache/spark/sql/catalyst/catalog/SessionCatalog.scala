@@ -246,9 +246,10 @@ class SessionCatalog(
   }
 
   /**
-   * Retrieve the metadata of an existing metastore table.
-   * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
+   * Retrieve the metadata of an existing metastore table/view or a temporary view.
+   * If no database is specified, we check whether the corresponding temporary view exists.
+   * If the temporary view does not exist, we assume the table/view is in the current database.
+   * If still not found in the database then a [[NoSuchTableException]] is thrown.
    */
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
@@ -267,6 +268,19 @@ class SessionCatalog(
       requireTableExists(TableIdentifier(table, Some(db)))
       externalCatalog.getTable(db, table)
     }
+  }
+
+  /**
+   * Retrieve the metadata of an existing permanent table/view. If no database is specified,
+   * assume the table/view is in the current database. If the specified table/view is not found
+   * in the database then a [[NoSuchTableException]] is thrown.
+   */
+  def getNonTempTableMetadata(name: TableIdentifier): CatalogTable = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(name.table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Some(db)))
+    externalCatalog.getTable(db, table)
   }
 
   /**

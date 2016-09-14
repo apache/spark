@@ -265,15 +265,13 @@ case class AlterTableUnsetPropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, tableName, isView)
-    val db = tableName.database.getOrElse(catalog.getCurrentDatabase)
-    val qualifiedName = TableIdentifier(tableName.table, Some(db))
-    val table = catalog.getTableMetadata(qualifiedName)
+    val table = catalog.getNonTempTableMetadata(tableName)
 
     if (!ifExists) {
       propKeys.foreach { k =>
         if (!table.properties.contains(k)) {
           throw new AnalysisException(
-            s"Attempted to unset non-existent property '$k' in table '$tableName'")
+            s"Attempted to unset non-existent property '$k' in table '${table.identifier}'")
         }
       }
     }
@@ -307,7 +305,7 @@ case class AlterTableSerDePropertiesCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = catalog.getNonTempTableMetadata(tableName)
     // For datasource tables, disallow setting serde or specifying partition
     if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException("Operation not allowed: ALTER TABLE SET " +
@@ -325,11 +323,11 @@ case class AlterTableSerDePropertiesCommand(
       catalog.alterTable(newTable)
     } else {
       val spec = partSpec.get
-      val part = catalog.getPartition(tableName, spec)
+      val part = catalog.getPartition(table.identifier, spec)
       val newPart = part.copy(storage = part.storage.copy(
         serde = serdeClassName.orElse(part.storage.serde),
         properties = part.storage.properties ++ serdeProperties.getOrElse(Map())))
-      catalog.alterPartitions(tableName, Seq(newPart))
+      catalog.alterPartitions(table.identifier, Seq(newPart))
     }
     Seq.empty[Row]
   }
@@ -356,7 +354,7 @@ case class AlterTableAddPartitionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = catalog.getNonTempTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         "ALTER TABLE ADD PARTITION is not allowed for tables defined using the datasource API")
@@ -365,7 +363,7 @@ case class AlterTableAddPartitionCommand(
       // inherit table storage format (possibly except for location)
       CatalogTablePartition(spec, table.storage.copy(locationUri = location))
     }
-    catalog.createPartitions(tableName, parts, ignoreIfExists = ifNotExists)
+    catalog.createPartitions(table.identifier, parts, ignoreIfExists = ifNotExists)
     Seq.empty[Row]
   }
 
@@ -416,12 +414,12 @@ case class AlterTableDropPartitionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = catalog.getNonTempTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
     }
-    catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists, purge = purge)
+    catalog.dropPartitions(table.identifier, specs, ignoreIfNotExists = ifExists, purge = purge)
     Seq.empty[Row]
   }
 
@@ -470,9 +468,9 @@ case class AlterTableRecoverPartitionsCommand(
 
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
-    val db = tableName.database.getOrElse(catalog.getCurrentDatabase)
-    val qualifiedName = TableIdentifier(tableName.table, Some(db))
-    val table = catalog.getTableMetadata(qualifiedName)
+    val table = catalog.getNonTempTableMetadata(tableName)
+    val qualifiedName = table.identifier.quotedString
+
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         s"Operation not allowed: $cmd on datasource tables: $qualifiedName")
@@ -647,11 +645,11 @@ case class AlterTableSetLocationCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = catalog.getNonTempTableMetadata(tableName)
     partitionSpec match {
       case Some(spec) =>
         // Partition spec is specified, so we set the location only for this partition
-        val part = catalog.getPartition(tableName, spec)
+        val part = catalog.getPartition(table.identifier, spec)
         val newPart =
           if (DDLUtils.isDatasourceTable(table)) {
             throw new AnalysisException(
@@ -660,7 +658,7 @@ case class AlterTableSetLocationCommand(
           } else {
             part.copy(storage = part.storage.copy(locationUri = Some(location)))
           }
-        catalog.alterPartitions(tableName, Seq(newPart))
+        catalog.alterPartitions(table.identifier, Seq(newPart))
       case None =>
         // No partition spec is specified, so we set the location for the table itself
         val newTable =

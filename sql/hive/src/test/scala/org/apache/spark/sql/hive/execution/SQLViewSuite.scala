@@ -145,12 +145,12 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       e = intercept[AnalysisException] {
         sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE $viewName""")
       }.getMessage
-      assert(e.contains(s"Target table in LOAD DATA cannot be a view: `default`.`$viewName`"))
+      assert(e.contains(s"Target table in LOAD DATA cannot be a view: `default`.`testview`"))
 
       e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $viewName")
       }.getMessage
-      assert(e.contains(s"Operation not allowed: TRUNCATE TABLE on views: `default`.`$viewName`"))
+      assert(e.contains(s"Operation not allowed: TRUNCATE TABLE on views: `default`.`testview`"))
     }
   }
 
