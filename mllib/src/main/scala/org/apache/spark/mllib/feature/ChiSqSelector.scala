@@ -47,16 +47,6 @@ private[spark] object ChiSqSelectorType extends Enumeration {
 class ChiSqSelectorModel @Since("1.3.0") (
   @Since("1.3.0") val selectedFeatures: Array[Int]) extends VectorTransformer with Saveable {
 
-  protected def isSorted(array: Array[Int]): Boolean = {
-    var i = 1
-    val len = array.length
-    while (i < len) {
-      if (array(i) < array(i-1)) return false
-      i += 1
-    }
-    true
-  }
-
   /**
    * Applies transformation on a vector.
    *

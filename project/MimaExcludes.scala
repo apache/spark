@@ -787,6 +787,9 @@ object MimaExcludes {
     ) ++ Seq(
         // [SPARK-14743] Improve delegation token handling in secure cluster
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.SparkHadoopUtil.getTimeFromNowToRenewal")
+    ) ++ Seq(
+        // [SPARK-17017] Add chiSquare selector based on False Positive Rate (FPR) test
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.feature.ChiSqSelectorModel.isSorted")
       )
   }
 
