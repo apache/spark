@@ -49,6 +49,14 @@ class AggregateOptimizeSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("do not remove all literals in grouping expression") {
+    val query = testRelation.groupBy(Literal("1"), Literal(1) + Literal(2))(sum('b))
+    val optimized = Optimize.execute(analyzer.execute(query))
+    val correctAnswer = query.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("Remove aliased literals") {
     val query = testRelation.select('a, Literal(1).as('y)).groupBy('a, 'y)(sum('b))
     val optimized = Optimize.execute(analyzer.execute(query))
