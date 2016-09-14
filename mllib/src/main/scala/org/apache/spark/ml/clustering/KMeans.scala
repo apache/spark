@@ -89,7 +89,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
     if (isDefined(initialModel)) {
       val kOfInitialModel = $(initialModel).parentModel.clusterCenters.length
       require(kOfInitialModel == $(k),
-        s"${$(k)} cluster centers required but $kOfInitialModel found in the initial model.")
+        s"mismatched cluster count, ${$(k)} cluster centers required but $kOfInitialModel found.")
     }
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
@@ -325,25 +325,6 @@ class KMeans @Since("1.5.0") (
   /** @group setParam */
   @Since("2.1.0")
   def setInitialModel(value: KMeansModel): this.type = set(initialModel, value)
-
-  /** @group setParam */
-  @Since("2.1.0")
-  def setInitialModel(value: Model[_]): this.type = {
-    value match {
-      case m: KMeansModel => setInitialModel(m)
-      case other =>
-        throw new IllegalArgumentException(
-          s"KMeansModel required but ${other.getClass.getSimpleName} found.")
-    }
-  }
-
-  /** @group setParam */
-  @Since("2.1.0")
-  def setInitialModel(clusterCenters: Array[Vector]): this.type = {
-    setInitialModel(
-      new KMeansModel("initial model",
-        new MLlibKMeansModel(clusterCenters.map(OldVectors.fromML))))
-  }
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {

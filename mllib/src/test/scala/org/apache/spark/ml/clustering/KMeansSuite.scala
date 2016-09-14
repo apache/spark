@@ -159,29 +159,18 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
 
   test("Initialize using wrong model") {
     val kmeans = new KMeans().setK(k).setSeed(1).setMaxIter(10)
-    val wrongTypeModel = new KMeansSuite.MockModel()
-
-    withClue("The type of an initial model should only be a KMeansModel.") {
-      intercept[IllegalArgumentException] {
-        kmeans.setInitialModel(wrongTypeModel).fit(dataset)
-      }
-    }
 
     val wrongKModel = KMeansSuite.generateRandomKMeansModel(3, k + 1)
-    withClue("The number of clusters set in the given model should be the same with the one set" +
-      " in the KMeans estimator.") {
-      intercept[IllegalArgumentException] {
-        kmeans.setInitialModel(wrongKModel).fit(dataset)
-      }
+    val wrongKModelThrown = intercept[IllegalArgumentException] {
+      kmeans.setInitialModel(wrongKModel).fit(dataset)
     }
+    assert(wrongKModelThrown.getMessage.contains("mismatched cluster count"))
 
     val wrongDimModel = KMeansSuite.generateRandomKMeansModel(4, k)
-    withClue("The dimension of points in the model should be the same with the dimension of the" +
-      " training data.") {
-      intercept[IllegalArgumentException] {
-        kmeans.setInitialModel(wrongDimModel).fit(dataset)
-      }
+    val wrongDimModelThrown = intercept[IllegalArgumentException] {
+      kmeans.setInitialModel(wrongDimModel).fit(dataset)
     }
+    assert(wrongDimModelThrown.getMessage.contains("mismatched dimension"))
   }
 }
 
