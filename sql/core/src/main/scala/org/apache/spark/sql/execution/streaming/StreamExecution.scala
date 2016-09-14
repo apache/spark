@@ -217,10 +217,7 @@ class StreamExecution(
     } finally {
       state = TERMINATED
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
-      postEvent(new QueryTerminated(
-        this.toInfo,
-        exception.map(_.getMessage),
-        exception.map(_.getStackTrace.toSeq).getOrElse(Nil)))
+      postEvent(new QueryTerminated(this.toInfo, exception.map(_.cause).map(Utils.exceptionString)))
       terminationLatch.countDown()
     }
   }
@@ -410,6 +407,9 @@ class StreamExecution(
       awaitBatchLock.lock()
       try {
         awaitBatchLockCondition.await(100, TimeUnit.MILLISECONDS)
+        if (streamDeathCause != null) {
+          throw streamDeathCause
+        }
       } finally {
         awaitBatchLock.unlock()
       }

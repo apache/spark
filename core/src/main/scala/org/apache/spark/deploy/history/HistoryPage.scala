@@ -45,7 +45,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
               <script src={UIUtils.prependBaseUri("/static/dataTables.rowsGroup.js")}></script> ++
                 <div id="history-summary" class="span12 pagination"></div> ++
                 <script src={UIUtils.prependBaseUri("/static/utils.js")}></script> ++
-                <script src={UIUtils.prependBaseUri("/static/historypage.js")}></script>
+                <script src={UIUtils.prependBaseUri("/static/historypage.js")}></script> ++
+                <script>setAppLimit({parent.maxApplications})</script>
             } else if (requestedIncomplete) {
               <h4>No incomplete applications found!</h4>
             } else {

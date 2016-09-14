@@ -189,9 +189,8 @@ private[spark] class Client(
     try {
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
       val fs = stagingDirPath.getFileSystem(hadoopConf)
-      if (!preserveFiles && fs.exists(stagingDirPath)) {
-        logInfo("Deleting staging directory " + stagingDirPath)
-        fs.delete(stagingDirPath, true)
+      if (!preserveFiles && fs.delete(stagingDirPath, true)) {
+        logInfo(s"Deleted staging directory $stagingDirPath")
       }
     } catch {
       case ioe: IOException =>
@@ -1004,6 +1003,10 @@ private[spark] class Client(
     val securityManager = new SecurityManager(sparkConf)
     amContainer.setApplicationACLs(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
+
+    if (sparkConf.get(IO_ENCRYPTION_ENABLED)) {
+      SecurityManager.initIOEncryptionKey(sparkConf, credentials)
+    }
     setupSecurityToken(amContainer)
 
     amContainer
@@ -1173,10 +1176,10 @@ private[spark] class Client(
         val pyLibPath = Seq(sys.env("SPARK_HOME"), "python", "lib").mkString(File.separator)
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
-          "pyspark.zip not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.10.1-src.zip")
+          s"$pyArchivesFile not found; cannot run pyspark application in YARN mode.")
+        val py4jFile = new File(pyLibPath, "py4j-0.10.3-src.zip")
         require(py4jFile.exists(),
-          "py4j-0.10.1-src.zip not found; cannot run pyspark application in YARN mode.")
+          s"$py4jFile not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
       }
   }
