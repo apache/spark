@@ -175,6 +175,7 @@ private[spark] class IndexShuffleBlockResolver(
           dataFile.delete()
         }
         if (!indexTmp.renameTo(indexFile)) {
+          indexTmp.delete()
           throw new IOException("fail to rename file " + indexTmp + " to " + indexFile)
         }
         if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
