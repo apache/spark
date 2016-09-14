@@ -687,6 +687,11 @@ class LogisticRegressionModel private[spark] (
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams with MLWritable {
 
+  /**
+   * A vector of model coefficients for "binomial" logistic regression. If this model was trained
+   * using the "multinomial" family then an exception is thrown.
+   * @return Vector
+   */
   @Since("2.0.0")
   def coefficients: Vector = if (isMultinomial) {
     throw new SparkException("Multinomial models contain a matrix of coefficients, use " +
@@ -705,6 +710,11 @@ class LogisticRegressionModel private[spark] (
     }
   }
 
+  /**
+   * The model intercept for "binomial" logistic regression. If this model was fit with the
+   * "multinomial" family then an exception is thrown.
+   * @return Double
+   */
   @Since("1.3.0")
   def intercept: Double = if (isMultinomial) {
     throw new SparkException("Multinomial models contain a vector of intercepts, use " +
@@ -743,6 +753,34 @@ class LogisticRegressionModel private[spark] (
   private val score: Vector => Double = (features) => {
     val m = margin(features)
     1.0 / (1.0 + math.exp(-m))
+  }
+
+  /** Score (probability) for each class label. */
+  private val scores: Vector => Vector = (features) => {
+    val m = margins(features)
+    val maxMarginIndex = m.argmax
+    val marginArray = m.toArray
+    val maxMargin = marginArray(maxMarginIndex)
+
+    // adjust margins for overflow
+    val sum = {
+      var temp = 0.0
+      var k = 0
+      while (k < numClasses) {
+        marginArray(k) = if (maxMargin > 0) {
+          math.exp(marginArray(k) - maxMargin)
+        } else {
+          math.exp(marginArray(k))
+        }
+        temp += marginArray(k)
+        k += 1
+      }
+      temp
+    }
+
+    val scores = Vectors.dense(marginArray)
+    BLAS.scal(1 / sum, scores)
+    scores
   }
 
   @Since("1.6.0")
@@ -802,7 +840,11 @@ class LogisticRegressionModel private[spark] (
    * The behavior of this can be adjusted using [[thresholds]].
    */
   override protected def predict(features: Vector): Double = if (isMultinomial) {
-    super.predict(features)
+    if (isDefined(thresholds)) {
+      probability2prediction(scores(features))
+    } else {
+      super.predict(features)
+    }
   } else {
     // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
     if (score(features) > getThreshold) 1 else 0
