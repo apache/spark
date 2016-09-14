@@ -787,14 +787,6 @@ class SparkContext(object):
         """
         self._jsc.sc().addFile(path)
 
-    def clearFiles(self):
-        """
-        Clear the job's list of files added by L{addFile} or L{addPyFile} so
-        that they do not get downloaded to any new nodes.
-        """
-        # TODO: remove added .py or .zip files from the PYTHONPATH?
-        self._jsc.sc().clearFiles()
-
     def addPyFile(self, path):
         """
         Add a .py or .zip dependency for all tasks to be executed on this

@@ -59,8 +59,8 @@ class StreamExecution(
   import org.apache.spark.sql.streaming.StreamingQueryListener._
 
   // Constants that drive AIMD algorithm to choose polling interval
-  private val minPollingDelayMs = sparkSession.conf.get(SQLConf.STREAMING_POLLING_MIN_DELAY)
-  private val maxPollingDelayMs = sparkSession.conf.get(SQLConf.STREAMING_POLLING_MAX_DELAY)
+  private val minPollingDelayMs = sparkSession.sessionState.conf.streamingPollingMinDelay
+  private val maxPollingDelayMs = sparkSession.sessionState.conf.streamingPollingMaxDelay
   if (minPollingDelayMs <= 0) {
     sys.error(s"Invalid value of $minPollingDelayMs for minimimum polling interval. Must be > 0.")
   }
