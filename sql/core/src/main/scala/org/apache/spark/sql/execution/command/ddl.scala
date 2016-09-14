@@ -70,8 +70,6 @@ case class CreateDatabaseCommand(
       ifNotExists)
     Seq.empty[Row]
   }
-
-  override val output: Seq[Attribute] = Seq.empty
 }
 
 
@@ -101,8 +99,6 @@ case class DropDatabaseCommand(
     sparkSession.sessionState.catalog.dropDatabase(databaseName, ifExists, cascade)
     Seq.empty[Row]
   }
-
-  override val output: Seq[Attribute] = Seq.empty
 }
 
 /**
@@ -126,8 +122,6 @@ case class AlterDatabasePropertiesCommand(
 
     Seq.empty[Row]
   }
-
-  override val output: Seq[Attribute] = Seq.empty
 }
 
 /**
