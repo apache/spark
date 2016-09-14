@@ -108,7 +108,7 @@ class DirectKafkaStreamSuite
     val expectedTotal = (data.values.sum * topics.size) - 2
     val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
 
-    ssc = new StreamingContext(sparkConf, Milliseconds(200))
+    ssc = new StreamingContext(sparkConf, Milliseconds(1000))
     val stream = withClue("Error creating direct stream") {
       KafkaUtils.createDirectStream[String, String](
         ssc,
@@ -150,7 +150,7 @@ class DirectKafkaStreamSuite
       allReceived.addAll(Arrays.asList(rdd.map(r => (r.key, r.value)).collect(): _*))
     }
     ssc.start()
-    eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
+    eventually(timeout(100000.milliseconds), interval(1000.milliseconds)) {
       assert(allReceived.size === expectedTotal,
         "didn't get expected number of messages, messages:\n" +
           allReceived.asScala.mkString("\n"))
@@ -172,7 +172,7 @@ class DirectKafkaStreamSuite
     val expectedTotal = (data.values.sum * 2) - 3
     val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
 
-    ssc = new StreamingContext(sparkConf, Milliseconds(200))
+    ssc = new StreamingContext(sparkConf, Milliseconds(1000))
     val stream = withClue("Error creating direct stream") {
       KafkaUtils.createDirectStream[String, String](
         ssc,
@@ -214,7 +214,7 @@ class DirectKafkaStreamSuite
       allReceived.addAll(Arrays.asList(rdd.map(r => (r.key, r.value)).collect(): _*))
     }
     ssc.start()
-    eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
+    eventually(timeout(100000.milliseconds), interval(1000.milliseconds)) {
       assert(allReceived.size === expectedTotal,
         "didn't get expected number of messages, messages:\n" +
           allReceived.asScala.mkString("\n"))
