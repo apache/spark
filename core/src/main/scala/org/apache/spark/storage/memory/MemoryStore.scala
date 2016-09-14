@@ -394,7 +394,7 @@ private[spark] class MemoryStore(
           redirectableStream,
           unrollMemoryUsedByThisBlock,
           memoryMode,
-          () => bbos.toChunkedByteBuffer,
+          bbos,
           values,
           classTag))
     }
@@ -726,8 +726,7 @@ private[storage] class RedirectableOutputStream extends OutputStream {
  * @param redirectableOutputStream an OutputStream which can be redirected to a different sink.
  * @param unrollMemory the amount of unroll memory used by the values in `unrolled`.
  * @param memoryMode whether the unroll memory is on- or off-heap
- * @param getChunkedByteBuffer creates a byte buffer containing the partially-serialized values.
- *                             Can only be called once.
+ * @param bbos byte buffer output stream containing the partially-serialized values.
  *                     [[redirectableOutputStream]] initially points to this output stream.
  * @param rest         the rest of the original iterator passed to
  *                     [[MemoryStore.putIteratorAsValues()]].
@@ -741,11 +740,14 @@ private[storage] class PartiallySerializedBlock[T](
     private val redirectableOutputStream: RedirectableOutputStream,
     val unrollMemory: Long,
     memoryMode: MemoryMode,
-    getChunkedByteBuffer: () => ChunkedByteBuffer,
+    bbos: ChunkedByteBufferOutputStream,
     rest: Iterator[T],
     classTag: ClassTag[T]) {
 
-  private lazy val unrolledBuffer: ChunkedByteBuffer = getChunkedByteBuffer()
+  private lazy val unrolledBuffer: ChunkedByteBuffer = {
+    bbos.close()
+    bbos.toChunkedByteBuffer
+  }
 
   // If the task does not fully consume `valuesIterator` or otherwise fails to consume or dispose of
   // this PartiallySerializedBlock then we risk leaking of direct buffers, so we use a task

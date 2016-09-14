@@ -23,6 +23,8 @@ import scala.reflect.ClassTag
 
 import org.mockito.Mockito
 import org.mockito.Mockito.atLeastOnce
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskContextImpl}
@@ -30,7 +32,7 @@ import org.apache.spark.memory.MemoryMode
 import org.apache.spark.serializer.{JavaSerializer, SerializationStream, SerializerManager}
 import org.apache.spark.storage.memory.{MemoryStore, PartiallySerializedBlock, RedirectableOutputStream}
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream}
-import org.apache.spark.util.io.ChunkedByteBufferOutputStream
+import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 class PartiallySerializedBlockSuite
     extends SparkFunSuite
@@ -55,7 +57,15 @@ class PartiallySerializedBlockSuite
       iter: Iterator[T],
       numItemsToBuffer: Int): PartiallySerializedBlock[T] = {
 
-    val bbos = new ChunkedByteBufferOutputStream(128, ByteBuffer.allocate)
+    val bbos: ChunkedByteBufferOutputStream = {
+      val spy = Mockito.spy(new ChunkedByteBufferOutputStream(128, ByteBuffer.allocate))
+      Mockito.doAnswer(new Answer[ChunkedByteBuffer] {
+        override def answer(invocationOnMock: InvocationOnMock): ChunkedByteBuffer = {
+          Mockito.spy(invocationOnMock.callRealMethod().asInstanceOf[ChunkedByteBuffer])
+        }
+      }).when(spy).toChunkedByteBuffer
+      spy
+    }
 
     val serializer = serializerManager.getSerializer(implicitly[ClassTag[T]]).newInstance()
     val redirectableOutputStream = Mockito.spy(new RedirectableOutputStream)
@@ -76,7 +86,7 @@ class PartiallySerializedBlockSuite
       redirectableOutputStream,
       unrollMemory = unrollMemory,
       memoryMode = MemoryMode.ON_HEAP,
-      getChunkedByteBuffer = () => Mockito.spy(bbos.toChunkedByteBuffer),
+      bbos,
       rest = iter,
       classTag = implicitly[ClassTag[T]])
   }
