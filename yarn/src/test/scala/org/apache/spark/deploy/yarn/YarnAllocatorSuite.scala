@@ -136,7 +136,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     size should be (0)
   }
 
-  test("container should be created if requested number if met") {
+  test("container should not be created if requested number if met") {
     // request a single container and receive it
     val handler = createAllocator(1)
     handler.updateResourceRequests()
