@@ -304,6 +304,11 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
    * Private helper function for comparing two values using relative tolerance.
    * Note that if x or y is extremely close to zero, i.e., smaller than Double.MinPositiveValue,
    * the relative tolerance is meaningless, so the exception will be raised to warn users.
+   *
+   * TODO: this duplicates functions in spark.ml.util.TestingUtils.relTol and
+   * spark.mllib.util.TestingUtils.relTol, they could be moved to common utils sub module for the
+   * whole spark project which does not depend on other modules. See more detail in discussion:
+   * https://github.com/apache/spark/pull/15059#issuecomment-246940444
    */
   private def relativeErrorComparison(x: Double, y: Double, eps: Double = 1E-8): Boolean = {
     val absX = math.abs(x)
