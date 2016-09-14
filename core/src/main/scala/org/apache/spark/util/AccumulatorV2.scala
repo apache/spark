@@ -25,6 +25,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 
+import com.google.common.util.concurrent.AtomicDouble
+
 import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.scheduler.AccumulableInfo
 
@@ -283,25 +285,25 @@ private[spark] object AccumulatorContext {
  * @since 2.0.0
  */
 class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
-  private var _sum = 0L
-  private var _count = 0L
+  private val _sum = new AtomicLong(0L)
+  private val _count = new AtomicLong(0L)
 
   /**
    * Adds v to the accumulator, i.e. increment sum by v and count by 1.
    * @since 2.0.0
    */
-  override def isZero: Boolean = _sum == 0L && _count == 0
+  override def isZero: Boolean = _sum.get == 0L && _count.get == 0
 
   override def copy(): LongAccumulator = {
     val newAcc = new LongAccumulator
-    newAcc._count = this._count
-    newAcc._sum = this._sum
+    newAcc._count.lazySet(this._count.get)
+    newAcc._sum.lazySet(this._sum.get)
     newAcc
   }
 
   override def reset(): Unit = {
-    _sum = 0L
-    _count = 0L
+    _sum.lazySet(0L)
+    _count.lazySet(0L)
   }
 
   /**
@@ -309,8 +311,8 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
    * @since 2.0.0
    */
   override def add(v: jl.Long): Unit = {
-    _sum += v
-    _count += 1
+    _sum.lazySet(_sum.get + v)
+    _count.lazySet(_count.get + 1)
   }
 
   /**
@@ -318,40 +320,40 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
    * @since 2.0.0
    */
   def add(v: Long): Unit = {
-    _sum += v
-    _count += 1
+    _sum.lazySet(_sum.get + v)
+    _count.lazySet(_count.get + 1)
   }
 
   /**
    * Returns the number of elements added to the accumulator.
    * @since 2.0.0
    */
-  def count: Long = _count
+  def count: Long = _count.get
 
   /**
    * Returns the sum of elements added to the accumulator.
    * @since 2.0.0
    */
-  def sum: Long = _sum
+  def sum: Long = _sum.get
 
   /**
    * Returns the average of elements added to the accumulator.
    * @since 2.0.0
    */
-  def avg: Double = _sum.toDouble / _count
+  def avg: Double = _sum.get.toDouble / _count.get
 
   override def merge(other: AccumulatorV2[jl.Long, jl.Long]): Unit = other match {
     case o: LongAccumulator =>
-      _sum += o.sum
-      _count += o.count
+      _sum.lazySet(_sum.get + o.sum)
+      _count.lazySet(_count.get + o.count)
     case _ =>
       throw new UnsupportedOperationException(
         s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  private[spark] def setValue(newValue: Long): Unit = _sum = newValue
+  private[spark] def setValue(newValue: Long): Unit = _sum.lazySet(newValue)
 
-  override def value: jl.Long = _sum
+  override def value: jl.Long = _sum.get
 }
 
 
@@ -362,21 +364,21 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
  * @since 2.0.0
  */
 class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
-  private var _sum = 0.0
-  private var _count = 0L
+  private val _sum = new AtomicDouble(0.0)
+  private val _count = new AtomicLong(0L)
 
-  override def isZero: Boolean = _sum == 0.0 && _count == 0
+  override def isZero: Boolean = _sum.get == 0.0 && _count.get == 0
 
   override def copy(): DoubleAccumulator = {
     val newAcc = new DoubleAccumulator
-    newAcc._count = this._count
-    newAcc._sum = this._sum
+    newAcc._count.lazySet(this._count.get)
+    newAcc._sum.lazySet(this._sum.get)
     newAcc
   }
 
   override def reset(): Unit = {
-    _sum = 0.0
-    _count = 0L
+    _sum.lazySet(0.0)
+    _count.lazySet(0L)
   }
 
   /**
@@ -384,8 +386,8 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
    * @since 2.0.0
    */
   override def add(v: jl.Double): Unit = {
-    _sum += v
-    _count += 1
+    _sum.lazySet(_sum.get + v)
+    _count.lazySet(_count.get + 1)
   }
 
   /**
@@ -393,40 +395,40 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
    * @since 2.0.0
    */
   def add(v: Double): Unit = {
-    _sum += v
-    _count += 1
+    _sum.lazySet(_sum.get + v)
+    _count.lazySet(_count.get + 1)
   }
 
   /**
    * Returns the number of elements added to the accumulator.
    * @since 2.0.0
    */
-  def count: Long = _count
+  def count: Long = _count.get
 
   /**
    * Returns the sum of elements added to the accumulator.
    * @since 2.0.0
    */
-  def sum: Double = _sum
+  def sum: Double = _sum.get
 
   /**
    * Returns the average of elements added to the accumulator.
    * @since 2.0.0
    */
-  def avg: Double = _sum / _count
+  def avg: Double = _sum.get / _count.get
 
   override def merge(other: AccumulatorV2[jl.Double, jl.Double]): Unit = other match {
     case o: DoubleAccumulator =>
-      _sum += o.sum
-      _count += o.count
+      _sum.lazySet(_sum.get + o.sum)
+      _count.lazySet(_count.get + o.count)
     case _ =>
       throw new UnsupportedOperationException(
         s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  private[spark] def setValue(newValue: Double): Unit = _sum = newValue
+  private[spark] def setValue(newValue: Double): Unit = _sum.lazySet(newValue)
 
-  override def value: jl.Double = _sum
+  override def value: jl.Double = _sum.get
 }
 
 
@@ -472,7 +474,7 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
 class LegacyAccumulatorWrapper[R, T](
     initialValue: R,
     param: org.apache.spark.AccumulableParam[R, T]) extends AccumulatorV2[T, R] {
-  private[spark] var _value = initialValue  // Current value on driver
+  @volatile private[spark] var _value = initialValue  // Current value on driver
 
   override def isZero: Boolean = _value == param.zero(initialValue)
 
