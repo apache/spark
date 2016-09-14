@@ -1658,10 +1658,7 @@ class Analyzer(
       // Third, for every Window Spec, we add a Window operator and set currentChild as the
       // child of it.
       var currentChild = child
-      var i = 0
-      val size = groupedWindowExpressions.size
-      while (i < size) {
-        val ((partitionSpec, orderSpec), windowExpressions) = groupedWindowExpressions(i)
+      groupedWindowExpressions.foreach { case ((partitionSpec, orderSpec), windowExpressions) =>
         // Set currentChild to the newly created Window operator.
         currentChild =
           Window(
@@ -1669,9 +1666,6 @@ class Analyzer(
             partitionSpec,
             orderSpec,
             currentChild)
-
-        // Move to next Window Spec.
-        i += 1
       }
 
       // Finally, we create a Project to output currentChild's output
