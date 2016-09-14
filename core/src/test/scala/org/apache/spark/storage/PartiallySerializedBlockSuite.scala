@@ -68,7 +68,6 @@ class PartiallySerializedBlockSuite
     }
 
     val unrollMemory = bbos.size
-    lazy val unrolled = Mockito.spy(bbos.toChunkedByteBuffer)
     new PartiallySerializedBlock[T](
       memoryStore,
       serializerManager,
@@ -77,7 +76,7 @@ class PartiallySerializedBlockSuite
       redirectableOutputStream,
       unrollMemory = unrollMemory,
       memoryMode = MemoryMode.ON_HEAP,
-      unrolled = unrolled,
+      getChunkedByteBuffer = () => Mockito.spy(bbos.toChunkedByteBuffer),
       rest = iter,
       classTag = implicitly[ClassTag[T]])
   }

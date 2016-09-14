@@ -394,7 +394,7 @@ private[spark] class MemoryStore(
           redirectableStream,
           unrollMemoryUsedByThisBlock,
           memoryMode,
-          bbos.toChunkedByteBuffer,
+          () => bbos.toChunkedByteBuffer,
           values,
           classTag))
     }
@@ -726,7 +726,8 @@ private[storage] class RedirectableOutputStream extends OutputStream {
  * @param redirectableOutputStream an OutputStream which can be redirected to a different sink.
  * @param unrollMemory the amount of unroll memory used by the values in `unrolled`.
  * @param memoryMode whether the unroll memory is on- or off-heap
- * @param unrolled a byte buffer containing the partially-serialized values.
+ * @param getChunkedByteBuffer creates a byte buffer containing the partially-serialized values.
+ *                             Can only be called once.
  *                     [[redirectableOutputStream]] initially points to this output stream.
  * @param rest         the rest of the original iterator passed to
  *                     [[MemoryStore.putIteratorAsValues()]].
@@ -740,9 +741,11 @@ private[storage] class PartiallySerializedBlock[T](
     private val redirectableOutputStream: RedirectableOutputStream,
     val unrollMemory: Long,
     memoryMode: MemoryMode,
-    unrolled: => ChunkedByteBuffer,
+    getChunkedByteBuffer: () => ChunkedByteBuffer,
     rest: Iterator[T],
     classTag: ClassTag[T]) {
+
+  private lazy val unrolledBuffer: ChunkedByteBuffer = getChunkedByteBuffer()
 
   // If the task does not fully consume `valuesIterator` or otherwise fails to consume or dispose of
   // this PartiallySerializedBlock then we risk leaking of direct buffers, so we use a task
@@ -752,12 +755,12 @@ private[storage] class PartiallySerializedBlock[T](
     taskContext.addTaskCompletionListener { _ =>
       // When a task completes, its unroll memory will automatically be freed. Thus we do not call
       // releaseUnrollMemoryForThisTask() here because we want to avoid double-freeing.
-      unrolled.dispose()
+      unrolledBuffer.dispose()
     }
   }
 
   // Exposed for testing
-  private[storage] def getUnrolledChunkedByteBuffer: ChunkedByteBuffer = unrolled
+  private[storage] def getUnrolledChunkedByteBuffer: ChunkedByteBuffer = unrolledBuffer
 
   private[this] var discarded = false
   private[this] var consumed = false
@@ -786,7 +789,7 @@ private[storage] class PartiallySerializedBlock[T](
         serializationStream.close()
       } finally {
         discarded = true
-        unrolled.dispose()
+        unrolledBuffer.dispose()
         memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
       }
     }
@@ -799,7 +802,7 @@ private[storage] class PartiallySerializedBlock[T](
   def finishWritingToStream(os: OutputStream): Unit = {
     verifyNotConsumedAndNotDiscarded()
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
-    ByteStreams.copy(unrolled.toInputStream(dispose = true), os)
+    ByteStreams.copy(unrolledBuffer.toInputStream(dispose = true), os)
     memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
     redirectableOutputStream.setOutputStream(os)
     while (rest.hasNext) {
@@ -822,11 +825,11 @@ private[storage] class PartiallySerializedBlock[T](
     serializationStream.close()
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
     val unrolledIter = serializerManager.dataDeserializeStream(
-      blockId, unrolled.toInputStream(dispose = true))(classTag)
+      blockId, unrolledBuffer.toInputStream(dispose = true))(classTag)
     new PartiallyUnrolledIterator(
       memoryStore,
       unrollMemory,
-      unrolled = CompletionIterator[T, Iterator[T]](unrolledIter, unrolled.dispose()),
+      unrolled = CompletionIterator[T, Iterator[T]](unrolledIter, unrolledBuffer.dispose()),
       rest = rest)
   }
 }
