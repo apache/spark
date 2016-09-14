@@ -19,7 +19,7 @@ package org.apache.spark.ml.classification
 
 import scala.collection.mutable
 
-import breeze.linalg.{DenseVector => BDV, View}
+import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
@@ -696,14 +696,13 @@ class LogisticRegressionModel private[spark] (
   }
 
   // convert to appropriate vector representation without replicating data
-  private lazy val _coefficients: Vector = coefficientMatrix match {
-    case dm: DenseMatrix => Vectors.dense(dm.values)
-    case sm: SparseMatrix =>
-      if (coefficientMatrix.isTransposed) {
-        Vectors.sparse(coefficientMatrix.numCols, sm.rowIndices, sm.values)
-      } else {
-        throw new IllegalStateException("LogisticRegressionModel coefficients should be row major.")
-      }
+  private lazy val _coefficients: Vector = {
+    require(coefficientMatrix.isTransposed,
+      "LogisticRegressionModel coefficients should be row major.")
+    coefficientMatrix match {
+      case dm: DenseMatrix => Vectors.dense(dm.values)
+      case sm: SparseMatrix => Vectors.sparse(coefficientMatrix.numCols, sm.rowIndices, sm.values)
+    }
   }
 
   @Since("1.3.0")
@@ -744,35 +743,6 @@ class LogisticRegressionModel private[spark] (
   private val score: Vector => Double = (features) => {
     val m = margin(features)
     1.0 / (1.0 + math.exp(-m))
-  }
-
-  /** Score (probability) for each class label. */
-  // TODO: do we need this anymore?
-  private val scores: Vector => Vector = (features) => {
-    val m = margins(features)
-    val maxMarginIndex = m.argmax
-    val marginArray = m.toArray
-    val maxMargin = marginArray(maxMarginIndex)
-
-    // adjust margins for overflow
-    val sum = {
-      var temp = 0.0
-      var k = 0
-      while (k < numClasses) {
-        marginArray(k) = if (maxMargin > 0) {
-          math.exp(marginArray(k) - maxMargin)
-        } else {
-          math.exp(marginArray(k))
-        }
-        temp += marginArray(k)
-        k += 1
-      }
-      temp
-    }
-
-    val scores = Vectors.dense(marginArray)
-    BLAS.scal(1 / sum, scores)
-    scores
   }
 
   @Since("1.6.0")

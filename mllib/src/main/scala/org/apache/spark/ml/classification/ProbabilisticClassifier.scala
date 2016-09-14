@@ -205,7 +205,8 @@ abstract class ProbabilisticClassificationModel[
       var argMax = 0
       var max = Double.NegativeInfinity
       var i = 0
-      while (i < probability.size) {
+      val probabilitySize = probability.size
+      while (i < probabilitySize) {
         if (thresholds(i) == 0.0) {
           max = Double.PositiveInfinity
           argMax = i
