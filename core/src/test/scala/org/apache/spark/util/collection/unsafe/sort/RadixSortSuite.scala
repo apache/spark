@@ -40,23 +40,38 @@ class RadixSortSuite extends SparkFunSuite with Logging {
   case class RadixSortType(
     name: String,
     referenceComparator: PrefixComparator,
-    startByteIdx: Int, endByteIdx: Int, descending: Boolean, signed: Boolean)
+    startByteIdx: Int, endByteIdx: Int, descending: Boolean, signed: Boolean, nullsFirst: Boolean)
 
   val SORT_TYPES_TO_TEST = Seq(
-    RadixSortType("unsigned binary data asc", PrefixComparators.BINARY, 0, 7, false, false),
-    RadixSortType("unsigned binary data desc", PrefixComparators.BINARY_DESC, 0, 7, true, false),
-    RadixSortType("twos complement asc", PrefixComparators.LONG, 0, 7, false, true),
-    RadixSortType("twos complement desc", PrefixComparators.LONG_DESC, 0, 7, true, true),
+    RadixSortType("unsigned binary data asc nulls first",
+      PrefixComparators.BINARY, 0, 7, false, false, true),
+    RadixSortType("unsigned binary data asc nulls last",
+      PrefixComparators.BINARY_NULLS_LAST, 0, 7, false, false, false),
+    RadixSortType("unsigned binary data desc nulls last",
+      PrefixComparators.BINARY_DESC_NULLS_FIRST, 0, 7, true, false, false),
+    RadixSortType("unsigned binary data desc nulls first",
+      PrefixComparators.BINARY_DESC, 0, 7, true, false, true),
+
+    RadixSortType("twos complement asc nulls first",
+      PrefixComparators.LONG, 0, 7, false, true, true),
+    RadixSortType("twos complement asc nulls last",
+      PrefixComparators.LONG_NULLS_LAST, 0, 7, false, true, false),
+    RadixSortType("twos complement desc nulls last",
+      PrefixComparators.LONG_DESC, 0, 7, true, true, false),
+    RadixSortType("twos complement desc nulls first",
+      PrefixComparators.LONG_DESC_NULLS_FIRST, 0, 7, true, true, true),
+
     RadixSortType(
       "binary data partial",
       new PrefixComparators.RadixSortSupport {
         override def sortDescending = false
         override def sortSigned = false
+        override def nullsFirst = true
         override def compare(a: Long, b: Long): Int = {
           return PrefixComparators.BINARY.compare(a & 0xffffff0000L, b & 0xffffff0000L)
         }
       },
-      2, 4, false, false))
+      2, 4, false, false, true))
 
   private def generateTestData(size: Int, rand: => Long): (Array[JLong], LongArray) = {
     val ref = Array.tabulate[Long](size) { i => rand }
