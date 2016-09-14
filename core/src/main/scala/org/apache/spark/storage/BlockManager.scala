@@ -861,36 +861,35 @@ private[spark] class BlockManager(
     }
 
     val startTimeMs = System.currentTimeMillis
-    var blockWasSuccessfullyStored: Boolean = false
     var exceptionWasThrown: Boolean = true
     val result: Option[T] = try {
       val res = putBody(putBlockInfo)
-      blockWasSuccessfullyStored = res.isEmpty
       exceptionWasThrown = false
-      res
-    } finally {
-      if (blockWasSuccessfullyStored) {
+      if (res.isEmpty) {
+        // the block was successfully stored
         if (keepReadLock) {
           blockInfoManager.downgradeLock(blockId)
         } else {
           blockInfoManager.unlock(blockId)
         }
       } else {
-        if (exceptionWasThrown) {
-          // If an exception was thrown then it's possible that the code in `putBody` has already
-          // notified the master about the availability of this block, so we need to send an update
-          // to remove this block location.
-          removeBlockInternal(blockId, tellMaster = tellMaster)
-          // The `putBody` code may have also added a new block status to TaskMetrics, so we need
-          // to cancel that out by overwriting it with an empty block status. We only do this if
-          // the finally block was entered via an exception because doing this unconditionally would
-          // cause us to send empty block statuses for every block that failed to be cached due to
-          // a memory shortage (which is an expected failure, unlike an uncaught exception).
-          addUpdatedBlockStatusToTaskMetrics(blockId, BlockStatus.empty)
-        } else {
-          removeBlockInternal(blockId, tellMaster = false)
-        }
+        removeBlockInternal(blockId, tellMaster = false)
         logWarning(s"Putting block $blockId failed")
+      }
+      res
+    } finally {
+      if (exceptionWasThrown) {
+        logWarning(s"Putting block $blockId failed due to an exception")
+        // If an exception was thrown then it's possible that the code in `putBody` has already
+        // notified the master about the availability of this block, so we need to send an update
+        // to remove this block location.
+        removeBlockInternal(blockId, tellMaster = tellMaster)
+        // The `putBody` code may have also added a new block status to TaskMetrics, so we need
+        // to cancel that out by overwriting it with an empty block status. We only do this if
+        // the finally block was entered via an exception because doing this unconditionally would
+        // cause us to send empty block statuses for every block that failed to be cached due to
+        // a memory shortage (which is an expected failure, unlike an uncaught exception).
+        addUpdatedBlockStatusToTaskMetrics(blockId, BlockStatus.empty)
       }
     }
     if (level.replication > 1) {
