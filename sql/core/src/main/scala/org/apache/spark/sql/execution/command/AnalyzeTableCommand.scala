@@ -53,7 +53,7 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
         updateTableStats(logicalRel.catalogTable.get, logicalRel.relation.sizeInBytes)
 
       case otherRelation =>
-        throw new AnalysisException(s"ANALYZE TABLE is not supported for " +
+        throw new AnalysisException("ANALYZE TABLE is not supported for " +
           s"${otherRelation.nodeName}.")
     }
 

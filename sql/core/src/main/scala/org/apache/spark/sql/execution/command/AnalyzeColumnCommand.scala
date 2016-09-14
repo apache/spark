@@ -23,6 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BasicColStats, Statistics}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions._
@@ -42,11 +43,18 @@ case class AnalyzeColumnCommand(
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
 
-    // check correctness for column names
-    val attributeNames = relation.output.map(_.name.toLowerCase)
-    val invalidColumns = columnNames.filterNot { col => attributeNames.contains(col.toLowerCase)}
-    if (invalidColumns.nonEmpty) {
-      throw new AnalysisException(s"Invalid columns for table $tableName: $invalidColumns.")
+    // check correctness of column names
+    val validColumns = mutable.HashSet[NamedExpression]()
+    val resolver = sparkSession.sessionState.conf.resolver
+    columnNames.foreach { col =>
+      val exprOption = relation.resolve(col.split("\\."), resolver)
+      if (exprOption.isEmpty) {
+        throw new AnalysisException(s"Invalid column name: $col")
+      }
+      if (validColumns.map(_.exprId).contains(exprOption.get.exprId)) {
+        throw new AnalysisException(s"Duplicate column name: $col")
+      }
+      validColumns += exprOption.get
     }
 
     relation match {
@@ -58,18 +66,14 @@ case class AnalyzeColumnCommand(
         updateStats(logicalRel.catalogTable.get, logicalRel.relation.sizeInBytes)
 
       case otherRelation =>
-        throw new AnalysisException(s"ANALYZE TABLE is not supported for " +
+        throw new AnalysisException("ANALYZE TABLE is not supported for " +
           s"${otherRelation.nodeName}.")
     }
 
     def updateStats(catalogTable: CatalogTable, newTotalSize: Long): Unit = {
-      val lowerCaseNames = columnNames.map(_.toLowerCase)
-      val attributes =
-        relation.output.filter(attr => lowerCaseNames.contains(attr.name.toLowerCase))
-
       // collect column statistics
       val aggColumns = mutable.ArrayBuffer[Column](count(Column("*")))
-      attributes.foreach(entry => aggColumns ++= statsAgg(entry.name, entry.dataType))
+      validColumns.foreach(entry => aggColumns ++= statsAgg(entry.name, entry.dataType))
       val statsRow: InternalRow = Dataset.ofRows(sparkSession, relation).select(aggColumns: _*)
         .queryExecution.toRdd.collect().head
 
@@ -84,7 +88,7 @@ case class AnalyzeColumnCommand(
 
       var pos = 1
       val colStats = mutable.HashMap[String, BasicColStats]()
-      attributes.foreach { attr =>
+      validColumns.foreach { attr =>
         attr.dataType match {
           case n: NumericType =>
             colStats += attr.name -> BasicColStats(

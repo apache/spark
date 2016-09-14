@@ -87,11 +87,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create an [[AnalyzeTableCommand]] command. This currently only implements the NOSCAN
-   * option (other options are passed on to Hive) e.g.:
-   * {{{
-   *   ANALYZE TABLE table COMPUTE STATISTICS NOSCAN;
-   * }}}
+   * Create an [[AnalyzeTableCommand]] command or an [[AnalyzeColumnCommand]] command.
    */
   override def visitAnalyze(ctx: AnalyzeContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.partitionSpec == null &&
@@ -99,6 +95,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       ctx.identifier.getText.toLowerCase == "noscan") {
       AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString)
     } else if (ctx.identifierSeq() == null) {
+      if (ctx.FOR() != null || ctx.COLUMNS() != null) {
+        throw new ParseException("Need to specify the columns to analyze. Usage: " +
+          "ANALYZE TABLE tbl COMPUTE STATISTICS FOR COLUMNS key, value", ctx)
+      }
       AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString, noscan = false)
     } else {
       AnalyzeColumnCommand(
