@@ -818,6 +818,12 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
         // Assert path name should be ended with compact suffix.
         assert(path.getName.endsWith(COMPACT_FILE_SUFFIX))
+
+        // Compacted batch should include all entries from start.
+        val entries = metadataLog.get(batchId)
+        assert(entries.isDefined)
+        assert(entries.get.length === metadataLog.allFiles().length)
+        assert(metadataLog.get(None, Some(batchId)).flatMap(_._2).length === entries.get.length)
       }
 
       assert(metadataLog.allFiles().sortBy(_.batchId) ===
