@@ -57,6 +57,7 @@ case class BroadcastHashJoinExec(
     }
     case _ => false
   }
+
   /**
     * Using this to mark which side is need not to be written repeatedly
     */
@@ -332,26 +333,50 @@ case class BroadcastHashJoinExec(
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       val found = ctx.freshName("found")
-      s"""
-         |// generate join key for stream side
-         |${keyEv.code}
-         |// find matches from HashRelation
-         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |boolean $found = false;
-         |// the last iteration of this loop is to emit an empty row if there is no matched rows.
-         |while ($matches != null && $matches.hasNext() || !$found) {
-         |  UnsafeRow $matched = $matches != null && $matches.hasNext() ?
-         |    (UnsafeRow) $matches.next() : null;
-         |  ${checkCondition.trim}
-         |  if (!$conditionPassed) continue;
-         |  $found = true;
-         |  $numOutput.add(1);
-         |  ${consume(ctx, resultVars)}
-         |}
-       """.stripMargin
+      if (avoidRepeatedlyWriting) {
+        val (writeStreamSideFields, writeBuildSideFields) =
+          consumeForJoin(ctx, resultVars, input.length, sequential)
+        s"""
+           |// generate join key for stream side
+           |${keyEv.code}
+           |// find matches from HashRelation
+           |$iteratorCls $matches = $anyNull ? null :
+           |($iteratorCls)$relationTerm.get(${keyEv.value});
+           |boolean $found = false;
+           |$writeStreamSideFields
+           |// the last iteration of this loop is to emit an empty row if there is no matched rows.
+           |while ($matches != null && $matches.hasNext() || !$found) {
+           |  UnsafeRow $matched = $matches != null && $matches.hasNext() ?
+           |    (UnsafeRow) $matches.next() : null;
+           |  ${checkCondition.trim}
+           |  if (!$conditionPassed) continue;
+           |  $found = true;
+           |  $numOutput.add(1);
+           |  $writeBuildSideFields
+           |}
+         """.stripMargin
+      } else {
+        s"""
+           |// generate join key for stream side
+           |${keyEv.code}
+           |// find matches from HashRelation
+           |$iteratorCls $matches = $anyNull ? null :
+           |($iteratorCls)$relationTerm.get(${keyEv.value});
+           |boolean $found = false;
+           |// the last iteration of this loop is to emit an empty row if there is no matched rows.
+           |while ($matches != null && $matches.hasNext() || !$found) {
+           |  UnsafeRow $matched = $matches != null && $matches.hasNext() ?
+           |    (UnsafeRow) $matches.next() : null;
+           |  ${checkCondition.trim}
+           |  if (!$conditionPassed) continue;
+           |  $found = true;
+           |  $numOutput.add(1);
+           |  ${consume(ctx, resultVars)}
+           |}
+         """.stripMargin
+      }
     }
   }
-
   /**
    * Generates the code for left semi join.
    */
@@ -379,7 +404,8 @@ case class BroadcastHashJoinExec(
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashRelation
-         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
+         |$iteratorCls $matches = $anyNull ? null :
+         |($iteratorCls)$relationTerm.get(${keyEv.value});
          |if ($matches == null) continue;
          |boolean $found = false;
          |while (!$found && $matches.hasNext()) {
