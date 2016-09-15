@@ -1103,10 +1103,10 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
       if (newGrouping.nonEmpty) {
         a.copy(groupingExpressions = newGrouping)
       } else {
-        // Do not rewrite the aggregate if we drop all grouping expressions, because this can
-        // change the return semantics when the input of the Aggregate is empty. See SPARK-17114
-        // for more information.
-        a
+        // All grouping expressions are literals. We should not drop them all, because this can
+        // change the return semantics when the input of the Aggregate is empty (SPARK-17114). We
+        // instead replace this by single, easy to hash/sort, literal expression.
+        a.copy(groupingExpressions = Seq(Literal(0, IntegerType)))
       }
   }
 }
