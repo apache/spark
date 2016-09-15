@@ -31,9 +31,12 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.ScalaReflection._
-import org.apache.spark.sql.catalyst.ScalaReflectionLock
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, FunctionResource}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflectionLock, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -621,30 +624,51 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     // SPARK-17356: In usage of mllib, Metadata may store a huge vector of data, transforming
     // it to JSON may trigger OutOfMemoryError.
     case m: Metadata => Metadata.empty.jsonValue
+    case clazz: Class[_] => JString(clazz.getName)
     case s: StorageLevel =>
       ("useDisk" -> s.useDisk) ~ ("useMemory" -> s.useMemory) ~ ("useOffHeap" -> s.useOffHeap) ~
         ("deserialized" -> s.deserialized) ~ ("replication" -> s.replication)
     case n: TreeNode[_] => n.jsonValue
     case o: Option[_] => o.map(parseToJson)
     // Recursive scan Seq[TreeNode]
-    case t: Seq[_] if t.forall(_.isInstanceOf[TreeNode[_]]) =>
+    case t: Seq[_] if t.forall(_.isInstanceOf[TreeNode[_]]) ||
+      t.forall(_.isInstanceOf[Partitioning]) || t.forall(_.isInstanceOf[DataType]) =>
       JArray(t.map(parseToJson).toList)
     // if it's a scala object, we can simply keep the full class path.
     // TODO: currently if the class name ends with "$", we think it's a scala object, there is
     // probably a better way to check it.
     case obj if obj.getClass.getName.endsWith("$") => "object" -> obj.getClass.getName
+    case t: Seq[String] if t.length > 0 && t.head.isInstanceOf[String] =>
+      JString(Utils.truncatedString(t, "[", ", ", "]"))
     case t: Seq[_] => JNull
-    case p: Product => try {
-      val fieldNames = getConstructorParameterNames(p.getClass)
-      val fieldValues = p.productIterator.toSeq
-      assert(fieldNames.length == fieldValues.length)
-      ("product-class" -> JString(p.getClass.getName)) :: fieldNames.zip(fieldValues).collect {
-        // Only converts String fields in Product to JSON
-        case (name, value: String) => name -> JString(value)
-      }.toList
-    } catch {
-      case _: RuntimeException => null
-    }
+    case p: Product if shouldConvertToJson(p) =>
+      try {
+        val fieldNames = getConstructorParameterNames(p.getClass)
+        val fieldValues = p.productIterator.toSeq
+        assert(fieldNames.length == fieldValues.length)
+        ("product-class" -> JString(p.getClass.getName)) :: fieldNames.zip(fieldValues).map {
+          case (name, value) => name -> parseToJson(value)
+        }.toList
+      } catch {
+        case _: RuntimeException => null
+      }
     case _ => JNull
+  }
+
+  private def shouldConvertToJson(product: Product): Boolean = {
+    case exprId: ExprId => true
+    case field: StructField => true
+    case id: TableIdentifier => true
+    case join: JoinType => true
+    case field: StructField => true
+    case id: FunctionIdentifier => true
+    case spec: BucketSpec => true
+    case catalog: CatalogTable => true
+    case boundary: FrameBoundary => true
+    case frame: WindowFrame => true
+    case partition: Partitioning => true
+    case resource: FunctionResource => true
+    case broadcast: BroadcastMode => true
+    case _ => false
   }
 }
