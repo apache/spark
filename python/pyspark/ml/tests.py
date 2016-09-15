@@ -247,14 +247,14 @@ class TestParams(HasMaxIter, HasInputCol, HasSeed):
     A subclass of Params mixed with HasMaxIter, HasInputCol and HasSeed.
     """
     @keyword_only
-    def __init__(self, seed=None):
+    def __init__(self, maxIter=None, inputCol=None, seed=None):
         super(TestParams, self).__init__()
         self._setDefault(maxIter=10)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, seed=None):
+    def setParams(self, maxIter=None, inputCol=None, seed=None):
         """
         setParams(self, seed=None)
         Sets params for this test.
@@ -388,6 +388,16 @@ class ParamTests(PySparkTestCase):
         model = Word2Vec().setWindowSize(6)
         # Check windowSize is set properly
         self.assertEqual(model.getWindowSize(), 6)
+
+    def test_param_value_None(self):
+        tp = TestParams()
+        self.assertFalse(tp.isSet(tp.inputCol), "inputCol is not set initially")
+        tp.setParams(inputCol=None)
+        self.assertFalse(tp.isSet(tp.inputCol), "Value of None should not change param")
+        tp.setParams(inputCol="input")
+        self.assertTrue(tp.isSet(tp.inputCol), "inputCol should now be set")
+        tp.setParams(inputCol=None)
+        self.assertTrue(tp.isSet(tp.inputCol), "inputCol should still be set")
 
 
 class FeatureTests(SparkSessionTestCase):

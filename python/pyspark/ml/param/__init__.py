@@ -425,13 +425,13 @@ class Params(Identifiable):
         Sets user-supplied params.
         """
         for param, value in kwargs.items():
-            p = getattr(self, param)
             if value is not None:
+                p = getattr(self, param)
                 try:
                     value = p.typeConverter(value)
                 except TypeError as e:
                     raise TypeError('Invalid param value given for param "%s". %s' % (p.name, e))
-            self._paramMap[p] = value
+                self._paramMap[p] = value
         return self
 
     def _clear(self, param):
