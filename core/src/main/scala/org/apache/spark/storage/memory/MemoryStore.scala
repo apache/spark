@@ -33,7 +33,7 @@ import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockInfoManager, StorageLevel}
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
+import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
@@ -828,10 +828,13 @@ private[storage] class PartiallySerializedBlock[T](
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
     val unrolledIter = serializerManager.dataDeserializeStream(
       blockId, unrolledBuffer.toInputStream(dispose = true))(classTag)
+    // The unroll memory will be freed once `unrolledIter` is fully consumed in
+    // PartiallyUnrolledIterator. If the iterator is not consumed by the end of the task then any
+    // extra unroll memory will automatically be freed by a `finally` block in `Task`.
     new PartiallyUnrolledIterator(
       memoryStore,
       unrollMemory,
-      unrolled = CompletionIterator[T, Iterator[T]](unrolledIter, unrolledBuffer.dispose()),
+      unrolled = unrolledIter,
       rest = rest)
   }
 }
