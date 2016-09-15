@@ -445,16 +445,6 @@ SparkR supports the following machine learning models and algorithms.
 
 * Accelerated Failure Time (AFT) Survival Model
 
-* Gaussian Mixture Model (GMM)
-
-* Latent Dirichlet Allocation (LDA)
-
-* Multilayer Perceptron Model
-
-* Collaborative Filtering with Alternating Least Squares (ALS)
-
-* Isotonic Regression Model
-
 More will be added in the future.
 
 ### R Formula
