@@ -699,8 +699,12 @@ object DDLUtils {
 
   /**
    * If the command ALTER VIEW is to alter a table or ALTER TABLE is to alter a view,
-   * issue an exception [[AnalysisException]]. Temporary views can be altered by both
-   * ALTER VIEW and ALTER TABLE commands.
+   * issue an exception [[AnalysisException]].
+   *
+   * Note: temporary views can be altered by both ALTER VIEW and ALTER TABLE commands,
+   * since temporary views can be also created by CREATE TEMPORARY TABLE. In the future,
+   * when we decided to drop the support, we should disallow users to alter temporary views
+   * by ALTER TABLE.
    */
   def verifyAlterTableType(
       catalog: SessionCatalog,
