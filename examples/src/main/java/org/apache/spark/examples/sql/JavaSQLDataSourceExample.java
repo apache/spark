@@ -23,6 +23,8 @@ import java.util.Arrays;
 import java.util.List;
 // $example off:schema_merging$
 
+import java.util.Properties
+
 // $example on:basic_parquet_example$
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
