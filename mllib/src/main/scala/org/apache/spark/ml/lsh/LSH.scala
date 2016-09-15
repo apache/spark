@@ -17,13 +17,16 @@
 
 package org.apache.spark.ml.lsh
 
+import scala.util.Random
+
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.sql._
+import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataTypes, StructField, StructType}
+import org.apache.spark.sql.types._
 
 /**
  * Params for [[LSH]].
@@ -37,24 +40,12 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
   final val outputDim: IntParam = new IntParam(this, "outputDim", "output dimension",
     ParamValidators.gt(0))
 
-  /**
-   * Param for distance column name.
-   *
-   * @group param
-   */
-  final val distCol: Param[String] = new Param[String](this, "distCol", "distance column name")
-
   /** @group getParam */
   final def getOutputDim: Int = $(outputDim)
-
-  /** @group getParam */
-  final def getDistCol: String = $(distCol)
 
   setDefault(outputDim -> 1)
 
   setDefault(outputCol -> "lsh_output")
-
-  setDefault(distCol -> "lsh_distance")
 
   /**
    * Transform the Schema for LSH
@@ -74,9 +65,6 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
 abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
   extends Model[T] with LSHParams {
   override def copy(extra: ParamMap): T = defaultCopy(extra)
-
-  protected var modelDataset: DataFrame = null
-
   /**
    * :: DeveloperApi ::
    *
@@ -116,8 +104,7 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val transformUDF = udf(hashFunction, new VectorUDT)
-    modelDataset = dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
-    modelDataset
+    dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
   }
 
   /**
@@ -133,25 +120,22 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
   }
 
   /**
-   * Get the dataset inside the model. This is used in approximate similarity join or when user
-   * wants to run their own algorithm on the LSH dataset.
-   * @return The dataset inside the model
-   */
-  def getModelDataset: Dataset[_] = modelDataset
-
-  /**
    * Given a large dataset and an item, approximately find at most k items which have the closest
    * distance to the item.
    * @param key The key to hash for the item
    * @param k The maximum number of items closest to the key
-   * @return A dataset containing at most k items closest to the key.
+   * @param distCol The column to store the distance between pairs
+   * @return A dataset containing at most k items closest to the key. A distCol is added to show
+   *         the distance between each record and the key.
    */
-  def approxNearestNeighbors(key: KeyType, k: Int = 1): Dataset[_] = {
+  def approxNearestNeighbors(dataset: Dataset[_], key: KeyType, k: Int = 1,
+                             distCol: String = "distance"): Dataset[_] = {
     if (k < 1) {
       throw new Exception(s"Invalid number of nearest neighbors $k")
     }
     // Get Hash Value of the key v
     val keyHash = hashFunction(key)
+    val modelDataset = transform(dataset)
 
     // In the origin dataset, find the hash value u that is closest to v
     val hashDistUDF = udf((x: Vector) => hashDistance(x, keyHash), DataTypes.DoubleType)
@@ -163,8 +147,79 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
 
     // Get the top k nearest neighbor by their distance to the key
     val keyDistUDF = udf((x: KeyType) => keyDistance(x, key), DataTypes.DoubleType)
-    val modelSubsetWithDistCol = modelSubset.withColumn($(distCol), keyDistUDF(col($(inputCol))))
-    modelSubsetWithDistCol.sort($(distCol)).limit(k)
+    val modelSubsetWithDistCol = modelSubset.withColumn(distCol, keyDistUDF(col($(inputCol))))
+    modelSubsetWithDistCol.sort(distCol).limit(k)
+  }
+
+  /**
+   * Preprocess step for approximate similarity join. Transform and explode the outputCol to
+   * explodeCols.
+   * @param dataset The dataset to transform and explode.
+   * @param explodeCols The alias for the exploded columns, must be a seq of two strings.
+   * @return A dataset containing idCol, inputCol and explodeCols
+   */
+  private[this] def processDataset(dataset: Dataset[_], explodeCols: Seq[String]): Dataset[_] = {
+    if (explodeCols.size != 2) {
+      throw new Exception("explodeCols must be two strings.")
+    }
+    val vectorToMap: UserDefinedFunction = udf((x: Vector) => x.asBreeze.iterator.toMap,
+      MapType(DataTypes.IntegerType, DataTypes.DoubleType))
+    transform(dataset)
+      .select(col("*"), explode(vectorToMap(col($(outputCol)))).as(explodeCols))
+  }
+
+  /**
+   * Recreate a column using the same column name but different attribute id. Used in approximate
+   * similarity join.
+   * @param dataset The dataset where a column need to recreate
+   * @param colName The name of the column to recreate
+   * @param tmpColName A temporary column name which does not conflict with existing columns
+   * @return
+   */
+  private[this] def recreateCol(dataset: Dataset[_], colName: String,
+                                tmpColName: String): Dataset[_] = {
+    dataset
+      .withColumnRenamed(colName, tmpColName)
+      .withColumn(colName, col(tmpColName))
+      .drop(tmpColName)
+  }
+
+  /**
+   * Join two dataset to approximately find all pairs of records whose distance are smaller
+   * than the threshold.
+   * @param datasetA One of the datasets to join
+   * @param datasetB Another dataset to join
+   * @param threshold The threshold for the distance of record pairs
+   * @param distCol The column to store the distance between pairs
+   * @return A joined dataset containing pairs of records. A distCol is added to show the distance
+   *         between each pair of records.
+   */
+  def approxSimilarityJoin(datasetA: Dataset[_], datasetB: Dataset[_], threshold: Double,
+                           distCol: String = "distance"): Dataset[_] = {
+
+    val explodeCols = Seq("lsh#entry", "lsh#hashValue")
+    val explodedA = processDataset(datasetA, explodeCols)
+
+    // If this is a self join, we need to recreate the inputCol of datasetB to avoid ambiguity.
+    val explodedB = if (datasetA != datasetB) {
+      processDataset(datasetB, explodeCols)
+    } else {
+      val recreatedB = recreateCol(datasetB, $(inputCol), s"${$(inputCol)}#${Random.nextString(5)}")
+      processDataset(recreatedB, explodeCols)
+    }
+
+    // Do a hash join on where the exploded hash values are equal.
+    val joinedDataset = explodedA.join(explodedB, explodeCols)
+      .drop(explodeCols: _*)
+
+    // Add a new column to store the distance of the two records.
+    val distUDF = udf((x: KeyType, y: KeyType) => keyDistance(x, y), DataTypes.DoubleType)
+    val joinedDatasetWithDist = joinedDataset.select(col("*"),
+      distUDF(explodedA($(inputCol)), explodedB($(inputCol))).as(distCol)
+    )
+
+    // Filter the joined datasets where the distance are smaller than the threshold.
+    joinedDatasetWithDist.distinct().filter(col(distCol) < threshold)
   }
 }
 
@@ -177,9 +232,6 @@ abstract class LSH[KeyType, T <: LSHModel[KeyType, T]] extends Estimator[T] with
 
   /** @group setParam */
   def setOutputDim(value: Int): this.type = set(outputDim, value)
-
-  /** @group setParam */
-  def setDistCol(value: String): this.type = set(distCol, value)
 
   /**
    * :: DeveloperApi ::
@@ -201,8 +253,6 @@ abstract class LSH[KeyType, T <: LSHModel[KeyType, T]] extends Estimator[T] with
     val inputDim = dataset.select(col($(inputCol))).head().get(0).asInstanceOf[Vector].size
     val model = createRawLSHModel(inputDim).setParent(this)
     copyValues(model)
-    model.transform(dataset)
-    model
   }
 
   /**
