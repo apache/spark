@@ -78,7 +78,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
       ("korea", Array(0.45f, 0.60f, 0.60f, 0.60f))
     )
     val model = new Word2VecModel(word2VecMap)
-    val syms = model.findSynonyms(Vectors.dense(Array(0.52d, 0.50d, 0.50d, 0.50d)), num)
+    val syms = model.findSynonyms(Vectors.dense(Array(0.52, 0.5, 0.5, 0.5)), num)
     assert(syms.length == num)
     assert(syms(0)._1 == "china")
     assert(syms(1)._1 == "taiwan")

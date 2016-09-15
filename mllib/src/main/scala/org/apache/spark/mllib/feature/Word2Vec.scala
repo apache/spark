@@ -518,7 +518,7 @@ class Word2VecModel private[spark] (
   }
 
   /**
-   * Find synonyms of a word
+   * Find synonyms of a word; do not include the word itself in results.
    * @param word a word
    * @param num number of synonyms to find
    * @return array of (word, cosineSimilarity)
@@ -530,7 +530,9 @@ class Word2VecModel private[spark] (
   }
 
   /**
-   * Find synonyms of the vector representation of a word
+   * Find synonyms of the vector representation of a word, possibly
+   * including any words in the model vocabulary whose vector respresentation
+   * is the supplied vector.
    * @param vector vector representation of a word
    * @param num number of synonyms to find
    * @return array of (word, cosineSimilarity)
@@ -542,8 +544,7 @@ class Word2VecModel private[spark] (
 
   /**
    * Find synonyms of the vector representation of a word, rejecting
-   * vectors identical to <tt>vector</tt> and words identical to the
-   * value of wordOpt, if one is supplied.
+   * words identical to the value of wordOpt, if one is supplied.
    * @param vector vector representation of a word
    * @param num number of synonyms to find
    * @param wordOpt optionally, a word to reject from the results list
@@ -579,10 +580,15 @@ class Word2VecModel private[spark] (
       ind += 1
     }
 
+    // NB: This code (and the documented behavior of findSynonyms
+    // elsewhere) assumes that distinct words do not have identical
+    // vector representations
+
     wordList.zip(cosVec)
       .toSeq
       .sortBy(-_._2)
-      .filter(tup => wordOpt.map(w => !w.equals(tup._1)).getOrElse(true) && tup._2 != 1.0d)
+      .take(num + 1)
+      .dropWhile(p => wordOpt.map(w => w.equals(p._1)).getOrElse(false))
       .take(num)
       .toArray
   }
