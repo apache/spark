@@ -159,7 +159,7 @@ case class AlterTableRenameCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(oldName)
-    DDLUtils.verifyAlterTableType(table, oldName, isView)
+    DDLUtils.verifyAlterTableType(catalog, table, isView)
     // If this is a temp view, just rename the view.
     // Otherwise, if this is a real table, we also need to uncache and invalidate the table.
     val isTemporary = catalog.isTemporaryTable(oldName)

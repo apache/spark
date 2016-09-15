@@ -687,6 +687,18 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(spark.table("teachers").collect().toSeq == df.collect().toSeq)
   }
 
+  test("rename temporary table") {
+    withTempView("tab1", "tab2") {
+      spark.range(10).createOrReplaceTempView("tab1")
+      sql("ALTER TABLE tab1 RENAME TO tab2")
+      checkAnswer(spark.table("tab2"), spark.range(10).toDF())
+      intercept[NoSuchTableException] { spark.table("tab1") }
+      sql("ALTER VIEW tab2 RENAME TO tab1")
+      checkAnswer(spark.table("tab1"), spark.range(10).toDF())
+      intercept[NoSuchTableException] { spark.table("tab2") }
+    }
+  }
+
   test("rename temporary table - destination table already exists") {
     withTempView("tab1", "tab2") {
       sql(
@@ -712,7 +724,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         """.stripMargin)
 
       val e = intercept[AnalysisException] {
-        sql("ALTER VIEW tab1 RENAME TO tab2")
+        sql("ALTER TABLE tab1 RENAME TO tab2")
       }
       assert(e.getMessage.contains(
         "RENAME TEMPORARY TABLE from '`tab1`' to 'tab2': destination table already exists"))
