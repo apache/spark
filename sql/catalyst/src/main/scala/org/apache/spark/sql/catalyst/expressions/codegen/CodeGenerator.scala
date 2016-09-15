@@ -910,14 +910,19 @@ object CodeGenerator extends Logging {
     codeAttrField.setAccessible(true)
     classes.foreach { case (_, classBytes) =>
       CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
-      val cf = new ClassFile(new ByteArrayInputStream(classBytes))
-      cf.methodInfos.asScala.foreach { method =>
-        method.getAttributes().foreach { a =>
-          if (a.getClass.getName == codeAttr.getName) {
-            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(
-              codeAttrField.get(a).asInstanceOf[Array[Byte]].length)
+      try {
+        val cf = new ClassFile(new ByteArrayInputStream(classBytes))
+        cf.methodInfos.asScala.foreach { method =>
+          method.getAttributes().foreach { a =>
+            if (a.getClass.getName == codeAttr.getName) {
+              CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(
+                codeAttrField.get(a).asInstanceOf[Array[Byte]].length)
+            }
           }
         }
+      } catch {
+        case e: Exception =>
+          logWarning("Error calculating stats of compiled class.", e)
       }
     }
   }
