@@ -158,7 +158,8 @@ case class AlterTableRenameCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    DDLUtils.verifyAlterTableType(catalog, oldName, isView)
+    val table = catalog.getTableMetadata(oldName)
+    DDLUtils.verifyAlterTableType(catalog, table, isView)
     // If this is a temp view, just rename the view.
     // Otherwise, if this is a real table, we also need to uncache and invalidate the table.
     val isTemporary = catalog.isTemporaryTable(oldName)
@@ -177,7 +178,6 @@ case class AlterTableRenameCommand(
         }
       }
       // For datasource tables, we also need to update the "path" serde property
-      val table = catalog.getTableMetadata(oldName)
       if (DDLUtils.isDatasourceTable(table) && table.tableType == CatalogTableType.MANAGED) {
         val newPath = catalog.defaultTablePath(newTblName)
         val newTable = table.withNewStorage(
@@ -468,6 +468,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     append(buffer, "Last Access Time:", new Date(table.lastAccessTime).toString, "")
     append(buffer, "Location:", table.storage.locationUri.getOrElse(""), "")
     append(buffer, "Table Type:", table.tableType.name, "")
+    table.stats.foreach(s => append(buffer, "Statistics:", s.simpleString, ""))
 
     append(buffer, "Table Parameters:", "", "")
     table.properties.foreach { case (key, value) =>
