@@ -66,9 +66,10 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 }
 
 /**
- * Preprocess some DDL plans, e.g. [[CreateTable]], to do some normalization and checking.
+ * Analyze [[CreateTable]] and do some normalization and checking.
+ * For CREATE TABLE AS SELECT, the SELECT query is also analyzed.
  */
-case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
+case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
@@ -95,9 +96,19 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
     //   * can't use all table columns as partition columns.
     //   * partition columns' type must be AtomicType.
     //   * sort columns' type must be orderable.
-    case c @ CreateTable(tableDesc, mode, query) if c.childrenResolved =>
-      val schema = if (query.isDefined) query.get.schema else tableDesc.schema
-      val columnNames = if (conf.caseSensitiveAnalysis) {
+    case c @ CreateTable(tableDesc, mode, query) =>
+      val analyzedQuery = query.map { q =>
+        // Analyze the query in CTAS and then we can do the normalization and checking.
+        val qe = sparkSession.sessionState.executePlan(q)
+        qe.assertAnalyzed()
+        qe.analyzed
+      }
+      val schema = if (analyzedQuery.isDefined) {
+        analyzedQuery.get.schema
+      } else {
+        tableDesc.schema
+      }
+      val columnNames = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
         schema.map(_.name)
       } else {
         schema.map(_.name.toLowerCase)
@@ -106,7 +117,7 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
 
       val partitionColsChecked = checkPartitionColumns(schema, tableDesc)
       val bucketColsChecked = checkBucketColumns(schema, partitionColsChecked)
-      c.copy(tableDesc = bucketColsChecked)
+      c.copy(tableDesc = bucketColsChecked, query = analyzedQuery)
   }
 
   private def checkPartitionColumns(schema: StructType, tableDesc: CatalogTable): CatalogTable = {
@@ -176,6 +187,7 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
       colName: String,
       colType: String): String = {
     val tableCols = schema.map(_.name)
+    val conf = sparkSession.sessionState.conf
     tableCols.find(conf.resolver(_, colName)).getOrElse {
       failAnalysis(s"$colType column $colName is not defined in table $tableIdent, " +
         s"defined table columns are: ${tableCols.mkString(", ")}")

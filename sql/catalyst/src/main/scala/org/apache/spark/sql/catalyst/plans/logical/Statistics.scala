@@ -38,12 +38,13 @@ case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
     isBroadcastable: Boolean = false) {
-  override def toString: String = {
-    val output =
-      Seq(s"sizeInBytes=$sizeInBytes",
-        if (rowCount.isDefined) s"rowCount=${rowCount.get}" else "",
-        s"isBroadcastable=$isBroadcastable"
-      )
-    output.filter(_.nonEmpty).mkString("Statistics(", ", ", ")")
+  override def toString: String = "Statistics(" + simpleString + ")"
+
+  /** Readable string representation for the Statistics. */
+  def simpleString: String = {
+    Seq(s"sizeInBytes=$sizeInBytes",
+      if (rowCount.isDefined) s"rowCount=${rowCount.get}" else "",
+      s"isBroadcastable=$isBroadcastable"
+    ).filter(_.nonEmpty).mkString("", ", ", "")
   }
 }
