@@ -277,6 +277,7 @@ private[spark] class MemoryStore(
           "released too much unroll memory")
         Left(new PartiallyUnrolledIterator(
           this,
+          MemoryMode.ON_HEAP,
           unrollMemoryUsedByThisBlock,
           unrolled = arrayValues.toIterator,
           rest = Iterator.empty))
@@ -285,7 +286,11 @@ private[spark] class MemoryStore(
       // We ran out of space while unrolling the values for this block
       logUnrollFailureMessage(blockId, vector.estimateSize())
       Left(new PartiallyUnrolledIterator(
-        this, unrollMemoryUsedByThisBlock, unrolled = vector.iterator, rest = values))
+        this,
+        MemoryMode.ON_HEAP,
+        unrollMemoryUsedByThisBlock,
+        unrolled = vector.iterator,
+        rest = values))
     }
   }
 
@@ -655,6 +660,7 @@ private[spark] class MemoryStore(
  * The result of a failed [[MemoryStore.putIteratorAsValues()]] call.
  *
  * @param memoryStore  the memoryStore, used for freeing memory.
+ * @param memoryMode   the memory mode (on- or off-heap).
  * @param unrollMemory the amount of unroll memory used by the values in `unrolled`.
  * @param unrolled     an iterator for the partially-unrolled values.
  * @param rest         the rest of the original iterator passed to
@@ -662,13 +668,14 @@ private[spark] class MemoryStore(
  */
 private[storage] class PartiallyUnrolledIterator[T](
     memoryStore: MemoryStore,
+    memoryMode: MemoryMode,
     unrollMemory: Long,
     private[this] var unrolled: Iterator[T],
     rest: Iterator[T])
   extends Iterator[T] {
 
   private def releaseUnrollMemory(): Unit = {
-    memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP, unrollMemory)
+    memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
     // SPARK-17503: Garbage collects the unrolling memory before the life end of
     // PartiallyUnrolledIterator.
     unrolled = null
@@ -833,6 +840,7 @@ private[storage] class PartiallySerializedBlock[T](
     // extra unroll memory will automatically be freed by a `finally` block in `Task`.
     new PartiallyUnrolledIterator(
       memoryStore,
+      memoryMode,
       unrollMemory,
       unrolled = unrolledIter,
       rest = rest)
