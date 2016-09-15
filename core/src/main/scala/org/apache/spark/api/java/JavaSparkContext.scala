@@ -678,14 +678,6 @@ class JavaSparkContext(val sc: SparkContext)
     sc.addJar(path)
   }
 
-
-  /**
-   * Returns the URL to the SparkUI instance running for this SparkContext. This may or may
-   * not be the same one set by the configuration, since Spark will attempt to listen on
-   * successive ports if the configured one is not available.
-   */
-  def uiWebUrl(): Optional[String] = JavaUtils.optionToOptional(sc.uiWebUrl)
-
   /**
    * Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.
    *

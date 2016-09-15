@@ -335,7 +335,7 @@ class SparkContext(object):
     @property
     def uiWebUrl(self):
         """Return the URL of the SparkUI instance started by this SparkContext"""
-        return self._jsc.uiWebUrl().orNull()
+        return self._jsc.sc().uiWebUrl().get()
 
     @property
     def startTime(self):
