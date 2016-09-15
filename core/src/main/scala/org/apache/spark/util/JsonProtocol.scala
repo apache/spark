@@ -310,11 +310,12 @@ private[spark] object JsonProtocol {
         case v: Int => JInt(v)
         case v: Long => JInt(v)
         // We only have 3 kind of internal accumulator types, so if it's not int or long, it must be
-        // the blocks accumulator, whose type is `Seq[(BlockId, BlockStatus)]`
+        // the blocks accumulator, whose type is `java.util.List[(BlockId, BlockStatus)]`
         case v =>
-          JArray(v.asInstanceOf[Seq[(BlockId, BlockStatus)]].toList.map { case (id, status) =>
-            ("Block ID" -> id.toString) ~
-            ("Status" -> blockStatusToJson(status))
+          JArray(v.asInstanceOf[java.util.List[(BlockId, BlockStatus)]].asScala.toList.map {
+            case (id, status) =>
+              ("Block ID" -> id.toString) ~
+              ("Status" -> blockStatusToJson(status))
           })
       }
     } else {
@@ -744,7 +745,7 @@ private[spark] object JsonProtocol {
             val id = BlockId((blockJson \ "Block ID").extract[String])
             val status = blockStatusFromJson(blockJson \ "Status")
             (id, status)
-          }
+          }.asJava
         case _ => throw new IllegalArgumentException(s"unexpected json value $value for " +
           "accumulator " + name.get)
       }

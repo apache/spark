@@ -169,12 +169,12 @@ private[spark] class MemoryStore(
    * temporary unroll memory used during the materialization is "transferred" to storage memory,
    * so we won't acquire more memory than is actually needed to store the block.
    *
-   * @return in case of success, the estimated the estimated size of the stored data. In case of
-   *         failure, return an iterator containing the values of the block. The returned iterator
-   *         will be backed by the combination of the partially-unrolled block and the remaining
-   *         elements of the original input iterator. The caller must either fully consume this
-   *         iterator or call `close()` on it in order to free the storage memory consumed by the
-   *         partially-unrolled block.
+   * @return in case of success, the estimated size of the stored data. In case of failure, return
+   *         an iterator containing the values of the block. The returned iterator will be backed
+   *         by the combination of the partially-unrolled block and the remaining elements of the
+   *         original input iterator. The caller must either fully consume this iterator or call
+   *         `close()` on it in order to free the storage memory consumed by the partially-unrolled
+   *         block.
    */
   private[storage] def putIteratorAsValues[T](
       blockId: BlockId,
@@ -298,9 +298,9 @@ private[spark] class MemoryStore(
    * temporary unroll memory used during the materialization is "transferred" to storage memory,
    * so we won't acquire more memory than is actually needed to store the block.
    *
-   * @return in case of success, the estimated the estimated size of the stored data. In case of
-   *         failure, return a handle which allows the caller to either finish the serialization
-   *         by spilling to disk or to deserialize the partially-serialized block and reconstruct
+   * @return in case of success, the estimated size of the stored data. In case of failure,
+   *         return a handle which allows the caller to either finish the serialization by
+   *         spilling to disk or to deserialize the partially-serialized block and reconstruct
    *         the original input iterator. The caller must either fully consume this result
    *         iterator or call `discard()` on it in order to free the storage memory consumed by the
    *         partially-unrolled block.
@@ -593,10 +593,10 @@ private[spark] class MemoryStore(
         val memoryToRelease = math.min(memory, unrollMemoryMap(taskAttemptId))
         if (memoryToRelease > 0) {
           unrollMemoryMap(taskAttemptId) -= memoryToRelease
-          if (unrollMemoryMap(taskAttemptId) == 0) {
-            unrollMemoryMap.remove(taskAttemptId)
-          }
           memoryManager.releaseUnrollMemory(memoryToRelease, memoryMode)
+        }
+        if (unrollMemoryMap(taskAttemptId) == 0) {
+          unrollMemoryMap.remove(taskAttemptId)
         }
       }
     }

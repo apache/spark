@@ -151,7 +151,7 @@ class ParquetFileFormat
     // Should we merge schemas from all Parquet part-files?
     val shouldMergeSchemas = parquetOptions.mergeSchema
 
-    val mergeRespectSummaries = sparkSession.conf.get(SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES)
+    val mergeRespectSummaries = sparkSession.sessionState.conf.isParquetSchemaRespectSummaries
 
     val filesByType = splitFiles(files)
 
@@ -308,14 +308,14 @@ class ParquetFileFormat
     // Sets flags for `CatalystSchemaConverter`
     hadoopConf.setBoolean(
       SQLConf.PARQUET_BINARY_AS_STRING.key,
-      sparkSession.conf.get(SQLConf.PARQUET_BINARY_AS_STRING))
+      sparkSession.sessionState.conf.isParquetBinaryAsString)
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
-      sparkSession.conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP))
+      sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
 
     // Try to push down filters when filter push-down is enabled.
     val pushed =
-      if (sparkSession.conf.get(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key).toBoolean) {
+      if (sparkSession.sessionState.conf.parquetFilterPushDown) {
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
