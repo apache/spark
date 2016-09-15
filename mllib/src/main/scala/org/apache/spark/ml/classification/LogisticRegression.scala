@@ -755,34 +755,6 @@ class LogisticRegressionModel private[spark] (
     1.0 / (1.0 + math.exp(-m))
   }
 
-  /** Score (probability) for each class label. */
-  private val scores: Vector => Vector = (features) => {
-    val m = margins(features)
-    val maxMarginIndex = m.argmax
-    val marginArray = m.toArray
-    val maxMargin = marginArray(maxMarginIndex)
-
-    // adjust margins for overflow
-    val sum = {
-      var temp = 0.0
-      var k = 0
-      while (k < numClasses) {
-        marginArray(k) = if (maxMargin > 0) {
-          math.exp(marginArray(k) - maxMargin)
-        } else {
-          math.exp(marginArray(k))
-        }
-        temp += marginArray(k)
-        k += 1
-      }
-      temp
-    }
-
-    val scores = Vectors.dense(marginArray)
-    BLAS.scal(1 / sum, scores)
-    scores
-  }
-
   @Since("1.6.0")
   override val numFeatures: Int = coefficientMatrix.numCols
 
@@ -840,11 +812,7 @@ class LogisticRegressionModel private[spark] (
    * The behavior of this can be adjusted using [[thresholds]].
    */
   override protected def predict(features: Vector): Double = if (isMultinomial) {
-    if (isDefined(thresholds)) {
-      probability2prediction(scores(features))
-    } else {
-      super.predict(features)
-    }
+    super.predict(features)
   } else {
     // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
     if (score(features) > getThreshold) 1 else 0

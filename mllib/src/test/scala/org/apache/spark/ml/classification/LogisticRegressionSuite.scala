@@ -231,6 +231,12 @@ class LogisticRegressionSuite
     assert(scaledPredictions.zip(basePredictions).forall { case (scaled, base) =>
       scaled.getDouble(0) === base.getDouble(0)
     })
+
+    // force it to use the predict method
+    model.setRawPredictionCol("").setProbabilityCol("").setThresholds(Array(0, 1, 1))
+    val predictionsWithPredict =
+      model.transform(smallMultinomialDataset).select("prediction").collect()
+    assert(predictionsWithPredict.forall(_.getDouble(0) === 0.0))
   }
 
   test("logistic regression doesn't fit intercept when fitIntercept is off") {
@@ -293,6 +299,8 @@ class LogisticRegressionSuite
   }
 
   test("multinomial logistic regression: Predictor, Classifier methods") {
+    val sqlContext = smallMultinomialDataset.sqlContext
+    import sqlContext.implicits._
     val mlr = new LogisticRegression().setFamily("multinomial")
 
     val model = mlr.fit(smallMultinomialDataset)
@@ -337,9 +345,27 @@ class LogisticRegressionSuite
         val predFromProb = prob.toArray.zipWithIndex.maxBy(_._1)._2
         assert(pred == predFromProb)
     }
+
+    // force it to use probability2prediction
+    model.setProbabilityCol("")
+    val resultsUsingProb2Predict =
+      model.transform(smallMultinomialDataset).select("prediction").as[Double].collect()
+    resultsUsingProb2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
+    }
+
+    // force it to use predict
+    model.setRawPredictionCol("").setProbabilityCol("")
+    val resultsUsingPredict =
+      model.transform(smallMultinomialDataset).select("prediction").as[Double].collect()
+    resultsUsingPredict.zip(results.select("prediction").as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
+    }
   }
 
   test("binary logistic regression: Predictor, Classifier methods") {
+    val sqlContext = smallBinaryDataset.sqlContext
+    import sqlContext.implicits._
     val lr = new LogisticRegression().setFamily("binomial")
 
     val model = lr.fit(smallBinaryDataset)
@@ -347,7 +373,6 @@ class LogisticRegressionSuite
     val numFeatures = smallBinaryDataset.select("features").first().getAs[Vector](0).size
     assert(model.numFeatures === numFeatures)
 
-    val threshold = model.getThreshold
     val results = model.transform(smallBinaryDataset)
 
     // Compare rawPrediction with probability
@@ -365,6 +390,22 @@ class LogisticRegressionSuite
       case Row(pred: Double, prob: Vector) =>
         val predFromProb = prob.toArray.zipWithIndex.maxBy(_._1)._2
         assert(pred == predFromProb)
+    }
+
+    // force it to use probability2prediction
+    model.setProbabilityCol("")
+    val resultsUsingProb2Predict =
+      model.transform(smallBinaryDataset).select("prediction").as[Double].collect()
+    resultsUsingProb2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
+    }
+
+    // force it to use predict
+    model.setRawPredictionCol("").setProbabilityCol("")
+    val resultsUsingPredict =
+      model.transform(smallBinaryDataset).select("prediction").as[Double].collect()
+    resultsUsingPredict.zip(results.select("prediction").as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
     }
   }
 
