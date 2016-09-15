@@ -23,7 +23,7 @@ import java.util.Arrays;
 import java.util.List;
 // $example off:schema_merging$
 
-import java.util.Properties
+import java.util.Properties;
 
 // $example on:basic_parquet_example$
 import org.apache.spark.api.java.JavaRDD;
@@ -250,11 +250,11 @@ public class JavaSQLDataSourceExample {
     Properties connectionProperties = new Properties();
     connectionProperties.put("user", "username");
     connectionProperties.put("password", "password");
-    Dataset<Row> jdbcDF2 = spark.read
+    Dataset<Row> jdbcDF2 = spark.read()
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties);
 
     // Saving data to a JDBC source
-    jdbcDF.write
+    jdbcDF.write()
       .format("jdbc")
       .option("url", "jdbc:postgresql:dbserver")
       .option("dbtable", "schema.tablename")
@@ -262,7 +262,7 @@ public class JavaSQLDataSourceExample {
       .option("password", "password")
       .save();
 
-    jdbcDF2.write
+    jdbcDF2.write()
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties);
     // $example off:jdbc_dataset$
   }
