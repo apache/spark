@@ -246,28 +246,19 @@ class SessionCatalog(
   }
 
   /**
-   * Retrieve the metadata of an existing metastore table/view or a temporary view.
-   * If no database is specified, we check whether the corresponding temporary view exists.
-   * If the temporary view does not exist, we assume the table/view is in the current database.
-   * If still not found in the database then a [[NoSuchTableException]] is thrown.
+   * Retrieve the metadata of an existing temporary view.
+   * If the temporary view does not exist, a [[NoSuchTempViewException]] is thrown.
    */
-  def getTableMetadata(name: TableIdentifier): CatalogTable = {
-    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
-    val table = formatTableName(name.table)
-    val tid = TableIdentifier(table)
-    if (isTemporaryTable(name)) {
-      CatalogTable(
-        identifier = tid,
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = tempTables(table).output.toStructType,
-        properties = Map(),
-        viewText = None)
-    } else {
-      requireDbExists(db)
-      requireTableExists(TableIdentifier(table, Some(db)))
-      externalCatalog.getTable(db, table)
+  def getTempViewMetadata(name: String): CatalogTable = {
+    val table = formatTableName(name)
+    if (!tempTables.contains(table)) {
+      throw new NoSuchTempViewException(table)
     }
+    CatalogTable(
+      identifier = TableIdentifier(table),
+      tableType = CatalogTableType.VIEW,
+      storage = CatalogStorageFormat.empty,
+      schema = tempTables(table).output.toStructType)
   }
 
   /**
@@ -275,7 +266,7 @@ class SessionCatalog(
    * assume the table/view is in the current database. If the specified table/view is not found
    * in the database then a [[NoSuchTableException]] is thrown.
    */
-  def getNonTempTableMetadata(name: TableIdentifier): CatalogTable = {
+  def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     requireDbExists(db)

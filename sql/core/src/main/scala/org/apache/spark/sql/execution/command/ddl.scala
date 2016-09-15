@@ -265,7 +265,7 @@ case class AlterTableUnsetPropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, tableName, isView)
-    val table = catalog.getNonTempTableMetadata(tableName)
+    val table = catalog.getTableMetadata(tableName)
 
     if (!ifExists) {
       propKeys.foreach { k =>
@@ -305,7 +305,7 @@ case class AlterTableSerDePropertiesCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getNonTempTableMetadata(tableName)
+    val table = catalog.getTableMetadata(tableName)
     // For datasource tables, disallow setting serde or specifying partition
     if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException("Operation not allowed: ALTER TABLE SET " +
@@ -354,7 +354,7 @@ case class AlterTableAddPartitionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getNonTempTableMetadata(tableName)
+    val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         "ALTER TABLE ADD PARTITION is not allowed for tables defined using the datasource API")
@@ -414,7 +414,7 @@ case class AlterTableDropPartitionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getNonTempTableMetadata(tableName)
+    val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
@@ -468,7 +468,7 @@ case class AlterTableRecoverPartitionsCommand(
 
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
-    val table = catalog.getNonTempTableMetadata(tableName)
+    val table = catalog.getTableMetadata(tableName)
     val qualifiedName = table.identifier.quotedString
 
     if (DDLUtils.isDatasourceTable(table)) {
@@ -645,7 +645,7 @@ case class AlterTableSetLocationCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getNonTempTableMetadata(tableName)
+    val table = catalog.getTableMetadata(tableName)
     partitionSpec match {
       case Some(spec) =>
         // Partition spec is specified, so we set the location only for this partition

@@ -64,7 +64,11 @@ case class CreateTableLikeCommand(
         s"Source table in CREATE TABLE LIKE does not exist: '$sourceTable'")
     }
 
-    val sourceTableDesc = catalog.getTableMetadata(sourceTable)
+    val sourceTableDesc = if (catalog.isTemporaryTable(sourceTable)) {
+      catalog.getTempViewMetadata(sourceTable.table)
+    } else {
+      catalog.getTableMetadata(sourceTable)
+    }
 
     // Storage format
     val newStorage =
@@ -176,7 +180,11 @@ case class AlterTableRenameCommand(
         }
       }
       // For datasource tables, we also need to update the "path" serde property
-      val table = catalog.getTableMetadata(oldName)
+      val table = if (catalog.isTemporaryTable(oldName)) {
+        catalog.getTempViewMetadata(oldName.table)
+      } else {
+        catalog.getTableMetadata(oldName)
+      }
       if (DDLUtils.isDatasourceTable(table) && table.tableType == CatalogTableType.MANAGED) {
         val newPath = catalog.defaultTablePath(newTblName)
         val newTable = table.withNewStorage(
@@ -214,7 +222,7 @@ case class LoadDataCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val targetTable = catalog.getNonTempTableMetadata(table)
+    val targetTable = catalog.getTableMetadata(table)
     val qualifiedName = targetTable.identifier.quotedString
 
     if (targetTable.tableType == CatalogTableType.VIEW) {
@@ -333,7 +341,7 @@ case class TruncateTableCommand(
 
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
-    val table = catalog.getNonTempTableMetadata(tableName)
+    val table = catalog.getTableMetadata(tableName)
     val qualifiedName = table.identifier.quotedString
 
     if (table.tableType == CatalogTableType.EXTERNAL) {
@@ -592,13 +600,19 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
  *   SHOW COLUMNS (FROM | IN) table_identifier [(FROM | IN) database];
  * }}}
  */
-case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
+case class ShowColumnsCommand(tableName: TableIdentifier) extends RunnableCommand {
   override val output: Seq[Attribute] = {
     AttributeReference("col_name", StringType, nullable = false)() :: Nil
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.catalog.getTableMetadata(table).schema.map { c =>
+    val catalog = sparkSession.sessionState.catalog
+    val table = if (catalog.isTemporaryTable(tableName)) {
+      catalog.getTempViewMetadata(tableName.table)
+    } else {
+      catalog.getTableMetadata(tableName)
+    }
+    table.schema.map { c =>
       Row(c.name)
     }
   }
@@ -634,7 +648,7 @@ case class ShowPartitionsCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getNonTempTableMetadata(tableName)
+    val table = catalog.getTableMetadata(tableName)
     val qualifiedName = table.identifier.quotedString
 
     /**
@@ -686,9 +700,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val db = table.database.getOrElse(catalog.getCurrentDatabase)
-    val qualifiedName = TableIdentifier(table.table, Some(db))
-    val tableMetadata = catalog.getTableMetadata(qualifiedName)
+    val tableMetadata = catalog.getTableMetadata(table)
 
     // TODO: unify this after we unify the CREATE TABLE syntax for hive serde and data source table.
     val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {

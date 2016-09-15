@@ -671,8 +671,7 @@ class HiveDDLSuite
           .createTempView(sourceViewName)
         sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName")
 
-        val sourceTable = spark.sessionState.catalog.getTableMetadata(
-          TableIdentifier(sourceViewName, None))
+        val sourceTable = spark.sessionState.catalog.getTempViewMetadata(sourceViewName)
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
 
