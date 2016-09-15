@@ -782,7 +782,6 @@ private[storage] class PartiallySerializedBlock[T](
     if (discarded) {
       throw new IllegalStateException("Cannot call methods on a discarded PartiallySerializedBlock")
     }
-    consumed = true
   }
 
   /**
@@ -810,6 +809,7 @@ private[storage] class PartiallySerializedBlock[T](
    */
   def finishWritingToStream(os: OutputStream): Unit = {
     verifyNotConsumedAndNotDiscarded()
+    consumed = true
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
     ByteStreams.copy(unrolledBuffer.toInputStream(dispose = true), os)
     memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
@@ -829,6 +829,7 @@ private[storage] class PartiallySerializedBlock[T](
    */
   def valuesIterator: PartiallyUnrolledIterator[T] = {
     verifyNotConsumedAndNotDiscarded()
+    consumed = true
     // Close the serialization stream so that the serializer's internal buffers are freed and any
     // "end-of-stream" markers can be written out so that `unrolled` is a valid serialized stream.
     serializationStream.close()
