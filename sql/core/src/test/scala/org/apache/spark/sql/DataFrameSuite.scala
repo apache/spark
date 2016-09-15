@@ -325,6 +325,40 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(6))
   }
 
+  test("sorting with null ordering") {
+    checkAnswer(
+      nullableData.orderBy('a.asc_nulls_last, 'b.desc_nulls_first),
+      Seq(
+        Row(2, null), Row(2, "B"), Row(3, null), Row(4, "a"),
+        Row(5, "A"), Row(null, "c"), Row(null, "b")
+      )
+    )
+
+    checkAnswer(
+      nullableData.orderBy(asc_nulls_last("a"), desc_nulls_first("b")),
+      Seq(
+        Row(2, null), Row(2, "B"), Row(3, null), Row(4, "a"),
+        Row(5, "A"), Row(null, "c"), Row(null, "b")
+      )
+    )
+
+    checkAnswer(
+      nullableData.orderBy('a.desc_nulls_first, 'b.asc_nulls_last),
+      Seq(
+        Row(null, "b"), Row(null, "c"), Row(5, "A"), Row(4, "a"),
+        Row(3, null), Row(2, "B"), Row(2, null)
+      )
+    )
+
+    checkAnswer(
+      nullableData.orderBy(desc_nulls_first("a"), asc_nulls_last("b")),
+      Seq(
+        Row(null, "b"), Row(null, "c"), Row(5, "A"), Row(4, "a"),
+        Row(3, null), Row(2, "B"), Row(2, null)
+      )
+    )
+  }
+
   test("global sorting") {
     checkAnswer(
       testData2.orderBy('a.asc, 'b.asc),
