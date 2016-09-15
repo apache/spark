@@ -1657,16 +1657,12 @@ class Analyzer(
 
       // Third, for every Window Spec, we add a Window operator and set currentChild as the
       // child of it.
-      var currentChild = child
-      groupedWindowExpressions.foreach { case ((partitionSpec, orderSpec), windowExpressions) =>
-        // Set currentChild to the newly created Window operator.
-        currentChild =
-          Window(
-            windowExpressions,
-            partitionSpec,
-            orderSpec,
-            currentChild)
-      }
+      val currentChild =
+        groupedWindowExpressions.foldLeft(child) {
+          case (last, ((partitionSpec, orderSpec), windowExpressions)) =>
+            // Set currentChild to the newly created Window operator.
+            Window(windowExpressions, partitionSpec, orderSpec, last)
+        }
 
       // Finally, we create a Project to output currentChild's output
       // newExpressionsWithWindowFunctions.
