@@ -1645,21 +1645,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     e = intercept[AnalysisException] {
       sql(s"select id from `com.databricks.spark.avro`.`file_path`")
     }
-    assert(e.message.contains("Failed to find data source: com.databricks.spark.avro. " +
-      "Please use Spark package http://spark-packages.org/package/databricks/spark-avro"))
+    assert(e.message.contains("Failed to find data source: com.databricks.spark.avro."))
 
     // data source type is case insensitive
     e = intercept[AnalysisException] {
       sql(s"select id from Avro.`file_path`")
     }
-    assert(e.message.contains("Failed to find data source: avro. Please use Spark package " +
-      "http://spark-packages.org/package/databricks/spark-avro"))
+    assert(e.message.contains("Failed to find data source: avro."))
 
     e = intercept[AnalysisException] {
       sql(s"select id from avro.`file_path`")
     }
-    assert(e.message.contains("Failed to find data source: avro. Please use Spark package " +
-      "http://spark-packages.org/package/databricks/spark-avro"))
+    assert(e.message.contains("Failed to find data source: avro."))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
@@ -2660,5 +2657,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         readBack.selectExpr("`part.col1`", "`col.1`"),
         data.selectExpr("`part.col1`", "`col.1`"))
     }
+  }
+
+  test("SPARK-17515: CollectLimit.execute() should perform per-partition limits") {
+    val numRecordsRead = spark.sparkContext.longAccumulator
+    spark.range(1, 100, 1, numPartitions = 10).map { x =>
+      numRecordsRead.add(1)
+      x
+    }.limit(1).queryExecution.toRdd.count()
+    assert(numRecordsRead.value === 10)
   }
 }

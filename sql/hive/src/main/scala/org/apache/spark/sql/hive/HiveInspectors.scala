@@ -756,7 +756,8 @@ private[hive] trait HiveInspectors {
       cache: Array[AnyRef],
       dataTypes: Array[DataType]): Array[AnyRef] = {
     var i = 0
-    while (i < inspectors.length) {
+    val length = inspectors.length
+    while (i < length) {
       cache(i) = wrap(row.get(i, dataTypes(i)), inspectors(i), dataTypes(i))
       i += 1
     }
@@ -769,7 +770,8 @@ private[hive] trait HiveInspectors {
       cache: Array[AnyRef],
       dataTypes: Array[DataType]): Array[AnyRef] = {
     var i = 0
-    while (i < inspectors.length) {
+    val length = inspectors.length
+    while (i < length) {
       cache(i) = wrap(row(i), inspectors(i), dataTypes(i))
       i += 1
     }
