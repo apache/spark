@@ -1068,10 +1068,31 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.driver.host</code></td>
+  <td><code>spark.driver.blockManager.port</code></td>
+  <td>(value of spark.blockManager.port)</td>
+  <td>
+    Driver-specific port for the block manager to listen on, for cases where it cannot use the same
+    configuration as executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.bindAddress</code></td>
   <td>(local hostname)</td>
   <td>
-    Hostname or IP address for the driver to listen on.
+    <p>Hostname or IP address where to bind listening sockets. This config overrides the SPARK_LOCAL_IP
+    environment variable (see below).</p>
+
+    <p>It also allows a different address from the local one to be advertised to executors or external systems.
+    This is useful, for example, when running containers with bridged networking. For this to properly work,
+    the different ports used by the driver (RPC, block manager and UI) need to be forwarded from the
+    container's host.</p>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.host</code></td>
+  <td>(value of spark.driver.bindAddress)</td>
+  <td>
+    Hostname or IP address for the driver.
     This is used for communicating with the executors and the standalone Master.
   </td>
 </tr>
