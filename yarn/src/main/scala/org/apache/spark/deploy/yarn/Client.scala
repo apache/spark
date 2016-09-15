@@ -54,7 +54,7 @@ import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CallerContext, Utils}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -161,8 +161,7 @@ private[spark] class Client(
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
       launcherBackend.setAppId(appId.toString)
 
-      val context: String = s"Spark_AppName_${sparkConf.get("spark.app.name", "")}_AppId_$appId"
-      Utils.setCallerContext(context)
+      new CallerContext(Option(sparkConf.get("spark.app.name", "")), Option(appId.toString)).set()
 
       // Verify whether the cluster has enough resources for our AM
       verifyClusterResources(newAppResponse)

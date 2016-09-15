@@ -2418,18 +2418,41 @@ private[spark] object Utils extends Logging {
       sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
     }
   }
+}
 
-  def setCallerContext(context: String): Boolean = {
+private[spark] class CallerContext(
+   appName: Option[String] = None,
+   appID: Option[String] = None,
+   appAttemptID: Option[String] = None,
+   jobID: Option[Int] = None,
+   stageID: Option[Int] = None,
+   stageAttemptId: Option[Int] = None,
+   taskId: Option[Long] = None,
+   taskAttemptNumber: Option[Int] = None) extends Logging {
+
+   val AppName = if (appName.isDefined) s"_AppName_${appName.get}" else ""
+   val AppID = if (appID.isDefined) s"_AppID_${appID.get}" else ""
+   val AppAttemptID = if (appAttemptID.isDefined) s"_${appAttemptID.get}" else ""
+   val JobID = if (jobID.isDefined) s"_JobID_${jobID.get}" else ""
+   val StageID = if (stageID.isDefined) s"_StageID_${stageID.get}" else ""
+   val StageAttemptId = if (stageAttemptId.isDefined) s"_${stageAttemptId.get}" else ""
+   val TaskId = if (taskId.isDefined) s"_TaskId_${taskId.get}" else ""
+   val TaskAttemptNumber = if (taskAttemptNumber.isDefined) s"_${taskAttemptNumber.get}" else ""
+
+   val context = "SPARK" + AppName + AppID + AppAttemptID +
+     JobID + StageID + StageAttemptId + TaskId + TaskAttemptNumber
+
+  def set(): Boolean = {
     var succeed = false
     try {
+      val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
       val Builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
       val builderInst = Builder.getConstructor(classOf[String]).newInstance(context)
-      val ret = Builder.getMethod("build").invoke(builderInst)
-      val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-      callerContext.getMethod("setCurrent", callerContext).invoke(null, ret)
+      val hdfsContext = Builder.getMethod("build").invoke(builderInst)
+      callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
       succeed = true
     } catch {
-      case NonFatal(e) => logDebug(s"$e", e)
+      case NonFatal(e) => logInfo("Fail to set Spark caller context", e)
     }
     succeed
   }
