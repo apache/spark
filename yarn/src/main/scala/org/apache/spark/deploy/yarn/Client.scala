@@ -659,6 +659,12 @@ private[spark] class Client(
     // by the AM.
     CACHE_CONFIGS.foreach(sparkConf.remove)
 
+    // Clear the spark-launcher-related entries from the configuration to avoid them polluting the
+    // UI's environment page. This works for client mode; for cluster mode, this is handled
+    // by the AM.
+    sparkConf.remove("spark.launcher.internal.secret")
+    sparkConf.remove("spark.launcher.internal.port")
+
     localResources
   }
 

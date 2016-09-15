@@ -173,6 +173,12 @@ private[spark] class ApplicationMaster(
       sys.props.remove(e.key)
     }
 
+    // Clean up the spark launcher configuration so it doesn't show up in the Web UI for security.
+    sparkConf.remove("spark.launcher.internal.secret")
+    sparkConf.remove("spark.launcher.internal.port")
+    sys.props.remove("spark.launcher.internal.secret")
+    sys.props.remove("spark.launcher.internal.port")
+
     resources.toMap
   }
 
