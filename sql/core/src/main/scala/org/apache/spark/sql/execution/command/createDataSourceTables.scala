@@ -55,7 +55,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       if (ignoreIfExists) {
         return Seq.empty[Row]
       } else {
-        throw new AnalysisException(s"Table ${table.identifier.unquotedString} already exists.")
+        throw new AnalysisException(s"Table ${tableIdentWithDB.unquotedString} already exists.")
       }
     }
 
@@ -132,11 +132,11 @@ case class CreateDataSourceTableAsSelectCommand(
     assert(table.provider.isDefined)
     assert(table.schema.isEmpty)
 
-    val tableName = table.identifier.unquotedString
     val provider = table.provider.get
     val sessionState = sparkSession.sessionState
     val db = table.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = table.identifier.copy(database = Some(db))
+    val tableName = tableIdentWithDB.unquotedString
 
     val optionsWithPath = if (table.tableType == CatalogTableType.MANAGED) {
       table.storage.properties + ("path" -> sessionState.catalog.defaultTablePath(table.identifier))
@@ -196,7 +196,7 @@ case class CreateDataSourceTableAsSelectCommand(
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
         case SaveMode.Overwrite =>
-          sessionState.catalog.dropTable(tableIdentWithDB, ignoreIfNotExists = false, purge = false)
+          sessionState.catalog.dropTable(tableIdentWithDB, ignoreIfNotExists = true, purge = false)
           // Need to create the table again.
           createMetastoreTable = true
       }
