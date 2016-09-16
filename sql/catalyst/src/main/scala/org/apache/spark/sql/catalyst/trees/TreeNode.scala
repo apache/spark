@@ -30,7 +30,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.{EmptyRDD, RDD}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, FunctionResource}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
@@ -671,6 +671,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case partition: Partitioning => true
     case resource: FunctionResource => true
     case broadcast: BroadcastMode => true
+    case table: CatalogTableType => true
+    case storage: CatalogStorageFormat => true
     case _ => false
   }
 }
