@@ -362,12 +362,14 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   def pregel[A: ClassTag](
       initialMsg: A,
       maxIterations: Int = Int.MaxValue,
+      checkpointInterval: Int = 25,
       activeDirection: EdgeDirection = EdgeDirection.Either)(
       vprog: (VertexId, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
-    Pregel(graph, initialMsg, maxIterations, activeDirection)(vprog, sendMsg, mergeMsg)
+    Pregel(graph, initialMsg, maxIterations, activeDirection,
+      checkpointInterval)(vprog, sendMsg, mergeMsg)
   }
 
   /**
