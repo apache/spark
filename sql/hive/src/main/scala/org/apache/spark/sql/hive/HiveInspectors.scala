@@ -284,25 +284,21 @@ private[hive] trait HiveInspectors {
       case _: ByteObjectInspector =>
         withNullSafe(o => o.asInstanceOf[java.lang.Byte])
       case _: JavaHiveVarcharObjectInspector =>
-        withNullSafe(
-        o => {
+        withNullSafe { o =>
             val s = o.asInstanceOf[UTF8String].toString
             new HiveVarchar(s, s.length)
-        })
+        }
       case _: JavaHiveCharObjectInspector =>
-        withNullSafe(o => {
+        withNullSafe { o =>
             val s = o.asInstanceOf[UTF8String].toString
             new HiveChar(s, s.length)
-          })
-
+          }
       case _: JavaHiveDecimalObjectInspector =>
         withNullSafe(o =>
           HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal))
-
       case _: JavaDateObjectInspector =>
         withNullSafe(o =>
             DateTimeUtils.toJavaDate(o.asInstanceOf[Int]))
-
       case _: JavaTimestampObjectInspector =>
         withNullSafe(o =>
             DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]))
@@ -330,7 +326,7 @@ private[hive] trait HiveInspectors {
       val wrappers = soi.getAllStructFieldRefs.asScala.zip(schema.fields).map {
         case (ref, field) => wrapperFor(ref.getFieldObjectInspector, field.dataType)
       }
-      withNullSafe(o => {
+      withNullSafe { o =>
         val struct = soi.create()
         val row = o.asInstanceOf[InternalRow]
         soi.getAllStructFieldRefs.asScala.zip(wrappers).zipWithIndex.foreach {
@@ -338,14 +334,14 @@ private[hive] trait HiveInspectors {
             soi.setStructFieldData(struct, field, wrapper(row.get(i, schema(i).dataType)))
         }
         struct
-      })
+      }
 
     case ssoi: SettableStructObjectInspector =>
       val structType = dataType.asInstanceOf[StructType]
       val wrappers = ssoi.getAllStructFieldRefs.asScala.zip(structType).map {
         case (ref, tpe) => wrapperFor(ref.getFieldObjectInspector, tpe.dataType)
       }
-      withNullSafe(o => {
+      withNullSafe { o =>
         val row = o.asInstanceOf[InternalRow]
         // 1. create the pojo (most likely) object
         val result = ssoi.create()
@@ -358,14 +354,14 @@ private[hive] trait HiveInspectors {
             wrapper(row.get(i, tpe)).asInstanceOf[AnyRef])
         }
         result
-      })
+      }
 
     case soi: StructObjectInspector =>
       val structType = dataType.asInstanceOf[StructType]
       val wrappers = soi.getAllStructFieldRefs.asScala.zip(structType).map {
         case (ref, tpe) => wrapperFor(ref.getFieldObjectInspector, tpe.dataType)
       }
-      withNullSafe(o => {
+      withNullSafe { o =>
         val row = o.asInstanceOf[InternalRow]
         val result = new java.util.ArrayList[AnyRef](wrappers.size)
         soi.getAllStructFieldRefs.asScala.zip(wrappers).zipWithIndex.foreach {
@@ -374,30 +370,29 @@ private[hive] trait HiveInspectors {
           result.add(wrapper(row.get(i, tpe)).asInstanceOf[AnyRef])
         }
         result
-      })
+      }
 
     case loi: ListObjectInspector =>
       val elementType = dataType.asInstanceOf[ArrayType].elementType
       val wrapper = wrapperFor(loi.getListElementObjectInspector, elementType)
-      withNullSafe(o => {
+      withNullSafe { o =>
         val array = o.asInstanceOf[ArrayData]
         val values = new java.util.ArrayList[Any](array.numElements())
         array.foreach(elementType, (_, e) => values.add(wrapper(e)))
         values
-      })
+      }
 
     case moi: MapObjectInspector =>
       val mt = dataType.asInstanceOf[MapType]
       val keyWrapper = wrapperFor(moi.getMapKeyObjectInspector, mt.keyType)
       val valueWrapper = wrapperFor(moi.getMapValueObjectInspector, mt.valueType)
-
-      withNullSafe(o => {
+      withNullSafe { o =>
           val map = o.asInstanceOf[MapData]
           val jmap = new java.util.HashMap[Any, Any](map.numElements())
           map.foreach(mt.keyType, mt.valueType, (k, v) =>
             jmap.put(keyWrapper(k), valueWrapper(v)))
           jmap
-        })
+        }
 
     case _ =>
       identity[Any]
