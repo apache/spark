@@ -417,7 +417,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * input once to determine the input schema.
    *
    * @param csvDS input Dataset with one CSV object per record
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def csv(csvDS: Dataset[String]): DataFrame = {
     val csvRDD = csvDS.rdd

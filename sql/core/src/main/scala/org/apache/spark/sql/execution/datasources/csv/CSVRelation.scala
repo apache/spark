@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile, WriterContainer}
 import org.apache.spark.sql.types._
 
-private[sql] object CSVRelation extends Logging {
+object CSVRelation extends Logging {
 
   def univocityTokenizer(
       file: RDD[String],
@@ -215,7 +215,7 @@ private[sql] object CSVRelation extends Logging {
     }
   }
 
-  private def verifySchema(schema: StructType): Unit = {
+  def verifySchema(schema: StructType): Unit = {
     def verifyType(dataType: DataType): Unit = dataType match {
       case ByteType | ShortType | IntegerType | LongType | FloatType |
            DoubleType | BooleanType | _: DecimalType | TimestampType |
