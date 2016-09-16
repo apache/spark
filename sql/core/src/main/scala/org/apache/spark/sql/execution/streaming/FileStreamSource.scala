@@ -136,7 +136,8 @@ class FileStreamSource(
         userSpecifiedSchema = Some(schema),
         className = fileFormatClassName,
         options = sourceOptions.optionMapWithoutPath)
-    Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation()))
+    Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation(
+      checkFilesExist = false)))
   }
 
   /**
