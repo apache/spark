@@ -23,6 +23,7 @@ import java.util.{Map => JavaMap}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleCompiler}
@@ -921,7 +922,7 @@ object CodeGenerator extends Logging {
           }
         }
       } catch {
-        case e: Exception =>
+        case NonFatal(e) =>
           logWarning("Error calculating stats of compiled class.", e)
       }
     }
