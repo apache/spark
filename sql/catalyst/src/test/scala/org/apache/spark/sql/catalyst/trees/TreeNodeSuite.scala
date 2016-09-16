@@ -25,12 +25,17 @@ import scala.collection.mutable.ArrayBuffer
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Union}
-import org.apache.spark.sql.types.{BooleanType, IntegerType, Metadata, NullType, StringType}
+import org.apache.spark.sql.catalyst.plans.physical.{IdentityBroadcastMode, RoundRobinPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.types.{BooleanType, DoubleType, FloatType, IntegerType, Metadata, NullType, StringType, StructField, StructType}
 import org.apache.spark.storage.StorageLevel
 
 case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFallback {
@@ -341,21 +346,196 @@ class TreeNodeSuite extends SparkFunSuite {
         |]
       """.stripMargin)
 
+    // Converts Seq[String] to JSON
+    assertJSON(Seq("1", "2", "3"), "\"[1, 2, 3]\"")
+
+    // Converts Seq[DataType] to JSON
+    assertJSON(Seq(IntegerType, DoubleType, FloatType), """["integer","double","float"]""")
+
+    // Converts Seq[Partitioning]
+    assertJSON(
+      Seq(SinglePartition, RoundRobinPartitioning(numPartitions = 3)),
+      """
+        |[
+        |  {
+        |    "object":"org.apache.spark.sql.catalyst.plans.physical.SinglePartition$"
+        |  },
+        |  {
+        |    "product-class":"org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning",
+        |    "numPartitions":3
+        |  }
+        |]
+      """.stripMargin)
+
     // Converts case object to JSON
     assertJSON(
       DummyObject,
       "{\"object\":\"org.apache.spark.sql.catalyst.trees.DummyObject$\"}")
 
-    // Convert Case class to JSON
-    val bigValue = new Array[Int](10000)
+    // Converts ExprId to JSON
     assertJSON(
-      NameValue("name", bigValue),
+      ExprId(0, uuid),
+      s"""
+         |{
+         |  "product-class":"org.apache.spark.sql.catalyst.expressions.ExprId",
+         |  "id":0,
+         |  "jvmId":"${uuid.toString}"
+         |}
+       """.stripMargin)
+
+    // Converts StructField to JSON
+    assertJSON(
+      StructField("field", IntegerType),
       """
         |{
-        |  "product-class":"org.apache.spark.sql.catalyst.trees.NameValue",
-        |  "name":"name"
+        |  "product-class":"org.apache.spark.sql.types.StructField",
+        |  "name":"field",
+        |  "dataType":"integer",
+        |  "nullable":true,
+        |  "metadata":{}
         |}
       """.stripMargin)
+
+    // Converts TableIdentifier to JSON
+    assertJSON(
+      TableIdentifier("table"),
+      """
+        |{"product-class":"org.apache.spark.sql.catalyst.TableIdentifier","table":"table"}
+      """.stripMargin)
+
+    // Converts JoinType to JSON
+    assertJSON(
+      NaturalJoin(LeftOuter),
+      """
+        |{
+        |  "product-class":"org.apache.spark.sql.catalyst.plans.NaturalJoin",
+        |  "tpe":{"object":"org.apache.spark.sql.catalyst.plans.LeftOuter$"}
+        |}
+      """.stripMargin)
+
+    // Converts FunctionIdentifier to JSON
+    assertJSON(
+      FunctionIdentifier("function", None),
+      """
+        |{"product-class":"org.apache.spark.sql.catalyst.FunctionIdentifier","funcName":"function"}
+      """.stripMargin)
+
+    // Converts BucketSpec to JSON
+    assertJSON(
+      BucketSpec(1, Seq("bucket"), Seq("sort")),
+      s"""
+         |{
+         |  "product-class":"org.apache.spark.sql.catalyst.catalog.BucketSpec",
+         |  "numBuckets":1,
+         |  "bucketColumnNames":"[bucket]",
+         |  "sortColumnNames":"[sort]"
+         |}
+       """.stripMargin)
+
+    // Converts FrameBoundary to JSON
+    assertJSON(
+      ValueFollowing(3),
+      s"""
+         |{"product-class":"org.apache.spark.sql.catalyst.expressions.ValueFollowing","value":3}
+       """.stripMargin)
+
+    // Converts WindowFrame to JSON
+    assertJSON(
+      SpecifiedWindowFrame(RowFrame, UnboundedFollowing, CurrentRow),
+      """
+        |{
+        |  "product-class":"org.apache.spark.sql.catalyst.expressions.SpecifiedWindowFrame",
+        |  "frameType": {
+        |    "object":"org.apache.spark.sql.catalyst.expressions.RowFrame$"
+        |  },
+        |  "frameStart": {
+        |    "object":"org.apache.spark.sql.catalyst.expressions.UnboundedFollowing$"
+        |  },
+        |  "frameEnd":{
+        |    "object":"org.apache.spark.sql.catalyst.expressions.CurrentRow$"
+        |  }
+        |}
+       """.stripMargin)
+
+    // Converts Partitioning to JSON
+    assertJSON(
+      RoundRobinPartitioning(numPartitions = 3),
+      """
+        |{
+        |  "product-class":"org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning",
+        |  "numPartitions":3
+        |}
+      """.stripMargin)
+
+    // Converts FunctionResource to JSON
+    assertJSON(
+      FunctionResource(JarResource, "file:///"),
+      """
+        |{
+        |  "product-class":"org.apache.spark.sql.catalyst.catalog.FunctionResource",
+        |  "resourceType":{
+        |    "object":"org.apache.spark.sql.catalyst.catalog.JarResource$"
+        |  },
+        |  "uri":"file:///"
+        |}
+      """.stripMargin)
+
+    // Converts BroadcastMode to JSON
+    assertJSON(
+      IdentityBroadcastMode,
+      """
+        |{"object":"org.apache.spark.sql.catalyst.plans.physical.IdentityBroadcastMode$"}
+      """.stripMargin)
+
+    // Converts CatalogTable to JSON
+    val struct = StructType(StructField("a", IntegerType, true) :: Nil)
+
+    System.out.print(
+      JsonTestTreeNode(CatalogTable(
+        TableIdentifier("table"),
+        CatalogTableType.MANAGED,
+        CatalogStorageFormat.empty,
+        StructType(StructField("a", IntegerType, true) :: Nil))).toJSON)
+
+    assertJSON(
+      CatalogTable(
+        TableIdentifier("table"),
+        CatalogTableType.MANAGED,
+        CatalogStorageFormat.empty,
+        StructType(StructField("a", IntegerType, true) :: Nil),
+        createTime = 0L),
+      """
+        |{
+        |  "product-class":"org.apache.spark.sql.catalyst.catalog.CatalogTable",
+        |  "identifier":{
+        |    "product-class":"org.apache.spark.sql.catalyst.TableIdentifier",
+        |    "table":"table"
+        |  },
+        |  "tableType":null,
+        |  "storage":null,
+        |  "schema":{
+        |    "type":"struct",
+        |    "fields":[{
+        |      "name":"a",
+        |      "type":"integer",
+        |      "nullable":true,
+        |      "metadata":{}
+        |    }]
+        |  },
+        |  "partitionColumnNames":[],
+        |  "owner":"",
+        |  "createTime":0,
+        |  "lastAccessTime":-1,
+        |  "properties":{
+        |    "object":"scala.collection.immutable.Map$EmptyMap$"
+        |  },
+        |  "unsupportedFeatures":[]
+        |}
+      """.stripMargin)
+
+    // For unknown case class, returns JNull.
+    val bigValue = new Array[Int](10000)
+    assertJSON(NameValue("name", bigValue), "null")
 
     // Converts Seq[TreeNode] to JSON recursively
     assertJSON(

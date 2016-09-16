@@ -30,9 +30,11 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.{EmptyRDD, RDD}
-import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, FunctionResource}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflectionLock, TableIdentifier}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.ScalaReflection._
+import org.apache.spark.sql.catalyst.ScalaReflectionLock
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
@@ -630,7 +632,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         ("deserialized" -> s.deserialized) ~ ("replication" -> s.replication)
     case n: TreeNode[_] => n.jsonValue
     case o: Option[_] => o.map(parseToJson)
-    // Recursive scan Seq[TreeNode]
+    // Recursive scan Seq[TreeNode], Seq[Partitioning], Seq[DataType]
     case t: Seq[_] if t.forall(_.isInstanceOf[TreeNode[_]]) ||
       t.forall(_.isInstanceOf[Partitioning]) || t.forall(_.isInstanceOf[DataType]) =>
       JArray(t.map(parseToJson).toList)
@@ -638,7 +640,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     // TODO: currently if the class name ends with "$", we think it's a scala object, there is
     // probably a better way to check it.
     case obj if obj.getClass.getName.endsWith("$") => "object" -> obj.getClass.getName
-    case t: Seq[String] if t.length > 0 && t.head.isInstanceOf[String] =>
+    case t: Seq[_] if t.length > 0 && t.head.isInstanceOf[String] =>
       JString(Utils.truncatedString(t, "[", ", ", "]"))
     case t: Seq[_] => JNull
     case p: Product if shouldConvertToJson(p) =>
@@ -655,12 +657,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case _ => JNull
   }
 
-  private def shouldConvertToJson(product: Product): Boolean = {
+  private def shouldConvertToJson(product: Product): Boolean = product match {
     case exprId: ExprId => true
     case field: StructField => true
     case id: TableIdentifier => true
     case join: JoinType => true
-    case field: StructField => true
     case id: FunctionIdentifier => true
     case spec: BucketSpec => true
     case catalog: CatalogTable => true
