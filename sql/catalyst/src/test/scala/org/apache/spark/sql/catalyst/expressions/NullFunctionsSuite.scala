@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.types._
 
 class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -43,6 +44,13 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(IsNull(Literal.create(null, tpe)), true)
       checkEvaluation(IsNotNull(Literal.create(null, tpe)), false)
     }
+  }
+
+  test("AssertNotNUll") {
+    val ex = intercept[RuntimeException] {
+      evaluate(AssertNotNull(Literal(null), Seq.empty[String]))
+    }.getMessage
+    assert(ex.contains("Null value appeared in non-nullable field"))
   }
 
   test("IsNaN") {
@@ -75,6 +83,21 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Coalesce(Seq(nullLit, lit, lit)), value)
       checkEvaluation(Coalesce(Seq(nullLit, nullLit, lit)), value)
     }
+  }
+
+  test("SPARK-16602 Nvl should support numeric-string cases") {
+    val intLit = Literal.create(1, IntegerType)
+    val doubleLit = Literal.create(2.2, DoubleType)
+    val stringLit = Literal.create("c", StringType)
+    val nullLit = Literal.create(null, NullType)
+
+    assert(Nvl(intLit, doubleLit).replaceForTypeCoercion().dataType == DoubleType)
+    assert(Nvl(intLit, stringLit).replaceForTypeCoercion().dataType == StringType)
+    assert(Nvl(stringLit, doubleLit).replaceForTypeCoercion().dataType == StringType)
+
+    assert(Nvl(nullLit, intLit).replaceForTypeCoercion().dataType == IntegerType)
+    assert(Nvl(doubleLit, nullLit).replaceForTypeCoercion().dataType == DoubleType)
+    assert(Nvl(nullLit, stringLit).replaceForTypeCoercion().dataType == StringType)
   }
 
   test("AtLeastNNonNulls") {

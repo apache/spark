@@ -87,6 +87,16 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-17124 agg should be ordering preserving") {
+    val df = spark.range(2)
+    val ret = df.groupBy("id").agg("id" -> "sum", "id" -> "count", "id" -> "min")
+    assert(ret.schema.map(_.name) == Seq("id", "sum(id)", "count(id)", "min(id)"))
+    checkAnswer(
+      ret,
+      Row(0, 0, 1, 0) :: Row(1, 1, 1, 1) :: Nil
+    )
+  }
+
   test("rollup") {
     checkAnswer(
       courseSales.rollup("course", "year").sum("earnings"),
@@ -431,6 +441,42 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Row(null, null, null, null, null))
   }
 
+  test("collect functions") {
+    val df = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
+    checkAnswer(
+      df.select(collect_list($"a"), collect_list($"b")),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
+    )
+    checkAnswer(
+      df.select(collect_set($"a"), collect_set($"b")),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 4)))
+    )
+  }
+
+  test("collect functions structs") {
+    val df = Seq((1, 2, 2), (2, 2, 2), (3, 4, 1))
+      .toDF("a", "x", "y")
+      .select($"a", struct($"x", $"y").as("b"))
+    checkAnswer(
+      df.select(collect_list($"a"), sort_array(collect_list($"b"))),
+      Seq(Row(Seq(1, 2, 3), Seq(Row(2, 2), Row(2, 2), Row(4, 1))))
+    )
+    checkAnswer(
+      df.select(collect_set($"a"), sort_array(collect_set($"b"))),
+      Seq(Row(Seq(1, 2, 3), Seq(Row(2, 2), Row(4, 1))))
+    )
+  }
+
+  test("collect_set functions cannot have maps") {
+    val df = Seq((1, 3, 0), (2, 3, 0), (3, 4, 1))
+      .toDF("a", "x", "y")
+      .select($"a", map($"x", $"y").as("b"))
+    val error = intercept[AnalysisException] {
+      df.select(collect_set($"a"), collect_set($"b"))
+    }
+    assert(error.message.contains("collect_set() cannot have map type data"))
+  }
+
   test("SPARK-14664: Decimal sum/avg over window should work.") {
     checkAnswer(
       spark.sql("select sum(a) over () from values 1.0, 2.0, 3.0 T(a)"),
@@ -438,5 +484,13 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       spark.sql("select avg(a) over () from values 1.0, 2.0, 3.0 T(a)"),
       Row(2.0) :: Row(2.0) :: Row(2.0) :: Nil)
+  }
+
+  test("SQL decimal test (used for catching certain demical handling bugs in aggregates)") {
+    checkAnswer(
+      decimalData.groupBy('a cast DecimalType(10, 2)).agg(avg('b cast DecimalType(10, 2))),
+      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(1.5)),
+        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(1.5)),
+        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(1.5))))
   }
 }

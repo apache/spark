@@ -17,11 +17,11 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
 
 class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
@@ -77,10 +77,10 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
 
   test("CountVectorizer vocabSize and minDF") {
     val df = spark.createDataFrame(Seq(
-      (0, split("a b c d"), Vectors.sparse(3, Seq((0, 1.0), (1, 1.0)))),
-      (1, split("a b c"), Vectors.sparse(3, Seq((0, 1.0), (1, 1.0)))),
-      (2, split("a b"), Vectors.sparse(3, Seq((0, 1.0), (1, 1.0)))),
-      (3, split("a"), Vectors.sparse(3, Seq((0, 1.0)))))
+      (0, split("a b c d"), Vectors.sparse(2, Seq((0, 1.0), (1, 1.0)))),
+      (1, split("a b c"), Vectors.sparse(2, Seq((0, 1.0), (1, 1.0)))),
+      (2, split("a b"), Vectors.sparse(2, Seq((0, 1.0), (1, 1.0)))),
+      (3, split("a"), Vectors.sparse(2, Seq((0, 1.0)))))
     ).toDF("id", "words", "expected")
     val cvModel = new CountVectorizer()
       .setInputCol("words")

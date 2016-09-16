@@ -21,35 +21,15 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.fpm.PrefixSpan.FreqSequence;
-import org.apache.spark.sql.SparkSession;
 import org.apache.spark.util.Utils;
 
-public class JavaPrefixSpanSuite {
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaPrefixSpan")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
-  }
+public class JavaPrefixSpanSuite extends SharedSparkSession {
 
   @Test
   public void runPrefixSpan() {
@@ -92,7 +72,9 @@ public class JavaPrefixSpanSuite {
 
     try {
       model.save(spark.sparkContext(), outputPath);
-      PrefixSpanModel newModel = PrefixSpanModel.load(spark.sparkContext(), outputPath);
+      @SuppressWarnings("unchecked")
+      PrefixSpanModel<Integer> newModel =
+          (PrefixSpanModel<Integer>) PrefixSpanModel.load(spark.sparkContext(), outputPath);
       JavaRDD<FreqSequence<Integer>> freqSeqs = newModel.freqSequences().toJavaRDD();
       List<FreqSequence<Integer>> localFreqSeqs = freqSeqs.collect();
       Assert.assertEquals(5, localFreqSeqs.size());

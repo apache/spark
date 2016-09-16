@@ -18,7 +18,8 @@
 context("broadcast variables")
 
 # JavaSparkContext handle
-sc <- sparkR.init()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Partitioned data
 nums <- 1:2
@@ -31,7 +32,7 @@ test_that("using broadcast variable", {
   useBroadcast <- function(x) {
     sum(SparkR:::value(randomMatBr) * x)
   }
-  actual <- collect(lapply(rrdd, useBroadcast))
+  actual <- collectRDD(lapply(rrdd, useBroadcast))
   expected <- list(sum(randomMat) * 1, sum(randomMat) * 2)
   expect_equal(actual, expected)
 })
@@ -42,7 +43,9 @@ test_that("without using broadcast variable", {
   useBroadcast <- function(x) {
     sum(randomMat * x)
   }
-  actual <- collect(lapply(rrdd, useBroadcast))
+  actual <- collectRDD(lapply(rrdd, useBroadcast))
   expected <- list(sum(randomMat) * 1, sum(randomMat) * 2)
   expect_equal(actual, expected)
 })
+
+sparkR.session.stop()

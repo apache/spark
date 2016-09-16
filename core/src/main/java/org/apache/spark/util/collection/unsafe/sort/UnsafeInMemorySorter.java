@@ -18,6 +18,7 @@
 package org.apache.spark.util.collection.unsafe.sort;
 
 import java.util.Comparator;
+import java.util.LinkedList;
 
 import org.apache.avro.reflect.Nullable;
 
@@ -25,6 +26,7 @@ import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.Sorter;
 
 /**
@@ -69,8 +71,6 @@ public final class UnsafeInMemorySorter {
   private final MemoryConsumer consumer;
   private final TaskMemoryManager memoryManager;
   @Nullable
-  private final Sorter<RecordPointerAndKeyPrefix, LongArray> sorter;
-  @Nullable
   private final Comparator<RecordPointerAndKeyPrefix> sortComparator;
 
   /**
@@ -80,13 +80,11 @@ public final class UnsafeInMemorySorter {
   private final PrefixComparators.RadixSortSupport radixSortSupport;
 
   /**
-   * Set to 2x for radix sort to reserve extra memory for sorting, otherwise 1x.
-   */
-  private final int memoryAllocationFactor;
-
-  /**
    * Within this buffer, position {@code 2 * i} holds a pointer pointer to the record at
    * index {@code i}, while position {@code 2 * i + 1} in the array holds an 8-byte key prefix.
+   *
+   * Only part of the array will be used to store the pointers, the rest part is preserved as
+   * temporary buffer for sorting.
    */
   private LongArray array;
 
@@ -94,6 +92,19 @@ public final class UnsafeInMemorySorter {
    * The position in the sort buffer where new records can be inserted.
    */
   private int pos = 0;
+
+  /**
+   * If sorting with radix sort, specifies the starting position in the sort buffer where records
+   * with non-null prefixes are kept. Positions [0..nullBoundaryPos) will contain null-prefixed
+   * records, and positions [nullBoundaryPos..pos) non-null prefixed records. This lets us avoid
+   * radix sorting over null values.
+   */
+  private int nullBoundaryPos = 0;
+
+  /*
+   * How many records could be inserted, because part of the array should be left for sorting.
+   */
+  private int usableCapacity = 0;
 
   private long initialSize;
 
@@ -121,7 +132,6 @@ public final class UnsafeInMemorySorter {
     this.memoryManager = memoryManager;
     this.initialSize = array.size();
     if (recordComparator != null) {
-      this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
       this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
       if (canUseRadixSort && prefixComparator instanceof PrefixComparators.RadixSortSupport) {
         this.radixSortSupport = (PrefixComparators.RadixSortSupport)prefixComparator;
@@ -129,12 +139,17 @@ public final class UnsafeInMemorySorter {
         this.radixSortSupport = null;
       }
     } else {
-      this.sorter = null;
       this.sortComparator = null;
       this.radixSortSupport = null;
     }
-    this.memoryAllocationFactor = this.radixSortSupport != null ? 2 : 1;
     this.array = array;
+    this.usableCapacity = getUsableCapacity();
+  }
+
+  private int getUsableCapacity() {
+    // Radix sort requires same amount of used memory as buffer, Tim sort requires
+    // half of the used memory as buffer.
+    return (int) (array.size() / (radixSortSupport != null ? 2 : 1.5));
   }
 
   /**
@@ -150,9 +165,11 @@ public final class UnsafeInMemorySorter {
   public void reset() {
     if (consumer != null) {
       consumer.freeArray(array);
-      this.array = consumer.allocateArray(initialSize);
+      array = consumer.allocateArray(initialSize);
+      usableCapacity = getUsableCapacity();
     }
     pos = 0;
+    nullBoundaryPos = 0;
   }
 
   /**
@@ -174,7 +191,7 @@ public final class UnsafeInMemorySorter {
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos + 1 < (array.size() / memoryAllocationFactor);
+    return pos + 1 < usableCapacity;
   }
 
   public void expandPointerArray(LongArray newArray) {
@@ -186,9 +203,10 @@ public final class UnsafeInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * (8 / memoryAllocationFactor));
+      pos * 8L);
     consumer.freeArray(array);
     array = newArray;
+    usableCapacity = getUsableCapacity();
   }
 
   /**
@@ -198,14 +216,27 @@ public final class UnsafeInMemorySorter {
    * @param recordPointer pointer to a record in a data page, encoded by {@link TaskMemoryManager}.
    * @param keyPrefix a user-defined key prefix
    */
-  public void insertRecord(long recordPointer, long keyPrefix) {
+  public void insertRecord(long recordPointer, long keyPrefix, boolean prefixIsNull) {
     if (!hasSpaceForAnotherRecord()) {
       throw new IllegalStateException("There is no space for new record");
     }
-    array.set(pos, recordPointer);
-    pos++;
-    array.set(pos, keyPrefix);
-    pos++;
+    if (prefixIsNull && radixSortSupport != null) {
+      // Swap forward a non-null record to make room for this one at the beginning of the array.
+      array.set(pos, array.get(nullBoundaryPos));
+      pos++;
+      array.set(pos, array.get(nullBoundaryPos + 1));
+      pos++;
+      // Place this record in the vacated position.
+      array.set(nullBoundaryPos, recordPointer);
+      nullBoundaryPos++;
+      array.set(nullBoundaryPos, keyPrefix);
+      nullBoundaryPos++;
+    } else {
+      array.set(pos, recordPointer);
+      pos++;
+      array.set(pos, keyPrefix);
+      pos++;
+    }
   }
 
   public final class SortedIterator extends UnsafeSorterIterator implements Cloneable {
@@ -217,6 +248,7 @@ public final class UnsafeInMemorySorter {
     private long baseOffset;
     private long keyPrefix;
     private int recordLength;
+    private long currentPageNumber;
 
     private SortedIterator(int numRecords, int offset) {
       this.numRecords = numRecords;
@@ -231,6 +263,7 @@ public final class UnsafeInMemorySorter {
       iter.baseOffset = baseOffset;
       iter.keyPrefix = keyPrefix;
       iter.recordLength = recordLength;
+      iter.currentPageNumber = currentPageNumber;
       return iter;
     }
 
@@ -248,6 +281,7 @@ public final class UnsafeInMemorySorter {
     public void loadNext() {
       // This pointer points to a 4-byte record length, followed by the record's bytes
       final long recordPointer = array.get(offset + position);
+      currentPageNumber = memoryManager.decodePageNumber(recordPointer);
       baseObject = memoryManager.getPage(recordPointer);
       baseOffset = memoryManager.getOffsetInPage(recordPointer) + 4;  // Skip over record length
       recordLength = Platform.getInt(baseObject, baseOffset - 4);
@@ -261,6 +295,10 @@ public final class UnsafeInMemorySorter {
     @Override
     public long getBaseOffset() { return baseOffset; }
 
+    public long getCurrentPageNumber() {
+      return currentPageNumber;
+    }
+
     @Override
     public int getRecordLength() { return recordLength; }
 
@@ -272,20 +310,41 @@ public final class UnsafeInMemorySorter {
    * Return an iterator over record pointers in sorted order. For efficiency, all calls to
    * {@code next()} will return the same mutable object.
    */
-  public SortedIterator getSortedIterator() {
+  public UnsafeSorterIterator getSortedIterator() {
     int offset = 0;
     long start = System.nanoTime();
-    if (sorter != null) {
+    if (sortComparator != null) {
       if (this.radixSortSupport != null) {
-        // TODO(ekl) we should handle NULL values before radix sort for efficiency, since they
-        // force a full-width sort (and we cannot radix-sort nullable long fields at all).
         offset = RadixSort.sortKeyPrefixArray(
-          array, pos / 2, 0, 7, radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
+          array, nullBoundaryPos, (pos - nullBoundaryPos) / 2, 0, 7,
+          radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
       } else {
+        MemoryBlock unused = new MemoryBlock(
+          array.getBaseObject(),
+          array.getBaseOffset() + pos * 8L,
+          (array.size() - pos) * 8L);
+        LongArray buffer = new LongArray(unused);
+        Sorter<RecordPointerAndKeyPrefix, LongArray> sorter =
+          new Sorter<>(new UnsafeSortDataFormat(buffer));
         sorter.sort(array, 0, pos / 2, sortComparator);
       }
     }
     totalSortTimeNanos += System.nanoTime() - start;
-    return new SortedIterator(pos / 2, offset);
+    if (nullBoundaryPos > 0) {
+      assert radixSortSupport != null : "Nulls are only stored separately with radix sort";
+      LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
+
+      // The null order is either LAST or FIRST, regardless of sorting direction (ASC|DESC)
+      if (radixSortSupport.nullsFirst()) {
+        queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
+        queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
+      } else {
+        queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
+        queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
+      }
+      return new UnsafeExternalSorter.ChainedIterator(queue);
+    } else {
+      return new SortedIterator(pos / 2, offset);
+    }
   }
 }

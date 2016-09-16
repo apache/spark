@@ -23,8 +23,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count, Max}
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
@@ -163,6 +163,16 @@ class AnalysisErrorSuite extends AnalysisTest {
     "Distinct window functions are not supported" :: Nil)
 
   errorTest(
+    "nested aggregate functions",
+    testRelation.groupBy('a)(
+      AggregateExpression(
+        Max(AggregateExpression(Count(Literal(1)), Complete, isDistinct = false)),
+        Complete,
+        isDistinct = false)),
+    "not allowed to use an aggregate function in the argument of another aggregate function." :: Nil
+  )
+
+  errorTest(
     "offset window function",
     testRelation2.select(
       WindowExpression(
@@ -268,6 +278,21 @@ class AnalysisErrorSuite extends AnalysisTest {
       testRelation.output.length.toString :: Nil)
 
   errorTest(
+    "union with incompatible column types",
+    testRelation.union(nestedRelation),
+    "union" :: "the compatible column types" :: Nil)
+
+  errorTest(
+    "intersect with incompatible column types",
+    testRelation.intersect(nestedRelation),
+    "intersect" :: "the compatible column types" :: Nil)
+
+  errorTest(
+    "except with incompatible column types",
+    testRelation.except(nestedRelation),
+    "except" :: "the compatible column types" :: Nil)
+
+  errorTest(
     "SPARK-9955: correct error message for aggregate",
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where('bad_column > 1).groupBy('a)(UnresolvedAlias(max('b))),
@@ -343,6 +368,12 @@ class AnalysisErrorSuite extends AnalysisTest {
   )
 
   errorTest(
+    "num_rows in limit clause must be equal to or greater than 0",
+    listRelation.limit(-1),
+    "The limit expression must be equal to or greater than 0, but got -1" :: Nil
+  )
+
+  errorTest(
     "more than one generators in SELECT",
     listRelation.select(Explode('list), Explode('list)),
     "Only one generator allowed per select clause but found 2: explode(list), explode(list)" :: Nil
@@ -365,7 +396,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("error test for self-join") {
-    val join = Join(testRelation, testRelation, Inner, None)
+    val join = Join(testRelation, testRelation, Cross, None)
     val error = intercept[AnalysisException] {
       SimpleAnalyzer.checkAnalysis(join)
     }
@@ -383,11 +414,10 @@ class AnalysisErrorSuite extends AnalysisTest {
             AttributeReference("a", dataType)(exprId = ExprId(2)),
             AttributeReference("b", IntegerType)(exprId = ExprId(1))))
 
-      shouldSuccess match {
-        case true =>
-          assertAnalysisSuccess(plan, true)
-        case false =>
-          assertAnalysisError(plan, "expression `a` cannot be used as a grouping expression" :: Nil)
+      if (shouldSuccess) {
+        assertAnalysisSuccess(plan, true)
+      } else {
+        assertAnalysisError(plan, "expression `a` cannot be used as a grouping expression" :: Nil)
       }
     }
 
@@ -444,7 +474,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         LocalRelation(
           AttributeReference("c", BinaryType)(exprId = ExprId(4)),
           AttributeReference("d", IntegerType)(exprId = ExprId(3))),
-        Inner,
+        Cross,
         Some(EqualTo(AttributeReference("a", BinaryType)(exprId = ExprId(2)),
           AttributeReference("c", BinaryType)(exprId = ExprId(4)))))
 
@@ -458,7 +488,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         LocalRelation(
           AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)),
           AttributeReference("d", IntegerType)(exprId = ExprId(3))),
-        Inner,
+        Cross,
         Some(EqualTo(AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
           AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)))))
 
@@ -517,5 +547,22 @@ class AnalysisErrorSuite extends AnalysisTest {
       Exists(Union(LocalRelation(b), Filter(EqualTo(OuterReference(a), c), LocalRelation(c)))),
       LocalRelation(a))
     assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan4 = Filter(
+      Exists(
+        Limit(1,
+          Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))
+      ),
+      LocalRelation(a))
+    assertAnalysisError(plan4, "Accessing outer query column is not allowed in a LIMIT" :: Nil)
+
+    val plan5 = Filter(
+      Exists(
+        Sample(0.0, 0.5, false, 1L,
+          Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))().select('b)
+      ),
+      LocalRelation(a))
+    assertAnalysisError(plan5,
+                        "Accessing outer query column is not allowed in a TABLESAMPLE" :: Nil)
   }
 }

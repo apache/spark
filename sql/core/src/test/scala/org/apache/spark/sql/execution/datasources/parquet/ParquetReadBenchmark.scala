@@ -52,7 +52,7 @@ object ParquetReadBenchmark {
   }
 
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
-    try f finally tableNames.foreach(spark.catalog.dropTempTable)
+    try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
 
   def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
@@ -75,10 +75,10 @@ object ParquetReadBenchmark {
 
     withTempPath { dir =>
       withTempTable("t1", "tempTable") {
-        spark.range(values).registerTempTable("t1")
+        spark.range(values).createOrReplaceTempView("t1")
         spark.sql("select cast(id as INT) as id from t1")
             .write.parquet(dir.getCanonicalPath)
-        spark.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tempTable")
 
         sqlBenchmark.addCase("SQL Parquet Vectorized") { iter =>
           spark.sql("select sum(id) from tempTable").collect()
@@ -159,10 +159,10 @@ object ParquetReadBenchmark {
   def intStringScanBenchmark(values: Int): Unit = {
     withTempPath { dir =>
       withTempTable("t1", "tempTable") {
-        spark.range(values).registerTempTable("t1")
+        spark.range(values).createOrReplaceTempView("t1")
         spark.sql("select cast(id as INT) as c1, cast(id as STRING) as c2 from t1")
             .write.parquet(dir.getCanonicalPath)
-        spark.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tempTable")
 
         val benchmark = new Benchmark("Int and String Scan", values)
 
@@ -193,10 +193,10 @@ object ParquetReadBenchmark {
   def stringDictionaryScanBenchmark(values: Int): Unit = {
     withTempPath { dir =>
       withTempTable("t1", "tempTable") {
-        spark.range(values).registerTempTable("t1")
+        spark.range(values).createOrReplaceTempView("t1")
         spark.sql("select cast((id % 200) + 10000 as STRING) as c1 from t1")
           .write.parquet(dir.getCanonicalPath)
-        spark.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tempTable")
 
         val benchmark = new Benchmark("String Dictionary", values)
 
@@ -225,10 +225,10 @@ object ParquetReadBenchmark {
   def partitionTableScanBenchmark(values: Int): Unit = {
     withTempPath { dir =>
       withTempTable("t1", "tempTable") {
-        spark.range(values).registerTempTable("t1")
+        spark.range(values).createOrReplaceTempView("t1")
         spark.sql("select id % 2 as p, cast(id as INT) as id from t1")
           .write.partitionBy("p").parquet(dir.getCanonicalPath)
-        spark.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tempTable")
 
         val benchmark = new Benchmark("Partitioned Table", values)
 
@@ -260,11 +260,11 @@ object ParquetReadBenchmark {
   def stringWithNullsScanBenchmark(values: Int, fractionOfNulls: Double): Unit = {
     withTempPath { dir =>
       withTempTable("t1", "tempTable") {
-        spark.range(values).registerTempTable("t1")
+        spark.range(values).createOrReplaceTempView("t1")
         spark.sql(s"select IF(rand(1) < $fractionOfNulls, NULL, cast(id as STRING)) as c1, " +
           s"IF(rand(2) < $fractionOfNulls, NULL, cast(id as STRING)) as c2 from t1")
           .write.parquet(dir.getCanonicalPath)
-        spark.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tempTable")
 
         val benchmark = new Benchmark("String with Nulls Scan", values)
 

@@ -21,6 +21,8 @@ import java.io.Serializable;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.*;
+import java.math.BigInteger;
+import java.math.BigDecimal;
 
 import scala.collection.JavaConverters;
 import scala.collection.Seq;
@@ -130,6 +132,7 @@ public class JavaDataFrameSuite {
     private Integer[] b = { 0, 1 };
     private Map<String, int[]> c = ImmutableMap.of("hello", new int[] { 1, 2 });
     private List<String> d = Arrays.asList("floppy", "disk");
+    private BigInteger e = new BigInteger("1234567");
 
     public double getA() {
       return a;
@@ -146,6 +149,8 @@ public class JavaDataFrameSuite {
     public List<String> getD() {
       return d;
     }
+
+    public BigInteger getE() { return e; }
   }
 
   void validateDataFrameWithBeans(Bean bean, Dataset<Row> df) {
@@ -163,7 +168,9 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(
       new StructField("d", new ArrayType(DataTypes.StringType, true), true, Metadata.empty()),
       schema.apply("d"));
-    Row first = df.select("a", "b", "c", "d").first();
+    Assert.assertEquals(new StructField("e", DataTypes.createDecimalType(38,0), true,
+      Metadata.empty()), schema.apply("e"));
+    Row first = df.select("a", "b", "c", "d", "e").first();
     Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
     // Now Java lists and maps are converted to Scala Seq's and Map's. Once we get a Seq below,
     // verify that it has the expected length, and contains expected elements.
@@ -182,6 +189,8 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < d.length(); i++) {
       Assert.assertEquals(bean.getD().get(i), d.apply(i));
     }
+    // Java.math.BigInteger is equavient to Spark Decimal(38,0)
+    Assert.assertEquals(new BigDecimal(bean.getE()), first.getDecimal(4));
   }
 
   @Test
@@ -237,8 +246,8 @@ public class JavaDataFrameSuite {
     Dataset<Row> crosstab = df.stat().crosstab("a", "b");
     String[] columnNames = crosstab.schema().fieldNames();
     Assert.assertEquals("a_b", columnNames[0]);
-    Assert.assertEquals("2", columnNames[1]);
-    Assert.assertEquals("1", columnNames[2]);
+    Assert.assertEquals("1", columnNames[1]);
+    Assert.assertEquals("2", columnNames[2]);
     List<Row> rows = crosstab.collectAsList();
     Collections.sort(rows, crosstabRowComparator);
     Integer count = 1;
@@ -318,23 +327,23 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testGenericLoad() {
-    Dataset<Row> df1 = spark.read().format("text").load(getResource("text-suite.txt"));
+    Dataset<Row> df1 = spark.read().format("text").load(getResource("test-data/text-suite.txt"));
     Assert.assertEquals(4L, df1.count());
 
     Dataset<Row> df2 = spark.read().format("text").load(
-      getResource("text-suite.txt"),
-      getResource("text-suite2.txt"));
+      getResource("test-data/text-suite.txt"),
+      getResource("test-data/text-suite2.txt"));
     Assert.assertEquals(5L, df2.count());
   }
 
   @Test
   public void testTextLoad() {
-    Dataset<String> ds1 = spark.read().text(getResource("text-suite.txt"));
+    Dataset<String> ds1 = spark.read().textFile(getResource("test-data/text-suite.txt"));
     Assert.assertEquals(4L, ds1.count());
 
-    Dataset<String> ds2 = spark.read().text(
-      getResource("text-suite.txt"),
-      getResource("text-suite2.txt"));
+    Dataset<String> ds2 = spark.read().textFile(
+      getResource("test-data/text-suite.txt"),
+      getResource("test-data/text-suite2.txt"));
     Assert.assertEquals(5L, ds2.count());
   }
 

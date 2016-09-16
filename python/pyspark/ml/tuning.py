@@ -25,7 +25,7 @@ from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasSeed
 from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.functions import rand
-from pyspark.mllib.common import inherit_doc, _py2java
+from pyspark.ml.common import inherit_doc, _py2java
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
            'TrainValidationSplitModel']
@@ -33,8 +33,6 @@ __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainVa
 
 class ParamGridBuilder(object):
     r"""
-    .. note:: Experimental
-
     Builder for a param grid used in grid search-based model selection.
 
     >>> from pyspark.ml.classification import LogisticRegression
@@ -145,14 +143,18 @@ class ValidatorParams(HasSeed):
 
 class CrossValidator(Estimator, ValidatorParams):
     """
-    .. note:: Experimental
 
-    K-fold cross validation.
+    K-fold cross validation performs model selection by splitting the dataset into a set of
+    non-overlapping randomly partitioned folds which are used as separate training and test datasets
+    e.g., with k=3 folds, K-fold cross validation will generate 3 (training, test) dataset pairs,
+    each of which uses 2/3 of the data for training and 1/3 for testing. Each fold is used as the
+    test set exactly once.
+
 
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> dataset = sqlContext.createDataFrame(
+    >>> from pyspark.ml.linalg import Vectors
+    >>> dataset = spark.createDataFrame(
     ...     [(Vectors.dense([0.0]), 0.0),
     ...      (Vectors.dense([0.4]), 1.0),
     ...      (Vectors.dense([0.5]), 0.0),
@@ -164,6 +166,8 @@ class CrossValidator(Estimator, ValidatorParams):
     >>> evaluator = BinaryClassificationEvaluator()
     >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
     >>> cvModel = cv.fit(dataset)
+    >>> cvModel.avgMetrics[0]
+    0.5
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
 
@@ -232,7 +236,7 @@ class CrossValidator(Estimator, ValidatorParams):
                 model = est.fit(train, epm[j])
                 # TODO: duplicate evaluator to take extra params from input
                 metric = eva.evaluate(model.transform(validation, epm[j]))
-                metrics[j] += metric
+                metrics[j] += metric/nFolds
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
@@ -264,9 +268,10 @@ class CrossValidator(Estimator, ValidatorParams):
 
 class CrossValidatorModel(Model, ValidatorParams):
     """
-    .. note:: Experimental
 
-    Model from k-fold cross validation.
+    CrossValidatorModel contains the model with the highest average cross-validation
+    metric across folds and uses this model to transform input data. CrossValidatorModel
+    also tracks the metrics for each param map evaluated.
 
     .. versionadded:: 1.4.0
     """
@@ -310,8 +315,8 @@ class TrainValidationSplit(Estimator, ValidatorParams):
 
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> dataset = sqlContext.createDataFrame(
+    >>> from pyspark.ml.linalg import Vectors
+    >>> dataset = spark.createDataFrame(
     ...     [(Vectors.dense([0.0]), 0.0),
     ...      (Vectors.dense([0.4]), 1.0),
     ...      (Vectors.dense([0.5]), 0.0),
@@ -379,7 +384,7 @@ class TrainValidationSplit(Estimator, ValidatorParams):
         seed = self.getOrDefault(self.seed)
         randCol = self.uid + "_rand"
         df = dataset.select("*", rand(seed).alias(randCol))
-        metrics = np.zeros(numModels)
+        metrics = [0.0] * numModels
         condition = (df[randCol] >= tRatio)
         validation = df.filter(condition)
         train = df.filter(~condition)
@@ -392,7 +397,7 @@ class TrainValidationSplit(Estimator, ValidatorParams):
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return self._copyValues(TrainValidationSplitModel(bestModel))
+        return self._copyValues(TrainValidationSplitModel(bestModel, metrics))
 
     @since("2.0.0")
     def copy(self, extra=None):
@@ -424,10 +429,12 @@ class TrainValidationSplitModel(Model, ValidatorParams):
     .. versionadded:: 2.0.0
     """
 
-    def __init__(self, bestModel):
+    def __init__(self, bestModel, validationMetrics=[]):
         super(TrainValidationSplitModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
+        #: evaluated validation metrics
+        self.validationMetrics = validationMetrics
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
@@ -439,29 +446,34 @@ class TrainValidationSplitModel(Model, ValidatorParams):
         and some extra params. This copies the underlying bestModel,
         creates a deep copy of the embedded paramMap, and
         copies the embedded and extra parameters over.
+        And, this creates a shallow copy of the validationMetrics.
 
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """
         if extra is None:
             extra = dict()
-        return TrainValidationSplitModel(self.bestModel.copy(extra))
+        bestModel = self.bestModel.copy(extra)
+        validationMetrics = list(self.validationMetrics)
+        return TrainValidationSplitModel(bestModel, validationMetrics)
 
 
 if __name__ == "__main__":
     import doctest
 
-    from pyspark.context import SparkContext
-    from pyspark.sql import SQLContext
+    from pyspark.sql import SparkSession
     globs = globals().copy()
 
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    sc = SparkContext("local[2]", "ml.tuning tests")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession.builder\
+        .master("local[2]")\
+        .appName("ml.tuning tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
     globs['sc'] = sc
-    globs['sqlContext'] = sqlContext
+    globs['spark'] = spark
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    sc.stop()
+    spark.stop()
     if failure_count:
         exit(-1)

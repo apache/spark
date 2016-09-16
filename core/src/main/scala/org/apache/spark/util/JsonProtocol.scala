@@ -280,6 +280,7 @@ private[spark] object JsonProtocol {
     ("Getting Result Time" -> taskInfo.gettingResultTime) ~
     ("Finish Time" -> taskInfo.finishTime) ~
     ("Failed" -> taskInfo.failed) ~
+    ("Killed" -> taskInfo.killed) ~
     ("Accumulables" -> JArray(taskInfo.accumulables.map(accumulableInfoToJson).toList))
   }
 
@@ -309,11 +310,12 @@ private[spark] object JsonProtocol {
         case v: Int => JInt(v)
         case v: Long => JInt(v)
         // We only have 3 kind of internal accumulator types, so if it's not int or long, it must be
-        // the blocks accumulator, whose type is `Seq[(BlockId, BlockStatus)]`
+        // the blocks accumulator, whose type is `java.util.List[(BlockId, BlockStatus)]`
         case v =>
-          JArray(v.asInstanceOf[Seq[(BlockId, BlockStatus)]].toList.map { case (id, status) =>
-            ("Block ID" -> id.toString) ~
-            ("Status" -> blockStatusToJson(status))
+          JArray(v.asInstanceOf[java.util.List[(BlockId, BlockStatus)]].asScala.toList.map {
+            case (id, status) =>
+              ("Block ID" -> id.toString) ~
+              ("Status" -> blockStatusToJson(status))
           })
       }
     } else {
@@ -697,6 +699,7 @@ private[spark] object JsonProtocol {
     val gettingResultTime = (json \ "Getting Result Time").extract[Long]
     val finishTime = (json \ "Finish Time").extract[Long]
     val failed = (json \ "Failed").extract[Boolean]
+    val killed = (json \ "Killed").extractOpt[Boolean].getOrElse(false)
     val accumulables = (json \ "Accumulables").extractOpt[Seq[JValue]] match {
       case Some(values) => values.map(accumulableInfoFromJson)
       case None => Seq[AccumulableInfo]()
@@ -707,6 +710,7 @@ private[spark] object JsonProtocol {
     taskInfo.gettingResultTime = gettingResultTime
     taskInfo.finishTime = finishTime
     taskInfo.failed = failed
+    taskInfo.killed = killed
     accumulables.foreach { taskInfo.accumulables += _ }
     taskInfo
   }
@@ -740,7 +744,7 @@ private[spark] object JsonProtocol {
             val id = BlockId((blockJson \ "Block ID").extract[String])
             val status = blockStatusFromJson(blockJson \ "Status")
             (id, status)
-          }
+          }.asJava
         case _ => throw new IllegalArgumentException(s"unexpected json value $value for " +
           "accumulator " + name.get)
       }

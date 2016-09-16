@@ -17,11 +17,13 @@
 .idea/
 .idea_modules/
 .project
+.pydevproject
 .scala_dependencies
 .settings
 /lib/
 R-unit-tests.log
 R/unit-tests.out
+R/cran-check.out
 build/*.jar
 build/apache-maven*
 build/scala*
@@ -77,3 +79,8 @@ spark-warehouse/
 # For R session data
 .RData
 .RHistory
+.Rhistory
+*.Rproj
+*.Rproj.*
+
+.Rproj.user

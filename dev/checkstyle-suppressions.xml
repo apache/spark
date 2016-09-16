@@ -42,4 +42,6 @@
               files="src/main/java/org/apache/hive/service/auth/PasswdAuthenticationProvider.java"/>
     <suppress checks="NoFinalizer"
               files="src/main/java/org/apache/hive/service/server/ThreadWithGarbageCleanup.java"/>
+    <suppress checks="MethodName"
+              files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/OutputMode.java"/>
 </suppressions>

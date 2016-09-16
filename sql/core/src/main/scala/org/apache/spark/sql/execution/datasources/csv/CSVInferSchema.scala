@@ -18,14 +18,14 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
-import java.text.{NumberFormat, SimpleDateFormat}
+import java.text.NumberFormat
 import java.util.Locale
 
 import scala.util.control.Exception._
 import scala.util.Try
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -85,6 +85,7 @@ private[csv] object CSVInferSchema {
         case NullType => tryParseInteger(field, options)
         case IntegerType => tryParseInteger(field, options)
         case LongType => tryParseLong(field, options)
+        case _: DecimalType => tryParseDecimal(field, options)
         case DoubleType => tryParseDouble(field, options)
         case TimestampType => tryParseTimestamp(field, options)
         case BooleanType => tryParseBoolean(field, options)
@@ -107,8 +108,26 @@ private[csv] object CSVInferSchema {
     if ((allCatch opt field.toLong).isDefined) {
       LongType
     } else {
-      tryParseDouble(field, options)
+      tryParseDecimal(field, options)
     }
+  }
+
+  private def tryParseDecimal(field: String, options: CSVOptions): DataType = {
+    val decimalTry = allCatch opt {
+      // `BigDecimal` conversion can fail when the `field` is not a form of number.
+      val bigDecimal = new BigDecimal(field)
+      // Because many other formats do not support decimal, it reduces the cases for
+      // decimals by disallowing values having scale (eg. `1.1`).
+      if (bigDecimal.scale <= 0) {
+        // `DecimalType` conversion can fail when
+        //   1. The precision is bigger than 38.
+        //   2. scale is bigger than precision.
+        DecimalType(bigDecimal.precision, bigDecimal.scale)
+      } else {
+        tryParseDouble(field, options)
+      }
+    }
+    decimalTry.getOrElse(tryParseDouble(field, options))
   }
 
   private def tryParseDouble(field: String, options: CSVOptions): DataType = {
@@ -120,20 +139,14 @@ private[csv] object CSVInferSchema {
   }
 
   private def tryParseTimestamp(field: String, options: CSVOptions): DataType = {
-    if (options.dateFormat != null) {
-      // This case infers a custom `dataFormat` is set.
-      if ((allCatch opt options.dateFormat.parse(field)).isDefined) {
-        TimestampType
-      } else {
-        tryParseBoolean(field, options)
-      }
-    } else {
+    // This case infers a custom `dataFormat` is set.
+    if ((allCatch opt options.timestampFormat.parse(field)).isDefined) {
+      TimestampType
+    } else if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
       // We keep this for backwords competibility.
-      if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
-        TimestampType
-      } else {
-        tryParseBoolean(field, options)
-      }
+      TimestampType
+    } else {
+      tryParseBoolean(field, options)
     }
   }
 
@@ -152,11 +165,11 @@ private[csv] object CSVInferSchema {
     StringType
   }
 
-  private val numericPrecedence: IndexedSeq[DataType] = HiveTypeCoercion.numericPrecedence
+  private val numericPrecedence: IndexedSeq[DataType] = TypeCoercion.numericPrecedence
 
   /**
    * Copied from internal Spark api
-   * [[org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion]]
+   * [[org.apache.spark.sql.catalyst.analysis.TypeCoercion]]
    */
   val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
     case (t1, t2) if t1 == t2 => Some(t1)
@@ -169,6 +182,33 @@ private[csv] object CSVInferSchema {
     case (t1, t2) if Seq(t1, t2).forall(numericPrecedence.contains) =>
       val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
       Some(numericPrecedence(index))
+
+    // These two cases below deal with when `DecimalType` is larger than `IntegralType`.
+    case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
+      Some(t2)
+    case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
+      Some(t1)
+
+    // These two cases below deal with when `IntegralType` is larger than `DecimalType`.
+    case (t1: IntegralType, t2: DecimalType) =>
+      findTightestCommonType(DecimalType.forType(t1), t2)
+    case (t1: DecimalType, t2: IntegralType) =>
+      findTightestCommonType(t1, DecimalType.forType(t2))
+
+    // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
+    // in most case, also have better precision.
+    case (DoubleType, _: DecimalType) | (_: DecimalType, DoubleType) =>
+      Some(DoubleType)
+
+    case (t1: DecimalType, t2: DecimalType) =>
+      val scale = math.max(t1.scale, t2.scale)
+      val range = math.max(t1.precision - t1.scale, t2.precision - t2.scale)
+      if (range + scale > 38) {
+        // DecimalType can't support precision > 38
+        Some(DoubleType)
+      } else {
+        Some(DecimalType(range + scale, scale))
+      }
 
     case _ => None
   }
@@ -231,19 +271,26 @@ private[csv] object CSVTypeCast {
           val value = new BigDecimal(datum.replaceAll(",", ""))
           Decimal(value, dt.precision, dt.scale)
         }
-      case _: TimestampType if options.dateFormat != null =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.
-        options.dateFormat.parse(datum).getTime * 1000L
       case _: TimestampType =>
         // This one will lose microseconds parts.
         // See https://issues.apache.org/jira/browse/SPARK-10681.
-        DateTimeUtils.stringToTime(datum).getTime  * 1000L
-      case _: DateType if options.dateFormat != null =>
-        DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime)
+        Try(options.timestampFormat.parse(datum).getTime * 1000L)
+          .getOrElse {
+            // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility.
+            DateTimeUtils.stringToTime(datum).getTime  * 1000L
+          }
       case _: DateType =>
-        DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
+        // This one will lose microseconds parts.
+        // See https://issues.apache.org/jira/browse/SPARK-10681.x
+        Try(DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime))
+          .getOrElse {
+            // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility.
+            DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
+          }
       case _: StringType => UTF8String.fromString(datum)
+      case udt: UserDefinedType[_] => castTo(datum, udt.sqlType, nullable, options)
       case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
     }
   }

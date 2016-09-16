@@ -20,6 +20,7 @@ package org.apache.spark.mllib.linalg
 import java.util.{Arrays, Random}
 
 import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, HashSet => MHashSet}
+import scala.language.implicitConversions
 
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
@@ -74,7 +75,7 @@ sealed trait Matrix extends Serializable {
   def rowIter: Iterator[Vector] = this.transpose.colIter
 
   /** Converts to a breeze matrix. */
-  private[mllib] def toBreeze: BM[Double]
+  private[mllib] def asBreeze: BM[Double]
 
   /** Gets the (i, j)-th element. */
   @Since("1.3.0")
@@ -117,11 +118,11 @@ sealed trait Matrix extends Serializable {
   }
 
   /** A human readable representation of the matrix */
-  override def toString: String = toBreeze.toString()
+  override def toString: String = asBreeze.toString()
 
   /** A human readable representation of the matrix with maximum lines and width */
   @Since("1.4.0")
-  def toString(maxLines: Int, maxLineWidth: Int): String = toBreeze.toString(maxLines, maxLineWidth)
+  def toString(maxLines: Int, maxLineWidth: Int): String = asBreeze.toString(maxLines, maxLineWidth)
 
   /**
    * Map the values of this matrix using a function. Generates a new matrix. Performs the
@@ -163,7 +164,8 @@ sealed trait Matrix extends Serializable {
    * Convert this matrix to the new mllib-local representation.
    * This does NOT copy the data; it copies references.
    */
-  private[spark] def asML: newlinalg.Matrix
+  @Since("2.0.0")
+  def asML: newlinalg.Matrix
 }
 
 private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
@@ -298,7 +300,7 @@ class DenseMatrix @Since("1.3.0") (
     this(numRows, numCols, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: Matrix => toBreeze == m.toBreeze
+    case m: Matrix => asBreeze == m.asBreeze
     case _ => false
   }
 
@@ -306,7 +308,7 @@ class DenseMatrix @Since("1.3.0") (
     com.google.common.base.Objects.hashCode(numRows: Integer, numCols: Integer, toArray)
   }
 
-  private[mllib] def toBreeze: BM[Double] = {
+  private[mllib] def asBreeze: BM[Double] = {
     if (!isTransposed) {
       new BDM[Double](numRows, numCols, values)
     } else {
@@ -426,7 +428,8 @@ class DenseMatrix @Since("1.3.0") (
     }
   }
 
-  private[spark] override def asML: newlinalg.DenseMatrix = {
+  @Since("2.0.0")
+  override def asML: newlinalg.DenseMatrix = {
     new newlinalg.DenseMatrix(numRows, numCols, values, isTransposed)
   }
 }
@@ -526,8 +529,11 @@ object DenseMatrix {
     matrix
   }
 
-  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark] def fromML(m: newlinalg.DenseMatrix): DenseMatrix = {
+  /**
+   * Convert new linalg type to spark.mllib type.  Light copy; only copies references
+   */
+  @Since("2.0.0")
+  def fromML(m: newlinalg.DenseMatrix): DenseMatrix = {
     new DenseMatrix(m.numRows, m.numCols, m.values, m.isTransposed)
   }
 }
@@ -566,10 +572,13 @@ class SparseMatrix @Since("1.3.0") (
 
   require(values.length == rowIndices.length, "The number of row indices and values don't match! " +
     s"values.length: ${values.length}, rowIndices.length: ${rowIndices.length}")
-  // The Or statement is for the case when the matrix is transposed
-  require(colPtrs.length == numCols + 1 || colPtrs.length == numRows + 1, "The length of the " +
-    "column indices should be the number of columns + 1. Currently, colPointers.length: " +
-    s"${colPtrs.length}, numCols: $numCols")
+  if (isTransposed) {
+    require(colPtrs.length == numRows + 1,
+      s"Expecting ${numRows + 1} colPtrs when numRows = $numRows but got ${colPtrs.length}")
+  } else {
+    require(colPtrs.length == numCols + 1,
+      s"Expecting ${numCols + 1} colPtrs when numCols = $numCols but got ${colPtrs.length}")
+  }
   require(values.length == colPtrs.last, "The last value of colPtrs must equal the number of " +
     s"elements. values.length: ${values.length}, colPtrs.last: ${colPtrs.last}")
 
@@ -601,13 +610,13 @@ class SparseMatrix @Since("1.3.0") (
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: Matrix => toBreeze == m.toBreeze
+    case m: Matrix => asBreeze == m.asBreeze
     case _ => false
   }
 
-  override def hashCode(): Int = toBreeze.hashCode
+  override def hashCode(): Int = asBreeze.hashCode
 
-  private[mllib] def toBreeze: BM[Double] = {
+  private[mllib] def asBreeze: BM[Double] = {
      if (!isTransposed) {
        new BSM[Double](values, numRows, numCols, colPtrs, rowIndices)
      } else {
@@ -739,7 +748,8 @@ class SparseMatrix @Since("1.3.0") (
     }
   }
 
-  private[spark] override def asML: newlinalg.SparseMatrix = {
+  @Since("2.0.0")
+  override def asML: newlinalg.SparseMatrix = {
     new newlinalg.SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
   }
 }
@@ -832,7 +842,7 @@ object SparseMatrix {
       "The expected number of nonzeros cannot be greater than Int.MaxValue.")
     val nnz = math.ceil(expected).toInt
     if (density == 0.0) {
-      new SparseMatrix(numRows, numCols, new Array[Int](numCols + 1), Array[Int](), Array[Double]())
+      new SparseMatrix(numRows, numCols, new Array[Int](numCols + 1), Array.empty, Array.empty)
     } else if (density == 1.0) {
       val colPtrs = Array.tabulate(numCols + 1)(j => j * numRows)
       val rowIndices = Array.tabulate(size.toInt)(idx => idx % numRows)
@@ -917,8 +927,11 @@ object SparseMatrix {
     }
   }
 
-  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark] def fromML(m: newlinalg.SparseMatrix): SparseMatrix = {
+  /**
+   * Convert new linalg type to spark.mllib type.  Light copy; only copies references
+   */
+  @Since("2.0.0")
+  def fromML(m: newlinalg.SparseMatrix): SparseMatrix = {
     new SparseMatrix(m.numRows, m.numCols, m.colPtrs, m.rowIndices, m.values, m.isTransposed)
   }
 }
@@ -970,16 +983,8 @@ object Matrices {
       case dm: BDM[Double] =>
         new DenseMatrix(dm.rows, dm.cols, dm.data, dm.isTranspose)
       case sm: BSM[Double] =>
-        // Spark-11507. work around breeze issue 479.
-        val mat = if (sm.colPtrs.last != sm.data.length) {
-          val matCopy = sm.copy
-          matCopy.compact()
-          matCopy
-        } else {
-          sm
-        }
         // There is no isTranspose flag for sparse matrices in Breeze
-        new SparseMatrix(mat.rows, mat.cols, mat.colPtrs, mat.rowIndices, mat.data)
+        new SparseMatrix(sm.rows, sm.cols, sm.colPtrs, sm.rowIndices, sm.data)
       case _ =>
         throw new UnsupportedOperationException(
           s"Do not support conversion from type ${breeze.getClass.getName}.")
@@ -1085,7 +1090,7 @@ object Matrices {
   @Since("1.3.0")
   def horzcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array[Double]())
+      return new DenseMatrix(0, 0, Array.empty)
     } else if (matrices.length == 1) {
       return matrices(0)
     }
@@ -1123,7 +1128,7 @@ object Matrices {
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
               if (v != 0.0) {
-                data.append((i, j + startCol, v))
+                data += Tuple3(i, j + startCol, v)
               }
             }
             startCol += nCols
@@ -1144,7 +1149,7 @@ object Matrices {
   @Since("1.3.0")
   def vertcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array[Double]())
+      return new DenseMatrix(0, 0, Array.empty[Double])
     } else if (matrices.length == 1) {
       return matrices(0)
     }
@@ -1193,7 +1198,7 @@ object Matrices {
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
               if (v != 0.0) {
-                data.append((i + startRow, j, v))
+                data += Tuple3(i + startRow, j, v)
               }
             }
             startRow += nRows
@@ -1204,11 +1209,35 @@ object Matrices {
     }
   }
 
-  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark] def fromML(m: newlinalg.Matrix): Matrix = m match {
+  /**
+   * Convert new linalg type to spark.mllib type.  Light copy; only copies references
+   */
+  @Since("2.0.0")
+  def fromML(m: newlinalg.Matrix): Matrix = m match {
     case dm: newlinalg.DenseMatrix =>
       DenseMatrix.fromML(dm)
     case sm: newlinalg.SparseMatrix =>
       SparseMatrix.fromML(sm)
   }
+}
+
+/**
+ * Implicit methods available in Scala for converting [[org.apache.spark.mllib.linalg.Matrix]] to
+ * [[org.apache.spark.ml.linalg.Matrix]] and vice versa.
+ */
+private[spark] object MatrixImplicits {
+
+  implicit def mllibMatrixToMLMatrix(m: Matrix): newlinalg.Matrix = m.asML
+
+  implicit def mllibDenseMatrixToMLDenseMatrix(m: DenseMatrix): newlinalg.DenseMatrix = m.asML
+
+  implicit def mllibSparseMatrixToMLSparseMatrix(m: SparseMatrix): newlinalg.SparseMatrix = m.asML
+
+  implicit def mlMatrixToMLlibMatrix(m: newlinalg.Matrix): Matrix = Matrices.fromML(m)
+
+  implicit def mlDenseMatrixToMLlibDenseMatrix(m: newlinalg.DenseMatrix): DenseMatrix =
+    Matrices.fromML(m).asInstanceOf[DenseMatrix]
+
+  implicit def mlSparseMatrixToMLlibSparseMatrix(m: newlinalg.SparseMatrix): SparseMatrix =
+    Matrices.fromML(m).asInstanceOf[SparseMatrix]
 }

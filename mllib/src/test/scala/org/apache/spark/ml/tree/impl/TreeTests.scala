@@ -22,9 +22,9 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.tree._
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -42,9 +42,10 @@ private[ml] object TreeTests extends SparkFunSuite {
       data: RDD[LabeledPoint],
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
-    val spark = SparkSession.builder
+    val spark = SparkSession.builder()
       .master("local[2]")
       .appName("TreeTests")
+      .sparkContext(data.sparkContext)
       .getOrCreate()
     import spark.implicits._
 
@@ -179,6 +180,18 @@ private[ml] object TreeTests extends SparkFunSuite {
     new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0)),
     new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 0)),
     new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0))
+  ))
+
+  /**
+   * Create some toy data for testing correctness of variance.
+   */
+  def varianceData(sc: SparkContext): RDD[LabeledPoint] = sc.parallelize(Seq(
+    new LabeledPoint(1.0, Vectors.dense(Array(0.0))),
+    new LabeledPoint(2.0, Vectors.dense(Array(1.0))),
+    new LabeledPoint(3.0, Vectors.dense(Array(2.0))),
+    new LabeledPoint(10.0, Vectors.dense(Array(3.0))),
+    new LabeledPoint(12.0, Vectors.dense(Array(4.0))),
+    new LabeledPoint(14.0, Vectors.dense(Array(5.0)))
   ))
 
   /**

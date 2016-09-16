@@ -281,20 +281,20 @@ private[spark] class Executor(
           val releasedLocks = env.blockManager.releaseAllLocksForTask(taskId)
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
 
-          if (freedMemory > 0) {
+          if (freedMemory > 0 && !threwException) {
             val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
-            if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false) && !threwException) {
+            if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)) {
               throw new SparkException(errMsg)
             } else {
-              logError(errMsg)
+              logWarning(errMsg)
             }
           }
 
-          if (releasedLocks.nonEmpty) {
+          if (releasedLocks.nonEmpty && !threwException) {
             val errMsg =
               s"${releasedLocks.size} block locks were not released by TID = $taskId:\n" +
                 releasedLocks.mkString("[", ", ", "]")
-            if (conf.getBoolean("spark.storage.exceptionOnPinLeak", false) && !threwException) {
+            if (conf.getBoolean("spark.storage.exceptionOnPinLeak", false)) {
               throw new SparkException(errMsg)
             } else {
               logWarning(errMsg)
@@ -359,8 +359,13 @@ private[spark] class Executor(
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
-        case _: TaskKilledException | _: InterruptedException if task.killed =>
+        case _: TaskKilledException =>
           logInfo(s"Executor killed $taskName (TID $taskId)")
+          setTaskFinishedAndClearInterruptStatus()
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
+
+        case _: InterruptedException if task.killed =>
+          logInfo(s"Executor interrupted and killed $taskName (TID $taskId)")
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
 

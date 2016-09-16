@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
@@ -50,7 +51,7 @@ case class InsertIntoHiveTable(
     ifNotExists: Boolean) extends UnaryExecNode {
 
   @transient private val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
-  @transient private val client = sessionState.metadataHive
+  @transient private val externalCatalog = sqlContext.sharedState.externalCatalog
 
   def output: Seq[Attribute] = Seq.empty
 
@@ -196,7 +197,7 @@ case class InsertIntoHiveTable(
       // Report error if any static partition appears after a dynamic partition
       val isDynamic = partitionColumnNames.map(partitionSpec(_).isEmpty)
       if (isDynamic.init.zip(isDynamic.tail).contains((true, false))) {
-        throw new SparkException(ErrorMsg.PARTITION_DYN_STA_ORDER.getMsg)
+        throw new AnalysisException(ErrorMsg.PARTITION_DYN_STA_ORDER.getMsg)
       }
     }
 
@@ -211,7 +212,7 @@ case class InsertIntoHiveTable(
       val warningMessage =
         s"$outputCommitterClass may be an output committer that writes data directly to " +
           "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
           "committer that does not have this behavior (e.g. FileOutputCommitter)."
       logWarning(warningMessage)
     }
@@ -222,81 +223,69 @@ case class InsertIntoHiveTable(
         jobConf,
         fileSinkConf,
         dynamicPartColNames,
-        child.output,
-        table)
+        child.output)
     } else {
       new SparkHiveWriterContainer(
         jobConf,
         fileSinkConf,
-        child.output,
-        table)
+        child.output)
     }
 
     @transient val outputClass = writerContainer.newSerializer(table.tableDesc).getSerializedClass
     saveAsHiveFile(child.execute(), outputClass, fileSinkConf, jobConfSer, writerContainer)
 
     val outputPath = FileOutputFormat.getOutputPath(jobConf)
-    // Have to construct the format of dbname.tablename.
-    val qualifiedTableName = s"${table.databaseName}.${table.tableName}"
     // TODO: Correctly set holdDDLTime.
     // In most of the time, we should have holdDDLTime = false.
     // holdDDLTime will be true when TOK_HOLD_DDLTIME presents in the query as a hint.
     val holdDDLTime = false
     if (partition.nonEmpty) {
-
-      // loadPartition call orders directories created on the iteration order of the this map
-      val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
-      table.hiveQlTable.getPartCols.asScala.foreach { entry =>
-        orderedPartitionSpec.put(entry.getName, partitionSpec.getOrElse(entry.getName, ""))
-      }
-
-      // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
-      // which is currently considered as a Hive native command.
-      val inheritTableSpecs = true
-      // TODO: Correctly set isSkewedStoreAsSubdir.
-      val isSkewedStoreAsSubdir = false
       if (numDynamicPartitions > 0) {
-        client.synchronized {
-          client.loadDynamicPartitions(
-            outputPath.toString,
-            qualifiedTableName,
-            orderedPartitionSpec,
-            overwrite,
-            numDynamicPartitions,
-            holdDDLTime,
-            isSkewedStoreAsSubdir)
-        }
+        externalCatalog.loadDynamicPartitions(
+          db = table.catalogTable.database,
+          table = table.catalogTable.identifier.table,
+          outputPath.toString,
+          partitionSpec,
+          overwrite,
+          numDynamicPartitions,
+          holdDDLTime = holdDDLTime)
       } else {
         // scalastyle:off
         // ifNotExists is only valid with static partition, refer to
         // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DML#LanguageManualDML-InsertingdataintoHiveTablesfromqueries
         // scalastyle:on
         val oldPart =
-          client.getPartitionOption(
-            client.getTable(table.databaseName, table.tableName),
+          externalCatalog.getPartitionOption(
+            table.catalogTable.database,
+            table.catalogTable.identifier.table,
             partitionSpec)
 
         if (oldPart.isEmpty || !ifNotExists) {
-            client.loadPartition(
-              outputPath.toString,
-              qualifiedTableName,
-              orderedPartitionSpec,
-              overwrite,
-              holdDDLTime,
-              inheritTableSpecs,
-              isSkewedStoreAsSubdir)
+          // inheritTableSpecs is set to true. It should be set to false for an IMPORT query
+          // which is currently considered as a Hive native command.
+          val inheritTableSpecs = true
+          externalCatalog.loadPartition(
+            table.catalogTable.database,
+            table.catalogTable.identifier.table,
+            outputPath.toString,
+            partitionSpec,
+            isOverwrite = overwrite,
+            holdDDLTime = holdDDLTime,
+            inheritTableSpecs = inheritTableSpecs)
         }
       }
     } else {
-      client.loadTable(
+      externalCatalog.loadTable(
+        table.catalogTable.database,
+        table.catalogTable.identifier.table,
         outputPath.toString, // TODO: URI
-        qualifiedTableName,
         overwrite,
         holdDDLTime)
     }
 
     // Invalidate the cache.
-    sqlContext.cacheManager.invalidateCache(table)
+    sqlContext.sharedState.cacheManager.invalidateCache(table)
+    sqlContext.sessionState.catalog.refreshTable(table.catalogTable.identifier)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

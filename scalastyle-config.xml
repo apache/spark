@@ -210,6 +210,12 @@ This file is divided into 3 sections:
     scala.collection.JavaConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
+  <check customId="commonslang2" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.lang\.</parameter></parameters>
+    <customMessage>Use Commons Lang 3 classes (package org.apache.commons.lang3.*) instead
+    of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
+  </check>
+
   <check level="error" class="org.scalastyle.scalariform.ImportOrderChecker" enabled="true">
     <parameters>
       <parameter name="groups">java,scala,3rdParty,spark</parameter>
@@ -243,6 +249,14 @@ This file is divided into 3 sections:
     <parameters><parameter name="regex">case[^\n>]*=>\s*\{</parameter></parameters>
     <customMessage>Omit braces in case clauses.</customMessage>
   </check>
+
+  <!-- SPARK-16877: Avoid Java annotations -->
+  <check customId="OverrideJavaCase" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">^Override$</parameter></parameters>
+    <customMessage>override modifier should be used instead of @java.lang.Override.</customMessage>
+  </check>
+
+  <check level="error" class="org.scalastyle.scalariform.DeprecatedJavaChecker" enabled="true"></check>
 
   <!-- ================================================================================ -->
   <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->

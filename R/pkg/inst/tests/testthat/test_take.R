@@ -30,37 +30,40 @@ strList <- list("Dexter Morgan: Blood. Sometimes it sets my teeth on edge, ",
                 "raising me. But they're both dead now. I didn't kill them. Honest.")
 
 # JavaSparkContext handle
-jsc <- sparkR.init()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 test_that("take() gives back the original elements in correct count and order", {
-  numVectorRDD <- parallelize(jsc, numVector, 10)
+  numVectorRDD <- parallelize(sc, numVector, 10)
   # case: number of elements to take is less than the size of the first partition
-  expect_equal(take(numVectorRDD, 1), as.list(head(numVector, n = 1)))
+  expect_equal(takeRDD(numVectorRDD, 1), as.list(head(numVector, n = 1)))
   # case: number of elements to take is the same as the size of the first partition
-  expect_equal(take(numVectorRDD, 11), as.list(head(numVector, n = 11)))
+  expect_equal(takeRDD(numVectorRDD, 11), as.list(head(numVector, n = 11)))
   # case: number of elements to take is greater than all elements
-  expect_equal(take(numVectorRDD, length(numVector)), as.list(numVector))
-  expect_equal(take(numVectorRDD, length(numVector) + 1), as.list(numVector))
+  expect_equal(takeRDD(numVectorRDD, length(numVector)), as.list(numVector))
+  expect_equal(takeRDD(numVectorRDD, length(numVector) + 1), as.list(numVector))
 
-  numListRDD <- parallelize(jsc, numList, 1)
-  numListRDD2 <- parallelize(jsc, numList, 4)
-  expect_equal(take(numListRDD, 3), take(numListRDD2, 3))
-  expect_equal(take(numListRDD, 5), take(numListRDD2, 5))
-  expect_equal(take(numListRDD, 1), as.list(head(numList, n = 1)))
-  expect_equal(take(numListRDD2, 999), numList)
+  numListRDD <- parallelize(sc, numList, 1)
+  numListRDD2 <- parallelize(sc, numList, 4)
+  expect_equal(takeRDD(numListRDD, 3), takeRDD(numListRDD2, 3))
+  expect_equal(takeRDD(numListRDD, 5), takeRDD(numListRDD2, 5))
+  expect_equal(takeRDD(numListRDD, 1), as.list(head(numList, n = 1)))
+  expect_equal(takeRDD(numListRDD2, 999), numList)
 
-  strVectorRDD <- parallelize(jsc, strVector, 2)
-  strVectorRDD2 <- parallelize(jsc, strVector, 3)
-  expect_equal(take(strVectorRDD, 4), as.list(strVector))
-  expect_equal(take(strVectorRDD2, 2), as.list(head(strVector, n = 2)))
+  strVectorRDD <- parallelize(sc, strVector, 2)
+  strVectorRDD2 <- parallelize(sc, strVector, 3)
+  expect_equal(takeRDD(strVectorRDD, 4), as.list(strVector))
+  expect_equal(takeRDD(strVectorRDD2, 2), as.list(head(strVector, n = 2)))
 
-  strListRDD <- parallelize(jsc, strList, 4)
-  strListRDD2 <- parallelize(jsc, strList, 1)
-  expect_equal(take(strListRDD, 3), as.list(head(strList, n = 3)))
-  expect_equal(take(strListRDD2, 1), as.list(head(strList, n = 1)))
+  strListRDD <- parallelize(sc, strList, 4)
+  strListRDD2 <- parallelize(sc, strList, 1)
+  expect_equal(takeRDD(strListRDD, 3), as.list(head(strList, n = 3)))
+  expect_equal(takeRDD(strListRDD2, 1), as.list(head(strList, n = 1)))
 
-  expect_equal(length(take(strListRDD, 0)), 0)
-  expect_equal(length(take(strVectorRDD, 0)), 0)
-  expect_equal(length(take(numListRDD, 0)), 0)
-  expect_equal(length(take(numVectorRDD, 0)), 0)
+  expect_equal(length(takeRDD(strListRDD, 0)), 0)
+  expect_equal(length(takeRDD(strVectorRDD, 0)), 0)
+  expect_equal(length(takeRDD(numListRDD, 0)), 0)
+  expect_equal(length(takeRDD(numVectorRDD, 0)), 0)
 })
+
+sparkR.session.stop()

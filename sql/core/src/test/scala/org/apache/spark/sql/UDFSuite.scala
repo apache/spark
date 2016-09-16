@@ -53,20 +53,20 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-8003 spark_partition_id") {
     val df = Seq((1, "Tearing down the walls that divide us")).toDF("id", "saying")
-    df.registerTempTable("tmp_table")
+    df.createOrReplaceTempView("tmp_table")
     checkAnswer(sql("select spark_partition_id() from tmp_table").toDF(), Row(0))
-    spark.catalog.dropTempTable("tmp_table")
+    spark.catalog.dropTempView("tmp_table")
   }
 
   test("SPARK-8005 input_file_name") {
     withTempPath { dir =>
       val data = sparkContext.parallelize(0 to 10, 2).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
-      spark.read.parquet(dir.getCanonicalPath).registerTempTable("test_table")
+      spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("test_table")
       val answer = sql("select input_file_name() from test_table").head().getString(0)
       assert(answer.contains(dir.getCanonicalPath))
       assert(sql("select input_file_name() from test_table").distinct().collect().length >= 2)
-      spark.catalog.dropTempTable("test_table")
+      spark.catalog.dropTempView("test_table")
     }
   }
 
@@ -107,7 +107,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
     val df = sparkContext.parallelize(
       (1 to 100).map(i => TestData(i, i.toString))).toDF()
-    df.registerTempTable("integerData")
+    df.createOrReplaceTempView("integerData")
 
     val result =
       sql("SELECT * FROM integerData WHERE oneArgFilter(key)")
@@ -119,7 +119,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq(("red", 1), ("red", 2), ("blue", 10),
       ("green", 100), ("green", 200)).toDF("g", "v")
-    df.registerTempTable("groupData")
+    df.createOrReplaceTempView("groupData")
 
     val result =
       sql(
@@ -138,7 +138,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq(("red", 1), ("red", 2), ("blue", 10),
       ("green", 100), ("green", 200)).toDF("g", "v")
-    df.registerTempTable("groupData")
+    df.createOrReplaceTempView("groupData")
 
     val result =
       sql(
@@ -158,7 +158,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq(("red", 1), ("red", 2), ("blue", 10),
       ("green", 100), ("green", 200)).toDF("g", "v")
-    df.registerTempTable("groupData")
+    df.createOrReplaceTempView("groupData")
 
     val result =
       sql(

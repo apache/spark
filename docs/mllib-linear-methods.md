@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Linear Methods - spark.mllib
-displayTitle: Linear Methods - spark.mllib
+title: Linear Methods - RDD-based API
+displayTitle: Linear Methods - RDD-based API
 ---
 
 * Table of contents
@@ -185,10 +185,10 @@ algorithm for 200 iterations.
 import org.apache.spark.mllib.optimization.L1Updater
 
 val svmAlg = new SVMWithSGD()
-svmAlg.optimizer.
-  setNumIterations(200).
-  setRegParam(0.1).
-  setUpdater(new L1Updater)
+svmAlg.optimizer
+  .setNumIterations(200)
+  .setRegParam(0.1)
+  .setUpdater(new L1Updater)
 val modelL1 = svmAlg.run(training)
 {% endhighlight %}
 
@@ -395,7 +395,7 @@ section of the Spark
 quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.
 
-###Streaming linear regression
+### Streaming linear regression
 
 When data arrive in a streaming fashion, it is useful to fit regression models online,
 updating the parameters of the model as new data arrives. `spark.mllib` currently supports

@@ -108,7 +108,7 @@ public class JavaApplySchemaSuite implements Serializable {
     StructType schema = DataTypes.createStructType(fields);
 
     Dataset<Row> df = spark.createDataFrame(rowRDD, schema);
-    df.registerTempTable("people");
+    df.createOrReplaceTempView("people");
     List<Row> actual = spark.sql("SELECT * FROM people").collectAsList();
 
     List<Row> expected = new ArrayList<>(2);
@@ -144,7 +144,7 @@ public class JavaApplySchemaSuite implements Serializable {
     StructType schema = DataTypes.createStructType(fields);
 
     Dataset<Row> df = spark.createDataFrame(rowRDD, schema);
-    df.registerTempTable("people");
+    df.createOrReplaceTempView("people");
     List<String> actual = spark.sql("SELECT * FROM people").toJavaRDD()
       .map(new Function<Row, String>() {
         @Override
@@ -202,14 +202,14 @@ public class JavaApplySchemaSuite implements Serializable {
     Dataset<Row> df1 = spark.read().json(jsonRDD);
     StructType actualSchema1 = df1.schema();
     Assert.assertEquals(expectedSchema, actualSchema1);
-    df1.registerTempTable("jsonTable1");
+    df1.createOrReplaceTempView("jsonTable1");
     List<Row> actual1 = spark.sql("select * from jsonTable1").collectAsList();
     Assert.assertEquals(expectedResult, actual1);
 
     Dataset<Row> df2 = spark.read().schema(expectedSchema).json(jsonRDD);
     StructType actualSchema2 = df2.schema();
     Assert.assertEquals(expectedSchema, actualSchema2);
-    df2.registerTempTable("jsonTable2");
+    df2.createOrReplaceTempView("jsonTable2");
     List<Row> actual2 = spark.sql("select * from jsonTable2").collectAsList();
     Assert.assertEquals(expectedResult, actual2);
   }

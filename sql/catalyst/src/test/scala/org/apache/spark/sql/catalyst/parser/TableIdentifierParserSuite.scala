@@ -53,8 +53,9 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     "bigint", "binary", "boolean", "current_date", "current_timestamp", "date", "double", "float",
     "int", "smallint", "timestamp", "at")
 
-  val hiveNonReservedRegression = Seq("left", "right", "left", "right", "full", "inner", "semi",
-    "union", "except", "intersect", "schema", "database")
+  val hiveStrictNonReservedKeyword = Seq("anti", "full", "inner", "left", "semi", "right",
+    "natural", "union", "intersect", "except", "database", "on", "join", "cross", "select", "from",
+    "where", "having", "from", "to", "table", "with", "not")
 
   test("table identifier") {
     // Regular names.
@@ -67,11 +68,18 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     }
   }
 
-  test("table identifier - keywords") {
+  test("quoted identifiers") {
+    assert(TableIdentifier("z", Some("x.y")) === parseTableIdentifier("`x.y`.z"))
+    assert(TableIdentifier("y.z", Some("x")) === parseTableIdentifier("x.`y.z`"))
+    assert(TableIdentifier("z", Some("`x.y`")) === parseTableIdentifier("```x.y```.z"))
+    assert(TableIdentifier("`y.z`", Some("x")) === parseTableIdentifier("x.```y.z```"))
+    assert(TableIdentifier("x.y.z", None) === parseTableIdentifier("`x.y.z`"))
+  }
+
+  test("table identifier - strict keywords") {
     // SQL Keywords.
-    val keywords = Seq("select", "from", "where") ++ hiveNonReservedRegression
-    keywords.foreach { keyword =>
-      intercept[ParseException](parseTableIdentifier(keyword))
+    hiveStrictNonReservedKeyword.foreach { keyword =>
+      assert(TableIdentifier(keyword) === parseTableIdentifier(keyword))
       assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
       assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
     }
@@ -82,5 +90,18 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     hiveNonReservedKeyword.foreach { nonReserved =>
       assert(TableIdentifier(nonReserved) === parseTableIdentifier(nonReserved))
     }
+  }
+
+  test("SPARK-17364 table identifier - contains number") {
+    assert(parseTableIdentifier("123_") == TableIdentifier("123_"))
+    assert(parseTableIdentifier("1a.123_") == TableIdentifier("123_", Some("1a")))
+    // ".123" should not be treated as token of type DECIMAL_VALUE
+    assert(parseTableIdentifier("a.123A") == TableIdentifier("123A", Some("a")))
+    // ".123E3" should not be treated as token of type SCIENTIFIC_DECIMAL_VALUE
+    assert(parseTableIdentifier("a.123E3_LIST") == TableIdentifier("123E3_LIST", Some("a")))
+    // ".123D" should not be treated as token of type DOUBLE_LITERAL
+    assert(parseTableIdentifier("a.123D_LIST") == TableIdentifier("123D_LIST", Some("a")))
+    // ".123BD" should not be treated as token of type BIGDECIMAL_LITERAL
+    assert(parseTableIdentifier("a.123BD_LIST") == TableIdentifier("123BD_LIST", Some("a")))
   }
 }

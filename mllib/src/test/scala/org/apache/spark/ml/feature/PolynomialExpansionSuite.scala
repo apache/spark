@@ -20,11 +20,11 @@ package org.apache.spark.ml.feature
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
 
 class PolynomialExpansionSuite
@@ -115,6 +115,30 @@ class PolynomialExpansionSuite
       .setOutputCol("myOutputCol")
       .setDegree(3)
     testDefaultReadWrite(t)
+  }
+
+  test("SPARK-17027. Integer overflow in PolynomialExpansion.getPolySize") {
+    val data: Array[(Vector, Int, Int)] = Array(
+      (Vectors.dense(1.0, 2.0, 3.0, 4.0, 5.0), 3002, 4367),
+      (Vectors.sparse(5, Seq((0, 1.0), (4, 5.0))), 3002, 4367),
+      (Vectors.dense(1.0, 2.0, 3.0, 4.0, 5.0, 6.0), 8007, 12375)
+    )
+
+    val df = spark.createDataFrame(data)
+      .toDF("features", "expectedPoly10size", "expectedPoly11size")
+
+    val t = new PolynomialExpansion()
+      .setInputCol("features")
+      .setOutputCol("polyFeatures")
+
+    for (i <- Seq(10, 11)) {
+      val transformed = t.setDegree(i)
+        .transform(df)
+        .select(s"expectedPoly${i}size", "polyFeatures")
+        .rdd.map { case Row(expected: Int, v: Vector) => expected == v.size }
+
+      assert(transformed.collect.forall(identity))
+    }
   }
 }
 

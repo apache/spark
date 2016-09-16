@@ -33,7 +33,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   setupTestData()
 
   test("simple columnar query") {
-    val plan = spark.executePlan(testData.logicalPlan).sparkPlan
+    val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().toSeq)
@@ -42,7 +42,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("default size avoids broadcast") {
     // TODO: Improve this test when we have better statistics
     sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
-      .toDF().registerTempTable("sizeTst")
+      .toDF().createOrReplaceTempView("sizeTst")
     spark.catalog.cacheTable("sizeTst")
     assert(
       spark.table("sizeTst").queryExecution.analyzed.statistics.sizeInBytes >
@@ -50,7 +50,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("projection") {
-    val plan = spark.executePlan(testData.select('value, 'key).logicalPlan).sparkPlan
+    val plan = spark.sessionState.executePlan(testData.select('value, 'key).logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().map {
@@ -59,7 +59,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
-    val plan = spark.executePlan(testData.logicalPlan).sparkPlan
+    val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().toSeq)
@@ -92,7 +92,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-2729 regression: timestamp data type") {
     val timestamps = (0 to 3).map(i => Tuple1(new Timestamp(i))).toDF("time")
-    timestamps.registerTempTable("timestamps")
+    timestamps.createOrReplaceTempView("timestamps")
 
     checkAnswer(
       sql("SELECT time FROM timestamps"),
@@ -133,7 +133,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
     assert(df.schema.head.dataType === DecimalType(15, 10))
 
-    df.cache().registerTempTable("test_fixed_decimal")
+    df.cache().createOrReplaceTempView("test_fixed_decimal")
     checkAnswer(
       sql("SELECT * FROM test_fixed_decimal"),
       (1 to 10).map(i => Row(Decimal(i, 15, 10).toJavaBigDecimal)))
@@ -179,7 +179,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
           (i to i + 10).map(j => s"map_key_$j" -> (Long.MaxValue - j)).toMap,
           Row((i - 0.25).toFloat, Seq(true, false, null)))
       }
-    spark.createDataFrame(rdd, schema).registerTempTable("InMemoryCache_different_data_types")
+    spark.createDataFrame(rdd, schema).createOrReplaceTempView("InMemoryCache_different_data_types")
     // Cache the table.
     sql("cache table InMemoryCache_different_data_types")
     // Make sure the table is indeed cached.
@@ -191,7 +191,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql(s"SELECT DISTINCT ${allColumns} FROM InMemoryCache_different_data_types"),
       spark.table("InMemoryCache_different_data_types").collect())
-    spark.catalog.dropTempTable("InMemoryCache_different_data_types")
+    spark.catalog.dropTempView("InMemoryCache_different_data_types")
   }
 
   test("SPARK-10422: String column in InMemoryColumnarCache needs to override clone method") {
@@ -202,7 +202,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     cached.count()
 
     // Make sure, the DataFrame is indeed cached.
-    assert(spark.cacheManager.lookupCachedData(cached).nonEmpty)
+    assert(spark.sharedState.cacheManager.lookupCachedData(cached).nonEmpty)
 
     // Check result.
     checkAnswer(
@@ -227,7 +227,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val columnTypes1 = List.fill(length1)(IntegerType)
     val columnarIterator1 = GenerateColumnAccessor.generate(columnTypes1)
 
-    val length2 = 10000
+    // SPARK-16664: the limit of janino is 8117
+    val length2 = 8117
     val columnTypes2 = List.fill(length2)(IntegerType)
     val columnarIterator2 = GenerateColumnAccessor.generate(columnTypes2)
   }

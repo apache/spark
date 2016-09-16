@@ -36,7 +36,7 @@ class UISeleniumSuite
   implicit var webDriver: WebDriver = _
   var server: HiveThriftServer2 = _
   val uiPort = 20000 + Random.nextInt(10000)
-  override def mode: ServerMode.Value = ServerMode.http
+  override def mode: ServerMode.Value = ServerMode.binary
 
   override def beforeAll(): Unit = {
     webDriver = new HtmlUnitDriver {

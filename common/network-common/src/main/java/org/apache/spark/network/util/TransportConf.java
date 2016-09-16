@@ -23,6 +23,11 @@ import com.google.common.primitives.Ints;
  * A central location that tracks all the settings we expose to users.
  */
 public class TransportConf {
+  
+  static {
+    // Set this due to Netty PR #5661 for Netty 4.0.37+ to work
+    System.setProperty("io.netty.maxDirectMemory", "0");
+  }
 
   private final String SPARK_NETWORK_IO_MODE_KEY;
   private final String SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY;
@@ -58,6 +63,10 @@ public class TransportConf {
     SPARK_NETWORK_IO_MAXRETRIES_KEY = getConfKey("io.maxRetries");
     SPARK_NETWORK_IO_RETRYWAIT_KEY = getConfKey("io.retryWait");
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
+  }
+
+  public int getInt(String name, int defaultValue) {
+    return conf.getInt(name, defaultValue);
   }
 
   private String getConfKey(String suffix) {

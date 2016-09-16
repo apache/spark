@@ -46,6 +46,8 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
   def children: Seq[SparkPlan] = child :: Nil
 
+  override def producedAttributes: AttributeSet = AttributeSet(output.drop(child.output.length))
+
   private def collectFunctions(udf: PythonUDF): (ChainedPythonFunctions, Seq[Expression]) = {
     udf.children match {
       case Seq(u: PythonUDF) =>

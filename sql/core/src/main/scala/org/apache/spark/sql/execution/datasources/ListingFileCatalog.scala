@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
-import scala.util.Try
 
 import org.apache.hadoop.fs.{FileStatus, LocatedFileStatus, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
@@ -73,23 +72,36 @@ class ListingFileCatalog(
     cachedPartitionSpec = null
   }
 
-  protected def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
+  /**
+   * List leaf files of given paths. This method will submit a Spark job to do parallel
+   * listing whenever there is a path having more files than the parallel partition discovery
+   * discovery threshold.
+   *
+   * This is publicly visible for testing.
+   */
+  def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
     if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession.sparkContext)
+      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession)
     } else {
+      // Right now, the number of paths is less than the value of
+      // parallelPartitionDiscoveryThreshold. So, we will list file statues at the driver.
+      // If there is any child that has more files than the threshold, we will use parallel
+      // listing.
+
+      // Dummy jobconf to get to the pathFilter defined in configuration
+      val jobConf = new JobConf(hadoopConf, this.getClass)
+      val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+
       val statuses: Seq[FileStatus] = paths.flatMap { path =>
         val fs = path.getFileSystem(hadoopConf)
-        logInfo(s"Listing $path on driver")
-        // Dummy jobconf to get to the pathFilter defined in configuration
-        val jobConf = new JobConf(hadoopConf, this.getClass)
-        val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+        logTrace(s"Listing $path on driver")
 
-        val statuses = {
-          val stats = Try(fs.listStatus(path)).getOrElse(Array.empty[FileStatus])
+        val childStatuses = {
+          val stats = fs.listStatus(path)
           if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
         }
 
-        statuses.map {
+        childStatuses.map {
           case f: LocatedFileStatus => f
 
           // NOTE:
@@ -98,10 +110,16 @@ class ListingFileCatalog(
           //   operations, calling `getFileBlockLocations` does no harm here since these file system
           //   implementations don't actually issue RPC for this method.
           //
-          // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should a
-          //   a big deal since we always use to `listLeafFilesInParallel` when the number of paths
-          //   exceeds threshold.
-          case f => new LocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
+          // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
+          //   be a big deal since we always use to `listLeafFilesInParallel` when the number of
+          //   paths exceeds threshold.
+          case f =>
+            if (f.isDirectory ) {
+              // If f is a directory, we do not need to call getFileBlockLocations (SPARK-14959).
+              f
+            } else {
+              HadoopFsRelation.createLocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
+            }
         }
       }.filterNot { status =>
         val name = status.getPath.getName

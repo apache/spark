@@ -18,9 +18,9 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
@@ -45,7 +45,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getPredictionCol === "prediction")
     assert(kmeans.getMaxIter === 20)
     assert(kmeans.getInitMode === MLlibKMeans.K_MEANS_PARALLEL)
-    assert(kmeans.getInitSteps === 5)
+    assert(kmeans.getInitSteps === 2)
     assert(kmeans.getTol === 1e-4)
   }
 

@@ -34,6 +34,7 @@ import org.apache.spark.mllib.util.MLUtils
  * A synthetic dataset can be found at `data/mllib/sample_linear_regression_data.txt`.
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
+@deprecated("Use ml.regression.LinearRegression or LBFGS", "2.0.0")
 object LinearRegression {
 
   object RegType extends Enumeration {
@@ -81,14 +82,13 @@ object LinearRegression {
         """.stripMargin)
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    } getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
+  def run(params: Params): Unit = {
     val conf = new SparkConf().setAppName(s"LinearRegression with $params")
     val sc = new SparkContext(conf)
 

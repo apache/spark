@@ -20,35 +20,38 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
- * :: Experimental ::
  * A feature transformer that merges multiple columns into a vector column.
  */
-@Experimental
-class VectorAssembler(override val uid: String)
+@Since("1.4.0")
+class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Transformer with HasInputCols with HasOutputCol with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("vecAssembler"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     // Schema transformation.
     val schema = dataset.schema
     lazy val first = dataset.toDF.first()
@@ -106,6 +109,7 @@ class VectorAssembler(override val uid: String)
     dataset.select(col("*"), assembleFunc(struct(args: _*)).as($(outputCol), metadata))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
@@ -122,6 +126,7 @@ class VectorAssembler(override val uid: String)
     StructType(schema.fields :+ new StructField(outputColName, new VectorUDT, true))
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
 }
 

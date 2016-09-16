@@ -35,7 +35,9 @@ import org.apache.spark.sql.types.StructType;
 public class JavaQuantileDiscretizerExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaQuantileDiscretizerExample").getOrCreate();
+      .builder()
+      .appName("JavaQuantileDiscretizerExample")
+      .getOrCreate();
 
     // $example on$
     List<Row> data = Arrays.asList(
@@ -52,7 +54,12 @@ public class JavaQuantileDiscretizerExample {
     });
 
     Dataset<Row> df = spark.createDataFrame(data, schema);
-
+    // $example off$
+    // Output of QuantileDiscretizer for such small datasets can depend on the number of
+    // partitions. Here we force a single partition to ensure consistent results.
+    // Note this is not necessary for normal use cases
+    df = df.repartition(1);
+    // $example on$
     QuantileDiscretizer discretizer = new QuantileDiscretizer()
       .setInputCol("hour")
       .setOutputCol("result")

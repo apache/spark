@@ -25,8 +25,9 @@ import scala.language.existentials
 
 import com.google.common.reflect.TypeToken
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -88,6 +89,7 @@ object JavaTypeInference {
       case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
 
       case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType.SYSTEM_DEFAULT, true)
+      case c: Class[_] if c == classOf[java.math.BigInteger] => (DecimalType.BigIntDecimal, true)
       case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
 
@@ -175,8 +177,8 @@ object JavaTypeInference {
       .map(p => UnresolvedExtractValue(p, expressions.Literal(part)))
       .getOrElse(UnresolvedAttribute(part))
 
-    /** Returns the current path or `BoundReference`. */
-    def getPath: Expression = path.getOrElse(BoundReference(0, inferDataType(typeToken)._1, true))
+    /** Returns the current path or `GetColumnByOrdinal`. */
+    def getPath: Expression = path.getOrElse(GetColumnByOrdinal(0, inferDataType(typeToken)._1))
 
     typeToken.getRawType match {
       case c if !inferExternalType(c).isInstanceOf[ObjectType] => getPath
@@ -393,10 +395,14 @@ object JavaTypeInference {
           toCatalystArray(inputObject, elementType(typeToken))
 
         case _ if mapType.isAssignableFrom(typeToken) =>
-          // TODO: for java map, if we get the keys and values by `keySet` and `values`, we can
-          // not guarantee they have same iteration order(which is different from scala map).
-          // A possible solution is creating a new `MapObjects` that can iterate a map directly.
-          throw new UnsupportedOperationException("map type is not supported currently")
+          val (keyType, valueType) = mapKeyValueType(typeToken)
+          ExternalMapToCatalyst(
+            inputObject,
+            ObjectType(keyType.getRawType),
+            serializerFor(_, keyType),
+            ObjectType(valueType.getRawType),
+            serializerFor(_, valueType)
+          )
 
         case other =>
           val properties = getJavaBeanProperties(other)

@@ -89,7 +89,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   final List<String> sparkArgs;
-  private final boolean printInfo;
+  private final boolean isAppResourceReq;
   private final boolean isExample;
 
   /**
@@ -101,42 +101,51 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   SparkSubmitCommandBuilder() {
     this.sparkArgs = new ArrayList<>();
-    this.printInfo = false;
+    this.isAppResourceReq = true;
     this.isExample = false;
   }
 
   SparkSubmitCommandBuilder(List<String> args) {
     this.allowsMixedArguments = false;
-
+    this.sparkArgs = new ArrayList<>();
     boolean isExample = false;
     List<String> submitArgs = args;
-    if (args.size() > 0 && args.get(0).equals(PYSPARK_SHELL)) {
-      this.allowsMixedArguments = true;
-      appResource = PYSPARK_SHELL;
-      submitArgs = args.subList(1, args.size());
-    } else if (args.size() > 0 && args.get(0).equals(SPARKR_SHELL)) {
-      this.allowsMixedArguments = true;
-      appResource = SPARKR_SHELL;
-      submitArgs = args.subList(1, args.size());
-    } else if (args.size() > 0 && args.get(0).equals(RUN_EXAMPLE)) {
-      isExample = true;
-      submitArgs = args.subList(1, args.size());
+
+    if (args.size() > 0) {
+      switch (args.get(0)) {
+        case PYSPARK_SHELL:
+          this.allowsMixedArguments = true;
+          appResource = PYSPARK_SHELL;
+          submitArgs = args.subList(1, args.size());
+          break;
+
+        case SPARKR_SHELL:
+          this.allowsMixedArguments = true;
+          appResource = SPARKR_SHELL;
+          submitArgs = args.subList(1, args.size());
+          break;
+
+        case RUN_EXAMPLE:
+          isExample = true;
+          submitArgs = args.subList(1, args.size());
+      }
+
+      this.isExample = isExample;
+      OptionParser parser = new OptionParser();
+      parser.parse(submitArgs);
+      this.isAppResourceReq = parser.isAppResourceReq;
+    }  else {
+      this.isExample = isExample;
+      this.isAppResourceReq = false;
     }
-
-    this.sparkArgs = new ArrayList<>();
-    this.isExample = isExample;
-
-    OptionParser parser = new OptionParser();
-    parser.parse(submitArgs);
-    this.printInfo = parser.infoRequested;
   }
 
   @Override
   public List<String> buildCommand(Map<String, String> env)
       throws IOException, IllegalArgumentException {
-    if (PYSPARK_SHELL.equals(appResource) && !printInfo) {
+    if (PYSPARK_SHELL.equals(appResource) && isAppResourceReq) {
       return buildPySparkShellCommand(env);
-    } else if (SPARKR_SHELL.equals(appResource) && !printInfo) {
+    } else if (SPARKR_SHELL.equals(appResource) && isAppResourceReq) {
       return buildSparkRCommand(env);
     } else {
       return buildSparkSubmitCommand(env);
@@ -147,7 +156,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     List<String> args = new ArrayList<>();
     SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
 
-    if (!allowsMixedArguments) {
+    if (!allowsMixedArguments && isAppResourceReq) {
       checkArgument(appResource != null, "Missing application resource.");
     }
 
@@ -199,7 +208,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       args.add(join(",", pyFiles));
     }
 
-    if (!printInfo) {
+    if (isAppResourceReq) {
       checkArgument(!isExample || mainClass != null, "Missing example class name.");
     }
     if (mainClass != null) {
@@ -285,11 +294,23 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     appResource = PYSPARK_SHELL_RESOURCE;
     constructEnvVarArgs(env, "PYSPARK_SUBMIT_ARGS");
 
-    // The executable is the PYSPARK_DRIVER_PYTHON env variable set by the pyspark script,
-    // followed by PYSPARK_DRIVER_PYTHON_OPTS.
+    // Will pick up the binary executable in the following order
+    // 1. conf spark.pyspark.driver.python
+    // 2. conf spark.pyspark.python
+    // 3. environment variable PYSPARK_DRIVER_PYTHON
+    // 4. environment variable PYSPARK_PYTHON
+    // 5. python
     List<String> pyargs = new ArrayList<>();
-    pyargs.add(firstNonEmpty(System.getenv("PYSPARK_DRIVER_PYTHON"), "python"));
+    pyargs.add(firstNonEmpty(conf.get(SparkLauncher.PYSPARK_DRIVER_PYTHON),
+      conf.get(SparkLauncher.PYSPARK_PYTHON),
+      System.getenv("PYSPARK_DRIVER_PYTHON"),
+      System.getenv("PYSPARK_PYTHON"),
+      "python"));
     String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
+    if (conf.containsKey(SparkLauncher.PYSPARK_PYTHON)) {
+      // pass conf spark.pyspark.python to python by environment variable.
+      env.put("PYSPARK_PYTHON", conf.get(SparkLauncher.PYSPARK_PYTHON));
+    }
     if (!isEmpty(pyOpts)) {
       pyargs.addAll(parseOptionString(pyOpts));
     }
@@ -315,7 +336,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
             join(File.separator, sparkHome, "R", "lib", "SparkR", "profile", "shell.R"));
 
     List<String> args = new ArrayList<>();
-    args.add(firstNonEmpty(System.getenv("SPARKR_DRIVER_R"), "R"));
+    args.add(firstNonEmpty(conf.get(SparkLauncher.SPARKR_R_SHELL),
+      System.getenv("SPARKR_DRIVER_R"), "R"));
     return args;
   }
 
@@ -379,7 +401,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private class OptionParser extends SparkSubmitOptionParser {
 
-    boolean infoRequested = false;
+    boolean isAppResourceReq = true;
 
     @Override
     protected boolean handle(String opt, String value) {
@@ -411,11 +433,15 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           allowsMixedArguments = true;
           appResource = specialClasses.get(value);
         }
+      } else if (opt.equals(KILL_SUBMISSION) || opt.equals(STATUS)) {
+        isAppResourceReq = false;
+        sparkArgs.add(opt);
+        sparkArgs.add(value);
       } else if (opt.equals(HELP) || opt.equals(USAGE_ERROR)) {
-        infoRequested = true;
+        isAppResourceReq = false;
         sparkArgs.add(opt);
       } else if (opt.equals(VERSION)) {
-        infoRequested = true;
+        isAppResourceReq = false;
         sparkArgs.add(opt);
       } else {
         sparkArgs.add(opt);

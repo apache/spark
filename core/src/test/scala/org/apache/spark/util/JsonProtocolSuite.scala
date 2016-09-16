@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
 import scala.collection.Map
 
 import org.json4s.jackson.JsonMethods._
@@ -258,7 +259,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   test("FetchFailed backwards compatibility") {
-    // FetchFailed in Spark 1.1.0 does not have an "Message" property.
+    // FetchFailed in Spark 1.1.0 does not have a "Message" property.
     val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
       "ignored")
     val oldEvent = JsonProtocol.taskEndReasonToJson(fetchFailed)
@@ -415,7 +416,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     })
     testAccumValue(Some(RESULT_SIZE), 3L, JInt(3))
     testAccumValue(Some(shuffleRead.REMOTE_BLOCKS_FETCHED), 2, JInt(2))
-    testAccumValue(Some(UPDATED_BLOCK_STATUSES), blocks, blocksJson)
+    testAccumValue(Some(UPDATED_BLOCK_STATUSES), blocks.asJava, blocksJson)
     // For anything else, we just cast the value to a string
     testAccumValue(Some("anything"), blocks, JString(blocks.toString))
     testAccumValue(Some("anything"), 123, JString("123"))
@@ -966,6 +967,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,
@@ -1012,6 +1014,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,
@@ -1064,6 +1067,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,
@@ -1161,6 +1165,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,
@@ -1258,6 +1263,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,

@@ -92,10 +92,22 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("big model load / save") {
-    // create a model bigger than 32MB since 9000 * 1000 * 4 > 2^25
-    val word2VecMap = Map((0 to 9000).map(i => s"$i" -> Array.fill(1000)(0.1f)): _*)
+    // backupping old values
+    val oldBufferConfValue = spark.conf.get("spark.kryoserializer.buffer.max", "64m")
+    val oldBufferMaxConfValue = spark.conf.get("spark.kryoserializer.buffer", "64k")
+
+    // setting test values to trigger partitioning
+    spark.conf.set("spark.kryoserializer.buffer", "50b")
+    spark.conf.set("spark.kryoserializer.buffer.max", "50b")
+
+    // create a model bigger than 50 Bytes
+    val word2VecMap = Map((0 to 10).map(i => s"$i" -> Array.fill(10)(0.1f)): _*)
     val model = new Word2VecModel(word2VecMap)
 
+    // est. size of this model, given the formula:
+    // (floatSize * vectorSize + 15) * numWords
+    // (4 * 10 + 15) * 10 = 550
+    // therefore it should generate multiple partitions
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
@@ -103,9 +115,16 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
       model.save(sc, path)
       val sameModel = Word2VecModel.load(sc, path)
       assert(sameModel.getVectors.mapValues(_.toSeq) === model.getVectors.mapValues(_.toSeq))
+    }
+    catch {
+      case t: Throwable => fail("exception thrown persisting a model " +
+        "that spans over multiple partitions", t)
     } finally {
       Utils.deleteRecursively(tempDir)
+      spark.conf.set("spark.kryoserializer.buffer", oldBufferConfValue)
+      spark.conf.set("spark.kryoserializer.buffer.max", oldBufferMaxConfValue)
     }
+
   }
 
   test("test similarity for word vectors with large values is not Infinity or NaN") {

@@ -155,10 +155,6 @@ class SparkContext(object):
         self.appName = self._conf.get("spark.app.name")
         self.sparkHome = self._conf.get("spark.home", None)
 
-        # Let YARN know it's a pyspark app, so it distributes needed libraries.
-        if self.master == "yarn-client":
-            self._conf.set("spark.yarn.isPython", "true")
-
         for (k, v) in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
@@ -170,6 +166,8 @@ class SparkContext(object):
 
         # Create the Java SparkContext through Py4J
         self._jsc = jsc or self._initialize_context(self._conf._jconf)
+        # Reset the SparkConf to the one actually used by the SparkContext in JVM.
+        self._conf = SparkConf(_jconf=self._jsc.sc().conf())
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
@@ -788,14 +786,6 @@ class SparkContext(object):
         [100, 200, 300, 400]
         """
         self._jsc.sc().addFile(path)
-
-    def clearFiles(self):
-        """
-        Clear the job's list of files added by L{addFile} or L{addPyFile} so
-        that they do not get downloaded to any new nodes.
-        """
-        # TODO: remove added .py or .zip files from the PYTHONPATH?
-        self._jsc.sc().clearFiles()
 
     def addPyFile(self, path):
         """

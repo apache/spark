@@ -18,11 +18,14 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.util.UUID
+
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -103,14 +106,15 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
   def createFileStream(
       format: String,
       path: String,
-      schema: Option[StructType] = None): DataFrame = {
+      schema: Option[StructType] = None,
+      options: Map[String, String] = Map.empty): DataFrame = {
     val reader =
       if (schema.isDefined) {
-        spark.read.format(format).schema(schema.get)
+        spark.readStream.format(format).schema(schema.get).options(options)
       } else {
-        spark.read.format(format)
+        spark.readStream.format(format).options(options)
       }
-    reader.stream(path)
+    reader.load(path)
   }
 
   protected def getSourceFromFileStream(df: DataFrame): FileStreamSource = {
@@ -136,9 +140,11 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
   val valueSchema = new StructType().add("value", StringType)
 }
 
-class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
+class FileStreamSourceSuite extends FileStreamSourceTest {
 
   import testImplicits._
+
+  override val streamingTimeout = 20.seconds
 
   /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
   private def createFileStreamSource(
@@ -152,31 +158,54 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       format: Option[String],
       path: Option[String],
       schema: Option[StructType] = None): StructType = {
-    val reader = spark.read
+    val reader = spark.readStream
     format.foreach(reader.format)
     schema.foreach(reader.schema)
     val df =
       if (path.isDefined) {
-        reader.stream(path.get)
+        reader.load(path.get)
       } else {
-        reader.stream()
+        reader.load()
       }
     df.queryExecution.analyzed
       .collect { case s @ StreamingRelation(dataSource, _, _) => s.schema }.head
   }
 
+  // ============= Basic parameter exists tests ================
+
   test("FileStreamSource schema: no path") {
-    val e = intercept[IllegalArgumentException] {
-      createFileStreamSourceAndGetSchema(format = None, path = None, schema = None)
+    def testError(): Unit = {
+      val e = intercept[IllegalArgumentException] {
+        createFileStreamSourceAndGetSchema(format = None, path = None, schema = None)
+      }
+      assert(e.getMessage.contains("path")) // reason is path, not schema
     }
-    assert("'path' is not specified" === e.getMessage)
+    withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "false") { testError() }
+    withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") { testError() }
   }
 
-  test("FileStreamSource schema: path doesn't exist") {
-    intercept[AnalysisException] {
-      createFileStreamSourceAndGetSchema(format = None, path = Some("/a/b/c"), schema = None)
+  test("FileStreamSource schema: path doesn't exist (without schema) should throw exception") {
+    withTempDir { dir =>
+      intercept[AnalysisException] {
+        val userSchema = new StructType().add(new StructField("value", IntegerType))
+        val schema = createFileStreamSourceAndGetSchema(
+          format = None, path = Some(new File(dir, "1").getAbsolutePath), schema = None)
+      }
     }
   }
+
+  test("FileStreamSource schema: path doesn't exist (with schema) should throw exception") {
+    withTempDir { dir =>
+      intercept[AnalysisException] {
+        val userSchema = new StructType().add(new StructField("value", IntegerType))
+        val schema = createFileStreamSourceAndGetSchema(
+          format = None, path = Some(new File(dir, "1").getAbsolutePath), schema = Some(userSchema))
+      }
+    }
+  }
+
+
+  // =============== Text file stream schema tests ================
 
   test("FileStreamSource schema: text, no existing files, no schema") {
     withTempDir { src =>
@@ -205,24 +234,28 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
-  test("FileStreamSource schema: parquet, no existing files, no schema") {
-    withTempDir { src =>
-      val e = intercept[AnalysisException] {
-        createFileStreamSourceAndGetSchema(
-          format = Some("parquet"), path = Some(new File(src, "1").getCanonicalPath), schema = None)
-      }
-      assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
-    }
-  }
+  // =============== Parquet file stream schema tests ================
 
   test("FileStreamSource schema: parquet, existing files, no schema") {
     withTempDir { src =>
       Seq("a", "b", "c").toDS().as("userColumn").toDF().write
         .mode(org.apache.spark.sql.SaveMode.Overwrite)
         .parquet(src.getCanonicalPath)
-      val schema = createFileStreamSourceAndGetSchema(
-        format = Some("parquet"), path = Some(src.getCanonicalPath), schema = None)
-      assert(schema === new StructType().add("value", StringType))
+
+      // Without schema inference, should throw error
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "false") {
+        intercept[IllegalArgumentException] {
+          createFileStreamSourceAndGetSchema(
+            format = Some("parquet"), path = Some(src.getCanonicalPath), schema = None)
+        }
+      }
+
+      // With schema inference, should infer correct schema
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+        val schema = createFileStreamSourceAndGetSchema(
+          format = Some("parquet"), path = Some(src.getCanonicalPath), schema = None)
+        assert(schema === new StructType().add("value", StringType))
+      }
     }
   }
 
@@ -237,22 +270,39 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
+  // =============== JSON file stream schema tests ================
+
   test("FileStreamSource schema: json, no existing files, no schema") {
     withTempDir { src =>
-      val e = intercept[AnalysisException] {
-        createFileStreamSourceAndGetSchema(
-          format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+
+        val e = intercept[AnalysisException] {
+          createFileStreamSourceAndGetSchema(
+            format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
+        }
+        assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
       }
-      assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
     }
   }
 
   test("FileStreamSource schema: json, existing files, no schema") {
     withTempDir { src =>
-      stringToFile(new File(src, "1"), "{'c': '1'}\n{'c': '2'}\n{'c': '3'}")
-      val schema = createFileStreamSourceAndGetSchema(
-        format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
-      assert(schema === new StructType().add("c", StringType))
+
+      // Without schema inference, should throw error
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "false") {
+        intercept[IllegalArgumentException] {
+          createFileStreamSourceAndGetSchema(
+            format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
+        }
+      }
+
+      // With schema inference, should infer correct schema
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+        stringToFile(new File(src, "1"), "{'c': '1'}\n{'c': '2'}\n{'c': '3'}")
+        val schema = createFileStreamSourceAndGetSchema(
+          format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
+        assert(schema === new StructType().add("c", StringType))
+      }
     }
   }
 
@@ -265,6 +315,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       assert(schema === userSchema)
     }
   }
+
+  // =============== Text file stream tests ================
 
   test("read from text files") {
     withTempDirs { case (src, tmp) =>
@@ -283,6 +335,41 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       )
     }
   }
+
+  test("SPARK-17165 should not track the list of seen files indefinitely") {
+    // This test works by:
+    // 1. Create a file
+    // 2. Get it processed
+    // 3. Sleeps for a very short amount of time (larger than maxFileAge
+    // 4. Add another file (at this point the original file should have been purged
+    // 5. Test the size of the seenFiles internal data structure
+
+    // Note that if we change maxFileAge to a very large number, the last step should fail.
+    withTempDirs { case (src, tmp) =>
+      val textStream: DataFrame =
+        createFileStream("text", src.getCanonicalPath, options = Map("maxFileAge" -> "5ms"))
+
+      testStream(textStream)(
+        AddTextFileData("a\nb", src, tmp),
+        CheckAnswer("a", "b"),
+
+        // SLeeps longer than 5ms (maxFileAge)
+        AssertOnQuery { _ => Thread.sleep(10); true },
+
+        AddTextFileData("c\nd", src, tmp),
+        CheckAnswer("a", "b", "c", "d"),
+
+        AssertOnQuery("seen files should contain only one entry") { streamExecution =>
+          val source = streamExecution.logicalPlan.collect { case e: StreamingExecutionRelation =>
+            e.source.asInstanceOf[FileStreamSource]
+          }.head
+          source.seenFiles.size == 1
+        }
+      )
+    }
+  }
+
+  // =============== JSON file stream tests ================
 
   test("read from json files") {
     withTempDirs { case (src, tmp) =>
@@ -313,73 +400,81 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   test("read from json files with inferring schema") {
     withTempDirs { case (src, tmp) =>
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
 
-      // Add a file so that we can infer its schema
-      stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
+        // Add a file so that we can infer its schema
+        stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
 
-      val fileStream = createFileStream("json", src.getCanonicalPath)
-      assert(fileStream.schema === StructType(Seq(StructField("c", StringType))))
+        val fileStream = createFileStream("json", src.getCanonicalPath)
+        assert(fileStream.schema === StructType(Seq(StructField("c", StringType))))
 
-      // FileStreamSource should infer the column "c"
-      val filtered = fileStream.filter($"c" contains "keep")
+        // FileStreamSource should infer the column "c"
+        val filtered = fileStream.filter($"c" contains "keep")
 
-      testStream(filtered)(
-        AddTextFileData("{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
-        CheckAnswer("keep2", "keep3", "keep5", "keep6")
-      )
+        testStream(filtered)(
+          AddTextFileData("{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
+          CheckAnswer("keep2", "keep3", "keep5", "keep6")
+        )
+      }
     }
   }
 
   test("reading from json files inside partitioned directory") {
     withTempDirs { case (baseSrc, tmp) =>
-      val src = new File(baseSrc, "type=X")
-      src.mkdirs()
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+        val src = new File(baseSrc, "type=X")
+        src.mkdirs()
 
-      // Add a file so that we can infer its schema
-      stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
+        // Add a file so that we can infer its schema
+        stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
 
-      val fileStream = createFileStream("json", src.getCanonicalPath)
+        val fileStream = createFileStream("json", src.getCanonicalPath)
 
-      // FileStreamSource should infer the column "c"
-      val filtered = fileStream.filter($"c" contains "keep")
+        // FileStreamSource should infer the column "c"
+        val filtered = fileStream.filter($"c" contains "keep")
 
-      testStream(filtered)(
-        AddTextFileData("{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
-        CheckAnswer("keep2", "keep3", "keep5", "keep6")
-      )
+        testStream(filtered)(
+          AddTextFileData("{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
+          CheckAnswer("keep2", "keep3", "keep5", "keep6")
+        )
+      }
     }
   }
 
   test("reading from json files with changing schema") {
     withTempDirs { case (src, tmp) =>
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
 
-      // Add a file so that we can infer its schema
-      stringToFile(new File(src, "existing"), "{'k': 'value0'}")
+        // Add a file so that we can infer its schema
+        stringToFile(new File(src, "existing"), "{'k': 'value0'}")
 
-      val fileStream = createFileStream("json", src.getCanonicalPath)
+        val fileStream = createFileStream("json", src.getCanonicalPath)
 
-      // FileStreamSource should infer the column "k"
-      assert(fileStream.schema === StructType(Seq(StructField("k", StringType))))
+        // FileStreamSource should infer the column "k"
+        assert(fileStream.schema === StructType(Seq(StructField("k", StringType))))
 
-      // After creating DF and before starting stream, add data with different schema
-      // Should not affect the inferred schema any more
-      stringToFile(new File(src, "existing2"), "{'k': 'value1', 'v': 'new'}")
+        // After creating DF and before starting stream, add data with different schema
+        // Should not affect the inferred schema any more
+        stringToFile(new File(src, "existing2"), "{'k': 'value1', 'v': 'new'}")
 
-      testStream(fileStream)(
+        testStream(fileStream)(
 
-        // Should not pick up column v in the file added before start
-        AddTextFileData("{'k': 'value2'}", src, tmp),
-        CheckAnswer("value0", "value1", "value2"),
+          // Should not pick up column v in the file added before start
+          AddTextFileData("{'k': 'value2'}", src, tmp),
+          CheckAnswer("value0", "value1", "value2"),
 
-        // Should read data in column k, and ignore v
-        AddTextFileData("{'k': 'value3', 'v': 'new'}", src, tmp),
-        CheckAnswer("value0", "value1", "value2", "value3"),
+          // Should read data in column k, and ignore v
+          AddTextFileData("{'k': 'value3', 'v': 'new'}", src, tmp),
+          CheckAnswer("value0", "value1", "value2", "value3"),
 
-        // Should ignore rows that do not have the necessary k column
-        AddTextFileData("{'v': 'value4'}", src, tmp),
-        CheckAnswer("value0", "value1", "value2", "value3", null))
+          // Should ignore rows that do not have the necessary k column
+          AddTextFileData("{'v': 'value4'}", src, tmp),
+          CheckAnswer("value0", "value1", "value2", "value3", null))
+      }
     }
   }
+
+  // =============== Parquet file stream tests ================
 
   test("read from parquet files") {
     withTempDirs { case (src, tmp) =>
@@ -402,48 +497,38 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   test("read from parquet files with changing schema") {
 
     withTempDirs { case (src, tmp) =>
-      // Add a file so that we can infer its schema
-      AddParquetFileData.writeToFile(Seq("value0").toDF("k"), src, tmp)
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
 
-      val fileStream = createFileStream("parquet", src.getCanonicalPath)
+        // Add a file so that we can infer its schema
+        AddParquetFileData.writeToFile(Seq("value0").toDF("k"), src, tmp)
 
-      // FileStreamSource should infer the column "k"
-      assert(fileStream.schema === StructType(Seq(StructField("k", StringType))))
+        val fileStream = createFileStream("parquet", src.getCanonicalPath)
 
-      // After creating DF and before starting stream, add data with different schema
-      // Should not affect the inferred schema any more
-      AddParquetFileData.writeToFile(Seq(("value1", 0)).toDF("k", "v"), src, tmp)
+        // FileStreamSource should infer the column "k"
+        assert(fileStream.schema === StructType(Seq(StructField("k", StringType))))
 
-      testStream(fileStream)(
-        // Should not pick up column v in the file added before start
-        AddParquetFileData(Seq("value2").toDF("k"), src, tmp),
-        CheckAnswer("value0", "value1", "value2"),
+        // After creating DF and before starting stream, add data with different schema
+        // Should not affect the inferred schema any more
+        AddParquetFileData.writeToFile(Seq(("value1", 0)).toDF("k", "v"), src, tmp)
 
-        // Should read data in column k, and ignore v
-        AddParquetFileData(Seq(("value3", 1)).toDF("k", "v"), src, tmp),
-        CheckAnswer("value0", "value1", "value2", "value3"),
+        testStream(fileStream)(
+          // Should not pick up column v in the file added before start
+          AddParquetFileData(Seq("value2").toDF("k"), src, tmp),
+          CheckAnswer("value0", "value1", "value2"),
 
-        // Should ignore rows that do not have the necessary k column
-        AddParquetFileData(Seq("value5").toDF("v"), src, tmp),
-        CheckAnswer("value0", "value1", "value2", "value3", null)
-      )
-    }
-  }
+          // Should read data in column k, and ignore v
+          AddParquetFileData(Seq(("value3", 1)).toDF("k", "v"), src, tmp),
+          CheckAnswer("value0", "value1", "value2", "value3"),
 
-  test("file stream source without schema") {
-    withTempDir { src =>
-      // Only "text" doesn't need a schema
-      createFileStream("text", src.getCanonicalPath)
-
-      // Both "json" and "parquet" require a schema if no existing file to infer
-      intercept[AnalysisException] {
-        createFileStream("json", src.getCanonicalPath)
-      }
-      intercept[AnalysisException] {
-        createFileStream("parquet", src.getCanonicalPath)
+          // Should ignore rows that do not have the necessary k column
+          AddParquetFileData(Seq("value5").toDF("v"), src, tmp),
+          CheckAnswer("value0", "value1", "value2", "value3", null)
+        )
       }
     }
   }
+
+  // =============== file stream globbing tests ================
 
   test("read new files in nested directories with globbing") {
     withTempDirs { case (dir, tmp) =>
@@ -518,6 +603,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
+  // =============== other tests ================
+
   test("fault tolerance") {
     withTempDirs { case (src, tmp) =>
       val fileStream = createFileStream("text", src.getCanonicalPath)
@@ -535,9 +622,188 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       )
     }
   }
+
+  test("max files per trigger") {
+    withTempDir { case src =>
+      var lastFileModTime: Option[Long] = None
+
+      /** Create a text file with a single data item */
+      def createFile(data: Int): File = {
+        val file = stringToFile(new File(src, s"$data.txt"), data.toString)
+        if (lastFileModTime.nonEmpty) file.setLastModified(lastFileModTime.get + 1000)
+        lastFileModTime = Some(file.lastModified)
+        file
+      }
+
+      createFile(1)
+      createFile(2)
+      createFile(3)
+
+      // Set up a query to read text files 2 at a time
+      val df = spark
+        .readStream
+        .option("maxFilesPerTrigger", 2)
+        .text(src.getCanonicalPath)
+      val q = df
+        .writeStream
+        .format("memory")
+        .queryName("file_data")
+        .start()
+        .asInstanceOf[StreamExecution]
+      q.processAllAvailable()
+      val memorySink = q.sink.asInstanceOf[MemorySink]
+      val fileSource = q.logicalPlan.collect {
+        case StreamingExecutionRelation(source, _) if source.isInstanceOf[FileStreamSource] =>
+          source.asInstanceOf[FileStreamSource]
+      }.head
+
+      /** Check the data read in the last batch */
+      def checkLastBatchData(data: Int*): Unit = {
+        val schema = StructType(Seq(StructField("value", StringType)))
+        val df = spark.createDataFrame(
+          spark.sparkContext.makeRDD(memorySink.latestBatchData), schema)
+        checkAnswer(df, data.map(_.toString).toDF("value"))
+      }
+
+      def checkAllData(data: Seq[Int]): Unit = {
+        val schema = StructType(Seq(StructField("value", StringType)))
+        val df = spark.createDataFrame(
+          spark.sparkContext.makeRDD(memorySink.allData), schema)
+        checkAnswer(df, data.map(_.toString).toDF("value"))
+      }
+
+      /** Check how many batches have executed since the last time this check was made */
+      var lastBatchId = -1L
+      def checkNumBatchesSinceLastCheck(numBatches: Int): Unit = {
+        require(lastBatchId >= 0)
+        assert(memorySink.latestBatchId.get === lastBatchId + numBatches)
+        lastBatchId = memorySink.latestBatchId.get
+      }
+
+      checkLastBatchData(3)  // (1 and 2) should be in batch 1, (3) should be in batch 2 (last)
+      checkAllData(1 to 3)
+      lastBatchId = memorySink.latestBatchId.get
+
+      fileSource.withBatchingLocked {
+        createFile(4)
+        createFile(5)   // 4 and 5 should be in a batch
+        createFile(6)
+        createFile(7)   // 6 and 7 should be in the last batch
+      }
+      q.processAllAvailable()
+      checkNumBatchesSinceLastCheck(2)
+      checkLastBatchData(6, 7)
+      checkAllData(1 to 7)
+
+      fileSource.withBatchingLocked {
+        createFile(8)
+        createFile(9)    // 8 and 9 should be in a batch
+        createFile(10)
+        createFile(11)   // 10 and 11 should be in a batch
+        createFile(12)   // 12 should be in the last batch
+      }
+      q.processAllAvailable()
+      checkNumBatchesSinceLastCheck(3)
+      checkLastBatchData(12)
+      checkAllData(1 to 12)
+
+      q.stop()
+    }
+  }
+
+  test("max files per trigger - incorrect values") {
+    withTempDir { case src =>
+      def testMaxFilePerTriggerValue(value: String): Unit = {
+        val df = spark.readStream.option("maxFilesPerTrigger", value).text(src.getCanonicalPath)
+        val e = intercept[IllegalArgumentException] {
+          testStream(df)()
+        }
+        Seq("maxFilesPerTrigger", value, "positive integer").foreach { s =>
+          assert(e.getMessage.contains(s))
+        }
+      }
+
+      testMaxFilePerTriggerValue("not-a-integer")
+      testMaxFilePerTriggerValue("-1")
+      testMaxFilePerTriggerValue("0")
+      testMaxFilePerTriggerValue("10.1")
+    }
+  }
+
+  test("explain") {
+    withTempDirs { case (src, tmp) =>
+      src.mkdirs()
+
+      val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_ + "-x")
+      // Test `explain` not throwing errors
+      df.explain()
+
+      val q = df.writeStream.queryName("file_explain").format("memory").start()
+        .asInstanceOf[StreamExecution]
+      try {
+        assert("No physical plan. Waiting for data." === q.explainInternal(false))
+        assert("No physical plan. Waiting for data." === q.explainInternal(true))
+
+        val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+        val finalFile = new File(src, tempFile.getName)
+        require(stringToFile(tempFile, "foo").renameTo(finalFile))
+
+        q.processAllAvailable()
+
+        val explainWithoutExtended = q.explainInternal(false)
+        // `extended = false` only displays the physical plan.
+        assert("Relation.*text".r.findAllMatchIn(explainWithoutExtended).size === 0)
+        assert("TextFileFormat".r.findAllMatchIn(explainWithoutExtended).size === 1)
+
+        val explainWithExtended = q.explainInternal(true)
+        // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
+        // plan.
+        assert("Relation.*text".r.findAllMatchIn(explainWithExtended).size === 3)
+        assert("TextFileFormat".r.findAllMatchIn(explainWithExtended).size === 1)
+      } finally {
+        q.stop()
+      }
+    }
+  }
+
+  test("SPARK-17372 - write file names to WAL as Array[String]") {
+    // Note: If this test takes longer than the timeout, then its likely that this is actually
+    // running a Spark job with 10000 tasks. This test tries to avoid that by
+    // 1. Setting the threshold for parallel file listing to very high
+    // 2. Using a query that should use constant folding to eliminate reading of the files
+
+    val numFiles = 10000
+
+    // This is to avoid running a spark job to list of files in parallel
+    // by the ListingFileCatalog.
+    spark.sessionState.conf.setConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD, numFiles * 2)
+
+    withTempDirs { case (root, tmp) =>
+      val src = new File(root, "a=1")
+      src.mkdirs()
+
+      (1 to numFiles).map { _.toString }.foreach { i =>
+        val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+        val finalFile = new File(src, tempFile.getName)
+        stringToFile(finalFile, i)
+      }
+      assert(src.listFiles().size === numFiles)
+
+      val files = spark.readStream.text(root.getCanonicalPath).as[String]
+
+      // Note this query will use constant folding to eliminate the file scan.
+      // This is to avoid actually running a Spark job with 10000 tasks
+      val df = files.filter("1 == 0").groupBy().count()
+
+      testStream(df, InternalOutputModes.Complete)(
+        AddTextFileData("0", src, tmp),
+        CheckAnswer(0)
+      )
+    }
+  }
 }
 
-class FileStreamSourceStressTestSuite extends FileStreamSourceTest with SharedSQLContext {
+class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
 
   import testImplicits._
 

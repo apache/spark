@@ -21,7 +21,7 @@ from pyspark import since, keyword_only
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredictionCol
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.common import inherit_doc
 
 __all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator',
            'MulticlassClassificationEvaluator']
@@ -111,10 +111,10 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label
     1) or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> scoreAndLabels = map(lambda x: (Vectors.dense([1.0 - x[0], x[0]]), x[1]),
     ...    [(0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)])
-    >>> dataset = sqlContext.createDataFrame(scoreAndLabels, ["raw", "label"])
+    >>> dataset = spark.createDataFrame(scoreAndLabels, ["raw", "label"])
     ...
     >>> evaluator = BinaryClassificationEvaluator(rawPredictionCol="raw")
     >>> evaluator.evaluate(dataset)
@@ -181,7 +181,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
 
     >>> scoreAndLabels = [(-28.98343821, -27.0), (20.21491975, 21.5),
     ...   (-25.98418959, -22.0), (30.69731842, 33.0), (74.69283752, 71.0)]
-    >>> dataset = sqlContext.createDataFrame(scoreAndLabels, ["raw", "label"])
+    >>> dataset = spark.createDataFrame(scoreAndLabels, ["raw", "label"])
     ...
     >>> evaluator = RegressionEvaluator(predictionCol="raw")
     >>> evaluator.evaluate(dataset)
@@ -193,9 +193,6 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
 
     .. versionadded:: 1.4.0
     """
-    # Because we will maximize evaluation value (ref: `CrossValidator`),
-    # when we evaluate a metric that is needed to minimize (e.g., `"rmse"`, `"mse"`, `"mae"`),
-    # we take and output the negative of this metric.
     metricName = Param(Params._dummy(), "metricName",
                        """metric name in evaluation - one of:
                        rmse - root mean squared error (default)
@@ -256,21 +253,19 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
 
     >>> scoreAndLabels = [(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)]
-    >>> dataset = sqlContext.createDataFrame(scoreAndLabels, ["prediction", "label"])
+    >>> dataset = spark.createDataFrame(scoreAndLabels, ["prediction", "label"])
     ...
     >>> evaluator = MulticlassClassificationEvaluator(predictionCol="prediction")
     >>> evaluator.evaluate(dataset)
     0.66...
-    >>> evaluator.evaluate(dataset, {evaluator.metricName: "precision"})
-    0.66...
-    >>> evaluator.evaluate(dataset, {evaluator.metricName: "recall"})
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
     0.66...
 
     .. versionadded:: 1.5.0
     """
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
-                       "(f1|precision|recall|weightedPrecision|weightedRecall)",
+                       "(f1|weightedPrecision|weightedRecall|accuracy)",
                        typeConverter=TypeConverters.toString)
 
     @keyword_only
@@ -316,17 +311,19 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
 
 if __name__ == "__main__":
     import doctest
-    from pyspark.context import SparkContext
-    from pyspark.sql import SQLContext
+    from pyspark.sql import SparkSession
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    sc = SparkContext("local[2]", "ml.evaluation tests")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession.builder\
+        .master("local[2]")\
+        .appName("ml.evaluation tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
     globs['sc'] = sc
-    globs['sqlContext'] = sqlContext
+    globs['spark'] = spark
     (failure_count, test_count) = doctest.testmod(
         globs=globs, optionflags=doctest.ELLIPSIS)
-    sc.stop()
+    spark.stop()
     if failure_count:
         exit(-1)

@@ -21,6 +21,7 @@ import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 import java.util.Properties
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
@@ -198,8 +199,8 @@ private[spark] object Task {
    */
   def serializeWithDependencies(
       task: Task[_],
-      currentFiles: HashMap[String, Long],
-      currentJars: HashMap[String, Long],
+      currentFiles: mutable.Map[String, Long],
+      currentJars: mutable.Map[String, Long],
       serializer: SerializerInstance)
     : ByteBuffer = {
 
