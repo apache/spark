@@ -550,7 +550,7 @@ class Word2VecModel private[spark] (
    * @param wordOpt optionally, a word to reject from the results list
    * @return array of (word, cosineSimilarity)
    */
-  private[spark] def findSynonyms(
+  private def findSynonyms(
       vector: Vector,
       num: Int,
       wordOpt: Option[String]): Array[(String, Double)] = {
@@ -584,13 +584,14 @@ class Word2VecModel private[spark] (
     // elsewhere) assumes that distinct words do not have identical
     // vector representations
 
-    wordList.zip(cosVec)
-      .toSeq
-      .sortBy(-_._2)
-      .take(num + 1)
-      .dropWhile(p => wordOpt.map(w => w.equals(p._1)).getOrElse(false))
-      .take(num)
-      .toArray
+    val scored = wordList.zip(cosVec).toSeq.sortBy(-_._2)
+
+    val filtered = wordOpt match {
+      case Some(w) => scored.take(num + 1).filter(tup => w != tup._1)
+      case None => scored
+    }
+
+    filtered.take(num).toArray
   }
 
   /**

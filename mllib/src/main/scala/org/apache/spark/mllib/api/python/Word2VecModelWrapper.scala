@@ -43,22 +43,34 @@ private[python] class Word2VecModelWrapper(model: Word2VecModel) {
     rdd.rdd.map(model.transform)
   }
 
+  /**
+   * Finds synonyms of a word; do not include the word itself in results.
+   * @param word a word
+   * @param num number of synonyms to find
+   * @return a list consisting of a list of words and a vector of cosine similarities
+   */
   def findSynonyms(word: String, num: Int): JList[Object] = {
-    val vec = transform(word)
-    findSynonyms(vec, num, Some(word))
+    prepareResult(model.findSynonyms(word, num))
   }
 
+  /**
+   * Finds words similar to the the vector representation of a word without
+   * filtering results.
+   * @param vector a vector
+   * @param num number of synonyms to find
+   * @return a list consisting of a list of words and a vector of cosine similarities
+   */
   def findSynonyms(vector: Vector, num: Int): JList[Object] = {
-    findSynonyms(vector, num, None)
+    prepareResult(model.findSynonyms(vector, num))
   }
 
-  def findSynonyms(
-      vector: Vector, num: Int, wordOpt: Option[String]): JList[Object] = {
-    val result = model.findSynonyms(vector, num, wordOpt)
+  private def prepareResult(result: Array[(String, Double)]) = {
     val similarity = Vectors.dense(result.map(_._2))
     val words = result.map(_._1)
     List(words, similarity).map(_.asInstanceOf[Object]).asJava
   }
+
+
   def getVectors: JMap[String, JList[Float]] = {
     model.getVectors.map { case (k, v) =>
       (k, v.toList.asJava)
