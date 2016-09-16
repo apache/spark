@@ -21,6 +21,7 @@ import java.io._
 
 import com.google.common.io.Closeables
 
+import org.apache.spark.SparkException
 import org.apache.spark.memory.{MemoryConsumer, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.unsafe.Platform
@@ -212,17 +213,22 @@ private[python] case class HybridRowQueue(
   }
 
   private def createNewQueue(required: Long): RowQueue = {
-    val buffer = try {
-      val page = allocatePage(required)
+    val page = try {
+      allocatePage(required)
+    } catch {
+      case _: OutOfMemoryError =>
+        null
+    }
+    val buffer = if (page != null) {
       new InMemoryRowQueue(page, numFields) {
         override def close(): Unit = {
           freePage(page)
         }
       }
-    } catch {
-      case _: OutOfMemoryError =>
-        createDiskQueue()
+    } else {
+      createDiskQueue()
     }
+
     synchronized {
       queues.add(buffer)
     }
@@ -232,7 +238,9 @@ private[python] case class HybridRowQueue(
   def add(row: UnsafeRow): Boolean = {
     if (writing == null || !writing.add(row)) {
       writing = createNewQueue(4 + row.getSizeInBytes)
-      assert(writing.add(row), s"failed to push a row into $writing")
+      if (!writing.add(row)) {
+        throw new SparkException(s"failed to push a row into $writing")
+      }
     }
     true
   }
