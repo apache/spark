@@ -23,13 +23,14 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.AnalyzeTableCommand
+import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, AnalyzeTableCommand}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryManager}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -186,13 +187,18 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   }
 
   /**
-   * Analyzes the given table in the current database to generate statistics, which will be
-   * used in query optimizations.
-   *
-   * Right now, it only supports catalog tables and it only updates the size of a catalog table
-   * in the external catalog.
+   * Analyzes the given table in the current database to generate table-level statistics, which
+   * will be used in query optimizations.
    */
-  def analyze(tableName: String, noscan: Boolean = true): Unit = {
-    AnalyzeTableCommand(tableName, noscan).run(sparkSession)
+  def analyzeTable(tableIdent: TableIdentifier, noscan: Boolean = true): Unit = {
+    AnalyzeTableCommand(tableIdent, noscan).run(sparkSession)
+  }
+
+  /**
+   * Analyzes the given columns in the table to generate column-level statistics, which will be
+   * used in query optimizations.
+   */
+  def analyzeTableColumns(tableIdent: TableIdentifier, columnNames: Seq[String]): Unit = {
+    AnalyzeColumnCommand(tableIdent, columnNames).run(sparkSession)
   }
 }

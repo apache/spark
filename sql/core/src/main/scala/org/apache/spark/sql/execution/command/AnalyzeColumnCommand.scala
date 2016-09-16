@@ -20,13 +20,13 @@ package org.apache.spark.sql.execution.command
 import scala.collection.mutable
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
-import org.apache.spark.sql.catalyst.plans.logical.{BasicColStats, Statistics}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, BasicColStats, Statistics}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 
@@ -35,17 +35,16 @@ import org.apache.spark.sql.types._
  * which will be used in query optimizations.
  */
 case class AnalyzeColumnCommand(
-    tableName: String,
+    tableIdent: TableIdentifier,
     columnNames: Seq[String]) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
-    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
 
     // check correctness of column names
-    val validColumns = mutable.HashSet[NamedExpression]()
-    val resolver = sparkSession.sessionState.conf.resolver
+    val validColumns = mutable.MutableList[NamedExpression]()
+    val resolver = sessionState.conf.resolver
     columnNames.foreach { col =>
       val exprOption = relation.resolve(col.split("\\."), resolver)
       if (exprOption.isEmpty) {
@@ -71,143 +70,90 @@ case class AnalyzeColumnCommand(
     }
 
     def updateStats(catalogTable: CatalogTable, newTotalSize: Long): Unit = {
-      // collect column statistics
-      val aggColumns = mutable.ArrayBuffer[Column](count(Column("*")))
-      validColumns.foreach(entry => aggColumns ++= statsAgg(entry.name, entry.dataType))
-      val statsRow: InternalRow = Dataset.ofRows(sparkSession, relation).select(aggColumns: _*)
+      // Collect statistics per column.
+      // The first element in the result will be the overall row count, the following elements
+      // will be structs containing all column stats.
+      // The layout of each struct follows the layout of the BasicColStats.
+      val ndvMaxErr = sessionState.conf.ndvMaxError
+      val expressions = Count(Literal(1)).toAggregateExpression() +:
+        validColumns.map(ColumnStatsStruct(_, ndvMaxErr))
+      val namedExpressions = expressions.map(e => Alias(e, e.toString)())
+      val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation))
         .queryExecution.toRdd.collect().head
 
-      // We also update table-level stats to prevent inconsistency in case of table modification
-      // between the two ANALYZE commands for collecting table-level stats and column-level stats.
+      // unwrap the result
       val rowCount = statsRow.getLong(0)
-      var newStats: Statistics = if (catalogTable.stats.isDefined) {
-        catalogTable.stats.get.copy(sizeInBytes = newTotalSize, rowCount = Some(rowCount))
-      } else {
-        Statistics(sizeInBytes = newTotalSize, rowCount = Some(rowCount))
-      }
+      val colStats = validColumns.zipWithIndex.map { case (expr, i) =>
+        val colInfo = statsRow.getStruct(i + 1, ColumnStatsStruct.statsNumber)
+        val colStats = ColumnStatsStruct.unwrapRow(expr, colInfo)
+        (expr.name, colStats)
+      }.toMap
 
-      var pos = 1
-      val colStats = mutable.HashMap[String, BasicColStats]()
-      validColumns.foreach { attr =>
-        attr.dataType match {
-          case n: NumericType =>
-            colStats += attr.name -> BasicColStats(
-              dataType = attr.dataType,
-              numNulls = rowCount - statsRow.getLong(pos + NumericStatsAgg.numNotNullsIndex),
-              max = Option(statsRow.get(pos + NumericStatsAgg.maxIndex, attr.dataType)),
-              min = Option(statsRow.get(pos + NumericStatsAgg.minIndex, attr.dataType)),
-              ndv = Some(statsRow.getLong(pos + NumericStatsAgg.ndvIndex)))
-            pos += NumericStatsAgg.statsSeq.length
-          case TimestampType | DateType =>
-            colStats += attr.name -> BasicColStats(
-              dataType = attr.dataType,
-              numNulls = rowCount - statsRow.getLong(pos + NumericStatsAgg.numNotNullsIndex),
-              max = Option(statsRow.get(pos + NumericStatsAgg.maxIndex, attr.dataType)),
-              min = Option(statsRow.get(pos + NumericStatsAgg.minIndex, attr.dataType)),
-              ndv = Some(statsRow.getLong(pos + NumericStatsAgg.ndvIndex)))
-            pos += NumericStatsAgg.statsSeq.length
-          case StringType =>
-            colStats += attr.name -> BasicColStats(
-              dataType = attr.dataType,
-              numNulls = rowCount - statsRow.getLong(pos + StringStatsAgg.numNotNullsIndex),
-              maxColLen = Some(statsRow.getLong(pos + StringStatsAgg.maxLenIndex)),
-              avgColLen =
-                Some(statsRow.getLong(pos + StringStatsAgg.sumLenIndex) / (1.0 * rowCount)),
-              ndv = Some(statsRow.getLong(pos + StringStatsAgg.ndvIndex)))
-            pos += StringStatsAgg.statsSeq.length
-          case BinaryType =>
-            colStats += attr.name -> BasicColStats(
-              dataType = attr.dataType,
-              numNulls = rowCount - statsRow.getLong(pos + BinaryStatsAgg.numNotNullsIndex),
-              maxColLen = Some(statsRow.getLong(pos + BinaryStatsAgg.maxLenIndex)),
-              avgColLen =
-                Some(statsRow.getLong(pos + BinaryStatsAgg.sumLenIndex) / (1.0 * rowCount)))
-            pos += BinaryStatsAgg.statsSeq.length
-          case BooleanType =>
-            val numOfNotNulls = statsRow.getLong(pos + BooleanStatsAgg.numNotNullsIndex)
-            val numOfTrues = Some(statsRow.getLong(pos + BooleanStatsAgg.numTruesIndex))
-            colStats += attr.name -> BasicColStats(
-              dataType = attr.dataType,
-              numNulls = rowCount - numOfNotNulls,
-              numTrues = numOfTrues,
-              numFalses = numOfTrues.map(i => numOfNotNulls - i),
-              ndv = Some(2))
-            pos += BooleanStatsAgg.statsSeq.length
-        }
-      }
-      newStats = newStats.copy(basicColStats = colStats.toMap)
-      sessionState.catalog.alterTable(catalogTable.copy(stats = Some(newStats)))
+      val statistics =
+        Statistics(sizeInBytes = newTotalSize, rowCount = Some(rowCount), basicColStats = colStats)
+      sessionState.catalog.alterTable(catalogTable.copy(stats = Some(statistics)))
       // Refresh the cached data source table in the catalog.
       sessionState.catalog.refreshTable(tableIdent)
     }
 
     Seq.empty[Row]
   }
-
-  private def statsAgg(name: String, dataType: DataType): Seq[Column] = dataType match {
-    // Currently we only support stats generation for atomic types
-    case n: NumericType => NumericStatsAgg(name)
-    case TimestampType | DateType => NumericStatsAgg(name)
-    case StringType => StringStatsAgg(name)
-    case BinaryType => BinaryStatsAgg(name)
-    case BooleanType => BooleanStatsAgg(name)
-    case otherType =>
-      throw new AnalysisException(s"Analyzing column $name of $otherType is not supported.")
-  }
 }
 
-object ColumnStats extends Enumeration {
-  val MAX, MIN, NDV, NUM_NOT_NULLS, MAX_LENGTH, SUM_LENGTH, NUM_TRUES = Value
-}
+object ColumnStatsStruct {
+  val zero = Literal(0, LongType)
+  val one = Literal(1, LongType)
+  val two = Literal(2, LongType)
+  val nullLong = Literal(null, LongType)
+  val nullDouble = Literal(null, DoubleType)
+  val nullString = Literal(null, StringType)
+  val nullBinary = Literal(null, BinaryType)
+  val nullBoolean = Literal(null, BooleanType)
+  val statsNumber = 8
 
-trait StatsAggFunc {
-  // This sequence is used to track the order of stats results when collecting.
-  val statsSeq: Seq[ColumnStats.Value]
-
-  def apply(name: String): Seq[Column] = {
-    val col = Column(name)
-    statsSeq.map {
-      case ColumnStats.MAX => max(col)
-      case ColumnStats.MIN => min(col)
-      // count(distinct col) will have a shuffle, so we use an approximate ndv for efficiency
-      case ColumnStats.NDV => approxCountDistinct(col)
-      case ColumnStats.NUM_NOT_NULLS => count(col)
-      case ColumnStats.MAX_LENGTH => max(length(col))
-      case ColumnStats.SUM_LENGTH => sum(length(col))
-      case ColumnStats.NUM_TRUES => sum(col.cast(IntegerType))
+  def apply(e: Expression, relativeSD: Double): CreateStruct = {
+    var statistics = e.dataType match {
+      case n: NumericType =>
+        Seq(Max(e), Min(e), HyperLogLogPlusPlus(e, relativeSD), nullDouble, nullLong, nullLong,
+          nullLong)
+      case TimestampType | DateType =>
+        Seq(Max(e), Min(e), HyperLogLogPlusPlus(e, relativeSD), nullDouble, nullLong, nullLong,
+          nullLong)
+      case StringType =>
+        Seq(nullString, nullString, HyperLogLogPlusPlus(e, relativeSD), Average(Length(e)),
+          Max(Length(e)), nullLong, nullLong)
+      case BinaryType =>
+        Seq(nullBinary, nullBinary, nullLong, Average(Length(e)), Max(Length(e)), nullLong,
+          nullLong)
+      case BooleanType =>
+        Seq(nullBoolean, nullBoolean, two, nullDouble, nullLong, Sum(If(e, one, zero)),
+          Sum(If(e, zero, one)))
+      case otherType =>
+        throw new AnalysisException("ANALYZE command is not supported for data type: " +
+          s"${e.dataType}")
     }
+    statistics = if (e.nullable) {
+      Sum(If(IsNull(e), one, zero)) +: statistics
+    } else {
+      zero +: statistics
+    }
+    assert(statistics.length == statsNumber)
+    CreateStruct(statistics.map {
+      case af: AggregateFunction => af.toAggregateExpression()
+      case e: Expression => e
+    })
   }
 
-  // This is used to locate the needed stat in the sequence.
-  def offset: Map[ColumnStats.Value, Int] = statsSeq.zipWithIndex.toMap
-
-  def numNotNullsIndex: Int = offset(ColumnStats.NUM_NOT_NULLS)
-}
-
-object NumericStatsAgg extends StatsAggFunc {
-  override val statsSeq = Seq(ColumnStats.MAX, ColumnStats.MIN, ColumnStats.NDV,
-    ColumnStats.NUM_NOT_NULLS)
-  def maxIndex: Int = offset(ColumnStats.MAX)
-  def minIndex: Int = offset(ColumnStats.MIN)
-  def ndvIndex: Int = offset(ColumnStats.NDV)
-}
-
-object StringStatsAgg extends StatsAggFunc {
-  override val statsSeq = Seq(ColumnStats.MAX_LENGTH, ColumnStats.SUM_LENGTH, ColumnStats.NDV,
-    ColumnStats.NUM_NOT_NULLS)
-  def maxLenIndex: Int = offset(ColumnStats.MAX_LENGTH)
-  def sumLenIndex: Int = offset(ColumnStats.SUM_LENGTH)
-  def ndvIndex: Int = offset(ColumnStats.NDV)
-}
-
-object BinaryStatsAgg extends StatsAggFunc {
-  override val statsSeq = Seq(ColumnStats.MAX_LENGTH, ColumnStats.SUM_LENGTH,
-    ColumnStats.NUM_NOT_NULLS)
-  def maxLenIndex: Int = offset(ColumnStats.MAX_LENGTH)
-  def sumLenIndex: Int = offset(ColumnStats.SUM_LENGTH)
-}
-
-object BooleanStatsAgg extends StatsAggFunc {
-  override val statsSeq = Seq(ColumnStats.NUM_TRUES, ColumnStats.NUM_NOT_NULLS)
-  def numTruesIndex: Int = offset(ColumnStats.NUM_TRUES)
+  def unwrapRow(e: Expression, row: InternalRow): BasicColStats = {
+    BasicColStats(
+      dataType = e.dataType,
+      numNulls = row.getLong(0),
+      max = if (row.isNullAt(1)) None else Some(row.get(1, e.dataType)),
+      min = if (row.isNullAt(2)) None else Some(row.get(2, e.dataType)),
+      ndv = if (row.isNullAt(3)) None else Some(row.getLong(3)),
+      avgColLen = if (row.isNullAt(4)) None else Some(row.getDouble(4)),
+      maxColLen = if (row.isNullAt(5)) None else Some(row.getLong(5)),
+      numTrues = if (row.isNullAt(6)) None else Some(row.getLong(6)),
+      numFalses = if (row.isNullAt(7)) None else Some(row.getLong(7) - row.getLong(0)))
+  }
 }

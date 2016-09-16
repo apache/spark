@@ -34,14 +34,15 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
  * Analyzes the given table in the current database to generate statistics, which will be
  * used in query optimizations.
  */
-case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extends RunnableCommand {
+case class AnalyzeTableCommand(
+    tableIdent: TableIdentifier,
+    noscan: Boolean = true) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
-    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-    val tableIdentwithDB = TableIdentifier(tableIdent.table, Some(db))
-    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdentwithDB))
+    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
+    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdentWithDB))
 
     relation match {
       case relation: CatalogRelation =>
@@ -83,7 +84,7 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
       if (newStats.isDefined) {
         sessionState.catalog.alterTable(catalogTable.copy(stats = newStats))
         // Refresh the cached data source table in the catalog.
-        sessionState.catalog.refreshTable(tableIdent)
+        sessionState.catalog.refreshTable(tableIdentWithDB)
       }
     }
 

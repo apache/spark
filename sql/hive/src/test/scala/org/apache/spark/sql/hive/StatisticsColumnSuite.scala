@@ -106,7 +106,7 @@ class StatisticsColumnSuite extends StatisticsTest {
     val rdd = sparkContext.parallelize(Seq(null, "a", "bbbb", "cccc")).map(Row(_))
     val schema = StructType(StructField(name = "c1", dataType = StringType, nullable = true) :: Nil)
     val statsSeq = Seq(("c1", BasicColStats(dataType = StringType, numNulls = 1,
-      maxColLen = Some(4), avgColLen = Some(2.25), ndv = Some(3))))
+      maxColLen = Some(4), avgColLen = Some(3), ndv = Some(3))))
     checkColStats(rdd, schema, statsSeq)
   }
 
@@ -116,7 +116,7 @@ class StatisticsColumnSuite extends StatisticsTest {
     }
     val schema = StructType(StructField(name = "c1", dataType = BinaryType, nullable = true) :: Nil)
     val statsSeq = Seq(("c1", BasicColStats(dataType = BinaryType, numNulls = 1,
-      maxColLen = Some(4), avgColLen = Some(2.25))))
+      maxColLen = Some(4), avgColLen = Some(3))))
     checkColStats(rdd, schema, statsSeq)
   }
 
@@ -207,16 +207,16 @@ class StatisticsColumnSuite extends StatisticsTest {
         StructField(name = "c1", dataType = IntegerType, nullable = false))))
       df.write.format("json").saveAsTable(tmpTable)
 
-      sql(s"CREATE TABLE $table (c1 int)")
+      sql(s"CREATE TABLE $table (c1 int) STORED AS PARQUET")
       sql(s"INSERT INTO $table SELECT * FROM $tmpTable")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-      val fetchedStats1 = checkTableStats(tableName = table, isDataSourceTable = false,
+      val fetchedStats1 = checkTableStats(tableName = table, isDataSourceTable = true,
         hasSizeInBytes = true, expectedRowCounts = Some(1))
 
       // update table between analyze table and analyze column commands
       sql(s"INSERT INTO $table SELECT * FROM $tmpTable")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c1")
-      val fetchedStats2 = checkTableStats(tableName = table, isDataSourceTable = false,
+      val fetchedStats2 = checkTableStats(tableName = table, isDataSourceTable = true,
         hasSizeInBytes = true, expectedRowCounts = Some(2))
       assert(fetchedStats2.get.sizeInBytes > fetchedStats1.get.sizeInBytes)
 
