@@ -269,7 +269,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   * during parsing.</li>
+   * during parsing.
    * <ul>
    *  <li> - `PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
    *  the malformed string into a new field configured by `columnNameOfCorruptRecord`. When
@@ -277,6 +277,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *  <li> - `DROPMALFORMED` : ignores the whole corrupted records.</li>
    *  <li> - `FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
+   * </li>
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
