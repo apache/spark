@@ -22,7 +22,7 @@ import java.io.{File, IOException}
 import org.scalatest.Suite
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -42,9 +42,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    */
   def testDefaultReadWrite[T <: Params with MLWritable, M <: Model[M]](
       instance: T,
-      testParams: Boolean = true,
-      checkModelData: (M, M) => Unit = (m1: MyModel, m2: MyModel) =>
-        throw new UnsupportedOperationException("Model check function needed")): T = {
+      testParams: Boolean = true): T = {
     val uid = instance.uid
     val subdirName = Identifiable.randomUID("test")
 
@@ -66,8 +64,6 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
           (instance.getOrDefault(p), newInstance.getOrDefault(p)) match {
             case (Array(values), Array(newValues)) =>
               assert(values === newValues, s"Values do not match on param ${p.name}.")
-            case (m1: M, m2: M) =>
-              checkModelData(m1, m2)
             case (value, newValue) =>
               assert(value === newValue, s"Values do not match on param ${p.name}.")
           }
@@ -81,6 +77,31 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     val another = load.invoke(instance, path).asInstanceOf[T]
     assert(another.uid === instance.uid)
     another
+  }
+
+  /**
+   * Compare Params with complex types that could not compare with [[===]].
+   *
+   * @param stage A pipeline stage contains these params.
+   * @param stage2 Another pipeline stage to compare.
+   * @param testParams Params to compare.
+   * @param testFunctions Functions to compare complex type params.
+   */
+  def compareParamsWithComplexTypes(
+      stage: PipelineStage,
+      stage2: PipelineStage,
+      testParams: Map[String, Any],
+      testFunctions: Map[String, (Any, Any) => Unit]): Unit = {
+    testParams.foreach { case (p, v) =>
+      val param = stage.getParam(p)
+      val paramVal = stage.get(param).get
+      val paramVal2 = stage2.get(param).get
+      if (testFunctions.contains(p)) {
+        testFunctions(p)(paramVal, paramVal2)
+      } else {
+        assert(paramVal === paramVal2)
+      }
+    }
   }
 
   /**
@@ -112,33 +133,19 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     }
     val model = estimator.fit(dataset)
 
-    // Test Estimator save/load
-    val estimator2 = testDefaultReadWrite(estimator, checkModelData = checkModelData)
-    testParams.foreach { case (p, v) =>
-      val param = estimator.getParam(p)
-      val paramVal = estimator.get(param).get
-      val paramVal2 = estimator2.get(param).get
-      paramVal match {
-        case _: M =>
-          checkModelData(paramVal.asInstanceOf[M], paramVal2.asInstanceOf[M])
-        case other =>
-          assert(estimator.get(param).get === estimator2.get(param).get)
-      }
+    val testFunctions = if (testParams.contains("initialModel")) {
+      Map(("initialModel", checkModelData.asInstanceOf[(Any, Any) => Unit]))
+    } else {
+      Map.empty[String, (Any, Any) => Unit]
     }
 
+    // Test Estimator save/load
+    val estimator2 = testDefaultReadWrite(estimator, testParams = false)
+    compareParamsWithComplexTypes(estimator, estimator2, testParams, testFunctions)
+
     // Test Model save/load
-    val model2 = testDefaultReadWrite(model, checkModelData = checkModelData)
-    testParams.foreach { case (p, v) =>
-      val param = model.getParam(p)
-      val paramVal = estimator.get(param).get
-      val paramVal2 = estimator2.get(param).get
-      paramVal match {
-        case _: M =>
-          checkModelData(paramVal.asInstanceOf[M], paramVal2.asInstanceOf[M])
-        case other =>
-          assert(estimator.get(param).get === estimator2.get(param).get)
-      }
-    }
+    val model2 = testDefaultReadWrite(model, testParams = false)
+    compareParamsWithComplexTypes(model, model2, testParams, testFunctions)
 
     checkModelData(model, model2)
   }
