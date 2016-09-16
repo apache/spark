@@ -23,7 +23,7 @@ import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{PeriodicRDDCheckpointer, Utils}
 
 
 class PeriodicRDDCheckpointerSuite extends SparkFunSuite with MLlibTestSparkContext {

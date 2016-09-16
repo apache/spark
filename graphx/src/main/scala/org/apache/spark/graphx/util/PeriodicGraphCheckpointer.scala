@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.impl
+// package org.apache.spark.mllib.impl
+package org.apache.spark.graphx.util
 
 import org.apache.spark.SparkContext
 import org.apache.spark.graphx.Graph
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.PeriodicCheckpointer
 
 
 /**
@@ -76,7 +78,7 @@ import org.apache.spark.storage.StorageLevel
  *
  * TODO: Move this out of MLlib?
  */
-private[mllib] class PeriodicGraphCheckpointer[VD, ED](
+private[spark] class PeriodicGraphCheckpointer[VD, ED](
     checkpointInterval: Int,
     sc: SparkContext)
   extends PeriodicCheckpointer[Graph[VD, ED]](checkpointInterval, sc) {

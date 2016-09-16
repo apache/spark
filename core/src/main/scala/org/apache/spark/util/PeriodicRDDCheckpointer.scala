@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.impl
+package org.apache.spark.util
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
