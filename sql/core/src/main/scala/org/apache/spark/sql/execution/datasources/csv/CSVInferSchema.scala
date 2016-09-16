@@ -232,7 +232,7 @@ private[csv] object CSVTypeCast {
       nullable: Boolean = true,
       options: CSVOptions = CSVOptions()): Any = {
 
-    if (datum == options.nullValue && nullable) {
+    if (nullable && datum == options.nullValue) {
       null
     } else {
       castType match {
@@ -241,26 +241,22 @@ private[csv] object CSVTypeCast {
         case _: IntegerType => datum.toInt
         case _: LongType => datum.toLong
         case _: FloatType =>
-          if (datum == options.nanValue) {
-            Float.NaN
-          } else if (datum == options.negativeInf) {
-            Float.NegativeInfinity
-          } else if (datum == options.positiveInf) {
-            Float.PositiveInfinity
-          } else {
-            Try(datum.toFloat)
-              .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
+          datum match {
+            case options.nanValue => Float.NaN
+            case options.negativeInf => Float.NegativeInfinity
+            case options.positiveInf => Float.PositiveInfinity
+            case _ =>
+              Try(datum.toFloat)
+                .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
           }
         case _: DoubleType =>
-          if (datum == options.nanValue) {
-            Double.NaN
-          } else if (datum == options.negativeInf) {
-            Double.NegativeInfinity
-          } else if (datum == options.positiveInf) {
-            Double.PositiveInfinity
-          } else {
-            Try(datum.toDouble)
-              .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
+          datum match {
+            case options.nanValue => Double.NaN
+            case options.negativeInf => Double.NegativeInfinity
+            case options.positiveInf => Double.PositiveInfinity
+            case _ =>
+              Try(datum.toDouble)
+                .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
           }
         case _: BooleanType => datum.toBoolean
         case dt: DecimalType =>
