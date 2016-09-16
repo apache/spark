@@ -580,10 +580,6 @@ class Word2VecModel private[spark] (
       ind += 1
     }
 
-    // NB: This code (and the documented behavior of findSynonyms
-    // elsewhere) assumes that distinct words do not have identical
-    // vector representations
-
     val scored = wordList.zip(cosVec).toSeq.sortBy(-_._2)
 
     val filtered = wordOpt match {
