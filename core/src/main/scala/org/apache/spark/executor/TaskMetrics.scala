@@ -318,7 +318,7 @@ private[spark] object TaskMetrics extends Logging {
     internalAccums.foreach { acc =>
       val tmAcc = tm.nameToAccums(acc.name.get).asInstanceOf[AccumulatorV2[Any, Any]]
       tmAcc.metadata = acc.metadata
-      tmAcc.merge(acc.asInstanceOf[AccumulatorV2[Any, Any]])
+      tmAcc.internalMerge(acc.asInstanceOf[AccumulatorV2[Any, Any]])
     }
 
     tm.externalAccums ++= externalAccums
@@ -345,7 +345,7 @@ private[spark] class BlockStatusesAccumulator
 
   override def addImpl(v: (BlockId, BlockStatus)): Unit = _seq.add(v)
 
-  override def mergeImpl(
+  override def merge(
     other: AccumulatorV2[(BlockId, BlockStatus), java.util.List[(BlockId, BlockStatus)]]): Unit = {
     other match {
       case o: BlockStatusesAccumulator => _seq.addAll(o.value)

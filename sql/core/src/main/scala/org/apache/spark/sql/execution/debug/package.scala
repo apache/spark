@@ -119,7 +119,7 @@ package object debug {
       }
       override def reset(): Unit = _set.clear()
       override def addImpl(v: T): Unit = _set.add(v)
-      override def mergeImpl(other: AccumulatorV2[T, java.util.Set[T]]): Unit = {
+      override def merge(other: AccumulatorV2[T, java.util.Set[T]]): Unit = {
         _set.addAll(other.value)
       }
       override def value: java.util.Set[T] = _set

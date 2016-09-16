@@ -40,7 +40,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   override def reset(): Unit = _value = _zeroValue
 
-  override def mergeImpl(other: AccumulatorV2[Long, Long]): Unit = other match {
+  override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
     case o: SQLMetric => _value += o.value
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")

@@ -221,14 +221,14 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
 
   /**
    * Merges another same-type accumulator into this one and update its state, i.e. this should be
-   * merge-in-place. Developers should extend mergeImpl to customize the merge functionality.
+   * merge-in-place. Developers should extend merge to customize the merge functionality.
    */
-  final private[spark] lazy val merge: (AccumulatorV2[IN, OUT] => Unit) = {
+  final private[spark] lazy val internalMerge: (AccumulatorV2[IN, OUT] => Unit) = {
     // Handle data property accumulators
     if (metadata != null && metadata.dataProperty) {
       dataPropertyMerge _
     } else {
-      mergeImpl _
+      merge _
     }
   }
 
@@ -238,7 +238,7 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
         val splits = processed.getOrElseUpdate((rddId, shuffleWriteId), new mutable.BitSet())
         if (!splits.contains(splitId)) {
           splits += splitId
-          mergeImpl(v)
+          merge(v)
         }
       }
   }
@@ -246,9 +246,9 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
 
   /**
    * Merges another same-type accumulator into this one and update its state, i.e. this should be
-   * merge-in-place. Developers should extend mergeImpl to customize the merge functionality.
+   * merge-in-place. Developers should extend this merge to customize the merge functionality.
    */
-  protected def mergeImpl(other: AccumulatorV2[IN, OUT]): Unit
+  protected def merge(other: AccumulatorV2[IN, OUT]): Unit
 
   /**
    * Defines the current value of this accumulator
@@ -444,7 +444,7 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
    */
   def avg: Double = _sum.toDouble / _count
 
-  override def mergeImpl(other: AccumulatorV2[jl.Long, jl.Long]): Unit = other match {
+  override def merge(other: AccumulatorV2[jl.Long, jl.Long]): Unit = other match {
     case o: LongAccumulator =>
       _sum += o.sum
       _count += o.count
@@ -510,7 +510,7 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
    */
   def avg: Double = _sum / _count
 
-  override def mergeImpl(other: AccumulatorV2[jl.Double, jl.Double]): Unit = other match {
+  override def merge(other: AccumulatorV2[jl.Double, jl.Double]): Unit = other match {
     case o: DoubleAccumulator =>
       _sum += o.sum
       _count += o.count
@@ -547,7 +547,7 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
 
   override def addImpl(v: T): Unit = _list.add(v)
 
-  override def mergeImpl(other: AccumulatorV2[T, java.util.List[T]]): Unit = other match {
+  override def merge(other: AccumulatorV2[T, java.util.List[T]]): Unit = other match {
     case o: CollectionAccumulator[T] => _list.addAll(o.value)
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
@@ -583,7 +583,7 @@ class LegacyAccumulatorWrapper[R, T](
 
   override def addImpl(v: T): Unit = _value = param.addAccumulator(_value, v)
 
-  override def mergeImpl(other: AccumulatorV2[T, R]): Unit = other match {
+  override def merge(other: AccumulatorV2[T, R]): Unit = other match {
     case o: LegacyAccumulatorWrapper[R, T] => _value = param.addInPlace(_value, o.value)
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
