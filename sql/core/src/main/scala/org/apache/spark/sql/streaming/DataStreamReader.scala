@@ -177,13 +177,13 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * character using backslash quoting mechanism</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    * during parsing.
-   * <ul>
-   *  <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts the
-   *  malformed string into a new field configured by `columnNameOfCorruptRecord`. When
-   *  a schema is set by user, it sets `null` for extra fields.</li>
-   *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
-   * </ul>
+   *   <ul>
+   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
+   *     the malformed string into a new field configured by `columnNameOfCorruptRecord`. When
+   *     a schema is set by user, it sets `null` for extra fields.</li>
+   *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   *   </ul>
    * </li>
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
@@ -250,12 +250,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * for any given value being read.</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    *    during parsing.
-   * <ul>
-   *   <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
-   *     a schema is set by user, it sets `null` for extra fields.</li>
-   *   <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *   <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
-   * </ul>
+   *   <ul>
+   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
+   *       a schema is set by user, it sets `null` for extra fields.</li>
+   *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   *   </ul>
    * </li>
    * </ul>
    *
