@@ -266,7 +266,7 @@ private[hive] trait HiveInspectors {
       case _: FloatObjectInspector if x.preferWritable() =>
         withNullSafe(o => getFloatWritable(o))
       case _: FloatObjectInspector =>
-        withNullSafe(o  => o.asInstanceOf[java.lang.Float])
+        withNullSafe(o => o.asInstanceOf[java.lang.Float])
       case _: DoubleObjectInspector if x.preferWritable() =>
         withNullSafe(o => getDoubleWritable(o))
       case _: DoubleObjectInspector =>
