@@ -59,7 +59,7 @@ class BitSet(numBits: Int) extends Serializable {
     val wordIndex = bitIndex >> 6 // divide by 64
     Arrays.fill(words, 0, wordIndex, 0)
     if(wordIndex < words.length) {
-      // Set the remaining bits
+      // Clear the remaining bits
       val mask = -1L << (bitIndex & 0x3f)
       words(wordIndex) &= mask
     }
