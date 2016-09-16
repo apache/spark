@@ -70,8 +70,8 @@ import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, Poi
  * All of the scheduling and execution in Spark is done based on these methods, allowing each RDD
  * to implement its own way of computing itself. Indeed, users can implement custom RDDs (e.g. for
  * reading data from a new storage system) by overriding these functions. Please refer to the
- * [[http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf Spark paper]] for more details
- * on RDD internals.
+ * [[https://www.usenix.org/system/files/conference/nsdi12/nsdi12-final138.pdf Spark paper]]
+ * for more details on RDD internals.
  */
 abstract class RDD[T: ClassTag](
     @transient private var _sc: SparkContext,
