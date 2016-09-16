@@ -646,7 +646,7 @@ case class ShowPartitionsCommand(
     val catalog = sparkSession.sessionState.catalog
 
     if (!catalog.tableExists(table)) {
-      throw new AnalysisException(s" Table does not exist")
+      throw new AnalysisException(s"Table ${table.unquotedString} does not exist")
     }
 
     if (catalog.isTemporaryTable(table)) {
