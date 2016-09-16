@@ -633,8 +633,8 @@ methods for creating DStreams from files as input sources.
 
      + A simple directory can be supplied, such as `hdfs://namenode:8040/logs/`.
        All files directly such a path will be processed as they are discovered.
-     + A regular expression can be supplied instead, such as
-       `hdfs://namenode:8040/logs/2016-*-31`.
+     + A POSIX glob pattern can be supplied, such as
+       `hdfs://namenode:8040/logs/2016-??-31`.
        Here, the DStream will consist of all files directly under those directories
        matching the regular expression.
        That is: it is a pattern of directories, not of files in directories.
@@ -644,29 +644,55 @@ methods for creating DStreams from files as input sources.
      + Files must be created in/moved under the `dataDirectory` directory/directories by
        an atomic operation. In HDFS and similar filesystems, this can be done *renaming* them
        into the data directory from another part of the same filesystem.
-     * If a wildcard is used to identify directories, such as `hdfs://namenode:8040/logs/2016*`,
+     * If a wildcard is used to identify directories, such as `hdfs://namenode:8040/logs/2016-*`,
        renaming an entire directory to match the path will add the directory to the list of
-       monitored directories. However, unless the modification time of the directory's files
+       monitored directories. Unless the modification time of the directory's files
        are within that of the current window, they will not be recognized as new files.
-     + Once processed, changes to a file will not cause the file to be reread.
+     + Once processed, changes to a file within the current window will not cause the file to be reread.
        That is: Updates are ignored.
      + The more files under a directory/wildcard pattern, the longer it will take to
        scan for changes —even if no files have actually changed.
+     + Calling `FileSystem.setTimes()` to fix the timestamp is a way to have the file picked
+       up in a later window, even if its contents have not changed.
 
-    Special points for object stores
+    Special points for HDFS
+    
+    For performance and scalability, the HDFS filesystem does not continually update the modification
+    time or even the listed filesize of a file while it is being written to. The algorithm is
+    
+    + File creation: a zero-byte file is listed, creation and modification time is set to the current
+      time as seen on the NameNode.
+    * File writes: data is buffered, nothing is written until local buffer is flushed
+    * `OutputStream.flush()` call or output buffer full: data is written to HDFS DataNodes. The
+      file length and modification time is only updated when the amount of data being written
+      crosses an HDFS block (64, 128, 256MB or similar).
+    * When `OutputStream.close()` is called, remaining data is written, the file closed and
+      the NameNode updated with the final size of the file. The modification time is set to
+      the time the file was closed.
+      
+    This means that is near-impossible to determine when a file being actively written to HDFS will
+    have its modification time updated and so changed detected; it will depend on the size of
+    the file being written. To guarantee that changes are picked up in a window, write the file
+    to a directory which is not being monitored, then, after the file is closed, `rename()` it into
+    the destination directory. 
+     
+    Object stores
+    
+    Object stores have a different set of limitations.
 
-     + Wildcard directory enumeration may be very slow with some object stores.
+     + Wildcard directory enumeration may be slow.
      + The slow-down from having many files to scan for changes is very significant. 
-     + File renaming is slow; it is `O(data)`.
-     + Directory rename is even slower and not atomic.
-     + Objects created directly though a single PUT operation are atomic, irrespective of
-       the programming language or library used to upload the file.
+     + Renaming directories and files can be very slow.
+     + Object creation directly though a PUT operation is atomic, irrespective of
+       the programming language or library used to upload the data.
+     + The `FileSystem.setTimes()` command to set file timestamps will be ignored.  
      + Writing a file to an object store using Hadoop's APIs is an atomic operation;
        the object is only created via a PUT operation in the final `OutputStream.close()` call.
 
     For this reason, applications using an object store as the direct destination of data
-    can consider using PUT operations to directly publish data for a DStream to pick up.
-    
+    can use PUT operations to directly publish data for a DStream to pick up —even though this
+    is not the mechanism to use when writing to HDFS or other filesystem.
+
 	For simple text files, there is an easier method `streamingContext.textFileStream(dataDirectory)`. And file streams do not require running a receiver, hence does not require allocating cores.
 
 	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
