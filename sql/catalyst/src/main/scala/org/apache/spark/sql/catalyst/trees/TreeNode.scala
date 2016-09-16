@@ -636,13 +636,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case t: Seq[_] if t.forall(_.isInstanceOf[TreeNode[_]]) ||
       t.forall(_.isInstanceOf[Partitioning]) || t.forall(_.isInstanceOf[DataType]) =>
       JArray(t.map(parseToJson).toList)
+    case t: Seq[_] if t.length > 0 && t.head.isInstanceOf[String] =>
+      JString(Utils.truncatedString(t, "[", ", ", "]"))
+    case t: Seq[_] => JNull
+    case m: Map[_, _] => JNull
     // if it's a scala object, we can simply keep the full class path.
     // TODO: currently if the class name ends with "$", we think it's a scala object, there is
     // probably a better way to check it.
     case obj if obj.getClass.getName.endsWith("$") => "object" -> obj.getClass.getName
-    case t: Seq[_] if t.length > 0 && t.head.isInstanceOf[String] =>
-      JString(Utils.truncatedString(t, "[", ", ", "]"))
-    case t: Seq[_] => JNull
     case p: Product if shouldConvertToJson(p) =>
       try {
         val fieldNames = getConstructorParameterNames(p.getClass)

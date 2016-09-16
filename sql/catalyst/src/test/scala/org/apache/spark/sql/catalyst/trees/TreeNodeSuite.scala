@@ -310,8 +310,8 @@ class TreeNodeSuite extends SparkFunSuite {
     compareJSON(JsonTestTreeNode(None).toJSON,
       s"""[
          |  {
-         |    "class":"${classOf[JsonTestTreeNode].getName}",
-         |    "num-children":0
+         |    "class": "${classOf[JsonTestTreeNode].getName}",
+         |    "num-children": 0
          |  }
          |]
        """.stripMargin)
@@ -319,17 +319,17 @@ class TreeNodeSuite extends SparkFunSuite {
     val uuid = UUID.randomUUID()
     assertJSON(uuid, "\"" + uuid.toString + "\"")
 
-    // Converts some Spark Sql types to JSON
+    // Converts Spark Sql DataType to JSON
     assertJSON(IntegerType, "\"integer\"")
     assertJSON(Metadata.empty, Metadata.empty.json)
     assertJSON(
       StorageLevel.NONE,
       """{
-        |  "useDisk":false,
-        |  "useMemory":false,
-        |  "useOffHeap":false,
-        |  "deserialized":false,
-        |  "replication":1
+        |  "useDisk": false,
+        |  "useMemory": false,
+        |  "useOffHeap": false,
+        |  "deserialized": false,
+        |  "replication": 1
         |}
       """.stripMargin)
 
@@ -338,10 +338,10 @@ class TreeNodeSuite extends SparkFunSuite {
       Literal(333),
       """[
         |  {
-        |    "class":"org.apache.spark.sql.catalyst.expressions.Literal",
-        |    "num-children":0,
-        |    "value":"333",
-        |    "dataType":"integer"
+        |    "class": "org.apache.spark.sql.catalyst.expressions.Literal",
+        |    "num-children": 0,
+        |    "value": "333",
+        |    "dataType": "integer"
         |  }
         |]
       """.stripMargin)
@@ -352,17 +352,17 @@ class TreeNodeSuite extends SparkFunSuite {
     // Converts Seq[DataType] to JSON
     assertJSON(Seq(IntegerType, DoubleType, FloatType), """["integer","double","float"]""")
 
-    // Converts Seq[Partitioning]
+    // Converts Seq[Partitioning] to JSON
     assertJSON(
       Seq(SinglePartition, RoundRobinPartitioning(numPartitions = 3)),
       """
         |[
         |  {
-        |    "object":"org.apache.spark.sql.catalyst.plans.physical.SinglePartition$"
+        |    "object": "org.apache.spark.sql.catalyst.plans.physical.SinglePartition$"
         |  },
         |  {
-        |    "product-class":"org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning",
-        |    "numPartitions":3
+        |    "product-class": "org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning",
+        |    "numPartitions": 3
         |  }
         |]
       """.stripMargin)
@@ -370,16 +370,20 @@ class TreeNodeSuite extends SparkFunSuite {
     // Converts case object to JSON
     assertJSON(
       DummyObject,
-      "{\"object\":\"org.apache.spark.sql.catalyst.trees.DummyObject$\"}")
+      """
+        |{
+        |  "object": "org.apache.spark.sql.catalyst.trees.DummyObject$"
+        |}
+      """.stripMargin)
 
     // Converts ExprId to JSON
     assertJSON(
       ExprId(0, uuid),
       s"""
          |{
-         |  "product-class":"org.apache.spark.sql.catalyst.expressions.ExprId",
-         |  "id":0,
-         |  "jvmId":"${uuid.toString}"
+         |  "product-class": "org.apache.spark.sql.catalyst.expressions.ExprId",
+         |  "id": 0,
+         |  "jvmId": "${uuid.toString}"
          |}
        """.stripMargin)
 
@@ -388,11 +392,11 @@ class TreeNodeSuite extends SparkFunSuite {
       StructField("field", IntegerType),
       """
         |{
-        |  "product-class":"org.apache.spark.sql.types.StructField",
-        |  "name":"field",
-        |  "dataType":"integer",
-        |  "nullable":true,
-        |  "metadata":{}
+        |  "product-class": "org.apache.spark.sql.types.StructField",
+        |  "name": "field",
+        |  "dataType": "integer",
+        |  "nullable": true,
+        |  "metadata": {}
         |}
       """.stripMargin)
 
@@ -400,7 +404,10 @@ class TreeNodeSuite extends SparkFunSuite {
     assertJSON(
       TableIdentifier("table"),
       """
-        |{"product-class":"org.apache.spark.sql.catalyst.TableIdentifier","table":"table"}
+        |{
+        |  "product-class": "org.apache.spark.sql.catalyst.TableIdentifier",
+        |  "table": "table"
+        |}
       """.stripMargin)
 
     // Converts JoinType to JSON
@@ -408,8 +415,10 @@ class TreeNodeSuite extends SparkFunSuite {
       NaturalJoin(LeftOuter),
       """
         |{
-        |  "product-class":"org.apache.spark.sql.catalyst.plans.NaturalJoin",
-        |  "tpe":{"object":"org.apache.spark.sql.catalyst.plans.LeftOuter$"}
+        |  "product-class": "org.apache.spark.sql.catalyst.plans.NaturalJoin",
+        |  "tpe":{
+        |    "object": "org.apache.spark.sql.catalyst.plans.LeftOuter$"
+        |  }
         |}
       """.stripMargin)
 
@@ -417,7 +426,10 @@ class TreeNodeSuite extends SparkFunSuite {
     assertJSON(
       FunctionIdentifier("function", None),
       """
-        |{"product-class":"org.apache.spark.sql.catalyst.FunctionIdentifier","funcName":"function"}
+        |{
+        |  "product-class": "org.apache.spark.sql.catalyst.FunctionIdentifier",
+        |  "funcName": "function"
+        |}
       """.stripMargin)
 
     // Converts BucketSpec to JSON
@@ -425,10 +437,10 @@ class TreeNodeSuite extends SparkFunSuite {
       BucketSpec(1, Seq("bucket"), Seq("sort")),
       s"""
          |{
-         |  "product-class":"org.apache.spark.sql.catalyst.catalog.BucketSpec",
-         |  "numBuckets":1,
-         |  "bucketColumnNames":"[bucket]",
-         |  "sortColumnNames":"[sort]"
+         |  "product-class": "org.apache.spark.sql.catalyst.catalog.BucketSpec",
+         |  "numBuckets": 1,
+         |  "bucketColumnNames": "[bucket]",
+         |  "sortColumnNames": "[sort]"
          |}
        """.stripMargin)
 
@@ -436,7 +448,10 @@ class TreeNodeSuite extends SparkFunSuite {
     assertJSON(
       ValueFollowing(3),
       s"""
-         |{"product-class":"org.apache.spark.sql.catalyst.expressions.ValueFollowing","value":3}
+         |{
+         |  "product-class": "org.apache.spark.sql.catalyst.expressions.ValueFollowing",
+         |  "value": 3
+         |}
        """.stripMargin)
 
     // Converts WindowFrame to JSON
@@ -444,15 +459,15 @@ class TreeNodeSuite extends SparkFunSuite {
       SpecifiedWindowFrame(RowFrame, UnboundedFollowing, CurrentRow),
       """
         |{
-        |  "product-class":"org.apache.spark.sql.catalyst.expressions.SpecifiedWindowFrame",
+        |  "product-class": "org.apache.spark.sql.catalyst.expressions.SpecifiedWindowFrame",
         |  "frameType": {
-        |    "object":"org.apache.spark.sql.catalyst.expressions.RowFrame$"
+        |    "object": "org.apache.spark.sql.catalyst.expressions.RowFrame$"
         |  },
         |  "frameStart": {
-        |    "object":"org.apache.spark.sql.catalyst.expressions.UnboundedFollowing$"
+        |    "object": "org.apache.spark.sql.catalyst.expressions.UnboundedFollowing$"
         |  },
-        |  "frameEnd":{
-        |    "object":"org.apache.spark.sql.catalyst.expressions.CurrentRow$"
+        |  "frameEnd": {
+        |    "object": "org.apache.spark.sql.catalyst.expressions.CurrentRow$"
         |  }
         |}
        """.stripMargin)
@@ -462,8 +477,8 @@ class TreeNodeSuite extends SparkFunSuite {
       RoundRobinPartitioning(numPartitions = 3),
       """
         |{
-        |  "product-class":"org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning",
-        |  "numPartitions":3
+        |  "product-class": "org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning",
+        |  "numPartitions": 3
         |}
       """.stripMargin)
 
@@ -472,31 +487,21 @@ class TreeNodeSuite extends SparkFunSuite {
       FunctionResource(JarResource, "file:///"),
       """
         |{
-        |  "product-class":"org.apache.spark.sql.catalyst.catalog.FunctionResource",
-        |  "resourceType":{
-        |    "object":"org.apache.spark.sql.catalyst.catalog.JarResource$"
+        |  "product-class": "org.apache.spark.sql.catalyst.catalog.FunctionResource",
+        |  "resourceType": {
+        |    "object": "org.apache.spark.sql.catalyst.catalog.JarResource$"
         |  },
-        |  "uri":"file:///"
+        |  "uri": "file:///"
         |}
       """.stripMargin)
 
     // Converts BroadcastMode to JSON
     assertJSON(
       IdentityBroadcastMode,
-      """
-        |{"object":"org.apache.spark.sql.catalyst.plans.physical.IdentityBroadcastMode$"}
-      """.stripMargin)
+      """{"object": "org.apache.spark.sql.catalyst.plans.physical.IdentityBroadcastMode$"}""")
 
     // Converts CatalogTable to JSON
     val struct = StructType(StructField("a", IntegerType, true) :: Nil)
-
-    System.out.print(
-      JsonTestTreeNode(CatalogTable(
-        TableIdentifier("table"),
-        CatalogTableType.MANAGED,
-        CatalogStorageFormat.empty,
-        StructType(StructField("a", IntegerType, true) :: Nil))).toJSON)
-
     assertJSON(
       CatalogTable(
         TableIdentifier("table"),
@@ -506,30 +511,28 @@ class TreeNodeSuite extends SparkFunSuite {
         createTime = 0L),
       """
         |{
-        |  "product-class":"org.apache.spark.sql.catalyst.catalog.CatalogTable",
-        |  "identifier":{
-        |    "product-class":"org.apache.spark.sql.catalyst.TableIdentifier",
-        |    "table":"table"
+        |  "product-class": "org.apache.spark.sql.catalyst.catalog.CatalogTable",
+        |  "identifier": {
+        |    "product-class": "org.apache.spark.sql.catalyst.TableIdentifier",
+        |    "table": "table"
         |  },
-        |  "tableType":null,
-        |  "storage":null,
-        |  "schema":{
-        |    "type":"struct",
-        |    "fields":[{
-        |      "name":"a",
-        |      "type":"integer",
-        |      "nullable":true,
-        |      "metadata":{}
+        |  "tableType": null,
+        |  "storage": null,
+        |  "schema": {
+        |    "type": "struct",
+        |    "fields": [{
+        |      "name": "a",
+        |      "type": "integer",
+        |      "nullable": true,
+        |      "metadata": {}
         |    }]
         |  },
-        |  "partitionColumnNames":[],
-        |  "owner":"",
-        |  "createTime":0,
-        |  "lastAccessTime":-1,
-        |  "properties":{
-        |    "object":"scala.collection.immutable.Map$EmptyMap$"
-        |  },
-        |  "unsupportedFeatures":[]
+        |  "partitionColumnNames": [],
+        |  "owner": "",
+        |  "createTime": 0,
+        |  "lastAccessTime": -1,
+        |  "properties": null,
+        |  "unsupportedFeatures": []
         |}
       """.stripMargin)
 
@@ -544,18 +547,18 @@ class TreeNodeSuite extends SparkFunSuite {
         |[
         |  [
         |    {
-        |      "class":"org.apache.spark.sql.catalyst.expressions.Literal",
-        |      "num-children":0,
-        |      "value":"1",
-        |      "dataType":"integer"
+        |      "class": "org.apache.spark.sql.catalyst.expressions.Literal",
+        |      "num-children": 0,
+        |      "value": "1",
+        |      "dataType": "integer"
         |    }
         |  ],
         |  [
         |    {
-        |      "class":"org.apache.spark.sql.catalyst.expressions.Literal",
-        |      "num-children":0,
-        |      "value":"2",
-        |      "dataType":"integer"
+        |      "class": "org.apache.spark.sql.catalyst.expressions.Literal",
+        |      "num-children": 0,
+        |      "value": "2",
+        |      "dataType": "integer"
         |    }
         |  ]
         |]
@@ -576,19 +579,19 @@ class TreeNodeSuite extends SparkFunSuite {
       """
         |[
         |  {
-        |    "class":"org.apache.spark.sql.catalyst.plans.logical.Union",
-        |    "num-children":2,
-        |    "children":[0, 1]
+        |    "class": "org.apache.spark.sql.catalyst.plans.logical.Union",
+        |    "num-children": 2,
+        |    "children": [0, 1]
         |  },
         |  {
-        |    "class":"org.apache.spark.sql.catalyst.trees.JsonTestTreeNode",
-        |    "num-children":0,
-        |    "arg":"0"
+        |    "class": "org.apache.spark.sql.catalyst.trees.JsonTestTreeNode",
+        |    "num-children": 0,
+        |    "arg": "0"
         |  },
         |  {
-        |    "class":"org.apache.spark.sql.catalyst.trees.JsonTestTreeNode",
-        |    "num-children":0,
-        |    "arg":"1"
+        |    "class": "org.apache.spark.sql.catalyst.trees.JsonTestTreeNode",
+        |    "num-children": 0,
+        |    "arg": "1"
         |  }
         |]
       """.stripMargin
