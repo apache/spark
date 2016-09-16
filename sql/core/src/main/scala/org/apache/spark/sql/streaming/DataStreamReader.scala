@@ -161,6 +161,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
    *
    * You can set the following JSON-specific options to deal with non-standard JSON files:
+   * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
    * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
@@ -175,14 +176,15 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   * during parsing.</li>
-   * <ul>
-   *  <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts the
-   *  malformed string into a new field configured by `columnNameOfCorruptRecord`. When
-   *  a schema is set by user, it sets `null` for extra fields.</li>
-   *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
-   * </ul>
+   * during parsing.
+   *   <ul>
+   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
+   *     the malformed string into a new field configured by `columnNameOfCorruptRecord`. When
+   *     a schema is set by user, it sets `null` for extra fields.</li>
+   *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   *   </ul>
+   * </li>
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
@@ -192,6 +194,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
@@ -207,6 +210,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * specify the schema explicitly using [[schema]].
    *
    * You can set the following CSV-specific options to deal with CSV files:
+   * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
    * <li>`sep` (default `,`): sets the single character as a separator for each
@@ -245,12 +249,14 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`maxCharsPerColumn` (default `1000000`): defines the maximum number of characters allowed
    * for any given value being read.</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   *    during parsing.</li>
-   * <ul>
-   *   <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
-   *     a schema is set by user, it sets `null` for extra fields.</li>
-   *   <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *   <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   *    during parsing.
+   *   <ul>
+   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
+   *       a schema is set by user, it sets `null` for extra fields.</li>
+   *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   *   </ul>
+   * </li>
    * </ul>
    *
    * @since 2.0.0
@@ -263,11 +269,13 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * Loads a Parquet file stream, returning the result as a [[DataFrame]].
    *
    * You can set the following Parquet-specific option(s) for reading Parquet files:
+   * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
    * <li>`mergeSchema` (default is the value specified in `spark.sql.parquet.mergeSchema`): sets
    * whether we should merge schemas collected from all Parquet part-files. This will override
    * `spark.sql.parquet.mergeSchema`.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
@@ -291,8 +299,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * }}}
    *
    * You can set the following text-specific options to deal with text files:
+   * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
