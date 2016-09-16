@@ -107,10 +107,11 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
    */
   private def canFilterOutNull(e: Expression): Boolean = {
     if (!e.deterministic || SubqueryExpression.hasCorrelatedSubquery(e)) return false
-    if (e.find(_.isInstanceOf[Unevaluable]).isDefined) return false
     val attributes = e.references.toSeq
     val emptyRow = new GenericInternalRow(attributes.length)
-    val v = BindReferences.bindReference(e, attributes).eval(emptyRow)
+    val boundE = BindReferences.bindReference(e, attributes)
+    if (boundE.find(_.isInstanceOf[Unevaluable]).isDefined) return false
+    val v = boundE.eval(emptyRow)
     v == null || v == false
   }
 
