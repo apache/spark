@@ -238,6 +238,10 @@ private[hive] trait HiveInspectors {
     case c => throw new AnalysisException(s"Unsupported java type $c")
   }
 
+  private def withNullSafe(f: Any => Any): Any => Any = {
+    input => if (input == null) null else f(input)
+  }
+
   /**
    * Wraps with Hive types based on object inspector.
    */
@@ -248,99 +252,77 @@ private[hive] trait HiveInspectors {
     case x: PrimitiveObjectInspector => x match {
       // TODO we don't support the HiveVarcharObjectInspector yet.
       case _: StringObjectInspector if x.preferWritable() =>
-        (o: Any) => getStringWritable(o)
+        withNullSafe(o => getStringWritable(o))
       case _: StringObjectInspector =>
-        (o: Any) => if (o != null) o.asInstanceOf[UTF8String].toString() else null
+        withNullSafe(o => o.asInstanceOf[UTF8String].toString())
       case _: IntObjectInspector if x.preferWritable() =>
-        (o: Any) => getIntWritable(o)
+        withNullSafe(o => getIntWritable(o))
       case _: IntObjectInspector =>
-        (o: Any) => if (o != null) o.asInstanceOf[java.lang.Integer] else null
+        withNullSafe(o => o.asInstanceOf[java.lang.Integer])
       case _: BooleanObjectInspector if x.preferWritable() =>
-        (o: Any) => getBooleanWritable(o)
+        withNullSafe(o => getBooleanWritable(o))
       case _: BooleanObjectInspector =>
-        (o: Any) => if (o != null) o.asInstanceOf[java.lang.Boolean] else null
+        withNullSafe(o => o.asInstanceOf[java.lang.Boolean])
       case _: FloatObjectInspector if x.preferWritable() =>
-        (o: Any) => getFloatWritable(o)
+        withNullSafe(o => getFloatWritable(o))
       case _: FloatObjectInspector =>
-        (o: Any) => if (o != null ) o.asInstanceOf[java.lang.Float] else null
+        withNullSafe(o  => o.asInstanceOf[java.lang.Float])
       case _: DoubleObjectInspector if x.preferWritable() =>
-        (o: Any) => getDoubleWritable(o)
+        withNullSafe(o => getDoubleWritable(o))
       case _: DoubleObjectInspector =>
-        (o: Any) => if (o != null) o.asInstanceOf[java.lang.Double] else null
+        withNullSafe(o => o.asInstanceOf[java.lang.Double])
       case _: LongObjectInspector if x.preferWritable() =>
-        (o: Any) => getLongWritable(o)
+        withNullSafe(o => getLongWritable(o))
       case _: LongObjectInspector =>
-        (o: Any) => if (o != null) o.asInstanceOf[java.lang.Long] else null
+        withNullSafe(o => o.asInstanceOf[java.lang.Long])
       case _: ShortObjectInspector if x.preferWritable() =>
-        (o: Any) => getShortWritable(o)
+        withNullSafe(o => getShortWritable(o))
       case _: ShortObjectInspector =>
-        (o: Any) => if (o != null) o.asInstanceOf[java.lang.Short] else null
+        withNullSafe(o => o.asInstanceOf[java.lang.Short])
       case _: ByteObjectInspector if x.preferWritable() =>
-        (o: Any) => getByteWritable(o)
+        withNullSafe(o => getByteWritable(o))
       case _: ByteObjectInspector =>
-        (o: Any) => if (o != null) o.asInstanceOf[java.lang.Byte] else null
+        withNullSafe(o => o.asInstanceOf[java.lang.Byte])
       case _: JavaHiveVarcharObjectInspector =>
-        (o: Any) => {
-          if (o != null) {
+        withNullSafe(
+        o => {
             val s = o.asInstanceOf[UTF8String].toString
             new HiveVarchar(s, s.length)
-          } else {
-            null
-          }
-        }
+        })
       case _: JavaHiveCharObjectInspector =>
-        (o: Any) =>
-          if (o != null) {
+        withNullSafe(o => {
             val s = o.asInstanceOf[UTF8String].toString
             new HiveChar(s, s.length)
-          } else {
-            null
-          }
+          })
 
       case _: JavaHiveDecimalObjectInspector =>
-        (o: Any) =>
-          if (o != null) {
-            HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal)
-          } else {
-            null
-          }
+        withNullSafe(o =>
+          HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal))
 
       case _: JavaDateObjectInspector =>
-        (o: Any) =>
-          if (o != null) {
-            DateTimeUtils.toJavaDate(o.asInstanceOf[Int])
-          } else {
-            null
-          }
+        withNullSafe(o =>
+            DateTimeUtils.toJavaDate(o.asInstanceOf[Int]))
 
       case _: JavaTimestampObjectInspector =>
-        (o: Any) =>
-          if (o != null) {
-            DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long])
-          } else {
-            null
-          }
+        withNullSafe(o =>
+            DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]))
       case _: HiveDecimalObjectInspector if x.preferWritable() =>
-        (o: Any) => getDecimalWritable(o.asInstanceOf[Decimal])
+        withNullSafe(o => getDecimalWritable(o.asInstanceOf[Decimal]))
       case _: HiveDecimalObjectInspector =>
-        (o: Any) =>
-          if (o != null) {
-            HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal)
-          } else {
-            null
-          }
+        withNullSafe(o =>
+            HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal))
       case _: BinaryObjectInspector if x.preferWritable() =>
-        (o: Any) => getBinaryWritable(o)
+        withNullSafe(o => getBinaryWritable(o))
       case _: BinaryObjectInspector =>
-        (o: Any) => if (o != null) o.asInstanceOf[Array[Byte]] else null
+        withNullSafe(o => o.asInstanceOf[Array[Byte]])
       case _: DateObjectInspector if x.preferWritable() =>
-        (o: Any) => getDateWritable(o)
+        withNullSafe(o => getDateWritable(o))
       case _: DateObjectInspector =>
-        (o: Any) => if (o != null) DateTimeUtils.toJavaDate(o.asInstanceOf[Int]) else null
+        withNullSafe(o => DateTimeUtils.toJavaDate(o.asInstanceOf[Int]))
       case _: TimestampObjectInspector if x.preferWritable() =>
-        (o: Any) => getTimestampWritable(o)
+        withNullSafe(o => getTimestampWritable(o))
       case _: TimestampObjectInspector =>
-        (o: Any) => if (o != null) DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]) else null
+        withNullSafe(o => DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]))
     }
 
     case soi: StandardStructObjectInspector =>
@@ -348,89 +330,74 @@ private[hive] trait HiveInspectors {
       val wrappers = soi.getAllStructFieldRefs.asScala.zip(schema.fields).map {
         case (ref, field) => wrapperFor(ref.getFieldObjectInspector, field.dataType)
       }
-      (o: Any) =>
-        if (o != null) {
-          val struct = soi.create()
-          val row = o.asInstanceOf[InternalRow]
-          soi.getAllStructFieldRefs.asScala.zip(wrappers).zipWithIndex.foreach {
-            case ((field, wrapper), i) =>
-              soi.setStructFieldData(struct, field, wrapper(row.get(i, schema(i).dataType)))
-          }
-          struct
-        } else {
-          null
+      withNullSafe(o => {
+        val struct = soi.create()
+        val row = o.asInstanceOf[InternalRow]
+        soi.getAllStructFieldRefs.asScala.zip(wrappers).zipWithIndex.foreach {
+          case ((field, wrapper), i) =>
+            soi.setStructFieldData(struct, field, wrapper(row.get(i, schema(i).dataType)))
         }
+        struct
+      })
 
     case ssoi: SettableStructObjectInspector =>
       val structType = dataType.asInstanceOf[StructType]
       val wrappers = ssoi.getAllStructFieldRefs.asScala.zip(structType).map {
         case (ref, tpe) => wrapperFor(ref.getFieldObjectInspector, tpe.dataType)
       }
-      (o: Any) =>
-        if (o != null) {
-          val row = o.asInstanceOf[InternalRow]
-          // 1. create the pojo (most likely) object
-          val result = ssoi.create()
-          ssoi.getAllStructFieldRefs.asScala.zip(wrappers).zipWithIndex.foreach {
-            case ((field, wrapper), i) =>
-              val tpe = structType(i).dataType
-              ssoi.setStructFieldData(
-              result,
-              field,
-              wrapper(row.get(i, tpe)).asInstanceOf[AnyRef])
-          }
-          result
-        } else {
-          null
+      withNullSafe(o => {
+        val row = o.asInstanceOf[InternalRow]
+        // 1. create the pojo (most likely) object
+        val result = ssoi.create()
+        ssoi.getAllStructFieldRefs.asScala.zip(wrappers).zipWithIndex.foreach {
+          case ((field, wrapper), i) =>
+            val tpe = structType(i).dataType
+            ssoi.setStructFieldData(
+            result,
+            field,
+            wrapper(row.get(i, tpe)).asInstanceOf[AnyRef])
         }
+        result
+      })
 
     case soi: StructObjectInspector =>
       val structType = dataType.asInstanceOf[StructType]
       val wrappers = soi.getAllStructFieldRefs.asScala.zip(structType).map {
         case (ref, tpe) => wrapperFor(ref.getFieldObjectInspector, tpe.dataType)
       }
-      (o: Any) =>
-        if (o != null) {
-          val row = o.asInstanceOf[InternalRow]
-          val result = new java.util.ArrayList[AnyRef](wrappers.size)
-          soi.getAllStructFieldRefs.asScala.zip(wrappers).zipWithIndex.foreach {
-            case ((field, wrapper), i) =>
-            val tpe = structType(i).dataType
-            result.add(wrapper(row.get(i, tpe)).asInstanceOf[AnyRef])
-          }
-          result
-        } else {
-          null
+      withNullSafe(o => {
+        val row = o.asInstanceOf[InternalRow]
+        val result = new java.util.ArrayList[AnyRef](wrappers.size)
+        soi.getAllStructFieldRefs.asScala.zip(wrappers).zipWithIndex.foreach {
+          case ((field, wrapper), i) =>
+          val tpe = structType(i).dataType
+          result.add(wrapper(row.get(i, tpe)).asInstanceOf[AnyRef])
         }
+        result
+      })
 
     case loi: ListObjectInspector =>
       val elementType = dataType.asInstanceOf[ArrayType].elementType
       val wrapper = wrapperFor(loi.getListElementObjectInspector, elementType)
-      (o: Any) =>
-        if (o != null) {
-          val array = o.asInstanceOf[ArrayData]
-          val values = new java.util.ArrayList[Any](array.numElements())
-          array.foreach(elementType, (_, e) => values.add(wrapper(e)))
-          values
-        } else {
-          null
-        }
+      withNullSafe(o => {
+        val array = o.asInstanceOf[ArrayData]
+        val values = new java.util.ArrayList[Any](array.numElements())
+        array.foreach(elementType, (_, e) => values.add(wrapper(e)))
+        values
+      })
 
     case moi: MapObjectInspector =>
       val mt = dataType.asInstanceOf[MapType]
       val keyWrapper = wrapperFor(moi.getMapKeyObjectInspector, mt.keyType)
       val valueWrapper = wrapperFor(moi.getMapValueObjectInspector, mt.valueType)
 
-      (o: Any) =>
-        if (o != null) {
+      withNullSafe(o => {
           val map = o.asInstanceOf[MapData]
           val jmap = new java.util.HashMap[Any, Any](map.numElements())
           map.foreach(mt.keyType, mt.valueType, (k, v) =>
             jmap.put(keyWrapper(k), valueWrapper(v)))
           jmap
-        } else {
-          null
-        }
+        })
 
     case _ =>
       identity[Any]
