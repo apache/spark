@@ -171,17 +171,6 @@ class KMeansModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter = new KMeansModel.KMeansModelWriter(this)
 
-  override def hashCode(): Int = {
-    (Array(this.getClass, uid) ++ clusterCenters)
-      .foldLeft(17) { case (hash, obj) => hash * 31 + obj.hashCode() }
-  }
-
-  override def equals(other: Any): Boolean = other match {
-    case that: KMeansModel =>
-      this.uid == that.uid && this.clusterCenters.sameElements(that.clusterCenters)
-    case _ => false
-  }
-
   private var trainingSummary: Option[KMeansSummary] = None
 
   private[clustering] def setSummary(summary: KMeansSummary): this.type = {
@@ -382,7 +371,7 @@ object KMeans extends DefaultParamsReadable[KMeans] {
   @Since("1.6.0")
   override def load(path: String): KMeans = super.load(path)
 
-  @Since("2.1.0")
+  @Since("1.6.0")
   override def read: MLReader[KMeans] = new KMeansReader
 
   /** [[MLWriter]] instance for [[KMeans]] */
