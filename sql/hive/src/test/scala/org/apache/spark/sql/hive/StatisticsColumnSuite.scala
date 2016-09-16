@@ -207,16 +207,16 @@ class StatisticsColumnSuite extends StatisticsTest {
         StructField(name = "c1", dataType = IntegerType, nullable = false))))
       df.write.format("json").saveAsTable(tmpTable)
 
-      sql(s"CREATE TABLE $table (c1 int) STORED AS PARQUET")
+      sql(s"CREATE TABLE $table (c1 int) STORED AS TEXTFILE")
       sql(s"INSERT INTO $table SELECT * FROM $tmpTable")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-      val fetchedStats1 = checkTableStats(tableName = table, isDataSourceTable = true,
+      val fetchedStats1 = checkTableStats(tableName = table, isDataSourceTable = false,
         hasSizeInBytes = true, expectedRowCounts = Some(1))
 
       // update table between analyze table and analyze column commands
       sql(s"INSERT INTO $table SELECT * FROM $tmpTable")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c1")
-      val fetchedStats2 = checkTableStats(tableName = table, isDataSourceTable = true,
+      val fetchedStats2 = checkTableStats(tableName = table, isDataSourceTable = false,
         hasSizeInBytes = true, expectedRowCounts = Some(2))
       assert(fetchedStats2.get.sizeInBytes > fetchedStats1.get.sizeInBytes)
 
