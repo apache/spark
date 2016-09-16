@@ -21,13 +21,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
-import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy => OldBoostingStrategy}
 import org.apache.spark.mllib.tree.impurity.{Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.PeriodicRDDCheckpointer
 
 
 private[spark] object GradientBoostedTrees extends Logging {

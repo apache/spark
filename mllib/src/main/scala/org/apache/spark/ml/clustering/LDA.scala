@@ -30,7 +30,6 @@ import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedL
   EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel,
   LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
   OnlineLDAOptimizer => OldOnlineLDAOptimizer}
-import org.apache.spark.mllib.impl.PeriodicCheckpointer
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Vector => OldVector,
   Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.MatrixImplicits._
@@ -39,7 +38,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, monotonically_increasing_id, udf}
 import org.apache.spark.sql.types.StructType
-
+import org.apache.spark.util.PeriodicCheckpointer
 
 private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasMaxIter
   with HasSeed with HasCheckpointInterval {
