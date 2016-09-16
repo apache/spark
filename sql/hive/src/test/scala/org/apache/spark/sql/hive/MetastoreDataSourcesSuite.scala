@@ -1158,7 +1158,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val e = intercept[AnalysisException] {
         spark.range(10).write.format("hive").mode(SaveMode.Ignore).save(path)
       }.getMessage
-      assert(e.contains("Operation not allowed: write a Dataset to the format: hive"))
+      assert(e.contains("Failed to find data source: hive"))
     }
   }
 
@@ -1168,14 +1168,14 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val e = intercept[AnalysisException] {
         spark.range(10).write.format("hive").mode(SaveMode.Overwrite).saveAsTable(tableName)
       }.getMessage
-      assert(e.contains("Operation not allowed: write a Dataset to the format: hive"))
+      assert(e.contains("Failed to find data source: hive"))
     }
   }
 
   test("create a data source table using hive") {
     val tableName = "tab1"
     withTable (tableName) {
-      val e = intercept[ParseException] {
+      val e = intercept[AnalysisException] {
         sql(
           s"""
              |CREATE TABLE $tableName
@@ -1183,7 +1183,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
              |USING hive
            """.stripMargin)
       }.getMessage
-      assert(e.contains("Operation not allowed: Create a table using the format: hive"))
+      assert(e.contains("Failed to find data source: hive"))
     }
   }
 

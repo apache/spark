@@ -81,7 +81,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def format(source: String): DataFrameWriter[T] = {
     if (source.toLowerCase == "hive") {
-      throw new AnalysisException(s"Operation not allowed: write a Dataset to the format: $source")
+      throw new AnalysisException(s"Failed to find data source: $source")
     }
     this.source = source
     this
