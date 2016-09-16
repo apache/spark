@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-// package org.apache.spark.mllib.impl
 package org.apache.spark.graphx.util
 
 import org.apache.spark.SparkContext
@@ -89,10 +88,7 @@ private[spark] class PeriodicGraphCheckpointer[VD, ED](
 
   override protected def persist(data: Graph[VD, ED]): Unit = {
     if (data.vertices.getStorageLevel == StorageLevel.NONE) {
-      data.vertices.persist()
-    }
-    if (data.edges.getStorageLevel == StorageLevel.NONE) {
-      data.edges.persist()
+      data.persist()
     }
   }
 
