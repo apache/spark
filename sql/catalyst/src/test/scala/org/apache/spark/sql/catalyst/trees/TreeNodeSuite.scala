@@ -33,6 +33,17 @@ case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFall
   override def eval(input: InternalRow): Any = null.asInstanceOf[Any]
 }
 
+case class BaseDummy (c1: String)(val c2: String) {}
+
+case class ComplexDummy(optKey: Option[Expression], basedummy: BaseDummy) (val extraParam: String)
+   extends Expression with CodegenFallback {
+  override def children: Seq[Expression] = optKey.toSeq
+  override def nullable: Boolean = true
+  override def dataType: NullType = NullType
+  override lazy val resolved = true
+  override def eval(input: InternalRow): Any = null.asInstanceOf[Any]
+}
+
 case class ComplexPlan(exprs: Seq[Seq[Expression]])
   extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
   override def output: Seq[Attribute] = Nil
@@ -260,5 +271,13 @@ class TreeNodeSuite extends SparkFunSuite {
       val expected = ExpressionInMap(Map("1" -> Literal(2), "2" -> Literal(3)))
       assert(actual === expected)
     }
+  }
+
+  test("SPARK 15491: test TreeNode jsonFields and parseToJson") {
+    val base = BaseDummy ("test1")("test2")
+    val jsonField = ComplexDummy (Some(Literal.create("1", StringType)), base)("test3").toJSON
+    assert(jsonField.contains("\"basedummy\":" +
+      "{\"product-class\":\"org.apache.spark.sql.catalyst.trees.BaseDummy\",\""
+      + "c1\":\"test1\",\"c2\":\"test2\"}") &&jsonField.contains ("\"extraParam\":\"test3\""))
   }
 }
