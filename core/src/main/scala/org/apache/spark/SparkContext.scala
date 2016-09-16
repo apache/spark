@@ -1355,6 +1355,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * Register the given accumulator with given name. Note that accumulators must be registered
+   * before use, or it will throw exception.
+   *
+   * @param name The name of accumulator.
+   */
+  def register(acc: AccumulatorV2[_, _], name: String): Unit = {
+    acc.register(this, name = Some(name))
+  }
+
+  /**
    * Register the given accumulator. Note that accumulators must be registered before use, or it
    * will throw exception.
    *
