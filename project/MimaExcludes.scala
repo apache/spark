@@ -936,6 +936,7 @@ object MimaExcludes {
     ) ++ Seq(
       // SPARK-5484 Periodically do checkpoint in Pregel      
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.graphx.Pregel.apply")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.graphx.GraphOps.pregel")
     )
   }
 
