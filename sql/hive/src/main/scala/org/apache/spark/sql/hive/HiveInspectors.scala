@@ -362,23 +362,22 @@ private[hive] trait HiveInspectors {
         }
 
     case ssoi: SettableStructObjectInspector =>
+      val structType = dataType.asInstanceOf[StructType]
+      val wrappers = ssoi.getAllStructFieldRefs.asScala.zip(structType).map {
+        case (ref, tpe) => wrapperFor(ref.getFieldObjectInspector, tpe.dataType)
+      }
       (o: Any) =>
         if (o != null) {
-          val fieldRefs = ssoi.getAllStructFieldRefs
-          val structType = dataType.asInstanceOf[StructType]
           val row = o.asInstanceOf[InternalRow]
           // 1. create the pojo (most likely) object
           val result = ssoi.create()
-          var i = 0
-          while (i < fieldRefs.size) {
-            // 2. set the property for the pojo
-            val tpe = structType(i).dataType
-            val wrapper = wrapperFor(fieldRefs.get(i).getFieldObjectInspector, tpe)
-            ssoi.setStructFieldData(
+          ssoi.getAllStructFieldRefs.asScala.zip(wrappers).zipWithIndex.foreach {
+            case ((field, wrapper), i) =>
+              val tpe = structType(i).dataType
+              ssoi.setStructFieldData(
               result,
-              fieldRefs.get(i),
+              field,
               wrapper(row.get(i, tpe)).asInstanceOf[AnyRef])
-            i += 1
           }
           result
         } else {
@@ -386,18 +385,18 @@ private[hive] trait HiveInspectors {
         }
 
     case soi: StructObjectInspector =>
+      val structType = dataType.asInstanceOf[StructType]
+      val wrappers = soi.getAllStructFieldRefs.asScala.zip(structType).map {
+        case (ref, tpe) => wrapperFor(ref.getFieldObjectInspector, tpe.dataType)
+      }
       (o: Any) =>
         if (o != null) {
-          val fieldRefs = soi.getAllStructFieldRefs
-          val structType = dataType.asInstanceOf[StructType]
           val row = o.asInstanceOf[InternalRow]
-          val result = new java.util.ArrayList[AnyRef](fieldRefs.size)
-          var i = 0
-          while (i < fieldRefs.size) {
+          val result = new java.util.ArrayList[AnyRef](wrappers.size)
+          soi.getAllStructFieldRefs.asScala.zip(wrappers).zipWithIndex.foreach {
+            case ((field, wrapper), i) =>
             val tpe = structType(i).dataType
-            val wrapper = wrapperFor(fieldRefs.get(i).getFieldObjectInspector, tpe)
             result.add(wrapper(row.get(i, tpe)).asInstanceOf[AnyRef])
-            i += 1
           }
           result
         } else {
