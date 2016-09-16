@@ -29,7 +29,9 @@ class RowQueueSuite extends SparkFunSuite {
 
   test("in-memory queue") {
     val page = MemoryBlock.fromLongArray(new Array[Long](1<<10))
-    val queue = InMemoryRowQueue(page, 1)
+    val queue = new InMemoryRowQueue(page, 1) {
+      override def close() {}
+    }
     val row = new UnsafeRow(1)
     row.pointTo(new Array[Byte](16), 16)
     val n = page.size() / (4 + row.getSizeInBytes)
@@ -54,7 +56,7 @@ class RowQueueSuite extends SparkFunSuite {
   test("disk queue") {
     val dir = Utils.createTempDir().getCanonicalFile
     dir.mkdirs()
-    val queue = DiskRowQueue(new File(dir, "buffer").toString, 1)
+    val queue = DiskRowQueue(new File(dir, "buffer"), 1)
     val row = new UnsafeRow(1)
     row.pointTo(new Array[Byte](16), 16)
     val n = 1000
