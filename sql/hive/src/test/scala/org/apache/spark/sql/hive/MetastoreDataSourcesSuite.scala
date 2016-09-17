@@ -1155,7 +1155,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("save API - format hive") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
-      val e = intercept[AnalysisException] {
+      val e = intercept[ClassNotFoundException] {
         spark.range(10).write.format("hive").mode(SaveMode.Ignore).save(path)
       }.getMessage
       assert(e.contains("Failed to find data source: hive"))
@@ -1168,7 +1168,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val e = intercept[AnalysisException] {
         spark.range(10).write.format("hive").mode(SaveMode.Overwrite).saveAsTable(tableName)
       }.getMessage
-      assert(e.contains("Failed to find data source: hive"))
+      assert(e.contains("Cannot create hive serde table with saveAsTable API"))
     }
   }
 

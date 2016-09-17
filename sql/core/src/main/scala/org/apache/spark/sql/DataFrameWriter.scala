@@ -80,9 +80,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def format(source: String): DataFrameWriter[T] = {
-    if (source.toLowerCase == "hive") {
-      throw new AnalysisException(s"Failed to find data source: $source")
-    }
     this.source = source
     this
   }
@@ -360,6 +357,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
+    if (source.toLowerCase == "hive") {
+      throw new AnalysisException("Cannot create hive serde table with saveAsTable API")
+    }
 
     val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
 
