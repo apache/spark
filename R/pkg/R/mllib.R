@@ -699,8 +699,8 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame"),
             if (length(layers) <= 1) {
               stop("layers vector require length > 0.")
             }
-            if (any(sapply(layers, function(e) !is.numeric(e)))) {
-              stop ("layers must be a numeric vector.")
+            if (any(sapply(layers, function(e) as.integer(e) != e))) {
+              stop ("layers must be a integer vector.")
             }
             jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
                                 "fit", data@sdf, as.integer(blockSize), as.array(layers),
