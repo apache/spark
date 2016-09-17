@@ -150,8 +150,7 @@ private[hive] case class HiveGenericUDF(
     returnInspector // Make sure initialized.
 
     var i = 0
-    val length = children.length
-    while (i < length) {
+    while (i < children.length) {
       val idx = i
       deferredObjects(i).asInstanceOf[DeferredObjectAdapter]
         .set(() => children(idx).eval(input))

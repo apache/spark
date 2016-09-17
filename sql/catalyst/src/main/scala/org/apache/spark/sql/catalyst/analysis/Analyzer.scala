@@ -1649,17 +1649,27 @@ class Analyzer(
         }
       }.toSeq
 
-      // Third, we aggregate them by adding each Window operator for each Window Spec and then
-      // setting this to the child of the next Window operator.
-      val windowOps =
-        groupedWindowExpressions.foldLeft(child) {
-          case (last, ((partitionSpec, orderSpec), windowExpressions)) =>
-            Window(windowExpressions, partitionSpec, orderSpec, last)
-        }
+      // Third, for every Window Spec, we add a Window operator and set currentChild as the
+      // child of it.
+      var currentChild = child
+      var i = 0
+      while (i < groupedWindowExpressions.size) {
+        val ((partitionSpec, orderSpec), windowExpressions) = groupedWindowExpressions(i)
+        // Set currentChild to the newly created Window operator.
+        currentChild =
+          Window(
+            windowExpressions,
+            partitionSpec,
+            orderSpec,
+            currentChild)
 
-      // Finally, we create a Project to output windowOps's output
+        // Move to next Window Spec.
+        i += 1
+      }
+
+      // Finally, we create a Project to output currentChild's output
       // newExpressionsWithWindowFunctions.
-      Project(windowOps.output ++ newExpressionsWithWindowFunctions, windowOps)
+      Project(currentChild.output ++ newExpressionsWithWindowFunctions, currentChild)
     } // end of addWindow
 
     // We have to use transformDown at here to make sure the rule of
