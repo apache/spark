@@ -57,7 +57,8 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
 private[spark] class DirectKafkaInputDStream[K, V](
     _ssc: StreamingContext,
     locationStrategy: LocationStrategy,
-    consumerStrategy: ConsumerStrategy[K, V]
+    consumerStrategy: ConsumerStrategy[K, V],
+    ppc: PerPartitionConfig
   ) extends InputDStream[ConsumerRecord[K, V]](_ssc) with Logging with CanCommitOffsets {
 
   val executorKafkaParams = {
@@ -128,9 +129,6 @@ private[spark] class DirectKafkaInputDStream[K, V](
     }
   }
 
-  private val maxRateLimitPerPartition: Int = context.sparkContext.getConf.getInt(
-    "spark.streaming.kafka.maxRatePerPartition", 0)
-
   protected[streaming] def maxMessagesPerPartition(
     offsets: Map[TopicPartition, Long]): Option[Map[TopicPartition, Long]] = {
     val estimatedRateLimit = rateController.map(_.getLatestRate().toInt)
@@ -144,11 +142,12 @@ private[spark] class DirectKafkaInputDStream[K, V](
         val totalLag = lagPerPartition.values.sum
 
         lagPerPartition.map { case (tp, lag) =>
+          val maxRateLimitPerPartition = ppc.maxRatePerPartition(tp)
           val backpressureRate = Math.round(lag / totalLag.toFloat * rate)
           tp -> (if (maxRateLimitPerPartition > 0) {
             Math.min(backpressureRate, maxRateLimitPerPartition)} else backpressureRate)
         }
-      case None => offsets.map { case (tp, offset) => tp -> maxRateLimitPerPartition }
+      case None => offsets.map { case (tp, offset) => tp -> ppc.maxRatePerPartition(tp) }
     }
 
     if (effectiveRateLimitPerPartition.values.sum > 0) {

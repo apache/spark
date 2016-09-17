@@ -250,7 +250,8 @@ class DirectKafkaStreamSuite
       val s = new DirectKafkaInputDStream[String, String](
         ssc,
         preferredHosts,
-        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala))
+        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
+        new DefaultPerPartitionConfig(sparkConf))
       s.consumer.poll(0)
       assert(
         s.consumer.position(topicPartition) >= offsetBeforeStart,
@@ -304,7 +305,8 @@ class DirectKafkaStreamSuite
         ConsumerStrategies.Assign[String, String](
           List(topicPartition),
           kafkaParams.asScala,
-          Map(topicPartition -> 11L)))
+          Map(topicPartition -> 11L)),
+        new DefaultPerPartitionConfig(sparkConf))
       s.consumer.poll(0)
       assert(
         s.consumer.position(topicPartition) >= offsetBeforeStart,
@@ -568,7 +570,9 @@ class DirectKafkaStreamSuite
       new DirectKafkaInputDStream[String, String](
         ssc,
         preferredHosts,
-        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala)) {
+        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
+        new DefaultPerPartitionConfig(sparkConf)
+      ) {
         override protected[streaming] val rateController =
           Some(new DirectKafkaRateController(id, estimator))
       }.map(r => (r.key, r.value))
@@ -641,7 +645,8 @@ class DirectKafkaStreamSuite
           tps.foreach(tp => consumer.seek(tp, 0))
           consumer
         }
-      }
+      },
+      new DefaultPerPartitionConfig(sparkConf)
     ) {
         override protected[streaming] val rateController = mockRateController
     }
