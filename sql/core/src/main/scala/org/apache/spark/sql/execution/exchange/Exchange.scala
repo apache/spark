@@ -54,7 +54,10 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
   }
 
   def doExecute(): RDD[InternalRow] = {
-    child.execute()
+    child match {
+      case _: ShuffleExchange => child.execute().cache()
+      case _ => child.execute()
+    }
   }
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
