@@ -293,6 +293,7 @@ class StreamExecution(
 
       // Now that we have logged the new batch, no further processing will happen for
       // the previous batch, and it is safe to discard the old metadata.
+      // Note that purge is exclusive, i.e. it purges everything before currentBatchId.
       // NOTE: If StreamExecution implements pipeline parallelism (multiple batches in
       // flight at the same time), this cleanup logic will need to change.
       offsetLog.purge(currentBatchId)
