@@ -1656,7 +1656,7 @@ class Analyzer(
       }.toSeq
 
       // Third, we aggregate them by adding each Window operator for each Window Spec and then
-      // setting the next to the child of the Window operator.
+      // setting this to the child of the next Window operator.
       val windowOps =
         groupedWindowExpressions.foldLeft(child) {
           case (last, ((partitionSpec, orderSpec), windowExpressions)) =>
