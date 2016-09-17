@@ -1183,7 +1183,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
              |USING hive
            """.stripMargin)
       }.getMessage
-      assert(e.contains("Failed to find data source: hive"))
+      assert(e.contains("Cannot create hive serde table with CREATE TABLE USING"))
     }
   }
 
