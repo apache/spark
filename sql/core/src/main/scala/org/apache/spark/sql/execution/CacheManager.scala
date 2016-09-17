@@ -22,7 +22,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Scanner}
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
@@ -134,9 +135,14 @@ class CacheManager extends Logging {
     plan transformDown {
       case currentFragment =>
         lookupCachedData(currentFragment)
-          .map(_.cachedRepresentation.withOutput(currentFragment.output))
+          .map(generateCachePlan(_, currentFragment.output))
           .getOrElse(currentFragment)
     }
+  }
+
+  private def generateCachePlan(cachedData: CachedData, output: Seq[Attribute]): LogicalPlan = {
+    val cachedRelation = cachedData.cachedRepresentation.withOutput(output)
+    Scanner(output, Nil, cachedRelation)
   }
 
   /**

@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
 import org.apache.spark.sql.{Column, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.plans.logical.Scanner
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
 
 /**
@@ -45,7 +45,7 @@ class OrcFilterSuite extends QueryTest with OrcTest {
 
     var maybeRelation: Option[HadoopFsRelation] = None
     val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _)) =>
+      case Scanner(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _)) =>
         maybeRelation = Some(orcRelation)
         filters
     }.flatten.reduceLeftOption(_ && _)
@@ -89,7 +89,7 @@ class OrcFilterSuite extends QueryTest with OrcTest {
 
     var maybeRelation: Option[HadoopFsRelation] = None
     val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _)) =>
+      case Scanner(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _)) =>
         maybeRelation = Some(orcRelation)
         filters
     }.flatten.reduceLeftOption(_ && _)
@@ -243,14 +243,14 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       )
       checkFilterPredicate(
         '_1 =!= 1,
-        """leaf-0 = (IS_NULL _1)
-          |leaf-1 = (EQUALS _1 1)
+        """leaf-0 = (EQUALS _1 1)
+          |leaf-1 = (IS_NULL _1)
           |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
       )
       checkFilterPredicate(
         !('_1 < 4),
-        """leaf-0 = (IS_NULL _1)
-          |leaf-1 = (LESS_THAN _1 4)
+        """leaf-0 = (LESS_THAN _1 4)
+          |leaf-1 = (IS_NULL _1)
           |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
       )
       checkFilterPredicate(
@@ -261,10 +261,10 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       )
       checkFilterPredicate(
         '_1 < 2 && '_1 > 3,
-        """leaf-0 = (IS_NULL _1)
-          |leaf-1 = (LESS_THAN _1 2)
-          |leaf-2 = (LESS_THAN_EQUALS _1 3)
-          |expr = (and (not leaf-0) leaf-1 (not leaf-2))""".stripMargin.trim
+        """leaf-0 = (LESS_THAN _1 2)
+          |leaf-1 = (LESS_THAN_EQUALS _1 3)
+          |leaf-2 = (IS_NULL _1)
+          |expr = (and leaf-0 (not leaf-1) (not leaf-2))""".stripMargin.trim
       )
     }
   }

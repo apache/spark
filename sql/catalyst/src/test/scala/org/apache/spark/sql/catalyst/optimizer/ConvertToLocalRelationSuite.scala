@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Scanner}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 
@@ -31,17 +31,18 @@ class ConvertToLocalRelationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("LocalRelation", FixedPoint(100),
+        CombineScanners,
         ConvertToLocalRelation) :: Nil
   }
 
-  test("Project on LocalRelation should be turned into a single LocalRelation") {
+  test("Project on LocalRelation should be turned into a new LocalRelation") {
     val testRelation = LocalRelation(
       LocalRelation('a.int, 'b.int).output,
       InternalRow(1, 2) :: InternalRow(4, 5) :: Nil)
 
-    val correctAnswer = LocalRelation(
+    val correctAnswer = Scanner(LocalRelation(
       LocalRelation('a1.int, 'b1.int).output,
-      InternalRow(1, 3) :: InternalRow(4, 6) :: Nil)
+      InternalRow(1, 3) :: InternalRow(4, 6) :: Nil))
 
     val projectOnLocal = testRelation.select(
       UnresolvedAttribute("a").as("a1"),

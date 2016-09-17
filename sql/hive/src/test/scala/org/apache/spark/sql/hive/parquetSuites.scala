@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.Scanner
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoDataSourceCommand, InsertIntoHadoopFsRelationCommand, LogicalRelation}
@@ -284,7 +285,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       )
 
       table("test_parquet_ctas").queryExecution.optimizedPlan match {
-        case LogicalRelation(_: HadoopFsRelation, _, _) => // OK
+        case Scanner(_, _, l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _)) => // OK
         case _ => fail(
           "test_parquet_ctas should be converted to " +
               s"${classOf[HadoopFsRelation ].getCanonicalName }")

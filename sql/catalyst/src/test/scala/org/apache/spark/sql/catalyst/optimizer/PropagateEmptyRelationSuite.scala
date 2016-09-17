@@ -21,7 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Scanner}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class PropagateEmptyRelationSuite extends PlanTest {
@@ -34,6 +34,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
         ReplaceIntersectWithSemiJoin,
         PushDownPredicate,
         PruneFilters,
+        PruneScanners,
         PropagateEmptyRelation) :: Nil
   }
 
@@ -45,7 +46,8 @@ class PropagateEmptyRelationSuite extends PlanTest {
         ReplaceExceptWithAntiJoin,
         ReplaceIntersectWithSemiJoin,
         PushDownPredicate,
-        PruneFilters) :: Nil
+        PruneFilters,
+        PruneScanners) :: Nil
   }
 
   val testRelation1 = LocalRelation.fromExternalRows(Seq('a.int), data = Seq(Row(1)))
@@ -57,7 +59,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       .union(testRelation2.where(false))
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = LocalRelation('a.int)
+    val correctAnswer = Scanner(LocalRelation('a.int))
 
     comparePlans(optimized, correctAnswer)
   }
@@ -74,29 +76,29 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (true, true, LeftAnti, None),
       (true, true, LeftSemi, None),
 
-      (true, false, Inner, Some(LocalRelation('a.int, 'b.int))),
-      (true, false, Cross, Some(LocalRelation('a.int, 'b.int))),
+      (true, false, Inner, Some(Scanner(LocalRelation('a.int, 'b.int)))),
+      (true, false, Cross, Some(Scanner(LocalRelation('a.int, 'b.int)))),
       (true, false, LeftOuter, None),
-      (true, false, RightOuter, Some(LocalRelation('a.int, 'b.int))),
+      (true, false, RightOuter, Some(Scanner(LocalRelation('a.int, 'b.int)))),
       (true, false, FullOuter, None),
       (true, false, LeftAnti, None),
       (true, false, LeftSemi, None),
 
-      (false, true, Inner, Some(LocalRelation('a.int, 'b.int))),
-      (false, true, Cross, Some(LocalRelation('a.int, 'b.int))),
-      (false, true, LeftOuter, Some(LocalRelation('a.int, 'b.int))),
+      (false, true, Inner, Some(Scanner(LocalRelation('a.int, 'b.int)))),
+      (false, true, Cross, Some(Scanner(LocalRelation('a.int, 'b.int)))),
+      (false, true, LeftOuter, Some(Scanner(LocalRelation('a.int, 'b.int)))),
       (false, true, RightOuter, None),
       (false, true, FullOuter, None),
-      (false, true, LeftAnti, Some(LocalRelation('a.int))),
-      (false, true, LeftSemi, Some(LocalRelation('a.int))),
+      (false, true, LeftAnti, Some(Scanner(LocalRelation('a.int)))),
+      (false, true, LeftSemi, Some(Scanner(LocalRelation('a.int)))),
 
-      (false, false, Inner, Some(LocalRelation('a.int, 'b.int))),
-      (false, false, Cross, Some(LocalRelation('a.int, 'b.int))),
-      (false, false, LeftOuter, Some(LocalRelation('a.int, 'b.int))),
-      (false, false, RightOuter, Some(LocalRelation('a.int, 'b.int))),
-      (false, false, FullOuter, Some(LocalRelation('a.int, 'b.int))),
-      (false, false, LeftAnti, Some(LocalRelation('a.int))),
-      (false, false, LeftSemi, Some(LocalRelation('a.int)))
+      (false, false, Inner, Some(Scanner(LocalRelation('a.int, 'b.int)))),
+      (false, false, Cross, Some(Scanner(LocalRelation('a.int, 'b.int)))),
+      (false, false, LeftOuter, Some(Scanner(LocalRelation('a.int, 'b.int)))),
+      (false, false, RightOuter, Some(Scanner(LocalRelation('a.int, 'b.int)))),
+      (false, false, FullOuter, Some(Scanner(LocalRelation('a.int, 'b.int)))),
+      (false, false, LeftAnti, Some(Scanner(LocalRelation('a.int)))),
+      (false, false, LeftSemi, Some(Scanner(LocalRelation('a.int))))
     )
 
     testcases.foreach { case (left, right, jt, answer) =>
@@ -119,7 +121,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       .orderBy('a.asc)
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = LocalRelation('a.int)
+    val correctAnswer = Scanner(LocalRelation('a.int))
 
     comparePlans(optimized, correctAnswer)
   }
@@ -159,7 +161,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       .groupBy('a)(count('a))
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = LocalRelation('a.int).groupBy('a)(count('a)).analyze
+    val correctAnswer = LocalRelation('a.int).scanner().groupBy('a)(count('a)).analyze
 
     comparePlans(optimized, correctAnswer)
   }

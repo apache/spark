@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Scanner, SubqueryAlias}
 import org.apache.spark.sql.catalyst.util.StringUtils
 
 object SessionCatalog {
@@ -417,9 +417,9 @@ class SessionCatalog(
         val view = Option(metadata.tableType).collect {
           case CatalogTableType.VIEW => name
         }
-        SubqueryAlias(relationAlias, SimpleCatalogRelation(db, metadata), view)
+        SubqueryAlias(relationAlias, Scanner(SimpleCatalogRelation(db, metadata)), view)
       } else {
-        SubqueryAlias(relationAlias, tempTables(table), Option(name))
+        SubqueryAlias(relationAlias, Scanner(tempTables(table)), Option(name))
       }
     }
   }

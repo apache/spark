@@ -90,6 +90,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       CombineFilters,
       CombineLimits,
       CombineUnions,
+      CombineScanners,
       // Constant folding and strength reduction
       NullPropagation,
       FoldablePropagation,
@@ -102,6 +103,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       RemoveDispensableExpressions,
       SimplifyBinaryComparison,
       PruneFilters,
+      PruneScanners,
       EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
@@ -423,7 +425,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, child) =>
       val required = child.references ++ p.references
       if ((child.inputSet -- required).nonEmpty) {
-        val newChildren = child.children.map(c => prunedChild(c, required))
+        val newChildren = child.children.map { c =>
+          c match {
+            case r: MultiInstanceRelation => r
+            case _ => prunedChild(c, required)
+          }
+        }
         p.copy(child = child.withNewChildren(newChildren))
       } else {
         p
@@ -556,6 +563,23 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
         filter
       }
 
+    case scanner @ Scanner(projectList, filters, child) =>
+      val aliasMap = AttributeMap(projectList.collect {
+        case a: Alias => (a.toAttribute, a.child)
+      })
+
+      val newFilters = scanner.constraints --
+        (child.constraints ++ filters)
+
+      if (newFilters.nonEmpty) {
+        val replaced = replaceAlias(newFilters.reduce(And), aliasMap)
+        Scanner(projectList,
+          filters ++ (splitConjunctivePredicates(replaced).toSet -- filters),
+          child)
+      } else {
+        scanner
+      }
+
     case join @ Join(left, right, joinType, conditionOpt) =>
       // Only consider constraints that can be pushed down completely to either the left or the
       // right child
@@ -602,6 +626,56 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
+ * Combines adjacent [[Scanner]] operators with [[Project]]s and [[Filter]]s as well as other
+ * [[Scanner]]s, merging the non-redundant conditions into one conjunctive predicate.
+ */
+object CombineScanners extends Rule[LogicalPlan] with PredicateHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case Project(fields, child: Scanner) =>
+      val aliasMap = AttributeMap(child.projectList.collect {
+        case a: Alias => (a.toAttribute, a)
+      })
+
+      child.copy(projectList = buildCleanedProjectList(fields, child.projectList))
+    case Filter(condition, child: Scanner) if child.projectList.forall(_.deterministic) =>
+      val aliasMap = AttributeMap(child.projectList.collect {
+        case a: Alias => (a.toAttribute, a.child)
+      })
+
+      val newFilters =
+        splitConjunctivePredicates(replaceAlias(condition, aliasMap)) ++ child.filters
+      child.copy(filters = newFilters)
+    case Scanner(fields, filters, child: Scanner) =>
+      val newFilters = filters ++ child.filters
+      child.copy(projectList = buildCleanedProjectList(fields, child.projectList),
+        filters = newFilters)
+  }
+
+  private def buildCleanedProjectList(
+      upper: Seq[NamedExpression],
+      lower: Seq[NamedExpression]): Seq[NamedExpression] = {
+    // Create a map of Aliases to their values from the lower projection.
+    // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
+    val aliases = AttributeMap(lower.collect {
+      case a: Alias => (a.toAttribute, a)
+    })
+
+    // Substitute any attributes that are produced by the lower projection, so that we safely
+    // eliminate it.
+    // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
+    // Use transformUp to prevent infinite recursion.
+    val rewrittenUpper = upper.map(_.transformUp {
+      case a: Attribute => aliases.getOrElse(a, a)
+    })
+    // collapse upper and lower Projects may introduce unnecessary Aliases, trim them here.
+    rewrittenUpper.map { p =>
+      CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
+    }
+  }
+}
+
+/**
  * Removes no-op SortOrder from Sort
  */
 object EliminateSorts extends Rule[LogicalPlan] {
@@ -640,6 +714,31 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         val newCond = remainingPredicates.reduce(And)
         Filter(newCond, p)
+      }
+  }
+}
+
+/**
+ * Removes filters in [[Scanner]] operator that can be evaluated trivially.
+ */
+object PruneScanners extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case s @ Scanner(projectList, filters, _) =>
+      // Removes filters always evaluate to true
+      val newFilters = filters.collect {
+        case filter: Expression if !filter.fastEquals(Literal(true, BooleanType)) => filter
+      }
+
+      if (newFilters.exists { filter =>
+        filter.fastEquals(Literal(false, BooleanType)) || filter.fastEquals(Literal(null))}) {
+        // If there exists at lease one filter that always evaluate to null or false,
+        // replace the input with an empty relation.
+        Scanner(LocalRelation(projectList.map(_.toAttribute), data = Seq.empty))
+      } else if (filters.forall(newFilters.contains(_))) {
+        // No filter always evaluate to true, respect the original filters.
+        s
+      } else {
+        s.copy(filters = newFilters)
       }
   }
 }
@@ -746,6 +845,29 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
           Filter(stayUp.reduceLeft(And), newUnion)
         } else {
           newUnion
+        }
+      } else {
+        filter
+      }
+
+    case filter @ Filter(condition, child: Scanner) if child.projectList.forall(_.deterministic) =>
+      // Deterministic parts placed before any non-deterministic predicates in [[Filter]] could
+      // be pushed down to [[Scanner]], combine with `Scanner.filters`.
+      val aliasMap = AttributeMap(child.projectList.collect {
+        case a: Alias => (a.toAttribute, a.child)
+      })
+
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).span(_.deterministic)
+
+      if (pushDown.nonEmpty) {
+        val replaced = replaceAlias(pushDown.reduce(And), aliasMap)
+        val newScanner =
+          child.copy(filters =
+            child.filters ++ (splitConjunctivePredicates(replaced).toSet -- child.filters))
+        if (stayUp.nonEmpty) {
+          Filter(stayUp.reduceLeft(And), newScanner)
+        } else {
+          newScanner
         }
       } else {
         filter
@@ -1022,15 +1144,16 @@ object DecimalAggregates extends Rule[LogicalPlan] {
 /**
  * Converts local operations (i.e. ones that don't require data exchange) on LocalRelation to
  * another LocalRelation.
- *
- * This is relatively simple as it currently handles only a single case: Project.
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Project(projectList, LocalRelation(output, data))
-        if !projectList.exists(hasUnevaluableExpr) =>
+    case scanner @ Scanner(projectList, filters, LocalRelation(output, data))
+        if !projectList.exists(hasUnevaluableExpr) && filters.isEmpty =>
       val projection = new InterpretedProjection(projectList, output)
-      LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+      val newProjectList = projectList.map(_.toAttribute)
+      val newRelation = LocalRelation(newProjectList, data.map(projection))
+
+      Scanner(newProjectList, filters, newRelation)
   }
 
   private def hasUnevaluableExpr(expr: Expression): Boolean = {

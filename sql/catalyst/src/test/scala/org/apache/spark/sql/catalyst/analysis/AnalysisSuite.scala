@@ -52,12 +52,12 @@ class AnalysisSuite extends AnalysisTest {
   test("analyze project") {
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("a")), testRelation),
-      Project(testRelation.output, testRelation))
+      Project(testRelation.output, Scanner(testRelation)))
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("TbL.a")),
         UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL"))),
-      Project(testRelation.output, testRelation))
+      Project(testRelation.output, Scanner(testRelation)))
 
     assertAnalysisError(
       Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(
@@ -67,13 +67,13 @@ class AnalysisSuite extends AnalysisTest {
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("TbL.a")), UnresolvedRelation(
         TableIdentifier("TaBlE"), Some("TbL"))),
-      Project(testRelation.output, testRelation),
+      Project(testRelation.output, Scanner(testRelation)),
       caseSensitive = false)
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(
         TableIdentifier("TaBlE"), Some("TbL"))),
-      Project(testRelation.output, testRelation),
+      Project(testRelation.output, Scanner(testRelation)),
       caseSensitive = false)
   }
 
@@ -88,6 +88,7 @@ class AnalysisSuite extends AnalysisTest {
       .where('b > "str").select('a)
       .sortBy('b.asc, 'c.desc)
     val expected1 = testRelation2
+      .scanner()
       .where(a > "str").select(a, b, c)
       .where(b > "str").select(a, b, c)
       .sortBy(b.asc, c.desc)
@@ -100,6 +101,7 @@ class AnalysisSuite extends AnalysisTest {
       .where('a > "str").select('a)
       .sortBy('b.asc, 'c.desc)
     val expected2 = testRelation2
+      .scanner()
       .where(a > "str").select(a, b, c)
       .where(a > "str").select(a, b, c)
       .sortBy(b.asc, c.desc)
@@ -117,7 +119,7 @@ class AnalysisSuite extends AnalysisTest {
     val plan = testRelation2.join(testRelation3)
       .where('a > "str").select('a, 'b)
       .sortBy('c.desc, 'h.asc)
-    val expected = testRelation2.join(testRelation3)
+    val expected = testRelation2.scanner().join(testRelation3.scanner())
       .where(a > "str").select(a, b, c, h)
       .sortBy(c.desc, h.asc)
       .select(a, b)
@@ -139,6 +141,7 @@ class AnalysisSuite extends AnalysisTest {
       .orderBy('b.asc)
 
     val expected1 = testRelation2
+      .scanner()
       .groupBy(a, c, b)(a, c, alias_a3, b)
       .select(a, c, alias_a3.toAttribute, b)
       .orderBy(b.asc)
@@ -153,6 +156,7 @@ class AnalysisSuite extends AnalysisTest {
       .orderBy('b.asc)
 
     val expected2 = testRelation2
+      .scanner()
       .groupBy(a, c, b)(a, c, alias_a3, alias_b)
       .orderBy(alias_b.toAttribute.asc)
       .select(a, c, alias_a3.toAttribute)
@@ -162,11 +166,13 @@ class AnalysisSuite extends AnalysisTest {
 
   test("resolve relations") {
     assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq())
-    checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation)
+    checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation.scanner())
     checkAnalysis(
-      UnresolvedRelation(TableIdentifier("tAbLe"), None), testRelation, caseSensitive = false)
+      UnresolvedRelation(TableIdentifier("tAbLe"), None), testRelation.scanner(),
+      caseSensitive = false)
     checkAnalysis(
-      UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation, caseSensitive = false)
+      UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation.scanner(),
+      caseSensitive = false)
   }
 
   test("divide should be casted into fractional types") {
@@ -192,7 +198,8 @@ class AnalysisSuite extends AnalysisTest {
     val expected =
       Project(testRelation.output,
         RepartitionByExpression(Seq(projected.toAttribute),
-          Project(testRelation.output :+ projected, testRelation)))
+          Project(testRelation.output :+ projected,
+            Scanner(testRelation))))
     checkAnalysis(plan, expected)
   }
 
@@ -202,24 +209,25 @@ class AnalysisSuite extends AnalysisTest {
     val expected =
       Project(testRelation.output,
         Sort(Seq(SortOrder(projected.toAttribute, Ascending)), false,
-          Project(testRelation.output :+ projected, testRelation)))
+          Project(testRelation.output :+ projected,
+            Scanner(testRelation))))
     checkAnalysis(plan, expected)
   }
 
   test("SPARK-9634: cleanup unnecessary Aliases in LogicalPlan") {
     val a = testRelation.output.head
     var plan = testRelation.select(((a + 1).as("a+1") + 2).as("col"))
-    var expected = testRelation.select((a + 1 + 2).as("col"))
+    var expected = testRelation.scanner().select((a + 1 + 2).as("col"))
     checkAnalysis(plan, expected)
 
     plan = testRelation.groupBy(a.as("a1").as("a2"))((min(a).as("min_a") + 1).as("col"))
-    expected = testRelation.groupBy(a)((min(a) + 1).as("col"))
+    expected = testRelation.scanner().groupBy(a)((min(a) + 1).as("col"))
     checkAnalysis(plan, expected)
 
     // CreateStruct is a special case that we should not trim Alias for it.
-    plan = testRelation.select(CreateStruct(Seq(a, (a + 1).as("a+1"))).as("col"))
+    plan = testRelation.scanner().select(CreateStruct(Seq(a, (a + 1).as("a+1"))).as("col"))
     checkAnalysis(plan, plan)
-    plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
+    plan = testRelation.scanner().select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
     checkAnalysis(plan, plan)
   }
 
@@ -228,7 +236,8 @@ class AnalysisSuite extends AnalysisTest {
     val c = testRelation2.output(2)
 
     val plan = testRelation2.select('c).orderBy(Floor('a).asc)
-    val expected = testRelation2.select(c, a).orderBy(Floor(a.cast(DoubleType)).asc).select(c)
+    val expected = testRelation2.scanner().select(c, a)
+      .orderBy(Floor(a.cast(DoubleType)).asc).select(c)
 
     checkAnalysis(plan, expected)
   }
@@ -268,7 +277,7 @@ class AnalysisSuite extends AnalysisTest {
     def checkUDF(udf: Expression, transformed: Expression): Unit = {
       checkAnalysis(
         Project(Alias(udf, "")() :: Nil, testRelation2),
-        Project(Alias(transformed, "")() :: Nil, testRelation2)
+        Project(Alias(transformed, "")() :: Nil, Scanner(testRelation2))
       )
     }
 
@@ -315,6 +324,7 @@ class AnalysisSuite extends AnalysisTest {
       .orderBy('a1.asc, 'c.asc)
 
     val expected = testRelation2
+      .scanner()
       .groupBy(a, c)(alias1, alias2, alias3)
       .orderBy(alias1.toAttribute.asc, alias2.toAttribute.asc)
       .select(alias1.toAttribute, alias2.toAttribute, alias3.toAttribute)
@@ -323,7 +333,7 @@ class AnalysisSuite extends AnalysisTest {
 
   test("Eliminate the unnecessary union") {
     val plan = Union(testRelation :: Nil)
-    val expected = testRelation
+    val expected = testRelation.scanner()
     checkAnalysis(plan, expected)
   }
 

@@ -115,6 +115,49 @@ case class Filter(condition: Expression, child: LogicalPlan)
   }
 }
 
+/** Factory for constructing new `Scanner` nodes. */
+object Scanner extends PredicateHelper {
+  def apply(child: LogicalPlan): Scanner = {
+    Scanner(child.output, Nil, child)
+  }
+
+  def apply(condition: Expression, child: LogicalPlan): Scanner = {
+    Scanner(child.output, splitConjunctivePredicates(condition), child)
+  }
+}
+
+case class Scanner(projectList: Seq[NamedExpression], filters: Seq[Expression], child: LogicalPlan)
+  extends UnaryNode {
+  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  override def maxRows: Option[Long] = child.maxRows
+
+  override lazy val resolved: Boolean = {
+    val hasSpecialExpressions = projectList.exists ( _.collect {
+      case agg: AggregateExpression => agg
+      case generator: Generator => generator
+      case window: WindowExpression => window
+    }.nonEmpty
+    )
+
+    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
+  }
+
+  override def validConstraints: Set[Expression] = {
+    val aliasMap = projectList.collect {
+      case a: Alias => (a.child, a.toAttribute)
+    }.toMap
+    val replaced = filters.map {
+      case filter: Expression =>
+        filter.transformUp {
+          case a : Attribute =>
+            aliasMap.getOrElse(a, a)
+        }
+    }
+    child.constraints
+      .union(replaced.filterNot(SubqueryExpression.hasCorrelatedSubquery).toSet)
+  }
+}
+
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
 
   protected def leftConstraints: Set[Expression] = left.constraints

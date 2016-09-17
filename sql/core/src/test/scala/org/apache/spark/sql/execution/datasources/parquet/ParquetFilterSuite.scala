@@ -26,7 +26,7 @@ import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.plans.logical.Scanner
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -64,7 +64,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
         var maybeRelation: Option[HadoopFsRelation] = None
         val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters, LogicalRelation(relation: HadoopFsRelation, _, _)) =>
+          case Scanner(_, filters, LogicalRelation(relation: HadoopFsRelation, _, _)) =>
             maybeRelation = Some(relation)
             filters
         }.flatten.reduceLeftOption(_ && _)

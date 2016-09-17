@@ -136,6 +136,11 @@ case class OptimizeMetadataOnlyQuery(
         val partAttrs = getPartitionAttrs(relation.catalogTable.partitionColumnNames, relation)
         Some(AttributeSet(partAttrs), relation)
 
+      case s @ Scanner(projectList, filters, child) =>
+        unapply(child).flatMap { case (partAttrs, relation) =>
+          if (s.references.subsetOf(partAttrs)) Some(s.outputSet, relation) else None
+        }
+
       case p @ Project(projectList, child) if projectList.forall(_.deterministic) =>
         unapply(child).flatMap { case (partAttrs, relation) =>
           if (p.references.subsetOf(partAttrs)) Some(p.outputSet, relation) else None

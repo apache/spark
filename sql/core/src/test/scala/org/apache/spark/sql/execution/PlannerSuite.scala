@@ -22,7 +22,7 @@ import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition, Scanner}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchange}
@@ -159,7 +159,7 @@ class PlannerSuite extends SharedSQLContext {
 
       withTempView("testPushed") {
         val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
-        assert(exp.toString.contains("PushedFilters: [IsNotNull(key), EqualTo(key,15)]"))
+        assert(exp.toString.contains("PushedFilters: [EqualTo(key,15), IsNotNull(key)]"))
       }
     }
   }
@@ -193,8 +193,9 @@ class PlannerSuite extends SharedSQLContext {
 
   test("CollectLimit can appear in the middle of a plan when caching is used") {
     val query = testData.select('key, 'value).limit(2).cache()
-    val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
-    assert(planned.child.isInstanceOf[CollectLimitExec])
+    val planned = query.queryExecution.optimizedPlan.asInstanceOf[Scanner]
+    val relation = planned.child.asInstanceOf[InMemoryRelation]
+    assert(relation.child.isInstanceOf[CollectLimitExec])
   }
 
   test("PartitioningCollection") {

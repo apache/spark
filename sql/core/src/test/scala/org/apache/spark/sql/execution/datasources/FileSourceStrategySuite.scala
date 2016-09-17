@@ -29,6 +29,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
+import org.apache.spark.sql.catalyst.plans.logical.Scanner
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.functions._
@@ -506,10 +507,12 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
     if (buckets > 0) {
       val bucketed = df.queryExecution.analyzed transform {
-        case l @ LogicalRelation(r: HadoopFsRelation, _, _) =>
-          l.copy(relation =
-            r.copy(bucketSpec =
-              Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(r.sparkSession))
+        case s @ Scanner(_, _, l @ LogicalRelation(r: HadoopFsRelation, _, _)) =>
+          val newRelation = l.copy(relation =
+            r.copy(
+              bucketSpec = Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(
+                r.sparkSession))
+          Scanner(newRelation.output, s.filters, newRelation)
       }
       Dataset.ofRows(spark, bucketed)
     } else {
