@@ -326,37 +326,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("sorting with null ordering") {
-    checkAnswer(
-      nullableData.orderBy('a.asc_nulls_last, 'b.desc_nulls_first),
-      Seq(
-        Row(2, null), Row(2, "B"), Row(3, null), Row(4, "a"),
-        Row(5, "A"), Row(null, "c"), Row(null, "b")
-      )
-    )
+    val data = Seq[java.lang.Integer](2, 1, null).toDF("key")
 
-    checkAnswer(
-      nullableData.orderBy(asc_nulls_last("a"), desc_nulls_first("b")),
-      Seq(
-        Row(2, null), Row(2, "B"), Row(3, null), Row(4, "a"),
-        Row(5, "A"), Row(null, "c"), Row(null, "b")
-      )
-    )
+    checkAnswer(data.orderBy('key.asc), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy(asc("key")), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy('key.asc_nulls_first), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy(asc_nulls_first("key")), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy('key.asc_nulls_last), Row(1) :: Row(2) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy(asc_nulls_last("key")), Row(1) :: Row(2) :: Row(null) :: Nil)
 
-    checkAnswer(
-      nullableData.orderBy('a.desc_nulls_first, 'b.asc_nulls_last),
-      Seq(
-        Row(null, "b"), Row(null, "c"), Row(5, "A"), Row(4, "a"),
-        Row(3, null), Row(2, "B"), Row(2, null)
-      )
-    )
-
-    checkAnswer(
-      nullableData.orderBy(desc_nulls_first("a"), asc_nulls_last("b")),
-      Seq(
-        Row(null, "b"), Row(null, "c"), Row(5, "A"), Row(4, "a"),
-        Row(3, null), Row(2, "B"), Row(2, null)
-      )
-    )
+    checkAnswer(data.orderBy('key.desc), Row(2) :: Row(1) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy(desc("key")), Row(2) :: Row(1) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy('key.desc_nulls_first), Row(null) :: Row(2) :: Row(1) :: Nil)
+    checkAnswer(data.orderBy(desc_nulls_first("key")), Row(null) :: Row(2) :: Row(1) :: Nil)
+    checkAnswer(data.orderBy('key.desc_nulls_last), Row(2) :: Row(1) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy(desc_nulls_last("key")), Row(2) :: Row(1) :: Row(null) :: Nil)
   }
 
   test("global sorting") {

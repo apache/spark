@@ -109,7 +109,6 @@ object functions {
   /**
    * Returns a sort expression based on ascending order of the column.
    * {{{
-   *   // Sort by dept in ascending order, and then age in descending order.
    *   df.sort(asc("dept"), desc("age"))
    * }}}
    *
@@ -119,9 +118,21 @@ object functions {
   def asc(columnName: String): Column = Column(columnName).asc
 
   /**
-   * Returns a sort expression based on ascending order of the column with NULLS LAST.
+   * Returns a sort expression based on ascending order of the column,
+   * and null values return before non-null values.
    * {{{
-   *   // Sort by dept in ascending order nulls first, and then age in descending order.
+   *   df.sort(asc_nulls_last("dept"), desc("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 2.1.0
+   */
+  def asc_nulls_first(columnName: String): Column = Column(columnName).asc_nulls_first
+
+  /**
+   * Returns a sort expression based on ascending order of the column,
+   * and null values appear after non-null values.
+   * {{{
    *   df.sort(asc_nulls_last("dept"), desc("age"))
    * }}}
    *
@@ -130,11 +141,9 @@ object functions {
    */
   def asc_nulls_last(columnName: String): Column = Column(columnName).asc_nulls_last
 
-
   /**
    * Returns a sort expression based on the descending order of the column.
    * {{{
-   *   // Sort by dept in ascending order, and then age in descending order.
    *   df.sort(asc("dept"), desc("age"))
    * }}}
    *
@@ -144,9 +153,9 @@ object functions {
   def desc(columnName: String): Column = Column(columnName).desc
 
   /**
-   * Returns a sort expression based on the descending order of the column with NULLS FIRST.
+   * Returns a sort expression based on the descending order of the column,
+   * and null values appear before non-null values.
    * {{{
-   *   // Sort by dept in ascending order, and then age in descending order NULLS FIRST.
    *   df.sort(asc("dept"), desc_nulls_first("age"))
    * }}}
    *
@@ -154,6 +163,18 @@ object functions {
    * @since 2.1.0
    */
   def desc_nulls_first(columnName: String): Column = Column(columnName).desc_nulls_first
+
+  /**
+   * Returns a sort expression based on the descending order of the column,
+   * and null values appear after non-null values.
+   * {{{
+   *   df.sort(asc("dept"), desc_nulls_last("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 2.1.0
+   */
+  def desc_nulls_last(columnName: String): Column = Column(columnName).desc_nulls_last
 
 
   //////////////////////////////////////////////////////////////////////////////////////////////
