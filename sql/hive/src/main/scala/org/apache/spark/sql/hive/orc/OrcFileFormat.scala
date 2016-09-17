@@ -190,7 +190,8 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
       row: InternalRow): Unit = {
     val fieldRefs = oi.getAllStructFieldRefs
     var i = 0
-    while (i < fieldRefs.size) {
+    val size = fieldRefs.size
+    while (i < size) {
 
       oi.setStructFieldData(
         struct,
@@ -289,7 +290,8 @@ private[orc] object OrcRelation extends HiveInspectors {
       iterator.map { value =>
         val raw = deserializer.deserialize(value)
         var i = 0
-        while (i < fieldRefs.length) {
+        val length = fieldRefs.length
+        while (i < length) {
           val fieldValue = oi.getStructFieldData(raw, fieldRefs(i))
           if (fieldValue == null) {
             mutableRow.setNullAt(fieldOrdinals(i))
