@@ -91,10 +91,10 @@ class QuantileSummaries(
     var sampleIdx = 0
     // The index of the sample currently being inserted.
     var opsIdx: Int = 0
-    while(opsIdx < sorted.length) {
+    while (opsIdx < sorted.length) {
       val currentSample = sorted(opsIdx)
       // Add all the samples before the next observation.
-      while(sampleIdx < sampled.size && sampled(sampleIdx).value <= currentSample) {
+      while (sampleIdx < sampled.length && sampled(sampleIdx).value <= currentSample) {
         newSamples += sampled(sampleIdx)
         sampleIdx += 1
       }
@@ -102,7 +102,7 @@ class QuantileSummaries(
       // If it is the first one to insert, of if it is the last one
       currentCount += 1
       val delta =
-        if (newSamples.isEmpty || (sampleIdx == sampled.size && opsIdx == sorted.length - 1)) {
+        if (newSamples.isEmpty || (sampleIdx == sampled.length && opsIdx == sorted.length - 1)) {
           0
         } else {
           math.floor(2 * relativeError * currentCount).toInt
@@ -114,7 +114,7 @@ class QuantileSummaries(
     }
 
     // Add all the remaining existing samples
-    while(sampleIdx < sampled.size) {
+    while (sampleIdx < sampled.length) {
       newSamples += sampled(sampleIdx)
       sampleIdx += 1
     }
@@ -195,7 +195,7 @@ class QuantileSummaries(
     // Minimum rank at current sample
     var minRank = 0
     var i = 1
-    while (i < sampled.size - 1) {
+    while (i < sampled.length - 1) {
       val curSample = sampled(i)
       minRank += curSample.g
       val maxRank = minRank + curSample.delta
