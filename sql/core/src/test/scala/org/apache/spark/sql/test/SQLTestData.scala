@@ -169,6 +169,20 @@ private[sql] trait SQLTestData { self =>
     rdd
   }
 
+  protected lazy val nullableData: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      NullableRecord(4, "a") ::
+      NullableRecord(null, "c") ::
+      NullableRecord(2, null) ::
+      NullableRecord(null, "b") ::
+      NullableRecord(3, null) ::
+      NullableRecord(5, "A") ::
+      NullableRecord(2, "B") :: Nil, 2
+    ).toDF("a", "b")
+    df.createOrReplaceTempView("nullableData")
+    df
+  }
+
   protected lazy val nullInts: DataFrame = {
     val df = spark.sparkContext.parallelize(
       NullInts(1) ::
@@ -305,6 +319,7 @@ private[sql] object SQLTestData {
   case class IntField(i: Int)
   case class NullInts(a: Integer)
   case class NullStrings(n: Int, s: String)
+  case class NullableRecord(n: Integer, s: String)
   case class TableName(tableName: String)
   case class Person(id: Int, name: String, age: Int)
   case class Salary(personId: Int, salary: Double)

@@ -1022,6 +1022,21 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   /**
    * Returns an ordering used in sorting.
    * {{{
+   *   // Scala: sort a DataFrame by age column in descending order with NULLS FIRST.
+   *   df.sort(df("age").desc_nulls_first)
+   *
+   *   // Java
+   *   df.sort(df.col("age").desc_nulls_first());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def desc_nulls_first: Column = withExpr { SortOrder(expr, Descending, NullsFirst) }
+
+  /**
+   * Returns an ordering used in sorting.
+   * {{{
    *   // Scala: sort a DataFrame by age column in ascending order.
    *   df.sort(df("age").asc)
    *
@@ -1033,6 +1048,22 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def asc: Column = withExpr { SortOrder(expr, Ascending) }
+
+  /**
+   * Returns an ordering used in sorting.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in ascending order with NULLS LAST.
+   *   df.sort(df("age").asc_nulls_last)
+   *
+   *   // Java
+   *   df.sort(df.col("age").asc_nulls_last());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def asc_nulls_last: Column = withExpr { SortOrder(expr, Ascending, NullsLast) }
+
 
   /**
    * Prints the expression to the console for debugging purpose.
