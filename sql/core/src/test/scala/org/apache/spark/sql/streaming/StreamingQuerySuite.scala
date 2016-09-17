@@ -129,7 +129,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map(6 / _)
 
-    // Run a few batches through the application
+    // Run 3 batches, and then assert that only 1 metadata file is left at the end
+    // since the first 2 should have been purged.
     testStream(mapped)(
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
@@ -138,11 +139,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
       AddData(inputData, 4, 6),
       CheckAnswer(6, 3, 6, 3, 1, 1),
 
-      // Three batches have run, but only one set of metadata should be present
-      AssertOnQuery("metadata log should contain only one file") { streamExecution =>
-        val metadataLogDir = new java.io.File(streamExecution.offsetLog.metadataPath.toString)
+      AssertOnQuery("metadata log should contain only one file") { q =>
+        val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
         val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
-        val toTest = logFileNames.filter(!_.endsWith(".crc")) // Workaround for SPARK-17475
+        val toTest = logFileNames // Workaround for SPARK-17475
         assert(toTest.size == 1 && toTest.head == "2")
         true
       }
