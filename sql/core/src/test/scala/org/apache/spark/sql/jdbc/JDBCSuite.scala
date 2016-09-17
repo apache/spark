@@ -289,7 +289,7 @@ class JDBCSuite extends SparkFunSuite
     assert(names(2).equals("mary"))
   }
 
-  test("SELECT first field when fetchSize is two") {
+  test("SELECT first field when fetchsize is two") {
     val names = sql("SELECT NAME FROM fetchtwo").collect().map(x => x.getString(0)).sortWith(_ < _)
     assert(names.size === 3)
     assert(names(0).equals("fred"))
@@ -305,7 +305,7 @@ class JDBCSuite extends SparkFunSuite
     assert(ids(2) === 3)
   }
 
-  test("SELECT second field when fetchSize is two") {
+  test("SELECT second field when fetchsize is two") {
     val ids = sql("SELECT THEID FROM fetchtwo").collect().map(x => x.getInt(0)).sortWith(_ < _)
     assert(ids.size === 3)
     assert(ids(0) === 1)
@@ -352,7 +352,7 @@ class JDBCSuite extends SparkFunSuite
       urlWithUserAndPass, "TEST.PEOPLE", new Properties()).collect().length === 3)
   }
 
-  test("Basic API with illegal FetchSize") {
+  test("Basic API with illegal fetchsize") {
     val properties = new Properties()
     properties.setProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, "-1")
     val e = intercept[SparkException] {
