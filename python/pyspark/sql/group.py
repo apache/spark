@@ -85,10 +85,25 @@ class GroupedData(object):
         if len(exprs) == 1 and isinstance(exprs[0], dict):
             jdf = self._jgd.agg(exprs[0])
         else:
+            assert all(isinstance(c,Column) for c in exprs) or all(isinstance(c,str) for c in exprs),\
+                "all exprs should be Column or support aggregate function names(str)"
             # Columns
-            assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            jdf = self._jgd.agg(exprs[0]._jc,
-                                _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
+            if all(isinstance(c,Column) for c in exprs):
+                jdf = self._jgd.agg(exprs[0]._jc,
+                                    _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
+            # agg methods
+            elif all(isinstance(c, str) for c in exprs):
+                tmp_df = None
+                keys = []
+                for m in exprs:
+                    df = getattr(self, m)()
+                    if tmp_df == None:
+                        tmp_df = df
+                    else:
+                        if len(keys == 0):
+                            keys = [key for key in set(tmp_df.columns).intersection(set(df.columns))]
+                        tmp_df = tmp_df.join(df,keys)
+                return tmp_df
         return DataFrame(jdf, self.sql_ctx)
 
     @dfapi
