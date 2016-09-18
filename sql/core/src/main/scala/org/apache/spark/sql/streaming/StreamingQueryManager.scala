@@ -204,7 +204,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
         new Path(userSpecified).toUri.toString
       }.orElse {
-        df.sparkSession.conf.get(SQLConf.CHECKPOINT_LOCATION).map { location =>
+        df.sparkSession.sessionState.conf.checkpointLocation.map { location =>
           new Path(location, name).toUri.toString
         }
       }.getOrElse {
@@ -232,7 +232,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       val analyzedPlan = df.queryExecution.analyzed
       df.queryExecution.assertAnalyzed()
 
-      if (sparkSession.conf.get(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
+      if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
         UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
       }
 

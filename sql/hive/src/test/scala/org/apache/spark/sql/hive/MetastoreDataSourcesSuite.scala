@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.client.HiveClient
@@ -1151,6 +1152,56 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           .write.mode("append").saveAsTable("saveAsTable_too_many_columns")
       }
       assert(e.getMessage.contains("doesn't match"))
+    }
+  }
+
+  test("save API - format hive") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val e = intercept[ClassNotFoundException] {
+        spark.range(10).write.format("hive").mode(SaveMode.Ignore).save(path)
+      }.getMessage
+      assert(e.contains("Failed to find data source: hive"))
+    }
+  }
+
+  test("saveAsTable API - format hive") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      val e = intercept[AnalysisException] {
+        spark.range(10).write.format("hive").mode(SaveMode.Overwrite).saveAsTable(tableName)
+      }.getMessage
+      assert(e.contains("Cannot create hive serde table with saveAsTable API"))
+    }
+  }
+
+  test("create a data source table using hive") {
+    val tableName = "tab1"
+    withTable (tableName) {
+      val e = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE $tableName
+             |(col1 int)
+             |USING hive
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains("Cannot create hive serde table with CREATE TABLE USING"))
+    }
+  }
+
+  test("create a temp view using hive") {
+    val tableName = "tab1"
+    withTable (tableName) {
+      val e = intercept[ClassNotFoundException] {
+        sql(
+          s"""
+             |CREATE TEMPORARY VIEW $tableName
+             |(col1 int)
+             |USING hive
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains("Failed to find data source: hive"))
     }
   }
 
