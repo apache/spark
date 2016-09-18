@@ -121,7 +121,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   test("creating SparkContext without app name") {
     val conf = new SparkConf(false).setMaster("local")
     sc = new SparkContext(conf)
-    assert(sc.appName.length == 36)
+    assert(sc.appName.startsWith("SPARK-"))
   }
 
   test("creating SparkContext with both master and app name") {

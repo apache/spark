@@ -371,7 +371,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
 
     if (!_conf.contains("spark.app.name")) {
-      _conf.setAppName(UUID.randomUUID().toString)
+      _conf.setAppName("SPARK-" + UUID.randomUUID().toString)
     }
 
     // System property spark.yarn.app.id must be set if user code ran by AM on a YARN cluster
