@@ -166,21 +166,27 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
 
 /**
  * Creates a ChiSquared feature selector.
+ * The selector supports three selection methods: KBest, Percentile and FPR.
+ * By default, the selection method is KBest, the default number of top features is 50.
+ * User can use setNumTopFeatures, setPercentile and setAlpha to set different selection methods.
  */
-@Since("2.1.0")
+@Since("1.3.0")
 class ChiSqSelector @Since("2.1.0") () extends Serializable {
   var numTopFeatures: Int = 50
   var percentile: Double = 0.1
   var alpha: Double = 0.05
   var selectorType = ChiSqSelectorType.KBest
 
+  /**
+   * The is the same to call this() and setNumTopFeatures(numTopFeatures)
+   */
   @Since("1.3.0")
   def this(numTopFeatures: Int) {
     this()
     this.numTopFeatures = numTopFeatures
   }
 
-  @Since("2.1.0")
+  @Since("1.6.0")
   def setNumTopFeatures(value: Int): this.type = {
     numTopFeatures = value
     selectorType = ChiSqSelectorType.KBest

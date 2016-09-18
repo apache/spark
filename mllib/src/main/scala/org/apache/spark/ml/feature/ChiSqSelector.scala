@@ -90,6 +90,9 @@ private[feature] trait ChiSqSelectorParams extends Params
 /**
  * Chi-Squared feature selection, which selects categorical features to use for predicting a
  * categorical label.
+ * The selector supports three selection methods: KBest, Percentile and FPR.
+ * By default, the selection method is KBest, the default number of top features is 50.
+ * User can use setNumTopFeatures, setPercentile and setAlpha to set different selection methods.
  */
 @Since("1.6.0")
 final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: String)
@@ -99,7 +102,7 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
   def this() = this(Identifiable.randomUID("chiSqSelector"))
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("1.6.0")
   def setNumTopFeatures(value: Int): this.type = {
     set(selectorType, ChiSqSelectorType.KBest.toString)
     set(numTopFeatures, value)

@@ -310,8 +310,8 @@ class ChiSqSelector(object):
 
     .. versionadded:: 1.4.0
     """
-    def __init__(self):
-        self.numTopFeatures = 50
+    def __init__(self, numTopFeatures=50):
+        self.numTopFeatures = numTopFeatures
         self.selectorType = ChiSqSelectorType.KBest
 
     @since('2.1.0')
