@@ -1326,6 +1326,16 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.task.maxFailures</code></td>
+  <td>4</td>
+  <td>
+    Number of failures of any particular task before giving up on the job.
+    The total number of failures spread across different tasks will not cause the job
+    to fail; a particular task has to fail this number of attempts.
+    Should be greater than or equal to 1. Number of allowed retries = this value - 1.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.task.assigner</code></td>
   <td>org.apache.spark.scheduler.RoundRobinAssigner</td>
   <td>
     The strategy of how to allocate tasks among workers with free cores.
@@ -1333,16 +1343,6 @@ Apart from these, the following properties are also available, and may be useful
     org.apache.spark.scheduler.BalancedAssigner tries to balance the task across all workers (allocating tasks to
     workers with most free cores). org.apache.spark.scheduler.PackedAssigner tries to allocate tasks to workers
     with the least free cores, which may help releasing the resources when dynamic allocation is enabled.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.task.assigner</code></td>
-  <td>4</td>
-  <td>
-    Number of failures of any particular task before giving up on the job.
-    The total number of failures spread across different tasks will not cause the job
-    to fail; a particular task has to fail this number of attempts.
-    Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
 </table>
