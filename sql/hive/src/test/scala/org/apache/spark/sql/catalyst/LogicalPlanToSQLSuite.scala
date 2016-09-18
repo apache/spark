@@ -779,22 +779,42 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |) AS MAX FROM parquet_t1 GROUP BY key, value
       """.stripMargin
 
-    checkHiveQl(sql_exclude.replace("FRAME_TYPE", "RANGE").replace("EXCLUDE_TYPE", "CURRENT ROW"))
-    checkHiveQl(sql_exclude.replace("FRAME_TYPE", "RANGE").replace("EXCLUDE_TYPE", "GROUP"))
-    checkHiveQl(sql_exclude.replace("FRAME_TYPE", "RANGE").replace("EXCLUDE_TYPE", "TIES"))
-    checkHiveQl(sql_exclude.replace("FRAME_TYPE", "ROWS").replace("EXCLUDE_TYPE", "CURRENT ROW"))
-    checkHiveQl(sql_exclude.replace("FRAME_TYPE", "ROWS").replace("EXCLUDE_TYPE", "GROUP"))
-    checkHiveQl(sql_exclude.replace("FRAME_TYPE", "ROWS").replace("EXCLUDE_TYPE", "TIES"))
+    checkSQL(
+      sql_exclude.replace("FRAME_TYPE", "RANGE").replace("EXCLUDE_TYPE", "CURRENT ROW"),
+      "window_with_exclude_clause_range_current_row"
+    )
+    checkSQL(
+      sql_exclude.replace("FRAME_TYPE", "RANGE").replace("EXCLUDE_TYPE", "GROUP"),
+      "window_with_exclude_clause_range_group"
+    )
+    checkSQL(
+      sql_exclude.replace("FRAME_TYPE", "RANGE").replace("EXCLUDE_TYPE", "TIES"),
+      "window_with_exclude_clause_range_group_ties"
+    )
+    checkSQL(
+      sql_exclude.replace("FRAME_TYPE", "ROWS").replace("EXCLUDE_TYPE", "CURRENT ROW"),
+      "window_with_exclude_clause_rows_current_row"
+    )
+    checkSQL(
+      sql_exclude.replace("FRAME_TYPE", "ROWS").replace("EXCLUDE_TYPE", "GROUP"),
+      "window_with_exclude_clause_rows_group"
+    )
+    checkSQL(
+      sql_exclude.replace("FRAME_TYPE", "ROWS").replace("EXCLUDE_TYPE", "TIES"),
+      "window_with_exclude_clause_rows_ties"
+    )
   }
 
   test("window with exclude clause - no order by ") {
-    checkHiveQl(
+    checkSQL(
       """
         |SELECT key, value,
         |MAX(value) OVER (PARTITION BY key % 5
         |range between unbounded preceding and current row exclude current row) AS max
         |FROM parquet_t1 GROUP BY key, value
-      """.stripMargin)
+      """.stripMargin,
+      "window_with_exclude_clause_no_order_by"
+    )
   }
 
   test("window with the same window specification with aggregate") {
