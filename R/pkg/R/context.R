@@ -228,30 +228,35 @@ setCheckpointDir <- function(sc, dirName) {
 #' Add a file or directory to be downloaded with this Spark job on every node.
 #'
 #' The path passed can be either a local file, a file in HDFS (or other Hadoop-supported
-#' filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
+#' filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
 #' use sparkFiles.get(fileName) to find its download location.
 #'
 #' A directory can be given if the recursive option is set to true.
 #' Currently directories are only supported for Hadoop-supported filesystems.
 #'
-#' @param path The path of the files to be added
+#' @param path The path of the file to be added
 #' @param recursive Recursive or not if the path is directory. Default is FALSE.
 #' @noRd
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' addFile(sc, "myfile")
+#' addFile(sc, "~/myfile")
 #'}
 addFile <- function(sc, path) {
   invisible(callJMethod(sc, "addFile", suppressWarnings(normalizePath(path))))
 }
 
 #' Get the root directory that contains files added through addFile.
+#'
+#' @noRd
 sparkFiles.getRootDirectory <- function() {
   callJStatic("org.apache.spark.SparkFiles", "getRootDirectory")
 }
 
 #' Get the absolute path of a file added through addFile.
+#'
+#' @param fileName The name of the file added through addFile
+#' @noRd
 sparkFiles.get <- function(fileName) {
   callJStatic("org.apache.spark.SparkFiles", "get", as.character(fileName))
 }
