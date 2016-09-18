@@ -260,7 +260,7 @@ class VectorTests(MLlibTestCase):
         self.assertEqual(sv[-3], 0.)
         self.assertEqual(sv[-5], 0.)
         for ind in [5, -6]:
-            self.assertRaises(ValueError, sv.__getitem__, ind)
+            self.assertRaises(IndexError, sv.__getitem__, ind)
         for ind in [7.8, '1']:
             self.assertRaises(TypeError, sv.__getitem__, ind)
 
@@ -268,11 +268,11 @@ class VectorTests(MLlibTestCase):
         self.assertEqual(zeros[0], 0.0)
         self.assertEqual(zeros[3], 0.0)
         for ind in [4, -5]:
-            self.assertRaises(ValueError, zeros.__getitem__, ind)
+            self.assertRaises(IndexError, zeros.__getitem__, ind)
 
         empty = SparseVector(0, {})
         for ind in [-1, 0, 1]:
-            self.assertRaises(ValueError, empty.__getitem__, ind)
+            self.assertRaises(IndexError, empty.__getitem__, ind)
 
     def test_matrix_indexing(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])

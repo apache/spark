@@ -802,7 +802,7 @@ class SparseVector(Vector):
                 "Indices must be of type integer, got type %s" % type(index))
 
         if index >= self.size or index < -self.size:
-            raise ValueError("Index %d out of bounds." % index)
+            raise IndexError("Index %d out of bounds." % index)
         if index < 0:
             index += self.size
 
