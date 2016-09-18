@@ -230,6 +230,7 @@ private[spark] object Task {
     dataOut.flush()
     val taskBytes = serializer.serialize(task)
     Utils.writeByteBuffer(taskBytes, out)
+    out.close()
     out.toByteBuffer
   }
 
