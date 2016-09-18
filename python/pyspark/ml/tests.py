@@ -1330,6 +1330,10 @@ class VectorTests(MLlibTestCase):
         for ind in [-1, 0, 1]:
             self.assertRaises(IndexError, empty.__getitem__, ind)
 
+    def test_sparse_vector_iteration(self):
+        self.assertListEqual(list(SparseVector(3, [], [])), [0.0, 0.0, 0.0])
+        self.assertListEqual(list(SparseVector(5, [0, 3], [1.0, 2.0])), [1.0, 0.0, 0.0, 2.0, 0.0])
+
     def test_matrix_indexing(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
         expected = [[0, 6], [1, 8], [4, 10]]
