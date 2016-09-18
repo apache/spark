@@ -369,8 +369,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     if (!_conf.contains("spark.master")) {
       throw new SparkException("A master URL must be set in your configuration")
     }
+
     if (!_conf.contains("spark.app.name")) {
-      throw new SparkException("An application name must be set in your configuration")
+      _conf.setAppName(UUID.randomUUID().toString)
     }
 
     // System property spark.yarn.app.id must be set if user code ran by AM on a YARN cluster
