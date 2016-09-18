@@ -15,17 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.deploy
 
-private[spark] object TaskState extends Enumeration {
+import org.scalatest.Matchers
 
-  val LAUNCHING, RUNNING, FINISHED, FAILED, KILLED, LOST = Value
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.ExecutorState._
 
-  private val FINISHED_STATES = Set(FINISHED, FAILED, KILLED, LOST)
+class ExecutorStateSuite extends SparkFunSuite with Matchers {
 
-  type TaskState = Value
+  test("Executor State should be finished if it is killed, failed, lost or exited") {
+    Seq(KILLED, FAILED, LOST, EXITED)
+      .foreach(executorState => isFinished(executorState) should be(true))
+  }
 
-  def isFailed(state: TaskState): Boolean = (LOST == state) || (FAILED == state)
+  test("Executor State should not be finished if it is running or launching") {
+    isFinished(LAUNCHING) should be (false)
+    isFinished(RUNNING) should be (false)
+  }
 
-  def isFinished(state: TaskState): Boolean = FINISHED_STATES.contains(state)
 }

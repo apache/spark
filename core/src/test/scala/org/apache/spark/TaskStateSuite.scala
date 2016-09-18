@@ -17,15 +17,29 @@
 
 package org.apache.spark
 
-private[spark] object TaskState extends Enumeration {
+import org.scalatest.Matchers
 
-  val LAUNCHING, RUNNING, FINISHED, FAILED, KILLED, LOST = Value
+import org.apache.spark.TaskState._
 
-  private val FINISHED_STATES = Set(FINISHED, FAILED, KILLED, LOST)
+class TaskStateSuite extends SparkFunSuite with Matchers {
 
-  type TaskState = Value
+  test("Task State should be failed if it is lost or failed") {
+    isFailed(LOST) should be (true)
+    isFailed(FAILED) should be (true)
+  }
 
-  def isFailed(state: TaskState): Boolean = (LOST == state) || (FAILED == state)
+  test("Task State should not be failed if it is launching, running, finished or killed") {
+    Set(LAUNCHING, RUNNING, FINISHED, KILLED)
+      .foreach(taskState => isFailed(taskState) should be (false))
+  }
 
-  def isFinished(state: TaskState): Boolean = FINISHED_STATES.contains(state)
+  test("Task State should be finished if it is finished, failed, killed or lost") {
+    Set(FINISHED, FAILED, KILLED, LOST).foreach(taskState => isFinished(taskState) should be (true))
+  }
+
+  test("Task State should not be finished if it is launching or running") {
+    isFinished(LAUNCHING) should be (false)
+    isFinished(RUNNING) should be (false)
+  }
+
 }
