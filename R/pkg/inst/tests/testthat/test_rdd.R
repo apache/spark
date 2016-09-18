@@ -801,15 +801,4 @@ test_that("Test correct concurrency of RRDD.compute()", {
   expect_equal(count, 1000)
 })
 
-test_that("add and get file to be downloaded with Spark job on every node", {
-  path <- tempfile(pattern = "hello", fileext = ".txt")
-  filename <- basename(path)
-  words <- "Hello World!"
-  writeLines(words, path)
-  addFile(sc, path)
-  download_path <- sparkFiles.get(filename)
-  expect_equal(readLines(download_path), words)
-  unlink(path)
-})
-
 sparkR.session.stop()
