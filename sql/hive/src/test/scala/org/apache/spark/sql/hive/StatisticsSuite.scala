@@ -290,6 +290,27 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     }
   }
 
+  test("alter table set location after analyze table") {
+    val textTable = "textTable"
+    withTable(textTable) {
+      sql(s"CREATE TABLE $textTable (key STRING, value STRING) STORED AS TEXTFILE")
+      sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
+      sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS")
+      checkStats(
+        textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = Some(500))
+
+      withTempDir { tmpDir =>
+        val path = tmpDir.getCanonicalPath
+        sql(s"ALTER TABLE $textTable SET LOCATION '$path'")
+        checkStats(
+          textTable,
+          isDataSourceTable = false,
+          hasSizeInBytes = false,
+          expectedRowCounts = None)
+      }
+    }
+  }
+
   test("test table-level statistics for data source table created in HiveExternalCatalog") {
     val parquetTable = "parquetTable"
     withTable(parquetTable) {
