@@ -29,7 +29,7 @@ import java.util.Arrays;
 public class UnsafeAlignedOffset {
 
   private static final int UAO_SIZE;
-  private static final boolean ALIGNED_ARCH = 
+  private static final boolean ALIGNED_ARCH =
     Arrays.asList("sparc", "sparcv9").contains(System.getProperty("os.arch"));
 
   static {
