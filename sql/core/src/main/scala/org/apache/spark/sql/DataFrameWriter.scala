@@ -357,6 +357,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
+    if (source.toLowerCase == "hive") {
+      throw new AnalysisException("Cannot create hive serde table with saveAsTable API")
+    }
 
     val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
 

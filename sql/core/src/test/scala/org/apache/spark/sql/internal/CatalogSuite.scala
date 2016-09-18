@@ -322,6 +322,13 @@ class CatalogSuite
     assert(e2.message == "Cannot create a file-based external data source table without path")
   }
 
+  test("createExternalTable should fail if provider is hive") {
+    val e = intercept[AnalysisException] {
+      spark.catalog.createExternalTable("tbl", "HiVe", Map.empty[String, String])
+    }
+    assert(e.message.contains("Cannot create hive serde table with createExternalTable API"))
+  }
+
   // TODO: add tests for the rest of them
 
 }
