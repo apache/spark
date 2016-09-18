@@ -181,7 +181,9 @@ object CreateStruct extends (Seq[Expression] => CreateNamedStruct) {
         (child, idx) <- children.zipWithIndex
       } yield {
         child match {
-          case ne: NamedExpression => ne.name
+            // please see https://github.com/apache/spark/pull/14444#r79028863
+            // for discussion about the need to check for resolved trees
+          case ne : NamedExpression if ne.resolved => ne.name
           case _ => s"col${idx + 1}"
         }
       }
