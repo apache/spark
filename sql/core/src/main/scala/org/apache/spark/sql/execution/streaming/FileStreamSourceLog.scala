@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util.{LinkedHashMap => JLinkedHashMap}
+import java.util.Map.Entry
+
 import scala.collection.mutable
 
 import org.json4s.NoTypeHints
@@ -49,17 +52,13 @@ class FileStreamSourceLog(
 
   private implicit val formats = Serialization.formats(NoTypeHints)
 
-  // A fixed size log cache to cache the file entries belong to the compaction batch. It is used
-  // to avoid scanning the compacted log file to retrieve it's own batch data.
+  // A fixed size log entry cache to cache the file entries belong to the compaction batch. It is
+  // used to avoid scanning the compacted log file to retrieve it's own batch data.
   private val cacheSize = compactInterval
-  private val fileEntryCache = new mutable.LinkedHashMap[Long, Array[FileEntry]]
-
-  private def updateCache(batchId: Long, logs: Array[FileEntry]): Unit = {
-    if (fileEntryCache.size >= cacheSize) {
-      fileEntryCache.drop(1)
+  private val fileEntryCache = new JLinkedHashMap[Long, Array[FileEntry]] {
+    override def removeEldestEntry(eldest: Entry[Long, Array[FileEntry]]): Boolean = {
+      size() > cacheSize
     }
-
-    fileEntryCache.put(batchId, logs)
   }
 
   protected override def serializeData(data: FileEntry): String = {
@@ -76,7 +75,7 @@ class FileStreamSourceLog(
 
   override def add(batchId: Long, logs: Array[FileEntry]): Boolean = {
     if (super.add(batchId, logs) && isCompactionBatch(batchId, compactInterval)) {
-      updateCache(batchId, logs)
+      fileEntryCache.put(batchId, logs)
       true
     } else if (!isCompactionBatch(batchId, compactInterval)) {
       true
@@ -90,8 +89,8 @@ class FileStreamSourceLog(
     val endBatchId = getLatest().map(_._1).getOrElse(0L)
 
     val (existedBatches, removedBatches) = (startBatchId to endBatchId).map { id =>
-      if (isCompactionBatch(id, compactInterval) && fileEntryCache.contains(id)) {
-        (id, Some(fileEntryCache(id)))
+      if (isCompactionBatch(id, compactInterval) && fileEntryCache.containsKey(id)) {
+        (id, Some(fileEntryCache.get(id)))
       } else {
         val logs = super.get(id).map(_.filter(_.batchId == id))
         (id, logs)

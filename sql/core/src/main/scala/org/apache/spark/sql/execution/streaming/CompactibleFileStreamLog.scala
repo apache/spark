@@ -68,7 +68,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
   protected def deserializeData(encodedString: String): T
 
   /**
-   * Filter out the obsolote logs.
+   * Filter out the obsolete logs.
    */
   def compactLogs(logs: Seq[T]): Seq[T]
 
