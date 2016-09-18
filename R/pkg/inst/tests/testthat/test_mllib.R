@@ -356,7 +356,7 @@ test_that("spark.kmeans", {
 test_that("spark.mlp", {
   df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
   model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs", maxIter = 100,
-                     tol = 0.5, stepSize = 1, seed = 1)
+                     tol = 0.5, stepSize = 1, seed = "1")
 
   # Test summary method
   summary <- summary(model)

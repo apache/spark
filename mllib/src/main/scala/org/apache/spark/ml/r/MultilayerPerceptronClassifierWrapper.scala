@@ -53,26 +53,26 @@ private[r] object MultilayerPerceptronClassifierWrapper
   def fit(
       data: DataFrame,
       blockSize: Int,
-      layers: Array[Double],
+      layers: Array[Int],
       solver: String,
       maxIter: Int,
       tol: Double,
       stepSize: Double,
-      seed: Int
+      seed: String
      ): MultilayerPerceptronClassifierWrapper = {
     // get labels and feature names from output schema
     val schema = data.schema
 
     // assemble and fit the pipeline
     val mlp = new MultilayerPerceptronClassifier()
-      .setLayers(layers.map(_.toInt))
+      .setLayers(layers)
       .setBlockSize(blockSize)
       .setSolver(solver)
       .setMaxIter(maxIter)
       .setTol(tol)
       .setStepSize(stepSize)
       .setPredictionCol(PREDICTED_LABEL_COL)
-    if (seed != 0x7FFFFFFF) mlp.setSeed(seed)
+    if (seed != null && seed.length > 0) mlp.setSeed(seed.toInt)
     val pipeline = new Pipeline()
       .setStages(Array(mlp))
       .fit(data)
