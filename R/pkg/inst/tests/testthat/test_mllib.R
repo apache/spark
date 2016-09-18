@@ -387,6 +387,11 @@ test_that("spark.mlp", {
   model <- spark.mlp(df, layers = c(4, 5, 4, 3))
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
   expect_equal(head(mlpPredictions$prediction, 10), c(1, 1, 1, 1, 0, 1, 2, 2, 1, 0))
+
+  # Test illegal parameter
+  expect_error(spark.mlp(df, layers = NULL))
+  expect_error(spark.mlp(df, layers = c()))
+  expect_error(spark.mlp(df, layers = c(3)))
 })
 
 test_that("spark.naiveBayes", {
