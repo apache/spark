@@ -325,9 +325,9 @@ class SessionCatalog(
     new Path(new Path(dbLocation), formatTableName(tableIdent.table)).toString
   }
 
-  // -------------------------------------------------------------
-  // | Methods that interact with temporary and metastore tables |
-  // -------------------------------------------------------------
+  // ----------------------------------------------
+  // | Methods that interact with temp views only |
+  // ----------------------------------------------
 
   /**
    * Create a temporary table.
@@ -342,6 +342,24 @@ class SessionCatalog(
     }
     tempTables.put(table, tableDefinition)
   }
+
+  /**
+   * Return a temporary view exactly as it was stored.
+   */
+  def getTempView(name: String): Option[LogicalPlan] = synchronized {
+    tempTables.get(formatTableName(name))
+  }
+
+  /**
+   * Drop a temporary view.
+   */
+  def dropTempView(name: String): Unit = synchronized {
+    tempTables.remove(formatTableName(name))
+  }
+
+  // -------------------------------------------------------------
+  // | Methods that interact with temporary and metastore tables |
+  // -------------------------------------------------------------
 
   /**
    * Rename a table.
@@ -490,14 +508,6 @@ class SessionCatalog(
    */
   def clearTempTables(): Unit = synchronized {
     tempTables.clear()
-  }
-
-  /**
-   * Return a temporary table exactly as it was stored.
-   * For testing only.
-   */
-  private[catalog] def getTempTable(name: String): Option[LogicalPlan] = synchronized {
-    tempTables.get(formatTableName(name))
   }
 
   // ----------------------------------------------------------------------------
