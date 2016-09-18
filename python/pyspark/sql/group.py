@@ -80,6 +80,8 @@ class GroupedData(object):
         >>> from pyspark.sql import functions as F
         >>> sorted(gdf.agg(F.min(df.age)).collect())
         [Row(name=u'Alice', min(age)=2), Row(name=u'Bob', min(age)=5)]
+
+        >>> sorted(gdf.agg('max','min').collect())
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
