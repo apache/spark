@@ -201,16 +201,16 @@ class SessionCatalogSuite extends SparkFunSuite {
     val tempTable2 = Range(1, 20, 2, 10)
     catalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
     catalog.createTempView("tbl2", tempTable2, overrideIfExists = false)
-    assert(catalog.getTempTable("tbl1") == Option(tempTable1))
-    assert(catalog.getTempTable("tbl2") == Option(tempTable2))
-    assert(catalog.getTempTable("tbl3").isEmpty)
+    assert(catalog.getTempView("tbl1") == Option(tempTable1))
+    assert(catalog.getTempView("tbl2") == Option(tempTable2))
+    assert(catalog.getTempView("tbl3").isEmpty)
     // Temporary table already exists
     intercept[TempTableAlreadyExistsException] {
       catalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
     }
     // Temporary table already exists but we override it
     catalog.createTempView("tbl1", tempTable2, overrideIfExists = true)
-    assert(catalog.getTempTable("tbl1") == Option(tempTable2))
+    assert(catalog.getTempView("tbl1") == Option(tempTable2))
   }
 
   test("drop table") {
@@ -246,11 +246,11 @@ class SessionCatalogSuite extends SparkFunSuite {
     val tempTable = Range(1, 10, 2, 10)
     sessionCatalog.createTempView("tbl1", tempTable, overrideIfExists = false)
     sessionCatalog.setCurrentDatabase("db2")
-    assert(sessionCatalog.getTempTable("tbl1") == Some(tempTable))
+    assert(sessionCatalog.getTempView("tbl1") == Some(tempTable))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
     // If database is not specified, temp table should be dropped first
     sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false)
-    assert(sessionCatalog.getTempTable("tbl1") == None)
+    assert(sessionCatalog.getTempView("tbl1") == None)
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
     // If temp table does not exist, the table in the current database should be dropped
     sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false)
@@ -259,7 +259,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.createTempView("tbl1", tempTable, overrideIfExists = false)
     sessionCatalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = false)
     sessionCatalog.dropTable(TableIdentifier("tbl1", Some("db2")), ignoreIfNotExists = false)
-    assert(sessionCatalog.getTempTable("tbl1") == Some(tempTable))
+    assert(sessionCatalog.getTempView("tbl1") == Some(tempTable))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl2"))
   }
 
@@ -307,18 +307,18 @@ class SessionCatalogSuite extends SparkFunSuite {
     val tempTable = Range(1, 10, 2, 10)
     sessionCatalog.createTempView("tbl1", tempTable, overrideIfExists = false)
     sessionCatalog.setCurrentDatabase("db2")
-    assert(sessionCatalog.getTempTable("tbl1") == Option(tempTable))
+    assert(sessionCatalog.getTempView("tbl1") == Option(tempTable))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
     // If database is not specified, temp table should be renamed first
     sessionCatalog.renameTable(TableIdentifier("tbl1"), TableIdentifier("tbl3"))
-    assert(sessionCatalog.getTempTable("tbl1").isEmpty)
-    assert(sessionCatalog.getTempTable("tbl3") == Option(tempTable))
+    assert(sessionCatalog.getTempView("tbl1").isEmpty)
+    assert(sessionCatalog.getTempView("tbl3") == Option(tempTable))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
     // If database is specified, temp tables are never renamed
     sessionCatalog.renameTable(
       TableIdentifier("tbl2", Some("db2")), TableIdentifier("tbl4", Some("db2")))
-    assert(sessionCatalog.getTempTable("tbl3") == Option(tempTable))
-    assert(sessionCatalog.getTempTable("tbl4").isEmpty)
+    assert(sessionCatalog.getTempView("tbl3") == Option(tempTable))
+    assert(sessionCatalog.getTempView("tbl4").isEmpty)
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl4"))
   }
 
