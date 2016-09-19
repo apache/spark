@@ -250,15 +250,22 @@ class SessionCatalog(
    * If the temporary view does not exist, a [[NoSuchTempViewException]] is thrown.
    */
   def getTempViewMetadata(name: String): CatalogTable = {
+    getTempViewMetadataOption(name).getOrElse(throw new NoSuchTempViewException(name))
+  }
+
+  /**
+   * Retrieve the metadata of an existing temporary view.
+   * If the temporary view does not exist, return None.
+   */
+  def getTempViewMetadataOption(name: String): Option[CatalogTable] = synchronized {
     val table = formatTableName(name)
-    if (!tempTables.contains(table)) {
-      throw new NoSuchTempViewException(table)
+    getTempView(table).map { plan =>
+      CatalogTable(
+        identifier = TableIdentifier(table),
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = plan.output.toStructType)
     }
-    CatalogTable(
-      identifier = TableIdentifier(table),
-      tableType = CatalogTableType.VIEW,
-      storage = CatalogStorageFormat.empty,
-      schema = tempTables(table).output.toStructType)
   }
 
   /**

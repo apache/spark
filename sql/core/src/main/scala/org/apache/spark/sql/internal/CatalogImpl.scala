@@ -151,10 +151,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   private def listColumns(tableIdentifier: TableIdentifier): Dataset[Column] = {
-    val tableMetadata = if (sessionCatalog.isTemporaryTable(tableIdentifier)) {
-      sessionCatalog.getTempViewMetadata(tableIdentifier.table)
-    } else {
+    val tableMetadata = if (tableIdentifier.database.isDefined) {
       sessionCatalog.getTableMetadata(tableIdentifier)
+    } else {
+      sessionCatalog.getTempViewMetadataOption(tableIdentifier.table)
+        .getOrElse(sessionCatalog.getTableMetadata(tableIdentifier))
     }
 
     val partitionColumnNames = tableMetadata.partitionColumnNames.toSet

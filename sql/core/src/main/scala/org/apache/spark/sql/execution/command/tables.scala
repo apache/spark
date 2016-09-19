@@ -64,10 +64,11 @@ case class CreateTableLikeCommand(
         s"Source table in CREATE TABLE LIKE does not exist: '$sourceTable'")
     }
 
-    val sourceTableDesc = if (catalog.isTemporaryTable(sourceTable)) {
-      catalog.getTempViewMetadata(sourceTable.table)
-    } else {
+    val sourceTableDesc = if (sourceTable.database.isDefined) {
       catalog.getTableMetadata(sourceTable)
+    } else {
+      catalog.getTempViewMetadataOption(sourceTable.table)
+        .getOrElse(catalog.getTableMetadata(sourceTable))
     }
 
     // Storage format
@@ -602,10 +603,11 @@ case class ShowColumnsCommand(tableName: TableIdentifier) extends RunnableComman
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = if (catalog.isTemporaryTable(tableName)) {
-      catalog.getTempViewMetadata(tableName.table)
-    } else {
+    val table = if (tableName.database.isDefined) {
       catalog.getTableMetadata(tableName)
+    } else {
+      catalog.getTempViewMetadataOption(tableName.table)
+        .getOrElse(catalog.getTableMetadata(tableName))
     }
     table.schema.map { c =>
       Row(c.name)
