@@ -59,4 +59,22 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(falsePositive < 0.1)
     assert(falseNegative < 0.1)
   }
+
+  test("approxNearestNeighbors for random projection") {
+    val data = {
+      for (i <- -10 until 10; j <- -10 until 10) yield Vectors.dense(i.toDouble, j.toDouble)
+    }
+    val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
+    val key = Vectors.dense(1.2, 3.4)
+
+    val rp = new RandomProjection()
+      .setOutputDim(2)
+      .setInputCol("keys")
+      .setOutputCol("values")
+      .setBucketLength(4.0)
+
+    val (precision, recall) = LSHTest.checkApproxNearestNeighbors(rp, df, key, 10)
+    assert(precision >= 0.7)
+    assert(recall >= 0.7)
+  }
 }

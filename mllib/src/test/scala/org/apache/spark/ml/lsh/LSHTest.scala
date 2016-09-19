@@ -35,12 +35,12 @@ private[ml] object LSHTest {
    * existing dataset and calculate the probabilities.
    * (https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Definition)
    *
-   * @param dataset  The dataset to verify the locality sensitive hashing property.
+   * @param dataset The dataset to verify the locality sensitive hashing property.
    * @param lsh The lsh instance to perform the hashing
    * @param dist1 Distance threshold for false positive
    * @param dist2 Distance threshold for false negative
-   * @tparam KeyType  The input key type of LSH
-   * @tparam T The type of lsh instance
+   * @tparam KeyType The input key type of LSH
+   * @tparam T The class type of lsh
    * @return A tuple of two doubles, representing the false positive and false negative rate
    */
   def checkLSHProperty[KeyType, T <: LSHModel[KeyType, T]]
@@ -65,5 +65,31 @@ private[ml] object LSHTest {
     val falsePositiveCount = positive.filter(col("distance") > dist1).count().toDouble
     val falseNegativeCount = negative.filter(col("distance") < dist2).count().toDouble
     (falsePositiveCount / positive.count(), falseNegativeCount / negative.count())
+  }
+
+  /**
+   * Check and compute the precision and recall of approximate nearest neighbors
+   * @param lsh The lsh instance
+   * @param dataset the dataset to look for the key
+   * @param key The key to hash for the item
+   * @param k The maximum number of items closest to the key
+   * @tparam KeyType The input key type of LSH
+   * @tparam T The class type of lsh
+   * @return A tuple of two doubles, representing precision and recall rate
+   */
+  def checkApproxNearestNeighbors[KeyType, T <: LSHModel[KeyType, T]]
+  (lsh: LSH[KeyType, T], dataset: Dataset[_], key: KeyType, k: Int): (Double, Double) = {
+    val model = lsh.fit(dataset)
+
+    // Compute expected
+    val distUDF = udf((x: KeyType) => model.keyDistance(x, key), DataTypes.DoubleType)
+    val expected = dataset.sort(distUDF(col(model.getInputCol))).limit(k)
+
+    // Compute actual
+    val actual = model.approxNearestNeighbors(dataset, key, k)
+
+    // Compute precision and recall
+    val correctCount = expected.join(actual, model.getInputCol).count().toDouble
+    (correctCount / expected.count(), correctCount / actual.count())
   }
 }

@@ -122,6 +122,7 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
   /**
    * Given a large dataset and an item, approximately find at most k items which have the closest
    * distance to the item.
+   * @param dataset the dataset to look for the key
    * @param key The key to hash for the item
    * @param k The maximum number of items closest to the key
    * @param distCol The column to store the distance between pairs
