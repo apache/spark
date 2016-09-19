@@ -976,7 +976,10 @@ case class ValidateExternalType(child: Expression, expected: DataType)
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
+  private val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
 
@@ -997,8 +1000,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
         if ($typeCheck) {
           ${ev.value} = (${ctx.boxedType(dataType)}) $obj;
         } else {
-          throw new RuntimeException($obj.getClass().getName() + " is not a valid " +
-            "external type for schema of ${expected.simpleString}");
+          throw new RuntimeException($obj.getClass().getName() + $errMsgField);
         }
       }
 
