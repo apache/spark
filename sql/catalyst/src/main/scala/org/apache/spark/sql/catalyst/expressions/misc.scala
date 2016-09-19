@@ -501,10 +501,12 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def prettyName: String = "assert_true"
 
+  private val errMsg = s"'${child.simpleString}' is not true!"
+
   override def eval(input: InternalRow) : Any = {
     val v = child.eval(input)
     if (v == null || java.lang.Boolean.FALSE.equals(v)) {
-      throw new RuntimeException(s"'${child.simpleString}' is not true!")
+      throw new RuntimeException(errMsg)
     } else {
       null
     }
@@ -512,9 +514,10 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
+    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     ExprCode(code = s"""${eval.code}
        |if (${eval.isNull} || !${eval.value}) {
-       |  throw new RuntimeException("'${child.simpleString}' is not true.");
+       |  throw new RuntimeException($errMsgField);
        |}""".stripMargin, isNull = "true", value = "null")
   }
 
