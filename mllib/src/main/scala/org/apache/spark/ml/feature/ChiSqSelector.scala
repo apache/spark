@@ -90,8 +90,11 @@ private[feature] trait ChiSqSelectorParams extends Params
 /**
  * Chi-Squared feature selection, which selects categorical features to use for predicting a
  * categorical label.
- * The selector supports three selection methods: KBest, Percentile and FPR.
- * By default, the selection method is KBest, the default number of top features is 50.
+ * The selector supports three selection methods: `KBest`, `Percentile` and `FPR`.
+ * `KBest` chooses the `k` top features according to a chi-squared test.
+ * `Percentile` is similar but chooses a fraction of all features instead of a fixed number.
+ * `FPR` chooses all features whose false positive rate meets some threshold.
+ * By default, the selection method is `KBest`, the default number of top features is 50.
  * User can use setNumTopFeatures, setPercentile and setAlpha to set different selection methods.
  */
 @Since("1.6.0")

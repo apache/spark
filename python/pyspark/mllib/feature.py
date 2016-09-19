@@ -281,6 +281,12 @@ class ChiSqSelectorType:
 class ChiSqSelector(object):
     """
     Creates a ChiSquared feature selector.
+    The selector supports three selection methods: `KBest`, `Percentile` and `FPR`.
+    `KBest` chooses the `k` top features according to a chi-squared test.
+    `Percentile` is similar but chooses a fraction of all features instead of a fixed number.
+    `FPR` chooses all features whose false positive rate meets some threshold.
+    By default, the selection method is `KBest`, the default number of top features is 50.
+    User can use setNumTopFeatures, setPercentile and setAlpha to set different selection methods.
 
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(3, {0: 8.0, 1: 7.0})),
