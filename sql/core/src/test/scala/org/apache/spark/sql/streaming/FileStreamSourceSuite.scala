@@ -19,6 +19,10 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.hdfs.{DistributedFileSystem, HdfsConfiguration, MiniDFSCluster}
 import org.scalatest.PrivateMethodTester
 import org.scalatest.time.SpanSugar._
 
@@ -68,7 +72,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext with Private
     protected def addData(source: FileStreamSource): Unit
   }
 
-  case class AddTextFileData(content: String, src: File, tmp: File)
+  case class AddTextLocalFileData(content: String, src: File, tmp: File)
     extends AddFileData {
 
     override def addData(source: FileStreamSource): Unit = {
@@ -80,15 +84,34 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext with Private
     }
   }
 
-  case class AddParquetFileData(data: DataFrame, src: File, tmp: File) extends AddFileData {
+  case class AddTextHDFSFileData(content: String, src: Path, tmp: File, conf: Configuration)
+    extends AddFileData {
+
     override def addData(source: FileStreamSource): Unit = {
-      AddParquetFileData.writeToFile(data, src, tmp)
+      val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+      val finalFile = new File(tempFile.getName)
+      require(stringToFile(tempFile, content).renameTo(finalFile))
+      // Set up files on hdfs
+      val fs = FileSystem.get(conf)
+      val hdfsFilePath = src
+      if(!fs.exists(src)) {
+        fs.mkdirs(src)
+      }
+      val inputData = new Path(finalFile.getAbsolutePath)
+      fs.copyFromLocalFile(inputData, hdfsFilePath)
+      logInfo(s"Written text '$content' to file $src")
     }
   }
 
-  object AddParquetFileData {
-    def apply(seq: Seq[String], src: File, tmp: File): AddParquetFileData = {
-      AddParquetFileData(seq.toDS().toDF(), src, tmp)
+  case class AddParquetLocalFileData(data: DataFrame, src: File, tmp: File) extends AddFileData {
+    override def addData(source: FileStreamSource): Unit = {
+      AddParquetLocalFileData.writeToFile(data, src, tmp)
+    }
+  }
+
+  object AddParquetLocalFileData {
+    def apply(seq: Seq[String], src: File, tmp: File): AddParquetLocalFileData = {
+      AddParquetLocalFileData(seq.toDS().toDF(), src, tmp)
     }
 
     /** Write parquet files in a temp dir, and move the individual files to the 'src' dir */
@@ -330,15 +353,42 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val filtered = textStream.filter($"value" contains "keep")
 
       testStream(filtered)(
-        AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
+        AddTextLocalFileData("drop1\nkeep2\nkeep3", src, tmp),
         CheckAnswer("keep2", "keep3"),
         StopStream,
-        AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
+        AddTextLocalFileData("drop4\nkeep5\nkeep6", src, tmp),
         StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
-        AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
+        AddTextLocalFileData("drop7\nkeep8\nkeep9", src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
       )
+    }
+  }
+
+  test("read from text files using hdfs") {
+    withTempDirs { case (_src, tmp) =>
+      // Create a mini dfs cluster.
+      System.clearProperty(MiniDFSCluster.PROP_TEST_BUILD_DATA)
+      val conf = new HdfsConfiguration()
+      conf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, tmp.getAbsolutePath)
+      val cluster = new MiniDFSCluster.Builder(conf).build()
+      val hdfsHomeDirectory: Path = cluster.getFileSystem.getHomeDirectory
+      cluster.getFileSystem.mkdirs(hdfsHomeDirectory)
+      cluster.waitClusterUp()
+      val textStream = createFileStream("text", hdfsHomeDirectory.toString)
+      val filtered = textStream.filter($"value" contains "keep")
+      val src = hdfsHomeDirectory
+      testStream(filtered)(
+        AddTextHDFSFileData("drop1\nkeep2\nkeep3", src, tmp, conf),
+        CheckAnswer("keep2", "keep3"),
+        StopStream,
+        AddTextHDFSFileData("drop4\nkeep5\nkeep6", src, tmp, conf),
+        StartStream(),
+        CheckAnswer("keep2", "keep3", "keep5", "keep6"),
+        AddTextHDFSFileData("drop7\nkeep8\nkeep9", src, tmp, conf),
+        CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
+      )
+        cluster.shutdown()
     }
   }
 
@@ -356,7 +406,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         createFileStream("text", src.getCanonicalPath, options = Map("maxFileAge" -> "5ms"))
 
       testStream(textStream)(
-        AddTextFileData("a\nb", src, tmp),
+        AddTextLocalFileData("a\nb", src, tmp),
         CheckAnswer("a", "b"),
 
         // SLeeps longer than 5ms (maxFileAge)
@@ -364,7 +414,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         // finer grained than 1 sec, we need to use 1 sec here.
         AssertOnQuery { _ => Thread.sleep(1000); true },
 
-        AddTextFileData("c\nd", src, tmp),
+        AddTextLocalFileData("c\nd", src, tmp),
         CheckAnswer("a", "b", "c", "d"),
 
         AssertOnQuery("seen files should contain only one entry") { streamExecution =>
@@ -386,19 +436,19 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val filtered = fileStream.filter($"value" contains "keep")
 
       testStream(filtered)(
-        AddTextFileData(
+        AddTextLocalFileData(
           "{'value': 'drop1'}\n{'value': 'keep2'}\n{'value': 'keep3'}",
           src,
           tmp),
         CheckAnswer("keep2", "keep3"),
         StopStream,
-        AddTextFileData(
+        AddTextLocalFileData(
           "{'value': 'drop4'}\n{'value': 'keep5'}\n{'value': 'keep6'}",
           src,
           tmp),
         StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
-        AddTextFileData(
+        AddTextLocalFileData(
           "{'value': 'drop7'}\n{'value': 'keep8'}\n{'value': 'keep9'}",
           src,
           tmp),
@@ -421,7 +471,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val filtered = fileStream.filter($"c" contains "keep")
 
         testStream(filtered)(
-          AddTextFileData("{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
+          AddTextLocalFileData("{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
           CheckAnswer("keep2", "keep3", "keep5", "keep6")
         )
       }
@@ -443,7 +493,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val filtered = fileStream.filter($"c" contains "keep")
 
         testStream(filtered)(
-          AddTextFileData("{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
+          AddTextLocalFileData("{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
           CheckAnswer("keep2", "keep3", "keep5", "keep6")
         )
       }
@@ -469,15 +519,15 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         testStream(fileStream)(
 
           // Should not pick up column v in the file added before start
-          AddTextFileData("{'k': 'value2'}", src, tmp),
+          AddTextLocalFileData("{'k': 'value2'}", src, tmp),
           CheckAnswer("value0", "value1", "value2"),
 
           // Should read data in column k, and ignore v
-          AddTextFileData("{'k': 'value3', 'v': 'new'}", src, tmp),
+          AddTextLocalFileData("{'k': 'value3', 'v': 'new'}", src, tmp),
           CheckAnswer("value0", "value1", "value2", "value3"),
 
           // Should ignore rows that do not have the necessary k column
-          AddTextFileData("{'v': 'value4'}", src, tmp),
+          AddTextLocalFileData("{'v': 'value4'}", src, tmp),
           CheckAnswer("value0", "value1", "value2", "value3", null))
       }
     }
@@ -491,13 +541,13 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val filtered = fileStream.filter($"value" contains "keep")
 
       testStream(filtered)(
-        AddParquetFileData(Seq("drop1", "keep2", "keep3"), src, tmp),
+        AddParquetLocalFileData(Seq("drop1", "keep2", "keep3"), src, tmp),
         CheckAnswer("keep2", "keep3"),
         StopStream,
-        AddParquetFileData(Seq("drop4", "keep5", "keep6"), src, tmp),
+        AddParquetLocalFileData(Seq("drop4", "keep5", "keep6"), src, tmp),
         StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
-        AddParquetFileData(Seq("drop7", "keep8", "keep9"), src, tmp),
+        AddParquetLocalFileData(Seq("drop7", "keep8", "keep9"), src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
       )
     }
@@ -509,7 +559,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
 
         // Add a file so that we can infer its schema
-        AddParquetFileData.writeToFile(Seq("value0").toDF("k"), src, tmp)
+        AddParquetLocalFileData.writeToFile(Seq("value0").toDF("k"), src, tmp)
 
         val fileStream = createFileStream("parquet", src.getCanonicalPath)
 
@@ -518,19 +568,19 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
         // After creating DF and before starting stream, add data with different schema
         // Should not affect the inferred schema any more
-        AddParquetFileData.writeToFile(Seq(("value1", 0)).toDF("k", "v"), src, tmp)
+        AddParquetLocalFileData.writeToFile(Seq(("value1", 0)).toDF("k", "v"), src, tmp)
 
         testStream(fileStream)(
           // Should not pick up column v in the file added before start
-          AddParquetFileData(Seq("value2").toDF("k"), src, tmp),
+          AddParquetLocalFileData(Seq("value2").toDF("k"), src, tmp),
           CheckAnswer("value0", "value1", "value2"),
 
           // Should read data in column k, and ignore v
-          AddParquetFileData(Seq(("value3", 1)).toDF("k", "v"), src, tmp),
+          AddParquetLocalFileData(Seq(("value3", 1)).toDF("k", "v"), src, tmp),
           CheckAnswer("value0", "value1", "value2", "value3"),
 
           // Should ignore rows that do not have the necessary k column
-          AddParquetFileData(Seq("value5").toDF("v"), src, tmp),
+          AddParquetLocalFileData(Seq("value5").toDF("v"), src, tmp),
           CheckAnswer("value0", "value1", "value2", "value3", null)
         )
       }
@@ -538,6 +588,59 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   // =============== file stream globbing tests ================
+  test("read new files in nested directories with globbing using hdfs") {
+    withTempDirs { case (dir, tmp) =>
+      // Create a mini dfs cluster.
+      System.clearProperty(MiniDFSCluster.PROP_TEST_BUILD_DATA)
+      val conf = new HdfsConfiguration()
+      conf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, tmp.getAbsolutePath)
+      val miniDFSClusterBuilder = new MiniDFSCluster.Builder(conf)
+      val cluster = miniDFSClusterBuilder.clusterId("testGlob").build()
+      val fs: DistributedFileSystem = cluster.getFileSystem
+      val hdfsHomeDirectory: Path = fs.getHomeDirectory
+      fs.mkdirs(hdfsHomeDirectory)
+      cluster.waitClusterUp()
+      // src/*/* should consider all the files and directories that matches that glob.
+      // So any files that matches the glob as well as any files in directories that matches
+      // this glob should be read.
+      val fileStream = createFileStream("text", s"$hdfsHomeDirectory/*/*")
+      val filtered = fileStream.filter($"value" contains "keep")
+      val subDir = new Path(hdfsHomeDirectory, "subDir")
+      val subSubDir = new Path(subDir, "subsubdir")
+      val subSubSubDir = new Path(subSubDir, "subsubsubdir")
+
+      require(!fs.exists(subDir))
+      require(!fs.exists(subSubDir))
+
+      testStream(filtered) (
+        // Create new dir/subdir and write to it, should read
+        AddTextHDFSFileData("drop1\nkeep2", subDir, tmp, conf),
+        CheckAnswer("keep2"),
+
+        // Add files to dir/subdir, should read
+        AddTextHDFSFileData("keep3", subDir, tmp, conf),
+        CheckAnswer("keep2", "keep3"),
+
+        // Create new dir/subdir/subsubdir and write to it, should read
+        AddTextHDFSFileData("keep4", subSubDir, tmp, conf),
+        CheckAnswer("keep2", "keep3", "keep4"),
+
+        // Add files to dir/subdir/subsubdir, should read
+        AddTextHDFSFileData("keep5", subSubDir, tmp, conf),
+        CheckAnswer("keep2", "keep3", "keep4", "keep5"),
+
+        // 1. Add file to src dir, should not read as globbing src/*/* does not capture files in
+        //    dir, only captures files in dir/subdir/
+        // 2. Add files to dir/subDir/subsubdir/subsubsubdir, should not read as src/*/* should
+        //    not capture those files
+        AddTextHDFSFileData("keep6", hdfsHomeDirectory, tmp, conf),
+        AddTextHDFSFileData("keep7", subSubSubDir, tmp, conf),
+        AddTextHDFSFileData("keep8", subDir, tmp, conf), // needed to make query detect new data
+        CheckAnswer("keep2", "keep3", "keep4", "keep5", "keep8")
+      )
+        cluster.shutdown()
+    }
+  }
 
   test("read new files in nested directories with globbing") {
     withTempDirs { case (dir, tmp) =>
@@ -556,28 +659,28 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
       testStream(filtered)(
         // Create new dir/subdir and write to it, should read
-        AddTextFileData("drop1\nkeep2", subDir, tmp),
+        AddTextLocalFileData("drop1\nkeep2", subDir, tmp),
         CheckAnswer("keep2"),
 
         // Add files to dir/subdir, should read
-        AddTextFileData("keep3", subDir, tmp),
+        AddTextLocalFileData("keep3", subDir, tmp),
         CheckAnswer("keep2", "keep3"),
 
         // Create new dir/subdir/subsubdir and write to it, should read
-        AddTextFileData("keep4", subSubDir, tmp),
+        AddTextLocalFileData("keep4", subSubDir, tmp),
         CheckAnswer("keep2", "keep3", "keep4"),
 
         // Add files to dir/subdir/subsubdir, should read
-        AddTextFileData("keep5", subSubDir, tmp),
+        AddTextLocalFileData("keep5", subSubDir, tmp),
         CheckAnswer("keep2", "keep3", "keep4", "keep5"),
 
         // 1. Add file to src dir, should not read as globbing src/*/* does not capture files in
         //    dir, only captures files in dir/subdir/
         // 2. Add files to dir/subDir/subsubdir/subsubsubdir, should not read as src/*/* should
         //    not capture those files
-        AddTextFileData("keep6", dir, tmp),
-        AddTextFileData("keep7", subSubSubDir, tmp),
-        AddTextFileData("keep8", subDir, tmp), // needed to make query detect new data
+        AddTextLocalFileData("keep6", dir, tmp),
+        AddTextLocalFileData("keep7", subSubSubDir, tmp),
+        AddTextLocalFileData("keep8", subDir, tmp), // needed to make query detect new data
         CheckAnswer("keep2", "keep3", "keep4", "keep5", "keep8")
       )
     }
@@ -594,19 +697,19 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val nullStr = null.asInstanceOf[String]
       testStream(filtered)(
         // Create new partition=foo sub dir and write to it, should read only value, not partition
-        AddTextFileData("{'value': 'drop1'}\n{'value': 'keep2'}", partitionFooSubDir, tmp),
+        AddTextLocalFileData("{'value': 'drop1'}\n{'value': 'keep2'}", partitionFooSubDir, tmp),
         CheckAnswer(("keep2", nullStr)),
 
         // Append to same partition=1 sub dir, should read only value, not partition
-        AddTextFileData("{'value': 'keep3'}", partitionFooSubDir, tmp),
+        AddTextLocalFileData("{'value': 'keep3'}", partitionFooSubDir, tmp),
         CheckAnswer(("keep2", nullStr), ("keep3", nullStr)),
 
         // Create new partition sub dir and write to it, should read only value, not partition
-        AddTextFileData("{'value': 'keep4'}", partitionBarSubDir, tmp),
+        AddTextLocalFileData("{'value': 'keep4'}", partitionBarSubDir, tmp),
         CheckAnswer(("keep2", nullStr), ("keep3", nullStr), ("keep4", nullStr)),
 
         // Append to same partition=2 sub dir, should read only value, not partition
-        AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
+        AddTextLocalFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
         CheckAnswer(("keep2", nullStr), ("keep3", nullStr), ("keep4", nullStr), ("keep5", nullStr))
       )
     }
@@ -624,19 +727,19 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val filtered = fileStream.filter($"value" contains "keep")
       testStream(filtered)(
         // Create new partition=foo sub dir and write to it
-        AddTextFileData("{'value': 'drop1'}\n{'value': 'keep2'}", partitionFooSubDir, tmp),
+        AddTextLocalFileData("{'value': 'drop1'}\n{'value': 'keep2'}", partitionFooSubDir, tmp),
         CheckAnswer(("keep2", "foo")),
 
         // Append to same partition=foo sub dir
-        AddTextFileData("{'value': 'keep3'}", partitionFooSubDir, tmp),
+        AddTextLocalFileData("{'value': 'keep3'}", partitionFooSubDir, tmp),
         CheckAnswer(("keep2", "foo"), ("keep3", "foo")),
 
         // Create new partition sub dir and write to it
-        AddTextFileData("{'value': 'keep4'}", partitionBarSubDir, tmp),
+        AddTextLocalFileData("{'value': 'keep4'}", partitionBarSubDir, tmp),
         CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar")),
 
         // Append to same partition=bar sub dir
-        AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
+        AddTextLocalFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
         CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"))
       )
     }
@@ -662,26 +765,26 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val filtered = fileStream.filter($"value" contains "keep")
         testStream(filtered)(
           // Append to same partition=foo sub dir
-          AddTextFileData("{'value': 'drop1'}\n{'value': 'keep2'}", partitionFooSubDir, tmp),
+          AddTextLocalFileData("{'value': 'drop1'}\n{'value': 'keep2'}", partitionFooSubDir, tmp),
           CheckAnswer(("keep2", "foo")),
 
           // Append to same partition=foo sub dir
-          AddTextFileData("{'value': 'keep3'}", partitionFooSubDir, tmp),
+          AddTextLocalFileData("{'value': 'keep3'}", partitionFooSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo")),
 
           // Create new partition sub dir and write to it
-          AddTextFileData("{'value': 'keep4'}", partitionBarSubDir, tmp),
+          AddTextLocalFileData("{'value': 'keep4'}", partitionBarSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar")),
 
           // Append to same partition=bar sub dir
-          AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
+          AddTextLocalFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar")),
 
           // Delete the two partition dirs
           DeleteFile(partitionFooSubDir),
           DeleteFile(partitionBarSubDir),
 
-          AddTextFileData("{'value': 'keep6'}", partitionBarSubDir, tmp),
+          AddTextLocalFileData("{'value': 'keep6'}", partitionBarSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"),
             ("keep6", "bar"))
         )
@@ -695,13 +798,13 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val filtered = fileStream.filter($"value" contains "keep")
 
       testStream(filtered)(
-        AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
+        AddTextLocalFileData("drop1\nkeep2\nkeep3", src, tmp),
         CheckAnswer("keep2", "keep3"),
         StopStream,
-        AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
+        AddTextLocalFileData("drop4\nkeep5\nkeep6", src, tmp),
         StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
-        AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
+        AddTextLocalFileData("drop7\nkeep8\nkeep9", src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
       )
     }
@@ -880,7 +983,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val df = files.filter("1 == 0").groupBy().count()
 
       testStream(df, InternalOutputModes.Complete)(
-        AddTextFileData("0", src, tmp),
+        AddTextLocalFileData("0", src, tmp),
         CheckAnswer(0)
       )
     }
@@ -924,22 +1027,22 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val filtered = fileStream.filter($"value" contains "keep")
 
         testStream(filtered)(
-          AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
+          AddTextLocalFileData("drop1\nkeep2\nkeep3", src, tmp),
           CheckAnswer("keep2", "keep3"),
           AssertOnQuery(verify(_)(0L, 1)),
-          AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
+          AddTextLocalFileData("drop4\nkeep5\nkeep6", src, tmp),
           CheckAnswer("keep2", "keep3", "keep5", "keep6"),
           AssertOnQuery(verify(_)(1L, 2)),
-          AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
+          AddTextLocalFileData("drop7\nkeep8\nkeep9", src, tmp),
           CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9"),
           AssertOnQuery(verify(_)(2L, 3)),
           StopStream,
           StartStream(),
           AssertOnQuery(verify(_)(2L, 3)),
-          AddTextFileData("drop10\nkeep11", src, tmp),
+          AddTextLocalFileData("drop10\nkeep11", src, tmp),
           CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9", "keep11"),
           AssertOnQuery(verify(_)(3L, 4)),
-          AddTextFileData("drop12\nkeep13", src, tmp),
+          AddTextLocalFileData("drop12\nkeep13", src, tmp),
           CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9", "keep11", "keep13"),
           AssertOnQuery(verify(_)(4L, 5))
         )
@@ -958,11 +1061,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val filtered = fileStream.filter($"value" contains "keep")
 
         testStream(filtered)(
-          AddTextFileData("keep1", src, tmp),
+          AddTextLocalFileData("keep1", src, tmp),
           CheckAnswer("keep1"),
-          AddTextFileData("keep2", src, tmp),
+          AddTextLocalFileData("keep2", src, tmp),
           CheckAnswer("keep1", "keep2"),
-          AddTextFileData("keep3", src, tmp),
+          AddTextLocalFileData("keep3", src, tmp),
           CheckAnswer("keep1", "keep2", "keep3"),
           AssertOnQuery("check getBatch") { execution: StreamExecution =>
             val _sources = PrivateMethod[Seq[Source]]('sources)
@@ -993,7 +1096,7 @@ class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
     val fileStream = createFileStream("text", src.getCanonicalPath)
     val ds = fileStream.as[String].map(_.toInt + 1)
     runStressTest(ds, data => {
-      AddTextFileData(data.mkString("\n"), src, tmp)
+      AddTextLocalFileData(data.mkString("\n"), src, tmp)
     })
 
     Utils.deleteRecursively(src)

@@ -127,6 +127,32 @@
       <artifactId>xbean-asm5-shaded</artifactId>
       <scope>test</scope>
     </dependency>
+	<dependency>
+	  <groupId>org.apache.hadoop</groupId>
+	  <artifactId>hadoop-common</artifactId>
+	  <version>${hadoop.version}</version>
+	  <scope>test</scope>
+	</dependency>
+	<dependency>
+	  <groupId>org.apache.hadoop</groupId>
+	  <artifactId>hadoop-common</artifactId>
+	  <version>${hadoop.version}</version>
+	  <scope>test</scope>
+      <classifier>tests</classifier>
+	</dependency>
+	<dependency>
+	  <groupId>org.apache.hadoop</groupId>
+	  <artifactId>hadoop-hdfs</artifactId>
+	  <version>${hadoop.version}</version>
+	  <scope>test</scope>
+	</dependency>
+	<dependency>
+	  <groupId>org.apache.hadoop</groupId>
+	  <artifactId>hadoop-hdfs</artifactId>
+	  <version>${hadoop.version}</version>
+	  <scope>test</scope>
+	  <classifier>tests</classifier>
+	</dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
