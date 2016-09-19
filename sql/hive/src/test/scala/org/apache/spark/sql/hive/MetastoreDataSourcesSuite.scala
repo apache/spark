@@ -509,7 +509,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           assert(
             intercept[AnalysisException] {
               sparkSession.catalog.createExternalTable("createdJsonTable", jsonFilePath.toString)
-            }.getMessage.contains("Table default.createdJsonTable already exists."),
+            }.getMessage.contains("Table `default`.`createdJsonTable` already exists."),
             "We should complain that createdJsonTable already exists")
         }
 
