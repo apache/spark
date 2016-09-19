@@ -477,10 +477,13 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 
   protected override def nullSafeEval(input: Any): Any = input
 
+  private val outputPrefix = s"Result of ${child.simpleString} is "
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val outputPrefixField = ctx.addReferenceObj("outputPrefix", outputPrefix)
     nullSafeCodeGen(ctx, ev, c =>
       s"""
-         | System.err.println("Result of ${child.simpleString} is " + $c);
+         | System.err.println($outputPrefixField + $c);
          | ${ev.value} = $c;
        """.stripMargin)
   }
