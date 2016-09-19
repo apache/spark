@@ -82,7 +82,7 @@ case class CreateDataSourceTableCommand(
       if (ignoreIfExists) {
         return Seq.empty[Row]
       } else {
-        throw new AnalysisException(s"Table ${tableIdentWithDB.quotedString} already exists.")
+        throw new AnalysisException(s"Table ${tableIdentWithDB.unquotedString} already exists.")
       }
     }
 
