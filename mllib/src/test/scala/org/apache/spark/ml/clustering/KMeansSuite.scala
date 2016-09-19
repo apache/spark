@@ -45,7 +45,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getPredictionCol === "prediction")
     assert(kmeans.getMaxIter === 20)
     assert(kmeans.getInitMode === MLlibKMeans.K_MEANS_PARALLEL)
-    assert(kmeans.getInitSteps === 5)
+    assert(kmeans.getInitSteps === 2)
     assert(kmeans.getTol === 1e-4)
   }
 

@@ -88,6 +88,13 @@ setClass("GaussianMixtureModel", representation(jobj = "jobj"))
 #' @note ALSModel since 2.1.0
 setClass("ALSModel", representation(jobj = "jobj"))
 
+#' S4 class that represents an KSTest
+#'
+#' @param jobj a Java object reference to the backing Scala KSTestWrapper
+#' @export
+#' @note KSTest since 2.1.0
+setClass("KSTest", representation(jobj = "jobj"))
+
 #' Saves the MLlib model to the input path
 #'
 #' Saves the MLlib model to the input path. For more information, see the specific
@@ -138,10 +145,11 @@ predict_internal <- function(object, newData) {
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
-#' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
-#'                  weights as 1.0.
 #' @param tol positive convergence tolerance of iterations.
 #' @param maxIter integer giving the maximal number of IRLS iterations.
+#' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
+#'                  weights as 1.0.
+#' @param regParam regularization parameter for L2 regularization.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model
@@ -171,7 +179,8 @@ predict_internal <- function(object, newData) {
 #' @note spark.glm since 2.0.0
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL) {
+          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
+                   regParam = 0.0) {
             if (is.character(family)) {
               family <- get(family, mode = "function", envir = parent.frame())
             }
@@ -190,7 +199,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, family$family, family$link,
-                                tol, as.integer(maxIter), as.character(weightCol))
+                                tol, as.integer(maxIter), as.character(weightCol), regParam)
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
@@ -711,8 +720,9 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 # Returns the summary of a Multilayer Perceptron Classification Model produced by \code{spark.mlp}
 
 #' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
-#' @return \code{summary} returns a list containing \code{layers}, the label distribution, and
-#'         \code{tables}, conditional probabilities given the target label.
+#' @return \code{summary} returns a list containing \code{labelCount}, \code{layers}, and
+#'         \code{weights}. For \code{weights}, it is a numeric vector with length equal to
+#'         the expected given the architecture (i.e., for 8-10-2 network, 100 connection weights).
 #' @rdname spark.mlp
 #' @export
 #' @aliases summary,MultilayerPerceptronClassificationModel-method
@@ -723,7 +733,6 @@ setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel
             labelCount <- callJMethod(jobj, "labelCount")
             layers <- unlist(callJMethod(jobj, "layers"))
             weights <- callJMethod(jobj, "weights")
-            weights <- matrix(weights, nrow = length(weights))
             list(labelCount = labelCount, layers = layers, weights = weights)
           })
 
@@ -994,18 +1003,22 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @export
 #' @examples
 #' \dontrun{
-#' text <- read.df("path/to/data", source = "libsvm")
+#' # nolint start
+#' # An example "path/to/file" can be
+#' # paste0(Sys.getenv("SPARK_HOME"), "/data/mllib/sample_lda_libsvm_data.txt")
+#' # nolint end
+#' text <- read.df("path/to/file", source = "libsvm")
 #' model <- spark.lda(data = text, optimizer = "em")
 #'
 #' # get a summary of the model
 #' summary(model)
 #'
 #' # compute posterior probabilities
-#' posterior <- spark.posterior(model, df)
+#' posterior <- spark.posterior(model, text)
 #' showDF(posterior)
 #'
 #' # compute perplexity
-#' perplexity <- spark.perplexity(model, df)
+#' perplexity <- spark.perplexity(model, text)
 #'
 #' # save and load the model
 #' path <- "path/to/model"
@@ -1228,7 +1241,7 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @note spark.als since 2.1.0
 setMethod("spark.als", signature(data = "SparkDataFrame"),
           function(data, ratingCol = "rating", userCol = "user", itemCol = "item",
-                   rank = 10, reg = 1.0, maxIter = 10, nonnegative = FALSE,
+                   rank = 10, reg = 0.1, maxIter = 10, nonnegative = FALSE,
                    implicitPrefs = FALSE, alpha = 1.0, numUserBlocks = 10, numItemBlocks = 10,
                    checkpointInterval = 10, seed = 0) {
 
@@ -1304,3 +1317,101 @@ setMethod("write.ml", signature(object = "ALSModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             write_internal(object, path, overwrite)
           })
+
+#' (One-Sample) Kolmogorov-Smirnov Test
+#'
+#' @description
+#' \code{spark.kstest} Conduct the two-sided Kolmogorov-Smirnov (KS) test for data sampled from a
+#' continuous distribution.
+#'
+#' By comparing the largest difference between the empirical cumulative
+#' distribution of the sample data and the theoretical distribution we can provide a test for the
+#' the null hypothesis that the sample data comes from that theoretical distribution.
+#'
+#' Users can call \code{summary} to obtain a summary of the test, and \code{print.summary.KSTest}
+#' to print out a summary result.
+#'
+#' @param data a SparkDataFrame of user data.
+#' @param testCol column name where the test data is from. It should be a column of double type.
+#' @param nullHypothesis name of the theoretical distribution tested against. Currently only
+#'                       \code{"norm"} for normal distribution is supported.
+#' @param distParams parameters(s) of the distribution. For \code{nullHypothesis = "norm"},
+#'                   we can provide as a vector the mean and standard deviation of
+#'                   the distribution. If none is provided, then standard normal will be used.
+#'                   If only one is provided, then the standard deviation will be set to be one.
+#' @param ... additional argument(s) passed to the method.
+#' @return \code{spark.kstest} returns a test result object.
+#' @rdname spark.kstest
+#' @aliases spark.kstest,SparkDataFrame-method
+#' @name spark.kstest
+#' @seealso \href{http://spark.apache.org/docs/latest/mllib-statistics.html#hypothesis-testing}{
+#'          MLlib: Hypothesis Testing}
+#' @export
+#' @examples
+#' \dontrun{
+#' data <- data.frame(test = c(0.1, 0.15, 0.2, 0.3, 0.25))
+#' df <- createDataFrame(data)
+#' test <- spark.ktest(df, "test", "norm", c(0, 1))
+#'
+#' # get a summary of the test result
+#' testSummary <- summary(test)
+#' testSummary
+#'
+#' # print out the summary in an organized way
+#' print.summary.KSTest(test)
+#' }
+#' @note spark.kstest since 2.1.0
+setMethod("spark.kstest", signature(data = "SparkDataFrame"),
+          function(data, testCol = "test", nullHypothesis = c("norm"), distParams = c(0, 1)) {
+            tryCatch(match.arg(nullHypothesis),
+                     error = function(e) {
+                       msg <- paste("Distribution", nullHypothesis, "is not supported.")
+                       stop(msg)
+                     })
+            if (nullHypothesis == "norm") {
+              distParams <- as.numeric(distParams)
+              mu <- ifelse(length(distParams) < 1, 0, distParams[1])
+              sigma <- ifelse(length(distParams) < 2, 1, distParams[2])
+              jobj <- callJStatic("org.apache.spark.ml.r.KSTestWrapper",
+                                  "test", data@sdf, testCol, nullHypothesis,
+                                  as.array(c(mu, sigma)))
+              new("KSTest", jobj = jobj)
+            }
+})
+
+#  Get the summary of Kolmogorov-Smirnov (KS) Test.
+#' @param object test result object of KSTest by \code{spark.kstest}.
+#' @return \code{summary} returns a list containing the p-value, test statistic computed for the
+#'         test, the null hypothesis with its parameters tested against
+#'         and degrees of freedom of the test.
+#' @rdname spark.kstest
+#' @aliases summary,KSTest-method
+#' @export
+#' @note summary(KSTest) since 2.1.0
+setMethod("summary", signature(object = "KSTest"),
+          function(object) {
+            jobj <- object@jobj
+            pValue <- callJMethod(jobj, "pValue")
+            statistic <- callJMethod(jobj, "statistic")
+            nullHypothesis <- callJMethod(jobj, "nullHypothesis")
+            distName <- callJMethod(jobj, "distName")
+            distParams <- unlist(callJMethod(jobj, "distParams"))
+            degreesOfFreedom <- callJMethod(jobj, "degreesOfFreedom")
+
+            list(p.value = pValue, statistic = statistic, nullHypothesis = nullHypothesis,
+                 nullHypothesis.name = distName, nullHypothesis.parameters = distParams,
+                 degreesOfFreedom = degreesOfFreedom)
+          })
+
+#  Prints the summary of KSTest
+
+#' @rdname spark.kstest
+#' @param x test result object of KSTest by \code{spark.kstest}.
+#' @export
+#' @note print.summary.KSTest since 2.1.0
+print.summary.KSTest <- function(x, ...) {
+  jobj <- x@jobj
+  summaryStr <- callJMethod(jobj, "summary")
+  cat(summaryStr)
+  invisible(summaryStr)
+}

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
+import javax.xml.bind.DatatypeConverter
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -91,10 +92,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
     // Apply CTEs
     query.optional(ctx.ctes) {
-      val ctes = ctx.ctes.namedQuery.asScala.map {
-        case nCtx =>
-          val namedQuery = visitNamedQuery(nCtx)
-          (namedQuery.alias, namedQuery)
+      val ctes = ctx.ctes.namedQuery.asScala.map { nCtx =>
+        val namedQuery = visitNamedQuery(nCtx)
+        (namedQuery.alias, namedQuery)
       }
       // Check for duplicate names.
       checkDuplicateKeys(ctes, ctx)
@@ -400,7 +400,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * separated) relations here, these get converted into a single plan by condition-less inner join.
    */
   override def visitFromClause(ctx: FromClauseContext): LogicalPlan = withOrigin(ctx) {
-    val from = ctx.relation.asScala.map(plan).reduceLeft(Join(_, _, Inner, None))
+    val from = ctx.relation.asScala.foldLeft(null: LogicalPlan) { (left, relation) =>
+      val right = plan(relation.relationPrimary)
+      val join = right.optionalMap(left)(Join(_, _, Inner, None))
+      withJoinRelations(join, relation)
+    }
     ctx.lateralView.asScala.foldLeft(from)(withGenerate)
   }
 
@@ -531,54 +535,53 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a joins between two or more logical plans.
+   * Create a single relation referenced in a FROM claused. This method is used when a part of the
+   * join condition is nested, for example:
+   * {{{
+   *   select * from t1 join (t2 cross join t3) on col1 = col2
+   * }}}
    */
-  override def visitJoinRelation(ctx: JoinRelationContext): LogicalPlan = withOrigin(ctx) {
-    /** Build a join between two plans. */
-    def join(ctx: JoinRelationContext, left: LogicalPlan, right: LogicalPlan): Join = {
-      val baseJoinType = ctx.joinType match {
-        case null => Inner
-        case jt if jt.FULL != null => FullOuter
-        case jt if jt.SEMI != null => LeftSemi
-        case jt if jt.ANTI != null => LeftAnti
-        case jt if jt.LEFT != null => LeftOuter
-        case jt if jt.RIGHT != null => RightOuter
-        case _ => Inner
-      }
+  override def visitRelation(ctx: RelationContext): LogicalPlan = withOrigin(ctx) {
+    withJoinRelations(plan(ctx.relationPrimary), ctx)
+  }
 
-      // Resolve the join type and join condition
-      val (joinType, condition) = Option(ctx.joinCriteria) match {
-        case Some(c) if c.USING != null =>
-          val columns = c.identifier.asScala.map { column =>
-            UnresolvedAttribute.quoted(column.getText)
-          }
-          (UsingJoin(baseJoinType, columns), None)
-        case Some(c) if c.booleanExpression != null =>
-          (baseJoinType, Option(expression(c.booleanExpression)))
-        case None if ctx.NATURAL != null =>
-          (NaturalJoin(baseJoinType), None)
-        case None =>
-          (baseJoinType, None)
-      }
-      Join(left, right, joinType, condition)
-    }
+  /**
+   * Join one more [[LogicalPlan]]s to the current logical plan.
+   */
+  private def withJoinRelations(base: LogicalPlan, ctx: RelationContext): LogicalPlan = {
+    ctx.joinRelation.asScala.foldLeft(base) { (left, join) =>
+      withOrigin(join) {
+        val baseJoinType = join.joinType match {
+          case null => Inner
+          case jt if jt.CROSS != null => Cross
+          case jt if jt.FULL != null => FullOuter
+          case jt if jt.SEMI != null => LeftSemi
+          case jt if jt.ANTI != null => LeftAnti
+          case jt if jt.LEFT != null => LeftOuter
+          case jt if jt.RIGHT != null => RightOuter
+          case _ => Inner
+        }
 
-    // Handle all consecutive join clauses. ANTLR produces a right nested tree in which the the
-    // first join clause is at the top. However fields of previously referenced tables can be used
-    // in following join clauses. The tree needs to be reversed in order to make this work.
-    var result = plan(ctx.left)
-    var current = ctx
-    while (current != null) {
-      current.right match {
-        case right: JoinRelationContext =>
-          result = join(current, result, plan(right.left))
-          current = right
-        case right =>
-          result = join(current, result, plan(right))
-          current = null
+        // Resolve the join type and join condition
+        val (joinType, condition) = Option(join.joinCriteria) match {
+          case Some(c) if c.USING != null =>
+            val columns = c.identifier.asScala.map { column =>
+              UnresolvedAttribute.quoted(column.getText)
+            }
+            (UsingJoin(baseJoinType, columns), None)
+          case Some(c) if c.booleanExpression != null =>
+            (baseJoinType, Option(expression(c.booleanExpression)))
+          case None if join.NATURAL != null =>
+            if (baseJoinType == Cross) {
+              throw new ParseException("NATURAL CROSS JOIN is not supported", ctx)
+            }
+            (NaturalJoin(baseJoinType), None)
+          case None =>
+            (baseJoinType, None)
+        }
+        Join(left, plan(join.right), joinType, condition)
       }
     }
-    result
   }
 
   /**
@@ -1203,11 +1206,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a [[SortOrder]] expression.
    */
   override def visitSortItem(ctx: SortItemContext): SortOrder = withOrigin(ctx) {
-    if (ctx.DESC != null) {
-      SortOrder(expression(ctx.expression), Descending)
+    val direction = if (ctx.DESC != null) {
+      Descending
     } else {
-      SortOrder(expression(ctx.expression), Ascending)
+      Ascending
     }
+    val nullOrdering = if (ctx.FIRST != null) {
+      NullsFirst
+    } else if (ctx.LAST != null) {
+      NullsLast
+    } else {
+      direction.defaultNullOrdering
+    }
+    SortOrder(expression(ctx.expression), direction, nullOrdering)
   }
 
   /**
@@ -1215,19 +1226,27 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * {{{
    *   [TYPE] '[VALUE]'
    * }}}
-   * Currently Date and Timestamp typed literals are supported.
-   *
-   * TODO what the added value of this over casting?
+   * Currently Date, Timestamp and Binary typed literals are supported.
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
-    ctx.identifier.getText.toUpperCase match {
-      case "DATE" =>
-        Literal(Date.valueOf(value))
-      case "TIMESTAMP" =>
-        Literal(Timestamp.valueOf(value))
-      case other =>
-        throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
+    val valueType = ctx.identifier.getText.toUpperCase
+    try {
+      valueType match {
+        case "DATE" =>
+          Literal(Date.valueOf(value))
+        case "TIMESTAMP" =>
+          Literal(Timestamp.valueOf(value))
+        case "X" =>
+          val padding = if (value.length % 2 == 1) "0" else ""
+          Literal(DatatypeConverter.parseHexBinary(padding + value))
+        case other =>
+          throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
+      }
+    } catch {
+      case e: IllegalArgumentException =>
+        val message = Option(e.getMessage).getOrElse(s"Exception parsing $valueType")
+        throw new ParseException(message, ctx)
     }
   }
 

@@ -159,7 +159,7 @@
     <scala.binary.version>2.11</scala.binary.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.6.5</fasterxml.jackson.version>
-    <snappy.version>1.1.2.4</snappy.version>
+    <snappy.version>1.1.2.6</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
     <commons-codec.version>1.10</commons-codec.version>
@@ -180,6 +180,7 @@
     <selenium.version>2.52.0</selenium.version>
     <paranamer.version>2.8</paranamer.version>
     <maven-antrun.version>1.8</maven-antrun.version>
+    <commons-crypto.version>1.0.0</commons-crypto.version>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
@@ -334,6 +335,18 @@
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-servlets</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-proxy</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-client</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
@@ -538,7 +551,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.29.Final</version>
+        <version>4.0.41.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -1825,6 +1838,17 @@
         <artifactId>jline</artifactId>
         <version>${jline.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-crypto</artifactId>
+        <version>${commons-crypto.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -2244,6 +2268,8 @@
               <include>org.spark-project.spark:unused</include>
               <include>org.eclipse.jetty:jetty-io</include>
               <include>org.eclipse.jetty:jetty-http</include>
+              <include>org.eclipse.jetty:jetty-proxy</include>
+              <include>org.eclipse.jetty:jetty-client</include>
               <include>org.eclipse.jetty:jetty-continuation</include>
               <include>org.eclipse.jetty:jetty-servlet</include>
               <include>org.eclipse.jetty:jetty-servlets</include>
@@ -2498,7 +2524,7 @@
     <profile>
       <id>hadoop-2.7</id>
       <properties>
-        <hadoop.version>2.7.2</hadoop.version>
+        <hadoop.version>2.7.3</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>

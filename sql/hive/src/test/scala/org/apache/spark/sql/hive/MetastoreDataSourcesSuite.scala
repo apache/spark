@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.client.HiveClient
@@ -338,7 +339,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         }.getMessage
 
         assert(
-          message.contains("Table ctasJsonTable already exists."),
+          message.contains("Table default.ctasJsonTable already exists."),
           "We should complain that ctasJsonTable already exists")
 
         // The following statement should be fine if it has IF NOT EXISTS.
@@ -514,7 +515,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           assert(
             intercept[AnalysisException] {
               sparkSession.catalog.createExternalTable("createdJsonTable", jsonFilePath.toString)
-            }.getMessage.contains("Table createdJsonTable already exists."),
+            }.getMessage.contains("Table default.createdJsonTable already exists."),
             "We should complain that createdJsonTable already exists")
         }
 
@@ -906,7 +907,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val e = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendOrcToParquet")
       }
-      assert(e.getMessage.contains("The file format of the existing table `appendOrcToParquet` " +
+      assert(e.getMessage.contains(
+        "The file format of the existing table default.appendOrcToParquet " +
         "is `org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat`. " +
         "It doesn't match the specified format `orc`"))
     }
@@ -917,7 +919,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         createDF(10, 19).write.mode(SaveMode.Append).format("parquet")
           .saveAsTable("appendParquetToJson")
       }
-      assert(e.getMessage.contains("The file format of the existing table `appendParquetToJson` " +
+      assert(e.getMessage.contains(
+        "The file format of the existing table default.appendParquetToJson " +
         "is `org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
         "It doesn't match the specified format `parquet`"))
     }
@@ -928,7 +931,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         createDF(10, 19).write.mode(SaveMode.Append).format("text")
           .saveAsTable("appendTextToJson")
       }
-      assert(e.getMessage.contains("The file format of the existing table `appendTextToJson` is " +
+      assert(e.getMessage.contains(
+        "The file format of the existing table default.appendTextToJson is " +
         "`org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
         "It doesn't match the specified format `text`"))
     }
@@ -1148,6 +1152,108 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           .write.mode("append").saveAsTable("saveAsTable_too_many_columns")
       }
       assert(e.getMessage.contains("doesn't match"))
+    }
+  }
+
+  test("save API - format hive") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val e = intercept[ClassNotFoundException] {
+        spark.range(10).write.format("hive").mode(SaveMode.Ignore).save(path)
+      }.getMessage
+      assert(e.contains("Failed to find data source: hive"))
+    }
+  }
+
+  test("saveAsTable API - format hive") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      val e = intercept[AnalysisException] {
+        spark.range(10).write.format("hive").mode(SaveMode.Overwrite).saveAsTable(tableName)
+      }.getMessage
+      assert(e.contains("Cannot create hive serde table with saveAsTable API"))
+    }
+  }
+
+  test("create a data source table using hive") {
+    val tableName = "tab1"
+    withTable (tableName) {
+      val e = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE $tableName
+             |(col1 int)
+             |USING hive
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains("Cannot create hive serde table with CREATE TABLE USING"))
+    }
+  }
+
+  test("create a temp view using hive") {
+    val tableName = "tab1"
+    withTable (tableName) {
+      val e = intercept[ClassNotFoundException] {
+        sql(
+          s"""
+             |CREATE TEMPORARY VIEW $tableName
+             |(col1 int)
+             |USING hive
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains("Failed to find data source: hive"))
+    }
+  }
+
+  test("saveAsTable - source and target are the same table") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable(tableName)
+
+      table(tableName).write.mode(SaveMode.Append).saveAsTable(tableName)
+      checkAnswer(table(tableName),
+        Seq(Row(1, 2), Row(1, 2)))
+
+      table(tableName).write.mode(SaveMode.Ignore).saveAsTable(tableName)
+      checkAnswer(table(tableName),
+        Seq(Row(1, 2), Row(1, 2)))
+
+      var e = intercept[AnalysisException] {
+        table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
+      }.getMessage
+      assert(e.contains(s"Cannot overwrite table `$tableName` that is also being read from"))
+
+      e = intercept[AnalysisException] {
+        table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
+      }.getMessage
+      assert(e.contains(s"Table `$tableName` already exists"))
+    }
+  }
+
+  test("insertInto - source and target are the same table") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable(tableName)
+
+      table(tableName).write.mode(SaveMode.Append).insertInto(tableName)
+      checkAnswer(
+        table(tableName),
+        Seq(Row(1, 2), Row(1, 2)))
+
+      table(tableName).write.mode(SaveMode.Ignore).insertInto(tableName)
+      checkAnswer(
+        table(tableName),
+        Seq(Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2)))
+
+      table(tableName).write.mode(SaveMode.ErrorIfExists).insertInto(tableName)
+      checkAnswer(
+        table(tableName),
+        Seq(Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2)))
+
+      val e = intercept[AnalysisException] {
+        table(tableName).write.mode(SaveMode.Overwrite).insertInto(tableName)
+      }.getMessage
+      assert(e.contains(s"Cannot overwrite a path that is also being read from"))
     }
   }
 

@@ -126,7 +126,7 @@ abstract class PartitioningAwareFileCatalog(
         PartitioningUtils.parsePartitions(
           leafDirs,
           PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled(),
+          typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
           basePaths = basePaths)
     }
   }

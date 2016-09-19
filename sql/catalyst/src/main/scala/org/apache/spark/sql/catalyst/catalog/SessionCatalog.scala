@@ -309,14 +309,13 @@ class SessionCatalog(
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit = {
+      inheritTableSpecs: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
-    externalCatalog.loadPartition(db, table, loadPath, partition, isOverwrite, holdDDLTime,
-      inheritTableSpecs, isSkewedStoreAsSubdir)
+    externalCatalog.loadPartition(
+      db, table, loadPath, partition, isOverwrite, holdDDLTime, inheritTableSpecs)
   }
 
   def defaultTablePath(tableIdent: TableIdentifier): String = {
@@ -326,9 +325,9 @@ class SessionCatalog(
     new Path(new Path(dbLocation), formatTableName(tableIdent.table)).toString
   }
 
-  // -------------------------------------------------------------
-  // | Methods that interact with temporary and metastore tables |
-  // -------------------------------------------------------------
+  // ----------------------------------------------
+  // | Methods that interact with temp views only |
+  // ----------------------------------------------
 
   /**
    * Create a temporary table.
@@ -345,34 +344,40 @@ class SessionCatalog(
   }
 
   /**
+   * Return a temporary view exactly as it was stored.
+   */
+  def getTempView(name: String): Option[LogicalPlan] = synchronized {
+    tempTables.get(formatTableName(name))
+  }
+
+  /**
+   * Drop a temporary view.
+   */
+  def dropTempView(name: String): Unit = synchronized {
+    tempTables.remove(formatTableName(name))
+  }
+
+  // -------------------------------------------------------------
+  // | Methods that interact with temporary and metastore tables |
+  // -------------------------------------------------------------
+
+  /**
    * Rename a table.
    *
    * If a database is specified in `oldName`, this will rename the table in that database.
    * If no database is specified, this will first attempt to rename a temporary table with
    * the same name, then, if that does not exist, rename the table in the current database.
-   *
-   * This assumes the database specified in `oldName` matches the one specified in `newName`.
    */
-  def renameTable(oldName: TableIdentifier, newName: TableIdentifier): Unit = synchronized {
+  def renameTable(oldName: TableIdentifier, newName: String): Unit = synchronized {
     val db = formatDatabaseName(oldName.database.getOrElse(currentDb))
     requireDbExists(db)
-    val newDb = formatDatabaseName(newName.database.getOrElse(currentDb))
-    if (db != newDb) {
-      throw new AnalysisException(
-        s"RENAME TABLE source and destination databases do not match: '$db' != '$newDb'")
-    }
     val oldTableName = formatTableName(oldName.table)
-    val newTableName = formatTableName(newName.table)
+    val newTableName = formatTableName(newName)
     if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
       requireTableExists(TableIdentifier(oldTableName, Some(db)))
       requireTableNotExists(TableIdentifier(newTableName, Some(db)))
       externalCatalog.renameTable(db, oldTableName, newTableName)
     } else {
-      if (newName.database.isDefined) {
-        throw new AnalysisException(
-          s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': cannot specify database " +
-            s"name '${newName.database.get}' in the destination table")
-      }
       if (tempTables.contains(newTableName)) {
         throw new AnalysisException(
           s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': destination table already exists")
@@ -503,14 +508,6 @@ class SessionCatalog(
    */
   def clearTempTables(): Unit = synchronized {
     tempTables.clear()
-  }
-
-  /**
-   * Return a temporary table exactly as it was stored.
-   * For testing only.
-   */
-  private[catalog] def getTempTable(name: String): Option[LogicalPlan] = synchronized {
-    tempTables.get(formatTableName(name))
   }
 
   // ----------------------------------------------------------------------------

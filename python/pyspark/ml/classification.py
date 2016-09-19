@@ -1276,7 +1276,7 @@ class MultilayerPerceptronClassificationModel(JavaModel, JavaPredictionModel, Ja
     @since("2.0.0")
     def weights(self):
         """
-        vector of initial weights for the model that consists of the weights of layers.
+        the weights of layers.
         """
         return self._call_java("weights")
 

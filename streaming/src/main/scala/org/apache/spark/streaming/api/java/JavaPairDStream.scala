@@ -471,9 +471,10 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       val list: JList[V] = values.asJava
       val scalaState: Optional[S] = JavaUtils.optionToOptional(state)
       val result: Optional[S] = in.apply(list, scalaState)
-      result.isPresent match {
-        case true => Some(result.get())
-        case _ => None
+      if (result.isPresent) {
+        Some(result.get())
+      } else {
+        None
       }
     }
     scalaFunc

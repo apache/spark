@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class AggregateOptimizeSuite extends PlanTest {
-  val conf = new SimpleCatalystConf(caseSensitiveAnalysis = false)
+  val conf = SimpleCatalystConf(caseSensitiveAnalysis = false, groupByOrdinal = false)
   val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
   val analyzer = new Analyzer(catalog, conf)
 
@@ -45,6 +45,14 @@ class AggregateOptimizeSuite extends PlanTest {
     val query = testRelation.groupBy('a, Literal("1"), Literal(1) + Literal(2))(sum('b))
     val optimized = Optimize.execute(analyzer.execute(query))
     val correctAnswer = testRelation.groupBy('a)(sum('b)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("do not remove all grouping expressions if they are all literals") {
+    val query = testRelation.groupBy(Literal("1"), Literal(1) + Literal(2))(sum('b))
+    val optimized = Optimize.execute(analyzer.execute(query))
+    val correctAnswer = analyzer.execute(testRelation.groupBy(Literal(0))(sum('b)))
 
     comparePlans(optimized, correctAnswer)
   }

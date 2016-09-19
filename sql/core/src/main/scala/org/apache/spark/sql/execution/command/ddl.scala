@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution.command
 
-import scala.collection.GenSeq
+import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.concurrent.forkjoin.ForkJoinPool
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SerializableConfiguration
 
 // Note: The definition of these commands are based on the ones described in
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
@@ -68,8 +70,6 @@ case class CreateDatabaseCommand(
       ifNotExists)
     Seq.empty[Row]
   }
-
-  override val output: Seq[Attribute] = Seq.empty
 }
 
 
@@ -99,8 +99,6 @@ case class DropDatabaseCommand(
     sparkSession.sessionState.catalog.dropDatabase(databaseName, ifExists, cascade)
     Seq.empty[Row]
   }
-
-  override val output: Seq[Attribute] = Seq.empty
 }
 
 /**
@@ -124,8 +122,6 @@ case class AlterDatabasePropertiesCommand(
 
     Seq.empty[Row]
   }
-
-  override val output: Seq[Attribute] = Seq.empty
 }
 
 /**
@@ -234,8 +230,8 @@ case class AlterTableSetPropertiesCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    DDLUtils.verifyAlterTableType(catalog, tableName, isView)
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(catalog, table, isView)
     // This overrides old properties
     val newTable = table.copy(properties = table.properties ++ properties)
     catalog.alterTable(newTable)
@@ -262,8 +258,8 @@ case class AlterTableUnsetPropertiesCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    DDLUtils.verifyAlterTableType(catalog, tableName, isView)
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(catalog, table, isView)
     if (!ifExists) {
       propKeys.foreach { k =>
         if (!table.properties.contains(k)) {
@@ -303,6 +299,7 @@ case class AlterTableSerDePropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     // For datasource tables, disallow setting serde or specifying partition
     if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException("Operation not allowed: ALTER TABLE SET " +
@@ -316,7 +313,7 @@ case class AlterTableSerDePropertiesCommand(
     if (partSpec.isEmpty) {
       val newTable = table.withNewStorage(
         serde = serdeClassName.orElse(table.storage.serde),
-        serdeProperties = table.storage.properties ++ serdeProperties.getOrElse(Map()))
+        properties = table.storage.properties ++ serdeProperties.getOrElse(Map()))
       catalog.alterTable(newTable)
     } else {
       val spec = partSpec.get
@@ -352,6 +349,7 @@ case class AlterTableAddPartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         "ALTER TABLE ADD PARTITION is not allowed for tables defined using the datasource API")
@@ -381,7 +379,14 @@ case class AlterTableRenamePartitionCommand(
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.catalog.renamePartitions(
+    val catalog = sparkSession.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+    if (DDLUtils.isDatasourceTable(table)) {
+      throw new AnalysisException(
+        "ALTER TABLE RENAME PARTITION is not allowed for tables defined using the datasource API")
+    }
+    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
+    catalog.renamePartitions(
       tableName, Seq(oldPartition), Seq(newPartition))
     Seq.empty[Row]
   }
@@ -412,6 +417,7 @@ case class AlterTableDropPartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
@@ -421,6 +427,9 @@ case class AlterTableDropPartitionCommand(
   }
 
 }
+
+
+case class PartitionStatistics(numFiles: Int, totalSize: Long)
 
 /**
  * Recover Partitions in ALTER TABLE: recover all the partition in the directory of a table and
@@ -435,6 +444,31 @@ case class AlterTableDropPartitionCommand(
 case class AlterTableRecoverPartitionsCommand(
     tableName: TableIdentifier,
     cmd: String = "ALTER TABLE RECOVER PARTITIONS") extends RunnableCommand {
+
+  // These are list of statistics that can be collected quickly without requiring a scan of the data
+  // see https://github.com/apache/hive/blob/master/
+  //   common/src/java/org/apache/hadoop/hive/common/StatsSetupConst.java
+  val NUM_FILES = "numFiles"
+  val TOTAL_SIZE = "totalSize"
+  val DDL_TIME = "transient_lastDdlTime"
+
+  private def getPathFilter(hadoopConf: Configuration): PathFilter = {
+    // Dummy jobconf to get to the pathFilter defined in configuration
+    // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
+    val jobConf = new JobConf(hadoopConf, this.getClass)
+    val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+    new PathFilter {
+      override def accept(path: Path): Boolean = {
+        val name = path.getName
+        if (name != "_SUCCESS" && name != "_temporary" && !name.startsWith(".")) {
+          pathFilter == null || pathFilter.accept(path)
+        } else {
+          false
+        }
+      }
+    }
+  }
+
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
     if (!catalog.tableExists(tableName)) {
@@ -445,13 +479,10 @@ case class AlterTableRecoverPartitionsCommand(
         s"Operation not allowed: $cmd on temporary tables: $tableName")
     }
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         s"Operation not allowed: $cmd on datasource tables: $tableName")
-    }
-    if (table.tableType != CatalogTableType.EXTERNAL) {
-      throw new AnalysisException(
-        s"Operation not allowed: $cmd only works on external tables: $tableName")
     }
     if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
@@ -463,19 +494,26 @@ case class AlterTableRecoverPartitionsCommand(
     }
 
     val root = new Path(table.storage.locationUri.get)
+    logInfo(s"Recover all the partitions in $root")
     val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
-    // Dummy jobconf to get to the pathFilter defined in configuration
-    // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
-    val jobConf = new JobConf(spark.sparkContext.hadoopConfiguration, this.getClass)
-    val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+
+    val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
+    val pathFilter = getPathFilter(hadoopConf)
     val partitionSpecsAndLocs = scanPartitions(
-      spark, fs, pathFilter, root, Map(), table.partitionColumnNames.map(_.toLowerCase))
-    val parts = partitionSpecsAndLocs.map { case (spec, location) =>
-      // inherit table storage format (possibly except for location)
-      CatalogTablePartition(spec, table.storage.copy(locationUri = Some(location.toUri.toString)))
+      spark, fs, pathFilter, root, Map(), table.partitionColumnNames.map(_.toLowerCase), threshold)
+    val total = partitionSpecsAndLocs.length
+    logInfo(s"Found $total partitions in $root")
+
+    val partitionStats = if (spark.sqlContext.conf.gatherFastStats) {
+      gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
+    } else {
+      GenMap.empty[String, PartitionStatistics]
     }
-    spark.sessionState.catalog.createPartitions(tableName,
-      parts.toArray[CatalogTablePartition], ignoreIfExists = true)
+    logInfo(s"Finished to gather the fast stats for all $total partitions.")
+
+    addPartitions(spark, table, partitionSpecsAndLocs, partitionStats)
+    logInfo(s"Recovered all partitions ($total).")
     Seq.empty[Row]
   }
 
@@ -487,15 +525,16 @@ case class AlterTableRecoverPartitionsCommand(
       filter: PathFilter,
       path: Path,
       spec: TablePartitionSpec,
-      partitionNames: Seq[String]): GenSeq[(TablePartitionSpec, Path)] = {
-    if (partitionNames.length == 0) {
+      partitionNames: Seq[String],
+      threshold: Int): GenSeq[(TablePartitionSpec, Path)] = {
+    if (partitionNames.isEmpty) {
       return Seq(spec -> path)
     }
 
-    val statuses = fs.listStatus(path)
-    val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
+    val statuses = fs.listStatus(path, filter)
     val statusPar: GenSeq[FileStatus] =
       if (partitionNames.length > 1 && statuses.length > threshold || partitionNames.length > 2) {
+        // parallelize the list of partitions here, then we can have better parallelism later.
         val parArray = statuses.par
         parArray.tasksupport = evalTaskSupport
         parArray
@@ -510,19 +549,87 @@ case class AlterTableRecoverPartitionsCommand(
         // TODO: Validate the value
         val value = PartitioningUtils.unescapePathName(ps(1))
         // comparing with case-insensitive, but preserve the case
-        if (columnName == partitionNames(0)) {
-          scanPartitions(
-            spark, fs, filter, st.getPath, spec ++ Map(columnName -> value), partitionNames.drop(1))
+        if (columnName == partitionNames.head) {
+          scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(columnName -> value),
+            partitionNames.drop(1), threshold)
         } else {
-          logWarning(s"expect partition column ${partitionNames(0)}, but got ${ps(0)}, ignore it")
+          logWarning(s"expect partition column ${partitionNames.head}, but got ${ps(0)}, ignore it")
           Seq()
         }
       } else {
-        if (name != "_SUCCESS" && name != "_temporary" && !name.startsWith(".")) {
-          logWarning(s"ignore ${new Path(path, name)}")
-        }
+        logWarning(s"ignore ${new Path(path, name)}")
         Seq()
       }
+    }
+  }
+
+  private def gatherPartitionStats(
+      spark: SparkSession,
+      partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)],
+      fs: FileSystem,
+      pathFilter: PathFilter,
+      threshold: Int): GenMap[String, PartitionStatistics] = {
+    if (partitionSpecsAndLocs.length > threshold) {
+      val hadoopConf = spark.sparkContext.hadoopConfiguration
+      val serializableConfiguration = new SerializableConfiguration(hadoopConf)
+      val serializedPaths = partitionSpecsAndLocs.map(_._2.toString).toArray
+
+      // Set the number of parallelism to prevent following file listing from generating many tasks
+      // in case of large #defaultParallelism.
+      val numParallelism = Math.min(serializedPaths.length,
+        Math.min(spark.sparkContext.defaultParallelism, 10000))
+      // gather the fast stats for all the partitions otherwise Hive metastore will list all the
+      // files for all the new partitions in sequential way, which is super slow.
+      logInfo(s"Gather the fast stats in parallel using $numParallelism tasks.")
+      spark.sparkContext.parallelize(serializedPaths, numParallelism)
+        .mapPartitions { paths =>
+          val pathFilter = getPathFilter(serializableConfiguration.value)
+          paths.map(new Path(_)).map{ path =>
+            val fs = path.getFileSystem(serializableConfiguration.value)
+            val statuses = fs.listStatus(path, pathFilter)
+            (path.toString, PartitionStatistics(statuses.length, statuses.map(_.getLen).sum))
+          }
+        }.collectAsMap()
+    } else {
+      partitionSpecsAndLocs.map { case (_, location) =>
+        val statuses = fs.listStatus(location, pathFilter)
+        (location.toString, PartitionStatistics(statuses.length, statuses.map(_.getLen).sum))
+      }.toMap
+    }
+  }
+
+  private def addPartitions(
+      spark: SparkSession,
+      table: CatalogTable,
+      partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)],
+      partitionStats: GenMap[String, PartitionStatistics]): Unit = {
+    val total = partitionSpecsAndLocs.length
+    var done = 0L
+    // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
+    // we should split them into smaller batches. Since Hive client is not thread safe, we cannot
+    // do this in parallel.
+    val batchSize = 100
+    partitionSpecsAndLocs.toIterator.grouped(batchSize).foreach { batch =>
+      val now = System.currentTimeMillis() / 1000
+      val parts = batch.map { case (spec, location) =>
+        val params = partitionStats.get(location.toString).map {
+          case PartitionStatistics(numFiles, totalSize) =>
+            // This two fast stat could prevent Hive metastore to list the files again.
+            Map(NUM_FILES -> numFiles.toString,
+              TOTAL_SIZE -> totalSize.toString,
+              // Workaround a bug in HiveMetastore that try to mutate a read-only parameters.
+              // see metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java
+              DDL_TIME -> now.toString)
+        }.getOrElse(Map.empty)
+        // inherit table storage format (possibly except for location)
+        CatalogTablePartition(
+          spec,
+          table.storage.copy(locationUri = Some(location.toUri.toString)),
+          params)
+      }
+      spark.sessionState.catalog.createPartitions(tableName, parts, ignoreIfExists = true)
+      done += parts.length
+      logDebug(s"Recovered ${parts.length} partitions ($done/$total so far)")
     }
   }
 }
@@ -548,6 +655,7 @@ case class AlterTableSetLocationCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     partitionSpec match {
       case Some(spec) =>
         // Partition spec is specified, so we set the location only for this partition
@@ -567,7 +675,7 @@ case class AlterTableSetLocationCommand(
           if (DDLUtils.isDatasourceTable(table)) {
             table.withNewStorage(
               locationUri = Some(location),
-              serdeProperties = table.storage.properties ++ Map("path" -> location))
+              properties = table.storage.properties ++ Map("path" -> location))
           } else {
             table.withNewStorage(locationUri = Some(location))
           }
@@ -586,19 +694,26 @@ object DDLUtils {
   /**
    * If the command ALTER VIEW is to alter a table or ALTER TABLE is to alter a view,
    * issue an exception [[AnalysisException]].
+   *
+   * Note: temporary views can be altered by both ALTER VIEW and ALTER TABLE commands,
+   * since temporary views can be also created by CREATE TEMPORARY TABLE. In the future,
+   * when we decided to drop the support, we should disallow users to alter temporary views
+   * by ALTER TABLE.
    */
   def verifyAlterTableType(
       catalog: SessionCatalog,
-      tableIdentifier: TableIdentifier,
+      tableMetadata: CatalogTable,
       isView: Boolean): Unit = {
-    catalog.getTableMetadataOption(tableIdentifier).map(_.tableType match {
-      case CatalogTableType.VIEW if !isView =>
-        throw new AnalysisException(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
-      case o if o != CatalogTableType.VIEW && isView =>
-        throw new AnalysisException(
-          s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
-      case _ =>
-    })
+    if (!catalog.isTemporaryTable(tableMetadata.identifier)) {
+      tableMetadata.tableType match {
+        case CatalogTableType.VIEW if !isView =>
+          throw new AnalysisException(
+            "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
+        case o if o != CatalogTableType.VIEW && isView =>
+          throw new AnalysisException(
+            s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
+        case _ =>
+      }
+    }
   }
 }

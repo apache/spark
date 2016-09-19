@@ -80,7 +80,7 @@ object SinkFileStatus {
  * (drops the deleted files).
  */
 class FileStreamSinkLog(sparkSession: SparkSession, path: String)
-  extends HDFSMetadataLog[Seq[SinkFileStatus]](sparkSession, path) {
+  extends HDFSMetadataLog[Array[SinkFileStatus]](sparkSession, path) {
 
   import FileStreamSinkLog._
 
@@ -93,11 +93,11 @@ class FileStreamSinkLog(sparkSession: SparkSession, path: String)
    * a live lock may happen if the compaction happens too frequently: one processing keeps deleting
    * old files while another one keeps retrying. Setting a reasonable cleanup delay could avoid it.
    */
-  private val fileCleanupDelayMs = sparkSession.conf.get(SQLConf.FILE_SINK_LOG_CLEANUP_DELAY)
+  private val fileCleanupDelayMs = sparkSession.sessionState.conf.fileSinkLogCleanupDelay
 
-  private val isDeletingExpiredLog = sparkSession.conf.get(SQLConf.FILE_SINK_LOG_DELETION)
+  private val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSinkLogDeletion
 
-  private val compactInterval = sparkSession.conf.get(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL)
+  private val compactInterval = sparkSession.sessionState.conf.fileSinkLogCompatInterval
   require(compactInterval > 0,
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $compactInterval) " +
       "to a positive value.")
@@ -123,11 +123,11 @@ class FileStreamSinkLog(sparkSession: SparkSession, path: String)
     }
   }
 
-  override def serialize(logData: Seq[SinkFileStatus]): Array[Byte] = {
+  override def serialize(logData: Array[SinkFileStatus]): Array[Byte] = {
     (VERSION +: logData.map(write(_))).mkString("\n").getBytes(UTF_8)
   }
 
-  override def deserialize(bytes: Array[Byte]): Seq[SinkFileStatus] = {
+  override def deserialize(bytes: Array[Byte]): Array[SinkFileStatus] = {
     val lines = new String(bytes, UTF_8).split("\n")
     if (lines.length == 0) {
       throw new IllegalStateException("Incomplete log file")
@@ -136,10 +136,10 @@ class FileStreamSinkLog(sparkSession: SparkSession, path: String)
     if (version != VERSION) {
       throw new IllegalStateException(s"Unknown log version: ${version}")
     }
-    lines.toSeq.slice(1, lines.length).map(read[SinkFileStatus](_))
+    lines.slice(1, lines.length).map(read[SinkFileStatus](_))
   }
 
-  override def add(batchId: Long, logs: Seq[SinkFileStatus]): Boolean = {
+  override def add(batchId: Long, logs: Array[SinkFileStatus]): Boolean = {
     if (isCompactionBatch(batchId, compactInterval)) {
       compact(batchId, logs)
     } else {
@@ -186,7 +186,7 @@ class FileStreamSinkLog(sparkSession: SparkSession, path: String)
   private def compact(batchId: Long, logs: Seq[SinkFileStatus]): Boolean = {
     val validBatches = getValidBatchesBeforeCompactionBatch(batchId, compactInterval)
     val allLogs = validBatches.flatMap(batchId => get(batchId)).flatten ++ logs
-    if (super.add(batchId, compactLogs(allLogs))) {
+    if (super.add(batchId, compactLogs(allLogs).toArray)) {
       if (isDeletingExpiredLog) {
         deleteExpiredLog(batchId)
       }

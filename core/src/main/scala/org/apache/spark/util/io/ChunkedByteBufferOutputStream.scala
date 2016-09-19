@@ -49,10 +49,19 @@ private[spark] class ChunkedByteBufferOutputStream(
    */
   private[this] var position = chunkSize
   private[this] var _size = 0
+  private[this] var closed: Boolean = false
 
   def size: Long = _size
 
+  override def close(): Unit = {
+    if (!closed) {
+      super.close()
+      closed = true
+    }
+  }
+
   override def write(b: Int): Unit = {
+    require(!closed, "cannot write to a closed ChunkedByteBufferOutputStream")
     allocateNewChunkIfNeeded()
     chunks(lastChunkIndex).put(b.toByte)
     position += 1
@@ -60,6 +69,7 @@ private[spark] class ChunkedByteBufferOutputStream(
   }
 
   override def write(bytes: Array[Byte], off: Int, len: Int): Unit = {
+    require(!closed, "cannot write to a closed ChunkedByteBufferOutputStream")
     var written = 0
     while (written < len) {
       allocateNewChunkIfNeeded()
@@ -73,7 +83,6 @@ private[spark] class ChunkedByteBufferOutputStream(
 
   @inline
   private def allocateNewChunkIfNeeded(): Unit = {
-    require(!toChunkedByteBufferWasCalled, "cannot write after toChunkedByteBuffer() is called")
     if (position == chunkSize) {
       chunks += allocator(chunkSize)
       lastChunkIndex += 1
@@ -82,6 +91,7 @@ private[spark] class ChunkedByteBufferOutputStream(
   }
 
   def toChunkedByteBuffer: ChunkedByteBuffer = {
+    require(closed, "cannot call toChunkedByteBuffer() unless close() has been called")
     require(!toChunkedByteBufferWasCalled, "toChunkedByteBuffer() can only be called once")
     toChunkedByteBufferWasCalled = true
     if (lastChunkIndex == -1) {
