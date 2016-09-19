@@ -356,7 +356,7 @@ test_that("spark.kmeans", {
 test_that("spark.mlp", {
   df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
   model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs", maxIter = 100,
-                     tol = 0.5, stepSize = 1, seed = "1")
+                     tol = 0.5, stepSize = 1, seed = 1)
 
   # Test summary method
   summary <- summary(model)
@@ -389,9 +389,9 @@ test_that("spark.mlp", {
   expect_equal(head(mlpPredictions$prediction, 10), c(1, 1, 1, 1, 0, 1, 2, 2, 1, 0))
 
   # Test illegal parameter
-  expect_error(spark.mlp(df, layers = NULL))
-  expect_error(spark.mlp(df, layers = c()))
-  expect_error(spark.mlp(df, layers = c(3)))
+  expect_error(spark.mlp(df, layers = NULL), "layers must be a integer vector with length > 1.")
+  expect_error(spark.mlp(df, layers = c()), "layers must be a integer vector with length > 1.")
+  expect_error(spark.mlp(df, layers = c(3)), "layers must be a integer vector with length > 1.")
 })
 
 test_that("spark.naiveBayes", {
