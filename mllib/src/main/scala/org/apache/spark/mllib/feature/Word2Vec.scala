@@ -581,13 +581,9 @@ class Word2VecModel private[spark] (
       ind += 1
     }
 
-    val ord = new Ordering[(String, Double)] {
-      override def compare(x: (String, Double), y: (String, Double)): Int = x._2.compareTo(y._2)
-    }
+    val pq = new BoundedPriorityQueue[(String, Double)](num + 1)(Ordering.by(_._2))
 
-    val pq = new BoundedPriorityQueue(num + 1)(ord)
-
-    wordList.zip(cosVec).foreach(tup => pq += tup)
+    pq ++= wordList.zip(cosVec)
 
     val scored = pq.toSeq.sortBy(-_._2)
 
