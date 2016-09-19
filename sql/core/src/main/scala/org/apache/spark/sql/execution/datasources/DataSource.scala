@@ -197,10 +197,13 @@ case class DataSource(
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
       val fileCatalog = new ListingFileCatalog(sparkSession, globbedPaths, options, None)
+      val partitionCols = fileCatalog.partitionSpec().partitionColumns.fields
       format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,
-        fileCatalog.allFiles())
+        fileCatalog.allFiles()).map { inferredSchema =>
+          partitionCols.foldLeft(inferredSchema)((struct, field) => struct.add(field))
+        }
     }.getOrElse {
       throw new AnalysisException("Unable to infer schema. It must be specified manually.")
     }

@@ -820,7 +820,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       }
       assert(src.listFiles().size === numFiles)
 
-      val files = spark.readStream.text(root.getCanonicalPath).as[String]
+      val files = spark.readStream.text(root.getCanonicalPath).as[(String, Int)]
 
       // Note this query will use constant folding to eliminate the file scan.
       // This is to avoid actually running a Spark job with 10000 tasks
