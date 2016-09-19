@@ -137,7 +137,16 @@ object DateTimeUtils {
         Date.valueOf(s)
       }
     } else {
-      DatatypeConverter.parseDateTime(s).getTime()
+      val offsetRegEx = """^.*(([+-]\d\d)(\d\d)?)$""".r
+      s match {
+        case offsetRegEx(offset, hour, min) => {
+          min match {
+            case null => stringToTime(s.replaceAllLiterally(offset, hour + ":00"))
+            case _ => stringToTime(s.replaceAllLiterally(offset, hour + ":" + min))
+          }
+        }
+        case _ => DatatypeConverter.parseDateTime(s).getTime()
+      }
     }
   }
 
