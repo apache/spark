@@ -177,11 +177,6 @@ private[spark] object UIData {
     }
   }
 
-  class ExecutorUIData(
-      val startTime: Long,
-      var finishTime: Option[Long] = None,
-      var finishReason: Option[String] = None)
-
   case class TaskMetricsUIData(
       executorDeserializeTime: Long,
       executorRunTime: Long,
