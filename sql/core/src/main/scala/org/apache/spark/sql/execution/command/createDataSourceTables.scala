@@ -64,8 +64,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
     val dataSource: BaseRelation =
       DataSource(
         sparkSession = sparkSession,
-        inputSchema = if (table.schema.isEmpty) None else Some(table.schema),
-        isSchemaFromUsers = true,
+        userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
         className = table.provider.get,
         bucketSpec = table.bucketSpec,
         options = table.storage.properties).resolveRelation()
@@ -165,7 +164,7 @@ case class CreateDataSourceTableAsSelectCommand(
           // Check if the specified data source match the data source of the existing table.
           val dataSource = DataSource(
             sparkSession = sparkSession,
-            inputSchema = Some(query.schema.asNullable),
+            userSpecifiedSchema = Some(query.schema.asNullable),
             partitionColumns = table.partitionColumnNames,
             bucketSpec = table.bucketSpec,
             className = provider,

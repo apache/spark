@@ -144,8 +144,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       DataSource.apply(
         sparkSession,
         paths = paths,
-        inputSchema = userSpecifiedSchema,
-        isSchemaFromUsers = true,
+        userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap).resolveRelation())
   }

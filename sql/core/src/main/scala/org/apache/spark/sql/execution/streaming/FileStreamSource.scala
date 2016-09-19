@@ -133,7 +133,7 @@ class FileStreamSource(
       DataSource(
         sparkSession,
         paths = files.map(_.path),
-        inputSchema = Some(schema),
+        userSpecifiedSchema = Some(schema),
         className = fileFormatClassName,
         options = sourceOptions.optionMapWithoutPath)
     Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation()))

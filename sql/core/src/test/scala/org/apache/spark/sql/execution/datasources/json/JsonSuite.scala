@@ -1346,7 +1346,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       val d1 = DataSource(
         spark,
-        inputSchema = None,
+        userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
         className = classOf[JsonFileFormat].getCanonicalName,
@@ -1354,7 +1354,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       val d2 = DataSource(
         spark,
-        inputSchema = None,
+        userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
         className = classOf[JsonFileFormat].getCanonicalName,

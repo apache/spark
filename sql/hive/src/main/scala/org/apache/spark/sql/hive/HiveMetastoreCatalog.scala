@@ -74,7 +74,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         val dataSource =
           DataSource(
             sparkSession,
-            inputSchema = Some(table.schema),
+            userSpecifiedSchema = Some(table.schema),
             partitionColumns = table.partitionColumnNames,
             bucketSpec = table.bucketSpec,
             className = table.provider.get,
@@ -278,7 +278,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             DataSource(
               sparkSession = sparkSession,
               paths = paths,
-              inputSchema = Some(metastoreRelation.schema),
+              userSpecifiedSchema = Some(metastoreRelation.schema),
               bucketSpec = bucketSpec,
               options = options,
               className = fileType).resolveRelation(),

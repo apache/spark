@@ -136,7 +136,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
     val dataSource =
       DataSource(
         sparkSession,
-        inputSchema = userSpecifiedSchema,
+        userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
     Dataset.ofRows(sparkSession, StreamingRelation(dataSource))

@@ -60,9 +60,8 @@ import org.apache.spark.util.Utils
  *
  * @param paths A list of file system paths that hold data.  These will be globbed before and
  *              qualified. This option only works when reading from a [[FileFormat]].
- * @param inputSchema An optional specification of the schema of the data. When present we skip
- *                   attempting to infer the schema.
- * @param isSchemaFromUsers A flag to indicate whether the schema is specified by users.
+ * @param userSpecifiedSchema An optional specification of the schema of the data. When present
+ *                            we skip attempting to infer the schema.
  * @param partitionColumns A list of column names that the relation is partitioned by. When this
  *                         list is empty, the relation is unpartitioned.
  * @param bucketSpec An optional specification for bucketing (hash-partitioning) of the data.
@@ -71,8 +70,7 @@ case class DataSource(
     sparkSession: SparkSession,
     className: String,
     paths: Seq[String] = Nil,
-    inputSchema: Option[StructType] = None,
-    isSchemaFromUsers: Boolean = false,
+    userSpecifiedSchema: Option[StructType] = None,
     partitionColumns: Seq[String] = Seq.empty,
     bucketSpec: Option[BucketSpec] = None,
     options: Map[String, String] = Map.empty) extends Logging {
@@ -189,7 +187,7 @@ case class DataSource(
   }
 
   private def inferFileFormatSchema(format: FileFormat): StructType = {
-    inputSchema.orElse {
+    userSpecifiedSchema.orElse {
       val caseInsensitiveOptions = new CaseInsensitiveMap(options)
       val allPaths = caseInsensitiveOptions.get("path")
       val globbedPaths = allPaths.toSeq.flatMap { path =>
@@ -213,7 +211,7 @@ case class DataSource(
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
         val (name, schema) = s.sourceSchema(
-          sparkSession.sqlContext, inputSchema, className, options)
+          sparkSession.sqlContext, userSpecifiedSchema, className, options)
         SourceInfo(name, schema)
 
       case format: FileFormat =>
@@ -236,7 +234,7 @@ case class DataSource(
         val isSchemaInferenceEnabled = sparkSession.sessionState.conf.streamingSchemaInference
         val isTextSource = providingClass == classOf[text.TextFileFormat]
         // If the schema inference is disabled, only text sources require schema to be specified
-        if (!isSchemaInferenceEnabled && !isTextSource && inputSchema.isEmpty) {
+        if (!isSchemaInferenceEnabled && !isTextSource && userSpecifiedSchema.isEmpty) {
           throw new IllegalArgumentException(
             "Schema must be specified when creating a streaming source DataFrame. " +
               "If some files already exist in the directory, then depending on the file format " +
@@ -255,7 +253,8 @@ case class DataSource(
   def createSource(metadataPath: String): Source = {
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
-        s.createSource(sparkSession.sqlContext, metadataPath, inputSchema, className, options)
+        s.createSource(
+          sparkSession.sqlContext, metadataPath, userSpecifiedSchema, className, options)
 
       case format: FileFormat =>
         val path = new CaseInsensitiveMap(options).getOrElse("path", {
@@ -320,7 +319,7 @@ case class DataSource(
    */
   def resolveRelation(): BaseRelation = {
     val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-    val relation = (providingClass.newInstance(), inputSchema) match {
+    val relation = (providingClass.newInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
         dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions, schema)
@@ -328,12 +327,13 @@ case class DataSource(
         dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
       case (_: SchemaRelationProvider, None) =>
         throw new AnalysisException(s"A schema needs to be specified when using $className.")
-      case (dataSource: RelationProvider, Some(_)) =>
-        if (isSchemaFromUsers) {
-          throw new AnalysisException(s"$className does not allow user-specified schemas.")
-        } else {
+      case (dataSource: RelationProvider, Some(schema)) =>
+        val baseRelation =
           dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
+        if (baseRelation.schema != schema) {
+          throw new AnalysisException(s"$className does not allow user-specified schemas.")
         }
+        baseRelation
 
       // We are reading from the results of a streaming query. Load files from the metadata log
       // instead of listing them using HDFS APIs.
@@ -341,7 +341,7 @@ case class DataSource(
           if hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
         val fileCatalog = new MetadataLogFileCatalog(sparkSession, basePath)
-        val dataSchema = inputSchema.orElse {
+        val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,
             caseInsensitiveOptions,
@@ -381,7 +381,7 @@ case class DataSource(
 
         // If they gave a schema, then we try and figure out the types of the partition columns
         // from that schema.
-        val partitionSchema = inputSchema.map { schema =>
+        val partitionSchema = userSpecifiedSchema.map { schema =>
           StructType(
             partitionColumns.map { c =>
               // TODO: Case sensitivity.
@@ -395,7 +395,7 @@ case class DataSource(
           new ListingFileCatalog(
             sparkSession, globbedPaths, options, partitionSchema)
 
-        val dataSchema = inputSchema.map { schema =>
+        val dataSchema = userSpecifiedSchema.map { schema =>
           val equality = sparkSession.sessionState.conf.resolver
           StructType(schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
         }.orElse {
@@ -505,7 +505,7 @@ case class DataSource(
             mode)
         sparkSession.sessionState.executePlan(plan).toRdd
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring it.
-        copy(inputSchema = Some(data.schema.asNullable)).resolveRelation()
+        copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
 
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
