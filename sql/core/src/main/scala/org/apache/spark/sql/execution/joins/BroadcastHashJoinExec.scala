@@ -48,15 +48,20 @@ case class BroadcastHashJoinExec(
   /**
     * Decide whether support avoiding repeatedly stream side fields writing
     */
-  private val avoidRepeatedlyWriting = joinType match {
-    case LeftOuter => true
-    case RightOuter if left.output.forall(p => UnsafeRow.isFixedLength(p.dataType)) => true
-    case Inner => buildSide match {
-      case BuildRight => true
-      case BuildLeft if left.output.forall(p => UnsafeRow.isFixedLength(p.dataType)) => true
+  private val avoidRepeatedlyWriting =
+    if (sqlContext.getConf("spark.sql.codegen.useInBenchmark", null) == "true") {
+      false
+    } else {
+      joinType match {
+        case LeftOuter => true
+        case RightOuter if left.output.forall(p => UnsafeRow.isFixedLength(p.dataType)) => true
+        case Inner => buildSide match {
+          case BuildRight => true
+          case BuildLeft if left.output.forall(p => UnsafeRow.isFixedLength(p.dataType)) => true
+        }
+        case _ => false
+      }
     }
-    case _ => false
-  }
 
   /**
     * Using this to mark which side is need not to be written repeatedly
