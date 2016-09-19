@@ -867,6 +867,15 @@ object MimaExcludes {
       // [SPARK-12221] Add CPU time to metrics
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetrics.this"),
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.this")
+    ) ++ Seq(
+      // [SPARK-6235] Address various 2G limits
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.network.netty.NettyBlockRpcServer.receive"),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.serializer.DummySerializerInstance.serialize"),
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.serializer.DummySerializerInstance.deserialize"),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.serializer.SerializerInstance.serialize"),
+      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.serializer.SerializerInstance.serialize"),
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.serializer.SerializerInstance.deserialize"),
+      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.serializer.SerializerInstance.deserialize")
     )
   }
 

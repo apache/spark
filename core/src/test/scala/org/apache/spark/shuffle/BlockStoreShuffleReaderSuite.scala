@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark._
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.storage.{BlockManager, BlockManagerId, ShuffleBlockId}
 
@@ -38,15 +38,16 @@ class RecordingManagedBuffer(underlyingBuffer: NioManagedBuffer) extends Managed
   var callsToRelease = 0
 
   override def size(): Long = underlyingBuffer.size()
-  override def nioByteBuffer(): ByteBuffer = underlyingBuffer.nioByteBuffer()
+  override def nioByteBuffer(): ChunkedByteBuffer = underlyingBuffer.nioByteBuffer()
   override def createInputStream(): InputStream = underlyingBuffer.createInputStream()
   override def convertToNetty(): AnyRef = underlyingBuffer.convertToNetty()
 
+  override def refCnt: Int = underlyingBuffer.refCnt
   override def retain(): ManagedBuffer = {
     callsToRetain += 1
     underlyingBuffer.retain()
   }
-  override def release(): ManagedBuffer = {
+  override def release(): Boolean = {
     callsToRelease += 1
     underlyingBuffer.release()
   }

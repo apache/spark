@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.annotation.{DeveloperApi, Private}
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.util.NextIterator
 
 /**
@@ -110,11 +111,19 @@ abstract class Serializer {
 @DeveloperApi
 @NotThreadSafe
 abstract class SerializerInstance {
-  def serialize[T: ClassTag](t: T): ByteBuffer
+  def serialize[T: ClassTag](t: T): ChunkedByteBuffer
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer): T
+  def deserialize[T: ClassTag](bytes: ChunkedByteBuffer): T = {
+    deserialize(bytes.toInputStream())
+  }
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T
+  def deserialize[T: ClassTag](bytes: ChunkedByteBuffer, loader: ClassLoader): T = {
+    deserialize(bytes.toInputStream(), loader)
+  }
+
+  def deserialize[T: ClassTag](in: InputStream): T
+
+  def deserialize[T: ClassTag](in: InputStream, loader: ClassLoader): T
 
   def serializeStream(s: OutputStream): SerializationStream
 

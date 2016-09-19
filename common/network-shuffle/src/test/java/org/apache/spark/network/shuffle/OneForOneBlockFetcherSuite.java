@@ -23,7 +23,6 @@ import java.util.LinkedHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.Maps;
-import io.netty.buffer.Unpooled;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -39,8 +38,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NettyManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -65,7 +64,7 @@ public class OneForOneBlockFetcherSuite {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
     blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("b1", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
-    blocks.put("b2", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
+    blocks.put("b2", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
 
     BlockFetchingListener listener = fetchBlocks(blocks);
 
@@ -135,13 +134,13 @@ public class OneForOneBlockFetcherSuite {
       @Override
       public Void answer(InvocationOnMock invocationOnMock) throws Throwable {
         BlockTransferMessage message = BlockTransferMessage.Decoder.fromByteBuffer(
-          (ByteBuffer) invocationOnMock.getArguments()[0]);
+          (ChunkedByteBuffer) invocationOnMock.getArguments()[0]);
         RpcResponseCallback callback = (RpcResponseCallback) invocationOnMock.getArguments()[1];
         callback.onSuccess(new StreamHandle(123, blocks.size()).toByteBuffer());
         assertEquals(new OpenBlocks("app-id", "exec-id", blockIds), message);
         return null;
       }
-    }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
+    }).when(client).sendRpc(any(ChunkedByteBuffer.class), any(RpcResponseCallback.class));
 
     // Respond to each chunk request with a single buffer from our blocks array.
     final AtomicInteger expectedChunkIndex = new AtomicInteger(0);

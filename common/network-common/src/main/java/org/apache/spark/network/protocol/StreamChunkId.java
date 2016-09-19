@@ -17,8 +17,11 @@
 
 package org.apache.spark.network.protocol;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
 
 /**
 * Encapsulates a request for a particular chunk of a stream.
@@ -33,19 +36,18 @@ public final class StreamChunkId implements Encodable {
   }
 
   @Override
-  public int encodedLength() {
+  public long encodedLength() {
     return 8 + 4;
   }
 
-  public void encode(ByteBuf buffer) {
-    buffer.writeLong(streamId);
-    buffer.writeInt(chunkIndex);
+  public void encode(OutputStream buffer) throws IOException {
+    Encoders.Longs.encode(buffer, streamId);
+    Encoders.Ints.encode(buffer, chunkIndex);
   }
 
-  public static StreamChunkId decode(ByteBuf buffer) {
-    assert buffer.readableBytes() >= 8 + 4;
-    long streamId = buffer.readLong();
-    int chunkIndex = buffer.readInt();
+  public static StreamChunkId decode(InputStream in) throws IOException {
+    long streamId = Encoders.Longs.decode(in);
+    int chunkIndex = Encoders.Ints.decode(in);
     return new StreamChunkId(streamId, chunkIndex);
   }
 

@@ -30,6 +30,8 @@ import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.*;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -58,15 +60,16 @@ public class ExternalShuffleBlockHandlerSuite {
   }
 
   @Test
-  public void testRegisterExecutor() {
+  public void testRegisterExecutor() throws Exception {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
     ExecutorShuffleInfo config = new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort");
-    ByteBuffer registerMessage = new RegisterExecutor("app0", "exec1", config).toByteBuffer();
-    handler.receive(client, registerMessage, callback);
+    ChunkedByteBuffer registerMessage = new RegisterExecutor("app0", "exec1", config).
+        toByteBuffer();
+    handler.receive(client, registerMessage.toInputStream(), callback);
     verify(blockResolver, times(1)).registerExecutor("app0", "exec1", config);
 
-    verify(callback, times(1)).onSuccess(any(ByteBuffer.class));
+    verify(callback, times(1)).onSuccess(any(ChunkedByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));
     // Verify register executor request latency metrics
     Timer registerExecutorRequestLatencyMillis = (Timer) ((ExternalShuffleBlockHandler) handler)
@@ -78,20 +81,20 @@ public class ExternalShuffleBlockHandlerSuite {
 
   @SuppressWarnings("unchecked")
   @Test
-  public void testOpenShuffleBlocks() {
+  public void testOpenShuffleBlocks() throws Exception {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
     ManagedBuffer block0Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[3]));
     ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
     when(blockResolver.getBlockData("app0", "exec1", "b0")).thenReturn(block0Marker);
     when(blockResolver.getBlockData("app0", "exec1", "b1")).thenReturn(block1Marker);
-    ByteBuffer openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" })
+    ChunkedByteBuffer openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" })
       .toByteBuffer();
-    handler.receive(client, openBlocks, callback);
+    handler.receive(client, openBlocks.toInputStream(), callback);
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b0");
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b1");
 
-    ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
+    ArgumentCaptor<ChunkedByteBuffer> response = ArgumentCaptor.forClass(ChunkedByteBuffer.class);
     verify(callback, times(1)).onSuccess(response.capture());
     verify(callback, never()).onFailure((Throwable) any());
 
@@ -123,27 +126,28 @@ public class ExternalShuffleBlockHandlerSuite {
   }
 
   @Test
-  public void testBadMessages() {
+  public void testBadMessages() throws Exception {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
-    ByteBuffer unserializableMsg = ByteBuffer.wrap(new byte[] { 0x12, 0x34, 0x56 });
+    ChunkedByteBuffer unserializableMsg = ChunkedByteBufferUtil.wrap(
+        new byte[]{0x12, 0x34, 0x56});
     try {
-      handler.receive(client, unserializableMsg, callback);
+      handler.receive(client, unserializableMsg.toInputStream(), callback);
       fail("Should have thrown");
     } catch (Exception e) {
       // pass
     }
 
-    ByteBuffer unexpectedMsg = new UploadBlock("a", "e", "b", new byte[1],
-      new byte[2]).toByteBuffer();
+    ChunkedByteBuffer unexpectedMsg = new UploadBlock("a", "e", "b", new byte[1],
+        new NioManagedBuffer(ChunkedByteBufferUtil.wrap(new byte[2]))).toByteBuffer();
     try {
-      handler.receive(client, unexpectedMsg, callback);
+      handler.receive(client, unexpectedMsg.toInputStream(), callback);
       fail("Should have thrown");
     } catch (UnsupportedOperationException e) {
       // pass
     }
 
-    verify(callback, never()).onSuccess(any(ByteBuffer.class));
+    verify(callback, never()).onSuccess(any(ChunkedByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));
   }
 }

@@ -17,16 +17,14 @@
 
 package org.apache.spark.storage
 
-import java.io.{FileOutputStream, IOException, RandomAccessFile}
-import java.nio.ByteBuffer
-import java.nio.channels.FileChannel.MapMode
+import java.io.FileOutputStream
 
 import com.google.common.io.Closeables
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.util.Utils
-import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Stores BlockManager blocks on disk.
@@ -74,37 +72,17 @@ private[spark] class DiskStore(conf: SparkConf, diskManager: DiskBlockManager) e
 
   def putBytes(blockId: BlockId, bytes: ChunkedByteBuffer): Unit = {
     put(blockId) { fileOutputStream =>
-      val channel = fileOutputStream.getChannel
       Utils.tryWithSafeFinally {
-        bytes.writeFully(channel)
+        bytes.writeFully(fileOutputStream)
       } {
-        channel.close()
+        fileOutputStream.close()
       }
     }
   }
 
-  def getBytes(blockId: BlockId): ChunkedByteBuffer = {
+  def getBlockData(blockId: BlockId): ManagedBuffer = {
     val file = diskManager.getFile(blockId.name)
-    val channel = new RandomAccessFile(file, "r").getChannel
-    Utils.tryWithSafeFinally {
-      // For small files, directly read rather than memory map
-      if (file.length < minMemoryMapBytes) {
-        val buf = ByteBuffer.allocate(file.length.toInt)
-        channel.position(0)
-        while (buf.remaining() != 0) {
-          if (channel.read(buf) == -1) {
-            throw new IOException("Reached EOF before filling buffer\n" +
-              s"offset=0\nfile=${file.getAbsolutePath}\nbuf.remaining=${buf.remaining}")
-          }
-        }
-        buf.flip()
-        new ChunkedByteBuffer(buf)
-      } else {
-        new ChunkedByteBuffer(channel.map(MapMode.READ_ONLY, 0, file.length))
-      }
-    } {
-      channel.close()
-    }
+    new FileSegmentManagedBuffer(minMemoryMapBytes, true, file, 0L, file.length())
   }
 
   def remove(blockId: BlockId): Boolean = {

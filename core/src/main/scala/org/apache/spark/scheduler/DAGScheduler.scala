@@ -987,10 +987,9 @@ class DAGScheduler(
       // For ResultTask, serialize and broadcast (rdd, func).
       val taskBinaryBytes: Array[Byte] = stage match {
         case stage: ShuffleMapStage =>
-          JavaUtils.bufferToArray(
-            closureSerializer.serialize((stage.rdd, stage.shuffleDep): AnyRef))
+          closureSerializer.serialize((stage.rdd, stage.shuffleDep): AnyRef).toArray
         case stage: ResultStage =>
-          JavaUtils.bufferToArray(closureSerializer.serialize((stage.rdd, stage.func): AnyRef))
+          closureSerializer.serialize((stage.rdd, stage.func): AnyRef).toArray
       }
 
       taskBinary = sc.broadcast(taskBinaryBytes)

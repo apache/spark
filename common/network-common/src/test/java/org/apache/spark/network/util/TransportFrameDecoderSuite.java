@@ -19,6 +19,7 @@ package org.apache.spark.network.util;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -92,11 +93,13 @@ public class TransportFrameDecoderSuite {
       @Override
       public Void answer(InvocationOnMock in) {
         // Retain a few frames but not others.
-        ByteBuf buf = (ByteBuf) in.getArguments()[0];
+        List<ByteBuf> buf = (List<ByteBuf>) in.getArguments()[0];
         if (count.incrementAndGet() % 2 == 0) {
-          retained.add(buf);
+          retained.addAll(buf);
         } else {
-          buf.release();
+          for (ByteBuf b : buf) {
+            b.release();
+          }
         }
         return null;
       }
@@ -131,7 +134,7 @@ public class TransportFrameDecoderSuite {
       decoder.channelRead(ctx, buf.readSlice(RND.nextInt(7)).retain());
       verify(ctx, never()).fireChannelRead(any(ByteBuf.class));
       decoder.channelRead(ctx, buf);
-      verify(ctx).fireChannelRead(any(ByteBuf.class));
+      verify(ctx).fireChannelRead(any(List.class));
       assertEquals(0, buf.refCnt());
     } finally {
       decoder.channelInactive(ctx);
@@ -213,8 +216,10 @@ public class TransportFrameDecoderSuite {
     when(ctx.fireChannelRead(any())).thenAnswer(new Answer<Void>() {
       @Override
       public Void answer(InvocationOnMock in) {
-        ByteBuf buf = (ByteBuf) in.getArguments()[0];
-        buf.release();
+        List<ByteBuf> buf = (List<ByteBuf>) in.getArguments()[0];
+        for (ByteBuf b : buf) {
+          b.release();
+        }
         return null;
       }
     });

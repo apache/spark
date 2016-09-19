@@ -19,6 +19,7 @@ package org.apache.spark.network.client;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.util.UUID;
@@ -34,9 +35,13 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
+import org.apache.spark.network.buffer.InputStreamManagedBuffer;
+import org.apache.spark.network.buffer.ManagedBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.protocol.ChunkFetchRequest;
 import org.apache.spark.network.protocol.OneWayMessage;
@@ -220,39 +225,66 @@ public class TransportClient implements Closeable {
    * @param callback Callback to handle the RPC's reply.
    * @return The RPC's id.
    */
-  public long sendRpc(ByteBuffer message, final RpcResponseCallback callback) {
+  public long sendRpc(ChunkedByteBuffer message, final RpcResponseCallback callback) {
+    return sendRpc(new NioManagedBuffer(message), callback);
+  }
+
+  /**
+   * Sends an opaque message to the RpcHandler on the server-side. The callback will be invoked
+   * with the server's response or upon any failure.
+   *
+   * @param message The message to send.
+   * @param callback Callback to handle the RPC's reply.
+   * @return The RPC's id.
+   */
+  public long sendRpc(ManagedBuffer message, final RpcResponseCallback callback) {
+    return sendRpc(message, true, callback);
+  }
+
+  /**
+   * Sends an opaque message to the RpcHandler on the server-side. The callback will be invoked
+   * with the server's response or upon any failure.
+   *
+   * @param message       The message to send.
+   * @param isBodyInFrame Whether to include the body of the message in the same
+   *                      frame as the message.
+   * @param callback      Callback to handle the RPC's reply.
+   * @return The RPC's id.
+   */
+  public long sendRpc(ManagedBuffer message, boolean isBodyInFrame,
+                      final RpcResponseCallback callback) {
     final long startTime = System.currentTimeMillis();
-    if (logger.isTraceEnabled()) {
+    if(logger.isTraceEnabled()){
       logger.trace("Sending RPC to {}", getRemoteAddress(channel));
     }
-
     final long requestId = Math.abs(UUID.randomUUID().getLeastSignificantBits());
     handler.addRpcRequest(requestId, callback);
 
-    channel.writeAndFlush(new RpcRequest(requestId, new NioManagedBuffer(message))).addListener(
-      new ChannelFutureListener() {
-        @Override
-        public void operationComplete(ChannelFuture future) throws Exception {
-          if (future.isSuccess()) {
-            long timeTaken = System.currentTimeMillis() - startTime;
-            if (logger.isTraceEnabled()) {
-              logger.trace("Sending request {} to {} took {} ms", requestId,
-                getRemoteAddress(channel), timeTaken);
-            }
-          } else {
-            String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
-              getRemoteAddress(channel), future.cause());
-            logger.error(errorMsg, future.cause());
-            handler.removeRpcRequest(requestId);
-            channel.close();
-            try {
-              callback.onFailure(new IOException(errorMsg, future.cause()));
-            } catch (Exception e) {
-              logger.error("Uncaught exception in RPC response callback handler!", e);
+    channel.writeAndFlush(new RpcRequest(requestId, message.size(), isBodyInFrame,
+        message)).addListener(
+        new ChannelFutureListener() {
+          @Override
+          public void operationComplete(ChannelFuture future) throws Exception {
+            if (future.isSuccess()) {
+              long timeTaken = System.currentTimeMillis() - startTime;
+              if (logger.isTraceEnabled()) {
+                logger.trace("Sending request {} to {} took {} ms", requestId,
+                    getRemoteAddress(channel), timeTaken);
+              }
+            } else {
+              String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
+                  getRemoteAddress(channel), future.cause());
+              logger.error(errorMsg, future.cause());
+              handler.removeRpcRequest(requestId);
+              channel.close();
+              try {
+                callback.onFailure(new IOException(errorMsg, future.cause()));
+              } catch (Exception e) {
+                logger.error("Uncaught exception in RPC response callback handler!", e);
+              }
             }
           }
-        }
-      });
+        });
 
     return requestId;
   }
@@ -261,17 +293,12 @@ public class TransportClient implements Closeable {
    * Synchronously sends an opaque message to the RpcHandler on the server-side, waiting for up to
    * a specified timeout for a response.
    */
-  public ByteBuffer sendRpcSync(ByteBuffer message, long timeoutMs) {
-    final SettableFuture<ByteBuffer> result = SettableFuture.create();
-
+  public ChunkedByteBuffer sendRpcSync(ChunkedByteBuffer message, long timeoutMs) {
+    final SettableFuture<ChunkedByteBuffer> result = SettableFuture.create();
     sendRpc(message, new RpcResponseCallback() {
       @Override
-      public void onSuccess(ByteBuffer response) {
-        ByteBuffer copy = ByteBuffer.allocate(response.remaining());
-        copy.put(response);
-        // flip "copy" to make it readable
-        copy.flip();
-        result.set(copy);
+      public void onSuccess(ChunkedByteBuffer response) {
+        result.set(response);
       }
 
       @Override
@@ -295,14 +322,14 @@ public class TransportClient implements Closeable {
    *
    * @param message The message to send.
    */
-  public void send(ByteBuffer message) {
+  public void send(ChunkedByteBuffer message) {
     channel.writeAndFlush(new OneWayMessage(new NioManagedBuffer(message)));
   }
 
   /**
    * Removes any state associated with the given RPC.
    *
-   * @param requestId The RPC id returned by {@link #sendRpc(ByteBuffer, RpcResponseCallback)}.
+   * @param requestId The RPC id returned by {@link #sendRpc(ChunkedByteBuffer, RpcResponseCallback)}.
    */
   public void removeRpcRequest(long requestId) {
     handler.removeRpcRequest(requestId);

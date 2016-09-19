@@ -17,8 +17,11 @@
 
 package org.apache.spark.network.protocol;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 
@@ -43,15 +46,15 @@ public final class StreamResponse extends AbstractResponseMessage {
   public Type type() { return Type.StreamResponse; }
 
   @Override
-  public int encodedLength() {
+  public long encodedLength() {
     return 8 + Encoders.Strings.encodedLength(streamId);
   }
 
   /** Encoding does NOT include 'buffer' itself. See {@link MessageEncoder}. */
   @Override
-  public void encode(ByteBuf buf) {
-    Encoders.Strings.encode(buf, streamId);
-    buf.writeLong(byteCount);
+  public void encode(OutputStream out) throws IOException {
+    Encoders.Strings.encode(out, streamId);
+    Encoders.Longs.encode(out, byteCount);
   }
 
   @Override
@@ -59,9 +62,9 @@ public final class StreamResponse extends AbstractResponseMessage {
     return new StreamFailure(streamId, error);
   }
 
-  public static StreamResponse decode(ByteBuf buf) {
-    String streamId = Encoders.Strings.decode(buf);
-    long byteCount = buf.readLong();
+  public static StreamResponse decode(InputStream in) throws IOException {
+    String streamId = Encoders.Strings.decode(in);
+    long byteCount = Encoders.Longs.decode(in);
     return new StreamResponse(streamId, byteCount, null);
   }
 
@@ -83,7 +86,7 @@ public final class StreamResponse extends AbstractResponseMessage {
   public String toString() {
     return Objects.toStringHelper(this)
       .add("streamId", streamId)
-      .add("byteCount", byteCount)
+      .add("bodySize", byteCount)
       .add("body", body())
       .toString();
   }

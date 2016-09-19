@@ -17,8 +17,11 @@
 
 package org.apache.spark.network.protocol;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
 
 /**
  * Response to {@link ChunkFetchRequest} when there is an error fetching the chunk.
@@ -36,19 +39,19 @@ public final class ChunkFetchFailure extends AbstractMessage implements Response
   public Type type() { return Type.ChunkFetchFailure; }
 
   @Override
-  public int encodedLength() {
+  public long encodedLength() {
     return streamChunkId.encodedLength() + Encoders.Strings.encodedLength(errorString);
   }
 
   @Override
-  public void encode(ByteBuf buf) {
-    streamChunkId.encode(buf);
-    Encoders.Strings.encode(buf, errorString);
+  public void encode(OutputStream out) throws IOException {
+    streamChunkId.encode(out);
+    Encoders.Strings.encode(out, errorString);
   }
 
-  public static ChunkFetchFailure decode(ByteBuf buf) {
-    StreamChunkId streamChunkId = StreamChunkId.decode(buf);
-    String errorString = Encoders.Strings.decode(buf);
+  public static ChunkFetchFailure decode(InputStream in) throws IOException {
+    StreamChunkId streamChunkId = StreamChunkId.decode(in);
+    String errorString = Encoders.Strings.decode(in);
     return new ChunkFetchFailure(streamChunkId, errorString);
   }
 

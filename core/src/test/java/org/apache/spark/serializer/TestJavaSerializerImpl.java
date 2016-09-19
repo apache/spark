@@ -21,6 +21,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import scala.reflect.ClassTag;
 
 
@@ -35,18 +36,19 @@ class TestJavaSerializerImpl extends Serializer {
   }
 
   static class SerializerInstanceImpl extends SerializerInstance {
-      @Override
-      public <T> ByteBuffer serialize(T t, ClassTag<T> evidence$1) {
-        return null;
-      }
 
-      @Override
-    public <T> T deserialize(ByteBuffer bytes, ClassLoader loader, ClassTag<T> evidence$1) {
+    @Override
+    public <T> ChunkedByteBuffer serialize(T t, ClassTag<T> evidence$1) {
       return null;
     }
 
     @Override
-    public <T> T deserialize(ByteBuffer bytes, ClassTag<T> evidence$1) {
+    public <T> T deserialize(InputStream bytes, ClassLoader loader, ClassTag<T> evidence$1) {
+      return null;
+    }
+
+    @Override
+    public <T> T deserialize(InputStream bytes, ClassTag<T> evidence$1) {
       return null;
     }
 

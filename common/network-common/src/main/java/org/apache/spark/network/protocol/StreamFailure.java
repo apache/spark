@@ -17,8 +17,11 @@
 
 package org.apache.spark.network.protocol;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
 
 /**
  * Message indicating an error when transferring a stream.
@@ -36,19 +39,19 @@ public final class StreamFailure extends AbstractMessage implements ResponseMess
   public Type type() { return Type.StreamFailure; }
 
   @Override
-  public int encodedLength() {
+  public long encodedLength() {
     return Encoders.Strings.encodedLength(streamId) + Encoders.Strings.encodedLength(error);
   }
 
   @Override
-  public void encode(ByteBuf buf) {
-    Encoders.Strings.encode(buf, streamId);
-    Encoders.Strings.encode(buf, error);
+  public void encode(OutputStream out) throws IOException {
+    Encoders.Strings.encode(out, streamId);
+    Encoders.Strings.encode(out, error);
   }
 
-  public static StreamFailure decode(ByteBuf buf) {
-    String streamId = Encoders.Strings.decode(buf);
-    String error = Encoders.Strings.decode(buf);
+  public static StreamFailure decode(InputStream in) throws IOException {
+    String streamId = Encoders.Strings.decode(in);
+    String error = Encoders.Strings.decode(in);
     return new StreamFailure(streamId, error);
   }
 

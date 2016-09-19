@@ -18,6 +18,7 @@
 package org.apache.spark.network;
 
 import java.io.File;
+import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.Collections;
@@ -107,7 +108,7 @@ public class ChunkFetchIntegrationSuite {
       @Override
       public void receive(
           TransportClient client,
-          ByteBuffer message,
+          InputStream message,
           RpcResponseCallback callback) {
         throw new UnsupportedOperationException();
       }
@@ -230,8 +231,8 @@ public class ChunkFetchIntegrationSuite {
   }
 
   private void assertBuffersEqual(ManagedBuffer buffer0, ManagedBuffer buffer1) throws Exception {
-    ByteBuffer nio0 = buffer0.nioByteBuffer();
-    ByteBuffer nio1 = buffer1.nioByteBuffer();
+    ByteBuffer nio0 = buffer0.nioByteBuffer().toByteBuffer();
+    ByteBuffer nio1 = buffer1.nioByteBuffer().toByteBuffer();
 
     int len = nio0.remaining();
     assertEquals(nio0.remaining(), nio1.remaining());

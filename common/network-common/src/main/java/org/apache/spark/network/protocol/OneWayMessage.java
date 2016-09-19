@@ -17,11 +17,14 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
+import com.google.common.base.Objects;
+
+import org.apache.spark.network.buffer.InputStreamManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NettyManagedBuffer;
 
 /**
  * A RPC that does not expect a reply, which is handled by a remote
@@ -37,23 +40,19 @@ public final class OneWayMessage extends AbstractMessage implements RequestMessa
   public Type type() { return Type.OneWayMessage; }
 
   @Override
-  public int encodedLength() {
-    // The integer (a.k.a. the body size) is not really used, since that information is already
-    // encoded in the frame length. But this maintains backwards compatibility with versions of
-    // RpcRequest that use Encoders.ByteArrays.
-    return 4;
+  public long encodedLength() {
+    return 8;
   }
 
   @Override
-  public void encode(ByteBuf buf) {
-    // See comment in encodedLength().
-    buf.writeInt((int) body().size());
+  public void encode(OutputStream out) throws IOException {
+    Encoders.Longs.encode(out, body().size());
   }
 
-  public static OneWayMessage decode(ByteBuf buf) {
-    // See comment in encodedLength().
-    buf.readInt();
-    return new OneWayMessage(new NettyManagedBuffer(buf.retain()));
+  public static OneWayMessage decode(InputStream in) throws IOException {
+    long limit = Encoders.Longs.decode(in);
+    ManagedBuffer managedBuf = new InputStreamManagedBuffer(in, limit, false);
+    return new OneWayMessage(managedBuf);
   }
 
   @Override

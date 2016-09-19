@@ -37,7 +37,7 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.rpc.RpcEnv
@@ -46,7 +46,6 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerMa
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util._
-import org.apache.spark.util.io.ChunkedByteBuffer
 
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
   with PrivateMethodTester with LocalSparkContext with ResetSystemProperties {
@@ -1205,8 +1204,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store = makeBlockManager(8000, "executor1", mockBlockManagerMaster,
       transferService = Option(mockBlockTransferService))
     val block = store.getRemoteBytes("item")
-      .asInstanceOf[Option[ByteBuffer]]
+      .asInstanceOf[Option[ManagedBuffer]]
     assert(block.isDefined)
+    block.foreach { b =>
+      b.release()
+      assert(b.asInstanceOf[ReleasableManagedBuffer].refCnt === 0)
+    }
     verify(mockBlockManagerMaster, times(2)).getLocations("item")
   }
 
