@@ -232,7 +232,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * from values being read should be skipped.</li>
    * <li>`ignoreTrailingWhiteSpace` (default `false`): defines whether or not trailing
    * whitespaces from values being read should be skipped.</li>
-   * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
+   * <li>`nullValue` (default empty string): sets the string representation of a null value. Since
+   * 2.0.1, this applies to all supported types including the string type.</li>
    * <li>`nanValue` (default `NaN`): sets the string representation of a non-number" value.</li>
    * <li>`positiveInf` (default `Inf`): sets the string representation of a positive infinity
    * value.</li>
