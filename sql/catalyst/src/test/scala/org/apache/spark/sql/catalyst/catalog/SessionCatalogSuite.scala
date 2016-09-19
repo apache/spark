@@ -444,7 +444,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(!catalog.tableExists(TableIdentifier("view1", Some("default"))))
   }
 
-  test("getTableMetadata and getTempViewMetadata on temporary views") {
+  test("getTableMetadata and getTempViewMetadataOption on temporary views") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val tempTable = Range(1, 10, 2, 10)
     val m = intercept[AnalysisException] {
@@ -457,12 +457,12 @@ class SessionCatalogSuite extends SparkFunSuite {
     }.getMessage
     assert(m2.contains("Table or view 'view1' not found in database 'default'"))
 
-    intercept[NoSuchTempViewException] {
-      catalog.getTempViewMetadata("view1")
-    }.getMessage
+    assert(catalog.getTempViewMetadataOption("view1").isEmpty,
+      "the temporary view `view1` should not exist")
 
     catalog.createTempView("view1", tempTable, overrideIfExists = false)
-    assert(catalog.getTempViewMetadata("view1").identifier === TableIdentifier("view1"))
+    assert(catalog.getTempViewMetadataOption("view1").get.identifier === TableIdentifier("view1"),
+      "the temporary view `view1` should exist")
 
     intercept[NoSuchTableException] {
       catalog.getTableMetadata(TableIdentifier("view1"))

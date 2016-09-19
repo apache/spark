@@ -219,37 +219,37 @@ case class LoadDataCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val targetTable = catalog.getTableMetadata(table)
-    val qualifiedName = targetTable.identifier.quotedString
+    val tableIdentwithDB = targetTable.identifier.quotedString
 
     if (targetTable.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $qualifiedName")
+      throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $tableIdentwithDB")
     }
     if (DDLUtils.isDatasourceTable(targetTable)) {
       throw new AnalysisException(
-        s"LOAD DATA is not supported for datasource tables: $qualifiedName")
+        s"LOAD DATA is not supported for datasource tables: $tableIdentwithDB")
     }
     if (targetTable.partitionColumnNames.nonEmpty) {
       if (partition.isEmpty) {
-        throw new AnalysisException(s"LOAD DATA target table $qualifiedName is partitioned, " +
+        throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
           s"but no partition spec is provided")
       }
       if (targetTable.partitionColumnNames.size != partition.get.size) {
-        throw new AnalysisException(s"LOAD DATA target table $qualifiedName is partitioned, " +
+        throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
           s"but number of columns in provided partition spec (${partition.get.size}) " +
           s"do not match number of partitioned columns in table " +
           s"(s${targetTable.partitionColumnNames.size})")
       }
       partition.get.keys.foreach { colName =>
         if (!targetTable.partitionColumnNames.contains(colName)) {
-          throw new AnalysisException(s"LOAD DATA target table $qualifiedName is partitioned, " +
+          throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
             s"but the specified partition spec refers to a column that is not partitioned: " +
             s"'$colName'")
         }
       }
     } else {
       if (partition.nonEmpty) {
-        throw new AnalysisException(s"LOAD DATA target table $qualifiedName is not partitioned, " +
-          s"but a partition spec was provided.")
+        throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is not " +
+          s"partitioned, but a partition spec was provided.")
       }
     }
 
@@ -338,26 +338,26 @@ case class TruncateTableCommand(
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    val qualifiedName = table.identifier.quotedString
+    val tableIdentwithDB = table.identifier.quotedString
 
     if (table.tableType == CatalogTableType.EXTERNAL) {
       throw new AnalysisException(
-        s"Operation not allowed: TRUNCATE TABLE on external tables: $qualifiedName")
+        s"Operation not allowed: TRUNCATE TABLE on external tables: $tableIdentwithDB")
     }
     if (table.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException(
-        s"Operation not allowed: TRUNCATE TABLE on views: $qualifiedName")
+        s"Operation not allowed: TRUNCATE TABLE on views: $tableIdentwithDB")
     }
     val isDatasourceTable = DDLUtils.isDatasourceTable(table)
     if (isDatasourceTable && partitionSpec.isDefined) {
       throw new AnalysisException(
         s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
-        s"for tables created using the data sources API: $qualifiedName")
+        s"for tables created using the data sources API: $tableIdentwithDB")
     }
     if (table.partitionColumnNames.isEmpty && partitionSpec.isDefined) {
       throw new AnalysisException(
         s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
-        s"for tables that are not partitioned: $qualifiedName")
+        s"for tables that are not partitioned: $tableIdentwithDB")
     }
     val locations =
       if (isDatasourceTable) {
@@ -378,7 +378,7 @@ case class TruncateTableCommand(
         } catch {
           case NonFatal(e) =>
             throw new AnalysisException(
-              s"Failed to truncate table $qualifiedName when removing data of the path: $path " +
+              s"Failed to truncate table $tableIdentwithDB when removing data of the path: $path " +
                 s"because of ${e.toString}")
         }
       }
@@ -391,7 +391,7 @@ case class TruncateTableCommand(
       spark.sharedState.cacheManager.uncacheQuery(spark.table(table.identifier))
     } catch {
       case NonFatal(e) =>
-        log.warn(s"Exception when attempting to uncache table $qualifiedName", e)
+        log.warn(s"Exception when attempting to uncache table $tableIdentwithDB", e)
     }
     Seq.empty[Row]
   }
@@ -646,7 +646,7 @@ case class ShowPartitionsCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    val qualifiedName = table.identifier.quotedString
+    val tableIdentWithDB = table.identifier.quotedString
 
     /**
      * Validate and throws an [[AnalysisException]] exception under the following conditions:
@@ -655,17 +655,17 @@ case class ShowPartitionsCommand(
      * 3. If it is a view.
      */
     if (table.tableType == VIEW) {
-      throw new AnalysisException(s"SHOW PARTITIONS is not allowed on a view: $qualifiedName")
+      throw new AnalysisException(s"SHOW PARTITIONS is not allowed on a view: $tableIdentWithDB")
     }
 
     if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a table that is not partitioned: $qualifiedName")
+        s"SHOW PARTITIONS is not allowed on a table that is not partitioned: $tableIdentWithDB")
     }
 
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a datasource table: $qualifiedName")
+        s"SHOW PARTITIONS is not allowed on a datasource table: $tableIdentWithDB")
     }
 
     /**

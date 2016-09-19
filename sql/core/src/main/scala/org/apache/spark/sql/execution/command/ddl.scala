@@ -472,19 +472,19 @@ case class AlterTableRecoverPartitionsCommand(
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    val qualifiedName = table.identifier.quotedString
+    val tableIdentWithDB = table.identifier.quotedString
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
-        s"Operation not allowed: $cmd on datasource tables: $qualifiedName")
+        s"Operation not allowed: $cmd on datasource tables: $tableIdentWithDB")
     }
     if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
-        s"Operation not allowed: $cmd only works on partitioned tables: $qualifiedName")
+        s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
     }
     if (table.storage.locationUri.isEmpty) {
-      throw new AnalysisException(
-        s"Operation not allowed: $cmd only works on table with location provided: $qualifiedName")
+      throw new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
+        s"location provided: $tableIdentWithDB")
     }
 
     val root = new Path(table.storage.locationUri.get)

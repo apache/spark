@@ -30,9 +30,6 @@ class NoSuchDatabaseException(db: String) extends AnalysisException(s"Database '
 class NoSuchTableException(db: String, table: String)
   extends AnalysisException(s"Table or view '$table' not found in database '$db'")
 
-class NoSuchTempViewException(table: String)
-  extends AnalysisException(s"Temporary view '$table' not found")
-
 class NoSuchPartitionException(
     db: String,
     table: String,
