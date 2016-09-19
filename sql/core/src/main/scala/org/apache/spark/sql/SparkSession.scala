@@ -359,6 +359,7 @@ class SparkSession private(
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
+   *
    * @since 1.6.0
    */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
@@ -937,7 +938,7 @@ object SparkSession {
   }
 
   /**
-   * Return true if Hive classes can be loaded, otherwise false.
+   * Returns true if Hive classes can be loaded, otherwise false.
    */
   private[spark] def hiveClassesArePresent: Boolean = {
     try {
