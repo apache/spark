@@ -138,14 +138,15 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
 
     // In the origin dataset, find the hash value u that is closest to v
     val hashDistUDF = udf((x: Vector) => hashDistance(x, keyHash), DataTypes.DoubleType)
+    val hashDistCol = hashDistUDF(col($(outputCol)))
 
     // Compute threshold to get exact k elements.
-    val modelDatasetSortedByHash = modelDataset.sort(hashDistUDF(col($(outputCol)))).limit(k)
-    val thresholdDataset = modelDatasetSortedByHash.select(max(hashDistUDF(col($(outputCol)))))
+    val modelDatasetSortedByHash = modelDataset.sort(hashDistCol).limit(k)
+    val thresholdDataset = modelDatasetSortedByHash.select(max(hashDistCol))
     val hashThreshold = thresholdDataset.collect()(0)(0).asInstanceOf[Double]
 
-    // Filter the dataset where the hash value equals to u
-    val modelSubset = modelDataset.filter(hashDistUDF(col($(outputCol))) <= hashThreshold)
+    // Filter the dataset where the hash value is less than the threshold.
+    val modelSubset = modelDataset.filter(hashDistCol <= hashThreshold)
 
     // Get the top k nearest neighbor by their distance to the key
     val keyDistUDF = udf((x: KeyType) => keyDistance(x, key), DataTypes.DoubleType)
@@ -226,6 +227,22 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
   }
 }
 
+/**
+ * Locality Sensitive Hashing for different metrics space. Support basic transformation with a new
+ * hash column, approximate nearest neighbor search with a dataset and a key, and approximate
+ * similarity join of two datasets.
+ *
+ * Currently the following LSH family is implemented:
+ *  - Euclidean Distance: Random Projection
+ *
+ * References:
+ * (1) Gionis, Aristides, Piotr Indyk, and Rajeev Motwani. "Similarity search in high dimensions
+ * via hashing." VLDB 7 Sep. 1999: 518-529.
+ * (2) Wang, Jingdong et al. "Hashing for similarity search: A survey." arXiv preprint
+ * arXiv:1408.2927 (2014).
+ * @tparam KeyType The input key type of LSH
+ * @tparam T The class type of lsh
+ */
 abstract class LSH[KeyType, T <: LSHModel[KeyType, T]] extends Estimator[T] with LSHParams {
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
