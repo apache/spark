@@ -15,10 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.sql.hive
 
-import org.apache.spark.SparkException
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
-private[spark]
-case class BlockFetchException(messages: String, throwable: Throwable)
-  extends SparkException(messages, throwable)
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.QueryTest
+
+class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+
+  test("newTemporaryConfiguration overwrites listener configurations") {
+    Seq(true, false).foreach { useInMemoryDerby =>
+      val conf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby)
+      assert(conf(ConfVars.METASTORE_PRE_EVENT_LISTENERS.varname) === "")
+      assert(conf(ConfVars.METASTORE_EVENT_LISTENERS.varname) === "")
+      assert(conf(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname) === "")
+    }
+  }
+}

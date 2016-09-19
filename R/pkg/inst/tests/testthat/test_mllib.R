@@ -369,6 +369,8 @@ test_that("spark.mlp", {
   expect_equal(summary$labelCount, 3)
   expect_equal(summary$layers, c(4, 5, 4, 3))
   expect_equal(length(summary$weights), 64)
+  expect_equal(head(summary$weights, 5), list(-0.878743, 0.2154151, -1.16304, -0.6583214, 1.009825),
+               tolerance = 1e-6)
 
   # Test predict method
   mlpTestDF <- df

@@ -505,6 +505,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
+    if (_conf.getBoolean("spark.ui.reverseProxy", false)) {
+      System.setProperty("spark.ui.proxyBase", "/proxy/" + _applicationId)
+    }
     _ui.foreach(_.setAppId(_applicationId))
     _env.blockManager.initialize(_applicationId)
 
@@ -792,7 +795,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def makeRDD[T: ClassTag](seq: Seq[(T, Seq[String])]): RDD[T] = withScope {
     assertNotStopped()
     val indexToPrefs = seq.zipWithIndex.map(t => (t._2, t._1._2)).toMap
-    new ParallelCollectionRDD[T](this, seq.map(_._1), seq.size, indexToPrefs)
+    new ParallelCollectionRDD[T](this, seq.map(_._1), math.max(seq.size, 1), indexToPrefs)
   }
 
   /**

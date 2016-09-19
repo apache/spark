@@ -73,6 +73,7 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
     val naiveBayes = new NaiveBayes()
       .setSmoothing(smoothing)
       .setModelType("bernoulli")
+      .setFeaturesCol(rFormula.getFeaturesCol)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
     val idxToStr = new IndexToString()
       .setInputCol(PREDICTED_LABEL_INDEX_COL)

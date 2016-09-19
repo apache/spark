@@ -17,13 +17,29 @@
 
 package org.apache.spark.sql.catalyst.trees
 
+import java.math.BigInteger
+import java.util.UUID
+
 import scala.collection.mutable.ArrayBuffer
 
+import org.json4s.jackson.JsonMethods
+import org.json4s.jackson.JsonMethods._
+import org.json4s.JsonAST._
+import org.json4s.JsonDSL._
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource, JarResource}
+import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.types.{IntegerType, NullType, StringType}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Union}
+import org.apache.spark.sql.catalyst.plans.physical.{IdentityBroadcastMode, RoundRobinPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.types.{BooleanType, DoubleType, FloatType, IntegerType, Metadata, NullType, StringType, StructField, StructType}
+import org.apache.spark.storage.StorageLevel
 
 case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFallback {
   override def children: Seq[Expression] = optKey.toSeq
@@ -43,6 +59,20 @@ case class ExpressionInMap(map: Map[String, Expression]) extends Expression with
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
+}
+
+case class JsonTestTreeNode(arg: Any) extends LeafNode {
+  override def output: Seq[Attribute] = Seq.empty[Attribute]
+}
+
+case class NameValue(name: String, value: Any)
+
+case object DummyObject
+
+case class SelfReferenceUDF(
+    var config: Map[String, Any] = Map.empty[String, Any]) extends Function1[String, Boolean] {
+  config += "self" -> this
+  def apply(key: String): Boolean = config.contains(key)
 }
 
 class TreeNodeSuite extends SparkFunSuite {
@@ -260,5 +290,265 @@ class TreeNodeSuite extends SparkFunSuite {
       val expected = ExpressionInMap(Map("1" -> Literal(2), "2" -> Literal(3)))
       assert(actual === expected)
     }
+  }
+
+  test("toJSON") {
+    def assertJSON(input: Any, json: JValue): Unit = {
+      val expected =
+        s"""
+           |[{
+           |  "class": "${classOf[JsonTestTreeNode].getName}",
+           |  "num-children": 0,
+           |  "arg": ${compact(render(json))}
+           |}]
+         """.stripMargin
+      compareJSON(JsonTestTreeNode(input).toJSON, expected)
+    }
+
+    // Converts simple types to JSON
+    assertJSON(true, true)
+    assertJSON(33.toByte, 33)
+    assertJSON(44, 44)
+    assertJSON(55L, 55L)
+    assertJSON(3.0, 3.0)
+    assertJSON(4.0D, 4.0D)
+    assertJSON(BigInt(BigInteger.valueOf(88L)), 88L)
+    assertJSON(null, JNull)
+    assertJSON("text", "text")
+    assertJSON(Some("text"), "text")
+    compareJSON(JsonTestTreeNode(None).toJSON,
+      s"""[
+         |  {
+         |    "class": "${classOf[JsonTestTreeNode].getName}",
+         |    "num-children": 0
+         |  }
+         |]
+       """.stripMargin)
+
+    val uuid = UUID.randomUUID()
+    assertJSON(uuid, uuid.toString)
+
+    // Converts Spark Sql DataType to JSON
+    assertJSON(IntegerType, "integer")
+    assertJSON(Metadata.empty, JObject(Nil))
+    assertJSON(
+      StorageLevel.NONE,
+      JObject(
+        "useDisk" -> false,
+        "useMemory" -> false,
+        "useOffHeap" -> false,
+        "deserialized" -> false,
+        "replication" -> 1)
+    )
+
+    // Converts TreeNode argument to JSON
+    assertJSON(
+      Literal(333),
+      List(
+        JObject(
+          "class" -> classOf[Literal].getName,
+          "num-children" -> 0,
+          "value" -> "333",
+          "dataType" -> "integer")))
+
+    // Converts Seq[String] to JSON
+    assertJSON(Seq("1", "2", "3"), "[1, 2, 3]")
+
+    // Converts Seq[DataType] to JSON
+    assertJSON(Seq(IntegerType, DoubleType, FloatType), List("integer", "double", "float"))
+
+    // Converts Seq[Partitioning] to JSON
+    assertJSON(
+      Seq(SinglePartition, RoundRobinPartitioning(numPartitions = 3)),
+      List(
+        JObject("object" -> JString(SinglePartition.getClass.getName)),
+        JObject(
+          "product-class" -> classOf[RoundRobinPartitioning].getName,
+          "numPartitions" -> 3)))
+
+    // Converts case object to JSON
+    assertJSON(DummyObject, JObject("object" -> JString(DummyObject.getClass.getName)))
+
+    // Converts ExprId to JSON
+    assertJSON(
+      ExprId(0, uuid),
+      JObject(
+        "product-class" -> classOf[ExprId].getName,
+        "id" -> 0,
+        "jvmId" -> uuid.toString))
+
+    // Converts StructField to JSON
+    assertJSON(
+      StructField("field", IntegerType),
+      JObject(
+        "product-class" -> classOf[StructField].getName,
+        "name" -> "field",
+        "dataType" -> "integer",
+        "nullable" -> true,
+        "metadata" -> JObject(Nil)))
+
+    // Converts TableIdentifier to JSON
+    assertJSON(
+      TableIdentifier("table"),
+      JObject(
+        "product-class" -> classOf[TableIdentifier].getName,
+        "table" -> "table"))
+
+    // Converts JoinType to JSON
+    assertJSON(
+      NaturalJoin(LeftOuter),
+      JObject(
+        "product-class" -> classOf[NaturalJoin].getName,
+        "tpe" -> JObject("object" -> JString(LeftOuter.getClass.getName))))
+
+    // Converts FunctionIdentifier to JSON
+    assertJSON(
+      FunctionIdentifier("function", None),
+      JObject(
+        "product-class" -> JString(classOf[FunctionIdentifier].getName),
+          "funcName" -> "function"))
+
+    // Converts BucketSpec to JSON
+    assertJSON(
+      BucketSpec(1, Seq("bucket"), Seq("sort")),
+      JObject(
+        "product-class" -> classOf[BucketSpec].getName,
+        "numBuckets" -> 1,
+        "bucketColumnNames" -> "[bucket]",
+        "sortColumnNames" -> "[sort]"))
+
+    // Converts FrameBoundary to JSON
+    assertJSON(
+      ValueFollowing(3),
+      JObject(
+        "product-class" -> classOf[ValueFollowing].getName,
+        "value" -> 3))
+
+    // Converts WindowFrame to JSON
+    assertJSON(
+      SpecifiedWindowFrame(RowFrame, UnboundedFollowing, CurrentRow),
+      JObject(
+        "product-class" -> classOf[SpecifiedWindowFrame].getName,
+        "frameType" -> JObject("object" -> JString(RowFrame.getClass.getName)),
+        "frameStart" -> JObject("object" -> JString(UnboundedFollowing.getClass.getName)),
+        "frameEnd" -> JObject("object" -> JString(CurrentRow.getClass.getName))))
+
+    // Converts Partitioning to JSON
+    assertJSON(
+      RoundRobinPartitioning(numPartitions = 3),
+      JObject(
+        "product-class" -> classOf[RoundRobinPartitioning].getName,
+        "numPartitions" -> 3))
+
+    // Converts FunctionResource to JSON
+    assertJSON(
+      FunctionResource(JarResource, "file:///"),
+      JObject(
+        "product-class" -> JString(classOf[FunctionResource].getName),
+        "resourceType" -> JObject("object" -> JString(JarResource.getClass.getName)),
+        "uri" -> "file:///"))
+
+    // Converts BroadcastMode to JSON
+    assertJSON(
+      IdentityBroadcastMode,
+      JObject("object" -> JString(IdentityBroadcastMode.getClass.getName)))
+
+    // Converts CatalogTable to JSON
+    assertJSON(
+      CatalogTable(
+        TableIdentifier("table"),
+        CatalogTableType.MANAGED,
+        CatalogStorageFormat.empty,
+        StructType(StructField("a", IntegerType, true) :: Nil),
+        createTime = 0L),
+
+      JObject(
+        "product-class" -> classOf[CatalogTable].getName,
+        "identifier" -> JObject(
+          "product-class" -> classOf[TableIdentifier].getName,
+          "table" -> "table"
+        ),
+        "tableType" -> JObject(
+          "product-class" -> classOf[CatalogTableType].getName,
+          "name" -> "MANAGED"
+        ),
+        "storage" -> JObject(
+          "product-class" -> classOf[CatalogStorageFormat].getName,
+          "compressed" -> false,
+          "properties" -> JNull
+        ),
+        "schema" -> JObject(
+          "type" -> "struct",
+          "fields" -> List(
+            JObject(
+              "name" -> "a",
+              "type" -> "integer",
+              "nullable" -> true,
+              "metadata" -> JObject(Nil)))),
+        "partitionColumnNames" -> List.empty[String],
+        "owner" -> "",
+        "createTime" -> 0,
+        "lastAccessTime" -> -1,
+        "properties" -> JNull,
+        "unsupportedFeatures" -> List.empty[String]))
+
+    // For unknown case class, returns JNull.
+    val bigValue = new Array[Int](10000)
+    assertJSON(NameValue("name", bigValue), JNull)
+
+    // Converts Seq[TreeNode] to JSON recursively
+    assertJSON(
+      Seq(Literal(1), Literal(2)),
+      List(
+        List(
+          JObject(
+            "class" -> JString(classOf[Literal].getName),
+            "num-children" -> 0,
+            "value" -> "1",
+            "dataType" -> "integer")),
+        List(
+          JObject(
+            "class" -> JString(classOf[Literal].getName),
+            "num-children" -> 0,
+            "value" -> "2",
+            "dataType" -> "integer"))))
+
+    // Other Seq is converted to JNull, to reduce the risk of out of memory
+    assertJSON(Seq(1, 2, 3), JNull)
+
+    // All Map type is converted to JNull, to reduce the risk of out of memory
+    assertJSON(Map("key" -> "value"), JNull)
+
+    // Unknown type is converted to JNull, to reduce the risk of out of memory
+    assertJSON(new Object {}, JNull)
+
+    // Convert all TreeNode children to JSON
+    assertJSON(
+      Union(Seq(JsonTestTreeNode("0"), JsonTestTreeNode("1"))),
+      List(
+        JObject(
+          "class" -> classOf[Union].getName,
+          "num-children" -> 2,
+          "children" -> List(0, 1)),
+        JObject(
+          "class" -> classOf[JsonTestTreeNode].getName,
+          "num-children" -> 0,
+          "arg" -> "0"),
+        JObject(
+          "class" -> classOf[JsonTestTreeNode].getName,
+          "num-children" -> 0,
+          "arg" -> "1")))
+  }
+
+  test("toJSON should not throws java.lang.StackOverflowError") {
+    val udf = ScalaUDF(SelfReferenceUDF(), BooleanType, Seq("col1".attr))
+    // Should not throw java.lang.StackOverflowError
+    udf.toJSON
+  }
+
+  private def compareJSON(leftJson: String, rightJson: String): Unit = {
+    val left = JsonMethods.parse(leftJson)
+    val right = JsonMethods.parse(rightJson)
+    assert(left == right)
   }
 }

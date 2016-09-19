@@ -340,6 +340,18 @@
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-proxy</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-client</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-util</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
@@ -539,7 +551,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.29.Final</version>
+        <version>4.0.41.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -2256,6 +2268,8 @@
               <include>org.spark-project.spark:unused</include>
               <include>org.eclipse.jetty:jetty-io</include>
               <include>org.eclipse.jetty:jetty-http</include>
+              <include>org.eclipse.jetty:jetty-proxy</include>
+              <include>org.eclipse.jetty:jetty-client</include>
               <include>org.eclipse.jetty:jetty-continuation</include>
               <include>org.eclipse.jetty:jetty-servlet</include>
               <include>org.eclipse.jetty:jetty-servlets</include>
@@ -2510,7 +2524,7 @@
     <profile>
       <id>hadoop-2.7</id>
       <properties>
-        <hadoop.version>2.7.2</hadoop.version>
+        <hadoop.version>2.7.3</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>

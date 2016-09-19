@@ -357,8 +357,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
+    if (source.toLowerCase == "hive") {
+      throw new AnalysisException("Cannot create hive serde table with saveAsTable API")
+    }
 
-    val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
+    val sessionState = df.sparkSession.sessionState
+    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val tableIdentWithDB = tableIdent.copy(database = Some(db))
+    // Pass a table identifier with database part, so that `tableExists` won't check temp views
+    // unexpectedly.
+    val tableExists = sessionState.catalog.tableExists(tableIdentWithDB)
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -384,7 +392,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           bucketSpec = getBucketSpec
         )
         val cmd = CreateTable(tableDesc, mode, Some(df.logicalPlan))
-        df.sparkSession.sessionState.executePlan(cmd).toRdd
+        sessionState.executePlan(cmd).toRdd
     }
   }
 
@@ -397,7 +405,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * your external database systems.
    *
    * You can set the following JDBC-specific option(s) for storing JDBC:
+   * <ul>
    * <li>`truncate` (default `false`): use `TRUNCATE TABLE` instead of `DROP TABLE`.</li>
+   * </ul>
    *
    * In case of failures, users should turn off `truncate` option to use `DROP TABLE` again. Also,
    * due to the different behavior of `TRUNCATE TABLE` among DBMS, it's not always safe to use this.
@@ -486,6 +496,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following JSON-specific option(s) for writing JSON files:
+   * <ul>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
@@ -495,6 +506,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * </ul>
    *
    * @since 1.4.0
    */
@@ -510,10 +522,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following Parquet-specific option(s) for writing Parquet files:
+   * <ul>
    * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
    * compression codec to use when saving to file. This can be one of the known case-insensitive
    * shorten names(none, `snappy`, `gzip`, and `lzo`). This will override
    * `spark.sql.parquet.compression.codec`.</li>
+   * </ul>
    *
    * @since 1.4.0
    */
@@ -529,9 +543,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following ORC-specific option(s) for writing ORC files:
+   * <ul>
    * <li>`compression` (default `snappy`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
    * This will override `orc.compress`.</li>
+   * </ul>
    *
    * @since 1.5.0
    * @note Currently, this method can only be used after enabling Hive support
@@ -553,9 +569,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following option(s) for writing text files:
+   * <ul>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
+   * </ul>
    *
    * @since 1.6.0
    */
@@ -571,6 +589,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following CSV-specific option(s) for writing CSV files:
+   * <ul>
    * <li>`sep` (default `,`): sets the single character as a separator for each
    * field and value.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
@@ -593,6 +612,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
