@@ -20,15 +20,15 @@ package org.apache.spark.sql.execution.benchmark
 import org.apache.spark.util.Benchmark
 
 /**
-  * Benchmark to measure performance for BroadcastHashJoinExec.
-  * To run this:
-  *  build/sbt "sql/test-only *benchmark.BroadcastHashJoinBenchmark"
-  *
-  * Benchmarks in this file are skipped in normal builds.
-  */
+ * Benchmark to measure performance for broadcast hash join with duplicated keys.
+ * To run this:
+ *  build/sbt "sql/test-only *benchmark.BroadcastHashJoinBenchmark"
+ *
+ * Benchmarks in this file are skipped in normal builds.
+ */
 class BroadcastHashJoinBenchmark extends BenchmarkBase {
 
-  test("yaoqin") {
+  ignore("BroadcastHashJoin w duplicated keys") {
     val N = 1 << 16
     val M = 1 << 8
 
@@ -71,13 +71,14 @@ class BroadcastHashJoinBenchmark extends BenchmarkBase {
     benchmark.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_51-b16 on Windows 7 6.1
-    Intel64 Family 6 Model 45 Stepping 7, GenuineIntel
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_65-b17 on Mac OS X 10.11.6
+    Intel(R) Core(TM) i5-5287U CPU @ 2.90GHz
+
     BroadcastHashJoin w duplicated keys:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    codegen = F                                    615 /  652          0.1        9383.0       1.0X
-    codegen = T avoid = F                          374 /  499          0.2        5713.6       1.6X
-    codegen = T avoid = T                          234 /  527          0.3        3574.9       2.6X
+    codegen = F                                    226 /  344          0.3        3447.1       1.0X
+    codegen = T avoid = F                          168 /  173          0.4        2565.2       1.3X
+    codegen = T avoid = T                          101 /  117          0.7        1535.5       2.2X
     */
   }
 }
