@@ -587,15 +587,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       val killResponse = adjustTotalExecutors.flatMap(killExecutors)(ThreadUtils.sameThread)
 
-      def execKilled(killStatus: Boolean): Future[Seq[String]] = Future.successful(
-        if (killStatus) {
-          executorsToKill
-        } else {
-          Seq.empty[String]
-        }
-      )
-
-      killResponse.flatMap(flag => execKilled(flag))(ThreadUtils.sameThread)
+      killResponse.flatMap(killSuccessful =>
+        Future.successful ( if (killSuccessful) executorsToKill else Seq.empty[String])
+      )(ThreadUtils.sameThread)
     }
 
     defaultAskTimeout.awaitResult(response)

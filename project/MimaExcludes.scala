@@ -812,6 +812,9 @@ object MimaExcludes {
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ui.exec.ExecutorsListener.executorToTotalCores"),
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ui.exec.ExecutorsListener.executorToTasksMax"),
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ui.exec.ExecutorsListener.executorToJvmGCTime")
+    ) ++ Seq(
+      // [SPARK-17365][Core] Remove/Kill multiple executors together to reduce RPC call time
+      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.SparkContext")
     )
   }
 

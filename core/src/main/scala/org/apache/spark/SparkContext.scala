@@ -1584,14 +1584,13 @@ class SparkContext(config: SparkConf) extends Logging {
    * @return whether the request is received.
    */
   private[spark] def killAndReplaceExecutor(executorId: String): Boolean = {
-    val killResponse = schedulerBackend match {
+    schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(Seq(executorId), replace = true, force = true)
+        b.killExecutors(Seq(executorId), replace = true, force = true).nonEmpty
       case _ =>
         logWarning("Killing executors is only supported in coarse-grained mode")
-        Seq.empty[String]
+        false
     }
-    killResponse.nonEmpty
   }
 
   /** The version of Spark on which this application is running. */

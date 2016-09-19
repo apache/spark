@@ -273,18 +273,18 @@ class ExecutorAllocationManagerSuite
 
     // Keep removing until the limit is reached
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(removeExecutors(manager, Seq("1")))
+    assert(removeExecutors(manager, Seq("1")) == Seq("1"))
     assert(executorsPendingToRemove(manager).size === 1)
     assert(executorsPendingToRemove(manager).contains("1"))
-    assert(removeExecutors(manager, Seq("2", "3")))
+    assert(removeExecutors(manager, Seq("2", "3")) == Seq("2", "3"))
     assert(executorsPendingToRemove(manager).size === 3)
     assert(executorsPendingToRemove(manager).contains("2"))
     assert(executorsPendingToRemove(manager).contains("3"))
     assert(!removeExecutor(manager, "100")) // remove non-existent executors
-    assert(!removeExecutors(manager, Seq("101", "102")))
+    assert(!(removeExecutors(manager, Seq("101", "102")) == Seq("101", "102")))
     assert(executorsPendingToRemove(manager).size === 3)
     assert(removeExecutor(manager, "4"))
-    assert(removeExecutors(manager, Seq("5")))
+    assert(removeExecutors(manager, Seq("5")) == Seq("5"))
     assert(!removeExecutor(manager, "6")) // reached the limit of 5
     assert(executorsPendingToRemove(manager).size === 5)
     assert(executorsPendingToRemove(manager).contains("4"))
@@ -311,7 +311,7 @@ class ExecutorAllocationManagerSuite
     // This should still fail because the number pending + running is still at the limit
     assert(!removeExecutor(manager, "7"))
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(!removeExecutors(manager, Seq("8")))
+    assert(!(removeExecutors(manager, Seq("8")) == Seq("8")))
     assert(executorsPendingToRemove(manager).isEmpty)
   }
 
@@ -335,7 +335,7 @@ class ExecutorAllocationManagerSuite
 
     // Remove until limit
     assert(removeExecutor(manager, "1"))
-    assert(removeExecutors(manager, Seq("2", "3")))
+    assert(removeExecutors(manager, Seq("2", "3")) == Seq("2", "3"))
     assert(!removeExecutor(manager, "4")) // lower limit reached
     assert(!removeExecutor(manager, "5"))
     onExecutorRemoved(manager, "1")
@@ -347,7 +347,7 @@ class ExecutorAllocationManagerSuite
     assert(addExecutors(manager) === 2) // upper limit reached
     assert(addExecutors(manager) === 0)
     assert(!removeExecutor(manager, "4")) // still at lower limit
-    assert(!removeExecutors(manager, Seq("5")))
+    assert(!(removeExecutors(manager, Seq("5")) == Seq("5")))
     onExecutorAdded(manager, "9")
     onExecutorAdded(manager, "10")
     onExecutorAdded(manager, "11")
@@ -356,7 +356,7 @@ class ExecutorAllocationManagerSuite
     assert(executorIds(manager).size === 10)
 
     // Remove succeeds again, now that we are no longer at the lower limit
-    assert(removeExecutors(manager, Seq("4", "5", "6")))
+    assert(removeExecutors(manager, Seq("4", "5", "6")) == Seq("4", "5", "6"))
     assert(removeExecutor(manager, "7"))
     assert(executorIds(manager).size === 10)
     assert(addExecutors(manager) === 0)
@@ -1002,7 +1002,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _updateAndSyncNumExecutorsTarget =
     PrivateMethod[Int]('updateAndSyncNumExecutorsTarget)
   private val _removeExecutor = PrivateMethod[Boolean]('removeExecutor)
-  private val _removeExecutors = PrivateMethod[Boolean]('removeExecutors)
+  private val _removeExecutors = PrivateMethod[Seq[String]]('removeExecutors)
   private val _onExecutorAdded = PrivateMethod[Unit]('onExecutorAdded)
   private val _onExecutorRemoved = PrivateMethod[Unit]('onExecutorRemoved)
   private val _onSchedulerBacklogged = PrivateMethod[Unit]('onSchedulerBacklogged)
@@ -1058,7 +1058,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager invokePrivate _removeExecutor(id)
   }
 
-  private def removeExecutors(manager: ExecutorAllocationManager, ids: Seq[String]): Boolean = {
+  private def removeExecutors(manager: ExecutorAllocationManager, ids: Seq[String]): Seq[String] = {
     manager invokePrivate _removeExecutors(ids)
   }
 

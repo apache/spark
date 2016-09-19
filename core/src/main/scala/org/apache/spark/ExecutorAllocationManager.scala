@@ -280,7 +280,7 @@ private[spark] class ExecutorAllocationManager(
 
     updateAndSyncNumExecutorsTarget(now)
 
-    val executorIdsToBeRemoved = new ArrayBuffer[String]
+    val executorIdsToBeRemoved = ArrayBuffer[String]()
     removeTimes.retain { case (executorId, expireTime) =>
       val expired = now >= expireTime
       if (expired) {
@@ -289,7 +289,7 @@ private[spark] class ExecutorAllocationManager(
       }
       !expired
     }
-    if(executorIdsToBeRemoved.size != 0) {
+    if (executorIdsToBeRemoved.nonEmpty) {
       removeExecutors(executorIdsToBeRemoved)
     }
   }
@@ -398,30 +398,27 @@ private[spark] class ExecutorAllocationManager(
 
   /**
    * Request the cluster manager to remove the given executors.
-   * Return whether the request is acknowledged. Ideally we should be returning the list of
-   * executors which were removed as the requested executors and the one's actually removed can be
-   * different (CoarseGrainedSchedulerBackend can filter some executors). To avoid breaking the API
-   * we continue to return a Boolean.
+   * Returns the list of executors which are removed.
    */
-  private def removeExecutors(executors: Seq[String]): Boolean = synchronized {
-
+  private def removeExecutors(executors: Seq[String]): Seq[String] = synchronized {
     val executorIdsToBeRemoved = new ArrayBuffer[String]
 
     logInfo("Request to remove executorIds: " + executors.mkString(", "))
-    val numExistingExecutors = executorIds.size - executorsPendingToRemove.size
-    for(executorId <- executors) {
-      // Do not kill the executor if we have already reached the lower bound
-      val newExecutorTotal = numExistingExecutors - executorIdsToBeRemoved.size
+    val numExistingExecutors = allocationManager.executorIds.size - executorsPendingToRemove.size
+
+    var newExecutorTotal = numExistingExecutors
+    executors.foreach { executorIdToBeRemoved =>
       if (newExecutorTotal - 1 < minNumExecutors) {
-        logDebug(s"Not removing idle executor $executorId because there are only " +
-          s"$numExistingExecutors executor(s) left (limit $minNumExecutors)")
-      } else if (canBeKilled(executorId)) {
-        executorIdsToBeRemoved += executorId
+        logDebug(s"Not removing idle executor $executorIdToBeRemoved because there are only " +
+          s"$newExecutorTotal executor(s) left (limit $minNumExecutors)")
+      } else if (canBeKilled(executorIdToBeRemoved)) {
+        executorIdsToBeRemoved += executorIdToBeRemoved
+        newExecutorTotal -= 1
       }
     }
 
     if (executorIdsToBeRemoved.isEmpty) {
-      return false
+      return Seq.empty[String]
     }
 
     // Send a request to the backend to kill this executor(s)
@@ -430,22 +427,20 @@ private[spark] class ExecutorAllocationManager(
     } else {
       client.killExecutors(executorIdsToBeRemoved)
     }
-
+    // reset the newExecutorTotal to the existing number of executors
+    newExecutorTotal = numExistingExecutors
     if (testing || executorsRemoved.nonEmpty) {
-      val numExistingExecutors = allocationManager.executorIds.size - executorsPendingToRemove.size
-      var index = 0
-      for(index <- 0 until executorsRemoved.size) {
-        val removedExecutorId = executorsRemoved(index)
-        val newExecutorTotal = numExistingExecutors - (index + 1)
+      executorsRemoved.foreach { removedExecutorId =>
+        newExecutorTotal -= 1
         logInfo(s"Removing executor $removedExecutorId because it has been idle for " +
           s"$executorIdleTimeoutS seconds (new desired total will be $newExecutorTotal)")
         executorsPendingToRemove.add(removedExecutorId)
       }
-      true
+      executorsRemoved
     } else {
       logWarning(s"Unable to reach the cluster manager to kill executor/s " +
-        executorIdsToBeRemoved.mkString(",") + "or no executor eligible to kill!")
-      false
+        "executorIdsToBeRemoved.mkString(\",\") or no executor eligible to kill!")
+      Seq.empty[String]
     }
   }
 
@@ -454,7 +449,8 @@ private[spark] class ExecutorAllocationManager(
    * Return whether the request is acknowledged.
    */
   private def removeExecutor(executorId: String): Boolean = synchronized {
-    removeExecutors(Seq(executorId))
+    val executorsRemoved = removeExecutors(Seq(executorId))
+    executorsRemoved.nonEmpty && executorsRemoved(0) == executorId
   }
 
   /**
