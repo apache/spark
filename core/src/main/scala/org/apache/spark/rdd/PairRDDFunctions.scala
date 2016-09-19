@@ -265,7 +265,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val samplingFunc = if (withReplacement) {
       StratifiedSamplingUtils.getPoissonSamplingFunction(self, fractions, false, seed)
     } else {
-      StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, false, seed)
+      StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, false, seed)._1
     }
     self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
   }
@@ -295,15 +295,62 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val samplingFunc = if (withReplacement) {
       StratifiedSamplingUtils.getPoissonSamplingFunction(self, fractions, true, seed)
     } else {
-      StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, true, seed)
+      StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, true, seed)._1
     }
     self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
   }
 
   /**
-   * Merge the values for each key using an associative and commutative reduce function. This will
-   * also perform the merging locally on each mapper before sending results to a reducer, similarly
-   * to a "combiner" in MapReduce.
+   * ::Experimental::
+   * Return random, non-overlapping splits of this RDD sampled by key (via stratified sampling)
+   * with each split containing exactly math.ceil(numItems * samplingRate) for each stratum.
+   *
+   * This method differs from [[sampleByKey]] and [[sampleByKeyExact]] in that it provides random
+   * splits (and their complements) instead of just a subsample of the data. This requires
+   * segmenting random keys into ranges with upper and lower bounds instead of segmenting the keys
+   * into a high/low bisection of the entire dataset.
+   *
+   * @param weights array of maps of (key -> samplingRate) pairs for each split, normed by key
+   * @param exact boolean specifying whether to use exact subsampling
+   * @param seed seed for the random number generator
+   * @return array of tuples containing the subsample and complement RDDs for each split
+   */
+  @Experimental
+  def randomSplitByKey(
+     weights: Array[Map[K, Double]],
+     exact: Boolean = false,
+     seed: Long = Utils.random.nextLong): Array[(RDD[(K, V)], RDD[(K, V)])] = self.withScope {
+
+    require(weights.flatMap(_.values).forall(v => v >= 0.0), "Negative sampling rates.")
+    if (weights.length > 1) {
+      require(weights.map(m => m.keys.toSet).sliding(2).forall(t => t(0) == t(1)),
+        "randomSplitByKey(): Each split must specify fractions for each key.")
+    }
+    require(weights.nonEmpty, "randomSplitByKey(): Split weights cannot be empty.")
+    val sumWeights = weights.foldLeft(mutable.HashMap.empty[K, Double].withDefaultValue(0.0)) {
+      case (acc, fractions) =>
+        fractions.foreach { case (k, v) => acc(k) += v }
+        acc
+    }
+    val normedWeights = weights.map { case fractions =>
+      fractions.map { case (k, v) =>
+        val keySum = sumWeights(k)
+        k -> (if (keySum > 0.0) v / keySum else 0.0)
+      }
+    }
+    val samplingFuncs =
+      StratifiedSamplingUtils.getBernoulliCellSamplingFunctions(self, normedWeights, exact, seed)
+
+    samplingFuncs.map { case (func, complementFunc) =>
+      (self.mapPartitionsWithIndex(func, preservesPartitioning = true),
+        self.mapPartitionsWithIndex(complementFunc, preservesPartitioning = true))
+    }.toArray
+  }
+
+  /**
+   * Merge the values for each key using an associative reduce function. This will also perform
+   * the merging locally on each mapper before sending results to a reducer, similarly to a
+   * "combiner" in MapReduce.
    */
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = self.withScope {
     combineByKeyWithClassTag[V]((v: V) => v, func, func, partitioner)

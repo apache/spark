@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import java.io.IOException
 
-import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
 import org.apache.commons.math3.distribution.{BinomialDistribution, PoissonDistribution}
@@ -166,6 +166,126 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     for (samplingRate <- List(0.01, 0.05, 0.1, 0.5)) {
       StratifiedAuxiliary.testSampleExact(stratifiedData, samplingRate, defaultSeed, n)
     }
+  }
+
+  test("randomSplitByKey exact") {
+    val defaultSeed = 1L
+
+    // vary RDD size
+    for (n <- List(100, 1000, 10000)) {
+      val data = sc.parallelize(1 to n, 2)
+      val fractionPositive = 0.3
+      val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+      val keys = Array("0", "1")
+      val splitWeights = Array(0.3, 0.2, 0.5)
+      val weights: Array[scala.collection.Map[String, Double]] =
+        splitWeights.map(w => keys.map(k => (k, w)).toMap)
+      StratifiedAuxiliary.testSplits(stratifiedData, weights, defaultSeed, n, true)
+    }
+
+    // vary fractionPositive
+    for (fractionPositive <- List(0.1, 0.3, 0.5, 0.7, 0.9)) {
+      val n = 100
+      val data = sc.parallelize(1 to n, 2)
+      val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+      val keys = Array("0", "1")
+      val splitWeights = Array(0.3, 0.2, 0.5)
+      val weights: Array[scala.collection.Map[String, Double]] =
+        splitWeights.map(w => keys.map(k => (k, w)).toMap)
+      StratifiedAuxiliary.testSplits(stratifiedData, weights, defaultSeed, n, true)
+    }
+
+    // use same data for remaining tests
+    val n = 100
+    val fractionPositive = 0.3
+    val data = sc.parallelize(1 to n, 2)
+    val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+    val keys = Array("0", "1")
+
+    // use different weights for each key in the split
+    val unevenWeights: Array[scala.collection.Map[String, Double]] =
+      Array(Map("0" -> 0.2, "1" -> 0.3), Map("0" -> 0.1, "1" -> 0.4), Map("0" -> 0.7, "1" -> 0.3))
+    StratifiedAuxiliary.testSplits(stratifiedData, unevenWeights, defaultSeed, n, true)
+
+    // vary the seed
+    val splitWeights = Array(0.3, 0.2, 0.5)
+    val weights: Array[scala.collection.Map[String, Double]] =
+      splitWeights.map(w => keys.map(k => (k, w)).toMap)
+    for (seed <- defaultSeed to defaultSeed + 3L) {
+      StratifiedAuxiliary.testSplits(stratifiedData, weights, seed, n, true)
+    }
+
+    // vary the number of splits
+    for (numSplits <- 1 to 3) {
+      val splitWeights = Array.fill(numSplits)(1.0) // check normalization too
+      val weights: Array[scala.collection.Map[String, Double]] =
+        splitWeights.map(w => keys.map(k => (k, w)).toMap)
+      StratifiedAuxiliary.testSplits(stratifiedData, weights, defaultSeed, n, true)
+    }
+    val thrown = intercept[IllegalArgumentException] {
+      stratifiedData.randomSplitByKey(Array.empty[scala.collection.Map[String, Double]], true, 42L)
+    }
+    assert(thrown.getMessage.contains("weights cannot be empty"))
+  }
+
+  test("randomSplitByKey") {
+    val defaultSeed = 1L
+
+    // vary RDD size
+    for (n <- List(500, 1000, 10000)) {
+      val data = sc.parallelize(1 to n, 2)
+      val fractionPositive = 0.3
+      val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+      val keys = Array("0", "1")
+      val splitWeights = Array(0.3, 0.2, 0.5)
+      val weights: Array[scala.collection.Map[String, Double]] =
+        splitWeights.map(w => keys.map(k => (k, w)).toMap)
+      StratifiedAuxiliary.testSplits(stratifiedData, weights, defaultSeed, n, false)
+    }
+
+    // vary fractionPositive
+    for (fractionPositive <- List(0.1, 0.3, 0.5, 0.7, 0.9)) {
+      val n = 500
+      val data = sc.parallelize(1 to n, 2)
+      val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+      val keys = Array("0", "1")
+      val splitWeights = Array(0.3, 0.2, 0.5)
+      val weights: Array[scala.collection.Map[String, Double]] =
+        splitWeights.map(w => keys.map(k => (k, w)).toMap)
+      StratifiedAuxiliary.testSplits(stratifiedData, weights, defaultSeed, n, false)
+    }
+
+    // use same data for remaining tests
+    val n = 500
+    val fractionPositive = 0.3
+    val data = sc.parallelize(1 to n, 2)
+    val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+    val keys = Array("0", "1")
+
+    // use different weights for each key in the split
+    val unevenWeights: Array[scala.collection.Map[String, Double]] =
+      Array(Map("0" -> 0.2, "1" -> 0.3), Map("0" -> 0.1, "1" -> 0.4), Map("0" -> 0.7, "1" -> 0.3))
+    StratifiedAuxiliary.testSplits(stratifiedData, unevenWeights, defaultSeed, n, false)
+
+    // vary the seed
+    val splitWeights = Array(0.3, 0.2, 0.5)
+    val weights: Array[scala.collection.Map[String, Double]] =
+      splitWeights.map(w => keys.map(k => (k, w)).toMap)
+    for (seed <- defaultSeed to defaultSeed + 5L) {
+      StratifiedAuxiliary.testSplits(stratifiedData, weights, seed, n, false)
+    }
+
+    // vary the number of splits
+    for (numSplits <- 1 to 5) {
+      val splitWeights = Array.fill(numSplits)(1.0) // check normalization too
+      val weights: Array[scala.collection.Map[String, Double]] =
+        splitWeights.map(w => keys.map(k => (k, w)).toMap)
+      StratifiedAuxiliary.testSplits(stratifiedData, weights, defaultSeed, n, false)
+    }
+    val thrown = intercept[IllegalArgumentException] {
+      stratifiedData.randomSplitByKey(Array.empty[scala.collection.Map[String, Double]], false, 42L)
+    }
+    assert(thrown.getMessage.contains("weights cannot be empty"))
   }
 
   test("reduceByKey") {
@@ -646,6 +766,20 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       }
     }
 
+    def checkSplitSize(exact: Boolean,
+        expected: Long,
+        actual: Long,
+        p: Double): Unit = {
+      if (exact) {
+        // all splits will not be exact, but must be within 1 of expected size
+        assert(math.abs(expected - actual) <= 1)
+      } else {
+        val stdev = math.sqrt(expected * p * (1 - p))
+        // Very forgiving margin since we're dealing with very small sample sizes most of the time
+        assert(math.abs(actual - expected) <= 6 * stdev)
+      }
+    }
+
     def testSampleExact(stratifiedData: RDD[(String, Int)],
         samplingRate: Double,
         seed: Long,
@@ -660,6 +794,67 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
         n: Long): Unit = {
       testBernoulli(stratifiedData, false, samplingRate, seed, n)
       testPoisson(stratifiedData, false, samplingRate, seed, n)
+    }
+
+    def testSplits(
+        stratifiedData: RDD[(String, Int)],
+        splitWeights: Array[scala.collection.Map[String, Double]],
+        seed: Long,
+        n: Int,
+        exact: Boolean): Unit = {
+
+      def countByKey[K, V](xs: TraversableOnce[(K, V)]): Map[K, Int] = {
+        xs.foldLeft(HashMap.empty[K, Int].withDefaultValue(0)) { case (acc, (k, v)) =>
+          acc(k) += 1
+          acc
+        }.toMap
+      }
+
+      val baseFold = splitWeights.head.mapValues(_ => 0.0)
+      val totalWeightByKey = splitWeights.foldLeft(baseFold) { case (cumWeights, weights) =>
+        cumWeights.map { case (k, sum) => (k, sum + weights(k)) }
+      }
+      val normedWeights = splitWeights.map{weights =>
+        weights.map { case(k, v) => (k, v / totalWeightByKey(k))}
+      }
+
+      val splits = stratifiedData.randomSplitByKey(splitWeights, exact, seed)
+      val data = stratifiedData.collect()
+      val dataSet = data.toSet
+      val totalCounts = countByKey(data)
+
+      val sampleSet = scala.collection.mutable.Set[(String, Int)]()
+      splits.zip(normedWeights).foreach { case ((sample, complement), fractions) =>
+        val takeSample = sample.collect()
+        val takeComplement = complement.collect()
+
+        // no duplicates in samples
+        assert(takeSample.length === takeSample.toSet.size)
+        assert(takeComplement.length === takeComplement.toSet.size)
+
+        val sampleCounts = countByKey(takeSample)
+        val complementCounts = countByKey(takeComplement)
+        val observedTotals = totalCounts.map { case (k, v) =>
+          k -> (sampleCounts.getOrElse(k, 0) + complementCounts.getOrElse(k, 0))
+        }
+        assert(observedTotals === totalCounts)
+
+        sampleCounts.foreach { case (k, count) =>
+          val expectedCount = math.ceil(totalCounts(k) * fractions(k)).toInt
+          checkSplitSize(exact, expectedCount, count, fractions(k))
+        }
+        complementCounts.foreach { case (k, count) =>
+          val expectedCount = math.ceil(totalCounts(k) * (1 - fractions(k))).toInt
+          checkSplitSize(exact, expectedCount, count, fractions(k))
+        }
+
+        sampleSet ++= takeSample
+        val samplesPlusComplements = (takeSample ++ takeComplement).toSet
+        assert(samplesPlusComplements === dataSet)
+      }
+
+      // union of all samples equals original data
+      assert(sampleSet === dataSet)
     }
 
     // Without replacement validation

@@ -22,7 +22,7 @@ import org.apache.spark.ml.{Estimator, Model, Pipeline}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
-import org.apache.spark.ml.feature.HashingTF
+import org.apache.spark.ml.feature.{HashingTF, LabeledPoint}
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.param.shared.HasInputCol
@@ -55,6 +55,7 @@ class CrossValidatorSuite
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setNumFolds(3)
+      .setStratifiedCol("label")
     val cvModel = cv.fit(dataset)
 
     // copied model must have the same paren.
@@ -109,6 +110,8 @@ class CrossValidatorSuite
       .setEstimator(est)
       .setEstimatorParamMaps(paramMaps)
       .setEvaluator(eval)
+      .setNumFolds(3)
+      .setStratifiedCol("label")
 
     cv.transformSchema(new StructType()) // This should pass.
 
@@ -117,6 +120,36 @@ class CrossValidatorSuite
     intercept[IllegalArgumentException] {
       cv.transformSchema(new StructType())
     }
+  }
+
+  test("stratified vs. not stratified cross validation") {
+    val numFolds = 10
+    val data = Seq.tabulate(100) { i =>
+      if (i >= numFolds) {
+        LabeledPoint(0.0, Vectors.dense(1.0)) // 1 per split
+      } else {
+        LabeledPoint(1.0, Vectors.dense(1.0))
+      }
+    }
+    val df = spark.createDataFrame(data)
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.maxIter, Array(2))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val cv = new CrossValidator()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setNumFolds(numFolds)
+      .setSeed(42L)
+    val notStratifiedModel = cv.fit(df)
+    cv.setStratifiedCol("label")
+    val stratifiedModel = cv.fit(df)
+    // without stratified sampling some of the splits will not contain both examples
+    // so some of the metrics will be < 0.5, bringing down the avg metrics.
+    assert(stratifiedModel.avgMetrics.forall(_ === 0.5))
+    assert(notStratifiedModel.avgMetrics.exists(_ != 0.5))
   }
 
   test("read/write: CrossValidator with simple estimator") {

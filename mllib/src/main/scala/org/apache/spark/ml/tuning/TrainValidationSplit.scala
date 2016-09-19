@@ -29,6 +29,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -87,9 +88,15 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group setParam */
+  @Since("2.1.0")
+  def setStratifiedCol(value: String): this.type = set(stratifiedCol, value)
+  setDefault(stratifiedCol -> "")
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): TrainValidationSplitModel = {
     val schema = dataset.schema
+    val sparkSession = dataset.sparkSession
     transformSchema(schema, logging = true)
     val est = $(estimator)
     val eval = $(evaluator)
@@ -98,7 +105,21 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val metrics = new Array[Double](epm.length)
 
     val Array(trainingDataset, validationDataset) =
-      dataset.randomSplit(Array($(trainRatio), 1 - $(trainRatio)), $(seed))
+      if ($(stratifiedCol).nonEmpty) {
+        val stratifiedColIndex = schema.fieldNames.indexOf($(stratifiedCol))
+        val pairData = dataset.toDF.rdd.map(row => (row(stratifiedColIndex), row))
+        val keys = pairData.keys.distinct.collect()
+        val weights: Array[scala.collection.Map[Any, Double]] =
+          Array(keys.map((_, $(trainRatio))).toMap, keys.map((_, 1 - $(trainRatio))).toMap)
+        val splitsWithKeys = pairData.randomSplitByKey(weights, exact = true, $(seed))
+        val Array(training, validation) =
+          splitsWithKeys.map { case (subsample, complement) => subsample.values }
+        Array(sparkSession.createDataFrame(training, schema),
+          sparkSession.createDataFrame(validation, schema))
+      } else {
+        dataset.randomSplit(Array($(trainRatio), 1 - $(trainRatio)), $(seed))
+      }
+
     trainingDataset.cache()
     validationDataset.cache()
 

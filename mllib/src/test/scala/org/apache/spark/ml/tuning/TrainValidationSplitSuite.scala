@@ -19,9 +19,10 @@ package org.apache.spark.ml.tuning
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.classification.{DecisionTreeClassifier, LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
-import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
+import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, MulticlassClassificationEvaluator, RegressionEvaluator}
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
@@ -49,12 +50,47 @@ class TrainValidationSplitSuite
       .setEvaluator(eval)
       .setTrainRatio(0.5)
       .setSeed(42L)
+      .setStratifiedCol("label")
+
     val cvModel = cv.fit(dataset)
     val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
     assert(cv.getTrainRatio === 0.5)
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
     assert(cvModel.validationMetrics.length === lrParamMaps.length)
+  }
+
+  test("stratified") {
+    val data = Seq(
+      List.fill(20)(LabeledPoint(0.0, Vectors.dense(0.0))),
+      List.fill(20)(LabeledPoint(1.0, Vectors.dense(1.0))),
+      List.fill(2)(LabeledPoint(2.0, Vectors.dense(2.0)))
+    ).flatten
+    val df = spark.createDataFrame(data)
+    val trainer = new DecisionTreeClassifier()
+    val dtParamMaps = new ParamGridBuilder()
+      .addGrid(trainer.maxDepth, Array(2))
+      .build()
+    val eval = new MulticlassClassificationEvaluator()
+    val cv = new TrainValidationSplit()
+      .setEstimator(trainer)
+      .setEstimatorParamMaps(dtParamMaps)
+      .setEvaluator(eval)
+      .setTrainRatio(0.5)
+    val nTrials = 5
+    val notStratifiedTrials = (0 until nTrials).map { i =>
+      cv.setSeed(42L + i)
+      val cvModel = cv.fit(df)
+      cvModel.validationMetrics.head
+    }
+    val stratifiedTrials = (0 until nTrials).map { i =>
+      cv.setSeed(42L + i).setStratifiedCol("label")
+      val cvModel = cv.fit(df)
+      cvModel.validationMetrics.head
+    }
+
+    assert(!stratifiedTrials.exists(metric => math.abs(metric - 1.0) > 1e-6))
+    assert(notStratifiedTrials.exists(metric => math.abs(metric - 1.0) > 1e-6))
   }
 
   test("train validation with linear regression") {
@@ -102,6 +138,7 @@ class TrainValidationSplitSuite
       .setEstimatorParamMaps(paramMaps)
       .setEvaluator(eval)
       .setTrainRatio(0.5)
+      .setStratifiedCol("label")
     cv.transformSchema(new StructType()) // This should pass.
 
     val invalidParamMaps = paramMaps :+ ParamMap(est.inputCol -> "")

@@ -210,6 +210,37 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("kFoldStratified") {
+    /*
+     * Most of the functionality of [[kFoldStratified]] is tested in the PairRDD function
+     * `randomSplitByKey`. All that needs to be checked here is that the folds are even
+     * splits for each key.
+     */
+    val defaultSeed = 1
+    val n = 100
+    val data = sc.parallelize(1 to n, 2)
+    val fractionPositive = 0.3
+    val keys = Array("0", "1")
+    val stratifiedData = data.map { x =>
+      if (x > n * fractionPositive) ("0", x) else ("1", x)
+    }
+    val counts = stratifiedData.countByKey()
+    for (numFolds <- 1 to 3) {
+      val folds = kFoldStratified(stratifiedData, numFolds, defaultSeed)
+      val expectedSize = keys.map(k => (k, counts(k) / numFolds.toDouble)).toMap
+      for ((sample, complement) <- folds) {
+        val sampleCounts = sample.countByKey()
+        val complementCounts = complement.countByKey()
+        sampleCounts.foreach { case(key, count) =>
+          assert(math.abs(count - expectedSize(key)) <= 1)
+        }
+        complementCounts.foreach { case(key, count) =>
+          assert(math.abs(count - (counts(key) - expectedSize(key))) <= 1)
+        }
+      }
+    }
+  }
+
   test("loadVectors") {
     val vectors = sc.parallelize(Seq(
       Vectors.dense(1.0, 2.0),
