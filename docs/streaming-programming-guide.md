@@ -657,22 +657,29 @@ methods for creating DStreams from files as input sources.
 
     Special points for HDFS
     
-    For performance and scalability, the HDFS filesystem does not continually update the modification
-    time or even the listed filesize of a file while it is being written to. The algorithm is
+    For performance and scalability, the HDFS filesystem does not update the modification
+    time while it is being written to. Specifically
     
-    + File creation: a zero-byte file is listed, creation and modification time is set to the current
-      time as seen on the NameNode.
-    * File writes: data is buffered, nothing is written until local buffer is flushed
-    * `OutputStream.flush()` call or output buffer full: data is written to HDFS DataNodes. The
-      file length and modification time is only updated when the amount of data being written
-      crosses an HDFS block (64, 128, 256MB or similar).
+    + `FileSystem.create()` creation: a zero-byte file is listed; creation and modification time is
+      set to the current time as seen on the NameNode.
+    * Writes to a file via the output stream returned in the `create()` call: the modification
+      time *does not change*.
     * When `OutputStream.close()` is called, remaining data is written, the file closed and
       the NameNode updated with the final size of the file. The modification time is set to
       the time the file was closed.
-      
-    This means that is near-impossible to determine when a file being actively written to HDFS will
-    have its modification time updated and so changed detected; it will depend on the size of
-    the file being written. To guarantee that changes are picked up in a window, write the file
+    * File opened for appends via an `append()` operation. This does not change the modification
+      time of the file until the `close()` call is made on the output stream.
+    * `FileSystem.setTimes()` can be used to explicitly set the time on a file.  
+    * The rarely used operations:  `FileSystem.concat()`, `createSnapshot()`, `createSymlink()` and
+      `truncate()` all update the modification time.  
+ 
+    This means that when a file is opened, even before data has been written, it may be
+    seen —and if so, read and added to the list of files to convert to an RDD.
+    At this point the fact it is empty will be observed, and so the file omitted from the RDD.
+    However, it will already have been considered to have been seen, *and any updates to the
+    file within the same window will be ignored*. That means that if a file is created and
+    then written to within the same streaming window, its contents may actually be missed. 
+    To guarantee that changes are picked up in a window, write the file
     to a directory which is not being monitored, then, after the file is closed, `rename()` it into
     the destination directory. 
      
@@ -680,18 +687,23 @@ methods for creating DStreams from files as input sources.
     
     Object stores have a different set of limitations.
 
-     + Wildcard directory enumeration may be slow.
-     + The slow-down from having many files to scan for changes is very significant. 
-     + Renaming directories and files can be very slow.
+     + Wildcard directory enumeration can very slow, especially if there are many directories
+       or files to scan.
+     + A file's creation time is also its modification time.
+     + The `FileSystem.setTimes()` command to set file timestamps will be ignored.
+     + `FileSystem.rename(file)` of a single file will update the modification time —but the time to rename is
+       `O(length(file))`.
+     + `FileSystem.rename(directory)` is not atomic, and slower the more data there is to rename. 
+       It may update the modification times of renamed files.
      + Object creation directly though a PUT operation is atomic, irrespective of
        the programming language or library used to upload the data.
-     + The `FileSystem.setTimes()` command to set file timestamps will be ignored.  
      + Writing a file to an object store using Hadoop's APIs is an atomic operation;
        the object is only created via a PUT operation in the final `OutputStream.close()` call.
 
     For this reason, applications using an object store as the direct destination of data
     can use PUT operations to directly publish data for a DStream to pick up —even though this
-    is not the mechanism to use when writing to HDFS or other filesystem.
+    is not the mechanism to use when writing to HDFS or other filesystem. If `rename()` is used,
+    to place the completed files into a monitored directory, expect the operation to be slow.
 
 	For simple text files, there is an easier method `streamingContext.textFileStream(dataDirectory)`. And file streams do not require running a receiver, hence does not require allocating cores.
 
