@@ -744,7 +744,6 @@
       <dependency>
         <groupId>com.spotify</groupId>
         <artifactId>docker-client</artifactId>
-        <classifier>shaded</classifier>
         <version>3.6.6</version>
         <scope>test</scope>
         <exclusions>
