@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -200,22 +200,16 @@ abstract class ProbabilisticClassificationModel[
     if (!isDefined(thresholds)) {
       probability.argmax
     } else {
-      val thresholds: Array[Double] = getThresholds
-      val probabilities = probability.toArray
+      val thresholds = getThresholds
       var argMax = 0
       var max = Double.NegativeInfinity
       var i = 0
       val probabilitySize = probability.size
       while (i < probabilitySize) {
-        if (thresholds(i) == 0.0) {
-          max = Double.PositiveInfinity
+        val scaled = probability(i) / thresholds(i)
+        if (scaled > max) {
+          max = scaled
           argMax = i
-        } else {
-          val scaled = probabilities(i) / thresholds(i)
-          if (scaled > max) {
-            max = scaled
-            argMax = i
-          }
         }
         i += 1
       }

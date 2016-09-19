@@ -123,9 +123,9 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
   /**
    * Set thresholds in multiclass (or binary) classification to adjust the probability of
-   * predicting each class. Array must have length equal to the number of classes, with values >= 0.
+   * predicting each class. Array must have length equal to the number of classes, with values > 0.
    * The class with largest value p/t is predicted, where p is the original probability of that
-   * class and t is the class' threshold.
+   * class and t is the class's threshold.
    *
    * Note: When [[setThresholds()]] is called, any user-set value for [[threshold]] will be cleared.
    *       If both [[threshold]] and [[thresholds]] are set in a ParamMap, then they must be

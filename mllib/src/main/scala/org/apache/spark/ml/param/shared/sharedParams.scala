@@ -176,10 +176,24 @@ private[ml] trait HasThreshold extends Params {
 private[ml] trait HasThresholds extends Params {
 
   /**
-   * Param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.
+   * Defines "thresholds" for each class. These do not, actually, define the minimum
+   * probability per class for that class to be chosen. They act like like 'cutoff' values in
+   * R's [[https://cran.r-project.org/web/packages/randomForest/randomForest.pdf randomForest]]
+   * package, which ironically are also not cutoffs. That is, a class may be selected even if its
+   * probability does not exceed the threshold.
+   *
+   * Array must have length equal to the number of classes, with values > 0.
+   * The class with largest value p/t is predicted, where p is the original probability of that
+   * class and t is the class's threshold.
+   *
    * @group param
    */
-  final val thresholds: DoubleArrayParam = new DoubleArrayParam(this, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold", (t: Array[Double]) => t.forall(_ >= 0))
+  final val thresholds: DoubleArrayParam = new DoubleArrayParam(this, "thresholds",
+    "Thresholds in multi-class classification to adjust the probability of predicting each class. " +
+    "Array must have length equal to the number of classes, with values > 0. " +
+    "The class with largest value p/t is predicted, where p is the original probability of that " +
+    "class and t is the class's threshold",
+    (t: Array[Double]) => t.forall(_ > 0.0))
 
   /** @group getParam */
   def getThresholds: Array[Double] = $(thresholds)
