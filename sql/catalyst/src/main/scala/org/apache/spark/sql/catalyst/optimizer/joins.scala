@@ -104,7 +104,9 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     if (!e.deterministic || SubqueryExpression.hasCorrelatedSubquery(e)) return false
     val attributes = e.references.toSeq
     val emptyRow = new GenericInternalRow(attributes.length)
-    val v = BindReferences.bindReference(e, attributes).eval(emptyRow)
+    val boundE = BindReferences.bindReference(e, attributes)
+    if (boundE.find(_.isInstanceOf[Unevaluable]).isDefined) return false
+    val v = boundE.eval(emptyRow)
     v == null || v == false
   }
 
