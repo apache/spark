@@ -35,6 +35,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.BoundedPriorityQueue
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -555,7 +556,7 @@ class Word2VecModel private[spark] (
       num: Int,
       wordOpt: Option[String]): Array[(String, Double)] = {
     require(num > 0, "Number of similar words should > 0")
-    // TODO: optimize top-k
+
     val fVector = vector.toArray.map(_.toFloat)
     val cosineVec = Array.fill[Float](numWords)(0)
     val alpha: Float = 1
@@ -580,7 +581,15 @@ class Word2VecModel private[spark] (
       ind += 1
     }
 
-    val scored = wordList.zip(cosVec).toSeq.sortBy(-_._2)
+    val ord = new Ordering[(String, Double)] {
+      override def compare(x: (String, Double), y: (String, Double)): Int = x._2.compareTo(y._2)
+    }
+
+    val pq = new BoundedPriorityQueue(num + 1)(ord)
+
+    wordList.zip(cosVec).foreach(tup => pq += tup)
+
+    val scored = pq.toSeq.sortBy(-_._2)
 
     val filtered = wordOpt match {
       case Some(w) => scored.take(num + 1).filter(tup => w != tup._1)
