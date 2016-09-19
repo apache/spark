@@ -22,6 +22,8 @@ import java.lang.reflect.Modifier
 import scala.language.existentials
 import scala.reflect.ClassTag
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
@@ -948,7 +950,8 @@ case class GetExternalRowField(
       }
 
       if (${row.value}.isNullAt($index)) {
-        throw new RuntimeException("The ${index}th field '$fieldName' of input row " +
+        throw new RuntimeException(
+          "The ${index}th field '${StringEscapeUtils.escapeJava(fieldName)}' of input row " +
           "cannot be null.");
       }
 
