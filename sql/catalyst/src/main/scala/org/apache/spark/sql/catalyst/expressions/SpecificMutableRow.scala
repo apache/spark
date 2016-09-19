@@ -242,31 +242,14 @@ final class SpecificMutableRow(val values: Array[MutableValue])
     }
   }
 
-  /**
-    * When reading a hive table with schema evolution from Int to Long,
-    * if hive metastore has Long as its type while parquet files have Int,
-    * SparkSQL need to differentiate the actual type in the parquet files.
-    * Otherwise, it will result in java.lang.ClassCastException:
-    * [[MutableLong]] cannot be cast to [[MutableInt]].
-    */
   override def setInt(ordinal: Int, value: Int): Unit = {
-    values(ordinal) match {
-      case currentValue: MutableInt =>
-        currentValue.isNull = false
-        currentValue.value = value
-      case currentValue: MutableLong =>
-        currentValue.isNull = false
-        currentValue.value = value
-    }
+    val currentValue = values(ordinal).asInstanceOf[MutableInt]
+    currentValue.isNull = false
+    currentValue.value = value
   }
 
   override def getInt(i: Int): Int = {
-    values(i) match {
-      case currentValue: MutableInt =>
-        currentValue.value
-      case currentValue: MutableLong =>
-        currentValue.value.toInt
-    }
+    values(i).asInstanceOf[MutableInt].value
   }
 
   override def setFloat(ordinal: Int, value: Float): Unit = {
