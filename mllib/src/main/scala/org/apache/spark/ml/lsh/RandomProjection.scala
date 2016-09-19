@@ -19,10 +19,9 @@ package org.apache.spark.ml.lsh
 
 import scala.util.Random
 
-import breeze.linalg.functions.euclideanDistance
 import breeze.linalg.normalize
 
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.param.{DoubleParam, Params, ParamValidators}
 import org.apache.spark.ml.util.Identifiable
 
@@ -36,20 +35,20 @@ private[ml] trait RandomProjectionParams extends Params {
 
 class RandomProjectionModel(
     override val uid: String,
-    val randUnitVectors: Array[breeze.linalg.Vector[Double]])
+    val randUnitVectors: Array[Vector])
   extends LSHModel[Vector, RandomProjectionModel] with RandomProjectionParams {
 
   override protected[this] val hashFunction: (Vector) => Vector = {
     key: Vector => {
       val hashValues: Array[Double] = randUnitVectors.map({
-        randUnitVector => Math.floor(key.asBreeze.dot(randUnitVector) / $(bucketLength))
+        randUnitVector => Math.floor(BLAS.dot(key, randUnitVector) / $(bucketLength))
       })
       Vectors.dense(hashValues)
     }
   }
 
-  override protected[this] def keyDistance(x: Vector, y: Vector): Double = {
-    euclideanDistance(x.asBreeze, y.asBreeze)
+  override protected[ml] def keyDistance(x: Vector, y: Vector): Double = {
+    Math.sqrt(Vectors.sqdist(x, y))
   }
 }
 
@@ -58,10 +57,10 @@ class RandomProjection(override val uid: String) extends LSH[Vector, RandomProje
 
   private[this] var inputDim = -1
 
-  private[this] lazy val randUnitVectors: Array[breeze.linalg.Vector[Double]] = {
+  private[this] lazy val randUnitVectors: Array[Vector] = {
     Array.fill($(outputDim)) {
       val randArray = Array.fill(inputDim)(Random.nextGaussian())
-      normalize(breeze.linalg.Vector(randArray))
+      Vectors.fromBreeze(normalize(breeze.linalg.Vector(randArray)))
     }
   }
 

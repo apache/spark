@@ -90,7 +90,7 @@ private[ml] object LSHTest {
 
     // Compute precision and recall
     val correctCount = expected.join(actual, model.getInputCol).count().toDouble
-    (correctCount / expected.count(), correctCount / actual.count())
+    (correctCount / actual.count(), correctCount / expected.count())
   }
 
   /**

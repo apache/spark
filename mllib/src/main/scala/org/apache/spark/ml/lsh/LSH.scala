@@ -131,9 +131,7 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
    */
   def approxNearestNeighbors(dataset: Dataset[_], key: KeyType, k: Int = 1,
                              distCol: String = "distance"): Dataset[_] = {
-    if (k < 1) {
-      throw new Exception(s"Invalid number of nearest neighbors $k")
-    }
+    assert(k > 0, "The number of nearest neighbors cannot be less than 1")
     // Get Hash Value of the key v
     val keyHash = hashFunction(key)
     val modelDataset = transform(dataset)
@@ -202,6 +200,7 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
     val explodedA = processDataset(datasetA, explodeCols)
 
     // If this is a self join, we need to recreate the inputCol of datasetB to avoid ambiguity.
+    // TODO: Remove recreateCol logic once SPARK-17154 is resolved.
     val explodedB = if (datasetA != datasetB) {
       processDataset(datasetB, explodeCols)
     } else {
@@ -220,7 +219,7 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
     )
 
     // Filter the joined datasets where the distance are smaller than the threshold.
-    joinedDatasetWithDist.distinct().filter(col(distCol) < threshold)
+    joinedDatasetWithDist.filter(col(distCol) < threshold).distinct()
   }
 }
 
