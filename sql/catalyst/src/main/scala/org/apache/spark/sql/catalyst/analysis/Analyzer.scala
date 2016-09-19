@@ -116,7 +116,7 @@ class Analyzer(
   )
 
   /**
-   * Substitute child plan with cte definitions
+   * Analyze cte definitions and substitute child plan with analyzed cte definitions.
    */
   object CTESubstitution extends Rule[LogicalPlan] {
     // TODO allow subquery to define CTE
@@ -124,7 +124,7 @@ class Analyzer(
       case With(child, relations) =>
         substituteCTE(child, relations.foldLeft(Seq.empty[(String, LogicalPlan)]) {
           case (resolved, (name, relation)) =>
-            resolved :+ name -> ResolveRelations(substituteCTE(relation, resolved))
+            resolved :+ name -> execute(substituteCTE(relation, resolved))
         })
       case other => other
     }
