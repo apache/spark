@@ -138,11 +138,14 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
 
     // In the origin dataset, find the hash value u that is closest to v
     val hashDistUDF = udf((x: Vector) => hashDistance(x, keyHash), DataTypes.DoubleType)
-    val nearestHashDataset = modelDataset.select(min(hashDistUDF(col($(outputCol)))))
-    val nearestHashValue = nearestHashDataset.collect()(0)(0).asInstanceOf[Double]
+
+    // Compute threshold to get exact k elements.
+    val modelDatasetSortedByHash = modelDataset.sort(hashDistUDF(col($(outputCol)))).limit(k)
+    val thresholdDataset = modelDatasetSortedByHash.select(max(hashDistUDF(col($(outputCol)))))
+    val hashThreshold = thresholdDataset.collect()(0)(0).asInstanceOf[Double]
 
     // Filter the dataset where the hash value equals to u
-    val modelSubset = modelDataset.filter(hashDistUDF(col($(outputCol))) === nearestHashValue)
+    val modelSubset = modelDataset.filter(hashDistUDF(col($(outputCol))) <= hashThreshold)
 
     // Get the top k nearest neighbor by their distance to the key
     val keyDistUDF = udf((x: KeyType) => keyDistance(x, key), DataTypes.DoubleType)
