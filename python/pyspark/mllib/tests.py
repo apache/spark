@@ -285,6 +285,9 @@ class VectorTests(MLlibTestCase):
             for j in range(2):
                 self.assertEqual(mat[i, j], expected[i][j])
 
+        for i, j in [(-1, 0), (4, 1), (3, 4)]:
+            self.assertRaises(IndexError, mat.__getitem__, (i, j))
+
     def test_repr_dense_matrix(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
         self.assertTrue(
@@ -355,6 +358,9 @@ class VectorTests(MLlibTestCase):
             for j in range(4):
                 self.assertEqual(expected[i][j], sm1[i, j])
         self.assertTrue(array_equal(sm1.toArray(), expected))
+
+        for i, j in [(-1, 1), (4, 3), (3, 5)]:
+            self.assertRaises(IndexError, sm1.__getitem__, (i, j))
 
         # Test conversion to dense and sparse.
         smnew = sm1.toDense().toSparse()
