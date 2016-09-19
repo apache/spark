@@ -2713,11 +2713,15 @@ setMethod("from_unixtime", signature(x = "Column"),
 #' @param x a time Column. Must be of TimestampType.
 #' @param windowDuration a string specifying the width of the window, e.g. '1 second',
 #'                       '1 day 12 hours', '2 minutes'. Valid interval strings are 'week',
-#'                       'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
+#'                       'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'. Note that
+#'                       the duration is a fixed length of time, and does not vary over time
+#'                       according to a calendar. For example, '1 day' always means 86,400,000
+#'                       milliseconds, not a calendar day.
 #' @param slideDuration a string specifying the sliding interval of the window. Same format as
 #'                      \code{windowDuration}. A new window will be generated every
 #'                      \code{slideDuration}. Must be less than or equal to
-#'                      the \code{windowDuration}.
+#'                      the \code{windowDuration}. This duration is likewise absolute, and does not
+#'                      vary according to a calendar.
 #' @param startTime the offset with respect to 1970-01-01 00:00:00 UTC with which to start
 #'                  window intervals. For example, in order to have hourly tumbling windows
 #'                  that start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
