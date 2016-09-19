@@ -23,16 +23,13 @@ import java.net.URI
 import scala.util.Random
 
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
-import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.streaming.ExistsThrowsExceptionFileSystem._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
-class FileStreamSourceSuite extends SparkFunSuite
-  with SharedSQLContext
-  with MockitoSugar {
+class FileStreamSourceSuite extends SparkFunSuite with SharedSQLContext {
 
   import FileStreamSource._
 
@@ -104,7 +101,9 @@ class FileStreamSourceSuite extends SparkFunSuite
   }
 }
 
-/** FakeFileSystem to test fallback of the HDFSMetadataLog from FileContext to FileSystem API */
+/** Fake FileSystem to test whether the method `fs.exists` is called during
+ * `DataSource.resolveRelation`.
+ */
 class ExistsThrowsExceptionFileSystem extends RawLocalFileSystem {
   override def getUri: URI = {
     URI.create(s"$scheme:///")
@@ -114,6 +113,7 @@ class ExistsThrowsExceptionFileSystem extends RawLocalFileSystem {
     throw new IllegalArgumentException("Exists shouldn't have been called!")
   }
 
+  /** Simply return an empty file for now. */
   override def listStatus(file: Path): Array[FileStatus] = {
     val emptyFile = new FileStatus()
     emptyFile.setPath(file)
