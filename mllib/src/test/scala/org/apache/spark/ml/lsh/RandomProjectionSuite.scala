@@ -24,21 +24,39 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("RandomProjection") {
     val data = {
-      for (i <- -20 until 20; j <- -20 until 20) yield Vectors.dense(i.toDouble, j.toDouble)
+      for (i <- -5 until 5; j <- -5 until 5) yield Vectors.dense(i.toDouble, j.toDouble)
     }
     val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
 
-    // Project from 2 dimensional Euclidean Space to 10 dimensions
+    // Project from 2 dimensional Euclidean Space to 1 dimensions
+    val rp = new RandomProjection()
+      .setOutputDim(1)
+      .setInputCol("keys")
+      .setOutputCol("values")
+      .setBucketLength(1.0)
+
+    val (falsePositive, falseNegative) = LSHTest.checkLSHProperty(df, rp, 8.0, 2.0)
+    assert(falsePositive < 0.1)
+    assert(falseNegative < 0.1)
+  }
+
+  test("RandomProjection with high dimension data") {
+    val numDim = 100
+    val data = {
+      for (i <- 0 until numDim; j <- Seq(-2, -1, 1, 2))
+        yield Vectors.sparse(numDim, Seq((i, j.toDouble)))
+    }
+    val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
+
+    // Project from 100 dimensional Euclidean Space to 10 dimensions
     val rp = new RandomProjection()
       .setOutputDim(10)
       .setInputCol("keys")
       .setOutputCol("values")
-      .setBucketLength(3.0)
+      .setBucketLength(2.5)
 
-    val model = rp.fit(df)
-
-    model.transform(df).show()
-    model.approxNearestNeighbors(df, Vectors.dense(1.2, 3.4), k = 20).show()
-    model.approxSimilarityJoin(df, df, 1.1).filter("distance != 0.0").show()
+    val (falsePositive, falseNegative) = LSHTest.checkLSHProperty(df, rp, 3.0, 2.0)
+    assert(falsePositive < 0.1)
+    assert(falseNegative < 0.1)
   }
 }

@@ -82,7 +82,7 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
    * @param y Another the point in the metric space
    * @return The distance between x and y in double
    */
-  protected[this] def keyDistance(x: KeyType, y: KeyType): Double
+  protected[ml] def keyDistance(x: KeyType, y: KeyType): Double
 
   /**
    * :: DeveloperApi ::
@@ -94,7 +94,7 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
    * @param y Another hash vector
    * @return The distance between hash vectors x and y in double
    */
-  protected[this] def hashDistance(x: Vector, y: Vector): Double = {
+  protected[ml] def hashDistance(x: Vector, y: Vector): Double = {
     (x.asBreeze - y.asBreeze).toArray.map(math.abs).min
   }
 
