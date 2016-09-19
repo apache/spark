@@ -17,6 +17,9 @@
 
 package org.apache.spark.ml.lsh
 
+import breeze.numerics.{cos, sin}
+import breeze.numerics.constants.Pi
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -75,6 +78,45 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val (precision, recall) = LSHTest.checkApproxNearestNeighbors(rp, df, key, 10)
     assert(precision >= 0.7)
+    assert(recall >= 0.7)
+  }
+
+  test("approxSimilarityJoin for random projection on different dataset") {
+    val dataA = {
+      for (i <- -10 until 10; j <- -10 until 10) yield Vectors.dense(i.toDouble, j.toDouble)
+    }
+    val dfA = spark.createDataFrame(dataA.map(Tuple1.apply)).toDF("keys")
+
+    val dataB = {
+      for (i <- 0 until 24) yield Vectors.dense(10 * sin(Pi / 12 * i), 10 * cos(Pi / 12 * i))
+    }
+    val dfB = spark.createDataFrame(dataB.map(Tuple1.apply)).toDF("keys")
+
+    val rp = new RandomProjection()
+      .setOutputDim(2)
+      .setInputCol("keys")
+      .setOutputCol("values")
+      .setBucketLength(4.0)
+
+    val (precision, recall) = LSHTest.checkApproxSimilarityJoin(rp, dfA, dfB, 1.0)
+    assert(precision == 1.0)
+    assert(recall >= 0.9)
+  }
+
+  test("approxSimilarityJoin for self join") {
+    val data = {
+      for (i <- 0 until 24) yield Vectors.dense(10 * sin(Pi / 12 * i), 10 * cos(Pi / 12 * i))
+    }
+    val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
+
+    val rp = new RandomProjection()
+      .setOutputDim(2)
+      .setInputCol("keys")
+      .setOutputCol("values")
+      .setBucketLength(4.0)
+
+    val (precision, recall) = LSHTest.checkApproxSimilarityJoin(rp, df, df, 3.0)
+    assert(precision == 1.0)
     assert(recall >= 0.7)
   }
 }

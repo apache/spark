@@ -92,4 +92,33 @@ private[ml] object LSHTest {
     val correctCount = expected.join(actual, model.getInputCol).count().toDouble
     (correctCount / expected.count(), correctCount / actual.count())
   }
+
+  /**
+   * Check and compute the precision and recall of approximate similarity join
+   * @param lsh The lsh instance
+   * @param datasetA One of the datasets to join
+   * @param datasetB Another dataset to join
+   * @param threshold The threshold for the distance of record pairs
+   * @tparam KeyType The input key type of LSH
+   * @tparam T The class type of lsh
+   * @return A tuple of two doubles, representing precision and recall rate
+   */
+  def checkApproxSimilarityJoin[KeyType, T <: LSHModel[KeyType, T]]
+  (lsh: LSH[KeyType, T], datasetA: Dataset[_], datasetB: Dataset[_],
+   threshold: Double): (Double, Double) = {
+    val model = lsh.fit(datasetA)
+    val inputCol = model.getInputCol
+
+    // Compute expected
+    val distUDF = udf((x: KeyType, y: KeyType) => model.keyDistance(x, y), DataTypes.DoubleType)
+    val expected = datasetA.as("a").crossJoin(datasetB.as("b"))
+      .filter(distUDF(col(s"a.$inputCol"), col(s"b.$inputCol")) < threshold)
+
+    // Compute actual
+    val actual = model.approxSimilarityJoin(datasetA, datasetB, threshold)
+
+    // Compute precision and recall
+    val correctCount = actual.filter(col("distance") < threshold).count().toDouble
+    (correctCount / actual.count(), correctCount / expected.count())
+  }
 }
