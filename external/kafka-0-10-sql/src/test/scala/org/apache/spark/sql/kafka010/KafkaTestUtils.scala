@@ -167,6 +167,15 @@ class KafkaTestUtils extends Logging {
     createTopic(topic, 1)
   }
 
+  /** Add new paritions to a Kafka topic */
+  def addPartitions(topic: String, partitions: Int): Unit = {
+    AdminUtils.addPartitions(zkUtils, topic, partitions)
+    // wait until metadata is propagated
+    (0 until partitions).foreach { p =>
+      waitUntilMetadataIsPropagated(topic, p)
+    }
+  }
+
   /** Java-friendly function for sending messages to the Kafka broker */
   def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {
     sendMessages(topic, Map(messageToFreq.asScala.mapValues(_.intValue()).toSeq: _*))

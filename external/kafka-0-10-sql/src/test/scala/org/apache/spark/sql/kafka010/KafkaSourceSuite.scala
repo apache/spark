@@ -139,6 +139,7 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.group.id", s"group-$topic")
       .option("kafka.auto.offset.reset", s"latest")
+      .option("kafka.metadata.max.age.ms", "1")
     options.foreach { case (k, v) => reader.option(k, v) }
     val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
     val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
@@ -154,7 +155,12 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
       StartStream(),
       CheckAnswer(2, 3, 4, 5, 6, 7), // Should get the added data
       AddKafkaData(Set(topic), 7, 8),
-      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9)
+      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9),
+      AssertOnQuery("Add partitions") { query: StreamExecution =>
+        testUtils.addPartitions(topic, 10)
+      },
+      AddKafkaData(Set(topic), 9, 10, 11, 12, 13, 14, 15, 16),
+      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
     )
   }
 
@@ -169,6 +175,7 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.group.id", s"group-$topic")
       .option("kafka.auto.offset.reset", s"earliest")
+      .option("kafka.metadata.max.age.ms", "1")
     options.foreach { case (k, v) => reader.option(k, v) }
     val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
     val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
@@ -182,7 +189,12 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
       StopStream,
       AddKafkaData(Set(topic), 7, 8),
       StartStream(),
-      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9)
+      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9),
+      AssertOnQuery("Add partitions") { query: StreamExecution =>
+        testUtils.addPartitions(topic, 10)
+      },
+      AddKafkaData(Set(topic), 9, 10, 11, 12, 13, 14, 15, 16),
+      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
     )
   }
 

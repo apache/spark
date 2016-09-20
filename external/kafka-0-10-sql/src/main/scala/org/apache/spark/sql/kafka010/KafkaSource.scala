@@ -87,7 +87,7 @@ private[kafka010] case class KafkaSource(
   /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = {
     val offset = KafkaSourceOffset(fetchPartitionOffsets(seekToLatest = true))
-    logInfo(s"GetOffset: $offset")
+    logDebug(s"GetOffset: $offset")
     Some(offset)
   }
 
@@ -118,14 +118,15 @@ private[kafka010] case class KafkaSource(
     val sortedExecutors = getSortedExecutorList(sc)
     val numExecutors = sortedExecutors.size
     logDebug("Sorted executors: " + sortedExecutors.mkString(", "))
-    val offsetRanges = sortedTopicPartitions.flatMap { tp =>
-      fromPartitionOffsets.get(tp).map { fromOffset =>
-        val untilOffset = untilPartitionOffsets(tp)
-        val preferredLoc = if (numExecutors > 0) {
-          Some(sortedExecutors(positiveMod(tp.hashCode, numExecutors)))
-        } else None
-        KafkaSourceRDD.OffsetRange(tp, fromOffset, untilOffset, preferredLoc)
-      }
+    val offsetRanges = sortedTopicPartitions.map { tp =>
+      // If fromPartitionOffsets doesn't contain tp, then it's a new partition.
+      // So use 0 as the start offset.
+      val fromOffset = fromPartitionOffsets.get(tp).getOrElse(0L)
+      val untilOffset = untilPartitionOffsets(tp)
+      val preferredLoc = if (numExecutors > 0) {
+        Some(sortedExecutors(positiveMod(tp.hashCode, numExecutors)))
+      } else None
+      KafkaSourceRDD.OffsetRange(tp, fromOffset, untilOffset, preferredLoc)
     }.toArray
 
     // Create a RDD that reads from Kafka and get the (key, value) pair as byte arrays.
