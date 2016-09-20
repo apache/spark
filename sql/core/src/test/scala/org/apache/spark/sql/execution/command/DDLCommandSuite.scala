@@ -243,7 +243,7 @@ class DDLCommandSuite extends PlanTest {
     allSources.foreach { s =>
       val query = s"CREATE TABLE my_tab STORED AS $s"
       val ct = parseAs[CreateTable](query)
-      val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+      val hiveSerde = HiveSerDe.sourceToSerDe(s)
       assert(hiveSerde.isDefined)
       assert(ct.tableDesc.storage.serde == hiveSerde.get.serde)
       assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
@@ -276,7 +276,7 @@ class DDLCommandSuite extends PlanTest {
       val query = s"CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS $s"
       if (supportedSources.contains(s)) {
         val ct = parseAs[CreateTable](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+        val hiveSerde = HiveSerDe.sourceToSerDe(s)
         assert(hiveSerde.isDefined)
         assert(ct.tableDesc.storage.serde == Some("anything"))
         assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
@@ -295,7 +295,7 @@ class DDLCommandSuite extends PlanTest {
       val query = s"CREATE TABLE my_tab ROW FORMAT DELIMITED FIELDS TERMINATED BY ' ' STORED AS $s"
       if (supportedSources.contains(s)) {
         val ct = parseAs[CreateTable](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+        val hiveSerde = HiveSerDe.sourceToSerDe(s)
         assert(hiveSerde.isDefined)
         assert(ct.tableDesc.storage.serde == hiveSerde.get.serde)
         assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
@@ -388,14 +388,19 @@ class DDLCommandSuite extends PlanTest {
     val parsed_view = parser.parsePlan(sql_view)
     val expected_table = AlterTableRenameCommand(
       TableIdentifier("table_name", None),
-      TableIdentifier("new_table_name", None),
+      "new_table_name",
       isView = false)
     val expected_view = AlterTableRenameCommand(
       TableIdentifier("table_name", None),
-      TableIdentifier("new_table_name", None),
+      "new_table_name",
       isView = true)
     comparePlans(parsed_table, expected_table)
     comparePlans(parsed_view, expected_view)
+
+    val e = intercept[ParseException](
+      parser.parsePlan("ALTER TABLE db1.tbl RENAME TO db1.tbl2")
+    )
+    assert(e.getMessage.contains("Can not specify database in table/view name after RENAME TO"))
   }
 
   // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);

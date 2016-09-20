@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.scalacheck.Gen
 import org.scalactic.TripleEqualsSupport.Spread
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 import org.apache.spark.SparkFunSuite
@@ -136,7 +137,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     // some expression is reusing variable names across different instances.
     // This behavior is tested in ExpressionEvalHelperSuite.
     val plan = generateProject(
-      GenerateUnsafeProjection.generate(
+      UnsafeProjection.create(
         Alias(expression, s"Optimized($expression)1")() ::
           Alias(expression, s"Optimized($expression)2")() :: Nil),
       expression)
@@ -289,13 +290,37 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
-      case (result: Double, expected: Spread[Double @unchecked]) =>
-        expected.asInstanceOf[Spread[Double]].isWithin(result)
       case (result: Double, expected: Double) if result.isNaN && expected.isNaN =>
         true
+      case (result: Double, expected: Double) =>
+        relativeErrorComparison(result, expected)
       case (result: Float, expected: Float) if result.isNaN && expected.isNaN =>
         true
       case _ => result == expected
+    }
+  }
+
+  /**
+   * Private helper function for comparing two values using relative tolerance.
+   * Note that if x or y is extremely close to zero, i.e., smaller than Double.MinPositiveValue,
+   * the relative tolerance is meaningless, so the exception will be raised to warn users.
+   *
+   * TODO: this duplicates functions in spark.ml.util.TestingUtils.relTol and
+   * spark.mllib.util.TestingUtils.relTol, they could be moved to common utils sub module for the
+   * whole spark project which does not depend on other modules. See more detail in discussion:
+   * https://github.com/apache/spark/pull/15059#issuecomment-246940444
+   */
+  private def relativeErrorComparison(x: Double, y: Double, eps: Double = 1E-8): Boolean = {
+    val absX = math.abs(x)
+    val absY = math.abs(y)
+    val diff = math.abs(x - y)
+    if (x == y) {
+      true
+    } else if (absX < Double.MinPositiveValue || absY < Double.MinPositiveValue) {
+      throw new TestFailedException(
+        s"$x or $y is extremely close to zero, so the relative tolerance is meaningless.", 0)
+    } else {
+      diff < eps * math.min(absX, absY)
     }
   }
 }

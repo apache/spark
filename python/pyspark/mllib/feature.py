@@ -208,9 +208,8 @@ class StandardScaler(object):
     training set.
 
     :param withMean: False by default. Centers the data with mean
-                     before scaling. It will build a dense output, so this
-                     does not work on sparse input and will raise an
-                     exception.
+                     before scaling. It will build a dense output, so take
+                     care when applying to sparse input.
     :param withStd: True by default. Scales the data to unit
                     standard deviation.
 
@@ -545,8 +544,7 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
 
 @ignore_unicode_prefix
 class Word2Vec(object):
-    """
-    Word2Vec creates vector representation of words in a text corpus.
+    """Word2Vec creates vector representation of words in a text corpus.
     The algorithm first constructs a vocabulary from the corpus
     and then learns vector representation of words in the vocabulary.
     The vector representation can be used as features in
@@ -568,13 +566,19 @@ class Word2Vec(object):
     >>> doc = sc.parallelize(localDoc).map(lambda line: line.split(" "))
     >>> model = Word2Vec().setVectorSize(10).setSeed(42).fit(doc)
 
+    Querying for synonyms of a word will not return that word:
+
     >>> syms = model.findSynonyms("a", 2)
     >>> [s[0] for s in syms]
     [u'b', u'c']
+
+    But querying for synonyms of a vector may return the word whose
+    representation is that vector:
+
     >>> vec = model.transform("a")
     >>> syms = model.findSynonyms(vec, 2)
     >>> [s[0] for s in syms]
-    [u'b', u'c']
+    [u'a', u'b']
 
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
@@ -592,6 +596,7 @@ class Word2Vec(object):
     ...     pass
 
     .. versionadded:: 1.2.0
+
     """
     def __init__(self):
         """
@@ -601,7 +606,7 @@ class Word2Vec(object):
         self.learningRate = 0.025
         self.numPartitions = 1
         self.numIterations = 1
-        self.seed = random.randint(0, sys.maxsize)
+        self.seed = None
         self.minCount = 5
         self.windowSize = 5
 
@@ -676,7 +681,7 @@ class Word2Vec(object):
             raise TypeError("data should be an RDD of list of string")
         jmodel = callMLlibFunc("trainWord2VecModel", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
-                               int(self.numIterations), int(self.seed),
+                               int(self.numIterations), self.seed,
                                int(self.minCount), int(self.windowSize))
         return Word2VecModel(jmodel)
 

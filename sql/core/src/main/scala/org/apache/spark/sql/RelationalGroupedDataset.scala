@@ -128,7 +128,7 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * (Scala-specific) Compute aggregates by specifying a map from column name to
+   * (Scala-specific) Compute aggregates by specifying the column names and
    * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
    *
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
@@ -143,7 +143,9 @@ class RelationalGroupedDataset protected[sql](
    * @since 1.3.0
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
-    agg((aggExpr +: aggExprs).toMap)
+    toDF((aggExpr +: aggExprs).map { case (colName, expr) =>
+      strToExpr(expr)(df(colName).expr)
+    })
   }
 
   /**
@@ -311,7 +313,7 @@ class RelationalGroupedDataset protected[sql](
    */
   def pivot(pivotColumn: String): RelationalGroupedDataset = {
     // This is to prevent unintended OOM errors when the number of distinct values is large
-    val maxValues = df.sparkSession.conf.get(SQLConf.DATAFRAME_PIVOT_MAX_VALUES)
+    val maxValues = df.sparkSession.sessionState.conf.dataFramePivotMaxValues
     // Get the distinct values of the column and sort them so its consistent
     val values = df.select(pivotColumn)
       .distinct()

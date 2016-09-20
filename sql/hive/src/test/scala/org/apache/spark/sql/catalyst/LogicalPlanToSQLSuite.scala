@@ -23,7 +23,10 @@ import java.nio.file.{Files, NoSuchFileException, Paths}
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -46,9 +49,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    sql("DROP TABLE IF EXISTS parquet_t0")
-    sql("DROP TABLE IF EXISTS parquet_t1")
-    sql("DROP TABLE IF EXISTS parquet_t2")
+    (0 to 3).foreach { i =>
+      sql(s"DROP TABLE IF EXISTS parquet_t$i")
+    }
     sql("DROP TABLE IF EXISTS t0")
 
     spark.range(10).write.saveAsTable("parquet_t0")
@@ -84,10 +87,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   override protected def afterAll(): Unit = {
     try {
-      sql("DROP TABLE IF EXISTS parquet_t0")
-      sql("DROP TABLE IF EXISTS parquet_t1")
-      sql("DROP TABLE IF EXISTS parquet_t2")
-      sql("DROP TABLE IF EXISTS parquet_t3")
+      (0 to 3).foreach { i =>
+        sql(s"DROP TABLE IF EXISTS parquet_t$i")
+      }
       sql("DROP TABLE IF EXISTS t0")
     } finally {
       super.afterAll()
@@ -180,7 +182,11 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     }
 
     test("Test should fail if the SQL query cannot be regenerated") {
-      spark.range(10).createOrReplaceTempView("not_sql_gen_supported_table_so_far")
+      case class Unsupported() extends LeafNode with MultiInstanceRelation {
+        override def newInstance(): Unsupported = copy()
+        override def output: Seq[Attribute] = Nil
+      }
+      Unsupported().createOrReplaceTempView("not_sql_gen_supported_table_so_far")
       sql("select * from not_sql_gen_supported_table_so_far")
       val m3 = intercept[org.scalatest.exceptions.TestFailedException] {
         checkSQL("select * from not_sql_gen_supported_table_so_far", "in")
@@ -194,6 +200,11 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       }.getMessage
       assert(m4.contains("did not equal"))
     }
+  }
+
+  test("range") {
+    checkSQL("select * from range(100)", "range")
+    checkSQL("select * from range(1, 100, 20, 10)", "range_with_splits")
   }
 
   test("in") {
@@ -222,6 +233,16 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   // when converting resolved plans back to SQL query strings as expression IDs are stripped.
   test("aggregate function in order by clause with multiple order keys") {
     checkSQL("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key, MAX(key)", "agg3")
+  }
+
+  test("order by asc nulls last") {
+    checkSQL("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key nulls last, MAX(key)",
+      "sort_asc_nulls_last")
+  }
+
+  test("order by desc nulls first") {
+    checkSQL("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key desc nulls first," +
+      "MAX(key)", "sort_desc_nulls_first")
   }
 
   test("type widening in union") {
@@ -630,7 +651,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkColumnNames(
       """SELECT x.a, y.a, x.b, y.b
         |FROM (SELECT 1 AS a, 2 AS b) x
-        |INNER JOIN (SELECT 1 AS a, 2 AS b) y
+        |CROSS JOIN (SELECT 1 AS a, 2 AS b) y
         |ON x.a = y.a
       """.stripMargin,
       "a", "a", "b", "b"
@@ -686,6 +707,20 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |FROM parquet_t1
       """.stripMargin,
       "window_basic_3")
+
+    checkSQL(
+      """
+        |SELECT key, value, ROUND(AVG(key) OVER (), 2)
+        |FROM parquet_t1 ORDER BY key nulls last
+      """.stripMargin,
+      "window_basic_asc_nulls_last")
+
+    checkSQL(
+      """
+        |SELECT key, value, ROUND(AVG(key) OVER (), 2)
+        |FROM parquet_t1 ORDER BY key desc nulls first
+      """.stripMargin,
+      "window_basic_desc_nulls_first")
   }
 
   test("multiple window functions in one expression") {
@@ -798,7 +833,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSQL(
       """
         |SELECT COUNT(a.value), b.KEY, a.KEY
-        |FROM parquet_t1 a, parquet_t1 b
+        |FROM parquet_t1 a CROSS JOIN parquet_t1 b
         |GROUP BY a.KEY, b.KEY
         |HAVING MAX(a.KEY) > 0
       """.stripMargin,
@@ -1101,5 +1136,13 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       sql("create table orc_t stored as orc as select 1 as c1, 'abc' as c2")
       checkSQL("select * from orc_t", "select_orc_table")
     }
+  }
+
+  test("inline tables") {
+    checkSQL(
+      """
+        |select * from values ("one", 1), ("two", 2), ("three", null) as data(a, b) where b > 1
+      """.stripMargin,
+      "inline_tables")
   }
 }

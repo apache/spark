@@ -305,11 +305,11 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
-        "hadoop2.3": ["-Pyarn", "-Phadoop-2.3"],
-        "hadoop2.4": ["-Pyarn", "-Phadoop-2.4"],
-        "hadoop2.6": ["-Pyarn", "-Phadoop-2.6"],
-        "hadoop2.7": ["-Pyarn", "-Phadoop-2.7"],
+        "hadoop2.2": ["-Phadoop-2.2"],
+        "hadoop2.3": ["-Phadoop-2.3"],
+        "hadoop2.4": ["-Phadoop-2.4"],
+        "hadoop2.6": ["-Phadoop-2.6"],
+        "hadoop2.7": ["-Phadoop-2.7"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:

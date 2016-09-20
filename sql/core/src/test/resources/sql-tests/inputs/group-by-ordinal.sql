@@ -43,6 +43,12 @@ select a, rand(0), sum(b) from data group by a, 2;
 -- negative case: star
 select * from data group by a, b, 1;
 
+-- group by ordinal followed by order by
+select a, count(a) from (select 1 as a) tmp group by 1 order by 1;
+
+-- group by ordinal followed by having
+select count(a), a from (select 1 as a) tmp group by 2 having a > 0;
+
 -- turn of group by ordinal
 set spark.sql.groupByOrdinal=false;
 
