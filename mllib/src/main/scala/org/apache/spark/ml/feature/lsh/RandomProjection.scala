@@ -52,6 +52,14 @@ class RandomProjectionModel(
   }
 }
 
+/**
+ * This [[RandomProjection]] implements Locality Sensitive Hashing functions with 2-stable
+ * distributions. If you are looking for LSH for cos distance, please use [[SignRandomProjection]]
+ *
+ * References:
+ * Wang, Jingdong et al. "Hashing for similarity search: A survey." arXiv preprint
+ * arXiv:1408.2927 (2014).
+ */
 class RandomProjection(override val uid: String) extends LSH[Vector, RandomProjectionModel]
   with RandomProjectionParams {
 
