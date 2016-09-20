@@ -588,7 +588,7 @@ class Word2VecModel private[spark] (
     val scored = pq.toSeq.sortBy(-_._2)
 
     val filtered = wordOpt match {
-      case Some(w) => scored.take(num + 1).filter(tup => w != tup._1)
+      case Some(w) => scored.filter(tup => w != tup._1)
       case None => scored
     }
 
