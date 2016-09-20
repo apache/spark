@@ -76,8 +76,12 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
 
   test("stress test with multiple topics and partitions") {
     val topics = (1 to 5).map(i => s"stress$i").toSet
+    var partitionRange = (1, 5)
+    def randomPartitions: Int = {
+      Random.nextInt(partitionRange._2 + 1 - partitionRange._1) + partitionRange._1
+    }
     topics.foreach { topic =>
-      testUtils.createTopic(topic, partitions = Random.nextInt(5) + 1)
+      testUtils.createTopic(topic, partitions = randomPartitions)
       testUtils.sendMessages(topic, (101 to 105).map { _.toString }.toArray)
     }
 
@@ -88,6 +92,7 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
         .option("kafka.group.id", s"group-stress-test")
         .option("subscribe", topics.mkString(","))
+        .option("kafka.metadata.max.age.ms", "1")
         .load()
         .select("key", "value")
         .as[(Array[Byte], Array[Byte])]
@@ -96,7 +101,16 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
 
     runStressTest(
       mapped,
-      d => AddKafkaData(topics, d: _*)(ensureDataInMultiplePartition = false),
+      d => {
+        if (Random.nextInt(5) == 0) {
+          partitionRange = (partitionRange._1 + 5, partitionRange._2 + 5)
+          val addPartitions = topics.toSeq.map(_ => randomPartitions)
+          AddKafkaData(topics, d: _*)(
+            ensureDataInMultiplePartition = false, addPartitions = Some(addPartitions))
+        } else {
+          AddKafkaData(topics, d: _*)(ensureDataInMultiplePartition = false)
+        }
+      },
       iterations = 50)
   }
 
@@ -201,9 +215,17 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
   }
 
   case class AddKafkaData(topics: Set[String], data: Int*)
-    (implicit ensureDataInMultiplePartition: Boolean = false) extends AddData {
+    (implicit ensureDataInMultiplePartition: Boolean = false,
+      addPartitions: Option[Seq[Int]] = None) extends AddData {
 
     override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+      if (addPartitions.nonEmpty) {
+        require(topics.size == addPartitions.get.size,
+          s"$addPartitions should have the same size of $topics")
+        topics.zip(addPartitions.get).foreach { case (topic, partitions) =>
+          testUtils.addPartitions(topic, partitions)
+        }
+      }
       require(
         query.nonEmpty,
         "Cannot add data when there is no query for finding the active kafka source")

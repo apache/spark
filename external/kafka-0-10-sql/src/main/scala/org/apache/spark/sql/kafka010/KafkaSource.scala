@@ -72,7 +72,7 @@ import org.apache.spark.SparkContext
  */
 private[kafka010] case class KafkaSource(
     sqlContext: SQLContext,
-    consumerStrategy: ConsumerStrategy[Array[Byte], Array[Byte]],
+    consumerStrategy: ConsumerStrategy,
     executorKafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String])
   extends Source with Logging {
@@ -104,6 +104,13 @@ private[kafka010] case class KafkaSource(
         initialPartitionOffsets
     }
 
+    val newPartitions = untilPartitionOffsets.keySet.diff(fromPartitionOffsets.keySet)
+    val newPartitionOffsets = if (newPartitions.nonEmpty) {
+      fetchNewPartitionEarliestOffsets(newPartitions.toSeq)
+    } else {
+      Map.empty[TopicPartition, Long]
+    }
+
     // Sort the partitions and current list of executors to consistently assign each partition
     // to the executor. This allows cached KafkaConsumers in the executors to be re-used to
     // read the same partition in every batch.
@@ -119,9 +126,13 @@ private[kafka010] case class KafkaSource(
     val numExecutors = sortedExecutors.size
     logDebug("Sorted executors: " + sortedExecutors.mkString(", "))
     val offsetRanges = sortedTopicPartitions.map { tp =>
-      // If fromPartitionOffsets doesn't contain tp, then it's a new partition.
-      // So use 0 as the start offset.
-      val fromOffset = fromPartitionOffsets.get(tp).getOrElse(0L)
+      val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
+        newPartitionOffsets.getOrElse(tp, {
+          // This should not happen since newPartitionOffsets contains all paritions not in
+          // fromPartitionOffsets
+          throw new IllegalStateException(s"$tp doesn't have a offset")
+        })
+      }
       val untilOffset = untilPartitionOffsets(tp)
       val preferredLoc = if (numExecutors > 0) {
         Some(sortedExecutors(positiveMod(tp.hashCode, numExecutors)))
@@ -130,7 +141,7 @@ private[kafka010] case class KafkaSource(
     }.toArray
 
     // Create a RDD that reads from Kafka and get the (key, value) pair as byte arrays.
-    val rdd = new KafkaSourceRDD[Array[Byte], Array[Byte]](
+    val rdd = new KafkaSourceRDD(
       sc, executorKafkaParams, offsetRanges, sourceOptions).map { cr =>
         Row(cr.checksum, cr.key, cr.offset, cr.partition, cr.serializedKeySize,
           cr.serializedValueSize, cr.timestamp, cr.timestampType.id, cr.topic, cr.value)
@@ -165,6 +176,21 @@ private[kafka010] case class KafkaSource(
     }
   }
 
+  private def fetchNewPartitionEarliestOffsets(
+      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = {
+    synchronized {
+      consumer.poll(0)
+      val partitions = consumer.assignment()
+      logDebug(s"\tPartitioned assigned to consumer: $partitions")
+      require(newPartitions.forall(tp => partitions.contains(tp)),
+        s"$partitions doesn't contain all new paritions: $newPartitions")
+      consumer.seekToBeginning(newPartitions.asJava)
+      val partitionToOffsets = newPartitions.map(p => p -> consumer.position(p))
+      logDebug(s"Got earliest positions $partitionToOffsets")
+      partitionToOffsets.toMap
+    }
+  }
+
   private def positiveMod(a: Long, b: Int): Int = ((a % b).toInt + b) % b
 }
 
@@ -184,14 +210,14 @@ private[kafka010] object KafkaSource {
     StructField("value", BinaryType)
   ))
 
-  sealed trait ConsumerStrategy[K, V] {
-    def createConsumer(): Consumer[K, V]
+  sealed trait ConsumerStrategy {
+    def createConsumer(): Consumer[Array[Byte], Array[Byte]]
   }
 
-  case class SubscribeStrategy[K, V](topics: Seq[String], kafkaParams: ju.Map[String, Object])
-    extends ConsumerStrategy[K, V] {
-    override def createConsumer(): Consumer[K, V] = {
-      val consumer = new KafkaConsumer[K, V](kafkaParams)
+  case class SubscribeStrategy(topics: Seq[String], kafkaParams: ju.Map[String, Object])
+    extends ConsumerStrategy {
+    override def createConsumer(): Consumer[Array[Byte], Array[Byte]] = {
+      val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
       consumer.subscribe(topics.asJava)
       consumer.poll(0)
       consumer
@@ -200,11 +226,11 @@ private[kafka010] object KafkaSource {
     override def toString: String = s"Subscribe[${topics.mkString(", ")}]"
   }
 
-  case class SubscribePatternStrategy[K, V](
+  case class SubscribePatternStrategy(
     topicPattern: String, kafkaParams: ju.Map[String, Object])
-    extends ConsumerStrategy[K, V] {
-    override def createConsumer(): Consumer[K, V] = {
-      val consumer = new KafkaConsumer[K, V](kafkaParams)
+    extends ConsumerStrategy {
+    override def createConsumer(): Consumer[Array[Byte], Array[Byte]] = {
+      val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
       consumer.subscribe(
         ju.regex.Pattern.compile(topicPattern),
         new NoOpConsumerRebalanceListener())
@@ -357,6 +383,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
       ConfigUpdater("source", specifiedKafkaParams)
         .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
         .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
+        .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
         .build()
 
     val kafkaParamsForExecutors =
@@ -381,11 +408,11 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
 
     val strategy = caseInsensitiveParams.find(x => strategyOptionNames.contains(x._1)).get match {
       case ("subscribe", value) =>
-        SubscribeStrategy[Array[Byte], Array[Byte]](
+        SubscribeStrategy(
           value.split(",").map(_.trim()).filter(_.nonEmpty),
           kafkaParamsForStrategy)
       case ("subscribepattern", value) =>
-        SubscribePatternStrategy[Array[Byte], Array[Byte]](
+        SubscribePatternStrategy(
           value.trim(),
           kafkaParamsForStrategy)
       case _ =>

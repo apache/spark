@@ -46,14 +46,13 @@ case class KafkaSourceRDDPartition(index: Int, offsetRange: OffsetRange) extends
  * @param executorKafkaParams Kafka configuration for creating KafkaConsumer on the executors
  * @param offsetRanges Offset ranges that define the Kafka data belonging to this RDD
  * @param sourceOptions Options provided through the source
- * @tparam K type of Kafka message key
- * @tparam V type of Kafka message value
  */
 private[kafka010] class KafkaSourceRDD(
     sc: SparkContext,
     executorKafkaParams: ju.Map[String, Object],
     offsetRanges: Seq[OffsetRange],
-    sourceOptions: Map[String, String]) extends RDD[ConsumerRecord[Array[Byte], Array[Byte]]](sc, Nil) {
+    sourceOptions: Map[String, String])
+  extends RDD[ConsumerRecord[Array[Byte], Array[Byte]]](sc, Nil) {
 
   override def persist(newLevel: StorageLevel): this.type = {
     logError("Kafka ConsumerRecord is not serializable. " +
@@ -149,8 +148,7 @@ private[kafka010] object KafkaSourceRDD {
     // Time between polling for more data by the KafkaConsumer in the executor. This should not
     // require much configuration as data should already be available in Kafka when the executors
     // are polling.
-    private val pollTimeout =
-      getLong(options, "consumer.pollMs", 512)
+    private val pollTimeout = getLong(options, "consumer.pollMs", 512)
 
     // Configurations for initializing the cache of KafkaConsumers.
     private val cacheInitialCapacity =
@@ -179,22 +177,6 @@ private[kafka010] object KafkaSourceRDD {
       requestOffset += 1
       r
     }
-  }
-
-  def getInt(options: Map[String, String], name: String, defaultValue: Int): Int = {
-    options.get(name).map { str =>
-      Try(str.toInt).getOrElse {
-        throw new IllegalArgumentException("Option '$name' must be a integer")
-      }
-    }.getOrElse(defaultValue)
-  }
-
-  def getDouble(options: Map[String, String], name: String, defaultValue: Double): Double = {
-    options.get(name).map { str =>
-      Try(str.toDouble).getOrElse {
-        throw new IllegalArgumentException("Option '$name' must be a double")
-      }
-    }.getOrElse(defaultValue)
   }
 
   def getLong(options: Map[String, String], name: String, defaultValue: Long): Long = {
