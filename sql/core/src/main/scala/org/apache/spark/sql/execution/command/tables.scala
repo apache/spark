@@ -390,10 +390,14 @@ case class TruncateTableCommand(
 /**
  * Command that looks like
  * {{{
- *   DESCRIBE [EXTENDED|FORMATTED] table_name;
+ *   DESCRIBE [EXTENDED|FORMATTED] table_name partitionSpec?;
  * }}}
  */
-case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isFormatted: Boolean)
+case class DescribeTableCommand(
+    table: TableIdentifier,
+    partitionSpec: TablePartitionSpec,
+    isExtended: Boolean,
+    isFormatted: Boolean)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] = Seq(
@@ -409,6 +413,10 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
     val catalog = sparkSession.sessionState.catalog
+
+    if (partitionSpec.nonEmpty) {
+      catalog.getPartition(table, partitionSpec)
+    }
 
     if (catalog.isTemporaryTable(table)) {
       describeSchema(catalog.lookupRelation(table).schema, result)
