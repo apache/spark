@@ -77,10 +77,10 @@ abstract class PartitioningAwareFileCatalog(
         // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
         val fs = path.getFileSystem(hadoopConf)
         val qualifiedPathPre = fs.makeQualified(path)
-        val qualifiedPath: Path = if (qualifiedPathPre.getParent == null) {
+        val qualifiedPath: Path = if (qualifiedPathPre.isRoot && !qualifiedPathPre.isAbsolute) {
           // SPARK-17613: Always append `Path.SEPARATOR` to the end of parent directories,
-          // because the `leafFile.getParent` would have returned a path with the separator at the
-          // end.
+          // because the `leafFile.getParent` would have returned an absolute path with the separator
+          // at the end.
           new Path(qualifiedPathPre, Path.SEPARATOR)
         } else {
           qualifiedPathPre
