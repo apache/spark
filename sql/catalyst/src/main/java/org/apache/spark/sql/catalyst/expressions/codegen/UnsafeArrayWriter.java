@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen;
 
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -55,7 +56,8 @@ public class UnsafeArrayWriter {
     this.startingOffset = holder.cursor;
 
     // Grows the global buffer ahead for header and fixed size data.
-    int fixedPartInBytes = ((elementSize * numElements + 7) / 8) * 8;
+    int fixedPartInBytes =
+      ByteArrayMethods.roundNumberOfBytesToNearestWord(elementSize * numElements);
     holder.grow(headerInBytes + fixedPartInBytes);
 
     // Write numElements and clear out null bits to header
@@ -65,10 +67,8 @@ public class UnsafeArrayWriter {
     }
 
     // fill 0 into reminder part of 8-bytes alignment in unsafe array
-    if ((fixedPartInBytes - elementSize * numElements) != 0) {
-      for (int i = elementSize * numElements; i < fixedPartInBytes; i++) {
-        Platform.putByte(holder.buffer, startingOffset + headerInBytes + i, (byte) 0);
-      }
+    for (int i = elementSize * numElements; i < fixedPartInBytes; i++) {
+      Platform.putByte(holder.buffer, startingOffset + headerInBytes + i, (byte) 0);
     }
     holder.cursor += (headerInBytes + fixedPartInBytes);
   }
@@ -84,6 +84,7 @@ public class UnsafeArrayWriter {
   }
 
   public void setOffsetAndSize(int ordinal, long currentCursor, long size) {
+    assertIndexIsValid(ordinal);
     final long relativeOffset = currentCursor - startingOffset;
     final long offsetAndSize = (relativeOffset << 32) | size;
 
@@ -190,7 +191,7 @@ public class UnsafeArrayWriter {
         final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
         final int numBytes = bytes.length;
         assert numBytes <= 16;
-        int roundedSize = ((numBytes + 7) / 8) * 8;  // 8-bytes boundary
+        int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
         holder.grow(roundedSize);
 
         zeroOutPaddingBytes(numBytes);
@@ -199,6 +200,7 @@ public class UnsafeArrayWriter {
         Platform.copyMemory(
           bytes, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, numBytes);
         write(ordinal, ((long)(holder.cursor - startingOffset) << 32) | ((long) numBytes));
+        setOffsetAndSize(ordinal, holder.cursor, (long)numBytes);
 
         // move the cursor forward with 8-bytes boundary
         holder.cursor += roundedSize;
@@ -210,7 +212,7 @@ public class UnsafeArrayWriter {
 
   public void write(int ordinal, UTF8String input) {
     final int numBytes = input.numBytes();
-    final int roundedSize = ((numBytes + 7) / 8) * 8;  // 8-bytes boundary
+    final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
 
     // grow the global buffer before writing data.
     holder.grow(roundedSize);
@@ -228,7 +230,7 @@ public class UnsafeArrayWriter {
 
   public void write(int ordinal, byte[] input) {
     final int numBytes = input.length;
-    final int roundedSize = ((input.length + 7) / 8) * 8;  // 8-bytes boundary
+    final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(input.length);
 
     // grow the global buffer before writing data.
     holder.grow(roundedSize);

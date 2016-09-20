@@ -100,22 +100,26 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     val intPrimitiveArray = Array.fill[Int](count) { rand.nextInt }
     val intEncoder = ExpressionEncoder[Array[Int]].resolveAndBind()
     val writeIntArray = { i: Int =>
+      var len = 0
       var n = 0
       while (n < iters) {
-        intTotalLength += intEncoder.toRow(intPrimitiveArray).getArray(0).numElements()
+        len += intEncoder.toRow(intPrimitiveArray).getArray(0).numElements()
         n += 1
       }
+      intTotalLength = len
     }
 
     var doubleTotalLength: Int = 0
     val doublePrimitiveArray = Array.fill[Double](count) { rand.nextDouble }
     val doubleEncoder = ExpressionEncoder[Array[Double]].resolveAndBind()
     val writeDoubleArray = { i: Int =>
+      var len = 0
       var n = 0
       while (n < iters) {
-        doubleTotalLength += doubleEncoder.toRow(doublePrimitiveArray).getArray(0).numElements()
+        len += doubleEncoder.toRow(doublePrimitiveArray).getArray(0).numElements()
         n += 1
       }
+      doubleTotalLength = len
     }
 
     val benchmark = new Benchmark("Write UnsafeArrayData", count * iters)
@@ -142,11 +146,13 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     val intEncoder = ExpressionEncoder[Array[Int]].resolveAndBind()
     val intUnsafeArray = intEncoder.toRow(intPrimitiveArray).getArray(0)
     val readIntArray = { i: Int =>
+      var len = 0
       var n = 0
       while (n < iters) {
-        intTotalLength += intUnsafeArray.toIntArray.length
+        len += intUnsafeArray.toIntArray.length
         n += 1
       }
+      intTotalLength = len
     }
 
     var doubleTotalLength: Int = 0
@@ -154,11 +160,13 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     val doubleEncoder = ExpressionEncoder[Array[Double]].resolveAndBind()
     val doubleUnsafeArray = doubleEncoder.toRow(doublePrimitiveArray).getArray(0)
     val readDoubleArray = { i: Int =>
+      var len = 0
       var n = 0
       while (n < iters) {
-        doubleTotalLength += doubleUnsafeArray.toDoubleArray.length
+        len += doubleUnsafeArray.toDoubleArray.length
         n += 1
       }
+      doubleTotalLength = len
     }
 
     val benchmark = new Benchmark("Get primitive array from UnsafeArrayData", count * iters)
@@ -180,24 +188,28 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     val count = 1024 * 1024 * 12
     val rand = new Random(42)
 
+    var intTotalLen: Int = 0
     val intPrimitiveArray = Array.fill[Int](count) { rand.nextInt }
-    var intUnsafeArray: UnsafeArrayData = null
     val createIntArray = { i: Int =>
+      var len = 0
       var n = 0
       while (n < iters) {
-        intUnsafeArray = UnsafeArrayData.fromPrimitiveArray(intPrimitiveArray)
+        len += UnsafeArrayData.fromPrimitiveArray(intPrimitiveArray).numElements
         n += 1
       }
+      intTotalLen = len
     }
 
+    var doubleTotalLen: Int = 0
     val doublePrimitiveArray = Array.fill[Double](count) { rand.nextDouble }
-    var doubleUnsafeArray: UnsafeArrayData = null
     val createDoubleArray = { i: Int =>
+      var len = 0
       var n = 0
       while (n < iters) {
-        doubleUnsafeArray = UnsafeArrayData.fromPrimitiveArray(doublePrimitiveArray)
+        len += UnsafeArrayData.fromPrimitiveArray(doublePrimitiveArray).numElements
         n += 1
       }
+      doubleTotalLen = len
     }
 
     val benchmark = new Benchmark("Create UnsafeArrayData from primitive array", count * iters)

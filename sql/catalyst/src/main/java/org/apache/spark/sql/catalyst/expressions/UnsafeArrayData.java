@@ -38,15 +38,15 @@ import org.apache.spark.unsafe.types.UTF8String;
  *
  * The `numElements` is 8 bytes storing the number of elements of this array.
  *
- * In the `null bits` region, we store 1 bit per element, represents whether a element has null
- * Its total size is ceil(numElements / 8) bytes, and  it is aligned to 8-byte boundaries.
+ * In the `null bits` region, we store 1 bit per element, represents whether an element is null
+ * Its total size is ceil(numElements / 8) bytes, and it is aligned to 8-byte boundaries.
  *
  * In the `values or offset&length` region, we store the content of elements. For fields that hold
  * fixed-length primitive types, such as long, double, or int, we store the value directly
- * in the field. For fields with non-primitive or variable-length values, we store a relative
- * offset (w.r.t. the base address of the array) that points to the beginning of
- * the variable-length field and length (they are combined into a long). For variable length
- * portion, each is aligned to 8-byte boundaries.
+ * in the field. For fixed-length portion, each is word-aligned. For fields with non-primitive or
+ * variable-length values, we store a relative offset (w.r.t. the base address of the array)
+ * that points to the beginning of the variable-length field and length (they are combined into
+ * a long). For variable length portion, each is aligned to 8-byte boundaries.
  *
  * Instances of `UnsafeArrayData` act as pointers to row data stored in this format.
  */
@@ -330,72 +330,57 @@ public final class UnsafeArrayData extends ArrayData {
 
   @Override
   public boolean[] toBooleanArray() {
-    int size = numElements();
-    boolean[] values = new boolean[size];
+    boolean[] values = new boolean[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.BOOLEAN_ARRAY_OFFSET, size);
+      baseObject, elementOffset, values, Platform.BOOLEAN_ARRAY_OFFSET, numElements);
     return values;
   }
 
   @Override
   public byte[] toByteArray() {
-    int size = numElements();
-    byte[] values = new byte[size];
+    byte[] values = new byte[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.BYTE_ARRAY_OFFSET, size);
+      baseObject, elementOffset, values, Platform.BYTE_ARRAY_OFFSET, numElements);
     return values;
   }
 
   @Override
   public short[] toShortArray() {
-    if (numElements > Integer.MAX_VALUE) {
-      throw new UnsupportedOperationException("Cannot convert this unsafe array to array as " +
-              "it's too big.");
-    }
-    int size = (int)numElements;
-    short[] values = new short[size];
+    short[] values = new short[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.SHORT_ARRAY_OFFSET, size * 2);
+      baseObject, elementOffset, values, Platform.SHORT_ARRAY_OFFSET, numElements * 2);
     return values;
   }
 
   @Override
   public int[] toIntArray() {
-    int size = numElements();
-    int[] values = new int[size];
+    int[] values = new int[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.INT_ARRAY_OFFSET, size * 4);
+      baseObject, elementOffset, values, Platform.INT_ARRAY_OFFSET, numElements * 4);
     return values;
   }
 
   @Override
   public long[] toLongArray() {
-    if (numElements > Integer.MAX_VALUE) {
-      throw new UnsupportedOperationException("Cannot convert this unsafe array to array as " +
-              "it's too big.");
-    }
-    int size = (int)numElements;
-    long[] values = new long[size];
+    long[] values = new long[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.LONG_ARRAY_OFFSET, size * 8);
+      baseObject, elementOffset, values, Platform.LONG_ARRAY_OFFSET, numElements * 8);
     return values;
   }
 
   @Override
   public float[] toFloatArray() {
-    int size = numElements();
-    float[] values = new float[size];
+    float[] values = new float[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.FLOAT_ARRAY_OFFSET, size * 4);
+      baseObject, elementOffset, values, Platform.FLOAT_ARRAY_OFFSET, numElements * 4);
     return values;
   }
 
   @Override
   public double[] toDoubleArray() {
-    int size = numElements();
-    double[] values = new double[size];
+    double[] values = new double[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.DOUBLE_ARRAY_OFFSET, size * 8);
+      baseObject, elementOffset, values, Platform.DOUBLE_ARRAY_OFFSET, numElements * 8);
     return values;
   }
 
@@ -404,7 +389,7 @@ public final class UnsafeArrayData extends ArrayData {
     final long headerInBytes = calculateHeaderPortionInBytes(length);
     final long valueRegionInBytes = elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
-    if (totalSizeInLongs * 8 > Integer.MAX_VALUE) {
+    if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
         "it's too big.");
     }

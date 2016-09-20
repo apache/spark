@@ -141,12 +141,18 @@ class UnsafeArraySuite extends SparkFunSuite {
       }
     }
 
-    val unsafeInterval = ExpressionEncoder[Array[CalendarInterval]].resolveAndBind().
-      toRow(calenderintervalArray).getArray(0)
-    assert(unsafeInterval.isInstanceOf[UnsafeArrayData])
-    assert(unsafeInterval.numElements == calenderintervalArray.length)
-    calenderintervalArray.zipWithIndex.map { case (e, i) =>
-      assert(unsafeInterval.getInterval(i) == e)
+    Seq(calenderintervalArray).map { calendarArray =>
+      val schema = new StructType().add("array", ArrayType(CalendarIntervalType))
+      val encoder = RowEncoder(schema).resolveAndBind()
+      val externalRow = Row(calendarArray)
+      val ir = encoder.toRow(externalRow)
+
+      val unsafeCalendar = ir.getArray(0)
+      assert(unsafeCalendar.isInstanceOf[UnsafeArrayData])
+      assert(unsafeCalendar.numElements == calendarArray.length)
+      calendarArray.zipWithIndex.map { case (e, i) =>
+        assert(unsafeCalendar.getInterval(i) == e)
+      }
     }
 
     val unsafeMultiDimInt = ExpressionEncoder[Array[Array[Int]]].resolveAndBind().
