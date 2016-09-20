@@ -76,7 +76,15 @@ abstract class PartitioningAwareFileCatalog(
       paths.flatMap { path =>
         // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
         val fs = path.getFileSystem(hadoopConf)
-        val qualifiedPath = fs.makeQualified(path)
+        val qualifiedPathPre = fs.makeQualified(path)
+        val qualifiedPath: Path = if (qualifiedPathPre.getParent == null) {
+          // SPARK-17613: Always append `Path.SEPARATOR` to the end of parent directories,
+          // because the `leafFile.getParent` would have returned a path with the separator at the
+          // end.
+          new Path(qualifiedPathPre, Path.SEPARATOR)
+        } else {
+          qualifiedPathPre
+        }
 
         // There are three cases possible with each path
         // 1. The path is a directory and has children files in it. Then it must be present in
