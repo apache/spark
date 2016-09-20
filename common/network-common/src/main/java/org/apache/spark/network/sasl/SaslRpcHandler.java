@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.sasl.aes.SparkAesSaslServer;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.util.JavaUtils;
@@ -75,35 +76,39 @@ class SaslRpcHandler extends RpcHandler {
 
   @Override
   public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
+    boolean aesEnable = conf.saslEncryptionAesEnabled();
+    boolean encrypt = conf.saslServerAlwaysEncrypt();
     if (isComplete) {
       // Authentication complete, delegate to base handler.
       delegate.receive(client, message, callback);
       return;
     }
+    if (saslServer == null || !saslServer.isComplete()) {
+      ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
+      SaslMessage saslMessage;
+      try {
+        saslMessage = SaslMessage.decode(nettyBuf);
+      } finally {
+        nettyBuf.release();
+      }
 
-    ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
-    SaslMessage saslMessage;
-    try {
-      saslMessage = SaslMessage.decode(nettyBuf);
-    } finally {
-      nettyBuf.release();
-    }
+      if (saslServer == null) {
+        // First message in the handshake, setup the necessary state.
+        client.setClientId(saslMessage.appId);
+        saslServer = aesEnable ?
+          new SparkAesSaslServer(saslMessage.appId, secretKeyHolder, encrypt) :
+          new SparkSaslServer(saslMessage.appId, secretKeyHolder, encrypt);
+      }
 
-    if (saslServer == null) {
-      // First message in the handshake, setup the necessary state.
-      client.setClientId(saslMessage.appId);
-      saslServer = new SparkSaslServer(saslMessage.appId, secretKeyHolder,
-        conf.saslServerAlwaysEncrypt());
+      byte[] response;
+      try {
+        response = saslServer.response(JavaUtils.bufferToArray(
+          saslMessage.body().nioByteBuffer()));
+      } catch (IOException ioe) {
+        throw new RuntimeException(ioe);
+      }
+      callback.onSuccess(ByteBuffer.wrap(response));
     }
-
-    byte[] response;
-    try {
-      response = saslServer.response(JavaUtils.bufferToArray(
-        saslMessage.body().nioByteBuffer()));
-    } catch (IOException ioe) {
-      throw new RuntimeException(ioe);
-    }
-    callback.onSuccess(ByteBuffer.wrap(response));
 
     // Setup encryption after the SASL response is sent, otherwise the client can't parse the
     // response. It's ok to change the channel pipeline here since we are processing an incoming
@@ -111,16 +116,18 @@ class SaslRpcHandler extends RpcHandler {
     // method returns. This assumes that the code ensures, through other means, that no outbound
     // messages are being written to the channel while negotiation is still going on.
     if (saslServer.isComplete()) {
-      logger.debug("SASL authentication successful for channel {}", client);
-      isComplete = true;
       if (SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
+        // Return directly if negotiate not finish.
+        if (!saslServer.negotiate(message, callback, conf)) return;
         logger.debug("Enabling encryption for channel {}", client);
         SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
         saslServer = null;
       } else {
+        logger.debug("SASL authentication successful for channel {}", client);
         saslServer.dispose();
         saslServer = null;
       }
+      isComplete = true;
     }
   }
 
@@ -154,5 +161,4 @@ class SaslRpcHandler extends RpcHandler {
   public void exceptionCaught(Throwable cause, TransportClient client) {
     delegate.exceptionCaught(cause, client);
   }
-
 }

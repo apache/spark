@@ -17,6 +17,9 @@
 
 package org.apache.spark.network.sasl;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import javax.security.auth.callback.Callback;
 import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.callback.NameCallback;
@@ -27,8 +30,6 @@ import javax.security.sasl.RealmCallback;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import com.google.common.base.Preconditions;
@@ -38,6 +39,9 @@ import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.base64.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * A SASL Server for Spark which simply keeps track of the state of a single SASL session, from the
@@ -147,6 +151,17 @@ public class SparkSaslServer implements SaslEncryptionBackend {
   @Override
   public byte[] unwrap(byte[] data, int offset, int len) throws SaslException {
     return saslServer.unwrap(data, offset, len);
+  }
+
+  /**
+   * Negotiate with peer for extended options, such as using AES cipher.
+   * @param message is message receive from peer which may contains communication parameters.
+   * @param callback is rpc callback.
+   * @param conf contains transport configuration.
+   * @return true if negotiate finish successfully, else false.
+   */
+  public boolean negotiate(ByteBuffer message, RpcResponseCallback callback, TransportConf conf) {
+    return true;
   }
 
   /**

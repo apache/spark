@@ -1435,6 +1435,30 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.authenticate.sasl.encryption.aes.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enable AES cipher as SASL authentication encrypt backend, when SASL authentication
+    is enabled.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.sasl.encryption.aes.cipher.transformation</code></td>
+  <td>AES/CTR/NoPadding</td>
+  <td>
+    Specify the algorithm/mode/padding of AES cipher when AES cipher is enabled
+    for SASL authentication. Currently, it supports AES/CTR/NoPadding and AES/CBC/NoPadding.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.sasl.encryption.aes.cipher.keySizeBits</code></td>
+  <td>128</td>
+  <td>
+    The bits of AES cipher key which is effective when AES cipher is enabled. AES
+    works with 128, 192 and 256 bit keys.
+  </td>
+</tr>
+<tr>
   <td><code>spark.core.connection.ack.wait.timeout</code></td>
   <td>60s</td>
   <td>

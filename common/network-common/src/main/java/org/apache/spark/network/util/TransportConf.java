@@ -18,7 +18,8 @@
 package org.apache.spark.network.util;
 
 import com.google.common.primitives.Ints;
-
+import io.netty.handler.ssl.CipherSuiteFilter;
+import org.apache.commons.crypto.cipher.CryptoCipherFactory;
 /**
  * A central location that tracks all the settings we expose to users.
  */
@@ -173,6 +174,30 @@ public class TransportConf {
    */
   public boolean saslServerAlwaysEncrypt() {
     return conf.getBoolean("spark.network.sasl.serverAlwaysEncrypt", false);
+  }
+
+  /**
+   * The trigger for enabling AES cipher for SASL encrypt backend.
+   */
+  public boolean saslEncryptionAesEnabled() {
+    return conf.getBoolean("spark.authenticate.sasl.encryption.aes.enabled", false);
+  }
+
+  /**
+   * Transformation string to specify algorithm/mode/padding for AES cipher, which is effective
+   * when AES cipher is enabled.
+   */
+  public String saslEncryptionAesCipherTransformation() {
+    return conf.get("spark.authenticate.sasl.encryption.aes.cipher.transformation",
+      "AES/CTR/NoPadding");
+  }
+
+  /**
+   * The bits of AES cipher key which is effective when AES cipher is enabled. Notice that
+   * the length should be 128, 192 or 256 bits.
+   */
+  public int saslEncryptionAesCipherKeySizeBits() {
+    return conf.getInt("spark.authenticate.sasl.encryption.aes.cipher.keySizeBits", 128);
   }
 
 }

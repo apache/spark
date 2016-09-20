@@ -18,6 +18,7 @@
 package org.apache.spark.network.sasl;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Map;
 import javax.security.auth.callback.Callback;
 import javax.security.auth.callback.CallbackHandler;
@@ -32,8 +33,14 @@ import javax.security.sasl.SaslException;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.network.util.TransportConf;
 
 import static org.apache.spark.network.sasl.SparkSaslServer.*;
 
@@ -79,7 +86,7 @@ public class SparkSaslClient implements SaslEncryptionBackend {
     }
   }
 
-  /** Determines whether the authentication exchange has completed. */
+  /** Determine whether the authentication exchange has completed. */
   public synchronized boolean isComplete() {
     return saslClient != null && saslClient.isComplete();
   }
@@ -116,6 +123,25 @@ public class SparkSaslClient implements SaslEncryptionBackend {
       } finally {
         saslClient = null;
       }
+    }
+  }
+
+  /**
+   * @param client is transport client used to connect to peer.
+   * @param conf contain client transport configuration.
+   * @throws IOException
+   */
+  public void negotiate(TransportClient client, TransportConf conf) throws IOException {
+    byte[] payload = firstToken();
+
+    while (!isComplete()) {
+      SaslMessage msg = new SaslMessage(secretKeyId, payload);
+      ByteBuf buf = Unpooled.buffer(msg.encodedLength() + (int) msg.body().size());
+      msg.encode(buf);
+      buf.writeBytes(msg.body().nioByteBuffer());
+
+      ByteBuffer response = client.sendRpcSync(buf.nioBuffer(), conf.saslRTTimeoutMs());
+      payload = response(JavaUtils.bufferToArray(response));
     }
   }
 
@@ -158,5 +184,4 @@ public class SparkSaslClient implements SaslEncryptionBackend {
   public byte[] unwrap(byte[] data, int offset, int len) throws SaslException {
     return saslClient.unwrap(data, offset, len);
   }
-
 }

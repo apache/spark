@@ -41,6 +41,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
+import org.apache.spark.network.sasl.aes.SparkAesCipher;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -66,6 +67,11 @@ import org.apache.spark.network.util.TransportConf;
  * Jointly tests SparkSaslClient and SparkSaslServer, as both are black boxes.
  */
 public class SparkSaslSuite {
+
+  private static final String BLOCK_SIZE_CONF = "spark.network.sasl.maxEncryptedBlockSize";
+  private static final String AES_ENABLED_CONF = "spark.authenticate.sasl.encryption.aes.enabled";
+  private static final String AES_MODE_CONF =
+          "spark.authenticate.sasl.encryption.aes.cipher.transformation";
 
   /** Provides a secret key holder which returns secret key == appId */
   private SecretKeyHolder secretKeyHolder = new SecretKeyHolder() {
@@ -371,6 +377,75 @@ public class SparkSaslSuite {
     Method[] rpcHandlerMethods = RpcHandler.class.getDeclaredMethods();
     for (Method m : rpcHandlerMethods) {
       SaslRpcHandler.class.getDeclaredMethod(m.getName(), m.getParameterTypes());
+    }
+  }
+
+  @Test
+  public void testSaslEncryptionAes() throws Exception {
+    for (String transformation : SparkAesCipher.supportedTransformation) {
+      System.setProperty(BLOCK_SIZE_CONF, "10k");
+      System.setProperty(AES_ENABLED_CONF, "true");
+      System.setProperty(AES_MODE_CONF, transformation);
+
+      final AtomicReference<ManagedBuffer> response = new AtomicReference<>();
+      final File file = File.createTempFile("sasltest", ".txt");
+      SaslTestCtx ctx = null;
+      try {
+        final TransportConf conf = new TransportConf("rpc", new SystemPropertyConfigProvider());
+        StreamManager sm = mock(StreamManager.class);
+        when(sm.getChunk(anyLong(), anyInt())).thenAnswer(new Answer<ManagedBuffer>() {
+          @Override
+          public ManagedBuffer answer(InvocationOnMock invocation) {
+            return new FileSegmentManagedBuffer(conf, file, 0, file.length());
+          }
+        });
+
+        RpcHandler rpcHandler = mock(RpcHandler.class);
+        when(rpcHandler.getStreamManager()).thenReturn(sm);
+
+        byte[] data = new byte[1024*1024];
+        new Random().nextBytes(data);
+        Files.write(data, file);
+
+        ctx = new SaslTestCtx(rpcHandler, true, false);
+
+        final Object lock = new Object();
+
+        ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
+        doAnswer(new Answer<Void>() {
+          @Override
+          public Void answer(InvocationOnMock invocation) {
+            response.set((ManagedBuffer) invocation.getArguments()[1]);
+            response.get().retain();
+            synchronized (lock) {
+              lock.notifyAll();
+            }
+            return null;
+          }
+        }).when(callback).onSuccess(anyInt(), any(ManagedBuffer.class));
+
+        synchronized (lock) {
+          ctx.client.fetchChunk(0, 0, callback);
+          lock.wait(10 * 1000);
+        }
+
+        verify(callback, times(1)).onSuccess(anyInt(), any(ManagedBuffer.class));
+        verify(callback, never()).onFailure(anyInt(), any(Throwable.class));
+
+        byte[] received = ByteStreams.toByteArray(response.get().createInputStream());
+        assertTrue(Arrays.equals(data, received));
+      } finally {
+        file.delete();
+        if (ctx != null) {
+          ctx.close();
+        }
+        if (response.get() != null) {
+          response.get().release();
+        }
+        System.clearProperty(BLOCK_SIZE_CONF);
+        System.clearProperty(AES_ENABLED_CONF);
+        System.clearProperty(AES_MODE_CONF);
+      }
     }
   }
 
