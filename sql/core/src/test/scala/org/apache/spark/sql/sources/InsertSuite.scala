@@ -70,7 +70,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     withTempView("t1", "t2") {
       sql(
         """
-          |CREATE TEMPORARY TABLE t1
+          |CREATE TEMPORARY VIEW t1
           |USING org.apache.spark.sql.sources.SimpleScanSource
           |OPTIONS (
           |  From '1',

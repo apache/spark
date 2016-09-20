@@ -345,7 +345,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       (1 to 10).map(Row(_)).toSeq)
   }
 
-  test("create a temp table that does not have a path in the option") {
+  test("create a temp view or a persistent table that does not need a path in the option") {
     Seq("TEMPORARY VIEW", "TABLE").foreach { tableType =>
       val tableName = "relationProvierWithSchema"
       withTable(tableName) {
