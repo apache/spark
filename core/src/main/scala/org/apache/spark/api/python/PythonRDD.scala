@@ -870,7 +870,7 @@ class BytesToString extends org.apache.spark.api.java.function.Function[Array[By
  * collects a list of pickled strings that we pass to Python through a socket.
  */
 private[spark] class PythonAccumulatorV2(@transient private val serverHost: String, serverPort: Int)
-  extends AccumulatorV2[JList[Array[Byte]], JList[Array[Byte]]] {
+  extends AccumulatorV2[JList[Array[Byte]], Unit] {
 
   private[python] var _acc: JList[Array[Byte]] = Collections.synchronizedList(
     new JArrayList[Array[Byte]])
@@ -883,9 +883,9 @@ private[spark] class PythonAccumulatorV2(@transient private val serverHost: Stri
    * We try to reuse a single Socket to transfer accumulator updates, as they are all added
    * by the DAGScheduler's single-threaded RpcEndpoint anyway.
    */
-  @transient var socket: Socket = _
+  @transient private var socket: Socket = _
 
-  def openSocket(): Socket = synchronized {
+  private def openSocket(): Socket = synchronized {
     if (socket == null || socket.isClosed) {
       socket = new Socket(serverHost, serverPort)
     }
@@ -914,7 +914,7 @@ private[spark] class PythonAccumulatorV2(@transient private val serverHost: Stri
   }
 
 
-  override def merge(other: AccumulatorV2[JList[Array[Byte]], JList[Array[Byte]]]): Unit = {
+  override def merge(other: AccumulatorV2[JList[Array[Byte]], Unit]): Unit = {
     val otherPythonAccumulator = other.asInstanceOf[PythonAccumulatorV2]
     // This conditional isn't strictly speaking needed - merging only currently happens on the
     // driver program - but that isn't gauranteed so incase this changes.
@@ -943,10 +943,9 @@ private[spark] class PythonAccumulatorV2(@transient private val serverHost: Stri
   }
 
   /**
-   * Value function - not expected to be called for Python
+   * Value function - not expected to be called for Python.
    */
-  def value: JList[Array[Byte]] = {
-    _acc
+  def value: Unit = {
   }
 }
 
