@@ -244,8 +244,7 @@ class CrossValidatorSuite
   test("read/write: CrossValidatorModel") {
     val lr = new LogisticRegression()
       .setThreshold(0.6)
-    val lrModel = new LogisticRegressionModel(lr.uid,
-      new DenseMatrix(1, 1, Array(0.0), isTransposed = true), Vectors.dense(0.0), 2, false)
+    val lrModel = new LogisticRegressionModel(lr.uid, Vectors.dense(1.0, 2.0), 1.2)
       .setThreshold(0.6)
     val evaluator = new BinaryClassificationEvaluator()
       .setMetricName("areaUnderPR")  // not default metric

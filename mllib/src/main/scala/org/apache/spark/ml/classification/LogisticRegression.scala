@@ -75,7 +75,6 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
     set(threshold, value)
   }
 
-
   /**
    * Param for the name of family which is a description of the label distribution
    * to be used in the model.
@@ -686,6 +685,14 @@ class LogisticRegressionModel private[spark] (
     private val isMultinomial: Boolean)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams with MLWritable {
+
+  require(coefficientMatrix.numRows == interceptVector.size, s"Dimension mismatch! Expected " +
+    s"coefficientMatrix.numRows == interceptVector.size, but ${coefficientMatrix.numRows} != " +
+    s"${interceptVector.size}")
+
+  private[spark] def this(uid: String, coefficients: Vector, intercept: Double) =
+    this(uid, new DenseMatrix(1, coefficients.size, coefficients.toArray, isTransposed = true),
+      Vectors.dense(intercept), 2, isMultinomial = false)
 
   /**
    * A vector of model coefficients for "binomial" logistic regression. If this model was trained
@@ -1381,7 +1388,6 @@ class BinaryLogisticRegressionSummary private[classification] (
  *       e^{\vec{x}_i \cdot \vec{\beta}_{k'} - maxMargin}} - I_{y=k}\right)
  *    $$
  * </blockquote></p>
- *
  *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.

@@ -60,8 +60,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
   test("params") {
     ParamsSuite.checkParams(new OneVsRest)
-    val lrModel = new LogisticRegressionModel("logReg",
-      new DenseMatrix(1, 1, Array(0.0), isTransposed = true), Vectors.dense(0.0), 2, false)
+    val lrModel = new LogisticRegressionModel("lr", Vectors.dense(0.0), 0.0)
     val model = new OneVsRestModel("ovr", Metadata.empty, Array(lrModel))
     ParamsSuite.checkParams(model)
   }

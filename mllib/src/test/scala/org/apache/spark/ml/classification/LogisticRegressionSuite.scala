@@ -26,7 +26,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, SparseMatrix, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -112,8 +112,7 @@ class LogisticRegressionSuite
 
   test("params") {
     ParamsSuite.checkParams(new LogisticRegression)
-    val model = new LogisticRegressionModel("logReg",
-      new DenseMatrix(1, 1, Array(0.0)), Vectors.dense(0.0), 2, isMultinomial = false)
+    val model = new LogisticRegressionModel("logReg", Vectors.dense(0.0), 0.0)
     ParamsSuite.checkParams(model)
   }
 
