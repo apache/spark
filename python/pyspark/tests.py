@@ -416,6 +416,7 @@ class AddFileTests(PySparkTestCase):
         with open(download_path) as test_file:
             self.assertEqual("Hello World!\n", test_file.readline())
 
+    def test_add_file_recursively_locally(self):
         path = os.path.join(SPARK_HOME, "python/test_support/hello")
         self.sc.addFile(path, True)
         download_path = SparkFiles.get("hello")
