@@ -46,8 +46,8 @@ case class BroadcastHashJoinExec(
   extends BinaryExecNode with HashJoin with CodegenSupport {
 
   /**
-    * Decide whether support avoiding repeatedly stream side fields writing
-    */
+   * Decide whether support avoiding repeatedly stream side fields writing
+   */
   private val avoidRepeatedlyWriting =
     if (sqlContext.getConf("spark.sql.codegen.useInBenchmark", null) == "true") {
       false
@@ -64,8 +64,8 @@ case class BroadcastHashJoinExec(
     }
 
   /**
-    * Using this to mark which side is need not to be written repeatedly
-    */
+   * Using this to mark which side is need not to be written repeatedly
+   */
   private val sequential = buildSide match {
     case BuildRight => true
     case _ => false

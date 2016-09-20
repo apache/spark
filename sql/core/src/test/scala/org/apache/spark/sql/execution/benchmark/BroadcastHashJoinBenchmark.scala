@@ -29,7 +29,7 @@ import org.apache.spark.util.Benchmark
  */
 class BroadcastHashJoinBenchmark extends BenchmarkBase {
 
-  ignore("BroadcastHashJoin w duplicated keys") {
+  test("BroadcastHashJoin w duplicated keys") {
     val N = 100L << 20
     val M = 1 << 16
 
@@ -70,13 +70,14 @@ class BroadcastHashJoinBenchmark extends BenchmarkBase {
     benchmark.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_51-b16 on Windows 7 6.1
-    Intel64 Family 6 Model 45 Stepping 7, GenuineIntel
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_65-b17 on Mac OS X 10.11.6
+    Intel(R) Core(TM) i5-5287U CPU @ 2.90GHz
+
     BroadcastHashJoin w duplicated keys:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    codegen = F                                 23177 / 23272          4.5         221.0       1.0X
-    codegen = T avoid = F                          532 /  539        197.2           5.1      43.6X
-    codegen = T avoid = T                          390 /  414        268.8           3.7      59.4X
+    codegen = F                                 13933 / 13974          7.5         132.9       1.0X
+    codegen = T avoid = F                          253 /  273        414.0           2.4      55.0X
+    codegen = T avoid = T                          202 /  211        518.7           1.9      68.9X
     */
   }
 }
