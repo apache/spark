@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import org.apache.spark.sql.functions._
 import org.apache.spark.util.Benchmark
 
 /**
@@ -28,28 +29,26 @@ import org.apache.spark.util.Benchmark
  */
 class BroadcastHashJoinBenchmark extends BenchmarkBase {
 
-  ignore("BroadcastHashJoin w duplicated keys") {
-    val N = 1 << 16
-    val M = 1 << 8
+  test("BroadcastHashJoin w duplicated keys") {
+    val N = 10 << 20
+    val M = 1 << 16
 
-    val benchmark = new Benchmark("BroadcastHashJoin w duplicated keys", N)
-    sparkSession.range(N).selectExpr(
-      "(id % 1024) as sk",
+    val src = sparkSession.range(N).selectExpr(
+      s"(id % $M)as sk",
       "(id / 2) as sv1",
       "(id / 3) as sv2",
       "(id / 4) as sv3",
       "(id / 5) as sv4",
       "(id / 6) as sv5")
-      .createOrReplaceTempView("src")
 
-    sparkSession.range(M).selectExpr(
-      "(id % 5) as dk",
+    val dim = broadcast(sparkSession.range(M).selectExpr(
+      "(id % 64) as dk",
       "(id / 2) as dv1",
-      "(id / 3) as dv2")
-      .createOrReplaceTempView("dim")
+      "(id / 3) as dv2"))
 
-    def f(): Unit = sparkSession.sql(
-      "select sk, sv1, sv2, sv3, sv4, sv5, dk, dv1, dv2 from src join dim on sk = dk").collect()
+    val benchmark = new Benchmark("BroadcastHashJoin w duplicated keys", N)
+
+    def f(): Unit = src.join(dim, col("sk") === col("dk")).collect()
 
     benchmark.addCase(s"codegen = F", numIters = 2) { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", value = false)
@@ -71,14 +70,13 @@ class BroadcastHashJoinBenchmark extends BenchmarkBase {
     benchmark.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_65-b17 on Mac OS X 10.11.6
-    Intel(R) Core(TM) i5-5287U CPU @ 2.90GHz
-
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_51-b16 on Windows 7 6.1
+    Intel64 Family 6 Model 45 Stepping 7, GenuineIntel
     BroadcastHashJoin w duplicated keys:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    codegen = F                                    226 /  344          0.3        3447.1       1.0X
-    codegen = T avoid = F                          168 /  173          0.4        2565.2       1.3X
-    codegen = T avoid = T                          101 /  117          0.7        1535.5       2.2X
+    codegen = F                                   4527 / 4584          4.6         215.9       1.0X
+    codegen = T avoid = F                          348 /  414         60.3          16.6      13.0X
+    codegen = T avoid = T                          282 /  290         74.3          13.5      16.0X
     */
   }
 }
