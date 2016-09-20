@@ -42,6 +42,8 @@ import org.apache.spark.rdd.RDD
  *                 input RDD's partitions).
  * @param localProperties copy of thread-local properties set by the user on the driver side.
  * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
+ *
+ * The parameters below are optional:
  * @param jobId id of the job this task belongs to
  * @param appId id of the app this task belongs to
  * @param appAttemptId attempt id of the app this task belongs to

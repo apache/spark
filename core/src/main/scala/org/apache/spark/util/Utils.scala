@@ -2420,29 +2420,54 @@ private[spark] object Utils extends Logging {
   }
 }
 
+/**
+ * An utility class used to set up Spark caller contexts to HDFS and Yarn. The `context` will be
+ * constructed by parameters passed in.
+ * When Spark applications run on Yarn and HDFS, its caller contexts will be written into Yarn RM
+ * audit log and hdfs-audit.log. That can help users to better diagnose and understand how
+ * specific applications impacting parts of the Hadoop system and potential problems they may be
+ * creating (e.g. overloading NN). As HDFS mentioned in HDFS-9184, for a given HDFS operation, it's
+ * very helpful to track which upper level job issues it.
+ *
+ * @param from who sets up the caller context (TASK, CLIENT, APPLICATION_MASTER)
+ *
+ * The parameters below are optional:
+ * @param appID id of the app this task belongs to
+ * @param appAttemptID attempt id of the app this task belongs to
+ * @param jobID id of the job this task belongs to
+ * @param stageID id of the stage this task belongs to
+ * @param stageAttemptId attempt id of the stage this task belongs to
+ * @param taskId task id
+ * @param taskAttemptNumber task attempt id
+ * @since 2.0.1
+ */
 private[spark] class CallerContext(
-   appName: Option[String] = None,
-   appID: Option[String] = None,
-   appAttemptID: Option[String] = None,
-   jobID: Option[Int] = None,
-   stageID: Option[Int] = None,
+   from: String,
+   appId: Option[String] = None,
+   appAttemptId: Option[String] = None,
+   jobId: Option[Int] = None,
+   stageId: Option[Int] = None,
    stageAttemptId: Option[Int] = None,
    taskId: Option[Long] = None,
    taskAttemptNumber: Option[Int] = None) extends Logging {
 
-   val AppName = if (appName.isDefined) s"_AppName_${appName.get}" else ""
-   val AppID = if (appID.isDefined) s"_AppID_${appID.get}" else ""
-   val AppAttemptID = if (appAttemptID.isDefined) s"_${appAttemptID.get}" else ""
-   val JobID = if (jobID.isDefined) s"_JobID_${jobID.get}" else ""
-   val StageID = if (stageID.isDefined) s"_StageID_${stageID.get}" else ""
-   val StageAttemptId = if (stageAttemptId.isDefined) s"_${stageAttemptId.get}" else ""
+   val AppId = if (appId.isDefined) s"_AppId_${appId.get}" else ""
+   val AppAttemptId = if (appAttemptId.isDefined) s"_AttemptId_${appAttemptId.get}" else ""
+   val JobId = if (jobId.isDefined) s"_JobId_${jobId.get}" else ""
+   val StageId = if (stageId.isDefined) s"_StageId_${stageId.get}" else ""
+   val StageAttemptId = if (stageAttemptId.isDefined) s"_AttemptId_${stageAttemptId.get}" else ""
    val TaskId = if (taskId.isDefined) s"_TaskId_${taskId.get}" else ""
-   val TaskAttemptNumber = if (taskAttemptNumber.isDefined) s"_${taskAttemptNumber.get}" else ""
+   val TaskAttemptNumber =
+     if (taskAttemptNumber.isDefined) s"_AttemptNum_${taskAttemptNumber.get}" else ""
 
-   val context = "SPARK" + AppName + AppID + AppAttemptID +
-     JobID + StageID + StageAttemptId + TaskId + TaskAttemptNumber
+   val context = "SPARK_" + from + AppId + AppAttemptId +
+     JobId + StageId + StageAttemptId + TaskId + TaskAttemptNumber
 
-  def set(): Boolean = {
+  /**
+   * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
+   * [[org.apache.hadoop.ipc.CallerContext]], which was added in hadoop 2.8.
+   */
+  def setCurrentContext(): Boolean = {
     var succeed = false
     try {
       val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")

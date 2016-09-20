@@ -161,7 +161,7 @@ private[spark] class Client(
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
       launcherBackend.setAppId(appId.toString)
 
-      new CallerContext(Option(sparkConf.get("spark.app.name", "")), Option(appId.toString)).set()
+      new CallerContext("CLIENT", Option(appId.toString)).setCurrentContext()
 
       // Verify whether the cluster has enough resources for our AM
       verifyClusterResources(newAppResponse)

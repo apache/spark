@@ -202,8 +202,8 @@ private[spark] class ApplicationMaster(
         attemptID = Option(appAttemptId.getAttemptId.toString)
       }
 
-      new CallerContext(Option(System.getProperty("spark.app.name")),
-        Option(appAttemptId.getApplicationId.toString), attemptID).set()
+      new CallerContext("APPLICATION_MASTER",
+        Option(appAttemptId.getApplicationId.toString), attemptID).setCurrentContext()
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
 
