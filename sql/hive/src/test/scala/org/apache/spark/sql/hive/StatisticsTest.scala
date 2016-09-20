@@ -32,7 +32,6 @@ trait StatisticsTest extends QueryTest with TestHiveSingleton with SQLTestUtils 
     val operators = parsed.collect {
       case a: AnalyzeTableCommand => a
       case b: AnalyzeColumnCommand => b
-      case o => o
     }
 
     assert(operators.size === 1)
@@ -41,7 +40,7 @@ trait StatisticsTest extends QueryTest with TestHiveSingleton with SQLTestUtils 
         s"""$analyzeCommand expected command: $c, but got ${operators(0)}
            |parsed command:
            |$parsed
-           """.stripMargin)
+         """.stripMargin)
     }
   }
 

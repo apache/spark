@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.internal.SessionState
 
 
 /**
@@ -47,7 +48,7 @@ case class AnalyzeTableCommand(
     relation match {
       case relation: CatalogRelation =>
         updateTableStats(relation.catalogTable,
-          AnalyzeTableCommand.calculateTotalSize(sparkSession, relation.catalogTable))
+          AnalyzeTableCommand.calculateTotalSize(sessionState, relation.catalogTable))
 
       // data source tables have been converted into LogicalRelations
       case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
@@ -94,7 +95,7 @@ case class AnalyzeTableCommand(
 
 object AnalyzeTableCommand extends Logging {
 
-  def calculateTotalSize(sparkSession: SparkSession, catalogTable: CatalogTable): Long = {
+  def calculateTotalSize(sessionState: SessionState, catalogTable: CatalogTable): Long = {
     // This method is mainly based on
     // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
     // in Hive 0.13 (except that we do not use fs.getContentSummary).
@@ -103,8 +104,7 @@ object AnalyzeTableCommand extends Logging {
     // Can we use fs.getContentSummary in future?
     // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
     // countFileSize to count the table size.
-    val stagingDir =
-    sparkSession.sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
+    val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
 
     def calculateTableSize(fs: FileSystem, path: Path): Long = {
       val fileStatus = fs.getFileStatus(path)
@@ -127,7 +127,7 @@ object AnalyzeTableCommand extends Logging {
     catalogTable.storage.locationUri.map { p =>
       val path = new Path(p)
       try {
-        val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+        val fs = path.getFileSystem(sessionState.newHadoopConf())
         calculateTableSize(fs, path)
       } catch {
         case NonFatal(e) =>

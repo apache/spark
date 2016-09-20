@@ -40,7 +40,9 @@ case class AnalyzeColumnCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
-    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
+    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
+    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdentWithDB))
 
     // check correctness of column names
     val attributesToAnalyze = mutable.MutableList[Attribute]()
@@ -59,7 +61,7 @@ case class AnalyzeColumnCommand(
     relation match {
       case catalogRel: CatalogRelation =>
         updateStats(catalogRel.catalogTable,
-          AnalyzeTableCommand.calculateTotalSize(sparkSession, catalogRel.catalogTable))
+          AnalyzeTableCommand.calculateTotalSize(sessionState, catalogRel.catalogTable))
 
       case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
         updateStats(logicalRel.catalogTable.get, logicalRel.relation.sizeInBytes)
@@ -93,7 +95,7 @@ case class AnalyzeColumnCommand(
         colStats = columnStats ++ catalogTable.stats.map(_.colStats).getOrElse(Map()))
       sessionState.catalog.alterTable(catalogTable.copy(stats = Some(statistics)))
       // Refresh the cached data source table in the catalog.
-      sessionState.catalog.refreshTable(tableIdent)
+      sessionState.catalog.refreshTable(tableIdentWithDB)
     }
 
     Seq.empty[Row]
@@ -111,6 +113,18 @@ object ColumnStatsStruct {
   val statsNumber = 8
 
   def apply(e: NamedExpression, relativeSD: Double): CreateStruct = {
+    // Use aggregate functions to compute statistics we need:
+    // - number of nulls: Sum(If(IsNull(e), one, zero));
+    // - maximum value: Max(e);
+    // - minimum value: Min(e);
+    // - ndv (number of distinct values): HyperLogLogPlusPlus(e, relativeSD);
+    // - average length of values: Average(Length(e));
+    // - maximum length of values: Max(Length(e));
+    // - number of true values: Sum(If(e, one, zero));
+    // - number of false values: Sum(If(Not(e), one, zero));
+    // - If we don't need some statistic for the data type, use null literal.
+    // Note that: the order of each sequence must be as follows:
+    // numNulls, max, min, ndv, avgColLen, maxColLen, numTrues, numFalses
     var statistics = e.dataType match {
       case _: NumericType | TimestampType | DateType =>
         Seq(Max(e), Min(e), HyperLogLogPlusPlus(e, relativeSD), nullDouble, nullLong, nullLong,

@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStats
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.AnalyzeColumnCommand
@@ -34,7 +35,7 @@ class StatisticsColumnSuite extends StatisticsTest {
       s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS key, value",
       classOf[AnalyzeColumnCommand])
 
-    intercept[AnalysisException] {
+    intercept[ParseException] {
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS")
     }
   }
@@ -49,13 +50,13 @@ class StatisticsColumnSuite extends StatisticsTest {
       val invalidColError = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS key")
       }
-      assert(invalidColError.message == s"Invalid column name: key.")
+      assert(invalidColError.message == "Invalid column name: key.")
 
       withSQLConf("spark.sql.caseSensitive" -> "true") {
         val invalidErr = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS ABC")
         }
-        assert(invalidErr.message == s"Invalid column name: ABC.")
+        assert(invalidErr.message == "Invalid column name: ABC.")
       }
 
       withSQLConf("spark.sql.caseSensitive" -> "false") {
@@ -89,7 +90,7 @@ class StatisticsColumnSuite extends StatisticsTest {
 
     val df = data.toDF("c1", "c2", "c3", "c4")
     val nonNullValues = getNonNullValues[Int](values)
-    val statsSeq = df.schema.map { f =>
+    val expectedColStatsSeq = df.schema.map { f =>
       val colStats = ColumnStats(
         dataType = f.dataType,
         numNulls = values.count(_.isEmpty),
@@ -98,7 +99,7 @@ class StatisticsColumnSuite extends StatisticsTest {
         ndv = Some(nonNullValues.distinct.length.toLong))
       (f.name, colStats)
     }
-    checkColStats(df, statsSeq)
+    checkColStats(df, expectedColStatsSeq)
   }
 
   test("column-level statistics for fractional type columns") {
@@ -111,7 +112,7 @@ class StatisticsColumnSuite extends StatisticsTest {
 
     val df = data.toDF("c1", "c2", "c3")
     val nonNullValues = getNonNullValues[Double](values)
-    val statsSeq = df.schema.map { f =>
+    val expectedColStatsSeq = df.schema.map { f =>
       val colStats = ColumnStats(
         dataType = f.dataType,
         numNulls = values.count(_.isEmpty),
@@ -120,14 +121,14 @@ class StatisticsColumnSuite extends StatisticsTest {
         ndv = Some(nonNullValues.distinct.length.toLong))
       (f.name, colStats)
     }
-    checkColStats(df, statsSeq)
+    checkColStats(df, expectedColStatsSeq)
   }
 
   test("column-level statistics for string column") {
-    val values = Seq(None, Some("a"), Some("bbbb"), Some("cccc"))
+    val values = Seq(None, Some("a"), Some("bbbb"), Some("cccc"), Some(""))
     val df = values.toDF("c1")
     val nonNullValues = getNonNullValues[String](values)
-    val statsSeq = df.schema.map { f =>
+    val expectedColStatsSeq = df.schema.map { f =>
       val colStats = ColumnStats(
         dataType = f.dataType,
         numNulls = values.count(_.isEmpty),
@@ -136,14 +137,14 @@ class StatisticsColumnSuite extends StatisticsTest {
         avgColLen = Some(nonNullValues.map(_.length).sum / nonNullValues.length.toDouble))
       (f.name, colStats)
     }
-    checkColStats(df, statsSeq)
+    checkColStats(df, expectedColStatsSeq)
   }
 
   test("column-level statistics for binary column") {
-    val values = Seq(None, Some("a"), Some("bbbb"), Some("cccc")).map(_.map(_.getBytes))
+    val values = Seq(None, Some("a"), Some("bbbb"), Some("cccc"), Some("")).map(_.map(_.getBytes))
     val df = values.toDF("c1")
     val nonNullValues = getNonNullValues[Array[Byte]](values)
-    val statsSeq = df.schema.map { f =>
+    val expectedColStatsSeq = df.schema.map { f =>
       val colStats = ColumnStats(
         dataType = f.dataType,
         numNulls = values.count(_.isEmpty),
@@ -151,14 +152,14 @@ class StatisticsColumnSuite extends StatisticsTest {
         avgColLen = Some(nonNullValues.map(_.length).sum / nonNullValues.length.toDouble))
       (f.name, colStats)
     }
-    checkColStats(df, statsSeq)
+    checkColStats(df, expectedColStatsSeq)
   }
 
   test("column-level statistics for boolean column") {
     val values = Seq(None, Some(true), Some(false), Some(true))
     val df = values.toDF("c1")
     val nonNullValues = getNonNullValues[Boolean](values)
-    val statsSeq = df.schema.map { f =>
+    val expectedColStatsSeq = df.schema.map { f =>
       val colStats = ColumnStats(
         dataType = f.dataType,
         numNulls = values.count(_.isEmpty),
@@ -166,14 +167,14 @@ class StatisticsColumnSuite extends StatisticsTest {
         numFalses = Some(nonNullValues.count(_.equals(false)).toLong))
       (f.name, colStats)
     }
-    checkColStats(df, statsSeq)
+    checkColStats(df, expectedColStatsSeq)
   }
 
   test("column-level statistics for date column") {
     val values = Seq(None, Some("1970-01-01"), Some("1970-02-02")).map(_.map(Date.valueOf))
     val df = values.toDF("c1")
     val nonNullValues = getNonNullValues[Date](values)
-    val statsSeq = df.schema.map { f =>
+    val expectedColStatsSeq = df.schema.map { f =>
       val colStats = ColumnStats(
         dataType = f.dataType,
         numNulls = values.count(_.isEmpty),
@@ -183,7 +184,7 @@ class StatisticsColumnSuite extends StatisticsTest {
         ndv = Some(nonNullValues.distinct.length.toLong))
       (f.name, colStats)
     }
-    checkColStats(df, statsSeq)
+    checkColStats(df, expectedColStatsSeq)
   }
 
   test("column-level statistics for timestamp column") {
@@ -192,7 +193,7 @@ class StatisticsColumnSuite extends StatisticsTest {
     }
     val df = values.toDF("c1")
     val nonNullValues = getNonNullValues[Timestamp](values)
-    val statsSeq = df.schema.map { f =>
+    val expectedColStatsSeq = df.schema.map { f =>
       val colStats = ColumnStats(
         dataType = f.dataType,
         numNulls = values.count(_.isEmpty),
@@ -202,7 +203,7 @@ class StatisticsColumnSuite extends StatisticsTest {
         ndv = Some(nonNullValues.distinct.length.toLong))
       (f.name, colStats)
     }
-    checkColStats(df, statsSeq)
+    checkColStats(df, expectedColStatsSeq)
   }
 
   test("column-level statistics for null columns") {
@@ -211,7 +212,7 @@ class StatisticsColumnSuite extends StatisticsTest {
       (i.map(_.toString), i.map(_.toString.toInt))
     }
     val df = data.toDF("c1", "c2")
-    val statsSeq = df.schema.map { f =>
+    val expectedColStatsSeq = df.schema.map { f =>
       val colStats = f.dataType match {
         case StringType =>
           ColumnStats(
@@ -230,7 +231,7 @@ class StatisticsColumnSuite extends StatisticsTest {
       }
       (f.name, colStats)
     }
-    checkColStats(df, statsSeq)
+    checkColStats(df, expectedColStatsSeq)
   }
 
   test("column-level statistics for columns with different types") {
@@ -248,7 +249,7 @@ class StatisticsColumnSuite extends StatisticsTest {
         timestampSeq(i), longSeq(i))
     }
     val df = data.toDF("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8")
-    val statsSeq = df.schema.map { f =>
+    val expectedColStatsSeq = df.schema.map { f =>
       val colStats = f.dataType match {
         case IntegerType =>
           ColumnStats(dataType = f.dataType, numNulls = 0, max = Some(intSeq.max),
@@ -285,7 +286,7 @@ class StatisticsColumnSuite extends StatisticsTest {
       }
       (f.name, colStats)
     }
-    checkColStats(df, statsSeq)
+    checkColStats(df, expectedColStatsSeq)
   }
 
   test("update table-level stats while collecting column-level stats") {
