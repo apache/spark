@@ -49,11 +49,11 @@ case class KafkaSourceRDDPartition(index: Int, offsetRange: OffsetRange) extends
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value
  */
-private[kafka010] class KafkaSourceRDD[K, V](
+private[kafka010] class KafkaSourceRDD(
     sc: SparkContext,
     executorKafkaParams: ju.Map[String, Object],
     offsetRanges: Seq[OffsetRange],
-    sourceOptions: Map[String, String]) extends RDD[ConsumerRecord[K, V]](sc, Nil) {
+    sourceOptions: Map[String, String]) extends RDD[ConsumerRecord[Array[Byte], Array[Byte]]](sc, Nil) {
 
   override def persist(newLevel: StorageLevel): this.type = {
     logError("Kafka ConsumerRecord is not serializable. " +
@@ -69,12 +69,12 @@ private[kafka010] class KafkaSourceRDD[K, V](
 
   override def isEmpty(): Boolean = count == 0L
 
-  override def take(num: Int): Array[ConsumerRecord[K, V]] = {
+  override def take(num: Int): Array[ConsumerRecord[Array[Byte], Array[Byte]]] = {
     val nonEmptyPartitions =
       this.partitions.map(_.asInstanceOf[KafkaSourceRDDPartition]).filter(_.offsetRange.size > 0)
 
     if (num < 1 || nonEmptyPartitions.isEmpty) {
-      return new Array[ConsumerRecord[K, V]](0)
+      return new Array[ConsumerRecord[Array[Byte], Array[Byte]]](0)
     }
 
     // Determine in advance how many messages need to be taken from each partition
@@ -88,17 +88,19 @@ private[kafka010] class KafkaSourceRDD[K, V](
       }
     }
 
-    val buf = new ArrayBuffer[ConsumerRecord[K, V]]
+    val buf = new ArrayBuffer[ConsumerRecord[Array[Byte], Array[Byte]]]
     val res = context.runJob(
       this,
-      (tc: TaskContext, it: Iterator[ConsumerRecord[K, V]]) =>
+      (tc: TaskContext, it: Iterator[ConsumerRecord[Array[Byte], Array[Byte]]]) =>
       it.take(parts(tc.partitionId)).toArray, parts.keys.toArray
     )
     res.foreach(buf ++= _)
     buf.toArray
   }
 
-  override def compute(thePart: Partition, context: TaskContext): Iterator[ConsumerRecord[K, V]] = {
+  override def compute(
+      thePart: Partition,
+      context: TaskContext): Iterator[ConsumerRecord[Array[Byte], Array[Byte]]] = {
     val range = thePart.asInstanceOf[KafkaSourceRDDPartition].offsetRange
     assert(
       range.fromOffset <= range.untilOffset,
@@ -132,11 +134,12 @@ private[kafka010] object KafkaSourceRDD {
    * An iterator that fetches messages directly from Kafka for the offsets in partition.
    * Uses a cached consumer where possible to take advantage of prefetching
    */
-  private class KafkaRDDIterator[K, V](
+  private class KafkaRDDIterator(
       part: OffsetRange,
       executorKafkaParams: ju.Map[String, Object],
       options: Map[String, String],
-      context: TaskContext) extends Iterator[ConsumerRecord[K, V]] with Logging {
+      context: TaskContext)
+    extends Iterator[ConsumerRecord[Array[Byte], Array[Byte]]] with Logging {
 
     logInfo(s"Computing topic ${part.topic}, partition ${part.partition} " +
       s"offsets ${part.fromOffset} -> ${part.untilOffset}")
@@ -164,13 +167,13 @@ private[kafka010] object KafkaSourceRDD {
       CachedKafkaConsumer.remove(groupId, part.topic, part.partition)
     }
     val consumer =
-      CachedKafkaConsumer.get[K, V](groupId, part.topic, part.partition, executorKafkaParams)
+      CachedKafkaConsumer.get(groupId, part.topic, part.partition, executorKafkaParams)
 
     var requestOffset = part.fromOffset
 
     override def hasNext(): Boolean = requestOffset < part.untilOffset
 
-    override def next(): ConsumerRecord[K, V] = {
+    override def next(): ConsumerRecord[Array[Byte], Array[Byte]] = {
       assert(hasNext(), "Can't call next() once untilOffset has been reached")
       val r = consumer.get(requestOffset, pollTimeout)
       requestOffset += 1

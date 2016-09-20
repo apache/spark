@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
  * Underlying consumer is not threadsafe, so neither is this,
  * but processing the same topicpartition and group id in multiple threads is usually bad anyway.
  */
-class CachedKafkaConsumer[K, V] private(
+class CachedKafkaConsumer private(
   val groupId: String,
   val topic: String,
   val partition: Int,
@@ -42,7 +42,7 @@ class CachedKafkaConsumer[K, V] private(
   val topicPartition = new TopicPartition(topic, partition)
 
   protected val consumer = {
-    val c = new KafkaConsumer[K, V](kafkaParams)
+    val c = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
     val tps = new ju.ArrayList[TopicPartition]()
     tps.add(topicPartition)
     c.assign(tps)
@@ -51,7 +51,8 @@ class CachedKafkaConsumer[K, V] private(
 
   // TODO if the buffer was kept around as a random-access structure,
   // could possibly optimize re-calculating of an RDD in the same batch
-  protected var buffer = ju.Collections.emptyList[ConsumerRecord[K, V]]().iterator
+  protected var buffer =
+    ju.Collections.emptyList[ConsumerRecord[Array[Byte], Array[Byte]]]().iterator
   protected var nextOffset = -2L
 
   def close(): Unit = consumer.close()
@@ -60,7 +61,7 @@ class CachedKafkaConsumer[K, V] private(
    * Get the record for the given offset, waiting up to timeout ms if IO is necessary.
    * Sequential forward access will use buffers, but random access will be horribly inefficient.
    */
-  def get(offset: Long, timeout: Long): ConsumerRecord[K, V] = {
+  def get(offset: Long, timeout: Long): ConsumerRecord[Array[Byte], Array[Byte]] = {
     logDebug(s"Get $groupId $topic $partition nextOffset $nextOffset requested $offset")
     if (offset != nextOffset) {
       logInfo(s"Initial fetch for $groupId $topic $partition $offset")
@@ -107,7 +108,7 @@ object CachedKafkaConsumer extends Logging {
   private case class CacheKey(groupId: String, topic: String, partition: Int)
 
   // Don't want to depend on guava, don't want a cleanup thread, use a simple LinkedHashMap
-  private var cache: ju.LinkedHashMap[CacheKey, CachedKafkaConsumer[_, _]] = null
+  private var cache: ju.LinkedHashMap[CacheKey, CachedKafkaConsumer] = null
 
   /** Must be called before get, once per JVM, to configure the cache. Further calls are ignored */
   def init(
@@ -116,10 +117,10 @@ object CachedKafkaConsumer extends Logging {
       loadFactor: Float): Unit = CachedKafkaConsumer.synchronized {
     if (null == cache) {
       logInfo(s"Initializing cache $initialCapacity $maxCapacity $loadFactor")
-      cache = new ju.LinkedHashMap[CacheKey, CachedKafkaConsumer[_, _]](
+      cache = new ju.LinkedHashMap[CacheKey, CachedKafkaConsumer](
         initialCapacity, loadFactor, true) {
         override def removeEldestEntry(
-          entry: ju.Map.Entry[CacheKey, CachedKafkaConsumer[_, _]]): Boolean = {
+          entry: ju.Map.Entry[CacheKey, CachedKafkaConsumer]): Boolean = {
           if (this.size > maxCapacity) {
             try {
               entry.getValue.consumer.close()
@@ -140,23 +141,23 @@ object CachedKafkaConsumer extends Logging {
    * Get a cached consumer for groupId, assigned to topic and partition.
    * If matching consumer doesn't already exist, will be created using kafkaParams.
    */
-  def get[K, V](
+  def get(
       groupId: String,
       topic: String,
       partition: Int,
-      kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer[K, V] =
+      kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer =
     CachedKafkaConsumer.synchronized {
       val k = CacheKey(groupId, topic, partition)
       val v = cache.get(k)
       if (null == v) {
         logInfo(s"Cache miss for $k")
         logDebug(cache.keySet.toString)
-        val c = new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams)
+        val c = new CachedKafkaConsumer(groupId, topic, partition, kafkaParams)
         cache.put(k, c)
         c
       } else {
         // any given topicpartition should have a consistent key and value type
-        v.asInstanceOf[CachedKafkaConsumer[K, V]]
+        v.asInstanceOf[CachedKafkaConsumer]
       }
     }
 
@@ -164,12 +165,12 @@ object CachedKafkaConsumer extends Logging {
    * Get a fresh new instance, unassociated with the global cache.
    * Caller is responsible for closing
    */
-  def getUncached[K, V](
+  def getUncached(
       groupId: String,
       topic: String,
       partition: Int,
-      kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer[K, V] =
-    new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams)
+      kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer =
+    new CachedKafkaConsumer(groupId, topic, partition, kafkaParams)
 
   /** remove consumer for given groupId, topic, and partition, if it exists */
   def remove(groupId: String, topic: String, partition: Int): Unit = {
