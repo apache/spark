@@ -621,7 +621,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         AddTextFileData("{'value': 'drop1'}\n{'value': 'keep2'}", partitionFooSubDir, tmp),
         CheckAnswer(("keep2", "foo")),
 
-        // Append to same partition=1 sub dir
+        // Append to same partition=foo sub dir
         AddTextFileData("{'value': 'keep3'}", partitionFooSubDir, tmp),
         CheckAnswer(("keep2", "foo"), ("keep3", "foo")),
 
@@ -629,7 +629,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         AddTextFileData("{'value': 'keep4'}", partitionBarSubDir, tmp),
         CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar")),
 
-        // Append to same partition=2 sub dir
+        // Append to same partition=bar sub dir
         AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
         CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"))
       )
@@ -649,18 +649,17 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val partitionFooSubDir = new File(dir, "partition=foo")
         val partitionBarSubDir = new File(dir, "partition=bar")
 
-        // Create files in partitions, so we can infer the schema.
+        // Create file in partition, so we can infer the schema.
         createFile("{'value': 'drop0'}", partitionFooSubDir, tmp)
-        createFile("{'value': 'drop0'}", partitionBarSubDir, tmp)
 
         val fileStream = createFileStream("json", s"${dir.getCanonicalPath}")
         val filtered = fileStream.filter($"value" contains "keep")
         testStream(filtered)(
-          // Create new partition=foo sub dir and write to it
+          // Append to same partition=foo sub dir
           AddTextFileData("{'value': 'drop1'}\n{'value': 'keep2'}", partitionFooSubDir, tmp),
           CheckAnswer(("keep2", "foo")),
 
-          // Append to same partition=1 sub dir
+          // Append to same partition=foo sub dir
           AddTextFileData("{'value': 'keep3'}", partitionFooSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo")),
 
@@ -668,7 +667,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           AddTextFileData("{'value': 'keep4'}", partitionBarSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar")),
 
-          // Append to same partition=2 sub dir
+          // Append to same partition=bar sub dir
           AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"))
         )
