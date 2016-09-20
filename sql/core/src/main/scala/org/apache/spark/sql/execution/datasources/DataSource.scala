@@ -198,12 +198,14 @@ case class DataSource(
       }.toArray
       val fileCatalog = new ListingFileCatalog(sparkSession, globbedPaths, options, None)
       val partitionCols = fileCatalog.partitionSpec().partitionColumns.fields
-      format.inferSchema(
+      val inferred = format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,
-        fileCatalog.allFiles()).map { inferredSchema =>
-          partitionCols.foldLeft(inferredSchema)((struct, field) => struct.add(field))
-        }
+        fileCatalog.allFiles())
+
+      inferred.map { inferredSchema =>
+        StructType(inferredSchema ++ partitionCols)
+      }
     }.getOrElse {
       throw new AnalysisException("Unable to infer schema. It must be specified manually.")
     }

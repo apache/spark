@@ -636,6 +636,46 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("when schema inference is turned on, should read partition data") {
+    def createFile(content: String, src: File, tmp: File): Unit = {
+      val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+      val finalFile = new File(src, tempFile.getName)
+      src.mkdirs()
+      require(stringToFile(tempFile, content).renameTo(finalFile))
+    }
+
+    withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+      withTempDirs { case (dir, tmp) =>
+        val partitionFooSubDir = new File(dir, "partition=foo")
+        val partitionBarSubDir = new File(dir, "partition=bar")
+
+        // Create files in partitions, so we can infer the schema.
+        createFile("{'value': 'drop0'}", partitionFooSubDir, tmp)
+        createFile("{'value': 'drop0'}", partitionBarSubDir, tmp)
+
+        val fileStream = createFileStream("json", s"${dir.getCanonicalPath}")
+        val filtered = fileStream.filter($"value" contains "keep")
+        testStream(filtered)(
+          // Create new partition=foo sub dir and write to it
+          AddTextFileData("{'value': 'drop1'}\n{'value': 'keep2'}", partitionFooSubDir, tmp),
+          CheckAnswer(("keep2", "foo")),
+
+          // Append to same partition=1 sub dir
+          AddTextFileData("{'value': 'keep3'}", partitionFooSubDir, tmp),
+          CheckAnswer(("keep2", "foo"), ("keep3", "foo")),
+
+          // Create new partition sub dir and write to it
+          AddTextFileData("{'value': 'keep4'}", partitionBarSubDir, tmp),
+          CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar")),
+
+          // Append to same partition=2 sub dir
+          AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
+          CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"))
+        )
+      }
+    }
+  }
+
   test("fault tolerance") {
     withTempDirs { case (src, tmp) =>
       val fileStream = createFileStream("text", src.getCanonicalPath)

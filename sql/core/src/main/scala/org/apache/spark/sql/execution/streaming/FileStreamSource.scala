@@ -49,13 +49,12 @@ class FileStreamSource(
     fs.makeQualified(new Path(path))  // can contains glob patterns
   }
 
-  private val optionsWithPartitionBasePath = if (!SparkHadoopUtil.get.isGlobPath(new Path(path))) {
-    options.get("path").map { path =>
-      sourceOptions.optionMapWithoutPath + (("basePath", path))
-    }.getOrElse(sourceOptions.optionMapWithoutPath)
-  } else {
-    sourceOptions.optionMapWithoutPath
-  }
+  private val optionsWithPartitionBasePath = sourceOptions.optionMapWithoutPath ++ {
+    if (!SparkHadoopUtil.get.isGlobPath(new Path(path)) && options.contains("path")) {
+      Map("basePath" -> path)
+    } else {
+      Map()
+    }}
 
   private val metadataLog = new HDFSMetadataLog[Array[FileEntry]](sparkSession, metadataPath)
 
