@@ -74,10 +74,10 @@ class FileStreamSourceLog(
   }
 
   override def add(batchId: Long, logs: Array[FileEntry]): Boolean = {
-    if (super.add(batchId, logs) && isCompactionBatch(batchId, compactInterval)) {
-      fileEntryCache.put(batchId, logs)
-      true
-    } else if (!isCompactionBatch(batchId, compactInterval)) {
+    if (super.add(batchId, logs)) {
+      if (isCompactionBatch(batchId, compactInterval)) {
+        fileEntryCache.put(batchId, logs)
+      }
       true
     } else {
       false
