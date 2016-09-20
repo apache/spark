@@ -34,7 +34,7 @@ if [ "$SPARK_MESOS_DISPATCHER_PORT" = "" ]; then
 fi
 
 if [ "$SPARK_MESOS_DISPATCHER_HOST" = "" ]; then
-  SPARK_MESOS_DISPATCHER_HOST=`hostname`
+  SPARK_MESOS_DISPATCHER_HOST=`hostname -f`
 fi
 
 if [ "$SPARK_MESOS_DISPATCHER_NUM" = "" ]; then

@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -517,5 +517,18 @@ class ExpressionParserSuite extends PlanTest {
   test("current date/timestamp braceless expressions") {
     assertEqual("current_date", CurrentDate())
     assertEqual("current_timestamp", CurrentTimestamp())
+  }
+
+  test("SPARK-17364, fully qualified column name which starts with number") {
+    assertEqual("123_", UnresolvedAttribute("123_"))
+    assertEqual("1a.123_", UnresolvedAttribute("1a.123_"))
+    // ".123" should not be treated as token of type DECIMAL_VALUE
+    assertEqual("a.123A", UnresolvedAttribute("a.123A"))
+    // ".123E3" should not be treated as token of type SCIENTIFIC_DECIMAL_VALUE
+    assertEqual("a.123E3_column", UnresolvedAttribute("a.123E3_column"))
+    // ".123D" should not be treated as token of type DOUBLE_LITERAL
+    assertEqual("a.123D_column", UnresolvedAttribute("a.123D_column"))
+    // ".123BD" should not be treated as token of type BIGDECIMAL_LITERAL
+    assertEqual("a.123BD_column", UnresolvedAttribute("a.123BD_column"))
   }
 }

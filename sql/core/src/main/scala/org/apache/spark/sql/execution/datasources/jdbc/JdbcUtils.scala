@@ -369,7 +369,7 @@ object JdbcUtils extends Logging {
         val bytes = rs.getBytes(pos + 1)
         var ans = 0L
         var j = 0
-        while (j < bytes.size) {
+        while (j < bytes.length) {
           ans = 256 * ans + (255 & bytes(j))
           j = j + 1
         }
@@ -590,12 +590,12 @@ object JdbcUtils extends Logging {
       val stmt = insertStatement(conn, table, rddSchema, dialect)
       val setters: Array[JDBCValueSetter] = rddSchema.fields.map(_.dataType)
         .map(makeSetter(conn, dialect, _)).toArray
+      val numFields = rddSchema.fields.length
 
       try {
         var rowCount = 0
         while (iterator.hasNext) {
           val row = iterator.next()
-          val numFields = rddSchema.fields.length
           var i = 0
           while (i < numFields) {
             if (row.isNullAt(i)) {
