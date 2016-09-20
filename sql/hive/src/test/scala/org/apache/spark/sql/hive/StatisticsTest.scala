@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.plans.logical.{BasicColStats, Statistics}
+import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStats, Statistics}
 import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, AnalyzeTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -80,21 +79,19 @@ trait StatisticsTest extends QueryTest with TestHiveSingleton with SQLTestUtils 
   }
 
   def checkColStats(
-      rowRDD: RDD[Row],
-      schema: StructType,
-      expectedColStatsSeq: Seq[(String, BasicColStats)]): Unit = {
+      df: DataFrame,
+      expectedColStatsSeq: Seq[(String, ColumnStats)]): Unit = {
     val table = "tbl"
     withTable(table) {
-      var df = spark.createDataFrame(rowRDD, schema)
       df.write.format("json").saveAsTable(table)
       val columns = expectedColStatsSeq.map(_._1).mkString(", ")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $columns")
-      df = sql(s"SELECT * FROM $table")
-      val stats = df.queryExecution.analyzed.collect {
+      val readback = sql(s"SELECT * FROM $table")
+      val stats = readback.queryExecution.analyzed.collect {
         case rel: LogicalRelation =>
           expectedColStatsSeq.foreach { expected =>
-            assert(rel.catalogTable.get.stats.get.basicColStats.contains(expected._1))
-            checkColStats(colStats = rel.catalogTable.get.stats.get.basicColStats(expected._1),
+            assert(rel.catalogTable.get.stats.get.colStats.contains(expected._1))
+            checkColStats(colStats = rel.catalogTable.get.stats.get.colStats(expected._1),
               expectedColStats = expected._2)
           }
       }
@@ -102,39 +99,36 @@ trait StatisticsTest extends QueryTest with TestHiveSingleton with SQLTestUtils 
     }
   }
 
-  def checkColStats(colStats: BasicColStats, expectedColStats: BasicColStats): Unit = {
+  def checkColStats(colStats: ColumnStats, expectedColStats: ColumnStats): Unit = {
     assert(colStats.dataType == expectedColStats.dataType)
     assert(colStats.numNulls == expectedColStats.numNulls)
     colStats.dataType match {
-      case ByteType | ShortType | IntegerType | LongType =>
+      case _: IntegralType | DateType | TimestampType =>
         assert(colStats.max.map(_.toString.toLong) == expectedColStats.max.map(_.toString.toLong))
         assert(colStats.min.map(_.toString.toLong) == expectedColStats.min.map(_.toString.toLong))
-      case FloatType | DoubleType =>
-        assert(colStats.max.map(_.toString.toDouble) == expectedColStats.max
-          .map(_.toString.toDouble))
-        assert(colStats.min.map(_.toString.toDouble) == expectedColStats.min
-          .map(_.toString.toDouble))
-      case DecimalType.SYSTEM_DEFAULT =>
-        assert(colStats.max.map(i => Decimal(i.toString)) == expectedColStats.max
-          .map(i => Decimal(i.toString)))
-        assert(colStats.min.map(i => Decimal(i.toString)) == expectedColStats.min
-          .map(i => Decimal(i.toString)))
-      case DateType | TimestampType =>
-        if (expectedColStats.max.isDefined) {
-          // just check the difference to exclude the influence of timezones
-          assert(colStats.max.get.toString.toLong - colStats.min.get.toString.toLong ==
-            expectedColStats.max.get.toString.toLong - expectedColStats.min.get.toString.toLong)
-        } else {
-          assert(colStats.max.isEmpty && colStats.min.isEmpty)
-        }
-      case _ => // only numeric types, date type and timestamp type have max and min stats
+      case _: FractionalType =>
+        assert(colStats.max.map(_.toString.toDouble) == expectedColStats
+          .max.map(_.toString.toDouble))
+        assert(colStats.min.map(_.toString.toDouble) == expectedColStats
+          .min.map(_.toString.toDouble))
+      case _ =>
+        // other types don't have max and min stats
+        assert(colStats.max.isEmpty)
+        assert(colStats.min.isEmpty)
     }
     colStats.dataType match {
-      case BinaryType => assert(colStats.ndv.isEmpty)
-      case BooleanType => assert(colStats.ndv.contains(2))
+      case BinaryType | BooleanType => assert(colStats.ndv.isEmpty)
       case _ =>
-        // ndv is an approximate value, so we just make sure we have the value
+        // ndv is an approximate value, so we make sure we have the value, and it should be
+        // within 3*SD's of the given rsd.
         assert(colStats.ndv.get >= 0)
+        if (expectedColStats.ndv.get == 0) {
+          assert(colStats.ndv.get == 0)
+        } else if (expectedColStats.ndv.get > 0) {
+          val rsd = spark.sessionState.conf.ndvMaxError
+          val error = math.abs((colStats.ndv.get / expectedColStats.ndv.get.toDouble) - 1.0d)
+          assert(error <= rsd * 3.0d, "Error should be within 3 std. errors.")
+        }
     }
     assert(colStats.avgColLen == expectedColStats.avgColLen)
     assert(colStats.maxColLen == expectedColStats.maxColLen)

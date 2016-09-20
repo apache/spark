@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, BasicColStats, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ColumnStats, Statistics}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.types._
 
@@ -43,17 +43,17 @@ case class AnalyzeColumnCommand(
     val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
 
     // check correctness of column names
-    val validColumns = mutable.MutableList[NamedExpression]()
-    val resolver = sessionState.conf.resolver
+    val attributesToAnalyze = mutable.MutableList[Attribute]()
+    val caseSensitive = sessionState.conf.caseSensitiveAnalysis
     columnNames.foreach { col =>
-      val exprOption = relation.resolve(col.split("\\."), resolver)
-      if (exprOption.isEmpty) {
-        throw new AnalysisException(s"Invalid column name: $col")
+      val exprOption = relation.output.find { attr =>
+        if (caseSensitive) attr.name == col else attr.name.equalsIgnoreCase(col)
       }
-      if (validColumns.map(_.exprId).contains(exprOption.get.exprId)) {
-        throw new AnalysisException(s"Duplicate column name: $col")
+      val expr = exprOption.getOrElse(throw new AnalysisException(s"Invalid column name: $col."))
+      // do deduplication
+      if (!attributesToAnalyze.contains(expr)) {
+        attributesToAnalyze += expr
       }
-      validColumns += exprOption.get
     }
 
     relation match {
@@ -73,24 +73,22 @@ case class AnalyzeColumnCommand(
       // Collect statistics per column.
       // The first element in the result will be the overall row count, the following elements
       // will be structs containing all column stats.
-      // The layout of each struct follows the layout of the BasicColStats.
+      // The layout of each struct follows the layout of the ColumnStats.
       val ndvMaxErr = sessionState.conf.ndvMaxError
       val expressions = Count(Literal(1)).toAggregateExpression() +:
-        validColumns.map(ColumnStatsStruct(_, ndvMaxErr))
+        attributesToAnalyze.map(ColumnStatsStruct(_, ndvMaxErr))
       val namedExpressions = expressions.map(e => Alias(e, e.toString)())
       val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation))
         .queryExecution.toRdd.collect().head
 
       // unwrap the result
       val rowCount = statsRow.getLong(0)
-      val colStats = validColumns.zipWithIndex.map { case (expr, i) =>
-        val colInfo = statsRow.getStruct(i + 1, ColumnStatsStruct.statsNumber)
-        val colStats = ColumnStatsStruct.unwrapRow(expr, colInfo)
-        (expr.name, colStats)
+      val columnStats = attributesToAnalyze.zipWithIndex.map { case (expr, i) =>
+        (expr.name, ColumnStatsStruct.unwrapStruct(statsRow, i + 1, expr))
       }.toMap
 
       val statistics =
-        Statistics(sizeInBytes = newTotalSize, rowCount = Some(rowCount), basicColStats = colStats)
+        Statistics(sizeInBytes = newTotalSize, rowCount = Some(rowCount), colStats = columnStats)
       sessionState.catalog.alterTable(catalogTable.copy(stats = Some(statistics)))
       // Refresh the cached data source table in the catalog.
       sessionState.catalog.refreshTable(tableIdent)
@@ -103,7 +101,6 @@ case class AnalyzeColumnCommand(
 object ColumnStatsStruct {
   val zero = Literal(0, LongType)
   val one = Literal(1, LongType)
-  val two = Literal(2, LongType)
   val nullLong = Literal(null, LongType)
   val nullDouble = Literal(null, DoubleType)
   val nullString = Literal(null, StringType)
@@ -111,12 +108,9 @@ object ColumnStatsStruct {
   val nullBoolean = Literal(null, BooleanType)
   val statsNumber = 8
 
-  def apply(e: Expression, relativeSD: Double): CreateStruct = {
+  def apply(e: NamedExpression, relativeSD: Double): CreateStruct = {
     var statistics = e.dataType match {
-      case n: NumericType =>
-        Seq(Max(e), Min(e), HyperLogLogPlusPlus(e, relativeSD), nullDouble, nullLong, nullLong,
-          nullLong)
-      case TimestampType | DateType =>
+      case _: NumericType | TimestampType | DateType =>
         Seq(Max(e), Min(e), HyperLogLogPlusPlus(e, relativeSD), nullDouble, nullLong, nullLong,
           nullLong)
       case StringType =>
@@ -126,11 +120,11 @@ object ColumnStatsStruct {
         Seq(nullBinary, nullBinary, nullLong, Average(Length(e)), Max(Length(e)), nullLong,
           nullLong)
       case BooleanType =>
-        Seq(nullBoolean, nullBoolean, two, nullDouble, nullLong, Sum(If(e, one, zero)),
-          Sum(If(e, zero, one)))
+        Seq(nullBoolean, nullBoolean, nullLong, nullDouble, nullLong, Sum(If(e, one, zero)),
+          Sum(If(Not(e), one, zero)))
       case otherType =>
-        throw new AnalysisException("ANALYZE command is not supported for data type: " +
-          s"${e.dataType}")
+        throw new AnalysisException("Analyzing columns is not supported for column " +
+          s"${e.name} of data type: ${e.dataType}.")
     }
     statistics = if (e.nullable) {
       Sum(If(IsNull(e), one, zero)) +: statistics
@@ -144,16 +138,29 @@ object ColumnStatsStruct {
     })
   }
 
-  def unwrapRow(e: Expression, row: InternalRow): BasicColStats = {
-    BasicColStats(
+  def unwrapStruct(row: InternalRow, offset: Int, e: Expression): ColumnStats = {
+    val struct = row.getStruct(offset, statsNumber)
+    ColumnStats(
       dataType = e.dataType,
-      numNulls = row.getLong(0),
-      max = if (row.isNullAt(1)) None else Some(row.get(1, e.dataType)),
-      min = if (row.isNullAt(2)) None else Some(row.get(2, e.dataType)),
-      ndv = if (row.isNullAt(3)) None else Some(row.getLong(3)),
-      avgColLen = if (row.isNullAt(4)) None else Some(row.getDouble(4)),
-      maxColLen = if (row.isNullAt(5)) None else Some(row.getLong(5)),
-      numTrues = if (row.isNullAt(6)) None else Some(row.getLong(6)),
-      numFalses = if (row.isNullAt(7)) None else Some(row.getLong(7) - row.getLong(0)))
+      numNulls = struct.getLong(0),
+      max = getField(struct, 1, e.dataType),
+      min = getField(struct, 2, e.dataType),
+      ndv = getLongField(struct, 3),
+      avgColLen = getDoubleField(struct, 4),
+      maxColLen = getLongField(struct, 5),
+      numTrues = getLongField(struct, 6),
+      numFalses = getLongField(struct, 7))
+  }
+
+  private def getField(struct: InternalRow, index: Int, dataType: DataType): Option[Any] = {
+    if (struct.isNullAt(index)) None else Some(struct.get(index, dataType))
+  }
+
+  private def getLongField(struct: InternalRow, index: Int): Option[Long] = {
+    if (struct.isNullAt(index)) None else Some(struct.getLong(index))
+  }
+
+  private def getDoubleField(struct: InternalRow, index: Int): Option[Double] = {
+    if (struct.isNullAt(index)) None else Some(struct.getDouble(index))
   }
 }

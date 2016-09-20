@@ -95,10 +95,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       ctx.identifier.getText.toLowerCase == "noscan") {
       AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier))
     } else if (ctx.identifierSeq() == null) {
-      if (ctx.FOR() != null || ctx.COLUMNS() != null) {
-        throw new ParseException("Need to specify the columns to analyze. Usage: " +
-          "ANALYZE TABLE tbl COMPUTE STATISTICS FOR COLUMNS key, value", ctx)
-      }
       AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier), noscan = false)
     } else {
       AnalyzeColumnCommand(

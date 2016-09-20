@@ -32,7 +32,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.{BasicColStats, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStats, Statistics}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.client.HiveClient
@@ -403,7 +403,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       if (stats.rowCount.isDefined) {
         statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
       }
-      stats.basicColStats.foreach { case (colName, colStats) =>
+      stats.colStats.foreach { case (colName, colStats) =>
         statsProperties += (STATISTICS_BASIC_COL_STATS_PREFIX + colName) -> colStats.toString
       }
       tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties)
@@ -480,16 +480,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val colStatsProps = catalogTable.properties
         .filterKeys(_.startsWith(STATISTICS_BASIC_COL_STATS_PREFIX))
         .map { case (k, v) => (k.replace(STATISTICS_BASIC_COL_STATS_PREFIX, ""), v)}
-      val colStats: Map[String, BasicColStats] = catalogTable.schema.collect {
+      val colStats: Map[String, ColumnStats] = catalogTable.schema.collect {
         case field if colStatsProps.contains(field.name) =>
-          (field.name, BasicColStats.fromString(colStatsProps(field.name), field.dataType))
+          (field.name, ColumnStats.fromString(colStatsProps(field.name), field.dataType))
       }.toMap
       catalogTable.copy(
         properties = removeStatsProperties(catalogTable),
         stats = Some(Statistics(
           sizeInBytes = BigInt(catalogTable.properties(STATISTICS_TOTAL_SIZE)),
           rowCount = catalogTable.properties.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
-          basicColStats = colStats)))
+          colStats = colStats)))
     } else {
       catalogTable
     }
@@ -701,7 +701,7 @@ object HiveExternalCatalog {
   val STATISTICS_PREFIX = "spark.sql.statistics."
   val STATISTICS_TOTAL_SIZE = STATISTICS_PREFIX + "totalSize"
   val STATISTICS_NUM_ROWS = STATISTICS_PREFIX + "numRows"
-  val STATISTICS_BASIC_COL_STATS_PREFIX = STATISTICS_PREFIX + "basicColStats."
+  val STATISTICS_BASIC_COL_STATS_PREFIX = STATISTICS_PREFIX + "colStats."
 
   def removeStatsProperties(metadata: CatalogTable): Map[String, String] = {
     metadata.properties.filterNot { case (key, _) => key.startsWith(STATISTICS_PREFIX) }

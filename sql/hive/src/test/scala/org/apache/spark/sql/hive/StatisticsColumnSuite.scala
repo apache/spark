@@ -19,12 +19,14 @@ package org.apache.spark.sql.hive
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.plans.logical.BasicColStats
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.plans.logical.ColumnStats
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.AnalyzeColumnCommand
 import org.apache.spark.sql.types._
 
 class StatisticsColumnSuite extends StatisticsTest {
+  import testImplicits._
 
   test("parse analyze column commands") {
     val table = "table"
@@ -32,197 +34,288 @@ class StatisticsColumnSuite extends StatisticsTest {
       s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS key, value",
       classOf[AnalyzeColumnCommand])
 
-    val noColumnError = intercept[AnalysisException] {
+    intercept[AnalysisException] {
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS")
     }
-    assert(noColumnError.message == "Need to specify the columns to analyze. Usage: " +
-      "ANALYZE TABLE tbl COMPUTE STATISTICS FOR COLUMNS key, value")
+  }
 
+  test("check correctness of columns") {
+    val table = "tbl"
+    val quotedColumn = "x.yz"
+    val quotedName = s"`$quotedColumn`"
     withTable(table) {
-      sql(s"CREATE TABLE $table (key INT, value STRING)")
-      val invalidColError = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS k")
-      }
-      assert(invalidColError.message == s"Invalid column name: k")
+      sql(s"CREATE TABLE $table (abc int, $quotedName string)")
 
-      val duplicateColError = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS key, value, key")
+      val invalidColError = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS key")
       }
-      assert(duplicateColError.message == s"Duplicate column name: key")
+      assert(invalidColError.message == s"Invalid column name: key.")
 
       withSQLConf("spark.sql.caseSensitive" -> "true") {
         val invalidErr = intercept[AnalysisException] {
-          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS keY")
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS ABC")
         }
-        assert(invalidErr.message == s"Invalid column name: keY")
+        assert(invalidErr.message == s"Invalid column name: ABC.")
       }
 
       withSQLConf("spark.sql.caseSensitive" -> "false") {
-        val duplicateErr = intercept[AnalysisException] {
-          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS key, value, vaLue")
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS ${quotedName.toUpperCase}, " +
+          s"ABC, $quotedName")
+        val df = sql(s"SELECT * FROM $table")
+        val stats = df.queryExecution.analyzed.collect {
+          case rel: MetastoreRelation =>
+            val colStats = rel.catalogTable.stats.get.colStats
+            // check deduplication
+            assert(colStats.size == 2)
+            assert(colStats.contains(quotedColumn))
+            assert(colStats.contains("abc"))
         }
-        assert(duplicateErr.message == s"Duplicate column name: vaLue")
+        assert(stats.size == 1)
       }
     }
   }
 
-  test("basic statistics for integral type columns") {
-    val rdd = sparkContext.parallelize(Seq("1", null, "2", "3", null)).map { i =>
-      if (i != null) Row(i.toByte, i.toShort, i.toInt, i.toLong) else Row(i, i, i, i)
+  private def getNonNullValues[T](values: Seq[Option[T]]): Seq[T] = {
+    values.filter(_.isDefined).map(_.get)
+  }
+
+  test("column-level statistics for integral type columns") {
+    val values = (0 to 5).map { i =>
+      if (i % 2 == 0) None else Some(i)
     }
-    val schema = StructType(
-      StructField(name = "c1", dataType = ByteType, nullable = true) ::
-        StructField(name = "c2", dataType = ShortType, nullable = true) ::
-        StructField(name = "c3", dataType = IntegerType, nullable = true) ::
-        StructField(name = "c4", dataType = LongType, nullable = true) :: Nil)
-    val expectedBasicStats = BasicColStats(
-      dataType = ByteType, numNulls = 2, max = Some(3), min = Some(1), ndv = Some(3))
-    val statsSeq = Seq(
-      ("c1", expectedBasicStats),
-      ("c2", expectedBasicStats.copy(dataType = ShortType)),
-      ("c3", expectedBasicStats.copy(dataType = IntegerType)),
-      ("c4", expectedBasicStats.copy(dataType = LongType)))
-    checkColStats(rdd, schema, statsSeq)
-  }
-
-  test("basic statistics for fractional type columns") {
-    val rdd = sparkContext.parallelize(Seq(null, "1.01", "2.02", "3.03")).map { i =>
-      if (i != null) Row(i.toFloat, i.toDouble, Decimal(i)) else Row(i, i, i)
+    val data = values.map { i =>
+      (i.map(_.toByte), i.map(_.toShort), i.map(_.toInt), i.map(_.toLong))
     }
-    val schema = StructType(
-      StructField(name = "c1", dataType = FloatType, nullable = true) ::
-        StructField(name = "c2", dataType = DoubleType, nullable = true) ::
-        StructField(name = "c3", dataType = DecimalType.SYSTEM_DEFAULT, nullable = true) :: Nil)
-    val expectedBasicStats = BasicColStats(
-      dataType = FloatType, numNulls = 1, max = Some(3.03), min = Some(1.01), ndv = Some(3))
-    val statsSeq = Seq(
-      ("c1", expectedBasicStats),
-      ("c2", expectedBasicStats.copy(dataType = DoubleType)),
-      ("c3", expectedBasicStats.copy(dataType = DecimalType.SYSTEM_DEFAULT)))
-    checkColStats(rdd, schema, statsSeq)
-  }
 
-  test("basic statistics for string column") {
-    val rdd = sparkContext.parallelize(Seq(null, "a", "bbbb", "cccc")).map(Row(_))
-    val schema = StructType(StructField(name = "c1", dataType = StringType, nullable = true) :: Nil)
-    val statsSeq = Seq(("c1", BasicColStats(dataType = StringType, numNulls = 1,
-      maxColLen = Some(4), avgColLen = Some(3), ndv = Some(3))))
-    checkColStats(rdd, schema, statsSeq)
-  }
-
-  test("basic statistics for binary column") {
-    val rdd = sparkContext.parallelize(Seq(null, "a", "bbbb", "cccc")).map { i =>
-      if (i != null) Row(i.getBytes) else Row(i)
+    val df = data.toDF("c1", "c2", "c3", "c4")
+    val nonNullValues = getNonNullValues[Int](values)
+    val statsSeq = df.schema.map { f =>
+      val colStats = ColumnStats(
+        dataType = f.dataType,
+        numNulls = values.count(_.isEmpty),
+        max = Some(nonNullValues.max),
+        min = Some(nonNullValues.min),
+        ndv = Some(nonNullValues.distinct.length.toLong))
+      (f.name, colStats)
     }
-    val schema = StructType(StructField(name = "c1", dataType = BinaryType, nullable = true) :: Nil)
-    val statsSeq = Seq(("c1", BasicColStats(dataType = BinaryType, numNulls = 1,
-      maxColLen = Some(4), avgColLen = Some(3))))
-    checkColStats(rdd, schema, statsSeq)
+    checkColStats(df, statsSeq)
   }
 
-  test("basic statistics for boolean column") {
-    val rdd = sparkContext.parallelize(Seq(null, true, false, true)).map(Row(_))
-    val schema =
-      StructType(StructField(name = "c1", dataType = BooleanType, nullable = true) :: Nil)
-    val statsSeq = Seq(("c1", BasicColStats(dataType = BooleanType, numNulls = 1,
-      numTrues = Some(2), numFalses = Some(1))))
-    checkColStats(rdd, schema, statsSeq)
-  }
-
-  test("basic statistics for date column") {
-    val rdd = sparkContext.parallelize(Seq(null, "1970-01-01", "1970-02-02")).map { i =>
-      if (i != null) Row(Date.valueOf(i)) else Row(i)
+  test("column-level statistics for fractional type columns") {
+    val values = (0 to 5).map { i =>
+      if (i == 0) None else Some(i + i * 0.01d)
     }
-    val schema =
-      StructType(StructField(name = "c1", dataType = DateType, nullable = true) :: Nil)
-    val statsSeq = Seq(("c1", BasicColStats(dataType = DateType, numNulls = 1,
-      max = Some(32), min = Some(0), ndv = Some(2))))
-    checkColStats(rdd, schema, statsSeq)
+    val data = values.map { i =>
+      (i.map(_.toFloat), i.map(_.toDouble), i.map(Decimal(_)))
+    }
+
+    val df = data.toDF("c1", "c2", "c3")
+    val nonNullValues = getNonNullValues[Double](values)
+    val statsSeq = df.schema.map { f =>
+      val colStats = ColumnStats(
+        dataType = f.dataType,
+        numNulls = values.count(_.isEmpty),
+        max = Some(nonNullValues.max),
+        min = Some(nonNullValues.min),
+        ndv = Some(nonNullValues.distinct.length.toLong))
+      (f.name, colStats)
+    }
+    checkColStats(df, statsSeq)
   }
 
-  test("basic statistics for timestamp column") {
-    val rdd = sparkContext.parallelize(Seq(null, "1970-01-01 00:00:00", "1970-01-01 00:00:05"))
-      .map(i => if (i != null) Row(Timestamp.valueOf(i)) else Row(i))
-    val schema =
-      StructType(StructField(name = "c1", dataType = TimestampType, nullable = true) :: Nil)
-    val statsSeq = Seq(("c1", BasicColStats(dataType = TimestampType, numNulls = 1,
-      max = Some(5000000), min = Some(0), ndv = Some(2))))
-    checkColStats(rdd, schema, statsSeq)
+  test("column-level statistics for string column") {
+    val values = Seq(None, Some("a"), Some("bbbb"), Some("cccc"))
+    val df = values.toDF("c1")
+    val nonNullValues = getNonNullValues[String](values)
+    val statsSeq = df.schema.map { f =>
+      val colStats = ColumnStats(
+        dataType = f.dataType,
+        numNulls = values.count(_.isEmpty),
+        ndv = Some(nonNullValues.distinct.length.toLong),
+        maxColLen = Some(nonNullValues.map(_.length).max.toLong),
+        avgColLen = Some(nonNullValues.map(_.length).sum / nonNullValues.length.toDouble))
+      (f.name, colStats)
+    }
+    checkColStats(df, statsSeq)
   }
 
-  test("basic statistics for null columns") {
-    val rdd = sparkContext.parallelize(Seq(Row(null, null)))
-    val schema = StructType(
-      StructField(name = "c1", dataType = LongType, nullable = true) ::
-        StructField(name = "c2", dataType = TimestampType, nullable = true) :: Nil)
-    val expectedBasicStats = BasicColStats(dataType = LongType, numNulls = 1,
-      max = None, min = None, ndv = Some(0))
-    val statsSeq = Seq(
-      ("c1", expectedBasicStats),
-      ("c2", expectedBasicStats.copy(dataType = TimestampType)))
-    checkColStats(rdd, schema, statsSeq)
+  test("column-level statistics for binary column") {
+    val values = Seq(None, Some("a"), Some("bbbb"), Some("cccc")).map(_.map(_.getBytes))
+    val df = values.toDF("c1")
+    val nonNullValues = getNonNullValues[Array[Byte]](values)
+    val statsSeq = df.schema.map { f =>
+      val colStats = ColumnStats(
+        dataType = f.dataType,
+        numNulls = values.count(_.isEmpty),
+        maxColLen = Some(nonNullValues.map(_.length).max.toLong),
+        avgColLen = Some(nonNullValues.map(_.length).sum / nonNullValues.length.toDouble))
+      (f.name, colStats)
+    }
+    checkColStats(df, statsSeq)
   }
 
-  test("basic statistics for columns with different types") {
-    val rdd = sparkContext.parallelize(Seq(
-      Row(1, 1.01, "a", "a".getBytes, true, Date.valueOf("1970-01-01"),
-        Timestamp.valueOf("1970-01-01 00:00:00"), 5.toLong),
-      Row(2, 2.02, "bb", "bb".getBytes, false, Date.valueOf("1970-02-02"),
-        Timestamp.valueOf("1970-01-01 00:00:05"), 4.toLong)))
-    val schema = StructType(Seq(
-      StructField(name = "c1", dataType = IntegerType, nullable = false),
-      StructField(name = "c2", dataType = DoubleType, nullable = false),
-      StructField(name = "c3", dataType = StringType, nullable = false),
-      StructField(name = "c4", dataType = BinaryType, nullable = false),
-      StructField(name = "c5", dataType = BooleanType, nullable = false),
-      StructField(name = "c6", dataType = DateType, nullable = false),
-      StructField(name = "c7", dataType = TimestampType, nullable = false),
-      StructField(name = "c8", dataType = LongType, nullable = false)))
-    val statsSeq = Seq(
-      ("c1", BasicColStats(dataType = IntegerType, numNulls = 0, max = Some(2), min = Some(1),
-        ndv = Some(2))),
-      ("c2", BasicColStats(dataType = DoubleType, numNulls = 0, max = Some(2.02), min = Some(1.01),
-        ndv = Some(2))),
-      ("c3", BasicColStats(dataType = StringType, numNulls = 0, maxColLen = Some(2),
-        avgColLen = Some(1.5), ndv = Some(2))),
-      ("c4", BasicColStats(dataType = BinaryType, numNulls = 0, maxColLen = Some(2),
-        avgColLen = Some(1.5))),
-      ("c5", BasicColStats(dataType = BooleanType, numNulls = 0, numTrues = Some(1),
-        numFalses = Some(1), ndv = Some(2))),
-      ("c6", BasicColStats(dataType = DateType, numNulls = 0, max = Some(32), min = Some(0),
-        ndv = Some(2))),
-      ("c7", BasicColStats(dataType = TimestampType, numNulls = 0, max = Some(5000000),
-        min = Some(0), ndv = Some(2))),
-      ("c8", BasicColStats(dataType = LongType, numNulls = 0, max = Some(5), min = Some(4),
-        ndv = Some(2))))
-    checkColStats(rdd, schema, statsSeq)
+  test("column-level statistics for boolean column") {
+    val values = Seq(None, Some(true), Some(false), Some(true))
+    val df = values.toDF("c1")
+    val nonNullValues = getNonNullValues[Boolean](values)
+    val statsSeq = df.schema.map { f =>
+      val colStats = ColumnStats(
+        dataType = f.dataType,
+        numNulls = values.count(_.isEmpty),
+        numTrues = Some(nonNullValues.count(_.equals(true)).toLong),
+        numFalses = Some(nonNullValues.count(_.equals(false)).toLong))
+      (f.name, colStats)
+    }
+    checkColStats(df, statsSeq)
+  }
+
+  test("column-level statistics for date column") {
+    val values = Seq(None, Some("1970-01-01"), Some("1970-02-02")).map(_.map(Date.valueOf))
+    val df = values.toDF("c1")
+    val nonNullValues = getNonNullValues[Date](values)
+    val statsSeq = df.schema.map { f =>
+      val colStats = ColumnStats(
+        dataType = f.dataType,
+        numNulls = values.count(_.isEmpty),
+        // Internally, DateType is represented as the number of days from 1970-01-01.
+        max = Some(nonNullValues.map(DateTimeUtils.fromJavaDate).max),
+        min = Some(nonNullValues.map(DateTimeUtils.fromJavaDate).min),
+        ndv = Some(nonNullValues.distinct.length.toLong))
+      (f.name, colStats)
+    }
+    checkColStats(df, statsSeq)
+  }
+
+  test("column-level statistics for timestamp column") {
+    val values = Seq(None, Some("1970-01-01 00:00:00"), Some("1970-01-01 00:00:05")).map { i =>
+      i.map(Timestamp.valueOf)
+    }
+    val df = values.toDF("c1")
+    val nonNullValues = getNonNullValues[Timestamp](values)
+    val statsSeq = df.schema.map { f =>
+      val colStats = ColumnStats(
+        dataType = f.dataType,
+        numNulls = values.count(_.isEmpty),
+        // Internally, TimestampType is represented as the number of days from 1970-01-01
+        max = Some(nonNullValues.map(DateTimeUtils.fromJavaTimestamp).max),
+        min = Some(nonNullValues.map(DateTimeUtils.fromJavaTimestamp).min),
+        ndv = Some(nonNullValues.distinct.length.toLong))
+      (f.name, colStats)
+    }
+    checkColStats(df, statsSeq)
+  }
+
+  test("column-level statistics for null columns") {
+    val values = Seq(None, None)
+    val data = values.map { i =>
+      (i.map(_.toString), i.map(_.toString.toInt))
+    }
+    val df = data.toDF("c1", "c2")
+    val statsSeq = df.schema.map { f =>
+      val colStats = f.dataType match {
+        case StringType =>
+          ColumnStats(
+            dataType = f.dataType,
+            numNulls = values.count(_.isEmpty),
+            ndv = Some(0),
+            maxColLen = None,
+            avgColLen = None)
+        case IntegerType =>
+          ColumnStats(
+            dataType = f.dataType,
+            numNulls = values.count(_.isEmpty),
+            max = None,
+            min = None,
+            ndv = Some(0))
+      }
+      (f.name, colStats)
+    }
+    checkColStats(df, statsSeq)
+  }
+
+  test("column-level statistics for columns with different types") {
+    val intSeq = Seq(1, 2)
+    val doubleSeq = Seq(1.01d, 2.02d)
+    val stringSeq = Seq("a", "bb")
+    val binarySeq = Seq("a", "bb").map(_.getBytes)
+    val booleanSeq = Seq(true, false)
+    val dateSeq = Seq("1970-01-01", "1970-02-02").map(Date.valueOf)
+    val timestampSeq = Seq("1970-01-01 00:00:00", "1970-01-01 00:00:05").map(Timestamp.valueOf)
+    val longSeq = Seq(5L, 4L)
+
+    val data = intSeq.indices.map { i =>
+      (intSeq(i), doubleSeq(i), stringSeq(i), binarySeq(i), booleanSeq(i), dateSeq(i),
+        timestampSeq(i), longSeq(i))
+    }
+    val df = data.toDF("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8")
+    val statsSeq = df.schema.map { f =>
+      val colStats = f.dataType match {
+        case IntegerType =>
+          ColumnStats(dataType = f.dataType, numNulls = 0, max = Some(intSeq.max),
+            min = Some(intSeq.min), ndv = Some(intSeq.distinct.length.toLong))
+        case DoubleType =>
+          ColumnStats(dataType = f.dataType, numNulls = 0, max = Some(doubleSeq.max),
+            min = Some(doubleSeq.min), ndv = Some(doubleSeq.distinct.length.toLong))
+        case StringType =>
+          ColumnStats(dataType = f.dataType, numNulls = 0,
+            maxColLen = Some(stringSeq.map(_.length).max.toLong),
+            avgColLen = Some(stringSeq.map(_.length).sum / stringSeq.length.toDouble),
+            ndv = Some(stringSeq.distinct.length.toLong))
+        case BinaryType =>
+          ColumnStats(dataType = f.dataType, numNulls = 0,
+            maxColLen = Some(binarySeq.map(_.length).max.toLong),
+            avgColLen = Some(binarySeq.map(_.length).sum / binarySeq.length.toDouble))
+        case BooleanType =>
+          ColumnStats(dataType = f.dataType, numNulls = 0,
+            numTrues = Some(booleanSeq.count(_.equals(true)).toLong),
+            numFalses = Some(booleanSeq.count(_.equals(false)).toLong))
+        case DateType =>
+          ColumnStats(dataType = f.dataType, numNulls = 0,
+            max = Some(dateSeq.map(DateTimeUtils.fromJavaDate).max),
+            min = Some(dateSeq.map(DateTimeUtils.fromJavaDate).min),
+            ndv = Some(dateSeq.distinct.length.toLong))
+        case TimestampType =>
+          ColumnStats(dataType = f.dataType, numNulls = 0,
+            max = Some(timestampSeq.map(DateTimeUtils.fromJavaTimestamp).max),
+            min = Some(timestampSeq.map(DateTimeUtils.fromJavaTimestamp).min),
+            ndv = Some(timestampSeq.distinct.length.toLong))
+        case LongType =>
+          ColumnStats(dataType = f.dataType, numNulls = 0, max = Some(longSeq.max),
+            min = Some(longSeq.min), ndv = Some(longSeq.distinct.length.toLong))
+      }
+      (f.name, colStats)
+    }
+    checkColStats(df, statsSeq)
   }
 
   test("update table-level stats while collecting column-level stats") {
     val table = "tbl"
     val tmpTable = "tmp"
     withTable(table, tmpTable) {
-      val rdd = sparkContext.parallelize(Seq(Row(1)))
-      val df = spark.createDataFrame(rdd, StructType(Seq(
-        StructField(name = "c1", dataType = IntegerType, nullable = false))))
+      val values = Seq(1)
+      val df = values.toDF("c1")
       df.write.format("json").saveAsTable(tmpTable)
 
       sql(s"CREATE TABLE $table (c1 int) STORED AS TEXTFILE")
       sql(s"INSERT INTO $table SELECT * FROM $tmpTable")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
       val fetchedStats1 = checkTableStats(tableName = table, isDataSourceTable = false,
-        hasSizeInBytes = true, expectedRowCounts = Some(1))
+        hasSizeInBytes = true, expectedRowCounts = Some(values.length))
 
       // update table between analyze table and analyze column commands
       sql(s"INSERT INTO $table SELECT * FROM $tmpTable")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c1")
       val fetchedStats2 = checkTableStats(tableName = table, isDataSourceTable = false,
-        hasSizeInBytes = true, expectedRowCounts = Some(2))
+        hasSizeInBytes = true, expectedRowCounts = Some(values.length * 2))
       assert(fetchedStats2.get.sizeInBytes > fetchedStats1.get.sizeInBytes)
 
-      val basicColStats = fetchedStats2.get.basicColStats("c1")
-      checkColStats(colStats = basicColStats, expectedColStats = BasicColStats(
-        dataType = IntegerType, numNulls = 0, max = Some(1), min = Some(1), ndv = Some(1)))
+      val colStats = fetchedStats2.get.colStats("c1")
+      checkColStats(colStats = colStats, expectedColStats = ColumnStats(
+        dataType = IntegerType,
+        numNulls = 0,
+        max = Some(values.max),
+        min = Some(values.min),
+        ndv = Some(values.distinct.length.toLong)))
     }
   }
 }

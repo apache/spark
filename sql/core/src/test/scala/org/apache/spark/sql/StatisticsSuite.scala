@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.logical.{BasicColStats, GlobalLimit, Join, LocalLimit}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStats, GlobalLimit, Join, LocalLimit}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -103,7 +103,7 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("test column-level statistics for data source table created in InMemoryCatalog") {
-    def checkColStats(colStats: BasicColStats, expectedColStats: BasicColStats): Unit = {
+    def checkColStats(colStats: ColumnStats, expectedColStats: ColumnStats): Unit = {
       assert(colStats.dataType == expectedColStats.dataType)
       assert(colStats.numNulls == expectedColStats.numNulls)
       assert(colStats.max == expectedColStats.max)
@@ -126,17 +126,17 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS i, j")
       val df = sql(s"SELECT * FROM $tableName")
       val expectedRowCount = Some(2)
-      val expectedColStatsSeq: Seq[(String, BasicColStats)] = Seq(
-        ("i", BasicColStats(dataType = IntegerType, numNulls = 0, max = Some(2), min = Some(1),
+      val expectedColStatsSeq: Seq[(String, ColumnStats)] = Seq(
+        ("i", ColumnStats(dataType = IntegerType, numNulls = 0, max = Some(2), min = Some(1),
           ndv = Some(2))),
-        ("j", BasicColStats(dataType = StringType, numNulls = 0, maxColLen = Some(1),
+        ("j", ColumnStats(dataType = StringType, numNulls = 0, maxColLen = Some(1),
           avgColLen = Some(1), ndv = Some(2))))
       val relations = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
         val stats = rel.catalogTable.get.stats.get
         assert(stats.rowCount == expectedRowCount)
         expectedColStatsSeq.foreach { case (column, expectedColStats) =>
-          assert(stats.basicColStats.contains(column))
-          checkColStats(colStats = stats.basicColStats(column), expectedColStats = expectedColStats)
+          assert(stats.colStats.contains(column))
+          checkColStats(colStats = stats.colStats(column), expectedColStats = expectedColStats)
         }
         rel
       }

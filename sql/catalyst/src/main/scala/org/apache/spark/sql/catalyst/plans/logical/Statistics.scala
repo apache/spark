@@ -34,13 +34,13 @@ import org.apache.spark.sql.types.DataType
  * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
  *                    defaults to the product of children's `sizeInBytes`.
  * @param rowCount Estimated number of rows.
- * @param basicColStats Basic column-level statistics.
+ * @param colStats Column-level statistics.
  * @param isBroadcastable If true, output is small enough to be used in a broadcast join.
  */
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
-    basicColStats: Map[String, BasicColStats] = Map.empty,
+    colStats: Map[String, ColumnStats] = Map.empty,
     isBroadcastable: Boolean = false) {
 
   override def toString: String = "Statistics(" + simpleString + ")"
@@ -49,13 +49,17 @@ case class Statistics(
   def simpleString: String = {
     Seq(s"sizeInBytes=$sizeInBytes",
       if (rowCount.isDefined) s"rowCount=${rowCount.get}" else "",
-      if (basicColStats.nonEmpty) s"basicColStats=$basicColStats" else "",
+      if (colStats.nonEmpty) s"colStats=$colStats" else "",
       s"isBroadcastable=$isBroadcastable"
     ).filter(_.nonEmpty).mkString(", ")
   }
 }
 
-case class BasicColStats(
+/**
+ * Statistics for a column.
+ * @param ndv Number of distinct values of the column.
+ */
+case class ColumnStats(
     dataType: DataType,
     numNulls: Long,
     max: Option[Any] = None,
@@ -66,7 +70,7 @@ case class BasicColStats(
     numTrues: Option[Long] = None,
     numFalses: Option[Long] = None) {
 
-  override def toString: String = "BasicColStats(" + simpleString + ")"
+  override def toString: String = "ColumnStats(" + simpleString + ")"
 
   def simpleString: String = {
     Seq(s"numNulls=$numNulls",
@@ -81,10 +85,10 @@ case class BasicColStats(
   }
 }
 
-object BasicColStats {
-  def fromString(str: String, dataType: DataType): BasicColStats = {
+object ColumnStats {
+  def fromString(str: String, dataType: DataType): ColumnStats = {
     val suffix = ",\\s|\\)"
-    BasicColStats(
+    ColumnStats(
       dataType = dataType,
       numNulls = findItem(source = str, prefix = "numNulls=", suffix = suffix).map(_.toLong).get,
       max = findItem(source = str, prefix = "max=", suffix = suffix),

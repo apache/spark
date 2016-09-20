@@ -582,7 +582,7 @@ object SQLConf {
       .createWithDefault(10L)
 
   val NDV_MAX_ERROR =
-    SQLConfigBuilder("spark.sql.ndv.maxError")
+    SQLConfigBuilder("spark.sql.statistics.ndv.maxError")
       .internal()
       .doc("The maximum estimation error allowed in HyperLogLog++ algorithm.")
       .doubleConf
