@@ -29,7 +29,7 @@ import org.apache.spark.util.Benchmark
  */
 class BroadcastHashJoinBenchmark extends BenchmarkBase {
 
-  test("BroadcastHashJoin w duplicated keys") {
+  ignore("BroadcastHashJoin w duplicated keys") {
     val N = 100L << 20
     val M = 1 << 16
 
