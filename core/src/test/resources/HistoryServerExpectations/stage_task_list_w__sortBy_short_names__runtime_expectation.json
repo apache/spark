@@ -723,7 +723,7 @@
   "speculative" : false,
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
-    "executorDeserializeTime" : 6,
+    "executorDeserializeTime" : 2,
     "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 18,
     "executorCpuTime" : 0,
@@ -765,7 +765,7 @@
   "speculative" : false,
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
-    "executorDeserializeTime" : 3,
+    "executorDeserializeTime" : 4,
     "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 18,
     "executorCpuTime" : 0,
@@ -792,7 +792,7 @@
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
-      "writeTime" : 98293,
+      "writeTime" : 90836,
       "recordsWritten" : 10
     }
   }
