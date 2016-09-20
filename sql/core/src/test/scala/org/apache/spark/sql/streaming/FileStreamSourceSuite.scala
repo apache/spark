@@ -890,6 +890,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
               List("keep2", "keep3"))
             assert(fileSource.getBatch(Some(LongOffset(1)), LongOffset(2)).as[String].collect() ===
               List("keep3"))
+            true
           }
         )
       }
