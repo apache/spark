@@ -51,7 +51,7 @@ trait StatisticsTest extends QueryTest with TestHiveSingleton with SQLTestUtils 
       expectedRowCounts: Option[Int]): Unit = {
     if (hasSizeInBytes || expectedRowCounts.nonEmpty) {
       assert(stats.isDefined)
-      assert(stats.get.sizeInBytes > 0)
+      assert(stats.get.sizeInBytes >= 0)
       assert(stats.get.rowCount === expectedRowCounts)
     } else {
       assert(stats.isEmpty)

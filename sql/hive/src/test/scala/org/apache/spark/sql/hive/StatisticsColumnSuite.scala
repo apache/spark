@@ -318,4 +318,26 @@ class StatisticsColumnSuite extends StatisticsTest {
         ndv = Some(values.distinct.length.toLong)))
     }
   }
+
+  test("analyze column stats independently") {
+    val table = "tbl"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (c1 int, c2 long) STORED AS TEXTFILE")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c1")
+      val fetchedStats1 = checkTableStats(tableName = table, isDataSourceTable = false,
+        hasSizeInBytes = false, expectedRowCounts = Some(0))
+      assert(fetchedStats1.get.colStats.size == 1)
+      val expected1 = ColumnStats(dataType = IntegerType, numNulls = 0, ndv = Some(0L))
+      checkColStats(colStats = fetchedStats1.get.colStats("c1"), expectedColStats = expected1)
+
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c2")
+      val fetchedStats2 = checkTableStats(tableName = table, isDataSourceTable = false,
+        hasSizeInBytes = false, expectedRowCounts = Some(0))
+      // column c1 is kept in the stats
+      assert(fetchedStats2.get.colStats.size == 2)
+      checkColStats(colStats = fetchedStats2.get.colStats("c1"), expectedColStats = expected1)
+      val expected2 = ColumnStats(dataType = LongType, numNulls = 0, ndv = Some(0L))
+      checkColStats(colStats = fetchedStats2.get.colStats("c2"), expectedColStats = expected2)
+    }
+  }
 }

@@ -87,8 +87,10 @@ case class AnalyzeColumnCommand(
         (expr.name, ColumnStatsStruct.unwrapStruct(statsRow, i + 1, expr))
       }.toMap
 
-      val statistics =
-        Statistics(sizeInBytes = newTotalSize, rowCount = Some(rowCount), colStats = columnStats)
+      val statistics = Statistics(
+        sizeInBytes = newTotalSize,
+        rowCount = Some(rowCount),
+        colStats = columnStats ++ catalogTable.stats.map(_.colStats).getOrElse(Map()))
       sessionState.catalog.alterTable(catalogTable.copy(stats = Some(statistics)))
       // Refresh the cached data source table in the catalog.
       sessionState.catalog.refreshTable(tableIdent)
