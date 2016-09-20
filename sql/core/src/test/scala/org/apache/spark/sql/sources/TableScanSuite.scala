@@ -345,24 +345,6 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       (1 to 10).map(Row(_)).toSeq)
   }
 
-  test("create a temp view or a persistent table that does not need a path in the option") {
-    Seq("TEMPORARY VIEW", "TABLE").foreach { tableType =>
-      val tableName = "relationProvierWithSchema"
-      withTable(tableName) {
-        sql(
-          s"""
-             |CREATE $tableType $tableName
-             |USING org.apache.spark.sql.sources.SimpleScanSource
-             |OPTIONS (
-             |  From '1',
-             |  To '10'
-             |)
-           """.stripMargin)
-        checkAnswer(spark.table(tableName), spark.range(1, 11).toDF())
-      }
-    }
-  }
-
   test("exceptions") {
     // Make sure we do throw correct exception when users use a relation provider that
     // only implements the RelationProvider or the SchemaRelationProvider.
