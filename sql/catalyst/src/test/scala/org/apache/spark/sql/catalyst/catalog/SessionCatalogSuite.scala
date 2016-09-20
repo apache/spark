@@ -448,12 +448,22 @@ class SessionCatalogSuite extends SparkFunSuite {
     val catalog = new SessionCatalog(newBasicCatalog())
     val tempTable = Range(1, 10, 2, 10)
     intercept[NoSuchTableException] {
-      catalog.getTempViewOrPermanentTableMetadata("view1")
+      catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1"))
+    }.getMessage
+
+    intercept[NoSuchTableException] {
+      catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
     }.getMessage
 
     catalog.createTempView("view1", tempTable, overrideIfExists = false)
-    assert(catalog.getTempViewOrPermanentTableMetadata("view1").identifier ==
-      TableIdentifier("view1"), "the temporary view `view1` should exist")
+    assert(catalog.getTempViewOrPermanentTableMetadata(
+      TableIdentifier("view1")).identifier.table == "view1")
+    assert(catalog.getTempViewOrPermanentTableMetadata(
+      TableIdentifier("view1")).schema(0).name == "id")
+
+    intercept[NoSuchTableException] {
+      catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
+    }.getMessage
   }
 
   test("list tables without pattern") {
