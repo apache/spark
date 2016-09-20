@@ -29,12 +29,12 @@ import org.apache.spark.util.Benchmark
  */
 class BroadcastHashJoinBenchmark extends BenchmarkBase {
 
-  test("BroadcastHashJoin w duplicated keys") {
-    val N = 10 << 20
+  ignore("BroadcastHashJoin w duplicated keys") {
+    val N = 100L << 20
     val M = 1 << 16
 
     val src = sparkSession.range(N).selectExpr(
-      s"(id % $M)as sk",
+      "id as sk",
       "(id / 2) as sv1",
       "(id / 3) as sv2",
       "(id / 4) as sv3",
@@ -74,9 +74,9 @@ class BroadcastHashJoinBenchmark extends BenchmarkBase {
     Intel64 Family 6 Model 45 Stepping 7, GenuineIntel
     BroadcastHashJoin w duplicated keys:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    codegen = F                                   4527 / 4584          4.6         215.9       1.0X
-    codegen = T avoid = F                          348 /  414         60.3          16.6      13.0X
-    codegen = T avoid = T                          282 /  290         74.3          13.5      16.0X
+    codegen = F                                 23177 / 23272          4.5         221.0       1.0X
+    codegen = T avoid = F                          532 /  539        197.2           5.1      43.6X
+    codegen = T avoid = T                          390 /  414        268.8           3.7      59.4X
     */
   }
 }
