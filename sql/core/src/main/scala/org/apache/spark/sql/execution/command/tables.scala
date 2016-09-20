@@ -67,7 +67,7 @@ case class CreateTableLikeCommand(
     val sourceTableDesc = if (sourceTable.database.isDefined) {
       catalog.getTableMetadata(sourceTable)
     } else {
-      catalog.getTempViewOrPermanentTableMetadata(sourceTable)
+      catalog.getTempViewOrPermanentTableMetadata(sourceTable.table)
     }
 
     // Storage format
@@ -605,7 +605,7 @@ case class ShowColumnsCommand(tableName: TableIdentifier) extends RunnableComman
     val table = if (tableName.database.isDefined) {
       catalog.getTableMetadata(tableName)
     } else {
-      catalog.getTempViewOrPermanentTableMetadata(tableName)
+      catalog.getTempViewOrPermanentTableMetadata(tableName.table)
     }
     table.schema.map { c =>
       Row(c.name)

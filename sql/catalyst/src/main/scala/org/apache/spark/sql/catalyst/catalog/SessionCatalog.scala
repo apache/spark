@@ -277,15 +277,15 @@ class SessionCatalog(
    * If the specified table/view is not found in the database then a [[NoSuchTableException]] is
    * thrown.
    */
-  def getTempViewOrPermanentTableMetadata(name: TableIdentifier): CatalogTable = synchronized {
-    val table = formatTableName(name.table)
+  def getTempViewOrPermanentTableMetadata(name: String): CatalogTable = synchronized {
+    val table = formatTableName(name)
     getTempView(table).map { plan =>
       CatalogTable(
         identifier = TableIdentifier(table),
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
         schema = plan.output.toStructType)
-    }.getOrElse(getTableMetadata(name))
+    }.getOrElse(getTableMetadata(TableIdentifier(name)))
   }
 
   /**
