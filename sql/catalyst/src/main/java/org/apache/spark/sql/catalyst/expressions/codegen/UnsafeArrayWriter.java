@@ -221,7 +221,7 @@ public class UnsafeArrayWriter {
     // Write the bytes to the variable length portion.
     input.writeToMemory(holder.buffer, holder.cursor);
 
-    write(ordinal, ((long)(holder.cursor - startingOffset) << 32) | ((long) numBytes));
+    setOffsetAndSize(ordinal, holder.cursor, (long)numBytes);
 
     // move the cursor forward.
     holder.cursor += roundedSize;
@@ -240,7 +240,7 @@ public class UnsafeArrayWriter {
     Platform.copyMemory(
       input, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, numBytes);
 
-    write(ordinal, ((long)(holder.cursor - startingOffset) << 32) | ((long) numBytes));
+    setOffsetAndSize(ordinal, holder.cursor, (long)numBytes);
 
     // move the cursor forward.
     holder.cursor += roundedSize;
@@ -254,7 +254,7 @@ public class UnsafeArrayWriter {
     Platform.putLong(holder.buffer, holder.cursor, input.months);
     Platform.putLong(holder.buffer, holder.cursor + 8, input.microseconds);
 
-    write(ordinal, ((long)(holder.cursor - startingOffset) << 32) | ((long) 16));
+    setOffsetAndSize(ordinal, holder.cursor, (long)16);
 
     // move the cursor forward.
     holder.cursor += 16;

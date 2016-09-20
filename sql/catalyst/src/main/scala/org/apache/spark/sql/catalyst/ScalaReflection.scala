@@ -678,7 +678,6 @@ object ScalaReflection extends ScalaReflection {
         Schema(DecimalType.BigIntDecimal, nullable = true)
       case t if t <:< localTypeOf[scala.math.BigInt] =>
         Schema(DecimalType.BigIntDecimal, nullable = true)
-      case t if t <:< localTypeOf[CalendarInterval] => Schema(CalendarIntervalType, nullable = true)
       case t if t <:< localTypeOf[Decimal] => Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if t <:< localTypeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Long] => Schema(LongType, nullable = true)
