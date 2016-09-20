@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.{TreeNodeRef}
+import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types._
 
@@ -83,6 +83,7 @@ class Analyzer(
       ResolveTableValuedFunctions ::
       ResolveRelations ::
       ResolveReferences ::
+      ResolveStructFields ::
       ResolveDeserializer ::
       ResolveNewInstance ::
       ResolveUpCast ::
@@ -666,6 +667,22 @@ class Analyzer(
         case o if containsStar(o.children) =>
           failAnalysis(s"Invalid usage of '*' in expression '${o.prettyName}'")
       }
+    }
+  }
+
+  /**
+    * an Analyzer rule that fills in missing names for named_struct fields.
+    */
+  object ResolveStructFields extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
+      case c @ CreateNamedStruct(children) if !c.resolved =>
+        val newChildren = c.children.grouped(2).flatMap {
+          case Seq(namePlaceHolder : CreateStruct.NamePlaceHolder, v) if v.resolved =>
+            // value is now available, we can derive the field's name.
+            Seq(namePlaceHolder.nameExpression(v), v)
+          case kv => kv
+        }
+        c.copy(newChildren.toList)
     }
   }
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
@@ -181,17 +181,51 @@ object CreateStruct extends (Seq[Expression] => CreateNamedStruct) {
         (child, idx) <- children.zipWithIndex
       } yield {
         child match {
-            // please see https://github.com/apache/spark/pull/14444#r79028863
+            // please see https://github.com/apache/spark/pull/14444
             // for discussion about the need to check for resolved trees
-          case ne : NamedExpression if ne.resolved => ne.name
-          case _ => s"col${idx + 1}"
+          case ne : NamedExpression if ne.resolved =>
+            // name is available, no need to wait for the [[Analyzer]] rule.
+            Literal(ne.name)
+          case ne : NamedExpression =>
+            // since ne is unresolved we're not guaranteed its name is currently available,
+            // so we put a place holder in place and wait for the [[Ana;yzer]] to do its magic.
+            NamePlaceHolder(idx)
+          case _ =>
+            // unnamed expression, simply use the default naming scheme.
+            NamePlaceHolder(idx).defaultName
         }
       }
       attNames.zip(children).flatMap {
-        case (name, expression) => Seq(Literal(name), expression)
+        case (name, expression) => Seq(name, expression)
       }
     }
     CreateNamedStruct(namedStructArgs)
+  }
+
+  /**
+    * an expression representing a not yet available attribute name.
+    * this expression is unevaluable and as its name suggests it
+    * is a temporrary place holder untill we're able to determine the actual attribute name.
+    * analyzer rull[[org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveStructFields]]
+    * replaces this place golder with a string [[Literal]].
+    * @param idx the attribute's index,
+    *            used in case the attribute name is derived from a non named expression.
+    */
+  case class NamePlaceHolder(idx : Int) extends LeafExpression with Unevaluable {
+    override lazy val resolved : Boolean = false
+    override def nullable: Boolean = throw new UnresolvedException( this, "nullable" )
+
+    /**
+      * Returns the [[DataType]] of the result of evaluating this expression.  It is
+      * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
+      */
+    override def dataType: DataType = throw new UnresolvedException( this, "nullable" )
+
+    def defaultName: Literal = Literal( s"col${idx + 1}" )
+    def nameExpression( e : Expression ) : Literal = e match {
+      case ne : NamedExpression => Literal(ne.name)
+      case _ => defaultName
+    }
   }
 
   private def expressionInfo: ExpressionInfo = new ExpressionInfo( "CreateStruct",
