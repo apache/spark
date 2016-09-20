@@ -79,8 +79,8 @@ abstract class PartitioningAwareFileCatalog(
         val qualifiedPathPre = fs.makeQualified(path)
         val qualifiedPath: Path = if (qualifiedPathPre.isRoot && !qualifiedPathPre.isAbsolute) {
           // SPARK-17613: Always append `Path.SEPARATOR` to the end of parent directories,
-          // because the `leafFile.getParent` would have returned an absolute path with the separator
-          // at the end.
+          // because the `leafFile.getParent` would have returned an absolute path with the
+          // separator at the end.
           new Path(qualifiedPathPre, Path.SEPARATOR)
         } else {
           qualifiedPathPre
