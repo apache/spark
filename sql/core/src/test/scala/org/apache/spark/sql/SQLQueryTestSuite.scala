@@ -256,6 +256,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       Tuple1(Map(1 -> "a5")) :: Nil)
       .toDF("mapcol")
       .createOrReplaceTempView("mapdata")
+
+    ((2015, "1Q", 1) :: (2015, "2Q", 4) :: (2015, "3Q", 2) :: (2015, "4Q", 2) ::
+      (2016, "1Q", 10) :: (2016, "2Q", 7) :: (2016, "3Q", 2) :: (2016, "4Q", 5) :: Nil)
+      .toDF("year", "quarter", "sales").createOrReplaceTempView("salesdata")
   }
 
   private val originalTimeZone = TimeZone.getDefault
