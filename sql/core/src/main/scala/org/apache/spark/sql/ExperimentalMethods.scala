@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 class ExperimentalMethods private[sql]() {
 
   /**
-   * Allows extra strategies to be injected into the query planner at runtime. Note this API
+   * Allows extra strategies to be injected into the query planner at runtime.  Note this API
    * should be considered experimental and is not intended to be stable across releases.
    *
    * @since 1.3.0
