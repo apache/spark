@@ -813,6 +813,9 @@ object MimaExcludes {
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ui.exec.ExecutorsListener.executorToTasksMax"),
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ui.exec.ExecutorsListener.executorToJvmGCTime")
     ) ++ Seq(
+      // [SPARK-17163] Unify logistic regression interface. Private constructor has new signature.
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.LogisticRegressionModel.this")
+    ) ++ Seq(
       // [SPARK-17365][Core] Remove/Kill multiple executors together to reduce RPC call time
       ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.SparkContext")
     )
