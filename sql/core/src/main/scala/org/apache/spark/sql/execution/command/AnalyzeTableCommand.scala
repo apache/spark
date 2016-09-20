@@ -22,8 +22,9 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 
@@ -33,11 +34,16 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
  * used in query optimizations.
  */
 case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extends RunnableCommand {
-
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
+    val relation = try {
+      EliminateSubqueryAliases(catalog.lookupRelation(tableIdent))
+    } catch {
+      case _: NoSuchTableException =>
+        throw new AnalysisException(s"Target table in ANALYZE TABLE does not exist: $tableIdent")
+    }
 
     relation match {
       case relation: CatalogRelation =>
@@ -66,7 +72,6 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
           } else {
             fileStatus.getLen
           }
-
           size
         }
 
@@ -90,6 +95,11 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
       // data source tables have been converted into LogicalRelations
       case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
         updateTableStats(logicalRel.catalogTable.get, logicalRel.relation.sizeInBytes)
+
+      // temporary table which is a [[LogicalRelation]].
+      case logicalRel: LogicalRelation if catalog.isTemporaryTable(tableIdent) =>
+        val catalogTable = logicalRel.catalogTable.getOrElse(catalog.getTableMetadata(tableIdent))
+        updateTableStats(catalogTable, logicalRel.relation.sizeInBytes)
 
       case otherRelation =>
         throw new AnalysisException(s"ANALYZE TABLE is not supported for " +
@@ -120,9 +130,17 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
       // Update the metastore if the above statistics of the table are different from those
       // recorded in the metastore.
       if (newStats.isDefined) {
-        sessionState.catalog.alterTable(catalogTable.copy(stats = newStats))
-        // Refresh the cached data source table in the catalog.
-        sessionState.catalog.refreshTable(tableIdent)
+        val newCatalogTable = catalogTable.copy(stats = newStats)
+        if (catalogTable.tableType == CatalogTableType.VIEW) {
+          assert(relation.isInstanceOf[LogicalRelation])
+          val newRelation =
+            relation.asInstanceOf[LogicalRelation].copy(catalogTable = Some(newCatalogTable))
+          catalog.createTempView(tableIdent.table, newRelation, overrideIfExists = true)
+        } else {
+          catalog.alterTable(newCatalogTable)
+          // Refresh the cached data source table in the catalog.
+          catalog.refreshTable(tableIdent)
+        }
       }
     }
 

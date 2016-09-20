@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, EliminateSubqueryAliases, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
@@ -1614,6 +1614,46 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       data.write.partitionBy("length").saveAsTable("rectangles2")
       assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
       assertUnsupported("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
+    }
+  }
+
+  test("Run analyze table command on temporary view which is analyzable") {
+    withTempPath { path =>
+      val dataPath = path.getCanonicalPath
+      spark.range(10).write.format("parquet").save(dataPath)
+      withView("view1") {
+        // Create a temporary view which is a [[LogicalRelation]] wrapping a datasource relation.
+        sql(s"CREATE TEMPORARY VIEW view1 USING parquet OPTIONS(path '$dataPath')")
+
+        // Before ANALYZE TABLE, HadoopFsRelation calculates statistics from file sizes.
+        val relBefore = spark.sessionState.catalog.lookupRelation(TableIdentifier("view1"))
+        val statsBefore = EliminateSubqueryAliases(relBefore).statistics
+        val sizeBefore = statsBefore.sizeInBytes
+        assert(sizeBefore > 0)
+        assert(statsBefore.rowCount.isEmpty)
+
+        sql("ANALYZE TABLE view1 COMPUTE STATISTICS")
+
+        val relAfter = spark.sessionState.catalog.lookupRelation(TableIdentifier("view1"))
+        val statsAfter = EliminateSubqueryAliases(relAfter).statistics
+        val sizeAfter = statsAfter.sizeInBytes
+        assert(sizeAfter == sizeBefore)
+        assert(statsAfter.rowCount.isDefined && statsAfter.rowCount.get == 10)
+      }
+    }
+  }
+
+  test("Run analyze table command on temporary view which is not analyzable") {
+    withTable("tab1") {
+      spark.range(10).write.saveAsTable("tab1")
+      withView("view1") {
+        // Create a temporary view which is represented as a query plan.
+        sql("CREATE TEMPORARY VIEW view1 (col1) AS SELECT * FROM tab1")
+        val df = spark.sessionState.catalog.lookupRelation(TableIdentifier("view1"))
+        intercept[AnalysisException] {
+          sql("ANALYZE TABLE view1 COMPUTE STATISTICS")
+        }
+      }
     }
   }
 
