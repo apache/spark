@@ -62,15 +62,15 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       var e = intercept[AnalysisException] {
         sql("CREATE OR REPLACE VIEW tab1 AS SELECT * FROM jt")
       }.getMessage
-      assert(e.contains("`default`.`tab1` is not a view"))
+      assert(e.contains("`tab1` is not a view"))
       e = intercept[AnalysisException] {
         sql("CREATE VIEW tab1 AS SELECT * FROM jt")
       }.getMessage
-      assert(e.contains("`default`.`tab1` is not a view"))
+      assert(e.contains("`tab1` is not a view"))
       e = intercept[AnalysisException] {
         sql("ALTER VIEW tab1 AS SELECT * FROM jt")
       }.getMessage
-      assert(e.contains("`default`.`tab1` is not a view"))
+      assert(e.contains("`tab1` is not a view"))
     }
   }
 

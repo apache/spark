@@ -40,33 +40,6 @@ case class CreateTable(
   override def innerChildren: Seq[QueryPlan[_]] = query.toSeq
 }
 
-case class CreateTempViewUsing(
-    tableIdent: TableIdentifier,
-    userSpecifiedSchema: Option[StructType],
-    replace: Boolean,
-    provider: String,
-    options: Map[String, String]) extends RunnableCommand {
-
-  if (tableIdent.database.isDefined) {
-    throw new AnalysisException(
-      s"Temporary table '$tableIdent' should not have specified a database")
-  }
-
-  def run(sparkSession: SparkSession): Seq[Row] = {
-    val dataSource = DataSource(
-      sparkSession,
-      userSpecifiedSchema = userSpecifiedSchema,
-      className = provider,
-      options = options)
-    sparkSession.sessionState.catalog.createTempView(
-      tableIdent.table,
-      Dataset.ofRows(sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
-      replace)
-
-    Seq.empty[Row]
-  }
-}
-
 case class RefreshTable(tableIdent: TableIdentifier)
   extends RunnableCommand {
 

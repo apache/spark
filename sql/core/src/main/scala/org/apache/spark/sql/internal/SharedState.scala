@@ -22,11 +22,11 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, InMemoryCatalog}
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, GlobalTempViewManager, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
@@ -36,6 +36,18 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  * A class that holds all state shared across sessions in a given [[SQLContext]].
  */
 private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
+
+  val globalTempDB = sparkContext.conf.get(
+    SessionCatalog.GLOBAL_TEMP_DB_CONF_KEY, SessionCatalog.DEFAULT_GLOBAL_TEMP_DB)
+
+  val globalTempViews = {
+    if (externalCatalog.databaseExists(globalTempDB)) {
+      throw new SparkException(
+        s"$globalTempDB is a system preserved database, please rename your existing database " +
+          "to resolve the name conflict and launch your Spark application again.")
+    }
+    new GlobalTempViewManager
+  }
 
   /**
    * Class for caching query results reused in future executions.

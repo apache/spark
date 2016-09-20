@@ -94,6 +94,8 @@ private[sql] class SessionState(sparkSession: SparkSession) {
    */
   lazy val catalog = new SessionCatalog(
     sparkSession.sharedState.externalCatalog,
+    sparkSession.sharedState.globalTempDB,
+    sparkSession.sharedState.globalTempViews,
     functionResourceLoader,
     functionRegistry,
     conf,
