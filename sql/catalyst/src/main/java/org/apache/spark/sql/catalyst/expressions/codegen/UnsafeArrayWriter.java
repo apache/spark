@@ -199,7 +199,6 @@ public class UnsafeArrayWriter {
         // Write the bytes to the variable length portion.
         Platform.copyMemory(
           bytes, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, numBytes);
-        write(ordinal, ((long)(holder.cursor - startingOffset) << 32) | ((long) numBytes));
         setOffsetAndSize(ordinal, holder.cursor, (long)numBytes);
 
         // move the cursor forward with 8-bytes boundary

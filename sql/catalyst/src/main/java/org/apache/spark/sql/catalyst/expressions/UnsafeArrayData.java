@@ -43,10 +43,11 @@ import org.apache.spark.unsafe.types.UTF8String;
  *
  * In the `values or offset&length` region, we store the content of elements. For fields that hold
  * fixed-length primitive types, such as long, double, or int, we store the value directly
- * in the field. For fixed-length portion, each is word-aligned. For fields with non-primitive or
- * variable-length values, we store a relative offset (w.r.t. the base address of the array)
- * that points to the beginning of the variable-length field and length (they are combined into
- * a long). For variable length portion, each is aligned to 8-byte boundaries.
+ * in the field. For fixed-length portion, each element value (even for byte) is word-aligned.
+ * For fields with non-primitive or variable-length values, we store a relative offset
+ * (w.r.t. the base address of the array) that points to the beginning of the variable-length field
+ * and length (they are combined into a long). For variable length portion, each is aligned
+ * to 8-byte boundaries.
  *
  * Instances of `UnsafeArrayData` act as pointers to row data stored in this format.
  */
