@@ -199,6 +199,9 @@ private[spark] class BlockManager(
           logError(s"Failed to connect to external shuffle server, will retry ${MAX_ATTEMPTS - i}"
             + s" more times after waiting $SLEEP_TIME_SECS seconds...", e)
           Thread.sleep(SLEEP_TIME_SECS * 1000)
+        case NonFatal(e) =>
+          throw new SparkException("Unable to register with external shuffle server due to : " +
+            e.getMessage, e)
       }
     }
   }
@@ -280,7 +283,12 @@ private[spark] class BlockManager(
     } else {
       getLocalBytes(blockId) match {
         case Some(buffer) => new BlockManagerManagedBuffer(blockInfoManager, blockId, buffer)
-        case None => throw new BlockNotFoundException(blockId.toString)
+        case None =>
+          // If this block manager receives a request for a block that it doesn't have then it's
+          // likely that the master has outdated block statuses for this block. Therefore, we send
+          // an RPC so that this block is marked as being unavailable from this block manager.
+          reportBlockStatus(blockId, BlockStatus.empty)
+          throw new BlockNotFoundException(blockId.toString)
       }
     }
   }
@@ -856,21 +864,37 @@ private[spark] class BlockManager(
     }
 
     val startTimeMs = System.currentTimeMillis
-    var blockWasSuccessfullyStored: Boolean = false
+    var exceptionWasThrown: Boolean = true
     val result: Option[T] = try {
       val res = putBody(putBlockInfo)
-      blockWasSuccessfullyStored = res.isEmpty
-      res
-    } finally {
-      if (blockWasSuccessfullyStored) {
+      exceptionWasThrown = false
+      if (res.isEmpty) {
+        // the block was successfully stored
         if (keepReadLock) {
           blockInfoManager.downgradeLock(blockId)
         } else {
           blockInfoManager.unlock(blockId)
         }
       } else {
-        blockInfoManager.removeBlock(blockId)
+        removeBlockInternal(blockId, tellMaster = false)
         logWarning(s"Putting block $blockId failed")
+      }
+      res
+    } finally {
+      // This cleanup is performed in a finally block rather than a `catch` to avoid having to
+      // catch and properly re-throw InterruptedException.
+      if (exceptionWasThrown) {
+        logWarning(s"Putting block $blockId failed due to an exception")
+        // If an exception was thrown then it's possible that the code in `putBody` has already
+        // notified the master about the availability of this block, so we need to send an update
+        // to remove this block location.
+        removeBlockInternal(blockId, tellMaster = tellMaster)
+        // The `putBody` code may have also added a new block status to TaskMetrics, so we need
+        // to cancel that out by overwriting it with an empty block status. We only do this if
+        // the finally block was entered via an exception because doing this unconditionally would
+        // cause us to send empty block statuses for every block that failed to be cached due to
+        // a memory shortage (which is an expected failure, unlike an uncaught exception).
+        addUpdatedBlockStatusToTaskMetrics(blockId, BlockStatus.empty)
       }
     }
     if (level.replication > 1) {
@@ -1170,7 +1194,7 @@ private[spark] class BlockManager(
               done = true  // specified number of peers have been replicated to
             }
           } catch {
-            case e: Exception =>
+            case NonFatal(e) =>
               logWarning(s"Failed to replicate $blockId to $peer, failure #$failures", e)
               failures += 1
               replicationFailed = true

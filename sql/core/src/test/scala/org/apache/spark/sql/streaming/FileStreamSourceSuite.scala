@@ -354,7 +354,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         CheckAnswer("a", "b"),
 
         // SLeeps longer than 5ms (maxFileAge)
-        AssertOnQuery { _ => Thread.sleep(10); true },
+        // Unfortunately since a lot of file system does not have modification time granularity
+        // finer grained than 1 sec, we need to use 1 sec here.
+        AssertOnQuery { _ => Thread.sleep(1000); true },
 
         AddTextFileData("c\nd", src, tmp),
         CheckAnswer("a", "b", "c", "d"),
@@ -363,7 +365,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           val source = streamExecution.logicalPlan.collect { case e: StreamingExecutionRelation =>
             e.source.asInstanceOf[FileStreamSource]
           }.head
-          source.seenFiles.size == 1
+          assert(source.seenFiles.size == 1)
+          true
         }
       )
     }
