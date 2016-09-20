@@ -197,7 +197,7 @@ public class YarnShuffleService extends AuxiliaryService {
   private void createSecretManager() throws IOException {
     secretManager = new ShuffleSecretManager();
     secretsFile = initRecoveryDb(SECRETS_RECOVERY_FILE_NAME);
- 
+
     // Make sure this is protected in case its not in the NM recovery dir
     FileSystem fs = FileSystem.getLocal(_conf);
     fs.mkdirs(new Path(secretsFile.getPath()), new FsPermission((short)0700));
@@ -306,7 +306,7 @@ public class YarnShuffleService extends AuxiliaryService {
       }
       if (db != null) {
         db.close();
-      } 
+      }
     } catch (Exception e) {
       logger.error("Exception when stopping service", e);
     }
@@ -329,7 +329,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
   /**
    * Get the path specific to this auxiliary service to use for recovery.
-   */ 
+   */
   protected Path getRecoveryPath(String fileName) {
     return _recoveryPath;
   }
@@ -345,7 +345,7 @@ public class YarnShuffleService extends AuxiliaryService {
         if (recoveryFile.exists()) {
           return recoveryFile;
         }
-    } 
+    }
     // db doesn't exist in recovery path go check local dirs for it
     String[] localDirs = _conf.getTrimmedStrings("yarn.nodemanager.local-dirs");
     for (String dir : localDirs) {
