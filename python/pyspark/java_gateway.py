@@ -42,8 +42,9 @@ def launch_gateway(conf=None):
         on_windows = platform.system() == "Windows"
         script = "./bin/spark-submit.cmd" if on_windows else "./bin/spark-submit"
         command = [os.path.join(SPARK_HOME, script)]
-        for k,v in conf.getAll():
-            command += ['--conf', '%s=%s' % (k, v)]
+        if conf:
+            for k, v in conf.getAll():
+                command += ['--conf', '%s=%s' % (k, v)]
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
         if os.environ.get("SPARK_TESTING"):
             submit_args = ' '.join([
