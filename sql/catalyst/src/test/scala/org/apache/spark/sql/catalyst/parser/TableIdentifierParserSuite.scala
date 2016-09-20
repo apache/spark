@@ -91,4 +91,17 @@ class TableIdentifierParserSuite extends SparkFunSuite {
       assert(TableIdentifier(nonReserved) === parseTableIdentifier(nonReserved))
     }
   }
+
+  test("SPARK-17364 table identifier - contains number") {
+    assert(parseTableIdentifier("123_") == TableIdentifier("123_"))
+    assert(parseTableIdentifier("1a.123_") == TableIdentifier("123_", Some("1a")))
+    // ".123" should not be treated as token of type DECIMAL_VALUE
+    assert(parseTableIdentifier("a.123A") == TableIdentifier("123A", Some("a")))
+    // ".123E3" should not be treated as token of type SCIENTIFIC_DECIMAL_VALUE
+    assert(parseTableIdentifier("a.123E3_LIST") == TableIdentifier("123E3_LIST", Some("a")))
+    // ".123D" should not be treated as token of type DOUBLE_LITERAL
+    assert(parseTableIdentifier("a.123D_LIST") == TableIdentifier("123D_LIST", Some("a")))
+    // ".123BD" should not be treated as token of type BIGDECIMAL_LITERAL
+    assert(parseTableIdentifier("a.123BD_LIST") == TableIdentifier("123BD_LIST", Some("a")))
+  }
 }

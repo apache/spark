@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
@@ -316,6 +316,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
     val options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
+    if (provider.toLowerCase == "hive") {
+      throw new AnalysisException("Cannot create hive serde table with CREATE TABLE USING")
+    }
     val schema = Option(ctx.colTypeList()).map(createStructType)
     val partitionColumnNames =
       Option(ctx.partitionColumnNames)

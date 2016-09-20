@@ -23,7 +23,7 @@ import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressio
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
 import org.apache.spark.ml.feature.HashingTF
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{DenseMatrix, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
