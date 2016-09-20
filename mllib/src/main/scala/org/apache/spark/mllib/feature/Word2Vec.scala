@@ -583,7 +583,9 @@ class Word2VecModel private[spark] (
 
     val pq = new BoundedPriorityQueue[(String, Double)](num + 1)(Ordering.by(_._2))
 
-    pq ++= wordList.zip(cosVec)
+    for(i <- cosVec.indices) {
+      pq += Tuple2(wordList(i), cosVec(i))
+    }
 
     val scored = pq.toSeq.sortBy(-_._2)
 
