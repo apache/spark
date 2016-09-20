@@ -630,6 +630,8 @@ case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
 case class ShowPartitionsCommand(
     table: TableIdentifier,
     spec: Option[TablePartitionSpec]) extends RunnableCommand {
+
+  // The result of SHOW PARTITIONS has one column called 'partition'
   override val output: Seq[Attribute] = {
     AttributeReference("partition", StringType, nullable = false)() :: Nil
   }
@@ -642,6 +644,10 @@ case class ShowPartitionsCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+
+    if (!catalog.tableExists(table)) {
+      throw new AnalysisException(s"Table ${table.unquotedString} does not exist")
+    }
 
     if (catalog.isTemporaryTable(table)) {
       throw new AnalysisException(

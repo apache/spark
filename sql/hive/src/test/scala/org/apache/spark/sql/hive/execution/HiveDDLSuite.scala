@@ -654,6 +654,21 @@ class HiveDDLSuite
     }
   }
 
+  test("show partitions on non-existent table") {
+    val message = intercept[AnalysisException] {
+      sql("SHOW PARTITIONS default.nonexistentTable")
+    }.getMessage
+    assert(message.contains("Table default.nonexistentTable does not exist"))
+  }
+
+  test("show partitions output schema name") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+      sql("ALTER TABLE t1 ADD PARTITION (ds = '1')")
+      assert(sql(" SHOW PARTITIONS t1").schema.getFieldIndex("partition") == Some(0))
+    }
+  }
+
   test("Create Cataloged Table As Select - Drop Table After Runtime Exception") {
     withTable("tab") {
       intercept[RuntimeException] {
