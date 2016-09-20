@@ -271,6 +271,24 @@ class SessionCatalog(
   }
 
   /**
+   * Retrieve the metadata of an existing temporary view or permanent table/view.
+   * If the temporary view does not exist, tries to get the metadata an existing permanent
+   * table/view. If no database is specified, assume the table/view is in the current database.
+   * If the specified table/view is not found in the database then a [[NoSuchTableException]] is
+   * thrown.
+   */
+  def getTempViewOrPermanentTableMetadata(name: TableIdentifier): CatalogTable = synchronized {
+    val table = formatTableName(name.table)
+    getTempView(table).map { plan =>
+      CatalogTable(
+        identifier = TableIdentifier(table),
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = plan.output.toStructType)
+    }.getOrElse(getTableMetadata(name))
+  }
+
+  /**
    * Load files stored in given path into an existing metastore table.
    * If no database is specified, assume the table is in the current database.
    * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
@@ -344,21 +362,6 @@ class SessionCatalog(
    */
   def dropTempView(name: String): Unit = synchronized {
     tempTables.remove(formatTableName(name))
-  }
-
-  /**
-   * Retrieve the metadata of an existing temporary view.
-   * If the temporary view does not exist, return None.
-   */
-  def getTempViewMetadataOption(name: String): Option[CatalogTable] = synchronized {
-    val table = formatTableName(name)
-    getTempView(table).map { plan =>
-      CatalogTable(
-        identifier = TableIdentifier(table),
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = plan.output.toStructType)
-    }
   }
 
   // -------------------------------------------------------------

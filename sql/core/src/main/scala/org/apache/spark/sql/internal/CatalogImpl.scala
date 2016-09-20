@@ -154,8 +154,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val tableMetadata = if (tableIdentifier.database.isDefined) {
       sessionCatalog.getTableMetadata(tableIdentifier)
     } else {
-      sessionCatalog.getTempViewMetadataOption(tableIdentifier.table)
-        .getOrElse(sessionCatalog.getTableMetadata(tableIdentifier))
+      sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdentifier)
     }
 
     val partitionColumnNames = tableMetadata.partitionColumnNames.toSet
