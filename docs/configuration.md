@@ -1077,7 +1077,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.driver.bindAddress</code></td>
-  <td>(local hostname)</td>
+  <td>(value of spark.driver.host)</td>
   <td>
     <p>Hostname or IP address where to bind listening sockets. This config overrides the SPARK_LOCAL_IP
     environment variable (see below).</p>
@@ -1090,7 +1090,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.driver.host</code></td>
-  <td>(value of spark.driver.bindAddress)</td>
+  <td>(local hostname)</td>
   <td>
     Hostname or IP address for the driver.
     This is used for communicating with the executors and the standalone Master.
