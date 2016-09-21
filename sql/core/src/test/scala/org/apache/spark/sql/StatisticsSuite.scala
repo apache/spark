@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStats, GlobalLimit, Join, LocalLimit}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, Join, LocalLimit}
 import org.apache.spark.sql.types._
 
-class StatisticsSuite extends QueryTest with SharedSQLContext {
+class StatisticsSuite extends StatisticsTest {
   import testImplicits._
 
   test("SPARK-15392: DataFrame created from RDD should not be broadcasted") {
@@ -77,20 +75,10 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("test table-level statistics for data source table created in InMemoryCatalog") {
-    def checkTableStats(tableName: String, expectedRowCount: Option[BigInt]): Unit = {
-      val df = sql(s"SELECT * FROM $tableName")
-      val relations = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
-        assert(rel.catalogTable.isDefined)
-        assert(rel.catalogTable.get.stats.flatMap(_.rowCount) === expectedRowCount)
-        rel
-      }
-      assert(relations.size === 1)
-    }
-
     val tableName = "tbl"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName(i INT, j STRING) USING parquet")
-      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto(tableName)
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
@@ -101,47 +89,4 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
       checkTableStats(tableName, expectedRowCount = Some(2))
     }
   }
-
-  test("test column-level statistics for data source table created in InMemoryCatalog") {
-    def checkColStats(colStats: ColumnStats, expectedColStats: ColumnStats): Unit = {
-      assert(colStats.dataType == expectedColStats.dataType)
-      assert(colStats.numNulls == expectedColStats.numNulls)
-      assert(colStats.max == expectedColStats.max)
-      assert(colStats.min == expectedColStats.min)
-      if (expectedColStats.ndv.isDefined) {
-        // ndv is an approximate value, so we just make sure we have the value
-        assert(colStats.ndv.get >= 0)
-      }
-      assert(colStats.avgColLen == expectedColStats.avgColLen)
-      assert(colStats.maxColLen == expectedColStats.maxColLen)
-      assert(colStats.numTrues == expectedColStats.numTrues)
-      assert(colStats.numFalses == expectedColStats.numFalses)
-    }
-
-    val tableName = "tbl"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName(i INT, j STRING) USING parquet")
-      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
-
-      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS i, j")
-      val df = sql(s"SELECT * FROM $tableName")
-      val expectedRowCount = Some(2)
-      val expectedColStatsSeq: Seq[(String, ColumnStats)] = Seq(
-        ("i", ColumnStats(dataType = IntegerType, numNulls = 0, max = Some(2), min = Some(1),
-          ndv = Some(2))),
-        ("j", ColumnStats(dataType = StringType, numNulls = 0, maxColLen = Some(1),
-          avgColLen = Some(1), ndv = Some(2))))
-      val relations = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
-        val stats = rel.catalogTable.get.stats.get
-        assert(stats.rowCount == expectedRowCount)
-        expectedColStatsSeq.foreach { case (column, expectedColStats) =>
-          assert(stats.colStats.contains(column))
-          checkColStats(colStats = stats.colStats(column), expectedColStats = expectedColStats)
-        }
-        rel
-      }
-      assert(relations.size == 1)
-    }
-  }
-
 }

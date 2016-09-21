@@ -15,67 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStats, Statistics}
-import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, AnalyzeTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-trait StatisticsTest extends QueryTest with TestHiveSingleton with SQLTestUtils {
-
-  def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
-    val parsed = spark.sessionState.sqlParser.parsePlan(analyzeCommand)
-    val operators = parsed.collect {
-      case a: AnalyzeTableCommand => a
-      case b: AnalyzeColumnCommand => b
-    }
-
-    assert(operators.size === 1)
-    if (operators(0).getClass() != c) {
-      fail(
-        s"""$analyzeCommand expected command: $c, but got ${operators(0)}
-           |parsed command:
-           |$parsed
-         """.stripMargin)
-    }
-  }
-
-  def checkTableStats(
-      stats: Option[Statistics],
-      hasSizeInBytes: Boolean,
-      expectedRowCounts: Option[Int]): Unit = {
-    if (hasSizeInBytes || expectedRowCounts.nonEmpty) {
-      assert(stats.isDefined)
-      assert(stats.get.sizeInBytes >= 0)
-      assert(stats.get.rowCount === expectedRowCounts)
-    } else {
-      assert(stats.isEmpty)
-    }
-  }
-
-  def checkTableStats(
-      tableName: String,
-      isDataSourceTable: Boolean,
-      hasSizeInBytes: Boolean,
-      expectedRowCounts: Option[Int]): Option[Statistics] = {
-    val df = sql(s"SELECT * FROM $tableName")
-    val stats = df.queryExecution.analyzed.collect {
-      case rel: MetastoreRelation =>
-        checkTableStats(rel.catalogTable.stats, hasSizeInBytes, expectedRowCounts)
-        assert(!isDataSourceTable, "Expected a Hive serde table, but got a data source table")
-        rel.catalogTable.stats
-      case rel: LogicalRelation =>
-        checkTableStats(rel.catalogTable.get.stats, hasSizeInBytes, expectedRowCounts)
-        assert(isDataSourceTable, "Expected a data source table, but got a Hive serde table")
-        rel.catalogTable.get.stats
-    }
-    assert(stats.size == 1)
-    stats.head
-  }
+trait StatisticsTest extends QueryTest with SharedSQLContext {
 
   def checkColStats(
       df: DataFrame,
@@ -83,18 +30,12 @@ trait StatisticsTest extends QueryTest with TestHiveSingleton with SQLTestUtils 
     val table = "tbl"
     withTable(table) {
       df.write.format("json").saveAsTable(table)
-      val columns = expectedColStatsSeq.map(_._1).mkString(", ")
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $columns")
-      val readback = sql(s"SELECT * FROM $table")
-      val stats = readback.queryExecution.analyzed.collect {
-        case rel: LogicalRelation =>
-          expectedColStatsSeq.foreach { expected =>
-            assert(rel.catalogTable.get.stats.get.colStats.contains(expected._1))
-            checkColStats(colStats = rel.catalogTable.get.stats.get.colStats(expected._1),
-              expectedColStats = expected._2)
-          }
+      val columns = expectedColStatsSeq.map(_._1)
+      val columnStats = spark.sessionState.computeColumnStats(table, columns)
+      expectedColStatsSeq.foreach { expected =>
+        assert(columnStats.contains(expected._1))
+        checkColStats(colStats = columnStats(expected._1), expectedColStats = expected._2)
       }
-      assert(stats.size == 1)
     }
   }
 
@@ -135,4 +76,13 @@ trait StatisticsTest extends QueryTest with TestHiveSingleton with SQLTestUtils 
     assert(colStats.numFalses == expectedColStats.numFalses)
   }
 
+  def checkTableStats(tableName: String, expectedRowCount: Option[Int]): Option[Statistics] = {
+    val df = sql(s"SELECT * FROM $tableName")
+    val stats = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
+      assert(rel.catalogTable.get.stats.flatMap(_.rowCount) === expectedRowCount)
+      rel.catalogTable.get.stats
+    }
+    assert(stats.size == 1)
+    stats.head
+  }
 }

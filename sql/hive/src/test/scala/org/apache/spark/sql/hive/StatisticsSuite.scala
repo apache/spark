@@ -21,16 +21,37 @@ import java.io.{File, PrintWriter}
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.command.{AnalyzeTableCommand, DDLUtils}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
-class StatisticsSuite extends StatisticsTest {
+class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   test("parse analyze commands") {
+    def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
+      val parsed = spark.sessionState.sqlParser.parsePlan(analyzeCommand)
+      val operators = parsed.collect {
+        case a: AnalyzeTableCommand => a
+        case o => o
+      }
+
+      assert(operators.size === 1)
+      if (operators(0).getClass() != c) {
+        fail(
+          s"""$analyzeCommand expected command: $c, but got ${operators(0)}
+             |parsed command:
+             |$parsed
+           """.stripMargin)
+      }
+    }
+
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS",
       classOf[AnalyzeTableCommand])
@@ -148,6 +169,39 @@ class StatisticsSuite extends StatisticsTest {
     }
     spark.sessionState.catalog.dropTable(
       TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
+  }
+
+  private def checkTableStats(
+      stats: Option[Statistics],
+      hasSizeInBytes: Boolean,
+      expectedRowCounts: Option[Int]): Unit = {
+    if (hasSizeInBytes || expectedRowCounts.nonEmpty) {
+      assert(stats.isDefined)
+      assert(stats.get.sizeInBytes > 0)
+      assert(stats.get.rowCount === expectedRowCounts)
+    } else {
+      assert(stats.isEmpty)
+    }
+  }
+
+  private def checkTableStats(
+      tableName: String,
+      isDataSourceTable: Boolean,
+      hasSizeInBytes: Boolean,
+      expectedRowCounts: Option[Int]): Option[Statistics] = {
+    val df = sql(s"SELECT * FROM $tableName")
+    val stats = df.queryExecution.analyzed.collect {
+      case rel: MetastoreRelation =>
+        checkTableStats(rel.catalogTable.stats, hasSizeInBytes, expectedRowCounts)
+        assert(!isDataSourceTable, "Expected a Hive serde table, but got a data source table")
+        rel.catalogTable.stats
+      case rel: LogicalRelation =>
+        checkTableStats(rel.catalogTable.get.stats, hasSizeInBytes, expectedRowCounts)
+        assert(isDataSourceTable, "Expected a data source table, but got a Hive serde table")
+        rel.catalogTable.get.stats
+    }
+    assert(stats.size == 1)
+    stats.head
   }
 
   test("test table-level statistics for hive tables created in HiveExternalCatalog") {

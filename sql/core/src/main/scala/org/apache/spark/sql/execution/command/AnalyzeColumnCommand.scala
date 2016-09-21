@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ColumnStats, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ColumnStats, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.types._
 
@@ -44,20 +44,6 @@ case class AnalyzeColumnCommand(
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
     val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdentWithDB))
 
-    // check correctness of column names
-    val attributesToAnalyze = mutable.MutableList[Attribute]()
-    val caseSensitive = sessionState.conf.caseSensitiveAnalysis
-    columnNames.foreach { col =>
-      val exprOption = relation.output.find { attr =>
-        if (caseSensitive) attr.name == col else attr.name.equalsIgnoreCase(col)
-      }
-      val expr = exprOption.getOrElse(throw new AnalysisException(s"Invalid column name: $col."))
-      // do deduplication
-      if (!attributesToAnalyze.contains(expr)) {
-        attributesToAnalyze += expr
-      }
-    }
-
     relation match {
       case catalogRel: CatalogRelation =>
         updateStats(catalogRel.catalogTable,
@@ -72,23 +58,7 @@ case class AnalyzeColumnCommand(
     }
 
     def updateStats(catalogTable: CatalogTable, newTotalSize: Long): Unit = {
-      // Collect statistics per column.
-      // The first element in the result will be the overall row count, the following elements
-      // will be structs containing all column stats.
-      // The layout of each struct follows the layout of the ColumnStats.
-      val ndvMaxErr = sessionState.conf.ndvMaxError
-      val expressions = Count(Literal(1)).toAggregateExpression() +:
-        attributesToAnalyze.map(ColumnStatsStruct(_, ndvMaxErr))
-      val namedExpressions = expressions.map(e => Alias(e, e.toString)())
-      val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation))
-        .queryExecution.toRdd.collect().head
-
-      // unwrap the result
-      val rowCount = statsRow.getLong(0)
-      val columnStats = attributesToAnalyze.zipWithIndex.map { case (expr, i) =>
-        (expr.name, ColumnStatsStruct.unwrapStruct(statsRow, i + 1, expr))
-      }.toMap
-
+      val (rowCount, columnStats) = computeColStats(sparkSession, relation)
       val statistics = Statistics(
         sizeInBytes = newTotalSize,
         rowCount = Some(rowCount),
@@ -99,6 +69,43 @@ case class AnalyzeColumnCommand(
     }
 
     Seq.empty[Row]
+  }
+
+  def computeColStats(
+      sparkSession: SparkSession,
+      relation: LogicalPlan): (Long, Map[String, ColumnStats]) = {
+
+    // check correctness of column names
+    val attributesToAnalyze = mutable.MutableList[Attribute]()
+    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    columnNames.foreach { col =>
+      val exprOption = relation.output.find { attr =>
+        if (caseSensitive) attr.name == col else attr.name.equalsIgnoreCase(col)
+      }
+      val expr = exprOption.getOrElse(throw new AnalysisException(s"Invalid column name: $col."))
+      // do deduplication
+      if (!attributesToAnalyze.contains(expr)) {
+        attributesToAnalyze += expr
+      }
+    }
+
+    // Collect statistics per column.
+    // The first element in the result will be the overall row count, the following elements
+    // will be structs containing all column stats.
+    // The layout of each struct follows the layout of the ColumnStats.
+    val ndvMaxErr = sparkSession.sessionState.conf.ndvMaxError
+    val expressions = Count(Literal(1)).toAggregateExpression() +:
+      attributesToAnalyze.map(ColumnStatsStruct(_, ndvMaxErr))
+    val namedExpressions = expressions.map(e => Alias(e, e.toString)())
+    val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation))
+      .queryExecution.toRdd.collect().head
+
+    // unwrap the result
+    val rowCount = statsRow.getLong(0)
+    val columnStats = attributesToAnalyze.zipWithIndex.map { case (expr, i) =>
+      (expr.name, ColumnStatsStruct.unwrapStruct(statsRow, i + 1, expr))
+    }.toMap
+    (rowCount, columnStats)
   }
 }
 

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStats, LogicalPlan}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, AnalyzeTableCommand}
 import org.apache.spark.sql.execution.datasources._
@@ -200,5 +200,14 @@ private[sql] class SessionState(sparkSession: SparkSession) {
    */
   def analyzeTableColumns(tableIdent: TableIdentifier, columnNames: Seq[String]): Unit = {
     AnalyzeColumnCommand(tableIdent, columnNames).run(sparkSession)
+  }
+
+  // This api is used for testing.
+  def computeColumnStats(tableName: String, columnNames: Seq[String]): Map[String, ColumnStats] = {
+    val tableIdent = sqlParser.parseTableIdentifier(tableName)
+    val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
+    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
+    val relation = sparkSession.sessionState.catalog.lookupRelation(tableIdentWithDB)
+    AnalyzeColumnCommand(tableIdent, columnNames).computeColStats(sparkSession, relation)._2
   }
 }

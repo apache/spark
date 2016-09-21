@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStats
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -30,8 +29,24 @@ class StatisticsColumnSuite extends StatisticsTest {
   import testImplicits._
 
   test("parse analyze column commands") {
+    def assertAnalyzeColumnCommand(analyzeCommand: String, c: Class[_]) {
+      val parsed = spark.sessionState.sqlParser.parsePlan(analyzeCommand)
+      val operators = parsed.collect {
+        case a: AnalyzeColumnCommand => a
+        case o => o
+      }
+      assert(operators.size == 1)
+      if (operators.head.getClass != c) {
+        fail(
+          s"""$analyzeCommand expected command: $c, but got ${operators.head}
+             |parsed command:
+             |$parsed
+           """.stripMargin)
+      }
+    }
+
     val table = "table"
-    assertAnalyzeCommand(
+    assertAnalyzeColumnCommand(
       s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS key, value",
       classOf[AnalyzeColumnCommand])
 
@@ -42,10 +57,11 @@ class StatisticsColumnSuite extends StatisticsTest {
 
   test("check correctness of columns") {
     val table = "tbl"
-    val quotedColumn = "x.yz"
-    val quotedName = s"`$quotedColumn`"
+    val colName1 = "abc"
+    val colName2 = "x.yz"
+    val quotedColName2 = s"`$colName2`"
     withTable(table) {
-      sql(s"CREATE TABLE $table (abc int, $quotedName string)")
+      sql(s"CREATE TABLE $table ($colName1 int, $quotedColName2 string) USING PARQUET")
 
       val invalidColError = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS key")
@@ -54,24 +70,19 @@ class StatisticsColumnSuite extends StatisticsTest {
 
       withSQLConf("spark.sql.caseSensitive" -> "true") {
         val invalidErr = intercept[AnalysisException] {
-          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS ABC")
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS ${colName1.toUpperCase}")
         }
-        assert(invalidErr.message == "Invalid column name: ABC.")
+        assert(invalidErr.message == s"Invalid column name: ${colName1.toUpperCase}.")
       }
 
       withSQLConf("spark.sql.caseSensitive" -> "false") {
-        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS ${quotedName.toUpperCase}, " +
-          s"ABC, $quotedName")
-        val df = sql(s"SELECT * FROM $table")
-        val stats = df.queryExecution.analyzed.collect {
-          case rel: MetastoreRelation =>
-            val colStats = rel.catalogTable.stats.get.colStats
-            // check deduplication
-            assert(colStats.size == 2)
-            assert(colStats.contains(quotedColumn))
-            assert(colStats.contains("abc"))
-        }
-        assert(stats.size == 1)
+        val columnsToAnalyze = Seq(colName2.toUpperCase, colName1, colName2)
+        val columnStats = spark.sessionState.computeColumnStats(table, columnsToAnalyze)
+        assert(columnStats.contains(colName1))
+        assert(columnStats.contains(colName2))
+        // check deduplication
+        assert(columnStats.size == 2)
+        assert(!columnStats.contains(colName2.toUpperCase))
       }
     }
   }
@@ -297,18 +308,17 @@ class StatisticsColumnSuite extends StatisticsTest {
       val df = values.toDF("c1")
       df.write.format("json").saveAsTable(tmpTable)
 
-      sql(s"CREATE TABLE $table (c1 int) STORED AS TEXTFILE")
+      sql(s"CREATE TABLE $table (c1 int) USING PARQUET")
       sql(s"INSERT INTO $table SELECT * FROM $tmpTable")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-      val fetchedStats1 = checkTableStats(tableName = table, isDataSourceTable = false,
-        hasSizeInBytes = true, expectedRowCounts = Some(values.length))
+      val fetchedStats1 =
+        checkTableStats(tableName = table, expectedRowCount = Some(values.length))
 
-      // update table between analyze table and analyze column commands
+      // update table-level stats between analyze table and analyze column commands
       sql(s"INSERT INTO $table SELECT * FROM $tmpTable")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c1")
-      val fetchedStats2 = checkTableStats(tableName = table, isDataSourceTable = false,
-        hasSizeInBytes = true, expectedRowCounts = Some(values.length * 2))
-      assert(fetchedStats2.get.sizeInBytes > fetchedStats1.get.sizeInBytes)
+      val fetchedStats2 =
+        checkTableStats(tableName = table, expectedRowCount = Some(values.length * 2))
 
       val colStats = fetchedStats2.get.colStats("c1")
       checkColStats(colStats = colStats, expectedColStats = ColumnStats(
@@ -323,17 +333,15 @@ class StatisticsColumnSuite extends StatisticsTest {
   test("analyze column stats independently") {
     val table = "tbl"
     withTable(table) {
-      sql(s"CREATE TABLE $table (c1 int, c2 long) STORED AS TEXTFILE")
+      sql(s"CREATE TABLE $table (c1 int, c2 long) USING PARQUET")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c1")
-      val fetchedStats1 = checkTableStats(tableName = table, isDataSourceTable = false,
-        hasSizeInBytes = false, expectedRowCounts = Some(0))
+      val fetchedStats1 = checkTableStats(tableName = table, expectedRowCount = Some(0))
       assert(fetchedStats1.get.colStats.size == 1)
       val expected1 = ColumnStats(dataType = IntegerType, numNulls = 0, ndv = Some(0L))
       checkColStats(colStats = fetchedStats1.get.colStats("c1"), expectedColStats = expected1)
 
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c2")
-      val fetchedStats2 = checkTableStats(tableName = table, isDataSourceTable = false,
-        hasSizeInBytes = false, expectedRowCounts = Some(0))
+      val fetchedStats2 = checkTableStats(tableName = table, expectedRowCount = Some(0))
       // column c1 is kept in the stats
       assert(fetchedStats2.get.colStats.size == 2)
       checkColStats(colStats = fetchedStats2.get.colStats("c1"), expectedColStats = expected1)
