@@ -162,6 +162,10 @@ class KafkaTestUtils extends Logging {
     }
   }
 
+  def getAllTopics(): Seq[String] = {
+    zkUtils.getAllTopics()
+  }
+
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
   def createTopic(topic: String): Unit = {
     createTopic(topic, 1)

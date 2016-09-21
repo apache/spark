@@ -36,7 +36,7 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
   private val topicId = new AtomicInteger(0)
   private var testUtils: KafkaTestUtils = _
 
-  override val streamingTimeout = 10.seconds
+  override val streamingTimeout = 30.seconds
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -75,11 +75,20 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
   }
 
   test("stress test with multiple topics and partitions") {
-    val topics = (1 to 5).map(i => s"stress$i").toSet
-    var partitionRange = (1, 5)
+    val topicId = new AtomicInteger(1)
+
+    def newStressTopic: String = s"stress${topicId.getAndIncrement()}"
+
+    @volatile var topics = (1 to 5).map(_ => newStressTopic).toSet
+
+    @volatile var partitionRange = (1, 5)
+
+    def newPartitionRange: (Int, Int) = (partitionRange._1 + 5, partitionRange._2 + 5)
+
     def randomPartitions: Int = {
       Random.nextInt(partitionRange._2 + 1 - partitionRange._1) + partitionRange._1
     }
+
     topics.foreach { topic =>
       testUtils.createTopic(topic, partitions = randomPartitions)
       testUtils.sendMessages(topic, (101 to 105).map { _.toString }.toArray)
@@ -91,8 +100,8 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
         .format(classOf[KafkaSourceProvider].getCanonicalName.stripSuffix("$"))
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
         .option("kafka.group.id", s"group-stress-test")
-        .option("subscribe", topics.mkString(","))
         .option("kafka.metadata.max.age.ms", "1")
+        .option("subscribePattern", "stress.*")
         .load()
         .select("key", "value")
         .as[(Array[Byte], Array[Byte])]
@@ -102,13 +111,20 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
     runStressTest(
       mapped,
       d => {
-        if (Random.nextInt(5) == 0) {
-          partitionRange = (partitionRange._1 + 5, partitionRange._2 + 5)
-          val addPartitions = topics.toSeq.map(_ => randomPartitions)
-          AddKafkaData(topics, d: _*)(
-            ensureDataInMultiplePartition = false, addPartitions = Some(addPartitions))
-        } else {
-          AddKafkaData(topics, d: _*)(ensureDataInMultiplePartition = false)
+        Random.nextInt(5) match {
+          case 0 =>
+            partitionRange = newPartitionRange
+            val addPartitions = topics.toSeq.map(_ => randomPartitions)
+            AddKafkaData(topics, d: _*)(
+              ensureDataInMultiplePartition = false, addPartitions = Some(addPartitions))
+          case 1 =>
+            topics = topics + newStressTopic
+            partitionRange = newPartitionRange
+            val addPartitions = topics.toSeq.map(_ => randomPartitions)
+            AddKafkaData(topics, d: _*)(
+              ensureDataInMultiplePartition = false, addPartitions = Some(addPartitions))
+          case _ =>
+            AddKafkaData(topics, d: _*)(ensureDataInMultiplePartition = false)
         }
       },
       iterations = 50)
@@ -214,16 +230,27 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
     )
   }
 
+  /**
+   * Add data to Kafka. If any topic in `topics` does not exist, it will be created automatically.
+   *
+   * `addPartitions` is the new partition numbers of the topics. The caller should make sure using
+   * a bigger partition number. Otherwise, it will throw an exception.
+   */
   case class AddKafkaData(topics: Set[String], data: Int*)
     (implicit ensureDataInMultiplePartition: Boolean = false,
       addPartitions: Option[Seq[Int]] = None) extends AddData {
 
     override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+      val allTopics = testUtils.getAllTopics().toSet
       if (addPartitions.nonEmpty) {
         require(topics.size == addPartitions.get.size,
           s"$addPartitions should have the same size of $topics")
         topics.zip(addPartitions.get).foreach { case (topic, partitions) =>
-          testUtils.addPartitions(topic, partitions)
+          if (allTopics.contains(topic)) {
+            testUtils.addPartitions(topic, partitions)
+          } else {
+            testUtils.createTopic(topic, partitions)
+          }
         }
       }
       require(
