@@ -561,9 +561,9 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
   test("Test default fileformat") {
     withSQLConf("hive.default.fileformat" -> "orc") {
       val s1 =
-        """CREATE TABLE IF NOT EXISTS fileformat_test
-        | (id int)""".stripMargin
-
+        s"""
+           |CREATE TABLE IF NOT EXISTS fileformat_test (id int)
+        """.stripMargin
       val (desc, exists) = extractTableDesc(s1)
       assert(exists)
       assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
@@ -573,9 +573,9 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
 
     withSQLConf("hive.default.fileformat" -> "parquet") {
       val s1 =
-        """CREATE TABLE IF NOT EXISTS fileformat_test
-          | (id int)""".stripMargin
-
+        s"""
+           |CREATE TABLE IF NOT EXISTS fileformat_test (id int)
+        """.stripMargin
       val (desc, exists) = extractTableDesc(s1)
       assert(exists)
       val input = desc.storage.inputFormat
