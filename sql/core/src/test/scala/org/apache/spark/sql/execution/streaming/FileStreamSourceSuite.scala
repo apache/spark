@@ -90,7 +90,8 @@ class FileStreamSourceSuite extends SparkFunSuite with SharedSQLContext {
         classOf[ExistsThrowsExceptionFileSystem].getName)
       // add the metadata entries as a pre-req
       val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
-      val metadataLog = new HDFSMetadataLog[Array[FileEntry]](spark, dir.getAbsolutePath)
+      val metadataLog =
+        new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath)
       assert(metadataLog.add(0, Array(FileEntry(s"$scheme:///file1", 100L))))
 
       val newSource = new FileStreamSource(spark, s"$scheme:///", "parquet", StructType(Nil),
