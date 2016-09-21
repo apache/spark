@@ -76,6 +76,31 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("define CTE in CTE subquery") {
+    checkAnswer(
+      sql(
+        """
+          | with t2 as (with t1 as (select 1 as b, 2 as c) select b, c from t1)
+          | select a from (select 1 as a union all select 2 as a) t
+          | where a = (select max(b) from t2)
+        """.stripMargin),
+      Array(Row(1))
+    )
+    checkAnswer(
+      sql(
+        """
+          | with t2 as (with t1 as (select 1 as b, 2 as c) select b, c from t1),
+          | t3 as (
+          |   with t4 as (select 1 as d, 3 as e)
+          |   select * from t4 cross join t2 where t2.b = t4.d
+          | )
+          | select a from (select 1 as a union all select 2 as a)
+          | where a = (select max(d) from t3)
+        """.stripMargin),
+      Array(Row(1))
+    )
+  }
+
   test("uncorrelated scalar subquery in CTE") {
     checkAnswer(
       sql("with t2 as (select 1 as b, 2 as c) " +
