@@ -46,14 +46,24 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
 
   public static final String HANDLER_NAME = "frameDecoder";
   private static final int LENGTH_SIZE = 8;
+  private static final int MAX_FRAME_SIZE = Integer.MAX_VALUE;
   private static final int UNKNOWN_FRAME_SIZE = -1;
 
   private final LinkedList<ByteBuf> buffers = new LinkedList<>();
   private final ByteBuf frameLenBuf = Unpooled.buffer(LENGTH_SIZE, LENGTH_SIZE);
+  private final boolean isSupportLargeData;
 
   private long totalSize = 0;
   private long nextFrameSize = UNKNOWN_FRAME_SIZE;
   private volatile Interceptor interceptor;
+
+  public TransportFrameDecoder() {
+    this(true);
+  }
+
+  public TransportFrameDecoder(boolean isSupportLargeData) {
+    this.isSupportLargeData = isSupportLargeData;
+  }
 
   @Override
   public void channelRead(ChannelHandlerContext ctx, Object data) throws Exception {
@@ -77,7 +87,13 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
         totalSize -= read;
       } else {
         // Interceptor is not active, so try to decode one frame.
-        LinkedList<ByteBuf> frame = decodeNext();
+        Object frame ;
+        if (isSupportLargeData) {
+          frame = decodeList();
+        } else {
+          frame = decodeByteBuf();
+        }
+
         if (frame == null) {
           break;
         }
@@ -120,7 +136,36 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     return nextFrameSize;
   }
 
-  private LinkedList<ByteBuf> decodeNext() throws Exception {
+  private ByteBuf decodeByteBuf() throws Exception {
+    long frameSize = decodeFrameSize();
+    if (frameSize == UNKNOWN_FRAME_SIZE || totalSize < frameSize) {
+      return null;
+    }
+
+    // Reset size for next frame.
+    nextFrameSize = UNKNOWN_FRAME_SIZE;
+
+    Preconditions.checkArgument(frameSize < MAX_FRAME_SIZE, "Too large frame: %s", frameSize);
+    Preconditions.checkArgument(frameSize > 0, "Frame length should be positive: %s", frameSize);
+
+    // If the first buffer holds the entire frame, return it.
+    int remaining = (int) frameSize;
+    if (buffers.getFirst().readableBytes() >= remaining) {
+      return nextBufferForFrame(remaining);
+    }
+
+    // Otherwise, create a composite buffer.
+    CompositeByteBuf frame = buffers.getFirst().alloc().compositeBuffer(Integer.MAX_VALUE);
+    while (remaining > 0) {
+      ByteBuf next = nextBufferForFrame(remaining);
+      remaining -= next.readableBytes();
+      frame.addComponent(next).writerIndex(frame.writerIndex() + next.readableBytes());
+    }
+    assert remaining == 0;
+    return frame;
+  }
+
+  private LinkedList<ByteBuf> decodeList() throws Exception {
     long frameSize = decodeFrameSize();
     if (frameSize == UNKNOWN_FRAME_SIZE || totalSize < frameSize) {
       return null;

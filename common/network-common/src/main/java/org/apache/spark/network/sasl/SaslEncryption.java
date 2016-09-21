@@ -31,12 +31,12 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.FileRegion;
-import io.netty.handler.codec.ByteToMessageDecoder;
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.MessageToMessageDecoder;
 import io.netty.util.AbstractReferenceCounted;
 
 import org.apache.spark.network.util.ByteArrayWritableChannel;
+import org.apache.spark.network.util.TransportFrameDecoder;
+
 /**
  * Provides SASL-based encription for transport channels. The single method exposed by this
  * class installs the needed channel handlers on a connected channel.
@@ -61,21 +61,12 @@ class SaslEncryption {
     channel.pipeline()
       .addFirst(ENCRYPTION_HANDLER_NAME, new EncryptionHandler(backend, maxOutboundBlockSize))
       .addFirst("saslDecryption", new DecryptionHandler(backend))
-      // Each frame does not exceed 8 + maxOutboundBlockSize bytes
       .addFirst("saslFrameDecoder", createFrameDecoder());
   }
 
-  /**
-   * Creates a LengthFieldBasedFrameDecoder where the first 8 bytes are the length of the frame.
-   * This is used before all decoders.
-   */
-  static ByteToMessageDecoder createFrameDecoder() {
-    // maxFrameLength = 2G
-    // lengthFieldOffset = 0
-    // lengthFieldLength = 8
-    // lengthAdjustment = -8, i.e. exclude the 8 byte length itself
-    // initialBytesToStrip = 8, i.e. strip out the length field itself
-    return new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 8, -8, 8);
+  // Each frame does not exceed 8 + maxOutboundBlockSize bytes
+  private static TransportFrameDecoder createFrameDecoder() {
+    return new TransportFrameDecoder(false);
   }
 
   private static class EncryptionHandler extends ChannelOutboundHandlerAdapter {
