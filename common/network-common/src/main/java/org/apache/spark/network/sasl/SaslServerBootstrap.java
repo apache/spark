@@ -29,6 +29,7 @@ import org.apache.spark.network.util.TransportConf;
  * authentication.
  */
 public class SaslServerBootstrap implements TransportServerBootstrap {
+
   private final TransportConf conf;
   private final SecretKeyHolder secretKeyHolder;
 
