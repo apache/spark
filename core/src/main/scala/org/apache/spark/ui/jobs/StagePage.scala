@@ -1017,8 +1017,8 @@ private[ui] class TaskDataSource(
         None
       }
 
-    val logs = executorsListener.executorToLogUrls.getOrElse(info.executorId, Map.empty)
-
+    val logs = executorsListener.executorToTaskSummary.get(info.executorId)
+      .map(_.executorLogs).getOrElse(Map.empty)
     new TaskTableRowData(
       info.index,
       info.taskId,

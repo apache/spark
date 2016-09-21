@@ -336,6 +336,11 @@ class SparkContext(object):
         return self._jsc.sc().applicationId()
 
     @property
+    def uiWebUrl(self):
+        """Return the URL of the SparkUI instance started by this SparkContext"""
+        return self._jsc.sc().uiWebUrl().get()
+
+    @property
     def startTime(self):
         """Return the epoch time when the Spark Context was started."""
         return self._jsc.startTime()
@@ -789,14 +794,6 @@ class SparkContext(object):
         [100, 200, 300, 400]
         """
         self._jsc.sc().addFile(path)
-
-    def clearFiles(self):
-        """
-        Clear the job's list of files added by L{addFile} or L{addPyFile} so
-        that they do not get downloaded to any new nodes.
-        """
-        # TODO: remove added .py or .zip files from the PYTHONPATH?
-        self._jsc.sc().clearFiles()
 
     def addPyFile(self, path):
         """

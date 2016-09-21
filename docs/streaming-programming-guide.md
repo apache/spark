@@ -2072,7 +2072,7 @@ unifiedStream.pprint()
 </div>
 </div>
 
-Another parameter that should be considered is the receiver's blocking interval,
+Another parameter that should be considered is the receiver's block interval,
 which is determined by the [configuration parameter](configuration.html#spark-streaming)
 `spark.streaming.blockInterval`. For most receivers, the received data is coalesced together into
 blocks of data before storing inside Spark's memory. The number of blocks in each batch
@@ -2382,7 +2382,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     - [Kafka Integration Guide](streaming-kafka-integration.html)
     - [Kinesis Integration Guide](streaming-kinesis-integration.html)
     - [Custom Receiver Guide](streaming-custom-receivers.html)
-* Third-party DStream data sources can be found in [Spark Packages](https://spark-packages.org/)
+* Third-party DStream data sources can be found in [Third Party Projects](https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects)
 * API documentation
   - Scala docs
     * [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) and

@@ -267,13 +267,15 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     s2.stop()
   }
 
-  test("moving recovery file form NM local dir to recovery path") {
+  test("moving recovery file from NM local dir to recovery path") {
     // This is to test when Hadoop is upgrade to 2.5+ and NM recovery is enabled, we should move
     // old recovery file to the new path to keep compatibility
 
     // Simulate s1 is running on old version of Hadoop in which recovery file is in the NM local
     // dir.
     s1 = new YarnShuffleService
+    // set auth to true to test the secrets recovery
+    yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, true)
     s1.init(yarnConfig)
     val app1Id = ApplicationId.newInstance(0, 1)
     val app1Data: ApplicationInitializationContext =
@@ -286,6 +288,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     val execStateFile = s1.registeredExecutorFile
     execStateFile should not be (null)
+    val secretsFile = s1.secretsFile
+    secretsFile should not be (null)
     val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, SORT_MANAGER)
     val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, SORT_MANAGER)
 
@@ -312,9 +316,15 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     s2.init(yarnConfig)
 
     val execStateFile2 = s2.registeredExecutorFile
+    val secretsFile2 = s2.secretsFile
+
     recoveryPath.toString should be (new Path(execStateFile2.getParentFile.toURI).toString)
+    recoveryPath.toString should be (new Path(secretsFile2.getParentFile.toURI).toString)
     eventually(timeout(10 seconds), interval(5 millis)) {
       assert(!execStateFile.exists())
+    }
+    eventually(timeout(10 seconds), interval(5 millis)) {
+      assert(!secretsFile.exists())
     }
 
     val handler2 = s2.blockHandler

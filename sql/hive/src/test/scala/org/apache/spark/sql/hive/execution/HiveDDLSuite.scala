@@ -300,9 +300,19 @@ class HiveDDLSuite
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         }.getMessage
         assert(message.contains(
-          "Attempted to unset non-existent property 'p' in table '`view1`'"))
+          "Attempted to unset non-existent property 'p' in table '`default`.`view1`'"))
       }
     }
+  }
+
+  private def assertErrorForAlterTableOnView(sqlText: String): Unit = {
+    val message = intercept[AnalysisException](sql(sqlText)).getMessage
+    assert(message.contains("Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+  }
+
+  private def assertErrorForAlterViewOnTable(sqlText: String): Unit = {
+    val message = intercept[AnalysisException](sql(sqlText)).getMessage
+    assert(message.contains("Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
   }
 
   test("alter views and alter table - misuse") {
@@ -317,45 +327,42 @@ class HiveDDLSuite
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(!catalog.tableExists(TableIdentifier(newViewName)))
 
-        var message = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $tabName RENAME TO $newViewName")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName RENAME TO $newViewName")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET SERDE 'whatever'")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RECOVER PARTITIONS")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(!catalog.tableExists(TableIdentifier(newViewName)))
       }
     }
   }
@@ -671,8 +678,8 @@ class HiveDDLSuite
           .createTempView(sourceViewName)
         sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName")
 
-        val sourceTable = spark.sessionState.catalog.getTableMetadata(
-          TableIdentifier(sourceViewName, None))
+        val sourceTable =
+          spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(sourceViewName)
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
 
