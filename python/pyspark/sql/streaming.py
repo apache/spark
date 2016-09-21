@@ -517,7 +517,7 @@ class DataStreamReader(OptionUtils):
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
                                   value being read. If None is set, it uses the default value,
-                                  ``1000000``.
+                                  ``-1`` meaning unlimited length.
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
