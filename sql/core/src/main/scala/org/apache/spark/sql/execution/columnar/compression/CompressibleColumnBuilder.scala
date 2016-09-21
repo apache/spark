@@ -109,6 +109,6 @@ private[columnar] trait CompressibleColumnBuilder[T <: AtomicType]
   }
 }
 
-private[columnar] object CompressibleColumnBuilder { 
+private[columnar] object CompressibleColumnBuilder {
   val unaligned = Platform.unaligned()
 }
