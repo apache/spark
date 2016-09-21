@@ -1272,8 +1272,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.blacklist.stage.maxFailedExecutorsPerNode</code></td>
   <td>2</td>
   <td>
-    (Experimental) How many different executors are marked as failed for a given stage, before the
-    entire node is marked as failed for the stage.
+    (Experimental) How many different executors are marked as blacklisted for a given stage, before
+    the entire node is marked as failed for the stage.
   </td>
 </tr>
 <tr>

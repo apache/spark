@@ -56,7 +56,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
 
   // even with the blacklist turned on, bad configs can lead to job failure.  To survive one
   // bad node, you need to make sure that
-  // maxTaskFailures > min(spark.blacklist.maxTaskFailuresPerNode, nExecutorsPerHost)
+  // maxTaskFailures > min(spark.blacklist.task.maxTaskAttemptsPerNode, nExecutorsPerHost)
   testScheduler(
     "With blacklist on, job will still fail if there are too many bad executors on bad host",
     extraConfs = Seq(
@@ -83,7 +83,6 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     }
     assertDataStructuresEmpty(noFailure = false)
   }
-
 
   testScheduler(
     "With default settings, job can succeed despite multiple bad executors on node",

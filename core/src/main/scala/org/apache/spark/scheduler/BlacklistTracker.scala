@@ -361,9 +361,9 @@ private[scheduler] object BlacklistTracker extends Logging {
         throw new IllegalArgumentException(s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
           s"( = ${maxNodeAttempts}) was >= spark.task.maxFailures " +
           s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
-          s"Spark will not be robust to one bad node.  Increase " +
-          s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} or spark.task.maxFailures, or disable " +
-          s"blacklisting with ${config.BLACKLIST_ENABLED.key}")
+          s"Spark will not be robust to one bad node.  Decrease " +
+          s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase spark.task.maxFailures, or " +
+          s"disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
       }
     }
   }
