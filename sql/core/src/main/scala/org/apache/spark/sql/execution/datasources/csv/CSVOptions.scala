@@ -112,7 +112,7 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
 
   val maxColumns = getInt("maxColumns", 20480)
 
-  val maxCharsPerColumn = getInt("maxCharsPerColumn", 1000000)
+  val maxCharsPerColumn = getInt("maxCharsPerColumn", -1)
 
   val escapeQuotes = getBool("escapeQuotes", true)
 
@@ -123,8 +123,6 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
   val inputBufferSize = 128
 
   val isCommentSet = this.comment != '\u0000'
-
-  val rowSeparator = "\n"
 }
 
 object CSVOptions {

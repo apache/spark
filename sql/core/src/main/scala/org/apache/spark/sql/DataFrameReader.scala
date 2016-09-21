@@ -392,8 +392,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * `java.sql.Timestamp.valueOf()` and `java.sql.Date.valueOf()` or ISO 8601 format.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
-   * <li>`maxCharsPerColumn` (default `1000000`): defines the maximum number of characters allowed
-   * for any given value being read.</li>
+   * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
+   * for any given value being read. By default, it is -1 meaning unlimited length</li>
    * <li>`maxMalformedLogPerPartition` (default `10`): sets the maximum number of malformed rows
    * Spark will log for each partition. Malformed records beyond this number will be ignored.</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
