@@ -111,7 +111,6 @@ class SparkConf(object):
                 # JVM is not created, so store data in self._conf first
                 self._jconf = None
                 self._conf = {}
-                self.loadDefaults = loadDefaults
 
     def set(self, key, value):
         """Set a configuration property."""
