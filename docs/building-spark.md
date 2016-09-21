@@ -24,7 +24,7 @@ When compiling with Java 8, a similar but smaller set of memory parameters is ne
 
     export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
 
-If you don't add these parameters to `MAVEN_OPTS`, you may see errors like the following:
+If you don't add these parameters to `MAVEN_OPTS`, you may see errors and warnings like the following:
 
     [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_BINARY_VERSION}}/classes...
     [ERROR] PermGen space -> [Help 1]
@@ -32,11 +32,14 @@ If you don't add these parameters to `MAVEN_OPTS`, you may see errors like the f
     [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_BINARY_VERSION}}/classes...
     [ERROR] Java heap space -> [Help 1]
 
+    [INFO] Compiling 233 Scala sources and 41 Java sources to /Users/me/Development/spark/sql/core/target/scala-{site.SCALA_BINARY_VERSION}/classes...
+    OpenJDK 64-Bit Server VM warning: CodeCache is full. Compiler has been disabled.
+    OpenJDK 64-Bit Server VM warning: Try increasing the code cache size using -XX:ReservedCodeCacheSize=
+
 You can fix these problems by setting the `MAVEN_OPTS` variable as discussed before.
 
 **Note:**
 
-* This step is not needed for Java 8.
 * If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options for Java 7 to the `MAVEN_OPTS` environment variable.
 * The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.
 * You may see warnings like "ignoring option MaxPermSize=1g; support was removed in 8.0" when building or running tests with Java 8. These warnings are harmless.
