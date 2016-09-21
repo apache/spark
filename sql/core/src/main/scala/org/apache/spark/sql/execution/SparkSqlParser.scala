@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
@@ -99,9 +99,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       ctx.identifier.getText.toLowerCase == "noscan") {
       AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString)
     } else {
-      // Always just run the no scan analyze. We should fix this and implement full analyze
-      // command in the future.
-      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString)
+      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString, noscan = false)
     }
   }
 
@@ -318,6 +316,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
     val options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
+    if (provider.toLowerCase == "hive") {
+      throw new AnalysisException("Cannot create hive serde table with CREATE TABLE USING")
+    }
     val schema = Option(ctx.colTypeList()).map(createStructType)
     val partitionColumnNames =
       Option(ctx.partitionColumnNames)
@@ -325,14 +326,17 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         .getOrElse(Array.empty[String])
     val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
 
+    // TODO: this may be wrong for non file-based data source like JDBC, which should be external
+    // even there is no `path` in options. We should consider allow the EXTERNAL keyword.
+    val tableType = if (new CaseInsensitiveMap(options).contains("path")) {
+      CatalogTableType.EXTERNAL
+    } else {
+      CatalogTableType.MANAGED
+    }
+
     val tableDesc = CatalogTable(
       identifier = table,
-      // TODO: actually the table type may be EXTERNAL if we have `path` in options. However, the
-      // physical plan `CreateDataSourceTableCommand` doesn't take table type as parameter, but a
-      // boolean flag called `managedIfNoPath`. We set the table type to MANAGED here to simulate
-      // setting the `managedIfNoPath` flag. In the future we should refactor the physical plan and
-      // make it take `CatalogTable` directly.
-      tableType = CatalogTableType.MANAGED,
+      tableType = tableType,
       storage = CatalogStorageFormat.empty.copy(properties = options),
       schema = schema.getOrElse(new StructType),
       provider = Some(provider),
@@ -663,9 +667,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
+    val fromName = visitTableIdentifier(ctx.from)
+    val toName = visitTableIdentifier(ctx.to)
+    if (toName.database.isDefined) {
+      operationNotAllowed("Can not specify database in table/view name after RENAME TO", ctx)
+    }
+
     AlterTableRenameCommand(
-      visitTableIdentifier(ctx.from),
-      visitTableIdentifier(ctx.to),
+      fromName,
+      toName.table,
       ctx.VIEW != null)
   }
 

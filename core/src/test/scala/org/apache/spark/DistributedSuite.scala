@@ -177,10 +177,12 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     blockManager.master.getLocations(blockId).foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
         blockId.toString)
-      val deserialized = serializerManager.dataDeserializeStream[Int](blockId,
-        new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream()).toList
+      val deserialized = serializerManager.dataDeserializeStream(blockId,
+        new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream())(data.elementClassTag).toList
       assert(deserialized === (1 to 100).toList)
     }
+    // This will exercise the getRemoteBytes / getRemoteValues code paths:
+    assert(blockIds.flatMap(id => blockManager.get[Int](id).get.data).toSet === (1 to 1000).toSet)
   }
 
   Seq(

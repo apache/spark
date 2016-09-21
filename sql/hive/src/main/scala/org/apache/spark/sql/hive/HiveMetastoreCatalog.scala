@@ -81,8 +81,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             options = table.storage.properties)
 
         LogicalRelation(
-          dataSource.resolveRelation(checkPathExist = true),
-          metastoreTableIdentifier = Some(TableIdentifier(in.name, Some(in.database))))
+          dataSource.resolveRelation(),
+          catalogTable = Some(table))
       }
     }
 
@@ -249,18 +249,14 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         }
 
         val relation = HadoopFsRelation(
-          sparkSession = sparkSession,
           location = fileCatalog,
           partitionSchema = partitionSchema,
           dataSchema = inferredSchema,
           bucketSpec = bucketSpec,
           fileFormat = defaultSource,
-          options = options)
+          options = options)(sparkSession = sparkSession)
 
-        val created = LogicalRelation(
-          relation,
-          metastoreTableIdentifier =
-            Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
+        val created = LogicalRelation(relation, catalogTable = Some(metastoreRelation.catalogTable))
         cachedDataSourceTables.put(tableIdentifier, created)
         created
       }
@@ -286,8 +282,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
               bucketSpec = bucketSpec,
               options = options,
               className = fileType).resolveRelation(),
-              metastoreTableIdentifier =
-                Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
+              catalogTable = Some(metastoreRelation.catalogTable))
 
 
         cachedDataSourceTables.put(tableIdentifier, created)

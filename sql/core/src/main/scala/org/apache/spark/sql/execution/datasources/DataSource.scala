@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -141,12 +142,13 @@ case class DataSource(
                 } else if (provider.toLowerCase == "avro" ||
                   provider == "com.databricks.spark.avro") {
                   throw new AnalysisException(
-                    s"Failed to find data source: ${provider.toLowerCase}. Please use Spark " +
-                      "package http://spark-packages.org/package/databricks/spark-avro")
+                    s"Failed to find data source: ${provider.toLowerCase}. Please find an Avro " +
+                      "package at " +
+                      "https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider. Please find packages at " +
-                      "http://spark-packages.org",
+                      "https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects",
                     error)
                 }
             }
@@ -229,7 +231,7 @@ case class DataSource(
           }
         }
 
-        val isSchemaInferenceEnabled = sparkSession.conf.get(SQLConf.STREAMING_SCHEMA_INFERENCE)
+        val isSchemaInferenceEnabled = sparkSession.sessionState.conf.streamingSchemaInference
         val isTextSource = providingClass == classOf[text.TextFileFormat]
         // If the schema inference is disabled, only text sources require schema to be specified
         if (!isSchemaInferenceEnabled && !isTextSource && userSpecifiedSchema.isEmpty) {
@@ -314,12 +316,8 @@ case class DataSource(
   /**
    * Create a resolved [[BaseRelation]] that can be used to read data from or write data into this
    * [[DataSource]]
-   *
-   * @param checkPathExist A flag to indicate whether to check the existence of path or not.
-   *                       This flag will be set to false when we create an empty table (the
-   *                       path of the table does not exist).
    */
-  def resolveRelation(checkPathExist: Boolean = true): BaseRelation = {
+  def resolveRelation(): BaseRelation = {
     val caseInsensitiveOptions = new CaseInsensitiveMap(options)
     val relation = (providingClass.newInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
@@ -350,13 +348,12 @@ case class DataSource(
         }
 
         HadoopFsRelation(
-          sparkSession,
           fileCatalog,
           partitionSchema = fileCatalog.partitionSpec().partitionColumns,
           dataSchema = dataSchema,
           bucketSpec = None,
           format,
-          options)
+          options)(sparkSession)
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
@@ -367,11 +364,11 @@ case class DataSource(
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
           val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified)
 
-          if (checkPathExist && globPath.isEmpty) {
+          if (globPath.isEmpty) {
             throw new AnalysisException(s"Path does not exist: $qualified")
           }
           // Sufficient to check head of the globPath seq for non-glob scenario
-          if (checkPathExist && !fs.exists(globPath.head)) {
+          if (!fs.exists(globPath.head)) {
             throw new AnalysisException(s"Path does not exist: ${globPath.head}")
           }
           globPath
@@ -391,7 +388,7 @@ case class DataSource(
 
         val fileCatalog =
           new ListingFileCatalog(
-            sparkSession, globbedPaths, options, partitionSchema, !checkPathExist)
+            sparkSession, globbedPaths, options, partitionSchema)
 
         val dataSchema = userSpecifiedSchema.map { schema =>
           val equality = sparkSession.sessionState.conf.resolver
@@ -408,13 +405,12 @@ case class DataSource(
         }
 
         HadoopFsRelation(
-          sparkSession,
           fileCatalog,
           partitionSchema = fileCatalog.partitionSpec().partitionColumns,
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
-          caseInsensitiveOptions)
+          caseInsensitiveOptions)(sparkSession)
 
       case _ =>
         throw new AnalysisException(
@@ -479,13 +475,23 @@ case class DataSource(
           }
         }
 
+        // SPARK-17230: Resolve the partition columns so InsertIntoHadoopFsRelationCommand does
+        // not need to have the query as child, to avoid to analyze an optimized query,
+        // because InsertIntoHadoopFsRelationCommand will be optimized first.
+        val columns = partitionColumns.map { name =>
+          val plan = data.logicalPlan
+          plan.resolve(name :: Nil, data.sparkSession.sessionState.analyzer.resolver).getOrElse {
+            throw new AnalysisException(
+              s"Unable to resolve ${name} given [${plan.output.map(_.name).mkString(", ")}]")
+          }.asInstanceOf[Attribute]
+        }
         // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This
         // will be adjusted within InsertIntoHadoopFsRelation.
         val plan =
           InsertIntoHadoopFsRelationCommand(
             outputPath,
-            partitionColumns.map(UnresolvedAttribute.quoted),
+            columns,
             bucketSpec,
             format,
             () => Unit, // No existing table needs to be refreshed.

@@ -29,8 +29,6 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * A very simple source that reads files from the given directory as they appear.
- *
- * TODO: Clean up the metadata log files periodically.
  */
 class FileStreamSource(
     sparkSession: SparkSession,
@@ -49,8 +47,8 @@ class FileStreamSource(
     fs.makeQualified(new Path(path))  // can contains glob patterns
   }
 
-  private val metadataLog = new HDFSMetadataLog[Seq[FileEntry]](sparkSession, metadataPath)
-
+  private val metadataLog =
+    new FileStreamSourceLog(FileStreamSourceLog.VERSION, sparkSession, metadataPath)
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   /** Maximum number of new files to be considered in each batch */
@@ -60,11 +58,10 @@ class FileStreamSource(
   // Visible for testing and debugging in production.
   val seenFiles = new SeenFilesMap(sourceOptions.maxFileAgeMs)
 
-  metadataLog.get(None, Some(maxBatchId)).foreach { case (batchId, entry) =>
-    entry.foreach(seenFiles.add)
-    // TODO: move purge call out of the loop once we truncate logs.
-    seenFiles.purge()
+  metadataLog.allFiles().foreach { entry =>
+    seenFiles.add(entry)
   }
+  seenFiles.purge()
 
   logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, maxFileAge = ${sourceOptions.maxFileAgeMs}")
 
@@ -98,7 +95,7 @@ class FileStreamSource(
 
     if (batchFiles.nonEmpty) {
       maxBatchId += 1
-      metadataLog.add(maxBatchId, batchFiles)
+      metadataLog.add(maxBatchId, batchFiles.map(_.copy(batchId = maxBatchId)).toArray)
       logInfo(s"Max batch id increased to $maxBatchId with ${batchFiles.size} new files")
     }
 
@@ -174,7 +171,10 @@ object FileStreamSource {
   /** Timestamp for file modification time, in ms since January 1, 1970 UTC. */
   type Timestamp = Long
 
-  case class FileEntry(path: String, timestamp: Timestamp) extends Serializable
+  val NOT_SET = -1L
+
+  case class FileEntry(path: String, timestamp: Timestamp, batchId: Long = NOT_SET)
+    extends Serializable
 
   /**
    * A custom hash map used to track the list of files seen. This map is not thread-safe.

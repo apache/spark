@@ -36,7 +36,7 @@ class SubstituteUnresolvedOrdinals(conf: CatalystConf) extends Rule[LogicalPlan]
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case s: Sort if conf.orderByOrdinal && s.order.exists(o => isIntLiteral(o.child)) =>
       val newOrders = s.order.map {
-        case order @ SortOrder(ordinal @ Literal(index: Int, IntegerType), _) =>
+        case order @ SortOrder(ordinal @ Literal(index: Int, IntegerType), _, _) =>
           val newOrdinal = withOrigin(ordinal.origin)(UnresolvedOrdinal(index))
           withOrigin(order.origin)(order.copy(child = newOrdinal))
         case other => other

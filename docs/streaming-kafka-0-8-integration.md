@@ -139,7 +139,7 @@ Next, we discuss how to use this approach in your streaming application.
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
 		// Hold a reference to the current offset ranges, so it can be used downstream
-		var offsetRanges = Array[OffsetRange]()
+		var offsetRanges = Array.empty[OffsetRange]
 
 		directKafkaStream.transform { rdd =>
 		  offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges

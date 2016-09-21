@@ -126,13 +126,13 @@ private[python] class PythonMLLibAPI extends Serializable {
       k: Int,
       maxIterations: Int,
       minDivisibleClusterSize: Double,
-      seed: Long): BisectingKMeansModel = {
-    new BisectingKMeans()
+      seed: java.lang.Long): BisectingKMeansModel = {
+    val kmeans = new BisectingKMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setMinDivisibleClusterSize(minDivisibleClusterSize)
-      .setSeed(seed)
-      .run(data)
+    if (seed != null) kmeans.setSeed(seed)
+    kmeans.run(data)
   }
 
   /**
@@ -629,13 +629,35 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for ChiSqSelector.fit(). This stub returns a
+   * Java stub for ChiSqSelector.fit() when the seletion type is KBest. This stub returns a
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
    * exit; see the Py4J documentation.
    */
-  def fitChiSqSelector(numTopFeatures: Int, data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
-    new ChiSqSelector(numTopFeatures).fit(data.rdd)
+  def fitChiSqSelectorKBest(numTopFeatures: Int,
+    data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
+    new ChiSqSelector().setNumTopFeatures(numTopFeatures).fit(data.rdd)
+  }
+
+  /**
+   * Java stub for ChiSqSelector.fit() when the selection type is Percentile. This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitChiSqSelectorPercentile(percentile: Double,
+    data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
+    new ChiSqSelector().setPercentile(percentile).fit(data.rdd)
+  }
+
+  /**
+   * Java stub for ChiSqSelector.fit() when the selection type is FPR. This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitChiSqSelectorFPR(alpha: Double, data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
+    new ChiSqSelector().setAlpha(alpha).fit(data.rdd)
   }
 
   /**
@@ -678,7 +700,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       learningRate: Double,
       numPartitions: Int,
       numIterations: Int,
-      seed: Long,
+      seed: java.lang.Long,
       minCount: Int,
       windowSize: Int): Word2VecModelWrapper = {
     val word2vec = new Word2Vec()
@@ -686,9 +708,9 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setLearningRate(learningRate)
       .setNumPartitions(numPartitions)
       .setNumIterations(numIterations)
-      .setSeed(seed)
       .setMinCount(minCount)
       .setWindowSize(windowSize)
+    if (seed != null) word2vec.setSeed(seed)
     try {
       val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
       new Word2VecModelWrapper(model)
@@ -751,7 +773,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       impurityStr: String,
       maxDepth: Int,
       maxBins: Int,
-      seed: Int): RandomForestModel = {
+      seed: java.lang.Long): RandomForestModel = {
 
     val algo = Algo.fromString(algoStr)
     val impurity = Impurities.fromString(impurityStr)
@@ -763,11 +785,13 @@ private[python] class PythonMLLibAPI extends Serializable {
       maxBins = maxBins,
       categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap)
     val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
+    // Only done because methods below want an int, not an optional Long
+    val intSeed = getSeedOrDefault(seed).toInt
     try {
       if (algo == Algo.Classification) {
-        RandomForest.trainClassifier(cached, strategy, numTrees, featureSubsetStrategy, seed)
+        RandomForest.trainClassifier(cached, strategy, numTrees, featureSubsetStrategy, intSeed)
       } else {
-        RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, seed)
+        RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, intSeed)
       }
     } finally {
       cached.unpersist(blocking = false)

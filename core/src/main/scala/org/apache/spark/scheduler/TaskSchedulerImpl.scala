@@ -374,6 +374,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     var failedExecutor: Option[String] = None
+    var reason: Option[ExecutorLossReason] = None
     synchronized {
       try {
         if (state == TaskState.LOST && taskIdToExecutorId.contains(tid)) {
@@ -381,8 +382,9 @@ private[spark] class TaskSchedulerImpl private[scheduler](
           val execId = taskIdToExecutorId(tid)
 
           if (executorIdToTaskCount.contains(execId)) {
-            removeExecutor(execId,
+            reason = Some(
               SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
+            removeExecutor(execId, reason.get)
             failedExecutor = Some(execId)
           }
         }
@@ -415,7 +417,8 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     }
     // Update the DAGScheduler without holding a lock on this, since that can deadlock
     if (failedExecutor.isDefined) {
-      dagScheduler.executorLost(failedExecutor.get)
+      assert(reason.isDefined)
+      dagScheduler.executorLost(failedExecutor.get, reason.get)
       backend.reviveOffers()
     }
   }
@@ -541,7 +544,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     }
     // Call dagScheduler.executorLost without holding the lock on this to prevent deadlock
     if (failedExecutor.isDefined) {
-      dagScheduler.executorLost(failedExecutor.get)
+      dagScheduler.executorLost(failedExecutor.get, reason)
       backend.reviveOffers()
     }
   }

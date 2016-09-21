@@ -44,7 +44,7 @@ import org.apache.spark.network.util.TransportConf;
  * executors.
  */
 public class ExternalShuffleClient extends ShuffleClient {
-  private final Logger logger = LoggerFactory.getLogger(ExternalShuffleClient.class);
+  private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleClient.class);
 
   private final TransportConf conf;
   private final boolean saslEnabled;

@@ -72,7 +72,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * Concurrency: thread safe and can be called from multiple threads.
  */
 public class TransportClient implements Closeable {
-  private final Logger logger = LoggerFactory.getLogger(TransportClient.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportClient.class);
 
   private final Channel channel;
   private final TransportResponseHandler handler;
@@ -150,8 +150,8 @@ public class TransportClient implements Closeable {
           if (future.isSuccess()) {
             long timeTaken = System.currentTimeMillis() - startTime;
             if (logger.isTraceEnabled()) {
-              logger.trace("Sending request {} to {} took {} ms", streamChunkId, getRemoteAddress(channel),
-                timeTaken);
+              logger.trace("Sending request {} to {} took {} ms", streamChunkId,
+                getRemoteAddress(channel), timeTaken);
             }
           } else {
             String errorMsg = String.format("Failed to send request %s to %s: %s", streamChunkId,
@@ -193,8 +193,8 @@ public class TransportClient implements Closeable {
             if (future.isSuccess()) {
               long timeTaken = System.currentTimeMillis() - startTime;
               if (logger.isTraceEnabled()) {
-                logger.trace("Sending request for {} to {} took {} ms", streamId, getRemoteAddress(channel),
-                  timeTaken);
+                logger.trace("Sending request for {} to {} took {} ms", streamId,
+                  getRemoteAddress(channel), timeTaken);
               }
             } else {
               String errorMsg = String.format("Failed to send request for %s to %s: %s", streamId,
@@ -236,7 +236,8 @@ public class TransportClient implements Closeable {
           if (future.isSuccess()) {
             long timeTaken = System.currentTimeMillis() - startTime;
             if (logger.isTraceEnabled()) {
-              logger.trace("Sending request {} to {} took {} ms", requestId, getRemoteAddress(channel), timeTaken);
+              logger.trace("Sending request {} to {} took {} ms", requestId,
+                getRemoteAddress(channel), timeTaken);
             }
           } else {
             String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,

@@ -281,7 +281,7 @@ public final class UnsafeInMemorySorter {
     public void loadNext() {
       // This pointer points to a 4-byte record length, followed by the record's bytes
       final long recordPointer = array.get(offset + position);
-      currentPageNumber = memoryManager.decodePageNumber(recordPointer);
+      currentPageNumber = TaskMemoryManager.decodePageNumber(recordPointer);
       baseObject = memoryManager.getPage(recordPointer);
       baseOffset = memoryManager.getOffsetInPage(recordPointer) + 4;  // Skip over record length
       recordLength = Platform.getInt(baseObject, baseOffset - 4);
@@ -333,13 +333,14 @@ public final class UnsafeInMemorySorter {
     if (nullBoundaryPos > 0) {
       assert radixSortSupport != null : "Nulls are only stored separately with radix sort";
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
-      if (radixSortSupport.sortDescending()) {
-        // Nulls are smaller than non-nulls
-        queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
+
+      // The null order is either LAST or FIRST, regardless of sorting direction (ASC|DESC)
+      if (radixSortSupport.nullsFirst()) {
         queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
+        queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
       } else {
-        queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
         queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
+        queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
       }
       return new UnsafeExternalSorter.ChainedIterator(queue);
     } else {
