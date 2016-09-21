@@ -117,24 +117,29 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                       "e.g. if threshold is p, then thresholds must be equal to [1-p, p].",
                       typeConverter=TypeConverters.toFloat)
 
+    family = Param(Params._dummy(), "family",
+                   "The name of family which is a description of the label distribution to " +
+                   "be used in the model. Supported options: auto, binomial, multinomial",
+                   typeConverter=TypeConverters.toString)
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                  threshold=0.5, thresholds=None, probabilityCol="probability",
                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None,
-                 aggregationDepth=2):
+                 aggregationDepth=2, family="auto"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  threshold=0.5, thresholds=None, probabilityCol="probability", \
                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
-                 aggregationDepth=2)
+                 aggregationDepth=2, family="auto")
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LogisticRegression", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
         self._checkThresholdConsistency()
@@ -145,13 +150,13 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                   threshold=0.5, thresholds=None, probabilityCol="probability",
                   rawPredictionCol="rawPrediction", standardization=True, weightCol=None,
-                  aggregationDepth=2):
+                  aggregationDepth=2, family="auto"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                   threshold=0.5, thresholds=None, probabilityCol="probability", \
                   rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
-                  aggregationDepth=2)
+                  aggregationDepth=2, family="auto")
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
@@ -231,6 +236,20 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
             if abs(t2 - t) >= 1E-5:
                 raise ValueError("Logistic Regression getThreshold found inconsistent values for" +
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
+
+    @since("2.1.0")
+    def setFamily(self, value):
+        """
+        Sets the value of :py:attr:`family`.
+        """
+        return self._set(family=value)
+
+    @since("2.1.0")
+    def getFamily(self):
+        """
+        Gets the value of :py:attr:`family` or its default value.
+        """
+        return self.getOrDefault(self.family)
 
 
 class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
