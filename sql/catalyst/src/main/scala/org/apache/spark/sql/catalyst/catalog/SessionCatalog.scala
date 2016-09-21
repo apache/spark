@@ -246,33 +246,16 @@ class SessionCatalog(
   }
 
   /**
-   * Retrieve the metadata of an existing metastore table.
-   * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
+   * Retrieve the metadata of an existing permanent table/view. If no database is specified,
+   * assume the table/view is in the current database. If the specified table/view is not found
+   * in the database then a [[NoSuchTableException]] is thrown.
    */
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
-    val tid = TableIdentifier(table)
-    if (isTemporaryTable(name)) {
-      CatalogTable(
-        identifier = tid,
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = tempTables(table).output.map { c =>
-          CatalogColumn(
-            name = c.name,
-            dataType = c.dataType.catalogString,
-            nullable = c.nullable
-          )
-        },
-        properties = Map(),
-        viewText = None)
-    } else {
-      requireDbExists(db)
-      requireTableExists(TableIdentifier(table, Some(db)))
-      externalCatalog.getTable(db, table)
-    }
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Some(db)))
+    externalCatalog.getTable(db, table)
   }
 
   /**
@@ -285,6 +268,32 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     requireDbExists(db)
     externalCatalog.getTableOption(db, table)
+  }
+
+  /**
+   * Retrieve the metadata of an existing temporary view or permanent table/view.
+   * If the temporary view does not exist, tries to get the metadata an existing permanent
+   * table/view. If no database is specified, assume the table/view is in the current database.
+   * If the specified table/view is not found in the database then a [[NoSuchTableException]] is
+   * thrown.
+   */
+  def getTempViewOrPermanentTableMetadata(name: String): CatalogTable = synchronized {
+    val table = formatTableName(name)
+    getTempView(table).map { plan =>
+      CatalogTable(
+        identifier = TableIdentifier(table),
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = plan.output.map { c =>
+          CatalogColumn(
+            name = c.name,
+            dataType = c.dataType.catalogString,
+            nullable = c.nullable
+          )
+        },
+        properties = Map(),
+        viewText = None)
+    }.getOrElse(getTableMetadata(TableIdentifier(name)))
   }
 
   /**
@@ -544,11 +553,11 @@ class SessionCatalog(
       tableName: TableIdentifier,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = {
-    requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
+    requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
     externalCatalog.createPartitions(db, table, parts, ignoreIfExists)
   }
 
@@ -560,11 +569,11 @@ class SessionCatalog(
       tableName: TableIdentifier,
       specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = {
-    requirePartialMatchedPartitionSpec(specs, getTableMetadata(tableName))
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
+    requirePartialMatchedPartitionSpec(specs, getTableMetadata(tableName))
     externalCatalog.dropPartitions(db, table, specs, ignoreIfNotExists)
   }
 
@@ -579,12 +588,12 @@ class SessionCatalog(
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = {
     val tableMetadata = getTableMetadata(tableName)
-    requireExactMatchedPartitionSpec(specs, tableMetadata)
-    requireExactMatchedPartitionSpec(newSpecs, tableMetadata)
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
+    requireExactMatchedPartitionSpec(specs, tableMetadata)
+    requireExactMatchedPartitionSpec(newSpecs, tableMetadata)
     externalCatalog.renamePartitions(db, table, specs, newSpecs)
   }
 
@@ -598,11 +607,11 @@ class SessionCatalog(
    * this becomes a no-op.
    */
   def alterPartitions(tableName: TableIdentifier, parts: Seq[CatalogTablePartition]): Unit = {
-    requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
+    requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
     externalCatalog.alterPartitions(db, table, parts)
   }
 
@@ -611,11 +620,11 @@ class SessionCatalog(
    * If no database is specified, assume the table is in the current database.
    */
   def getPartition(tableName: TableIdentifier, spec: TablePartitionSpec): CatalogTablePartition = {
-    requireExactMatchedPartitionSpec(Seq(spec), getTableMetadata(tableName))
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
+    requireExactMatchedPartitionSpec(Seq(spec), getTableMetadata(tableName))
     externalCatalog.getPartition(db, table, spec)
   }
 

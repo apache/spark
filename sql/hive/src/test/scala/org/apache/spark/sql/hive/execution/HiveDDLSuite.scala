@@ -292,7 +292,7 @@ class HiveDDLSuite
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         }.getMessage
         assert(message.contains(
-          "Attempted to unset non-existent property 'p' in table '`view1`'"))
+          "Attempted to unset non-existent property 'p' in table '`default`.`view1`'"))
       }
     }
   }
@@ -664,8 +664,8 @@ class HiveDDLSuite
           .createTempView(sourceViewName)
         sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName")
 
-        val sourceTable = spark.sessionState.catalog.getTableMetadata(
-          TableIdentifier(sourceViewName, None))
+        val sourceTable =
+          spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(sourceViewName)
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
 
