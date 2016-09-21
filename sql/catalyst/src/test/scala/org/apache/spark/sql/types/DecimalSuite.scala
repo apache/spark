@@ -195,12 +195,14 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("changePrecision() on compact decimal should respect rounding mode") {
     Seq(ROUND_FLOOR, ROUND_CEILING, ROUND_HALF_UP, ROUND_HALF_EVEN).foreach { mode =>
-      Seq("1.0", "1.1", "1.6", "2.5", "5.5", "-1.0", "-1.1", "-1.6", "-2.5", "-5.5").foreach { n =>
-        val bd = BigDecimal(n)
-        val unscaled = (bd * 10).toLongExact
-        val d = Decimal(unscaled, 8, 1)
-        assert(d.changePrecision(10, 0, mode))
-        assert(d.toString === bd.setScale(0, mode).toString(), s"num: $n, mode: $mode")
+      Seq("0.4", "0.5", "0.6", "1.0", "1.1", "1.6", "2.5", "5.5").foreach { n =>
+        Seq("", "-").foreach { sigh =>
+          val bd = BigDecimal(sigh + n)
+          val unscaled = (bd * 10).toLongExact
+          val d = Decimal(unscaled, 8, 1)
+          assert(d.changePrecision(10, 0, mode))
+          assert(d.toString === bd.setScale(0, mode).toString(), s"num: $sigh$n, mode: $mode")
+        }
       }
     }
   }

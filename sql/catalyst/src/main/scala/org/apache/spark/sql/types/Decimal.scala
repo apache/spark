@@ -257,12 +257,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
             }
           case ROUND_HALF_UP =>
             if (math.abs(droppedDigits) * 2 >= pow10diff) {
-              longVal += (if (longVal < 0) -1L else 1L)
+              longVal += (if (droppedDigits < 0) -1L else 1L)
             }
           case ROUND_HALF_EVEN =>
             val doubled = math.abs(droppedDigits) * 2
             if (doubled > pow10diff || doubled == pow10diff && longVal % 2 != 0) {
-              longVal += (if (longVal < 0) -1L else 1L)
+              longVal += (if (droppedDigits < 0) -1L else 1L)
             }
           case _ =>
             sys.error(s"Not supported rounding mode: $roundMode")
