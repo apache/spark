@@ -22,9 +22,7 @@ import java.math.MathContext
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
@@ -2307,6 +2305,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         sql("SELECT i, j FROM tbl"),
         Row(1, "a") :: Row(2, "b") :: Row(3, "c") :: Row(4, "d") :: Nil)
+    }
+  }
+
+  test("data source table created in InMemoryCatalog should guarantee resolving consistency") {
+    val table = "tbl"
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(i INT, j STRING) USING parquet")
+      val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(table)
+      val relation = spark.sessionState.catalog.lookupRelation(tableIdent)
+      val expr = relation.resolve("i")
+      val plan = Dataset.ofRows(spark, Project(Seq(expr), relation))
+      plan.queryExecution.assertAnalyzed()
     }
   }
 
