@@ -355,7 +355,7 @@ private[spark] class Executor(
 
       } catch {
         case ffe: FetchFailedException =>
-          val reason = ffe.toTaskEndReason
+          val reason = ffe.toTaskFailedReason
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
@@ -370,7 +370,7 @@ private[spark] class Executor(
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
 
         case CausedBy(cDE: CommitDeniedException) =>
-          val reason = cDE.toTaskEndReason
+          val reason = cDE.toTaskFailedReason
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 

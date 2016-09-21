@@ -696,7 +696,7 @@ private[spark] class TaskSetManager(
    * Marks the task as failed, re-adds it to the list of pending tasks, and notifies the
    * DAG Scheduler.
    */
-  def handleFailedTask(tid: Long, state: TaskState, reason: TaskEndReason) {
+  def handleFailedTask(tid: Long, state: TaskState, reason: TaskFailedReason) {
     val info = taskInfos(tid)
     if (info.failed || info.killed) {
       return
@@ -707,7 +707,7 @@ private[spark] class TaskSetManager(
     copiesRunning(index) -= 1
     var accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty
     val failureReason = s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid, ${info.host}): " +
-      reason.asInstanceOf[TaskFailedReason].toErrorString
+      reason.toErrorString
     val failureException: Option[Throwable] = reason match {
       case fetchFailed: FetchFailed =>
         logWarning(failureReason)
@@ -765,10 +765,6 @@ private[spark] class TaskSetManager(
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
         logWarning(failureReason)
         None
-
-      case e: TaskEndReason =>
-        logError("Unknown TaskEndReason: " + e)
-        None
     }
     // always add to failed executors
     failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
@@ -784,9 +780,7 @@ private[spark] class TaskSetManager(
       addPendingTask(index)
     }
 
-    if (!isZombie && state != TaskState.KILLED
-        && reason.isInstanceOf[TaskFailedReason]
-        && reason.asInstanceOf[TaskFailedReason].countTowardsTaskFailures) {
+    if (!isZombie && state != TaskState.KILLED && reason.countTowardsTaskFailures) {
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
