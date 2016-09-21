@@ -482,7 +482,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         .map { case (k, v) => (k.replace(STATISTICS_BASIC_COL_STATS_PREFIX, ""), v)}
       val colStats: Map[String, ColumnStats] = catalogTable.schema.collect {
         case field if colStatsProps.contains(field.name) =>
-          (field.name, ColumnStats.fromString(colStatsProps(field.name), field.dataType))
+          (field.name, ColumnStats(colStatsProps(field.name), field.dataType))
       }.toMap
       catalogTable.copy(
         properties = removeStatsProperties(catalogTable),

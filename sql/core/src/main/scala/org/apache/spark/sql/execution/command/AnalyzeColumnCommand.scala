@@ -103,7 +103,7 @@ case class AnalyzeColumnCommand(
     // unwrap the result
     val rowCount = statsRow.getLong(0)
     val columnStats = attributesToAnalyze.zipWithIndex.map { case (expr, i) =>
-      (expr.name, ColumnStatsStruct.unwrapStruct(statsRow, i + 1, expr))
+      (expr.name, ColumnStatsStruct.unwrapStruct(statsRow, i + 1, expr, rowCount))
     }.toMap
     (rowCount, columnStats)
   }
@@ -161,14 +161,14 @@ object ColumnStatsStruct {
     })
   }
 
-  def unwrapStruct(row: InternalRow, offset: Int, e: Expression): ColumnStats = {
+  def unwrapStruct(row: InternalRow, offset: Int, e: Expression, rowCount: Long): ColumnStats = {
     val struct = row.getStruct(offset, statsNumber)
     ColumnStats(
       dataType = e.dataType,
       numNulls = struct.getLong(0),
       max = getField(struct, 1, e.dataType),
       min = getField(struct, 2, e.dataType),
-      ndv = getLongField(struct, 3),
+      ndv = getLongField(struct, 3).map(math.min(_, rowCount)),
       avgColLen = getDoubleField(struct, 4),
       maxColLen = getLongField(struct, 5),
       numTrues = getLongField(struct, 6),

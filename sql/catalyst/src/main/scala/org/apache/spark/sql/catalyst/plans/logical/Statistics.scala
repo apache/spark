@@ -86,7 +86,7 @@ case class ColumnStats(
 }
 
 object ColumnStats {
-  def fromString(str: String, dataType: DataType): ColumnStats = {
+  def apply(str: String, dataType: DataType): ColumnStats = {
     val suffix = ",\\s|\\)"
     ColumnStats(
       dataType = dataType,
