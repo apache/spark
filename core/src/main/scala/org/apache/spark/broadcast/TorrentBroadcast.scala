@@ -177,10 +177,12 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       val blockManager = SparkEnv.get.blockManager
       blockManager.getLocalValues(broadcastId).map(_.data.next()) match {
         case Some(x) =>
+          // Found broadcasted value in local [[BlockManager]]. Use it directly.
           releaseLock(broadcastId)
           x.asInstanceOf[T]
 
         case None =>
+          // Not found. Going to fetch the chunks of the broadcasted value from driver/executors.
           logInfo("Started reading broadcast variable " + id)
           val startTimeMs = System.currentTimeMillis()
           val blocks = readBlocks().flatMap(_.getChunks())

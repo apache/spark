@@ -1464,7 +1464,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         join2.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
       assert(
         join2.queryExecution.executedPlan
-          .collect { case e: BroadcastExchangeExec => true }.size === 1)
+          .collect { case e: BroadcastExchangeExec[_] => true }.size === 1)
       assert(
         join2.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 4)
     }

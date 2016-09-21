@@ -29,6 +29,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
+import org.apache.spark.broadcast.BroadcastMode
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -38,7 +39,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -670,7 +671,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case frame: WindowFrame => true
     case partition: Partitioning => true
     case resource: FunctionResource => true
-    case broadcast: BroadcastMode => true
+    case broadcast: BroadcastMode[_] => true
     case table: CatalogTableType => true
     case storage: CatalogStorageFormat => true
     case _ => false

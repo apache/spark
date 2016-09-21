@@ -23,10 +23,10 @@ import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.broadcast.BroadcastMode
 import org.apache.spark.memory.{MemoryConsumer, MemoryMode, StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
@@ -826,7 +826,7 @@ private[joins] object LongHashedRelation {
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */
 private[execution] case class HashedRelationBroadcastMode(key: Seq[Expression])
-  extends BroadcastMode {
+  extends BroadcastMode[InternalRow] {
 
   override def transform(rows: Array[InternalRow]): HashedRelation = {
     HashedRelation(rows.iterator, canonicalizedKey, rows.length)
@@ -836,7 +836,7 @@ private[execution] case class HashedRelationBroadcastMode(key: Seq[Expression])
     key.map { e => e.canonicalized }
   }
 
-  override def compatibleWith(other: BroadcastMode): Boolean = other match {
+  override def compatibleWith(other: BroadcastMode[InternalRow]): Boolean = other match {
     case m: HashedRelationBroadcastMode => canonicalizedKey == m.canonicalizedKey
     case _ => false
   }

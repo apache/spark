@@ -15,19 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.physical
-
-import org.apache.spark.broadcast.BroadcastMode
-import org.apache.spark.sql.catalyst.InternalRow
+package org.apache.spark.broadcast
 
 /**
- * IdentityBroadcastMode requires that rows are broadcasted in their original form.
+ * Marker trait to identify the shape in which tuples are broadcasted. Typical examples of this are
+ * identity (tuples remain unchanged) or hashed (tuples are converted into some hash index).
  */
-case object IdentityBroadcastMode extends BroadcastMode[InternalRow] {
-  // TODO: pack the UnsafeRows into single bytes array.
-  override def transform(rows: Array[InternalRow]): Array[InternalRow] = rows
+trait BroadcastMode[T] {
+  def transform(rows: Array[T]): Any
 
-  override def compatibleWith(other: BroadcastMode[InternalRow]): Boolean = {
-    this eq other
-  }
+  /**
+   * Returns true iff this [[BroadcastMode]] generates the same result as `other`.
+   */
+  def compatibleWith(other: BroadcastMode[T]): Boolean
 }

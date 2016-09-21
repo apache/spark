@@ -18,10 +18,11 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
-import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
+import org.apache.spark.sql.execution.joins.{HashedRelation, HashedRelationBroadcastMode}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
@@ -55,12 +56,12 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     val output = plan.output
     assert(plan sameResult plan)
 
-    val exchange1 = BroadcastExchangeExec(IdentityBroadcastMode, plan)
+    val exchange1 = BroadcastExchangeExec[Array[InternalRow]](IdentityBroadcastMode, plan)
     val hashMode = HashedRelationBroadcastMode(output)
-    val exchange2 = BroadcastExchangeExec(hashMode, plan)
+    val exchange2 = BroadcastExchangeExec[HashedRelation](hashMode, plan)
     val hashMode2 =
       HashedRelationBroadcastMode(Alias(output.head, "id2")() :: Nil)
-    val exchange3 = BroadcastExchangeExec(hashMode2, plan)
+    val exchange3 = BroadcastExchangeExec[HashedRelation](hashMode2, plan)
     val exchange4 = ReusedExchangeExec(output, exchange3)
 
     assert(exchange1 sameResult exchange1)
