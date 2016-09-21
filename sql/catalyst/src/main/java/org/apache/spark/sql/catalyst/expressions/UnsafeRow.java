@@ -610,8 +610,12 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       return (sizeInBytes == o.sizeInBytes) &&
         ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
           sizeInBytes);
+    } else if (other == null) {
+      return false;
+    } else {
+      throw new IllegalArgumentException(
+        "Cannot compare UnsafeRow to " + other.getClass().getName());
     }
-    return false;
   }
 
   /**
