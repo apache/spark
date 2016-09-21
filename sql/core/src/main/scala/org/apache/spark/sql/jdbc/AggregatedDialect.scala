@@ -41,4 +41,8 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
   override def getJDBCType(dt: DataType): Option[JdbcType] = {
     dialects.flatMap(_.getJDBCType(dt)).headOption
   }
+
+  override def quoteIdentifier(colName: String): String = {
+    dialects.head.quoteIdentifier(colName)
+  }
 }
