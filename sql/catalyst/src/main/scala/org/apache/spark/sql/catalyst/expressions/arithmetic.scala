@@ -273,7 +273,11 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
       if (input1 == null) {
         null
       } else {
-        integral.rem(input1, input2)
+        input1 match {
+          case d: Double => d % input2.asInstanceOf[java.lang.Double]
+          case f: Float => f % input2.asInstanceOf[java.lang.Float]
+          case _ => integral.rem(input1, input2)
+        }
       }
     }
   }
