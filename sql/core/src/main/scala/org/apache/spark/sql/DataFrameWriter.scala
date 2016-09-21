@@ -357,8 +357,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
+    if (source.toLowerCase == "hive") {
+      throw new AnalysisException("Cannot create hive serde table with saveAsTable API")
+    }
 
-    val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
+    val sessionState = df.sparkSession.sessionState
+    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val tableIdentWithDB = tableIdent.copy(database = Some(db))
+    // Pass a table identifier with database part, so that `tableExists` won't check temp views
+    // unexpectedly.
+    val tableExists = sessionState.catalog.tableExists(tableIdentWithDB)
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -384,7 +392,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           bucketSpec = getBucketSpec
         )
         val cmd = CreateTable(tableDesc, mode, Some(df.logicalPlan))
-        df.sparkSession.sessionState.executePlan(cmd).toRdd
+        sessionState.executePlan(cmd).toRdd
     }
   }
 

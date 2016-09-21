@@ -31,7 +31,8 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow
 
   def compare(a: InternalRow, b: InternalRow): Int = {
     var i = 0
-    while (i < ordering.size) {
+    val size = ordering.size
+    while (i < size) {
       val order = ordering(i)
       val left = order.child.eval(a)
       val right = order.child.eval(b)
