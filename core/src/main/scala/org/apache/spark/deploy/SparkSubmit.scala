@@ -311,7 +311,7 @@ object SparkSubmit {
     // In Mesos cluster mode, non-local python files are automatically downloaded by Mesos.
     if (args.isPython && !isYarnCluster && !isMesosCluster) {
       if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
-        printErrorAndExit(s"Only local python files are supported: $args.primaryResource")
+        printErrorAndExit(s"Only local python files are supported: ${args.primaryResource}")
       }
       val nonLocalPyFiles = Utils.nonLocalPaths(args.pyFiles).mkString(",")
       if (nonLocalPyFiles.nonEmpty) {
@@ -322,7 +322,7 @@ object SparkSubmit {
     // Require all R files to be local
     if (args.isR && !isYarnCluster) {
       if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
-        printErrorAndExit(s"Only local R files are supported: $args.primaryResource")
+        printErrorAndExit(s"Only local R files are supported: ${args.primaryResource}")
       }
     }
 
@@ -633,7 +633,14 @@ object SparkSubmit {
     // explicitly sets `spark.submit.pyFiles` in his/her default properties file.
     sysProps.get("spark.submit.pyFiles").foreach { pyFiles =>
       val resolvedPyFiles = Utils.resolveURIs(pyFiles)
-      val formattedPyFiles = PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
+      val formattedPyFiles = if (!isYarnCluster && !isMesosCluster) {
+        PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
+      } else {
+        // Ignoring formatting python path in yarn and mesos cluster mode, these two modes
+        // support dealing with remote python files, they could distribute and add python files
+        // locally.
+        resolvedPyFiles
+      }
       sysProps("spark.submit.pyFiles") = formattedPyFiles
     }
 
