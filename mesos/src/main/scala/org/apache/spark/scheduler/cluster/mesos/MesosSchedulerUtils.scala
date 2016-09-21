@@ -32,6 +32,7 @@ import org.apache.mesos.protobuf.{ByteString, GeneratedMessage}
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.TaskState
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 
@@ -424,7 +425,7 @@ trait MesosSchedulerUtils extends Logging {
     }
   }
 
-  val managedPortNames = List("spark.executor.port", "spark.blockManager.port")
+  val managedPortNames = List("spark.executor.port", BLOCK_MANAGER_PORT.key)
 
   /**
    * The values of the non-zero ports to be used by the executor process.
