@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe.array;
 
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.UnsafeAlignedOffset;
 
 public class ByteArrayMethods {
 
@@ -41,7 +40,7 @@ public class ByteArrayMethods {
     }
   }
 
-  private static final boolean alignedArch = UnsafeAlignedOffset.getAlignedArch();
+  private static final boolean unaligned = Platform.unaligned();
   /**
    * Optimized byte array equality check for byte arrays.
    * @return true if the arrays are equal, false otherwise
@@ -51,7 +50,7 @@ public class ByteArrayMethods {
     int i = 0;
 
     // check if stars align and we can get both offsets to be aligned
-    if ((leftOffset % 8 != 0) && ((leftOffset % 8) == (rightOffset % 8))) {
+    if ((leftOffset % 8) == (rightOffset % 8)) {
       while ((leftOffset + i) % 8 != 0 && i < length) {
         if (Platform.getByte(leftBase, leftOffset + i) !=
             Platform.getByte(rightBase, rightOffset + i)) {
@@ -61,7 +60,7 @@ public class ByteArrayMethods {
       }
     }
     // for architectures that suport unaligned accesses, chew it up 8 bytes at a time
-    if (!alignedArch || (((leftOffset + i) % 8 == 0) && ((rightOffset+i) % 8 == 0))) {
+    if (unaligned || (((leftOffset + i) % 8 == 0) && ((rightOffset + i) % 8 == 0))) {
       while (i <= length - 8) {
         if (Platform.getLong(leftBase, leftOffset + i) !=
             Platform.getLong(rightBase, rightOffset + i)) {

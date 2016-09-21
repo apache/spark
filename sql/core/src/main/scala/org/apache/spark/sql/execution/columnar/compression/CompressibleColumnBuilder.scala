@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.columnar.{ColumnBuilder, NativeColumnBuilder}
 import org.apache.spark.sql.types.AtomicType
-import org.apache.spark.unsafe.UnsafeAlignedOffset
+import org.apache.spark.unsafe.Platform
 
 /**
  * A stackable trait that builds optionally compressed byte buffer for a column.  Memory layout of
@@ -67,7 +67,7 @@ private[columnar] trait CompressibleColumnBuilder[T <: AtomicType]
   // is found to also allow aligned accesses this must be disabled for SPARC.
 
   protected def isWorthCompressing(encoder: Encoder[T]) = {
-    !CompressibleColumnBuilder.alignedArch && encoder.compressionRatio < 0.8
+    CompressibleColumnBuilder.unaligned && encoder.compressionRatio < 0.8
   }
 
   private def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {
@@ -110,5 +110,5 @@ private[columnar] trait CompressibleColumnBuilder[T <: AtomicType]
 }
 
 private[columnar] object CompressibleColumnBuilder { 
-  val alignedArch = UnsafeAlignedOffset.getAlignedArch()
+  val unaligned = Platform.unaligned()
 }

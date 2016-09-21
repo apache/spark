@@ -17,8 +17,6 @@
 
 package org.apache.spark.unsafe;
 
-import java.util.Arrays;
-
 /**
  * Class to make changes to record length offsets uniform through out
  * various areas of Apache Spark core and unsafe.  The SPARC platform
@@ -28,24 +26,10 @@ import java.util.Arrays;
  */
 public class UnsafeAlignedOffset {
 
-  private static final int UAO_SIZE;
-  private static final boolean ALIGNED_ARCH =
-    Arrays.asList("sparc", "sparcv9").contains(System.getProperty("os.arch"));
-
-  static {
-    if (ALIGNED_ARCH) {
-      UAO_SIZE = 8;
-    } else {
-      UAO_SIZE = 4;
-    }
-  }
+  private static final int UAO_SIZE = Platform.unaligned() ? 4 : 8;
 
   public static int getUaoSize() {
     return UAO_SIZE;
-  }
-
-  public static boolean getAlignedArch() {
-    return ALIGNED_ARCH;
   }
 
   public static int getSize(Object object, long offset) {
