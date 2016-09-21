@@ -84,14 +84,11 @@ class FileStreamSinkLog(
 
   private implicit val formats = Serialization.formats(NoTypeHints)
 
-  protected override val fileCleanupDelayMs =
-    sparkSession.conf.get(SQLConf.FILE_SINK_LOG_CLEANUP_DELAY)
+  protected override val fileCleanupDelayMs = sparkSession.sessionState.conf.fileSinkLogCleanupDelay
 
-  protected override val isDeletingExpiredLog =
-    sparkSession.conf.get(SQLConf.FILE_SINK_LOG_DELETION)
+  protected override val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSinkLogDeletion
 
-  protected override val compactInterval =
-    sparkSession.conf.get(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL)
+  protected override val compactInterval = sparkSession.sessionState.conf.fileSinkLogCompactInterval
   require(compactInterval > 0,
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $compactInterval) " +
       "to a positive value.")

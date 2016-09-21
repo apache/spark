@@ -262,7 +262,7 @@ ctes
     ;
 
 namedQuery
-    : name=identifier AS? '(' queryNoWith ')'
+    : name=identifier AS? '(' query ')'
     ;
 
 tableProvider
