@@ -26,6 +26,7 @@ import org.scalatest._
 import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.internal.config._
 
 class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoSugar {
 
@@ -179,7 +180,7 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
   test("Port reservation is done correctly with user specified ports only") {
     val conf = new SparkConf()
     conf.set("spark.executor.port", "3000" )
-    conf.set("spark.blockManager.port", "4000")
+    conf.set(BLOCK_MANAGER_PORT, 4000)
     val portResource = createTestPortResource((3000, 5000), Some("my_role"))
 
     val (resourcesLeft, resourcesToBeUsed) = utils

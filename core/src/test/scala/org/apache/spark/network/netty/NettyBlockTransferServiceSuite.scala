@@ -23,6 +23,7 @@ import org.mockito.Mockito.mock
 import org.scalatest._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config._
 import org.apache.spark.network.BlockDataManager
 
 class NettyBlockTransferServiceSuite
@@ -86,10 +87,10 @@ class NettyBlockTransferServiceSuite
   private def createService(port: Int): NettyBlockTransferService = {
     val conf = new SparkConf()
       .set("spark.app.id", s"test-${getClass.getName}")
-      .set("spark.blockManager.port", port.toString)
     val securityManager = new SecurityManager(conf)
     val blockDataManager = mock(classOf[BlockDataManager])
-    val service = new NettyBlockTransferService(conf, securityManager, "localhost", numCores = 1)
+    val service = new NettyBlockTransferService(conf, securityManager, "localhost", "localhost",
+      port, 1)
     service.init(blockDataManager)
     service
   }

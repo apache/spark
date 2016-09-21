@@ -2079,9 +2079,9 @@ private[spark] object Utils extends Logging {
         case e: Exception if isBindCollision(e) =>
           if (offset >= maxRetries) {
             val exceptionMessage = s"${e.getMessage}: Service$serviceString failed after " +
-              s"$maxRetries retries! Consider explicitly setting the appropriate port for the " +
-              s"service$serviceString (for example spark.ui.port for SparkUI) to an available " +
-              "port or increasing spark.port.maxRetries."
+              s"$maxRetries retries (starting from $startPort)! Consider explicitly setting " +
+              s"the appropriate port for the service$serviceString (for example spark.ui.port " +
+              s"for SparkUI) to an available port or increasing spark.port.maxRetries."
             val exception = new BindException(exceptionMessage)
             // restore original stack trace
             exception.setStackTrace(e.getStackTrace)
