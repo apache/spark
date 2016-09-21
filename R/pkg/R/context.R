@@ -233,6 +233,7 @@ setCheckpointDir <- function(sc, dirName) {
 #'
 #' @rdname spark.addFile
 #' @param path The path of the file to be added
+#' @export
 #' @examples
 #'\dontrun{
 #' spark.addFile("~/myfile")
@@ -247,6 +248,7 @@ spark.addFile <- function(path) {
 #'
 #' @rdname spark.getSparkFilesRootDirectory
 #' @return the root directory that contains files added through spark.addFile
+#' @export
 #' @examples
 #'\dontrun{
 #' spark.getSparkFilesRootDirectory()
@@ -261,6 +263,7 @@ spark.getSparkFilesRootDirectory <- function() {
 #' @rdname spark.getSparkFiles
 #' @param fileName The name of the file added through spark.addFile
 #' @return the absolute path of a file added through spark.addFile.
+#' @export
 #' @examples
 #'\dontrun{
 #' spark.getSparkFiles("myfile")
