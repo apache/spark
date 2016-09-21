@@ -232,7 +232,7 @@ class LogisticRegressionSuite
     })
 
     // force it to use the predict method
-    model.setRawPredictionCol("").setProbabilityCol("").setThresholds(Array(0, 1, 1))
+    model.setRawPredictionCol("").setProbabilityCol("").setThresholds(Array(0.0001, 1, 1))
     val predictionsWithPredict =
       model.transform(smallMultinomialDataset).select("prediction").collect()
     assert(predictionsWithPredict.forall(_.getDouble(0) === 0.0))
