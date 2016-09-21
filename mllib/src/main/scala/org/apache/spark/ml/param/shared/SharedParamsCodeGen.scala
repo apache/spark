@@ -53,7 +53,7 @@ private[shared] object SharedParamsCodeGen {
         " Array must have length equal to the number of classes, with values > 0." +
         " The class with largest value p/t is predicted, where p is the original probability" +
         " of that class and t is the class's threshold",
-        isValid = "(t: Array[Double]) => t.forall(_ >= 0)", finalMethods = false),
+        isValid = "(t: Array[Double]) => t.forall(_ > 0)", finalMethods = false),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),

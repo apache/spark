@@ -206,6 +206,7 @@ abstract class ProbabilisticClassificationModel[
       var i = 0
       val probabilitySize = probability.size
       while (i < probabilitySize) {
+        // thresholds are all > 0
         val scaled = probability(i) / thresholds(i)
         if (scaled > max) {
           max = scaled
