@@ -38,7 +38,7 @@ You can fix these problems by setting the `MAVEN_OPTS` variable as discussed bef
 
 **Note:**
 
-* If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options for Java 7 to the `MAVEN_OPTS` environment variable.
+* If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options to the `MAVEN_OPTS` environment variable.
 * The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.
 * You may see warnings like "ignoring option MaxPermSize=1g; support was removed in 8.0" when building or running tests with Java 8 and `build/mvn`. These warnings are harmless.
     
