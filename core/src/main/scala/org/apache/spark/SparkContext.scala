@@ -385,7 +385,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // Set Spark driver host and port system properties. This explicitly sets the configuration
     // instead of relying on the default value of the config constant.
-    _conf.set(DRIVER_HOST_ADDRESS, conf.get(DRIVER_HOST_ADDRESS))
+    _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
     _conf.setIfMissing("spark.driver.port", "0")
 
     _conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
