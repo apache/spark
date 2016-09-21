@@ -1253,6 +1253,8 @@ class DAGScheduler(
               s"longer running")
           }
 
+          var failedStageAdded = false
+
           if (disallowStageRetryForTest) {
             abortStage(failedStage, "Fetch failure will not retry stage due to testing config",
               None)
@@ -1267,12 +1269,17 @@ class DAGScheduler(
             // TODO: Cancel running tasks in the stage
             logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
               s"$failedStage (${failedStage.name}) due to fetch failure")
+            failedStages += failedStage
+            failedStages += mapStage
+            failedStageAdded = true
             messageScheduler.schedule(new Runnable {
               override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
             }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
           }
-          failedStages += failedStage
-          failedStages += mapStage
+          if (!failedStageAdded) {
+            failedStages += failedStage
+            failedStages += mapStage
+          }
           // Mark the map whose fetch failed as broken in the map stage
           if (mapId != -1) {
             mapStage.removeOutputLoc(mapId, bmAddress)
