@@ -63,8 +63,7 @@ private[scheduler] class BlacklistTracker (
    * to do so.  But it will not grow too large, because as soon as an executor gets too many
    * failures, we blacklist the executor and remove its entry here.
    */
-  private[scheduler] val executorIdToFailureList: HashMap[String, ExecutorFailureList] =
-    new HashMap()
+  private val executorIdToFailureList: HashMap[String, ExecutorFailureList] = new HashMap()
   val executorIdToBlacklistStatus: HashMap[String, BlacklistedExecutor] = new HashMap()
   val nodeIdToBlacklistExpiryTime: HashMap[String, Long] = new HashMap()
   /**
@@ -76,7 +75,7 @@ private[scheduler] class BlacklistTracker (
    * Time when the next blacklist will expire.  Used as a
    * shortcut to avoid iterating over all entries in the blacklist when none will have expired.
    */
-  private[scheduler] var nextExpiryTime: Long = Long.MaxValue
+  var nextExpiryTime: Long = Long.MaxValue
   /**
    * Mapping from nodes to all of the executors that have been blacklisted on that node. We do *not*
    * remove from this when executors are removed from spark, so we can track when we get multiple
@@ -199,6 +198,65 @@ private[scheduler] class BlacklistTracker (
     // will clear it up periodically in any case.
     executorIdToFailureList -= executorId
   }
+
+
+  /**
+   * Tracks all failures for one executor (that have not passed the timeout).  Designed to
+   * efficiently remove failures that are older than the timeout, and query for the number of unique
+   * failed tasks.
+   * In general we actually expect this to be extremely small, since it won't contain more than the
+   * maximum number of task failures before an executor is failed (default 2).
+   */
+  private[scheduler] final class ExecutorFailureList extends Logging {
+
+    private case class TaskId(stage: Int, stageAttempt: Int, taskIndex: Int)
+
+    /**
+     * All failures on this executor in successful task sets, sorted by time ascending.
+     */
+    private var failures = ArrayBuffer[(TaskId, Long)]()
+
+    def addFailures(
+      stage: Int,
+      stageAttempt: Int,
+      failuresInTaskSet: ExecutorFailuresInTaskSet): Unit = {
+      // The new failures may interleave with the old ones, so rebuild the failures in sorted order.
+      // This shouldn't be expensive because if there were a lot of failures, the executor would
+      // have been blacklisted.
+      if (failuresInTaskSet.taskToFailureCountAndExpiryTime.nonEmpty) {
+        failuresInTaskSet.taskToFailureCountAndExpiryTime.foreach { case (taskIdx, (_, time)) =>
+          failures += ((TaskId(stage, stageAttempt, taskIdx), time))
+        }
+        // sort by failure time, so we can quickly determine if a failure has gone past the timeout
+        failures = failures.sortBy(_._2)
+      }
+    }
+
+    /**
+     * The number of unique tasks that failed on this executor.  Only counts failures within the
+     * timeout, and in successful tasksets.
+     */
+    def numUniqueTaskFailures: Int = failures.size
+
+    def isEmpty: Boolean = failures.isEmpty
+
+    def dropFailuresWithTimeoutBefore(dropBefore: Long): Unit = {
+      val minExpiryTime = failures.headOption.map(_._2).getOrElse(Long.MaxValue)
+      if (minExpiryTime < dropBefore) {
+        val minIndexToKeep = failures.indexWhere(_._2 >= dropBefore)
+        if (minIndexToKeep == -1) {
+          failures.clear()
+        } else {
+          failures = failures.drop(minIndexToKeep)
+        }
+      }
+    }
+
+    override def toString(): String = {
+      s"failures = $failures"
+    }
+  }
+
 }
 
 
@@ -308,9 +366,10 @@ private[scheduler] object BlacklistTracker extends Logging {
           s"blacklisting with ${config.BLACKLIST_ENABLED.key}")
       }
     }
-
   }
 }
+
+private final case class BlacklistedExecutor(node: String, expiryTime: Long)
 
 /** Failures for one executor, within one taskset */
 private[scheduler] final class ExecutorFailuresInTaskSet(val node: String) {
@@ -328,66 +387,8 @@ private[scheduler] final class ExecutorFailuresInTaskSet(val node: String) {
   def numUniqueTasksWithFailures: Int = taskToFailureCountAndExpiryTime.size
 
   override def toString(): String = {
-    s"numUniqueTasksWithFailures= $numUniqueTasksWithFailures; " +
+    s"numUniqueTasksWithFailures = $numUniqueTasksWithFailures; " +
       s"tasksToFailureCount = $taskToFailureCountAndExpiryTime"
   }
 }
 
-/**
- * Tracks all failures for one executor (that have not passed the timeout).  Designed to efficiently
- * remove failures that are older than the timeout, and query for the number of unique failed tasks.
- * In general we actually expect this to be extremely small, since it won't contain more than the
- * maximum number of task failures before an executor is failed (default 2).
- */
-private[scheduler] final class ExecutorFailureList extends Logging {
-
-  private case class TaskId(stage: Int, stageAttempt: Int, taskIndex: Int)
-
-  /**
-   * All failures on this executor in successful task sets, sorted by time ascending.
-   */
-  private var failures = ArrayBuffer[(TaskId, Long)]()
-
-  def addFailures(
-      stage: Int,
-      stageAttempt: Int,
-      failuresInTaskSet: ExecutorFailuresInTaskSet): Unit = {
-    // The new failures may interleave with the old ones, so rebuild the failures in sorted order.
-    // This shouldn't be expensive because if there were a lot of failures, the executor would
-    // have been blacklisted.
-    if (failuresInTaskSet.taskToFailureCountAndExpiryTime.nonEmpty) {
-      failuresInTaskSet.taskToFailureCountAndExpiryTime.foreach { case (taskIdx, (_, time)) =>
-        failures += ((TaskId(stage, stageAttempt, taskIdx), time))
-      }
-      // sort by failure time, so we can quickly determine if any failure has gone past the timeout
-      failures = failures.sortBy(_._2)
-    }
-  }
-
-  def minExpiryTime: Long = failures.headOption.map(_._2).getOrElse(Long.MaxValue)
-
-  /**
-   * The number of unique tasks that failed on this executor.  Only counts failures within the
-   * timeout, and in successful tasksets.
-   */
-  def numUniqueTaskFailures: Int = failures.size
-
-  def isEmpty: Boolean = failures.isEmpty
-
-  def dropFailuresWithTimeoutBefore(dropBefore: Long): Unit = {
-    if (minExpiryTime < dropBefore) {
-      val minIndexToKeep = failures.indexWhere(_._2 >= dropBefore)
-      if (minIndexToKeep == -1) {
-        failures.clear()
-      } else {
-        failures = failures.drop(minIndexToKeep)
-      }
-    }
-  }
-
-  override def toString(): String = {
-    s"failures = $failures"
-  }
-}
-
-private final case class BlacklistedExecutor(node: String, expiryTime: Long)

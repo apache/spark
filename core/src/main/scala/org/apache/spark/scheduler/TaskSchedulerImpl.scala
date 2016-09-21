@@ -220,7 +220,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, blacklistTracker, taskSet, maxTaskFailures, new SystemClock)
+    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTracker, new SystemClock)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {

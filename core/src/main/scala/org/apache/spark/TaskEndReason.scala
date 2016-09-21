@@ -98,7 +98,8 @@ case class FetchFailed(
    * 4 task failures, instead we immediately go back to the stage which generated the map output,
    * and regenerate the missing data.  (2) we don't count fetch failures for blacklisting, since
    * presumably its not the fault of the executor where the task ran, but the executor which
-   * stored the data.
+   * stored the data. This is especially important because we we might rack up a bunch of
+   * fetch-failures in rapid succession, on all nodes of the cluster, due to one bad node.
    */
   override def countTowardsTaskFailures: Boolean = false
 }
