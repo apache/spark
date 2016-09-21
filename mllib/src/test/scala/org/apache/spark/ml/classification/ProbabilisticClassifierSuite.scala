@@ -70,6 +70,9 @@ class ProbabilisticClassifierSuite extends SparkFunSuite {
     intercept[IllegalArgumentException] {
       new TestProbabilisticClassificationModel("myuid", 2, 2).setThresholds(Array(0.0, 0.0))
     }
+    intercept[IllegalArgumentException] {
+      new TestProbabilisticClassificationModel("myuid", 2, 2).setThresholds(Array(-0.1, 0.1))
+    }
   }
 }
 
