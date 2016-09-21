@@ -16,13 +16,11 @@ Building Spark using Maven requires Maven 3.3.9 or newer and Java 7+.
 
 ### Setting up Maven's Memory Usage
 
-If you are compiling with Java 7, you'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`:
-
-    export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
-
-When compiling with Java 8, a similar but smaller set of memory parameters is necessary:
+You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`:
 
     export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
+
+When compiling with Java 7, you will need to add the additional option "-XX:MaxPermSize=512M" to MAVEN_OPTS.
 
 If you don't add these parameters to `MAVEN_OPTS`, you may see errors and warnings like the following:
 
