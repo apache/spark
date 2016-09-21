@@ -767,12 +767,15 @@ class SparkContext(object):
         SparkContext._next_accum_id += 1
         return Accumulator(SparkContext._next_accum_id - 1, value, accum_param)
 
-    def addFile(self, path):
+    def addFile(self, path, recursive=False):
         """
         Add a file to be downloaded with this Spark job on every node.
         The C{path} passed can be either a local file, a file in HDFS
         (or other Hadoop-supported filesystems), or an HTTP, HTTPS or
         FTP URI.
+
+        A directory can be given if the recursive option is set to true.
+        Currently directories are onlysupported for Hadoop-supported filesystems.
 
         To access the file in Spark jobs, use
         L{SparkFiles.get(fileName)<pyspark.files.SparkFiles.get>} with the
@@ -790,7 +793,7 @@ class SparkContext(object):
         >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
         [100, 200, 300, 400]
         """
-        self._jsc.sc().addFile(path)
+        self._jsc.sc().addFile(path, recursive)
 
     def addPyFile(self, path):
         """
