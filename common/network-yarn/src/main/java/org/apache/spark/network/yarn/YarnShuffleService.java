@@ -181,7 +181,7 @@ public class YarnShuffleService extends AuxiliaryService {
   private void createSecretManager() throws IOException {
     secretManager = new ShuffleSecretManager();
     secretsFile = findRecoveryDb(SECRETS_RECOVERY_FILE_NAME);
- 
+
     // Make sure this is protected in case its not in the NM recovery dir
     FileSystem fs = FileSystem.getLocal(_conf);
     fs.mkdirs(new Path(secretsFile.getPath()), new FsPermission((short)0700));
@@ -301,7 +301,7 @@ public class YarnShuffleService extends AuxiliaryService {
       }
       if (db != null) {
         db.close();
-      } 
+      }
     } catch (Exception e) {
       logger.error("Exception when stopping service", e);
     }
