@@ -20,7 +20,7 @@ package org.apache.spark.api.python
 import java.io._
 import java.net._
 import java.nio.charset.StandardCharsets
-import java.util.{ArrayList => JArrayList, Collections, List => JList, Map => JMap}
+import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -38,7 +38,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.{AccumulatorV2, SerializableConfiguration, Utils}
+import org.apache.spark.util._
 
 
 private[spark] class PythonRDD(
@@ -200,7 +200,7 @@ private[spark] class PythonRunner(
                 val updateLen = stream.readInt()
                 val update = new Array[Byte](updateLen)
                 stream.readFully(update)
-                accumulator.add(Collections.singletonList(update))
+                accumulator.add(update)
               }
               // Check whether the worker is ready to be re-used.
               if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
@@ -461,7 +461,7 @@ private[spark] object PythonRDD extends Logging {
   JavaRDD[Array[Byte]] = {
     val file = new DataInputStream(new FileInputStream(filename))
     try {
-      val objs = new collection.mutable.ArrayBuffer[Array[Byte]]
+      val objs = new mutable.ArrayBuffer[Array[Byte]]
       try {
         while (true) {
           val length = file.readInt()
@@ -869,11 +869,10 @@ class BytesToString extends org.apache.spark.api.java.function.Function[Array[By
  * Internal class that acts as an `AccumulatorV2` for Python accumulators. Inside, it
  * collects a list of pickled strings that we pass to Python through a socket.
  */
-private[spark] class PythonAccumulatorV2(@transient private val serverHost: String, serverPort: Int)
-  extends AccumulatorV2[JList[Array[Byte]], Unit] {
-
-  private[python] var _acc: JList[Array[Byte]] = Collections.synchronizedList(
-    new JArrayList[Array[Byte]])
+private[spark] class PythonAccumulatorV2(
+    @transient private val serverHost: String,
+    private val serverPort: Int)
+  extends CollectionAccumulator[Array[Byte]] {
 
   Utils.checkHost(serverHost, "Expected hostname")
 
@@ -892,46 +891,26 @@ private[spark] class PythonAccumulatorV2(@transient private val serverHost: Stri
     socket
   }
 
-  override def reset(): Unit = {
-    this._acc = Collections.synchronizedList(new JArrayList[Array[Byte]])
-  }
-
-  override def isZero: Boolean = {
-    this._acc.isEmpty
-  }
-
+  // Need to override so the types match with PythonFunction
   override def copyAndReset(): PythonAccumulatorV2 = new PythonAccumulatorV2(serverHost, serverPort)
 
-  override def copy(): PythonAccumulatorV2 = {
-    val newAcc = new PythonAccumulatorV2(serverHost, serverPort)
-    newAcc._acc.addAll(this._acc)
-    newAcc
-  }
-
-  // This happens on the worker node, where we just want to remember all the updates
-  override def add(val2: JList[Array[Byte]]): Unit = {
-    _acc.addAll(val2)
-  }
-
-
-  override def merge(other: AccumulatorV2[JList[Array[Byte]], Unit]): Unit = {
+  override def merge(other: AccumulatorV2[Array[Byte], JList[Array[Byte]]]): Unit = synchronized {
     val otherPythonAccumulator = other.asInstanceOf[PythonAccumulatorV2]
     // This conditional isn't strictly speaking needed - merging only currently happens on the
     // driver program - but that isn't gauranteed so incase this changes.
     if (serverHost == null) {
       // We are on the worker
-      add(otherPythonAccumulator._acc)
+      super.merge(otherPythonAccumulator)
     } else {
       // This happens on the master, where we pass the updates to Python through a socket
       val socket = openSocket()
       val in = socket.getInputStream
       val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream, bufferSize))
-      otherPythonAccumulator._acc.synchronized {
-        out.writeInt(otherPythonAccumulator._acc.size)
-        for (array <- otherPythonAccumulator._acc.asScala) {
-          out.writeInt(array.length)
-          out.write(array)
-        }
+      val values = other.value
+      out.writeInt(values.size)
+      for (array <- values.asScala) {
+        out.writeInt(array.length)
+        out.write(array)
       }
       out.flush()
       // Wait for a byte from the Python side as an acknowledgement
@@ -940,12 +919,6 @@ private[spark] class PythonAccumulatorV2(@transient private val serverHost: Stri
         throw new SparkException("EOF reached before Python server acknowledged")
       }
     }
-  }
-
-  /**
-   * Value function - not expected to be called for Python.
-   */
-  def value: Unit = {
   }
 }
 
