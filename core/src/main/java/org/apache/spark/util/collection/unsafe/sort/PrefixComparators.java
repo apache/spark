@@ -30,22 +30,26 @@ public class PrefixComparators {
   public static final PrefixComparator STRING = new UnsignedPrefixComparator();
   public static final PrefixComparator STRING_DESC = new UnsignedPrefixComparatorDesc();
   public static final PrefixComparator STRING_NULLS_LAST = new UnsignedPrefixComparatorNullsLast();
-  public static final PrefixComparator STRING_DESC_NULLS_FIRST = new UnsignedPrefixComparatorDescNullsFirst();
+  public static final PrefixComparator STRING_DESC_NULLS_FIRST =
+    new UnsignedPrefixComparatorDescNullsFirst();
 
   public static final PrefixComparator BINARY = new UnsignedPrefixComparator();
   public static final PrefixComparator BINARY_DESC = new UnsignedPrefixComparatorDesc();
   public static final PrefixComparator BINARY_NULLS_LAST = new UnsignedPrefixComparatorNullsLast();
-  public static final PrefixComparator BINARY_DESC_NULLS_FIRST = new UnsignedPrefixComparatorDescNullsFirst();
+  public static final PrefixComparator BINARY_DESC_NULLS_FIRST =
+    new UnsignedPrefixComparatorDescNullsFirst();
 
   public static final PrefixComparator LONG = new SignedPrefixComparator();
   public static final PrefixComparator LONG_DESC = new SignedPrefixComparatorDesc();
   public static final PrefixComparator LONG_NULLS_LAST = new SignedPrefixComparatorNullsLast();
-  public static final PrefixComparator LONG_DESC_NULLS_FIRST = new SignedPrefixComparatorDescNullsFirst();
+  public static final PrefixComparator LONG_DESC_NULLS_FIRST =
+    new SignedPrefixComparatorDescNullsFirst();
 
   public static final PrefixComparator DOUBLE = new UnsignedPrefixComparator();
   public static final PrefixComparator DOUBLE_DESC = new UnsignedPrefixComparatorDesc();
   public static final PrefixComparator DOUBLE_NULLS_LAST = new UnsignedPrefixComparatorNullsLast();
-  public static final PrefixComparator DOUBLE_DESC_NULLS_FIRST = new UnsignedPrefixComparatorDescNullsFirst();
+  public static final PrefixComparator DOUBLE_DESC_NULLS_FIRST =
+    new UnsignedPrefixComparatorDescNullsFirst();
 
   public static final class StringPrefixComparator {
     public static long computePrefix(UTF8String value) {
