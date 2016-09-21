@@ -39,16 +39,15 @@ class FileStreamSourceLog(
 
   // Configurations about metadata compaction
   protected override val compactInterval =
-  sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL)
+    sparkSession.sessionState.conf.fileSourceLogCompactInterval
   require(compactInterval > 0,
     s"Please set ${SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key} (was $compactInterval) to a " +
       s"positive value.")
 
   protected override val fileCleanupDelayMs =
-    sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY)
+    sparkSession.sessionState.conf.fileSourceLogCleanupDelay
 
-  protected override val isDeletingExpiredLog =
-    sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_DELETION)
+  protected override val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSourceLogDeletion
 
   private implicit val formats = Serialization.formats(NoTypeHints)
 
