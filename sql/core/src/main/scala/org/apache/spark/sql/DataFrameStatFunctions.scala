@@ -52,6 +52,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670 Space-efficient
    * Online Computation of Quantile Summaries]] by Greenwald and Khanna.
    *
+   * Note that NaN values will be removed from the numerical column before calculation
    * @param col the name of the numerical column
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
@@ -67,7 +68,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       col: String,
       probabilities: Array[Double],
       relativeError: Double): Array[Double] = {
-    StatFunctions.multipleApproxQuantiles(df, Seq(col), probabilities, relativeError).head.toArray
+    StatFunctions.multipleApproxQuantiles(df.select(col).na.drop(),
+      Seq(col), probabilities, relativeError).head.toArray
   }
 
   /**
