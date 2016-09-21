@@ -64,6 +64,6 @@ private[spark] trait ExecutorAllocationClient {
    */
   def killExecutor(executorId: String): Boolean = {
     val killedExecutors = killExecutors(Seq(executorId))
-    killedExecutors.nonEmpty && killedExecutors(0).equals(executorId)
+    killedExecutors.nonEmpty & killedExecutors(0).equals(executorId)
   }
 }

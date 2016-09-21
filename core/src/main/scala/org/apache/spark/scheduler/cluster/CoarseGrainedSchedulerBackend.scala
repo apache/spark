@@ -564,7 +564,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         .filter { id => force || !scheduler.isExecutorBusy(id) }
       executorsToKill.foreach { id => executorsPendingToRemove(id) = !replace }
 
-      logInfo(s"Requesting to kill filtered executor(s) ${executorsToKill.mkString(", ")}")
+      logInfo(s"Actual list of executor(s) to be killed is ${executorsToKill.mkString(", ")}")
 
       // If we do not wish to replace the executors we kill, sync the target number of executors
       // with the cluster manager to avoid allocating new ones. When computing the new target,
@@ -588,7 +588,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       val killResponse = adjustTotalExecutors.flatMap(killExecutors)(ThreadUtils.sameThread)
 
       killResponse.flatMap(killSuccessful =>
-        Future.successful ( if (killSuccessful) executorsToKill else Seq.empty[String])
+        Future.successful (if (killSuccessful) executorsToKill else Seq.empty[String])
       )(ThreadUtils.sameThread)
     }
 
