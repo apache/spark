@@ -150,8 +150,8 @@ public class TransportClient implements Closeable {
           if (future.isSuccess()) {
             long timeTaken = System.currentTimeMillis() - startTime;
             if (logger.isTraceEnabled()) {
-              logger.trace("Sending request {} to {} took {} ms", streamChunkId, getRemoteAddress(channel),
-                timeTaken);
+              logger.trace("Sending request {} to {} took {} ms", streamChunkId,
+                getRemoteAddress(channel), timeTaken);
             }
           } else {
             String errorMsg = String.format("Failed to send request %s to %s: %s", streamChunkId,
@@ -193,8 +193,8 @@ public class TransportClient implements Closeable {
             if (future.isSuccess()) {
               long timeTaken = System.currentTimeMillis() - startTime;
               if (logger.isTraceEnabled()) {
-                logger.trace("Sending request for {} to {} took {} ms", streamId, getRemoteAddress(channel),
-                  timeTaken);
+                logger.trace("Sending request for {} to {} took {} ms", streamId,
+                  getRemoteAddress(channel), timeTaken);
               }
             } else {
               String errorMsg = String.format("Failed to send request for %s to %s: %s", streamId,
@@ -236,7 +236,8 @@ public class TransportClient implements Closeable {
           if (future.isSuccess()) {
             long timeTaken = System.currentTimeMillis() - startTime;
             if (logger.isTraceEnabled()) {
-              logger.trace("Sending request {} to {} took {} ms", requestId, getRemoteAddress(channel), timeTaken);
+              logger.trace("Sending request {} to {} took {} ms", requestId,
+                getRemoteAddress(channel), timeTaken);
             }
           } else {
             String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
