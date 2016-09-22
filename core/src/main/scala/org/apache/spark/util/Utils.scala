@@ -2429,13 +2429,13 @@ private[spark] object Utils extends Logging {
  * creating (e.g. overloading NN). As HDFS mentioned in HDFS-9184, for a given HDFS operation, it's
  * very helpful to track which upper level job issues it.
  *
- * @param from who sets up the caller context (TASK, CLIENT, APPLICATION_MASTER)
+ * @param from who sets up the caller context (TASK, CLIENT, APPMASTER)
  *
  * The parameters below are optional:
- * @param appID id of the app this task belongs to
- * @param appAttemptID attempt id of the app this task belongs to
- * @param jobID id of the job this task belongs to
- * @param stageID id of the stage this task belongs to
+ * @param appId id of the app this task belongs to
+ * @param appAttemptId attempt id of the app this task belongs to
+ * @param jobId id of the job this task belongs to
+ * @param stageId id of the stage this task belongs to
  * @param stageAttemptId attempt id of the stage this task belongs to
  * @param taskId task id
  * @param taskAttemptNumber task attempt id
@@ -2451,14 +2451,14 @@ private[spark] class CallerContext(
    taskId: Option[Long] = None,
    taskAttemptNumber: Option[Int] = None) extends Logging {
 
-   val AppId = if (appId.isDefined) s"_AppId_${appId.get}" else ""
-   val AppAttemptId = if (appAttemptId.isDefined) s"_AttemptId_${appAttemptId.get}" else ""
-   val JobId = if (jobId.isDefined) s"_JobId_${jobId.get}" else ""
-   val StageId = if (stageId.isDefined) s"_StageId_${stageId.get}" else ""
-   val StageAttemptId = if (stageAttemptId.isDefined) s"_AttemptId_${stageAttemptId.get}" else ""
-   val TaskId = if (taskId.isDefined) s"_TaskId_${taskId.get}" else ""
+   val AppId = if (appId.isDefined) s"_${appId.get}" else ""
+   val AppAttemptId = if (appAttemptId.isDefined) s"_${appAttemptId.get}" else ""
+   val JobId = if (jobId.isDefined) s"_JId_${jobId.get}" else ""
+   val StageId = if (stageId.isDefined) s"_SId_${stageId.get}" else ""
+   val StageAttemptId = if (stageAttemptId.isDefined) s"_${stageAttemptId.get}" else ""
+   val TaskId = if (taskId.isDefined) s"_TId_${taskId.get}" else ""
    val TaskAttemptNumber =
-     if (taskAttemptNumber.isDefined) s"_AttemptNum_${taskAttemptNumber.get}" else ""
+     if (taskAttemptNumber.isDefined) s"_${taskAttemptNumber.get}" else ""
 
    val context = "SPARK_" + from + AppId + AppAttemptId +
      JobId + StageId + StageAttemptId + TaskId + TaskAttemptNumber
