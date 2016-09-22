@@ -41,7 +41,7 @@ public final class JavaQueueStream {
 
   public static void main(String[] args) throws Exception {
 
-    StreamingExamples.setStreamingLogLevels();
+    StreamingExamplesUtils.setStreamingLogLevels();
     SparkConf sparkConf = new SparkConf().setAppName("JavaQueueStream");
 
     // Create the context

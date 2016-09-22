@@ -46,7 +46,7 @@ object KafkaWordCount {
       System.exit(1)
     }
 
-    StreamingExamples.setStreamingLogLevels()
+    StreamingExamplesUtils.setStreamingLogLevels()
 
     val Array(zkQuorum, group, topics, numThreads) = args
     val sparkConf = new SparkConf().setAppName("KafkaWordCount")

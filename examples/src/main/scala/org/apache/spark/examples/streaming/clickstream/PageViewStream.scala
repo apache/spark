@@ -18,7 +18,7 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming.clickstream
 
-import org.apache.spark.examples.streaming.StreamingExamples
+import org.apache.spark.examples.streaming.StreamingExamplesUtils
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 // scalastyle:off
@@ -42,7 +42,7 @@ object PageViewStream {
                          " errorRatePerZipCode, activeUserCount, popularUsersSeen")
       System.exit(1)
     }
-    StreamingExamples.setStreamingLogLevels()
+    StreamingExamplesUtils.setStreamingLogLevels()
     val metric = args(0)
     val host = args(1)
     val port = args(2).toInt
