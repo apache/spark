@@ -183,32 +183,25 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (!catalog.tableExists(tableName)) {
-      if (!ifExists) {
-        val objectName = if (isView) "View" else "Table"
-        throw new AnalysisException(s"$objectName to drop '$tableName' does not exist")
-      }
-    } else {
-      // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
-      // issue an exception.
-      catalog.getTableMetadataOption(tableName).map(_.tableType match {
-        case CatalogTableType.VIEW if !isView =>
-          throw new AnalysisException(
-            "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
-        case o if o != CatalogTableType.VIEW && isView =>
-          throw new AnalysisException(
-            s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
-        case _ =>
-      })
-      try {
-        sparkSession.sharedState.cacheManager.uncacheQuery(
-          sparkSession.table(tableName.quotedString))
-      } catch {
-        case NonFatal(e) => log.warn(e.toString, e)
-      }
-      catalog.refreshTable(tableName)
-      catalog.dropTable(tableName, ifExists, purge)
+    // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
+    // issue an exception.
+    catalog.getTableMetadataOption(tableName).map(_.tableType match {
+      case CatalogTableType.VIEW if !isView =>
+        throw new AnalysisException(
+          "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+      case o if o != CatalogTableType.VIEW && isView =>
+        throw new AnalysisException(
+          s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
+      case _ =>
+    })
+    try {
+      sparkSession.sharedState.cacheManager.uncacheQuery(
+        sparkSession.table(tableName.quotedString))
+    } catch {
+      case NonFatal(e) => log.warn(e.toString, e)
     }
+    catalog.refreshTable(tableName)
+    catalog.dropTable(tableName, ifExists, purge)
     Seq.empty[Row]
   }
 }
