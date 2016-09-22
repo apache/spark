@@ -27,6 +27,7 @@ import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{PairRDDFunctions, RDD}
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.api.python.PythonDStream
 import org.apache.spark.streaming.ui.UIUtils
 import org.apache.spark.util.{EventLoop, ThreadUtils}
 
@@ -210,6 +211,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   private def handleError(msg: String, e: Throwable) {
     logError(msg, e)
     ssc.waiter.notifyError(e)
+    PythonDStream.stopStreamingContextIfPythonProcessIsDead(e)
   }
 
   private class JobHandler(job: Job) extends Runnable with Logging {
