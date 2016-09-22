@@ -18,7 +18,7 @@
 package org.apache.spark.util.collection
 
 import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
+import scala.runtime.ScalaRunTime
 
 import com.google.common.collect.{Ordering => GuavaOrdering}
 
@@ -26,7 +26,7 @@ import org.apache.spark.{TaskContext}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{CompletionIterator, SizeEstimator}
 
-import scala.runtime.ScalaRunTime
+
 
 /**
  * Utility functions for collections.
