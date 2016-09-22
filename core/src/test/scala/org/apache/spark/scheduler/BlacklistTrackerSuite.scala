@@ -74,67 +74,6 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     new TaskSetManager(scheduler, taskSet, 4, Some(blacklist), clock)
   }
 
-  test("Blacklisting individual tasks") {
-    conf = new SparkConf().setAppName("test").setMaster("local")
-      .set(config.BLACKLIST_ENABLED.key, "true")
-    scheduler = mockTaskSchedWithConf(conf)
-    // Task 1 failed on executor 1
-    blacklist = new BlacklistTracker(conf, clock)
-    val tsm = createTaskSetManager(numTasks = 10)
-    tsm.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
-    for {
-      executor <- (1 to 4).map(_.toString)
-      index <- 0 until 10
-    } {
-      val exp = (executor == "1"  && index == 0)
-      assert(tsm.isExecutorBlacklistedForTask(executor, index) === exp)
-    }
-    assert(blacklist.nodeBlacklist() === Set())
-    assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set())
-    assertEquivalentToSet(tsm.isNodeBlacklistedForTaskSet, Set())
-    assertEquivalentToSet(tsm.isExecutorBlacklistedForTaskSet, Set())
-
-    // Task 1 & 2 failed on both executor 1 & 2, so we should blacklist all executors on that host,
-    // for all tasks for the stage.  Note the api expects multiple checks for each type of
-    // blacklist -- this actually fits naturally with its use in the scheduler.
-    tsm.updateBlacklistForFailedTask("hostA", exec = "1", index = 1)
-    assertEquivalentToSet(tsm.isNodeBlacklistedForTaskSet, Set())
-    tsm.updateBlacklistForFailedTask("hostA", exec = "2", index = 0)
-    assertEquivalentToSet(tsm.isNodeBlacklistedForTaskSet, Set())
-    tsm.updateBlacklistForFailedTask("hostA", exec = "2", index = 1)
-    // we don't explicitly return the executors in hostA here, but that is OK
-    for {
-      executor <- (1 to 4).map(_.toString)
-      index <- 0 until 10
-    } {
-      withClue(s"exec = $executor; index = $index") {
-        val badExec = (executor == "1" || executor == "2")
-        val badIndex = (index == 0 || index == 1)
-        assert(
-          tsm.isExecutorBlacklistedForTask(executor, index) === (badExec && badIndex))
-        assert(tsm.isExecutorBlacklistedForTaskSet(executor) === badExec)
-      }
-    }
-    assertEquivalentToSet(tsm.isNodeBlacklistedForTaskSet, Set("hostA"))
-    // we dont' blacklist the nodes or executors till the stages complete
-    assert(blacklist.nodeBlacklist() === Set())
-    assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set())
-    assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set())
-
-    // when the stage completes successfully, now there is sufficient evidence we've got
-    // bad executors and node
-    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, tsm.execToFailures)
-    assert(blacklist.nodeBlacklist() === Set("hostA"))
-    assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set("hostA"))
-    assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1", "2"))
-
-    clock.advance(blacklist.BLACKLIST_TIMEOUT_MILLIS + 1)
-    blacklist.applyBlacklistTimeout()
-    assert(blacklist.nodeBlacklist() === Set())
-    assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set())
-    assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set())
-  }
-
   def configureBlacklistAndScheduler(confs: (String, String)*): Unit = {
     conf = new SparkConf().setAppName("test").setMaster("local")
       .set(config.BLACKLIST_ENABLED.key, "true")
