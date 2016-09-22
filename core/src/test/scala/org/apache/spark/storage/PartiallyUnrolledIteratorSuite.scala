@@ -33,7 +33,7 @@ class PartiallyUnrolledIteratorSuite extends SparkFunSuite with MockitoSugar {
     val rest = (unrollSize until restSize + unrollSize).iterator
 
     val memoryStore = mock[MemoryStore]
-    val joinIterator = new PartiallyUnrolledIterator(memoryStore, unrollSize, unroll, rest)
+    val joinIterator = new PartiallyUnrolledIterator(memoryStore, ON_HEAP, unrollSize, unroll, rest)
 
     // Firstly iterate over unrolling memory iterator
     (0 until unrollSize).foreach { value =>

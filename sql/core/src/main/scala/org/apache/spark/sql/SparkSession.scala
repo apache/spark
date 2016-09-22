@@ -937,7 +937,7 @@ object SparkSession {
   }
 
   /**
-   * Return true if Hive classes can be loaded, otherwise false.
+   * @return true if Hive classes can be loaded, otherwise false.
    */
   private[spark] def hiveClassesArePresent: Boolean = {
     try {

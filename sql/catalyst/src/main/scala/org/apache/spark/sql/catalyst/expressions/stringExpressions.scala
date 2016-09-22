@@ -1057,7 +1057,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(str | binary) - Returns the length of str or number of bytes in binary data.",
   extended = "> SELECT _FUNC_('Spark SQL');\n 9")
-case class Length(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Length(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
 

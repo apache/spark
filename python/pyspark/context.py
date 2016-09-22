@@ -333,6 +333,11 @@ class SparkContext(object):
         return self._jsc.sc().applicationId()
 
     @property
+    def uiWebUrl(self):
+        """Return the URL of the SparkUI instance started by this SparkContext"""
+        return self._jsc.sc().uiWebUrl().get()
+
+    @property
     def startTime(self):
         """Return the epoch time when the Spark Context was started."""
         return self._jsc.startTime()
@@ -762,7 +767,7 @@ class SparkContext(object):
         SparkContext._next_accum_id += 1
         return Accumulator(SparkContext._next_accum_id - 1, value, accum_param)
 
-    def addFile(self, path):
+    def addFile(self, path, recursive=False):
         """
         Add a file to be downloaded with this Spark job on every node.
         The C{path} passed can be either a local file, a file in HDFS
@@ -772,6 +777,9 @@ class SparkContext(object):
         To access the file in Spark jobs, use
         L{SparkFiles.get(fileName)<pyspark.files.SparkFiles.get>} with the
         filename to find its download location.
+
+        A directory can be given if the recursive option is set to True.
+        Currently directories are only supported for Hadoop-supported filesystems.
 
         >>> from pyspark import SparkFiles
         >>> path = os.path.join(tempdir, "test.txt")
@@ -785,7 +793,7 @@ class SparkContext(object):
         >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
         [100, 200, 300, 400]
         """
-        self._jsc.sc().addFile(path)
+        self._jsc.sc().addFile(path, recursive)
 
     def addPyFile(self, path):
         """
