@@ -348,31 +348,51 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
   test("exceptions") {
     // Make sure we do throw correct exception when users use a relation provider that
     // only implements the RelationProvider or the SchemaRelationProvider.
-    val schemaNotAllowed = intercept[Exception] {
-      sql(
-        """
-          |CREATE TEMPORARY VIEW relationProvierWithSchema (i int)
-          |USING org.apache.spark.sql.sources.SimpleScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10'
-          |)
-        """.stripMargin)
-    }
-    assert(schemaNotAllowed.getMessage.contains("does not allow user-specified schemas"))
+    Seq("TEMPORARY VIEW", "TABLE").foreach { tableType =>
+      val schemaNotAllowed = intercept[Exception] {
+        sql(
+          s"""
+             |CREATE $tableType relationProvierWithSchema (i int)
+             |USING org.apache.spark.sql.sources.SimpleScanSource
+             |OPTIONS (
+             |  From '1',
+             |  To '10'
+             |)
+           """.stripMargin)
+      }
+      assert(schemaNotAllowed.getMessage.contains("does not allow user-specified schemas"))
 
-    val schemaNeeded = intercept[Exception] {
-      sql(
-        """
-          |CREATE TEMPORARY VIEW schemaRelationProvierWithoutSchema
-          |USING org.apache.spark.sql.sources.AllDataTypesScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10'
-          |)
-        """.stripMargin)
+      val schemaNeeded = intercept[Exception] {
+        sql(
+          s"""
+             |CREATE $tableType schemaRelationProvierWithoutSchema
+             |USING org.apache.spark.sql.sources.AllDataTypesScanSource
+             |OPTIONS (
+             |  From '1',
+             |  To '10'
+             |)
+           """.stripMargin)
+      }
+      assert(schemaNeeded.getMessage.contains("A schema needs to be specified when using"))
     }
-    assert(schemaNeeded.getMessage.contains("A schema needs to be specified when using"))
+  }
+
+  test("read the data source tables that do not extend SchemaRelationProvider") {
+    Seq("TEMPORARY VIEW", "TABLE").foreach { tableType =>
+      val tableName = "relationProvierWithSchema"
+      withTable (tableName) {
+        sql(
+          s"""
+             |CREATE $tableType $tableName
+             |USING org.apache.spark.sql.sources.SimpleScanSource
+             |OPTIONS (
+             |  From '1',
+             |  To '10'
+             |)
+           """.stripMargin)
+        checkAnswer(spark.table(tableName), spark.range(1, 11).toDF())
+      }
+    }
   }
 
   test("SPARK-5196 schema field with comment") {
