@@ -61,7 +61,7 @@ private[hive] trait HiveStrategies {
         // `ErrorIfExists` mode, and `DataFrameWriter.saveAsTable` doesn't support hive serde
         // tables yet.
         if (mode == SaveMode.Append || mode == SaveMode.Overwrite) {
-          throw new AnalysisException("" +
+          throw new AnalysisException(
             "CTAS for hive serde tables does not support append or overwrite semantics.")
         }
 

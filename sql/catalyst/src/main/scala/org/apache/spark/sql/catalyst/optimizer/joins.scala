@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
-
 /**
  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
  * one condition.
@@ -39,39 +38,46 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
    *
    * The joined plan are picked from left to right, prefer those has at least one join condition.
    *
-   * @param input a list of LogicalPlans to join.
+   * @param input a list of LogicalPlans to inner join and the type of inner join.
    * @param conditions a list of condition for join.
    */
   @tailrec
-  def createOrderedJoin(input: Seq[LogicalPlan], conditions: Seq[Expression]): LogicalPlan = {
+  def createOrderedJoin(input: Seq[(LogicalPlan, InnerLike)], conditions: Seq[Expression])
+    : LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
       val (joinConditions, others) = conditions.partition(
         e => !SubqueryExpression.hasCorrelatedSubquery(e))
-      val join = Join(input(0), input(1), Inner, joinConditions.reduceLeftOption(And))
+      val ((left, leftJoinType), (right, rightJoinType)) = (input(0), input(1))
+      val innerJoinType = (leftJoinType, rightJoinType) match {
+        case (Inner, Inner) => Inner
+        case (_, _) => Cross
+      }
+      val join = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And))
       if (others.nonEmpty) {
         Filter(others.reduceLeft(And), join)
       } else {
         join
       }
     } else {
-      val left :: rest = input.toList
+      val (left, _) :: rest = input.toList
       // find out the first join that have at least one join condition
-      val conditionalJoin = rest.find { plan =>
+      val conditionalJoin = rest.find { planJoinPair =>
+        val plan = planJoinPair._1
         val refs = left.outputSet ++ plan.outputSet
         conditions.filterNot(canEvaluate(_, left)).filterNot(canEvaluate(_, plan))
           .exists(_.references.subsetOf(refs))
       }
       // pick the next one if no condition left
-      val right = conditionalJoin.getOrElse(rest.head)
+      val (right, innerJoinType) = conditionalJoin.getOrElse(rest.head)
 
       val joinedRefs = left.outputSet ++ right.outputSet
       val (joinConditions, others) = conditions.partition(
         e => e.references.subsetOf(joinedRefs) && !SubqueryExpression.hasCorrelatedSubquery(e))
-      val joined = Join(left, right, Inner, joinConditions.reduceLeftOption(And))
+      val joined = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And))
 
       // should not have reference to same logical plan
-      createOrderedJoin(Seq(joined) ++ rest.filterNot(_ eq right), others)
+      createOrderedJoin(Seq((joined, Inner)) ++ rest.filterNot(_._1 eq right), others)
     }
   }
 
@@ -81,7 +87,6 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       createOrderedJoin(input, conditions)
   }
 }
-
 
 /**
  * Elimination of outer joins, if the predicates can restrict the result sets so that
@@ -104,7 +109,9 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     if (!e.deterministic || SubqueryExpression.hasCorrelatedSubquery(e)) return false
     val attributes = e.references.toSeq
     val emptyRow = new GenericInternalRow(attributes.length)
-    val v = BindReferences.bindReference(e, attributes).eval(emptyRow)
+    val boundE = BindReferences.bindReference(e, attributes)
+    if (boundE.find(_.isInstanceOf[Unevaluable]).isDefined) return false
+    val v = boundE.eval(emptyRow)
     v == null || v == false
   }
 

@@ -51,10 +51,10 @@ class KMeans private (
 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
-   * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4, seed: random}.
+   * initializationMode: "k-means||", initializationSteps: 2, epsilon: 1e-4, seed: random}.
    */
   @Since("0.8.0")
-  def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, Utils.random.nextLong())
+  def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 2, 1e-4, Utils.random.nextLong())
 
   /**
    * Number of clusters to create (k).
@@ -134,7 +134,7 @@ class KMeans private (
 
   /**
    * Set the number of steps for the k-means|| initialization mode. This is an advanced
-   * setting -- the default of 5 is almost always enough. Default: 5.
+   * setting -- the default of 2 is almost always enough. Default: 2.
    */
   @Since("0.8.0")
   def setInitializationSteps(initializationSteps: Int): this.type = {

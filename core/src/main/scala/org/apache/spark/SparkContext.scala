@@ -49,6 +49,7 @@ import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat,
   WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -382,8 +383,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       logInfo("Spark configuration:\n" + _conf.toDebugString)
     }
 
-    // Set Spark driver host and port system properties
-    _conf.setIfMissing("spark.driver.host", Utils.localHostName())
+    // Set Spark driver host and port system properties. This explicitly sets the configuration
+    // instead of relying on the default value of the config constant.
+    _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
     _conf.setIfMissing("spark.driver.port", "0")
 
     _conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
@@ -411,6 +413,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
 
     if (master == "yarn" && deployMode == "client") System.setProperty("SPARK_YARN_MODE", "true")
+    if (_conf.get(IO_ENCRYPTION_ENABLED) && !SparkHadoopUtil.get.isYarnMode()) {
+      throw new SparkException("IO encryption is only supported in YARN mode, please disable it " +
+        s"by setting ${IO_ENCRYPTION_ENABLED.key} to false")
+    }
 
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
     // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
@@ -500,6 +506,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
+    if (_conf.getBoolean("spark.ui.reverseProxy", false)) {
+      System.setProperty("spark.ui.proxyBase", "/proxy/" + _applicationId)
+    }
     _ui.foreach(_.setAppId(_applicationId))
     _env.blockManager.initialize(_applicationId)
 
@@ -787,7 +796,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def makeRDD[T: ClassTag](seq: Seq[(T, Seq[String])]): RDD[T] = withScope {
     assertNotStopped()
     val indexToPrefs = seq.zipWithIndex.map(t => (t._2, t._1._2)).toMap
-    new ParallelCollectionRDD[T](this, seq.map(_._1), seq.size, indexToPrefs)
+    new ParallelCollectionRDD[T](this, seq.map(_._1), math.max(seq.size, 1), indexToPrefs)
   }
 
   /**
@@ -987,7 +996,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // This is a hack to enforce loading hdfs-site.xml.
     // See SPARK-11227 for details.
-    FileSystem.get(new URI(path), hadoopConfiguration)
+    FileSystem.getLocal(hadoopConfiguration)
 
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
     val confBroadcast = broadcast(new SerializableConfiguration(hadoopConfiguration))
@@ -1076,7 +1085,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // This is a hack to enforce loading hdfs-site.xml.
     // See SPARK-11227 for details.
-    FileSystem.get(new URI(path), hadoopConfiguration)
+    FileSystem.getLocal(hadoopConfiguration)
 
     // The call to NewHadoopJob automatically adds security credentials to conf,
     // so we don't need to explicitly add them ourselves
@@ -1418,7 +1427,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * supported for Hadoop-supported filesystems.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
-    val uri = new URI(path)
+    val uri = new Path(path).toUri
     val schemeCorrectedPath = uri.getScheme match {
       case null | "local" => new File(path).getCanonicalFile.toURI.toString
       case _ => path
@@ -1449,8 +1458,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       logInfo(s"Added file $path at $key with timestamp $timestamp")
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
-      Utils.fetchFile(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager,
-        hadoopConfiguration, timestamp, useCache = false)
+      Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory()), conf,
+        env.securityManager, hadoopConfiguration, timestamp, useCache = false)
       postEnvironmentUpdate()
     }
   }
