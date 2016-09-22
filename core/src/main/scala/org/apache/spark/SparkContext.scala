@@ -383,8 +383,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       logInfo("Spark configuration:\n" + _conf.toDebugString)
     }
 
-    // Set Spark driver host and port system properties
-    _conf.setIfMissing("spark.driver.host", Utils.localHostName())
+    // Set Spark driver host and port system properties. This explicitly sets the configuration
+    // instead of relying on the default value of the config constant.
+    _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
     _conf.setIfMissing("spark.driver.port", "0")
 
     _conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
@@ -1426,7 +1427,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * supported for Hadoop-supported filesystems.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
-    val uri = new URI(path)
+    val uri = new Path(path).toUri
     val schemeCorrectedPath = uri.getScheme match {
       case null | "local" => new File(path).getCanonicalFile.toURI.toString
       case _ => path
@@ -1457,8 +1458,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       logInfo(s"Added file $path at $key with timestamp $timestamp")
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
-      Utils.fetchFile(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager,
-        hadoopConfiguration, timestamp, useCache = false)
+      Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory()), conf,
+        env.securityManager, hadoopConfiguration, timestamp, useCache = false)
       postEnvironmentUpdate()
     }
   }
