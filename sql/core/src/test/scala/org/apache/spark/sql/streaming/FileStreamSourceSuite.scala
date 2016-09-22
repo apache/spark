@@ -612,6 +612,24 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("excludeFile option should exclude files specified.") {
+    withTempDirs { case (src, tmp) =>
+      val textStream = createFileStream("text", s"${src.getCanonicalPath}/*/",
+        options = Map("excludeFiles" -> "_temporary,.*_File"))
+      val filtered = textStream.filter($"value" contains "keep")
+      val filteredDir = new File(src, "_temporary")
+      val filteredDir2 = new File(src, "test_File")
+      val input = new File(src, "input")
+      testStream(filtered)(
+        AddTextFileData("drop7\nkeep8\nkeep9", input, tmp),
+        CheckAnswer("keep8", "keep9"),
+        AddTextFileData("drop1\nkeep2\nkeep3", filteredDir, tmp),
+        AddTextFileData("drop4\nkeep0\nkeep1", filteredDir2, tmp),
+        AddTextFileData("drop11\nkeep4\nkeep5", input, tmp),
+        CheckAnswer("keep8", "keep9", "keep4", "keep5")
+      )
+    }
+  }
   // =============== other tests ================
 
   test("read new files in partitioned table without globbing, should read partition data") {

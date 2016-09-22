@@ -50,6 +50,19 @@ class ListingFileCatalog(
 
   refresh()
 
+  /**
+   * Often HDFS create temporary files while copying to a new directory or writing new content.
+   * These files are unintentionally picked up by streaming - causing job failures. This option lets
+   * HDFS skip these files matching the configured regex-patterns from being picked up by Streaming
+   * Job.
+   */
+  private lazy val excludeFiles: Set[String] = parameters
+    .getOrElse("excludeFiles", ".*._COPYING_,.*_temporary").split(",").toSet
+
+  private def isExcludedFile(path: Path): Boolean = {
+    excludeFiles.map(path.getName.matches).fold(false)(_ || _)
+  }
+
   override def partitionSpec(): PartitionSpec = {
     if (cachedPartitionSpec == null) {
       cachedPartitionSpec = inferPartitioning()
@@ -82,8 +95,9 @@ class ListingFileCatalog(
    * This is publicly visible for testing.
    */
   def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
-    if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession)
+    val _paths = paths.filterNot(isExcludedFile)
+    if (_paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
+      HadoopFsRelation.listLeafFilesInParallel(_paths, hadoopConf, sparkSession)
     } else {
       // Right now, the number of paths is less than the value of
       // parallelPartitionDiscoveryThreshold. So, we will list file statues at the driver.
@@ -93,15 +107,19 @@ class ListingFileCatalog(
       // Dummy jobconf to get to the pathFilter defined in configuration
       val jobConf = new JobConf(hadoopConf, this.getClass)
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-
-      val statuses: Seq[FileStatus] = paths.flatMap { path =>
+      val statuses: Seq[FileStatus] = _paths.flatMap { path =>
         val fs = path.getFileSystem(hadoopConf)
         logTrace(s"Listing $path on driver")
 
         val childStatuses = {
           try {
             val stats = fs.listStatus(path)
-            if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
+            if (pathFilter != null) {
+              stats.filter(f => pathFilter.accept(f.getPath) &&
+                !isExcludedFile(f.getPath))
+            } else {
+              stats.filter(f => !isExcludedFile(f.getPath))
+            }
           } catch {
             case _: FileNotFoundException =>
               logWarning(s"The directory $path was not found. Was it deleted very recently?")
