@@ -29,7 +29,8 @@ import scala.util.Random
 
 import kafka.admin.AdminUtils
 import kafka.api.Request
-import kafka.server.{KafkaConfig, KafkaServer}
+import kafka.common.TopicAndPartition
+import kafka.server.{KafkaConfig, KafkaServer, OffsetCheckpoint}
 import kafka.utils.ZkUtils
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
@@ -171,6 +172,12 @@ class KafkaTestUtils extends Logging {
     createTopic(topic, 1)
   }
 
+  /** Delete a Kafka topic and wait until it is propagated to the whole cluster */
+  def deleteTopic(topic: String, partitions: Int): Unit = {
+    AdminUtils.deleteTopic(zkUtils, topic)
+    verifyTopicDeletion(zkUtils, topic, partitions, List(this.server))
+  }
+
   /** Add new paritions to a Kafka topic */
   def addPartitions(topic: String, partitions: Int): Unit = {
     AdminUtils.addPartitions(zkUtils, topic, partitions)
@@ -234,6 +241,7 @@ class KafkaTestUtils extends Logging {
     props.put("zookeeper.connect", zkAddress)
     props.put("log.flush.interval.messages", "1")
     props.put("replica.socket.timeout.ms", "1500")
+    props.put("delete.topic.enable", "true")
     props
   }
 
@@ -255,6 +263,37 @@ class KafkaTestUtils extends Logging {
     props.put("key.deserializer", classOf[StringDeserializer].getName)
     props.put("enable.auto.commit", "false")
     props
+  }
+
+  private def verifyTopicDeletion(
+      zkUtils: ZkUtils,
+      topic: String,
+      numPartitions: Int,
+      servers: Seq[KafkaServer]) {
+    import ZkUtils._
+    val topicAndPartitions = (0 until numPartitions).map(TopicAndPartition(topic, _))
+    def isDeleted(): Boolean = {
+      // wait until admin path for delete topic is deleted, signaling completion of topic deletion
+      val deletePath = !zkUtils.pathExists(getDeleteTopicPath(topic))
+      val topicPath = !zkUtils.pathExists(getTopicPath(topic))
+      // ensure that the topic-partition has been deleted from all brokers' replica managers
+      val replicaManager = servers.forall(server => topicAndPartitions.forall(tp =>
+        server.replicaManager.getPartition(tp.topic, tp.partition) == None))
+      // ensure that logs from all replicas are deleted if delete topic is marked successful
+      val logManager = servers.forall(server => topicAndPartitions.forall(tp =>
+        server.getLogManager().getLog(tp).isEmpty))
+      // ensure that topic is removed from all cleaner offsets
+      val cleaner = servers.forall(server => topicAndPartitions.forall { tp =>
+        val checkpoints = server.getLogManager().logDirs.map { logDir =>
+          new OffsetCheckpoint(new File(logDir, "cleaner-offset-checkpoint")).read()
+        }
+        checkpoints.forall(checkpointsPerLogDir => !checkpointsPerLogDir.contains(tp))
+      })
+      deletePath && topicPath && replicaManager && logManager && cleaner
+    }
+    eventually(timeout(10.seconds)) {
+      assert(isDeleted, s"$topic not deleted after timeout")
+    }
   }
 
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
