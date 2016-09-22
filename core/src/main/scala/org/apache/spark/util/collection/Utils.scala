@@ -26,6 +26,8 @@ import org.apache.spark.{TaskContext}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{CompletionIterator, SizeEstimator}
 
+import scala.runtime.ScalaRunTime
+
 /**
  * Utility functions for collections.
  */
@@ -54,13 +56,20 @@ private[spark] object Utils {
     }
 
     val iter = input.buffered
-    var size = SizeEstimator.estimate(iter.head)
+    val head = iter.head
+    var size =
+      if (ScalaRunTime.isAnyVal(head)) {
+        SizeEstimator.primitiveSize(head)
+      } else {
+        SizeEstimator.estimate(head)
+      }
+
     if (size == 0) {
       size = 1024
     }
 
-    val executorMemory = Runtime.getRuntime.maxMemory()
-    val limit = (executorMemory / size) * 0.1
+    val memory = Runtime.getRuntime.maxMemory()
+    val limit = (memory / size) * 0.1
 
     if (num < limit) {
       takeOrdered(iter, num)(ord)
