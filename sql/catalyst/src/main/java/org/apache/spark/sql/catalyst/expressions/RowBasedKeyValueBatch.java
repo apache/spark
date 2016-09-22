@@ -62,6 +62,9 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer {
   protected final UnsafeRow keyRow;
   protected final UnsafeRow valueRow;
 
+  // mark valueRow as cached after calling getKeyRow if rowId == keyRowId
+  protected boolean isValueCached = false;
+
   protected MemoryBlock page = null;
   protected Object base = null;
   protected final long recordStartOffset;
