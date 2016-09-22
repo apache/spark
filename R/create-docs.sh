@@ -30,6 +30,13 @@ set -e
 
 # Figure out where the script is
 export FWDIR="$(cd "`dirname "$0"`"; pwd)"
+export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+
+# Required for setting SPARK_SCALA_VERSION
+. "${SPARK_HOME}"/bin/load-spark-env.sh
+
+echo "Using Scala $SPARK_SCALA_VERSION"
+
 pushd $FWDIR
 
 # Install the package (this will also generate the Rd files)
@@ -45,9 +52,21 @@ Rscript -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); library(knit
 
 popd
 
-# render creates SparkR vignettes
-Rscript -e 'library(rmarkdown); paths <- .libPaths(); .libPaths(c("lib", paths)); Sys.setenv(SPARK_HOME=tools::file_path_as_absolute("..")); render("pkg/vignettes/sparkr-vignettes.Rmd"); .libPaths(paths)'
+# Find Spark jars.
+if [ -f "${SPARK_HOME}/RELEASE" ]; then
+  SPARK_JARS_DIR="${SPARK_HOME}/jars"
+else
+  SPARK_JARS_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars"
+fi
 
-find pkg/vignettes/. -not -name '.' -not -name '*.Rmd' -not -name '*.md' -not -name '*.pdf' -not -name '*.html' -delete
+# Only create vignettes if Spark JARs exist
+if [ -d "$SPARK_JARS_DIR" ]; then
+  # render creates SparkR vignettes
+  Rscript -e 'library(rmarkdown); paths <- .libPaths(); .libPaths(c("lib", paths)); Sys.setenv(SPARK_HOME=tools::file_path_as_absolute("..")); render("pkg/vignettes/sparkr-vignettes.Rmd"); .libPaths(paths)'
+
+  find pkg/vignettes/. -not -name '.' -not -name '*.Rmd' -not -name '*.md' -not -name '*.pdf' -not -name '*.html' -delete
+else
+  echo "Skipping R vignettes as Spark JARs not found in $SPARK_HOME"
+fi
 
 popd
