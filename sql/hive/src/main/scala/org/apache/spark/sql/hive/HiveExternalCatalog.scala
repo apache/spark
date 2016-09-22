@@ -479,7 +479,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     if (catalogTable.properties.filterKeys(_.startsWith(STATISTICS_PREFIX)).nonEmpty) {
       val colStatsProps = catalogTable.properties
         .filterKeys(_.startsWith(STATISTICS_BASIC_COL_STATS_PREFIX))
-        .map { case (k, v) => (k.replace(STATISTICS_BASIC_COL_STATS_PREFIX, ""), v)}
+        .map { case (k, v) => (k.replace(STATISTICS_BASIC_COL_STATS_PREFIX, ""), v) }
       val colStats: Map[String, ColumnStats] = catalogTable.schema.collect {
         case field if colStatsProps.contains(field.name) =>
           (field.name, ColumnStats(colStatsProps(field.name), field.dataType))

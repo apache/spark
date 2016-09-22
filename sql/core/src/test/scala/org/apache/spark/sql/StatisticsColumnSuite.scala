@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStats
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.AnalyzeColumnCommand
+import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
 
 class StatisticsColumnSuite extends StatisticsTest {
@@ -53,6 +54,28 @@ class StatisticsColumnSuite extends StatisticsTest {
 
     intercept[ParseException] {
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS")
+    }
+  }
+
+  test("analyzing columns in temporary tables is not supported") {
+    val viewName = "tbl"
+    withTempView(viewName) {
+      spark.range(10).createOrReplaceTempView(viewName)
+      val err = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+      }
+      assert(err.message.contains("ANALYZE TABLE is not supported"))
+    }
+  }
+
+  test("analyzing columns of non-atomic types is not supported") {
+    val tableName = "tbl"
+    withTable(tableName) {
+      Seq(ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3)))).toDF().write.saveAsTable(tableName)
+      val err = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS data")
+      }
+      assert(err.message.contains("Analyzing columns is not supported"))
     }
   }
 
@@ -315,16 +338,15 @@ class StatisticsColumnSuite extends StatisticsTest {
       sql(s"CREATE TABLE $table (c1 int) USING PARQUET")
       sql(s"INSERT INTO $table SELECT * FROM $tmpTable")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-      val fetchedStats1 =
-        checkTableStats(tableName = table, expectedRowCount = Some(values.length))
+      checkTableStats(tableName = table, expectedRowCount = Some(values.length))
 
       // update table-level stats between analyze table and analyze column commands
       sql(s"INSERT INTO $table SELECT * FROM $tmpTable")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c1")
-      val fetchedStats2 =
+      val fetchedStats =
         checkTableStats(tableName = table, expectedRowCount = Some(values.length * 2))
 
-      val colStats = fetchedStats2.get.colStats("c1")
+      val colStats = fetchedStats.get.colStats("c1")
       checkColStats(colStats = colStats, expectedColStats = ColumnStats(
         dataType = IntegerType,
         numNulls = 0,

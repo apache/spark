@@ -82,7 +82,7 @@ trait StatisticsTest extends QueryTest with SharedSQLContext {
   }
 
   def checkTableStats(tableName: String, expectedRowCount: Option[Int]): Option[Statistics] = {
-    val df = sql(s"SELECT * FROM $tableName")
+    val df = spark.table(tableName)
     val stats = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
       assert(rel.catalogTable.get.stats.flatMap(_.rowCount) === expectedRowCount)
       rel.catalogTable.get.stats
