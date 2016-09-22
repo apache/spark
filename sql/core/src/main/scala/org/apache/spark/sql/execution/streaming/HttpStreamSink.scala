@@ -30,6 +30,12 @@ trait HttpDataFormat{
   def format(data: Seq[Any]): String
 }
 
+class HttpDataToStringDefault extends HttpDataFormat {
+  def format(data: Seq[Any]) : String = {
+    return data.mkString(", ")
+  }
+}
+
 class HttpSink(options: Map[String, String]) extends Sink with Logging {
   override def addBatch(batchId: Long, data: DataFrame): Unit = synchronized {
     val dataFormat: HttpDataFormat = {
@@ -48,14 +54,14 @@ class HttpSink(options: Map[String, String]) extends Sink with Logging {
     constructor.newInstance(args: _*)
   }
 
-  private def post(param: String): Unit = {
+  private def post(data: String): Unit = {
     val url: URL = new URL(options.get("url").get)
     val connection: URLConnection = url.openConnection
     connection.setDoInput(true)
     connection.setDoOutput(true)
     val writer = new PrintWriter(connection.getOutputStream)
     try {
-      writer.print(param)
+      writer.print(data)
       writer.flush()
     } catch {
       case cause: Throwable => {
@@ -79,12 +85,6 @@ class HttpSink(options: Map[String, String]) extends Sink with Logging {
     } finally {
       reader.close()
     }
-  }
-}
-
-class HttpDataToStringDefault extends HttpDataFormat {
-  def format(data: Seq[Any]) : String = {
-    return data.mkString(", ")
   }
 }
 
