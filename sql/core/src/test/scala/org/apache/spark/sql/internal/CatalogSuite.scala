@@ -122,14 +122,15 @@ class CatalogSuite
   }
 
   test("list databases") {
-    assert(spark.catalog.listDatabases().collect().map(_.name).toSet == Set("default"))
+    assert(spark.catalog.listDatabases().collect().map(_.name).toSet ==
+      Set("default", "information_schema"))
     createDatabase("my_db1")
     createDatabase("my_db2")
     assert(spark.catalog.listDatabases().collect().map(_.name).toSet ==
-      Set("default", "my_db1", "my_db2"))
+      Set("default", "information_schema", "my_db1", "my_db2"))
     dropDatabase("my_db1")
     assert(spark.catalog.listDatabases().collect().map(_.name).toSet ==
-      Set("default", "my_db2"))
+      Set("default", "information_schema", "my_db2"))
   }
 
   test("list tables") {
