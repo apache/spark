@@ -186,7 +186,7 @@ case class SortAggregateExec(
       s"""
          | ${bufVars(i).isNull} = ${ev.isNull};
          | if (${bufVars(i).value} != ${ev.value})
-         |     ${bufVars(i).value} = ${ctx.copyValue(ev.value, bufVarsType(i))};
+         |     ${ctx.setValue(bufVars(i).value, bufVarsType(i), ev.value)};
        """.stripMargin
     }
     s"""

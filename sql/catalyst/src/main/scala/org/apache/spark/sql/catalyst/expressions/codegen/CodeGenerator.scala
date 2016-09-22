@@ -319,6 +319,20 @@ class CodegenContext {
   }
 
   /**
+   * Returns the code to update a variable for a given DataType.
+   */
+  def setValue(target: String, dataType: DataType, value: String): String = {
+    val jt = javaType(dataType)
+    val codes = dataType match {
+      case _ if isPrimitiveType(jt) => value
+      case StringType => s"$value.clone()"
+      case _: StructType | _: ArrayType | _: MapType => s"$value.copy()"
+      case _ => value
+    }
+    s"$target = $codes"
+  }
+
+  /**
    * Returns the specialized code to set a given value in a column vector for a given `DataType`.
    */
   def setValue(batch: String, row: String, dataType: DataType, ordinal: Int,
@@ -372,16 +386,6 @@ class CodegenContext {
         s"$batch.column($ordinal).getUTF8String($row)"
       case _ =>
         throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
-    }
-  }
-
-  def copyValue(value: String, dataType: DataType): String = {
-    val jt = javaType(dataType)
-    val safeCopy = s"$value == null ? null :"
-    dataType match {
-      case _ if isPrimitiveType(jt) => value
-      case _: StructType => s"$safeCopy $value.copy()"
-      case _ => s"$safeCopy $value.clone()"
     }
   }
 
