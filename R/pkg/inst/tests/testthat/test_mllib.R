@@ -760,13 +760,7 @@ test_that("spark.kstest", {
 
   expect_equal(stats$p.value, rStats$p.value, tolerance = 1e-4)
   expect_equal(stats$statistic, unname(rStats$statistic), tolerance = 1e-4)
-
-  printStr <- print.summary.KSTest(testResult)
-  expect_match(printStr, paste0("Kolmogorov-Smirnov test summary:\\n",
-                                "degrees of freedom = 0 \\n",
-                                "statistic = 0.38208[0-9]* \\n",
-                                "pValue = 0.19849[0-9]* \\n",
-                                ".*"), perl = TRUE)
+  expect_match(capture.output(stats)[1], "Kolmogorov-Smirnov test summary:")
 
   testResult <- spark.kstest(df, "test", "norm", -0.5)
   stats <- summary(testResult)
@@ -775,13 +769,7 @@ test_that("spark.kstest", {
 
   expect_equal(stats$p.value, rStats$p.value, tolerance = 1e-4)
   expect_equal(stats$statistic, unname(rStats$statistic), tolerance = 1e-4)
-
-  printStr <- print.summary.KSTest(testResult)
-  expect_match(printStr, paste0("Kolmogorov-Smirnov test summary:\\n",
-                                "degrees of freedom = 0 \\n",
-                                "statistic = 0.44003[0-9]* \\n",
-                                "pValue = 0.09470[0-9]* \\n",
-                                ".*"), perl = TRUE)
+  expect_match(capture.output(stats)[1], "Kolmogorov-Smirnov test summary:")
 })
 
 sparkR.session.stop()

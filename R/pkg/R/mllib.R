@@ -1398,20 +1398,22 @@ setMethod("summary", signature(object = "KSTest"),
             distParams <- unlist(callJMethod(jobj, "distParams"))
             degreesOfFreedom <- callJMethod(jobj, "degreesOfFreedom")
 
-            list(p.value = pValue, statistic = statistic, nullHypothesis = nullHypothesis,
-                 nullHypothesis.name = distName, nullHypothesis.parameters = distParams,
-                 degreesOfFreedom = degreesOfFreedom)
+            ans <- list(p.value = pValue, statistic = statistic, nullHypothesis = nullHypothesis,
+                        nullHypothesis.name = distName, nullHypothesis.parameters = distParams,
+                        degreesOfFreedom = degreesOfFreedom, jobj = jobj)
+            class(ans) <- "summary.KSTest"
+            ans
           })
 
 #  Prints the summary of KSTest
 
 #' @rdname spark.kstest
-#' @param x test result object of KSTest by \code{spark.kstest}.
+#' @param x summary object of KSTest returned by \code{summary}.
 #' @export
 #' @note print.summary.KSTest since 2.1.0
 print.summary.KSTest <- function(x, ...) {
-  jobj <- x@jobj
+  jobj <- x$jobj
   summaryStr <- callJMethod(jobj, "summary")
-  cat(summaryStr)
-  invisible(summaryStr)
+  cat(summaryStr, "\n")
+  invisible(x)
 }
