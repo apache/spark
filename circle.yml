@@ -1,6 +1,8 @@
 general:
   artifacts:
     - target
+    - binary-release-hadoop2.7.log
+    - binary-release-without-hadoop.log
 
 machine:
   pre:
@@ -29,11 +31,16 @@ dependencies:
 
 test:
   override:
-    - /bin/true
+    - ./build/sbt -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive package
     #- ./dev/run-tests -p 1
 
 deployment:
   release:
     tag: /[0-9]+(?:\.[0-9]+)+-palantir[0-9]+/
     commands:
-      - ./dev/publish.sh
+      - ./build/sbt -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive publish
+      - ./dev/make-distribution.sh --name hadoop2.7 --tgz "-Phadoop2.7 -Psparkr -Phive -Phive-thriftserver -Pyarn -Pmesos" \
+          2>&1 > binary-release-hadoop2.7.log
+      - ./build/sbt -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive clean
+      - ./dev/make-distribution.sh --name without-hadoop --tgz "-Psparkr -Phadoop-provided -Pyarn -Pmesos" \
+          2>&1 > binary-release-without-hadoop.log
