@@ -58,11 +58,11 @@ object JDBCRDD extends Logging {
     val dialect = JdbcDialects.get(url)
     val conn: Connection = JdbcUtils.createConnectionFactory(url, properties)()
     try {
-      val statement = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0")
+      val statement = conn.prepareStatement(dialect.getTableExistsQuery(table))
       try {
         val rs = statement.executeQuery()
         try {
-          return JdbcUtils.getSchema(rs, dialect)
+          JdbcUtils.getSchema(rs, dialect)
         } finally {
           rs.close()
         }
@@ -72,8 +72,6 @@ object JDBCRDD extends Logging {
     } finally {
       conn.close()
     }
-
-    throw new RuntimeException("This line is unreachable.")
   }
 
   /**
