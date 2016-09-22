@@ -164,4 +164,19 @@ case class HiveTableScanExec(
   }
 
   override def output: Seq[Attribute] = attributes
+
+  override def sameResult(plan: SparkPlan): Boolean = plan match {
+    case other: HiveTableScanExec =>
+      val thisPredicates = partitionPruningPred.map(cleanExpression)
+      val otherPredicates = other.partitionPruningPred.map(cleanExpression)
+
+      val result = relation.sameResult(other.relation) &&
+        output.length == other.output.length &&
+          output.zip(other.output)
+            .forall(p => p._1.name == p._2.name && p._1.dataType == p._2.dataType) &&
+              thisPredicates.length == otherPredicates.length &&
+                thisPredicates.zip(otherPredicates).forall(p => p._1.semanticEquals(p._2))
+      result
+    case _ => false
+  }
 }
