@@ -66,7 +66,13 @@ object SizeEstimator extends Logging {
    * deserialized form. This is not the same as the serialized size of the object, which will
    * typically be much smaller.
    */
-  def estimate(obj: AnyRef): Long = estimate(obj, new IdentityHashMap[AnyRef, AnyRef])
+  def estimate(obj: Any): Long = {
+    if (obj.isInstanceOf[AnyVal]) {
+      primitiveSize(obj.getClass)
+    } else {
+      estimate(obj.asInstanceOf[AnyRef], new IdentityHashMap[AnyRef, AnyRef])
+    }
+  }
 
   // Sizes of primitive types
   private val BYTE_SIZE = 1

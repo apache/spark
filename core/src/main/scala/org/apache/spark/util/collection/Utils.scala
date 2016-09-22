@@ -46,7 +46,7 @@ private[spark] object Utils {
    * Returns the first K elements from the input as defined by the specified implicit Ordering[T]
    * and maintains the ordering.
    */
-  def takeOrdered[T: ClassTag](input: Iterator[T], num: Int, ser: Serializer)
+  def takeOrdered[T](input: Iterator[T], num: Int, ser: Serializer)
       (implicit ord: Ordering[T]): Iterator[T] = {
     val context = TaskContext.get()
     if (context == null || !input.hasNext) {
