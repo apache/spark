@@ -26,7 +26,8 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, Union}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
@@ -1584,5 +1585,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val sampleDf = df.sample(true, 2.00)
     val d = sampleDf.withColumn("c", monotonically_increasing_id).select($"c").collect
     assert(d.size == d.distinct.size)
+  }
+
+  test("SPARK-17625: data source table in InMemoryCatalog should guarantee output consistency") {
+    val tableName = "tbl"
+    withTable(tableName) {
+      spark.range(10).select('id as 'i, 'id as 'j).write.saveAsTable(tableName)
+      val relation = spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName))
+      val expr = relation.resolve("i")
+      val qe = spark.sessionState.executePlan(Project(Seq(expr), relation))
+      qe.assertAnalyzed()
+    }
   }
 }
