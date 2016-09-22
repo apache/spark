@@ -21,6 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
+import org.apache.spark.ml.util.MultiStopwatch
 import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy => OldBoostingStrategy}
@@ -246,9 +247,11 @@ private[spark] object GradientBoostedTrees extends Logging {
       boostingStrategy: OldBoostingStrategy,
       validate: Boolean,
       seed: Long): (Array[DecisionTreeRegressionModel], Array[Double]) = {
-    val timer = new TimeTracker()
-    timer.start("total")
-    timer.start("init")
+    val multiTimer = new MultiStopwatch(input.sparkContext)
+    multiTimer.addLocal("total")
+    multiTimer.addLocal("init")
+    multiTimer("total").start()
+    multiTimer("init").start()
 
     boostingStrategy.assertValid()
 
@@ -279,14 +282,15 @@ private[spark] object GradientBoostedTrees extends Logging {
     val validatePredErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
       treeStrategy.getCheckpointInterval, input.sparkContext)
 
-    timer.stop("init")
+    multiTimer("init").stop()
 
     logDebug("##########")
     logDebug("Building tree 0")
     logDebug("##########")
 
     // Initialize tree
-    timer.start("building tree 0")
+    multiTimer.addLocal("building tree 0")
+    multiTimer("building tree 0").start()
     val firstTree = new DecisionTreeRegressor().setSeed(seed)
     val firstTreeModel = firstTree.train(input, treeStrategy)
     val firstTreeWeight = 1.0
@@ -299,7 +303,7 @@ private[spark] object GradientBoostedTrees extends Logging {
     logDebug("error of gbt = " + predError.values.mean())
 
     // Note: A model of type regression is used since we require raw prediction
-    timer.stop("building tree 0")
+    multiTimer("building tree 0").stop()
 
     var validatePredError: RDD[(Double, Double)] =
       computeInitialPredictionAndError(validationInput, firstTreeWeight, firstTreeModel, loss)
@@ -315,13 +319,14 @@ private[spark] object GradientBoostedTrees extends Logging {
         LabeledPoint(-loss.gradient(pred, point.label), point.features)
       }
 
-      timer.start(s"building tree $m")
+      multiTimer.addLocal(s"building tree $m")
+      multiTimer(s"building tree $m").start()
       logDebug("###################################################")
       logDebug("Gradient boosting tree iteration " + m)
       logDebug("###################################################")
       val dt = new DecisionTreeRegressor().setSeed(seed + m)
       val model = dt.train(data, treeStrategy)
-      timer.stop(s"building tree $m")
+      multiTimer(s"building tree $m").stop()
       // Update partial model
       baseLearners(m) = model
       // Note: The setting of baseLearnerWeights is incorrect for losses other than SquaredError.
@@ -355,10 +360,10 @@ private[spark] object GradientBoostedTrees extends Logging {
       m += 1
     }
 
-    timer.stop("total")
+    multiTimer("total").stop()
 
     logInfo("Internal timing for DecisionTree:")
-    logInfo(s"$timer")
+    logInfo(s"$multiTimer")
 
     predErrorCheckpointer.deleteAllCheckpoints()
     validatePredErrorCheckpointer.deleteAllCheckpoints()
