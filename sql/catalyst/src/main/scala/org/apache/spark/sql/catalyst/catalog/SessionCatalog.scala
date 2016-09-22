@@ -246,6 +246,16 @@ class SessionCatalog(
   }
 
   /**
+   * Return whether a table/view with the specified name exists. If no database is specified, check
+   * with current database.
+   */
+  def tableExists(name: TableIdentifier): Boolean = synchronized {
+    val db = formatDatabaseName(name.database.getOrElse(currentDb))
+    val table = formatTableName(name.table)
+    externalCatalog.tableExists(db, table)
+  }
+
+  /**
    * Retrieve the metadata of an existing permanent table/view. If no database is specified,
    * assume the table/view is in the current database. If the specified table/view is not found
    * in the database then a [[NoSuchTableException]] is thrown.
@@ -268,32 +278,6 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     requireDbExists(db)
     externalCatalog.getTableOption(db, table)
-  }
-
-  /**
-   * Retrieve the metadata of an existing temporary view or permanent table/view.
-   * If the temporary view does not exist, tries to get the metadata an existing permanent
-   * table/view. If no database is specified, assume the table/view is in the current database.
-   * If the specified table/view is not found in the database then a [[NoSuchTableException]] is
-   * thrown.
-   */
-  def getTempViewOrPermanentTableMetadata(name: String): CatalogTable = synchronized {
-    val table = formatTableName(name)
-    getTempView(table).map { plan =>
-      CatalogTable(
-        identifier = TableIdentifier(table),
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = plan.output.map { c =>
-          CatalogColumn(
-            name = c.name,
-            dataType = c.dataType.catalogString,
-            nullable = c.nullable
-          )
-        },
-        properties = Map(),
-        viewText = None)
-    }.getOrElse(getTableMetadata(TableIdentifier(name)))
   }
 
   /**
@@ -376,6 +360,38 @@ class SessionCatalog(
   // -------------------------------------------------------------
   // | Methods that interact with temporary and metastore tables |
   // -------------------------------------------------------------
+
+  /**
+   * Retrieve the metadata of an existing temporary view or permanent table/view.
+   *
+   * If a database is specified in `name`, this will return the metadata of table/view in that
+   * database.
+   * If no database is specified, this will first attempt to get the metadata of a temporary view
+   * with the same name, then, if that does not exist, return the metadata of table/view in the
+   * current database.
+   */
+  def getTempViewOrPermanentTableMetadata(name: TableIdentifier): CatalogTable = synchronized {
+    val table = formatTableName(name.table)
+    if (name.database.isDefined) {
+      getTableMetadata(name)
+    } else {
+      getTempView(table).map { plan =>
+        CatalogTable(
+          identifier = TableIdentifier(table),
+          tableType = CatalogTableType.VIEW,
+          storage = CatalogStorageFormat.empty,
+          schema = plan.output.map { c =>
+            CatalogColumn(
+              name = c.name,
+              dataType = c.dataType.catalogString,
+              nullable = c.nullable
+            )
+          },
+          properties = Map(),
+          viewText = None)
+      }.getOrElse(getTableMetadata(name))
+    }
+  }
 
   /**
    * Rename a table.
@@ -462,24 +478,6 @@ class SessionCatalog(
       // If an alias was specified by the lookup, wrap the plan in a subquery so that
       // attributes are properly qualified with this alias.
       alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
-    }
-  }
-
-  /**
-   * Return whether a table with the specified name exists.
-   *
-   * Note: If a database is explicitly specified, then this will return whether the table
-   * exists in that particular database instead. In that case, even if there is a temporary
-   * table with the same name, we will return false if the specified database does not
-   * contain the table.
-   */
-  def tableExists(name: TableIdentifier): Boolean = synchronized {
-    val db = formatDatabaseName(name.database.getOrElse(currentDb))
-    val table = formatTableName(name.table)
-    if (isTemporaryTable(name)) {
-      true
-    } else {
-      externalCatalog.tableExists(db, table)
     }
   }
 

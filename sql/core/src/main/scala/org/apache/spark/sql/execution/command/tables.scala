@@ -78,15 +78,7 @@ case class CreateTableLikeCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (!catalog.tableExists(sourceTable)) {
-      throw new AnalysisException(
-        s"Source table in CREATE TABLE LIKE does not exist: '$sourceTable'")
-    }
-    val sourceTableDesc = if (sourceTable.database.isDefined) {
-      catalog.getTableMetadata(sourceTable)
-    } else {
-      catalog.getTempViewOrPermanentTableMetadata(sourceTable.table)
-    }
+    val sourceTableDesc = catalog.getTempViewOrPermanentTableMetadata(sourceTable)
 
     if (DDLUtils.isDatasourceTable(sourceTableDesc) ||
         sourceTableDesc.tableType == CatalogTableType.VIEW) {
@@ -668,11 +660,7 @@ case class ShowColumnsCommand(tableName: TableIdentifier) extends RunnableComman
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = if (tableName.database.isDefined) {
-        catalog.getTableMetadata(tableName)
-      } else {
-        catalog.getTempViewOrPermanentTableMetadata(tableName.table)
-      }
+    val table = catalog.getTempViewOrPermanentTableMetadata(tableName)
     table.schema.map { c =>
       Row(c.name)
     }

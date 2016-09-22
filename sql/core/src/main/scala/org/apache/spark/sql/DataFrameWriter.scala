@@ -356,12 +356,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
 
-    val sessionState = df.sparkSession.sessionState
-    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-    val tableIdentWithDB = tableIdent.copy(database = Some(db))
-    // Pass a table identifier with database part, so that `tableExists` won't check temp views
-    // unexpectedly.
-    val tableExists = sessionState.catalog.tableExists(tableIdentWithDB)
+    val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -380,7 +375,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             mode,
             extraOptions.toMap,
             df.logicalPlan)
-        sessionState.executePlan(cmd).toRdd
+        df.sparkSession.sessionState.executePlan(cmd).toRdd
     }
   }
 
