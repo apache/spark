@@ -163,7 +163,7 @@ private[spark] object RandomForest extends Logging {
 
     /*
       Stack of nodes to train: (treeIndex, node)
-      The reason this is FILO is that we train many trees at once, but we want to focus on
+      The reason this is a stack is that we train many trees at once, but we want to focus on
       completing trees, rather than training all simultaneously.  If we are splitting nodes from
       1 tree, then the new nodes to split will be put at the top of this stack, so we will continue
       training the same tree in the next iteration.  This focus allows us to send fewer trees to
