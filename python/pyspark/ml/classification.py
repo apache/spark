@@ -67,7 +67,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                          HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
     """
     Logistic regression.
-    Currently, this class only supports binary classification.
+    This class supports binary and multinomial classification.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
@@ -80,6 +80,14 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     DenseVector([5.5...])
     >>> model.intercept
     -2.68...
+    >>> lrm = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight",
+    ...     family="multinomial")
+    >>> modelm = lrm.fit(df)
+    >>> print(modelm.coefficientMatrix)
+    DenseMatrix([[-3.2...],
+                 [ 3.2...]])
+    >>> modelm.interceptVector
+    DenseVector([1.4..., -1.4...])
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
     >>> result = model.transform(test0).head()
     >>> result.prediction
@@ -274,6 +282,22 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
         Model intercept.
         """
         return self._call_java("intercept")
+
+    @property
+    @since("2.1.0")
+    def coefficientMatrix(self):
+        """
+        Model coefficients.
+        """
+        return self._call_java("coefficientMatrix")
+
+    @property
+    @since("2.1.0")
+    def interceptVector(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("interceptVector")
 
     @property
     @since("2.0.0")
