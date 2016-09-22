@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStats, Statistics}
+import org.apache.spark.sql.execution.command.AnalyzeColumnCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -31,7 +33,10 @@ trait StatisticsTest extends QueryTest with SharedSQLContext {
     withTable(table) {
       df.write.format("json").saveAsTable(table)
       val columns = expectedColStatsSeq.map(_._1)
-      val columnStats = spark.sessionState.computeColumnStats(table, columns)
+      val tableIdent = TableIdentifier(table, Some("default"))
+      val relation = spark.sessionState.catalog.lookupRelation(tableIdent)
+      val columnStats =
+        AnalyzeColumnCommand(tableIdent, columns).computeColStats(spark, relation)._2
       expectedColStatsSeq.foreach { expected =>
         assert(columnStats.contains(expected._1))
         checkColStats(colStats = columnStats(expected._1), expectedColStats = expected._2)

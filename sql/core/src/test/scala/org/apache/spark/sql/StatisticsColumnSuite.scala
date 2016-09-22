@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStats
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -77,7 +78,10 @@ class StatisticsColumnSuite extends StatisticsTest {
 
       withSQLConf("spark.sql.caseSensitive" -> "false") {
         val columnsToAnalyze = Seq(colName2.toUpperCase, colName1, colName2)
-        val columnStats = spark.sessionState.computeColumnStats(table, columnsToAnalyze)
+        val tableIdent = TableIdentifier(table, Some("default"))
+        val relation = spark.sessionState.catalog.lookupRelation(tableIdent)
+        val columnStats =
+          AnalyzeColumnCommand(tableIdent, columnsToAnalyze).computeColStats(spark, relation)._2
         assert(columnStats.contains(colName1))
         assert(columnStats.contains(colName2))
         // check deduplication
