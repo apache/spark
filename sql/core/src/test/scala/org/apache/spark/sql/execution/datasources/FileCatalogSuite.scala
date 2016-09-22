@@ -67,4 +67,16 @@ class FileCatalogSuite extends SharedSQLContext {
 
     }
   }
+
+  test("ListingFileCatalog: folders that don't exist don't throw exceptions") {
+    withTempDir { dir =>
+      val deletedFolder = new File(dir, "deleted")
+      assert(!deletedFolder.exists())
+      val catalog1 = new ListingFileCatalog(
+        spark, Seq(new Path(deletedFolder.getCanonicalPath)), Map.empty, None,
+        ignoreFileNotFound = true)
+      // doesn't throw an exception
+      assert(catalog1.listLeafFiles(catalog1.paths).isEmpty)
+    }
+  }
 }
