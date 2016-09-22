@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import com.google.common.collect.{Ordering => GuavaOrdering}
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{TaskContext}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{CompletionIterator, SizeEstimator}
 
@@ -58,12 +58,7 @@ private[spark] object Utils {
       size = 1024
     }
 
-    val executorMemory = SparkEnv.get.conf.getOption("spark.executor.memory")
-      .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
-      .orElse(Option(System.getenv("SPARK_MEM")))
-      .map(Utils.memoryStringToMb)
-      .getOrElse(1024L) * 1024 * 1024
-
+    val executorMemory = Runtime.getRuntime.maxMemory()
     val limit = (executorMemory / size) * 0.1
 
     if (num < limit) {

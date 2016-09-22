@@ -484,7 +484,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // The Mesos scheduler backend relies on this environment variable to set executor memory.
     // TODO: Set this only in the Mesos scheduler.
     executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
-    executorEnvs ++= _conf.getExecutorEnvj
+    executorEnvs ++= _conf.getExecutorEnv
     executorEnvs("SPARK_USER") = sparkUser
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
