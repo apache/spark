@@ -238,7 +238,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           partitionSpec)
 
         val schema = fileType match {
-          case "orc" | "parquet" =>
+          case "parquet" =>
+            val inferredSchema =
+              defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles())
+            inferredSchema.map { inferred =>
+              ParquetFileFormat.mergeMetastoreParquetSchema(metastoreSchema, inferred)
+            }.getOrElse(metastoreSchema)
+          case "orc" =>
             metastoreSchema
           case _ =>
             throw new RuntimeException(s"Cannot convert a $fileType to a data source table")
