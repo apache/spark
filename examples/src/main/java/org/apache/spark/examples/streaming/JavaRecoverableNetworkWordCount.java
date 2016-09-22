@@ -29,7 +29,6 @@ import scala.Tuple2;
 
 import com.google.common.io.Files;
 
-import org.apache.spark.Accumulator;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -41,6 +40,7 @@ import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
+import org.apache.spark.util.LongAccumulator;
 
 /**
  * Use this singleton to get or register a Broadcast variable.
@@ -67,13 +67,13 @@ class JavaWordBlacklist {
  */
 class JavaDroppedWordsCounter {
 
-  private static volatile Accumulator<Integer> instance = null;
+  private static volatile LongAccumulator instance = null;
 
-  public static Accumulator<Integer> getInstance(JavaSparkContext jsc) {
+  public static LongAccumulator getInstance(JavaSparkContext jsc) {
     if (instance == null) {
       synchronized (JavaDroppedWordsCounter.class) {
         if (instance == null) {
-          instance = jsc.accumulator(0, "WordsInBlacklistCounter");
+          instance = jsc.sc().longAccumulator("WordsInBlacklistCounter");
         }
       }
     }
@@ -158,7 +158,7 @@ public final class JavaRecoverableNetworkWordCount {
         final Broadcast<List<String>> blacklist =
             JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
         // Get or register the droppedWordsCounter Accumulator
-        final Accumulator<Integer> droppedWordsCounter =
+        final LongAccumulator droppedWordsCounter =
             JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
         // Use blacklist to drop words and use droppedWordsCounter to count them
         String counts = rdd.filter(new Function<Tuple2<String, Integer>, Boolean>() {
@@ -183,7 +183,7 @@ public final class JavaRecoverableNetworkWordCount {
     return ssc;
   }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     if (args.length != 4) {
       System.err.println("You arguments were " + Arrays.asList(args));
       System.err.println(

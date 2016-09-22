@@ -17,8 +17,8 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.{Accumulator, InternalAccumulator}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.LongAccumulator
 
 
 /**
@@ -27,51 +27,25 @@ import org.apache.spark.annotation.DeveloperApi
  * Operations are not thread-safe.
  */
 @DeveloperApi
-class ShuffleWriteMetrics private (
-    _bytesWritten: Accumulator[Long],
-    _recordsWritten: Accumulator[Long],
-    _writeTime: Accumulator[Long])
-  extends Serializable {
-
-  private[executor] def this(accumMap: Map[String, Accumulator[_]]) {
-    this(
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleWrite.BYTES_WRITTEN),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleWrite.RECORDS_WRITTEN),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleWrite.WRITE_TIME))
-  }
-
-  /**
-   * Create a new [[ShuffleWriteMetrics]] that is not associated with any particular task.
-   *
-   * This mainly exists for legacy reasons, because we use dummy [[ShuffleWriteMetrics]] in
-   * many places only to merge their values together later. In the future, we should revisit
-   * whether this is needed.
-   *
-   * A better alternative is [[TaskMetrics.shuffleWriteMetrics]].
-   */
-  private[spark] def this() {
-    this(InternalAccumulator.createShuffleWriteAccums().map { a => (a.name.get, a) }.toMap)
-  }
+class ShuffleWriteMetrics private[spark] () extends Serializable {
+  private[executor] val _bytesWritten = new LongAccumulator
+  private[executor] val _recordsWritten = new LongAccumulator
+  private[executor] val _writeTime = new LongAccumulator
 
   /**
    * Number of bytes written for the shuffle by this task.
    */
-  def bytesWritten: Long = _bytesWritten.localValue
+  def bytesWritten: Long = _bytesWritten.sum
 
   /**
    * Total number of records written to the shuffle by this task.
    */
-  def recordsWritten: Long = _recordsWritten.localValue
+  def recordsWritten: Long = _recordsWritten.sum
 
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
    */
-  def writeTime: Long = _writeTime.localValue
-
-  /**
-   * Returns true if this metrics has been updated before.
-   */
-  def isUpdated: Boolean = (writeTime | recordsWritten | bytesWritten) != 0
+  def writeTime: Long = _writeTime.sum
 
   private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
   private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)

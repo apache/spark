@@ -43,7 +43,7 @@ public final class JavaFlumeEventCount {
   private JavaFlumeEventCount() {
   }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     if (args.length != 2) {
       System.err.println("Usage: JavaFlumeEventCount <host> <port>");
       System.exit(1);

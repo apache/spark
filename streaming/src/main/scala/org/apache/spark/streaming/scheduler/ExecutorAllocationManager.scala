@@ -38,7 +38,7 @@ import org.apache.spark.util.{Clock, Utils}
  * - Periodically take the average batch completion times and compare with the batch interval
  * - If (avg. proc. time / batch interval) >= scaling up ratio, then request more executors.
  *   The number of executors requested is based on the ratio = (avg. proc. time / batch interval).
- * - If (avg. proc. time / batch interval) <= scaling down ratio, then try to kill a executor that
+ * - If (avg. proc. time / batch interval) <= scaling down ratio, then try to kill an executor that
  *   is not running a receiver.
  *
  * This features should ideally be used in conjunction with backpressure, as backpressure ensures

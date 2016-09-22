@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
@@ -64,17 +64,16 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     result
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val first = children(0)
     val rest = children.drop(1)
-    val firstEval = first.gen(ctx)
-    s"""
+    val firstEval = first.genCode(ctx)
+    ev.copy(code = s"""
       ${firstEval.code}
       boolean ${ev.isNull} = ${firstEval.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${firstEval.value};
-    """ +
+      ${ctx.javaType(dataType)} ${ev.value} = ${firstEval.value};""" +
       rest.map { e =>
-      val eval = e.gen(ctx)
+      val eval = e.genCode(ctx)
       s"""
         if (${ev.isNull}) {
           ${eval.code}
@@ -84,7 +83,83 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
           }
         }
       """
-    }.mkString("\n")
+    }.mkString("\n"))
+  }
+}
+
+
+@ExpressionDescription(usage = "_FUNC_(a,b) - Returns b if a is null, or a otherwise.")
+case class IfNull(left: Expression, right: Expression) extends RuntimeReplaceable {
+  override def children: Seq[Expression] = Seq(left, right)
+
+  override def replaceForEvaluation(): Expression = Coalesce(Seq(left, right))
+
+  override def replaceForTypeCoercion(): Expression = {
+    if (left.dataType != right.dataType) {
+      TypeCoercion.findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { dtype =>
+        copy(left = Cast(left, dtype), right = Cast(right, dtype))
+      }.getOrElse(this)
+    } else {
+      this
+    }
+  }
+}
+
+
+@ExpressionDescription(usage = "_FUNC_(a,b) - Returns null if a equals to b, or a otherwise.")
+case class NullIf(left: Expression, right: Expression) extends RuntimeReplaceable {
+  override def children: Seq[Expression] = Seq(left, right)
+
+  override def replaceForEvaluation(): Expression = {
+    If(EqualTo(left, right), Literal.create(null, left.dataType), left)
+  }
+
+  override def replaceForTypeCoercion(): Expression = {
+    if (left.dataType != right.dataType) {
+      TypeCoercion.findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { dtype =>
+        copy(left = Cast(left, dtype), right = Cast(right, dtype))
+      }.getOrElse(this)
+    } else {
+      this
+    }
+  }
+}
+
+
+@ExpressionDescription(usage = "_FUNC_(a,b) - Returns b if a is null, or a otherwise.")
+case class Nvl(left: Expression, right: Expression) extends RuntimeReplaceable {
+  override def children: Seq[Expression] = Seq(left, right)
+
+  override def replaceForEvaluation(): Expression = Coalesce(Seq(left, right))
+
+  override def replaceForTypeCoercion(): Expression = {
+    if (left.dataType != right.dataType) {
+      TypeCoercion.findTightestCommonTypeToString(left.dataType, right.dataType).map { dtype =>
+        copy(left = Cast(left, dtype), right = Cast(right, dtype))
+      }.getOrElse(this)
+    } else {
+      this
+    }
+  }
+}
+
+
+@ExpressionDescription(usage = "_FUNC_(a,b,c) - Returns b if a is not null, or c otherwise.")
+case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression)
+  extends RuntimeReplaceable {
+
+  override def replaceForEvaluation(): Expression = If(IsNotNull(expr1), expr2, expr3)
+
+  override def children: Seq[Expression] = Seq(expr1, expr2, expr3)
+
+  override def replaceForTypeCoercion(): Expression = {
+    if (expr2.dataType != expr3.dataType) {
+      TypeCoercion.findTightestCommonTypeOfTwo(expr2.dataType, expr3.dataType).map { dtype =>
+        copy(expr2 = Cast(expr2, dtype), expr3 = Cast(expr3, dtype))
+      }.getOrElse(this)
+    } else {
+      this
+    }
   }
 }
 
@@ -113,16 +188,15 @@ case class IsNaN(child: Expression) extends UnaryExpression
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval = child.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
     child.dataType match {
       case DoubleType | FloatType =>
-        s"""
+        ev.copy(code = s"""
           ${eval.code}
           boolean ${ev.isNull} = false;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});
-        """
+          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""")
     }
   }
 }
@@ -155,12 +229,12 @@ case class NaNvl(left: Expression, right: Expression)
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val leftGen = left.gen(ctx)
-    val rightGen = right.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val leftGen = left.genCode(ctx)
+    val rightGen = right.genCode(ctx)
     left.dataType match {
       case DoubleType | FloatType =>
-        s"""
+        ev.copy(code = s"""
           ${leftGen.code}
           boolean ${ev.isNull} = false;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -177,8 +251,7 @@ case class NaNvl(left: Expression, right: Expression)
                 ${ev.value} = ${rightGen.value};
               }
             }
-          }
-        """
+          }""")
     }
   }
 }
@@ -196,11 +269,9 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
     child.eval(input) == null
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval = child.gen(ctx)
-    ev.isNull = "false"
-    ev.value = eval.isNull
-    eval.code
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    ExprCode(code = eval.code, isNull = "false", value = eval.isNull)
   }
 
   override def sql: String = s"(${child.sql} IS NULL)"
@@ -219,11 +290,9 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
     child.eval(input) != null
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval = child.gen(ctx)
-    ev.isNull = "false"
-    ev.value = s"(!(${eval.isNull}))"
-    eval.code
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    ExprCode(code = eval.code, isNull = "false", value = s"(!(${eval.isNull}))")
   }
 
   override def sql: String = s"(${child.sql} IS NOT NULL)"
@@ -259,10 +328,10 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     numNonNulls >= n
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val nonnull = ctx.freshName("nonnull")
     val code = children.map { e =>
-      val eval = e.gen(ctx)
+      val eval = e.genCode(ctx)
       e.dataType match {
         case DoubleType | FloatType =>
           s"""
@@ -284,11 +353,10 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
           """
       }
     }.mkString("\n")
-    s"""
+    ev.copy(code = s"""
       int $nonnull = 0;
       $code
       boolean ${ev.isNull} = false;
-      boolean ${ev.value} = $nonnull >= $n;
-     """
+      boolean ${ev.value} = $nonnull >= $n;""")
   }
 }

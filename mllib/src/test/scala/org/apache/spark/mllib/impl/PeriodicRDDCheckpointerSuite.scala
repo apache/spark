@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.impl
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -127,9 +127,11 @@ private object PeriodicRDDCheckpointerSuite {
     //       Instead, we check for the presence of the checkpoint files.
     //       This test should continue to work even after this rdd.isCheckpointed issue
     //       is fixed (though it can then be simplified and not look for the files).
-    val fs = FileSystem.get(rdd.sparkContext.hadoopConfiguration)
+    val hadoopConf = rdd.sparkContext.hadoopConfiguration
     rdd.getCheckpointFile.foreach { checkpointFile =>
-      assert(!fs.exists(new Path(checkpointFile)), "RDD checkpoint file should have been removed")
+      val path = new Path(checkpointFile)
+      val fs = path.getFileSystem(hadoopConf)
+      assert(!fs.exists(path), "RDD checkpoint file should have been removed")
     }
   }
 

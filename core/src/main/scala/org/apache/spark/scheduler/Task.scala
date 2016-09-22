@@ -21,14 +21,15 @@ import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 import java.util.Properties
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{Accumulator, SparkEnv, TaskContext, TaskContextImpl}
+import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
+import org.apache.spark.util.{AccumulatorV2, ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 /**
  * A unit of execution. We have two kinds of Task's in Spark:
@@ -44,17 +45,16 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
  * @param stageId id of the stage this task belongs to
  * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
- * @param initialAccumulators initial set of accumulators to be used in this task for tracking
- *                            internal metrics. Other accumulators will be registered later when
- *                            they are deserialized on the executors.
+ * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
-    val initialAccumulators: Seq[Accumulator[_]],
-    @transient var localProperties: Properties) extends Serializable {
+    // The default value is only used in tests.
+    val metrics: TaskMetrics = TaskMetrics.registered,
+    @transient var localProperties: Properties = new Properties) extends Serializable {
 
   /**
    * Called by [[org.apache.spark.executor.Executor]] to run this task.
@@ -76,7 +76,7 @@ private[spark] abstract class Task[T](
       taskMemoryManager,
       localProperties,
       metricsSystem,
-      initialAccumulators)
+      metrics)
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
     if (_killed) {
@@ -128,8 +128,6 @@ private[spark] abstract class Task[T](
   // Map output tracker epoch. Will be set by TaskScheduler.
   var epoch: Long = -1
 
-  var metrics: Option[TaskMetrics] = None
-
   // Task context, to be initialized in run().
   @transient protected var context: TaskContextImpl = _
 
@@ -156,11 +154,18 @@ private[spark] abstract class Task[T](
    * Collect the latest values of accumulators used in this task. If the task failed,
    * filter out the accumulators whose values should not be included on failures.
    */
-  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulableInfo] = {
+  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulatorV2[_, _]] = {
     if (context != null) {
-      context.taskMetrics.accumulatorUpdates().filter { a => !taskFailed || a.countFailedValues }
+      context.taskMetrics.internalAccums.filter { a =>
+        // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
+        // value will be updated at driver side.
+        // Note: internal accumulators representing task metrics always count failed values
+        !a.isZero || a.name == Some(InternalAccumulator.RESULT_SIZE)
+      // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not filter
+      // them out.
+      } ++ context.taskMetrics.externalAccums.filter(a => !taskFailed || a.countFailedValues)
     } else {
-      Seq.empty[AccumulableInfo]
+      Seq.empty
     }
   }
 
@@ -194,8 +199,8 @@ private[spark] object Task {
    */
   def serializeWithDependencies(
       task: Task[_],
-      currentFiles: HashMap[String, Long],
-      currentJars: HashMap[String, Long],
+      currentFiles: mutable.Map[String, Long],
+      currentJars: mutable.Map[String, Long],
       serializer: SerializerInstance)
     : ByteBuffer = {
 
@@ -225,6 +230,7 @@ private[spark] object Task {
     dataOut.flush()
     val taskBytes = serializer.serialize(task)
     Utils.writeByteBuffer(taskBytes, out)
+    out.close()
     out.toByteBuffer
   }
 
@@ -233,7 +239,7 @@ private[spark] object Task {
    * and return the task itself as a serialized ByteBuffer. The caller can then update its
    * ClassLoaders and deserialize the task.
    *
-   * @return (taskFiles, taskJars, taskBytes)
+   * @return (taskFiles, taskJars, taskProps, taskBytes)
    */
   def deserializeWithDependencies(serializedTask: ByteBuffer)
     : (HashMap[String, Long], HashMap[String, Long], Properties, ByteBuffer) = {

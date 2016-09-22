@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import org.apache.hadoop.conf.{ Configurable, Configuration }
+import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.JobContextImpl

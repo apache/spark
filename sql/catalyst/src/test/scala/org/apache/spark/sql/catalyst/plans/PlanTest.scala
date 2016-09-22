@@ -34,7 +34,13 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
   protected def normalizeExprIds(plan: LogicalPlan) = {
     plan transformAllExpressions {
       case s: ScalarSubquery =>
-        ScalarSubquery(s.query, ExprId(0))
+        s.copy(exprId = ExprId(0))
+      case e: Exists =>
+        e.copy(exprId = ExprId(0))
+      case l: ListQuery =>
+        l.copy(exprId = ExprId(0))
+      case p: PredicateSubquery =>
+        p.copy(exprId = ExprId(0))
       case a: AttributeReference =>
         AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
       case a: Alias =>

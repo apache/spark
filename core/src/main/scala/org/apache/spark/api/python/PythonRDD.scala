@@ -467,7 +467,7 @@ private[spark] object PythonRDD extends Logging {
           val length = file.readInt()
           val obj = new Array[Byte](length)
           file.readFully(obj)
-          objs.append(obj)
+          objs += obj
         }
       } catch {
         case eof: EOFException => // No-op
@@ -919,7 +919,7 @@ private class PythonAccumulatorParam(@transient private val serverHost: String, 
 }
 
 /**
- * An Wrapper for Python Broadcast, which is written into disk by Python. It also will
+ * A Wrapper for Python Broadcast, which is written into disk by Python. It also will
  * write the data into disk after deserialization, then Python can read it from disks.
  */
 // scalastyle:off no.finalize

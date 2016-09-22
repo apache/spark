@@ -21,6 +21,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -29,18 +30,20 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Maps;
-import org.fusesource.leveldbjni.JniDBFactory;
-import org.fusesource.leveldbjni.internal.NativeDB;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
-import org.iq80.leveldb.Options;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+import org.apache.spark.network.util.LevelDBProvider;
+import org.apache.spark.network.util.LevelDBProvider.StoreVersion;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
@@ -49,7 +52,7 @@ import org.apache.spark.network.util.TransportConf;
  * Manages converting shuffle BlockIds into physical segments of local files, from a process outside
  * of Executors. Each Executor must register its own configuration about where it stores its files
  * (local dirs) and how (shuffle manager). The logic for retrieval of individual files is replicated
- * from Spark's FileShuffleBlockResolver and IndexShuffleBlockResolver.
+ * from Spark's IndexShuffleBlockResolver.
  */
 public class ExternalShuffleBlockResolver {
   private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockResolver.class);
@@ -66,6 +69,12 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
 
+  /**
+   *  Caches index file information so that we can avoid open/close the index files
+   *  for each block fetch.
+   */
+  private final LoadingCache<File, ShuffleIndexInformation> shuffleIndexCache;
+
   // Single-threaded Java executor used to perform expensive recursive directory deletion.
   private final Executor directoryCleaner;
 
@@ -75,6 +84,10 @@ public class ExternalShuffleBlockResolver {
   final File registeredExecutorFile;
   @VisibleForTesting
   final DB db;
+
+  private final List<String> knownManagers = Arrays.asList(
+    "org.apache.spark.shuffle.sort.SortShuffleManager",
+    "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager");
 
   public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
       throws IOException {
@@ -91,55 +104,26 @@ public class ExternalShuffleBlockResolver {
       Executor directoryCleaner) throws IOException {
     this.conf = conf;
     this.registeredExecutorFile = registeredExecutorFile;
-    if (registeredExecutorFile != null) {
-      Options options = new Options();
-      options.createIfMissing(false);
-      options.logger(new LevelDBLogger());
-      DB tmpDb;
-      try {
-        tmpDb = JniDBFactory.factory.open(registeredExecutorFile, options);
-      } catch (NativeDB.DBException e) {
-        if (e.isNotFound() || e.getMessage().contains(" does not exist ")) {
-          logger.info("Creating state database at " + registeredExecutorFile);
-          options.createIfMissing(true);
-          try {
-            tmpDb = JniDBFactory.factory.open(registeredExecutorFile, options);
-          } catch (NativeDB.DBException dbExc) {
-            throw new IOException("Unable to create state store", dbExc);
+    int indexCacheEntries = conf.getInt("spark.shuffle.service.index.cache.entries", 1024);
+    CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
+        new CacheLoader<File, ShuffleIndexInformation>() {
+          public ShuffleIndexInformation load(File file) throws IOException {
+            return new ShuffleIndexInformation(file);
           }
-        } else {
-          // the leveldb file seems to be corrupt somehow.  Lets just blow it away and create a new
-          // one, so we can keep processing new apps
-          logger.error("error opening leveldb file {}.  Creating new file, will not be able to " +
-            "recover state for existing applications", registeredExecutorFile, e);
-          if (registeredExecutorFile.isDirectory()) {
-            for (File f : registeredExecutorFile.listFiles()) {
-              if (!f.delete()) {
-                logger.warn("error deleting {}", f.getPath());
-              }
-            }
-          }
-          if (!registeredExecutorFile.delete()) {
-            logger.warn("error deleting {}", registeredExecutorFile.getPath());
-          }
-          options.createIfMissing(true);
-          try {
-            tmpDb = JniDBFactory.factory.open(registeredExecutorFile, options);
-          } catch (NativeDB.DBException dbExc) {
-            throw new IOException("Unable to create state store", dbExc);
-          }
-
-        }
-      }
-      // if there is a version mismatch, we throw an exception, which means the service is unusable
-      checkVersion(tmpDb);
-      executors = reloadRegisteredExecutors(tmpDb);
-      db = tmpDb;
+        };
+    shuffleIndexCache = CacheBuilder.newBuilder()
+                                    .maximumSize(indexCacheEntries).build(indexCacheLoader);
+    db = LevelDBProvider.initLevelDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
+    if (db != null) {
+      executors = reloadRegisteredExecutors(db);
     } else {
-      db = null;
       executors = Maps.newConcurrentMap();
     }
     this.directoryCleaner = directoryCleaner;
+  }
+
+  public int getRegisteredExecutorsSize() {
+    return executors.size();
   }
 
   /** Registers a new Executor with all the configuration we need to find its shuffle files. */
@@ -149,6 +133,10 @@ public class ExternalShuffleBlockResolver {
       ExecutorShuffleInfo executorInfo) {
     AppExecId fullId = new AppExecId(appId, execId);
     logger.info("Registered executor {} with {}", fullId, executorInfo);
+    if (!knownManagers.contains(executorInfo.shuffleManager)) {
+      throw new UnsupportedOperationException(
+        "Unsupported shuffle manager of executor: " + executorInfo);
+    }
     try {
       if (db != null) {
         byte[] key = dbAppExecKey(fullId);
@@ -183,14 +171,7 @@ public class ExternalShuffleBlockResolver {
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }
 
-    if ("sort".equals(executor.shuffleManager) || "tungsten-sort".equals(executor.shuffleManager)) {
-      return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
-    } else if ("hash".equals(executor.shuffleManager)) {
-      return getHashBasedShuffleBlockData(executor, blockId);
-    } else {
-      throw new UnsupportedOperationException(
-        "Unsupported shuffle manager: " + executor.shuffleManager);
-    }
+    return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
   }
 
   /**
@@ -243,20 +224,11 @@ public class ExternalShuffleBlockResolver {
     for (String localDir : dirs) {
       try {
         JavaUtils.deleteRecursively(new File(localDir));
-        logger.debug("Successfully cleaned up directory: " + localDir);
+        logger.debug("Successfully cleaned up directory: {}", localDir);
       } catch (Exception e) {
         logger.error("Failed to delete directory: " + localDir, e);
       }
     }
-  }
-
-  /**
-   * Hash-based shuffle data is simply stored as one file per block.
-   * This logic is from FileShuffleBlockResolver.
-   */
-  private ManagedBuffer getHashBasedShuffleBlockData(ExecutorShuffleInfo executor, String blockId) {
-    File shuffleFile = getFile(executor.localDirs, executor.subDirsPerLocalDir, blockId);
-    return new FileSegmentManagedBuffer(conf, shuffleFile, 0, shuffleFile.length());
   }
 
   /**
@@ -269,24 +241,17 @@ public class ExternalShuffleBlockResolver {
     File indexFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
       "shuffle_" + shuffleId + "_" + mapId + "_0.index");
 
-    DataInputStream in = null;
     try {
-      in = new DataInputStream(new FileInputStream(indexFile));
-      in.skipBytes(reduceId * 8);
-      long offset = in.readLong();
-      long nextOffset = in.readLong();
+      ShuffleIndexInformation shuffleIndexInformation = shuffleIndexCache.get(indexFile);
+      ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(reduceId);
       return new FileSegmentManagedBuffer(
         conf,
         getFile(executor.localDirs, executor.subDirsPerLocalDir,
           "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
-        offset,
-        nextOffset - offset);
-    } catch (IOException e) {
+        shuffleIndexRecord.getOffset(),
+        shuffleIndexRecord.getLength());
+    } catch (ExecutionException e) {
       throw new RuntimeException("Failed to open file: " + indexFile, e);
-    } finally {
-      if (in != null) {
-        JavaUtils.closeQuietly(in);
-      }
     }
   }
 
@@ -376,76 +341,11 @@ public class ExternalShuffleBlockResolver {
           break;
         }
         AppExecId id = parseDbAppExecKey(key);
+        logger.info("Reloading registered executors: " +  id.toString());
         ExecutorShuffleInfo shuffleInfo = mapper.readValue(e.getValue(), ExecutorShuffleInfo.class);
         registeredExecutors.put(id, shuffleInfo);
       }
     }
     return registeredExecutors;
   }
-
-  private static class LevelDBLogger implements org.iq80.leveldb.Logger {
-    private static final Logger LOG = LoggerFactory.getLogger(LevelDBLogger.class);
-
-    @Override
-    public void log(String message) {
-      LOG.info(message);
-    }
-  }
-
-  /**
-   * Simple major.minor versioning scheme.  Any incompatible changes should be across major
-   * versions.  Minor version differences are allowed -- meaning we should be able to read
-   * dbs that are either earlier *or* later on the minor version.
-   */
-  private static void checkVersion(DB db) throws IOException {
-    byte[] bytes = db.get(StoreVersion.KEY);
-    if (bytes == null) {
-      storeVersion(db);
-    } else {
-      StoreVersion version = mapper.readValue(bytes, StoreVersion.class);
-      if (version.major != CURRENT_VERSION.major) {
-        throw new IOException("cannot read state DB with version " + version + ", incompatible " +
-          "with current version " + CURRENT_VERSION);
-      }
-      storeVersion(db);
-    }
-  }
-
-  private static void storeVersion(DB db) throws IOException {
-    db.put(StoreVersion.KEY, mapper.writeValueAsBytes(CURRENT_VERSION));
-  }
-
-
-  public static class StoreVersion {
-
-    static final byte[] KEY = "StoreVersion".getBytes(StandardCharsets.UTF_8);
-
-    public final int major;
-    public final int minor;
-
-    @JsonCreator public StoreVersion(
-      @JsonProperty("major") int major,
-      @JsonProperty("minor") int minor) {
-      this.major = major;
-      this.minor = minor;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
-
-      StoreVersion that = (StoreVersion) o;
-
-      return major == that.major && minor == that.minor;
-    }
-
-    @Override
-    public int hashCode() {
-      int result = major;
-      result = 31 * result + minor;
-      return result;
-    }
-  }
-
 }

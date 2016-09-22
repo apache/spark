@@ -21,7 +21,8 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.test.SQLTestData.DecimalData
+import org.apache.spark.sql.types.{Decimal, DecimalType}
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -61,6 +62,39 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       df1.groupBy("key").min("value2"),
       Seq(Row("a", 0), Row("b", 4))
     )
+
+    checkAnswer(
+      decimalData.groupBy("a").agg(sum("b")),
+      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(3.0)),
+        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(3.0)),
+        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(3.0)))
+    )
+
+    val decimalDataWithNulls = spark.sparkContext.parallelize(
+      DecimalData(1, 1) ::
+      DecimalData(1, null) ::
+      DecimalData(2, 1) ::
+      DecimalData(2, null) ::
+      DecimalData(3, 1) ::
+      DecimalData(3, 2) ::
+      DecimalData(null, 2) :: Nil).toDF()
+    checkAnswer(
+      decimalDataWithNulls.groupBy("a").agg(sum("b")),
+      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(1.0)),
+        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(1.0)),
+        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(3.0)),
+        Row(null, new java.math.BigDecimal(2.0)))
+    )
+  }
+
+  test("SPARK-17124 agg should be ordering preserving") {
+    val df = spark.range(2)
+    val ret = df.groupBy("id").agg("id" -> "sum", "id" -> "count", "id" -> "min")
+    assert(ret.schema.map(_.name) == Seq("id", "sum(id)", "count(id)", "min(id)"))
+    checkAnswer(
+      ret,
+      Row(0, 0, 1, 0) :: Row(1, 1, 1, 1) :: Nil
+    )
   }
 
   test("rollup") {
@@ -90,7 +124,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         Row(null, null, 113000.0) :: Nil
     )
 
-    val df0 = sqlContext.sparkContext.parallelize(Seq(
+    val df0 = spark.sparkContext.parallelize(Seq(
       Fact(20151123, 18, 35, "room1", 18.6),
       Fact(20151123, 18, 35, "room2", 22.4),
       Fact(20151123, 18, 36, "room1", 17.4),
@@ -183,12 +217,12 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3))
     )
 
-    sqlContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
+    spark.conf.set(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key, false)
     checkAnswer(
       testData2.groupBy("a").agg(sum($"b")),
       Seq(Row(3), Row(3), Row(3))
     )
-    sqlContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, true)
+    spark.conf.set(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key, true)
   }
 
   test("agg without groups") {
@@ -405,5 +439,58 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         expr("skewness(a)"),
         expr("kurtosis(a)")),
       Row(null, null, null, null, null))
+  }
+
+  test("collect functions") {
+    val df = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
+    checkAnswer(
+      df.select(collect_list($"a"), collect_list($"b")),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
+    )
+    checkAnswer(
+      df.select(collect_set($"a"), collect_set($"b")),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 4)))
+    )
+  }
+
+  test("collect functions structs") {
+    val df = Seq((1, 2, 2), (2, 2, 2), (3, 4, 1))
+      .toDF("a", "x", "y")
+      .select($"a", struct($"x", $"y").as("b"))
+    checkAnswer(
+      df.select(collect_list($"a"), sort_array(collect_list($"b"))),
+      Seq(Row(Seq(1, 2, 3), Seq(Row(2, 2), Row(2, 2), Row(4, 1))))
+    )
+    checkAnswer(
+      df.select(collect_set($"a"), sort_array(collect_set($"b"))),
+      Seq(Row(Seq(1, 2, 3), Seq(Row(2, 2), Row(4, 1))))
+    )
+  }
+
+  test("collect_set functions cannot have maps") {
+    val df = Seq((1, 3, 0), (2, 3, 0), (3, 4, 1))
+      .toDF("a", "x", "y")
+      .select($"a", map($"x", $"y").as("b"))
+    val error = intercept[AnalysisException] {
+      df.select(collect_set($"a"), collect_set($"b"))
+    }
+    assert(error.message.contains("collect_set() cannot have map type data"))
+  }
+
+  test("SPARK-14664: Decimal sum/avg over window should work.") {
+    checkAnswer(
+      spark.sql("select sum(a) over () from values 1.0, 2.0, 3.0 T(a)"),
+      Row(6.0) :: Row(6.0) :: Row(6.0) :: Nil)
+    checkAnswer(
+      spark.sql("select avg(a) over () from values 1.0, 2.0, 3.0 T(a)"),
+      Row(2.0) :: Row(2.0) :: Row(2.0) :: Nil)
+  }
+
+  test("SQL decimal test (used for catching certain demical handling bugs in aggregates)") {
+    checkAnswer(
+      decimalData.groupBy('a cast DecimalType(10, 2)).agg(avg('b cast DecimalType(10, 2))),
+      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(1.5)),
+        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(1.5)),
+        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(1.5))))
   }
 }

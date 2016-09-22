@@ -17,139 +17,31 @@
 
 package org.apache.spark
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.{BlockId, BlockStatus}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
 
 
 class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
   import InternalAccumulator._
-  import AccumulatorParam._
 
   override def afterEach(): Unit = {
     try {
-      Accumulators.clear()
+      AccumulatorContext.clear()
     } finally {
       super.afterEach()
     }
   }
 
-  test("get param") {
-    assert(getParam(EXECUTOR_DESERIALIZE_TIME) === LongAccumulatorParam)
-    assert(getParam(EXECUTOR_RUN_TIME) === LongAccumulatorParam)
-    assert(getParam(RESULT_SIZE) === LongAccumulatorParam)
-    assert(getParam(JVM_GC_TIME) === LongAccumulatorParam)
-    assert(getParam(RESULT_SERIALIZATION_TIME) === LongAccumulatorParam)
-    assert(getParam(MEMORY_BYTES_SPILLED) === LongAccumulatorParam)
-    assert(getParam(DISK_BYTES_SPILLED) === LongAccumulatorParam)
-    assert(getParam(PEAK_EXECUTION_MEMORY) === LongAccumulatorParam)
-    assert(getParam(UPDATED_BLOCK_STATUSES) === UpdatedBlockStatusesAccumulatorParam)
-    assert(getParam(TEST_ACCUM) === LongAccumulatorParam)
-    // shuffle read
-    assert(getParam(shuffleRead.REMOTE_BLOCKS_FETCHED) === IntAccumulatorParam)
-    assert(getParam(shuffleRead.LOCAL_BLOCKS_FETCHED) === IntAccumulatorParam)
-    assert(getParam(shuffleRead.REMOTE_BYTES_READ) === LongAccumulatorParam)
-    assert(getParam(shuffleRead.LOCAL_BYTES_READ) === LongAccumulatorParam)
-    assert(getParam(shuffleRead.FETCH_WAIT_TIME) === LongAccumulatorParam)
-    assert(getParam(shuffleRead.RECORDS_READ) === LongAccumulatorParam)
-    // shuffle write
-    assert(getParam(shuffleWrite.BYTES_WRITTEN) === LongAccumulatorParam)
-    assert(getParam(shuffleWrite.RECORDS_WRITTEN) === LongAccumulatorParam)
-    assert(getParam(shuffleWrite.WRITE_TIME) === LongAccumulatorParam)
-    // input
-    assert(getParam(input.RECORDS_READ) === LongAccumulatorParam)
-    assert(getParam(input.BYTES_READ) === LongAccumulatorParam)
-    // output
-    assert(getParam(output.RECORDS_WRITTEN) === LongAccumulatorParam)
-    assert(getParam(output.BYTES_WRITTEN) === LongAccumulatorParam)
-    // default to Long
-    assert(getParam(METRICS_PREFIX + "anything") === LongAccumulatorParam)
-    intercept[IllegalArgumentException] {
-      getParam("something that does not start with the right prefix")
-    }
-  }
-
-  test("create by name") {
-    val executorRunTime = create(EXECUTOR_RUN_TIME)
-    val updatedBlockStatuses = create(UPDATED_BLOCK_STATUSES)
-    val shuffleRemoteBlocksRead = create(shuffleRead.REMOTE_BLOCKS_FETCHED)
-    assert(executorRunTime.name === Some(EXECUTOR_RUN_TIME))
-    assert(updatedBlockStatuses.name === Some(UPDATED_BLOCK_STATUSES))
-    assert(shuffleRemoteBlocksRead.name === Some(shuffleRead.REMOTE_BLOCKS_FETCHED))
-    assert(executorRunTime.value.isInstanceOf[Long])
-    assert(updatedBlockStatuses.value.isInstanceOf[Seq[_]])
-    // We cannot assert the type of the value directly since the type parameter is erased.
-    // Instead, try casting a `Seq` of expected type and see if it fails in run time.
-    updatedBlockStatuses.setValueAny(Seq.empty[(BlockId, BlockStatus)])
-    assert(shuffleRemoteBlocksRead.value.isInstanceOf[Int])
-    // default to Long
-    val anything = create(METRICS_PREFIX + "anything")
-    assert(anything.value.isInstanceOf[Long])
-  }
-
-  test("create") {
-    val accums = createAll()
-    val shuffleReadAccums = createShuffleReadAccums()
-    val shuffleWriteAccums = createShuffleWriteAccums()
-    val inputAccums = createInputAccums()
-    val outputAccums = createOutputAccums()
-    // assert they're all internal
-    assert(accums.forall(_.isInternal))
-    assert(shuffleReadAccums.forall(_.isInternal))
-    assert(shuffleWriteAccums.forall(_.isInternal))
-    assert(inputAccums.forall(_.isInternal))
-    assert(outputAccums.forall(_.isInternal))
-    // assert they all count on failures
-    assert(accums.forall(_.countFailedValues))
-    assert(shuffleReadAccums.forall(_.countFailedValues))
-    assert(shuffleWriteAccums.forall(_.countFailedValues))
-    assert(inputAccums.forall(_.countFailedValues))
-    assert(outputAccums.forall(_.countFailedValues))
-    // assert they all have names
-    assert(accums.forall(_.name.isDefined))
-    assert(shuffleReadAccums.forall(_.name.isDefined))
-    assert(shuffleWriteAccums.forall(_.name.isDefined))
-    assert(inputAccums.forall(_.name.isDefined))
-    assert(outputAccums.forall(_.name.isDefined))
-    // assert `accums` is a strict superset of the others
-    val accumNames = accums.map(_.name.get).toSet
-    val shuffleReadAccumNames = shuffleReadAccums.map(_.name.get).toSet
-    val shuffleWriteAccumNames = shuffleWriteAccums.map(_.name.get).toSet
-    val inputAccumNames = inputAccums.map(_.name.get).toSet
-    val outputAccumNames = outputAccums.map(_.name.get).toSet
-    assert(shuffleReadAccumNames.subsetOf(accumNames))
-    assert(shuffleWriteAccumNames.subsetOf(accumNames))
-    assert(inputAccumNames.subsetOf(accumNames))
-    assert(outputAccumNames.subsetOf(accumNames))
-  }
-
-  test("naming") {
-    val accums = createAll()
-    val shuffleReadAccums = createShuffleReadAccums()
-    val shuffleWriteAccums = createShuffleWriteAccums()
-    val inputAccums = createInputAccums()
-    val outputAccums = createOutputAccums()
-    // assert that prefixes are properly namespaced
-    assert(SHUFFLE_READ_METRICS_PREFIX.startsWith(METRICS_PREFIX))
-    assert(SHUFFLE_WRITE_METRICS_PREFIX.startsWith(METRICS_PREFIX))
-    assert(INPUT_METRICS_PREFIX.startsWith(METRICS_PREFIX))
-    assert(OUTPUT_METRICS_PREFIX.startsWith(METRICS_PREFIX))
-    assert(accums.forall(_.name.get.startsWith(METRICS_PREFIX)))
-    // assert they all start with the expected prefixes
-    assert(shuffleReadAccums.forall(_.name.get.startsWith(SHUFFLE_READ_METRICS_PREFIX)))
-    assert(shuffleWriteAccums.forall(_.name.get.startsWith(SHUFFLE_WRITE_METRICS_PREFIX)))
-    assert(inputAccums.forall(_.name.get.startsWith(INPUT_METRICS_PREFIX)))
-    assert(outputAccums.forall(_.name.get.startsWith(OUTPUT_METRICS_PREFIX)))
-  }
-
   test("internal accumulators in TaskContext") {
     val taskContext = TaskContext.empty()
-    val accumUpdates = taskContext.taskMetrics.accumulatorUpdates()
+    val accumUpdates = taskContext.taskMetrics.accumulators()
     assert(accumUpdates.size > 0)
-    assert(accumUpdates.forall(_.internal))
-    val testAccum = taskContext.taskMetrics.getAccum(TEST_ACCUM)
+    val testAccum = taskContext.taskMetrics.testAccum.get
     assert(accumUpdates.exists(_.id == testAccum.id))
   }
 
@@ -160,7 +52,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     sc.addSparkListener(listener)
     // Have each task add 1 to the internal accumulator
     val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitions { iter =>
-      TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1
+      TaskContext.get().taskMetrics().testAccum.get.add(1)
       iter
     }
     // Register asserts in job completion callback to avoid flakiness
@@ -196,17 +88,17 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     val rdd = sc.parallelize(1 to 100, numPartitions)
       .map { i => (i, i) }
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1
+        TaskContext.get().taskMetrics().testAccum.get.add(1)
         iter
       }
       .reduceByKey { case (x, y) => x + y }
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 10
+        TaskContext.get().taskMetrics().testAccum.get.add(10)
         iter
       }
       .repartition(numPartitions * 2)
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 100
+        TaskContext.get().taskMetrics().testAccum.get.add(100)
         iter
       }
     // Register asserts in job completion callback to avoid flakiness
@@ -236,7 +128,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     // This should retry both stages in the scheduler. Note that we only want to fail the
     // first stage attempt because we want the stage to eventually succeed.
     val x = sc.parallelize(1 to 100, numPartitions)
-      .mapPartitions { iter => TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1; iter }
+      .mapPartitions { iter => TaskContext.get().taskMetrics().testAccum.get.add(1); iter }
       .groupBy(identity)
     val sid = x.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle.shuffleId
     val rdd = x.mapPartitionsWithIndex { case (i, iter) =>
@@ -292,18 +184,19 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       private val myCleaner = new SaveAccumContextCleaner(this)
       override def cleaner: Option[ContextCleaner] = Some(myCleaner)
     }
-    assert(Accumulators.originals.isEmpty)
+    assert(AccumulatorContext.numAccums == 0)
     sc.parallelize(1 to 100).map { i => (i, i) }.reduceByKey { _ + _ }.count()
-    val internalAccums = InternalAccumulator.createAll()
+    val numInternalAccums = TaskMetrics.empty.internalAccums.length
     // We ran 2 stages, so we should have 2 sets of internal accumulators, 1 for each stage
-    assert(Accumulators.originals.size === internalAccums.size * 2)
+    assert(AccumulatorContext.numAccums === numInternalAccums * 2)
     val accumsRegistered = sc.cleaner match {
       case Some(cleaner: SaveAccumContextCleaner) => cleaner.accumsRegisteredForCleanup
       case _ => Seq.empty[Long]
     }
     // Make sure the same set of accumulators is registered for cleanup
-    assert(accumsRegistered.size === internalAccums.size * 2)
-    assert(accumsRegistered.toSet === Accumulators.originals.keys.toSet)
+    assert(accumsRegistered.size === numInternalAccums * 2)
+    assert(accumsRegistered.toSet.size === AccumulatorContext.numAccums)
+    accumsRegistered.foreach(id => assert(AccumulatorContext.get(id) != None))
   }
 
   /**
@@ -321,7 +214,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
   private class SaveAccumContextCleaner(sc: SparkContext) extends ContextCleaner(sc) {
     private val accumsRegistered = new ArrayBuffer[Long]
 
-    override def registerAccumulatorForCleanup(a: Accumulable[_, _]): Unit = {
+    override def registerAccumulatorForCleanup(a: AccumulatorV2[_, _]): Unit = {
       accumsRegistered += a.id
       super.registerAccumulatorForCleanup(a)
     }

@@ -19,13 +19,17 @@ package org.apache.spark.sql.execution.joins
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
+import scala.util.Random
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.map.BytesToBytesMap
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.CompactBuffer
 
 class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
@@ -110,14 +114,14 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
 
   test("LongToUnsafeRowMap") {
     val unsafeProj = UnsafeProjection.create(
-      Seq(BoundReference(0, IntegerType, false), BoundReference(1, IntegerType, true)))
-    val rows = (0 until 100).map(i => unsafeProj(InternalRow(i, i + 1)).copy())
-    val key = Seq(BoundReference(0, IntegerType, false))
+      Seq(BoundReference(0, LongType, false), BoundReference(1, IntegerType, true)))
+    val rows = (0 until 100).map(i => unsafeProj(InternalRow(Int.int2long(i), i + 1)).copy())
+    val key = Seq(BoundReference(0, LongType, false))
     val longRelation = LongHashedRelation(rows.iterator, key, 10, mm)
     assert(longRelation.keyIsUnique)
     (0 until 100).foreach { i =>
       val row = longRelation.getValue(i)
-      assert(row.getInt(0) === i)
+      assert(row.getLong(0) === i)
       assert(row.getInt(1) === i + 1)
     }
 
@@ -126,9 +130,9 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     (0 until 100).foreach { i =>
       val rows = longRelation2.get(i).toArray
       assert(rows.length === 2)
-      assert(rows(0).getInt(0) === i)
+      assert(rows(0).getLong(0) === i)
       assert(rows(0).getInt(1) === i + 1)
-      assert(rows(1).getInt(0) === i)
+      assert(rows(1).getLong(0) === i)
       assert(rows(1).getInt(1) === i + 1)
     }
 
@@ -143,10 +147,186 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     (0 until 100).foreach { i =>
       val rows = relation.get(i).toArray
       assert(rows.length === 2)
-      assert(rows(0).getInt(0) === i)
+      assert(rows(0).getLong(0) === i)
       assert(rows(0).getInt(1) === i + 1)
-      assert(rows(1).getInt(0) === i)
+      assert(rows(1).getLong(0) === i)
       assert(rows(1).getInt(1) === i + 1)
     }
+  }
+
+  test("LongToUnsafeRowMap with very wide range") {
+    val taskMemoryManager = new TaskMemoryManager(
+      new StaticMemoryManager(
+        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+        Long.MaxValue,
+        Long.MaxValue,
+        1),
+      0)
+    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
+
+    {
+      // SPARK-16740
+      val keys = Seq(0L, Long.MaxValue, Long.MaxValue)
+      val map = new LongToUnsafeRowMap(taskMemoryManager, 1)
+      keys.foreach { k =>
+        map.append(k, unsafeProj(InternalRow(k)))
+      }
+      map.optimize()
+      val row = unsafeProj(InternalRow(0L)).copy()
+      keys.foreach { k =>
+        assert(map.getValue(k, row) eq row)
+        assert(row.getLong(0) === k)
+      }
+      map.free()
+    }
+
+
+    {
+      // SPARK-16802
+      val keys = Seq(Long.MaxValue, Long.MaxValue - 10)
+      val map = new LongToUnsafeRowMap(taskMemoryManager, 1)
+      keys.foreach { k =>
+        map.append(k, unsafeProj(InternalRow(k)))
+      }
+      map.optimize()
+      val row = unsafeProj(InternalRow(0L)).copy()
+      keys.foreach { k =>
+        assert(map.getValue(k, row) eq row)
+        assert(row.getLong(0) === k)
+      }
+      assert(map.getValue(Long.MinValue, row) eq null)
+      map.free()
+    }
+  }
+
+  test("LongToUnsafeRowMap with random keys") {
+    val taskMemoryManager = new TaskMemoryManager(
+      new StaticMemoryManager(
+        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+        Long.MaxValue,
+        Long.MaxValue,
+        1),
+      0)
+    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
+
+    val N = 1000000
+    val rand = new Random
+    val keys = (0 to N).map(x => rand.nextLong()).toArray
+
+    val map = new LongToUnsafeRowMap(taskMemoryManager, 10)
+    keys.foreach { k =>
+      map.append(k, unsafeProj(InternalRow(k)))
+    }
+    map.optimize()
+
+    val os = new ByteArrayOutputStream()
+    val out = new ObjectOutputStream(os)
+    map.writeExternal(out)
+    out.flush()
+    val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
+    val map2 = new LongToUnsafeRowMap(taskMemoryManager, 1)
+    map2.readExternal(in)
+
+    val row = unsafeProj(InternalRow(0L)).copy()
+    keys.foreach { k =>
+      val r = map2.get(k, row)
+      assert(r.hasNext)
+      var c = 0
+      while (r.hasNext) {
+        val rr = r.next()
+        assert(rr.getLong(0) === k)
+        c += 1
+      }
+    }
+    var i = 0
+    while (i < N * 10) {
+      val k = rand.nextLong()
+      val r = map2.get(k, row)
+      if (r != null) {
+        assert(r.hasNext)
+        while (r.hasNext) {
+          assert(r.next().getLong(0) === k)
+        }
+      }
+      i += 1
+    }
+    map.free()
+  }
+
+  test("Spark-14521") {
+    val ser = new KryoSerializer(
+      (new SparkConf).set("spark.kryo.referenceTracking", "false")).newInstance()
+    val key = Seq(BoundReference(0, LongType, false))
+
+    // Testing Kryo serialization of HashedRelation
+    val unsafeProj = UnsafeProjection.create(
+      Seq(BoundReference(0, LongType, false), BoundReference(1, IntegerType, true)))
+    val rows = (0 until 100).map(i => unsafeProj(InternalRow(Int.int2long(i), i + 1)).copy())
+    val longRelation = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm)
+    val longRelation2 = ser.deserialize[LongHashedRelation](ser.serialize(longRelation))
+    (0 until 100).foreach { i =>
+      val rows = longRelation2.get(i).toArray
+      assert(rows.length === 2)
+      assert(rows(0).getLong(0) === i)
+      assert(rows(0).getInt(1) === i + 1)
+      assert(rows(1).getLong(0) === i)
+      assert(rows(1).getInt(1) === i + 1)
+    }
+
+    // Testing Kryo serialization of UnsafeHashedRelation
+    val unsafeHashed = UnsafeHashedRelation(rows.iterator, key, 1, mm)
+    val os = new ByteArrayOutputStream()
+    val out = new ObjectOutputStream(os)
+    unsafeHashed.asInstanceOf[UnsafeHashedRelation].writeExternal(out)
+    out.flush()
+    val unsafeHashed2 = ser.deserialize[UnsafeHashedRelation](ser.serialize(unsafeHashed))
+    val os2 = new ByteArrayOutputStream()
+    val out2 = new ObjectOutputStream(os2)
+    unsafeHashed2.writeExternal(out2)
+    out2.flush()
+    assert(java.util.Arrays.equals(os.toByteArray, os2.toByteArray))
+  }
+
+  // This test require 4G heap to run, should run it manually
+  ignore("build HashedRelation that is larger than 1G") {
+    val unsafeProj = UnsafeProjection.create(
+      Seq(BoundReference(0, IntegerType, false),
+        BoundReference(1, StringType, true)))
+    val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" " * 100)))
+    val key = Seq(BoundReference(0, IntegerType, false))
+    val rows = (0 until (1 << 24)).iterator.map { i =>
+      unsafeRow.setInt(0, i % 1000000)
+      unsafeRow.setInt(1, i)
+      unsafeRow
+    }
+
+    val unsafeRelation = UnsafeHashedRelation(rows, key, 1000, mm)
+    assert(unsafeRelation.estimatedSize > (2L << 30))
+    unsafeRelation.close()
+
+    val rows2 = (0 until (1 << 24)).iterator.map { i =>
+      unsafeRow.setInt(0, i % 1000000)
+      unsafeRow.setInt(1, i)
+      unsafeRow
+    }
+    val longRelation = LongHashedRelation(rows2, key, 1000, mm)
+    assert(longRelation.estimatedSize > (2L << 30))
+    longRelation.close()
+  }
+
+  // This test require 4G heap to run, should run it manually
+  ignore("build HashedRelation with more than 100 millions rows") {
+    val unsafeProj = UnsafeProjection.create(
+      Seq(BoundReference(0, IntegerType, false),
+        BoundReference(1, StringType, true)))
+    val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" " * 100)))
+    val key = Seq(BoundReference(0, IntegerType, false))
+    val rows = (0 until (1 << 10)).iterator.map { i =>
+      unsafeRow.setInt(0, i % 1000000)
+      unsafeRow.setInt(1, i)
+      unsafeRow
+    }
+    val m = LongHashedRelation(rows, key, 100 << 20, mm)
+    m.close()
   }
 }

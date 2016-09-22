@@ -18,10 +18,10 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
 import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy => OldBoostingStrategy}
 import org.apache.spark.mllib.tree.impurity.{Variance => OldVariance}
@@ -205,31 +205,29 @@ private[spark] object GradientBoostedTrees extends Logging {
       case _ => data
     }
 
-    val numIterations = trees.length
-    val evaluationArray = Array.fill(numIterations)(0.0)
-    val localTreeWeights = treeWeights
-
-    var predictionAndError = computeInitialPredictionAndError(
-      remappedData, localTreeWeights(0), trees(0), loss)
-
-    evaluationArray(0) = predictionAndError.values.mean()
-
     val broadcastTrees = sc.broadcast(trees)
-    (1 until numIterations).foreach { nTree =>
-      predictionAndError = remappedData.zip(predictionAndError).mapPartitions { iter =>
-        val currentTree = broadcastTrees.value(nTree)
-        val currentTreeWeight = localTreeWeights(nTree)
-        iter.map { case (point, (pred, error)) =>
-          val newPred = updatePrediction(point.features, pred, currentTree, currentTreeWeight)
-          val newError = loss.computeError(newPred, point.label)
-          (newPred, newError)
-        }
-      }
-      evaluationArray(nTree) = predictionAndError.values.mean()
-    }
+    val localTreeWeights = treeWeights
+    val treesIndices = trees.indices
 
-    broadcastTrees.unpersist()
-    evaluationArray
+    val dataCount = remappedData.count()
+    val evaluation = remappedData.map { point =>
+      treesIndices.map { idx =>
+        val prediction = broadcastTrees.value(idx)
+          .rootNode
+          .predictImpl(point.features)
+          .prediction
+        prediction * localTreeWeights(idx)
+      }
+      .scanLeft(0.0)(_ + _).drop(1)
+      .map(prediction => loss.computeError(prediction, point.label))
+    }
+    .aggregate(treesIndices.map(_ => 0.0))(
+      (aggregated, row) => treesIndices.map(idx => aggregated(idx) + row(idx)),
+      (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
+    .map(_ / dataCount)
+
+    broadcastTrees.destroy()
+    evaluation.toArray
   }
 
   /**

@@ -19,15 +19,14 @@ package org.apache.spark.ui.storage
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkFunSuite, Success}
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark._
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 
 /**
  * Test various functionality in the StorageListener that supports the StorageTab.
  */
-class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
+class StorageTabSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter {
   private var bus: LiveListenerBus = _
   private var storageStatusListener: StorageStatusListener = _
   private var storageListener: StorageListener = _
@@ -43,8 +42,10 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
   private val bm1 = BlockManagerId("big", "dog", 1)
 
   before {
-    bus = new LiveListenerBus
-    storageStatusListener = new StorageStatusListener(new SparkConf())
+    val conf = new SparkConf()
+    sc = new SparkContext("local", "test", conf)
+    bus = new LiveListenerBus(sc)
+    storageStatusListener = new StorageStatusListener(conf)
     storageListener = new StorageListener(storageStatusListener)
     bus.addListener(storageStatusListener)
     bus.addListener(storageListener)
@@ -177,6 +178,23 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
     assert(storageListener.rddInfoList.size === 2)
     bus.postToAll(SparkListenerStageCompleted(stageInfo1))
     assert(storageListener.rddInfoList.size === 2)
+  }
+
+  test("verify StorageTab still contains a renamed RDD") {
+    val rddInfo = new RDDInfo(0, "original_name", 1, memOnly, Seq(4))
+    val stageInfo0 = new StageInfo(0, 0, "stage0", 1, Seq(rddInfo), Seq.empty, "details")
+    bus.postToAll(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
+    bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
+    val blockUpdateInfos1 = Seq(BlockUpdatedInfo(bm1, RDDBlockId(0, 1), memOnly, 100L, 0L))
+    postUpdateBlocks(bus, blockUpdateInfos1)
+    assert(storageListener.rddInfoList.size == 1)
+
+    val newName = "new_name"
+    val rddInfoRenamed = new RDDInfo(0, newName, 1, memOnly, Seq(4))
+    val stageInfo1 = new StageInfo(1, 0, "stage1", 1, Seq(rddInfoRenamed), Seq.empty, "details")
+    bus.postToAll(SparkListenerStageSubmitted(stageInfo1))
+    assert(storageListener.rddInfoList.size == 1)
+    assert(storageListener.rddInfoList.head.name == newName)
   }
 
   private def postUpdateBlocks(

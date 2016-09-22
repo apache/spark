@@ -108,6 +108,13 @@ abstract class JdbcDialect extends Serializable {
   def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
   }
 
+  /**
+   * Return Some[true] iff `TRUNCATE TABLE` causes cascading default.
+   * Some[true] : TRUNCATE TABLE causes cascading.
+   * Some[false] : TRUNCATE TABLE does not cause cascading.
+   * None: The behavior of TRUNCATE TABLE is unknown (default).
+   */
+  def isCascadingTruncateTable(): Option[Boolean] = None
 }
 
 /**
@@ -155,7 +162,7 @@ object JdbcDialects {
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
    */
-  private[sql] def get(url: String): JdbcDialect = {
+  def get(url: String): JdbcDialect = {
     val matchingDialects = dialects.filter(_.canHandle(url))
     matchingDialects.length match {
       case 0 => NoopDialect

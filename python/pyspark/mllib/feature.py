@@ -60,8 +60,6 @@ class VectorTransformer(object):
 
 class Normalizer(VectorTransformer):
     """
-    .. note:: Experimental
-
     Normalizes samples individually to unit L\ :sup:`p`\  norm
 
     For any 1 <= `p` < float('inf'), normalizes samples using
@@ -131,8 +129,6 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
 
 class StandardScalerModel(JavaVectorTransformer):
     """
-    .. note:: Experimental
-
     Represents a StandardScaler model that can transform vectors.
 
     .. versionadded:: 1.2.0
@@ -207,16 +203,13 @@ class StandardScalerModel(JavaVectorTransformer):
 
 class StandardScaler(object):
     """
-    .. note:: Experimental
-
     Standardizes features by removing the mean and scaling to unit
     variance using column summary statistics on the samples in the
     training set.
 
     :param withMean: False by default. Centers the data with mean
-                     before scaling. It will build a dense output, so this
-                     does not work on sparse input and will raise an
-                     exception.
+                     before scaling. It will build a dense output, so take
+                     care when applying to sparse input.
     :param withStd: True by default. Scales the data to unit
                     standard deviation.
 
@@ -262,8 +255,6 @@ class StandardScaler(object):
 
 class ChiSqSelectorModel(JavaVectorTransformer):
     """
-    .. note:: Experimental
-
     Represents a Chi Squared selector model.
 
     .. versionadded:: 1.4.0
@@ -280,13 +271,22 @@ class ChiSqSelectorModel(JavaVectorTransformer):
         return JavaVectorTransformer.transform(self, vector)
 
 
+class ChiSqSelectorType:
+    """
+    This class defines the selector types of Chi Square Selector.
+    """
+    KBest, Percentile, FPR = range(3)
+
+
 class ChiSqSelector(object):
     """
-    .. note:: Experimental
-
     Creates a ChiSquared feature selector.
-
-    :param numTopFeatures: number of features that selector will select.
+    The selector supports three selection methods: `KBest`, `Percentile` and `FPR`.
+    `KBest` chooses the `k` top features according to a chi-squared test.
+    `Percentile` is similar but chooses a fraction of all features instead of a fixed number.
+    `FPR` chooses all features whose false positive rate meets some threshold.
+    By default, the selection method is `KBest`, the default number of top features is 50.
+    User can use setNumTopFeatures, setPercentile and setAlpha to set different selection methods.
 
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(3, {0: 8.0, 1: 7.0})),
@@ -294,16 +294,58 @@ class ChiSqSelector(object):
     ...     LabeledPoint(1.0, [0.0, 9.0, 8.0]),
     ...     LabeledPoint(2.0, [8.0, 9.0, 5.0])
     ... ]
-    >>> model = ChiSqSelector(1).fit(sc.parallelize(data))
+    >>> model = ChiSqSelector().setNumTopFeatures(1).fit(sc.parallelize(data))
     >>> model.transform(SparseVector(3, {1: 9.0, 2: 6.0}))
     SparseVector(1, {0: 6.0})
     >>> model.transform(DenseVector([8.0, 9.0, 5.0]))
     DenseVector([5.0])
+    >>> model = ChiSqSelector().setPercentile(0.34).fit(sc.parallelize(data))
+    >>> model.transform(SparseVector(3, {1: 9.0, 2: 6.0}))
+    SparseVector(1, {0: 6.0})
+    >>> model.transform(DenseVector([8.0, 9.0, 5.0]))
+    DenseVector([5.0])
+    >>> data = [
+    ...     LabeledPoint(0.0, SparseVector(4, {0: 8.0, 1: 7.0})),
+    ...     LabeledPoint(1.0, SparseVector(4, {1: 9.0, 2: 6.0, 3: 4.0})),
+    ...     LabeledPoint(1.0, [0.0, 9.0, 8.0, 4.0]),
+    ...     LabeledPoint(2.0, [8.0, 9.0, 5.0, 9.0])
+    ... ]
+    >>> model = ChiSqSelector().setAlpha(0.1).fit(sc.parallelize(data))
+    >>> model.transform(DenseVector([1.0,2.0,3.0,4.0]))
+    DenseVector([4.0])
 
     .. versionadded:: 1.4.0
     """
-    def __init__(self, numTopFeatures):
+    def __init__(self, numTopFeatures=50):
+        self.numTopFeatures = numTopFeatures
+        self.selectorType = ChiSqSelectorType.KBest
+
+    @since('2.1.0')
+    def setNumTopFeatures(self, numTopFeatures):
+        """
+        set numTopFeature for feature selection by number of top features
+        """
         self.numTopFeatures = int(numTopFeatures)
+        self.selectorType = ChiSqSelectorType.KBest
+        return self
+
+    @since('2.1.0')
+    def setPercentile(self, percentile):
+        """
+        set percentile [0.0, 1.0] for feature selection by percentile
+        """
+        self.percentile = float(percentile)
+        self.selectorType = ChiSqSelectorType.Percentile
+        return self
+
+    @since('2.1.0')
+    def setAlpha(self, alpha):
+        """
+        set alpha [0.0, 1.0] for feature selection by FPR
+        """
+        self.alpha = float(alpha)
+        self.selectorType = ChiSqSelectorType.FPR
+        return self
 
     @since('1.4.0')
     def fit(self, data):
@@ -315,7 +357,15 @@ class ChiSqSelector(object):
                      treated as categorical for each distinct value.
                      Apply feature discretizer before using this function.
         """
-        jmodel = callMLlibFunc("fitChiSqSelector", self.numTopFeatures, data)
+        if self.selectorType == ChiSqSelectorType.KBest:
+            jmodel = callMLlibFunc("fitChiSqSelectorKBest", self.numTopFeatures, data)
+        elif self.selectorType == ChiSqSelectorType.Percentile:
+            jmodel = callMLlibFunc("fitChiSqSelectorPercentile", self.percentile, data)
+        elif self.selectorType == ChiSqSelectorType.FPR:
+            jmodel = callMLlibFunc("fitChiSqSelectorFPR", self.alpha, data)
+        else:
+            raise ValueError("ChiSqSelector type supports KBest(0), Percentile(1) and"
+                             " FPR(2), the current value is: %s" % self.selectorType)
         return ChiSqSelectorModel(jmodel)
 
 
@@ -361,8 +411,6 @@ class PCA(object):
 
 class HashingTF(object):
     """
-    .. note:: Experimental
-
     Maps a sequence of terms to their term frequencies using the hashing
     trick.
 
@@ -448,8 +496,6 @@ class IDFModel(JavaVectorTransformer):
 
 class IDF(object):
     """
-    .. note:: Experimental
-
     Inverse document frequency (IDF).
 
     The standard formulation is used: `idf = log((m + 1) / (d(t) + 1))`,
@@ -553,14 +599,13 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         """
         jmodel = sc._jvm.org.apache.spark.mllib.feature \
             .Word2VecModel.load(sc._jsc.sc(), path)
-        model = sc._jvm.Word2VecModelWrapper(jmodel)
+        model = sc._jvm.org.apache.spark.mllib.api.python.Word2VecModelWrapper(jmodel)
         return Word2VecModel(model)
 
 
 @ignore_unicode_prefix
 class Word2Vec(object):
-    """
-    Word2Vec creates vector representation of words in a text corpus.
+    """Word2Vec creates vector representation of words in a text corpus.
     The algorithm first constructs a vocabulary from the corpus
     and then learns vector representation of words in the vocabulary.
     The vector representation can be used as features in
@@ -582,13 +627,19 @@ class Word2Vec(object):
     >>> doc = sc.parallelize(localDoc).map(lambda line: line.split(" "))
     >>> model = Word2Vec().setVectorSize(10).setSeed(42).fit(doc)
 
+    Querying for synonyms of a word will not return that word:
+
     >>> syms = model.findSynonyms("a", 2)
     >>> [s[0] for s in syms]
     [u'b', u'c']
+
+    But querying for synonyms of a vector may return the word whose
+    representation is that vector:
+
     >>> vec = model.transform("a")
     >>> syms = model.findSynonyms(vec, 2)
     >>> [s[0] for s in syms]
-    [u'b', u'c']
+    [u'a', u'b']
 
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
@@ -606,6 +657,7 @@ class Word2Vec(object):
     ...     pass
 
     .. versionadded:: 1.2.0
+
     """
     def __init__(self):
         """
@@ -615,8 +667,9 @@ class Word2Vec(object):
         self.learningRate = 0.025
         self.numPartitions = 1
         self.numIterations = 1
-        self.seed = random.randint(0, sys.maxsize)
+        self.seed = None
         self.minCount = 5
+        self.windowSize = 5
 
     @since('1.2.0')
     def setVectorSize(self, vectorSize):
@@ -669,6 +722,14 @@ class Word2Vec(object):
         self.minCount = minCount
         return self
 
+    @since('2.0.0')
+    def setWindowSize(self, windowSize):
+        """
+        Sets window size (default: 5).
+        """
+        self.windowSize = windowSize
+        return self
+
     @since('1.2.0')
     def fit(self, data):
         """
@@ -681,15 +742,13 @@ class Word2Vec(object):
             raise TypeError("data should be an RDD of list of string")
         jmodel = callMLlibFunc("trainWord2VecModel", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
-                               int(self.numIterations), int(self.seed),
-                               int(self.minCount))
+                               int(self.numIterations), self.seed,
+                               int(self.minCount), int(self.windowSize))
         return Word2VecModel(jmodel)
 
 
 class ElementwiseProduct(VectorTransformer):
     """
-    .. note:: Experimental
-
     Scales each column of the vector, with the supplied weight vector.
     i.e the elementwise product.
 
@@ -723,11 +782,15 @@ class ElementwiseProduct(VectorTransformer):
 
 def _test():
     import doctest
-    from pyspark import SparkContext
+    from pyspark.sql import SparkSession
     globs = globals().copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("mllib.feature tests")\
+        .getOrCreate()
+    globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

@@ -19,9 +19,8 @@
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
-import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext, Time}
 
@@ -59,20 +58,20 @@ object SqlNetworkWordCount {
     val words = lines.flatMap(_.split(" "))
 
     // Convert RDDs of the words DStream to DataFrame and run SQL query
-    words.foreachRDD { (rdd, time) =>
-      // Get the singleton instance of SQLContext
-      val sqlContext = SQLContextSingleton.getInstance(rdd.sparkContext)
-      import sqlContext.implicits._
+    words.foreachRDD { (rdd: RDD[String], time: Time) =>
+      // Get the singleton instance of SparkSession
+      val spark = SparkSessionSingleton.getInstance(rdd.sparkContext.getConf)
+      import spark.implicits._
 
       // Convert RDD[String] to RDD[case class] to DataFrame
       val wordsDataFrame = rdd.map(w => Record(w)).toDF()
 
-      // Register as table
-      wordsDataFrame.registerTempTable("words")
+      // Creates a temporary view using the DataFrame
+      wordsDataFrame.createOrReplaceTempView("words")
 
       // Do word count on table using SQL and print it
       val wordCountsDataFrame =
-        sqlContext.sql("select word, count(*) as total from words group by word")
+        spark.sql("select word, count(*) as total from words group by word")
       println(s"========= $time =========")
       wordCountsDataFrame.show()
     }
@@ -87,14 +86,17 @@ object SqlNetworkWordCount {
 case class Record(word: String)
 
 
-/** Lazily instantiated singleton instance of SQLContext */
-object SQLContextSingleton {
+/** Lazily instantiated singleton instance of SparkSession */
+object SparkSessionSingleton {
 
-  @transient  private var instance: SQLContext = _
+  @transient  private var instance: SparkSession = _
 
-  def getInstance(sparkContext: SparkContext): SQLContext = {
+  def getInstance(sparkConf: SparkConf): SparkSession = {
     if (instance == null) {
-      instance = new SQLContext(sparkContext)
+      instance = SparkSession
+        .builder
+        .config(sparkConf)
+        .getOrCreate()
     }
     instance
   }

@@ -24,13 +24,13 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
  * A set of tests that validates commands can also be queried by like a table
  */
 class HiveOperatorQueryableSuite extends QueryTest with TestHiveSingleton {
-  import hiveContext._
+  import spark._
 
   test("SPARK-5324 query result of describe command") {
     hiveContext.loadTestTable("src")
 
-    // register a describe command to be a temp table
-    sql("desc src").registerTempTable("mydesc")
+    // Creates a temporary view with the output of a describe command
+    sql("desc src").createOrReplaceTempView("mydesc")
     checkAnswer(
       sql("desc mydesc"),
       Seq(

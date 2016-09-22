@@ -17,24 +17,21 @@
 
 package org.apache.spark.ml.feature
 
-import scala.collection.mutable
-
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasSeed}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.{DoubleType, StructType}
-import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * Params for [[QuantileDiscretizer]].
  */
 private[feature] trait QuantileDiscretizerBase extends Params
-  with HasInputCol with HasOutputCol with HasSeed {
+  with HasInputCol with HasOutputCol {
 
   /**
    * Number of buckets (quantiles, or categories) into which data points are grouped. Must
@@ -42,7 +39,7 @@ private[feature] trait QuantileDiscretizerBase extends Params
    * default: 2
    * @group param
    */
-  val numBuckets = new IntParam(this, "numBuckets", "Maximum number of buckets (quantiles, or " +
+  val numBuckets = new IntParam(this, "numBuckets", "Number of buckets (quantiles, or " +
     "categories) into which data points are grouped. Must be >= 2.",
     ParamValidators.gtEq(2))
   setDefault(numBuckets -> 2)
@@ -53,13 +50,13 @@ private[feature] trait QuantileDiscretizerBase extends Params
   /**
    * Relative error (see documentation for
    * [[org.apache.spark.sql.DataFrameStatFunctions.approxQuantile approxQuantile]] for description)
-   * Must be a number in [0, 1].
+   * Must be in the range [0, 1].
    * default: 0.001
    * @group param
    */
   val relativeError = new DoubleParam(this, "relativeError", "The relative target precision " +
-    "for approxQuantile",
-    ParamValidators.inRange(0.0, 1.0))
+    "for the approximate quantile algorithm used to generate buckets. " +
+    "Must be in the range [0, 1].", ParamValidators.inRange(0.0, 1.0))
   setDefault(relativeError -> 0.001)
 
   /** @group getParam */
@@ -67,35 +64,45 @@ private[feature] trait QuantileDiscretizerBase extends Params
 }
 
 /**
- * :: Experimental ::
  * `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
- * categorical features. The bin ranges are chosen by taking a sample of the data and dividing it
- * into roughly equal parts. The lower and upper bin bounds will be -Infinity and +Infinity,
+ * categorical features. The number of bins can be set using the `numBuckets` parameter. It is
+ * possible that the number of buckets used will be less than this value, for example, if there
+ * are too few distinct values of the input to create enough distinct quantiles. Note also that
+ * NaN values are handled specially and placed into their own bucket. For example, if 4 buckets
+ * are used, then non-NaN data will be put into buckets(0-3), but NaNs will be counted in a special
+ * bucket(4).
+ * The bin ranges are chosen using an approximate algorithm (see the documentation for
+ * [[org.apache.spark.sql.DataFrameStatFunctions.approxQuantile approxQuantile]]
+ * for a detailed description). The precision of the approximation can be controlled with the
+ * `relativeError` parameter. The lower and upper bin bounds will be `-Infinity` and `+Infinity`,
  * covering all real values.
  */
-@Experimental
-final class QuantileDiscretizer(override val uid: String)
+@Since("1.6.0")
+final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val uid: String)
   extends Estimator[Bucketizer] with QuantileDiscretizerBase with DefaultParamsWritable {
 
+  @Since("1.6.0")
   def this() = this(Identifiable.randomUID("quantileDiscretizer"))
 
   /** @group setParam */
+  @Since("2.0.0")
   def setRelativeError(value: Double): this.type = set(relativeError, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setNumBuckets(value: Int): this.type = set(numBuckets, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  /** @group setParam */
-  def setSeed(value: Long): this.type = set(seed, value)
-
+  @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
+    SchemaUtils.checkNumericType(schema, $(inputCol))
     val inputFields = schema.fields
     require(inputFields.forall(_.name != $(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
@@ -106,15 +113,22 @@ final class QuantileDiscretizer(override val uid: String)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): Bucketizer = {
+    transformSchema(dataset.schema, logging = true)
     val splits = dataset.stat.approxQuantile($(inputCol),
       (0.0 to 1.0 by 1.0/$(numBuckets)).toArray, $(relativeError))
     splits(0) = Double.NegativeInfinity
     splits(splits.length - 1) = Double.PositiveInfinity
 
-    val bucketizer = new Bucketizer(uid).setSplits(splits)
+    val distinctSplits = splits.distinct
+    if (splits.length != distinctSplits.length) {
+      log.warn(s"Some quantiles were identical. Bucketing to ${distinctSplits.length - 1}" +
+        s" buckets as a result.")
+    }
+    val bucketizer = new Bucketizer(uid).setSplits(distinctSplits.sorted)
     copyValues(bucketizer.setParent(this))
   }
 
+  @Since("1.6.0")
   override def copy(extra: ParamMap): QuantileDiscretizer = defaultCopy(extra)
 }
 

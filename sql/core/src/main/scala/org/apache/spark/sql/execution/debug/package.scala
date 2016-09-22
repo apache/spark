@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.HashSet
+import java.util.Collections
 
-import org.apache.spark.{Accumulator, AccumulatorParam}
+import scala.collection.JavaConverters._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -28,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
 
 /**
  * Contains methods for debugging query execution.
@@ -49,9 +51,9 @@ package object debug {
   }
 
   def codegenString(plan: SparkPlan): String = {
-    val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegen]()
+    val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
     plan transform {
-      case s: WholeStageCodegen =>
+      case s: WholeStageCodegenExec =>
         codegenSubtrees += s
         s
       case s => s
@@ -68,11 +70,11 @@ package object debug {
   }
 
   /**
-   * Augments [[SQLContext]] with debug methods.
+   * Augments [[SparkSession]] with debug methods.
    */
-  implicit class DebugSQLContext(sqlContext: SQLContext) {
+  implicit class DebugSQLContext(sparkSession: SparkSession) {
     def debug(): Unit = {
-      sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, false)
+      sparkSession.conf.set(SQLConf.DATAFRAME_EAGER_ANALYSIS.key, false)
     }
   }
 
@@ -86,11 +88,11 @@ package object debug {
       val debugPlan = plan transform {
         case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
           visited += new TreeNodeRef(s)
-          DebugNode(s)
+          DebugExec(s)
       }
       debugPrint(s"Results returned: ${debugPlan.execute().count()}")
       debugPlan.foreach {
-        case d: DebugNode => d.dumpStats()
+        case d: DebugExec => d.dumpStats()
         case _ =>
       }
     }
@@ -104,31 +106,34 @@ package object debug {
     }
   }
 
-  private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode with CodegenSupport {
+  case class DebugExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
     def output: Seq[Attribute] = child.output
 
-    implicit object SetAccumulatorParam extends AccumulatorParam[HashSet[String]] {
-      def zero(initialValue: HashSet[String]): HashSet[String] = {
-        initialValue.clear()
-        initialValue
+    class SetAccumulator[T] extends AccumulatorV2[T, java.util.Set[T]] {
+      private val _set = Collections.synchronizedSet(new java.util.HashSet[T]())
+      override def isZero: Boolean = _set.isEmpty
+      override def copy(): AccumulatorV2[T, java.util.Set[T]] = {
+        val newAcc = new SetAccumulator[T]()
+        newAcc._set.addAll(_set)
+        newAcc
       }
-
-      def addInPlace(v1: HashSet[String], v2: HashSet[String]): HashSet[String] = {
-        v1 ++= v2
-        v1
+      override def reset(): Unit = _set.clear()
+      override def add(v: T): Unit = _set.add(v)
+      override def merge(other: AccumulatorV2[T, java.util.Set[T]]): Unit = {
+        _set.addAll(other.value)
       }
+      override def value: java.util.Set[T] = _set
     }
 
     /**
      * A collection of metrics for each column of output.
-     *
-     * @param elementTypes the actual runtime types for the output.  Useful when there are bugs
-     *                     causing the wrong data to be projected.
      */
-    case class ColumnMetrics(
-      elementTypes: Accumulator[HashSet[String]] = sparkContext.accumulator(HashSet.empty))
+    case class ColumnMetrics() {
+      val elementTypes = new SetAccumulator[String]
+      sparkContext.register(elementTypes)
+    }
 
-    val tupleCount: Accumulator[Int] = sparkContext.accumulator[Int](0)
+    val tupleCount: LongAccumulator = sparkContext.longAccumulator
 
     val numColumns: Int = child.output.size
     val columnStats: Array[ColumnMetrics] = Array.fill(child.output.size)(new ColumnMetrics())
@@ -137,7 +142,9 @@ package object debug {
       debugPrint(s"== ${child.simpleString} ==")
       debugPrint(s"Tuples output: ${tupleCount.value}")
       child.output.zip(columnStats).foreach { case (attr, metric) =>
-        val actualDataTypes = metric.elementTypes.value.mkString("{", ",", "}")
+        // This is called on driver. All accumulator updates have a fixed value. So it's safe to use
+        // `asScala` which accesses the internal values using `java.util.Iterator`.
+        val actualDataTypes = metric.elementTypes.value.asScala.mkString("{", ",", "}")
         debugPrint(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
       }
     }
@@ -149,12 +156,12 @@ package object debug {
 
           def next(): InternalRow = {
             val currentRow = iter.next()
-            tupleCount += 1
+            tupleCount.add(1)
             var i = 0
             while (i < numColumns) {
               val value = currentRow.get(i, output(i).dataType)
               if (value != null) {
-                columnStats(i).elementTypes += HashSet(value.getClass.getName)
+                columnStats(i).elementTypes.add(value.getClass.getName)
               }
               i += 1
             }
@@ -164,8 +171,8 @@ package object debug {
       }
     }
 
-    override def upstreams(): Seq[RDD[InternalRow]] = {
-      child.asInstanceOf[CodegenSupport].upstreams()
+    override def inputRDDs(): Seq[RDD[InternalRow]] = {
+      child.asInstanceOf[CodegenSupport].inputRDDs()
     }
 
     override def doProduce(ctx: CodegenContext): String = {

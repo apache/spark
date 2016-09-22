@@ -21,7 +21,6 @@ import javax.ws.rs.{DefaultValue, GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.deploy.history.ApplicationHistoryInfo
-import org.apache.spark.deploy.master.{ApplicationInfo => InternalApplicationInfo}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class ApplicationListResource(uiRoot: UIRoot) {
@@ -30,7 +29,8 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
   def appList(
       @QueryParam("status") status: JList[ApplicationStatus],
       @DefaultValue("2010-01-01") @QueryParam("minDate") minDate: SimpleDateParam,
-      @DefaultValue("3000-01-01") @QueryParam("maxDate") maxDate: SimpleDateParam)
+      @DefaultValue("3000-01-01") @QueryParam("maxDate") maxDate: SimpleDateParam,
+      @QueryParam("limit") limit: Integer)
   : Iterator[ApplicationInfo] = {
     val allApps = uiRoot.getApplicationInfoList
     val adjStatus = {
@@ -42,7 +42,7 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
     }
     val includeCompleted = adjStatus.contains(ApplicationStatus.COMPLETED)
     val includeRunning = adjStatus.contains(ApplicationStatus.RUNNING)
-    allApps.filter { app =>
+    val appList = allApps.filter { app =>
       val anyRunning = app.attempts.exists(!_.completed)
       // if any attempt is still running, we consider the app to also still be running
       val statusOk = (!anyRunning && includeCompleted) ||
@@ -53,6 +53,11 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
           attempt.startTime.getTime <= maxDate.timestamp
       }
       statusOk && dateOk
+    }
+    if (limit != null) {
+      appList.take(limit)
+    } else {
+      appList
     }
   }
 }
@@ -84,33 +89,4 @@ private[spark] object ApplicationsListResource {
       }
     )
   }
-
-  def convertApplicationInfo(
-      internal: InternalApplicationInfo,
-      completed: Boolean): ApplicationInfo = {
-    // standalone application info always has just one attempt
-    new ApplicationInfo(
-      id = internal.id,
-      name = internal.desc.name,
-      coresGranted = Some(internal.coresGranted),
-      maxCores = internal.desc.maxCores,
-      coresPerExecutor = internal.desc.coresPerExecutor,
-      memoryPerExecutorMB = Some(internal.desc.memoryPerExecutorMB),
-      attempts = Seq(new ApplicationAttemptInfo(
-        attemptId = None,
-        startTime = new Date(internal.startTime),
-        endTime = new Date(internal.endTime),
-        duration =
-          if (internal.endTime > 0) {
-            internal.endTime - internal.startTime
-          } else {
-            0
-          },
-        lastUpdated = new Date(internal.endTime),
-        sparkUser = internal.desc.user,
-        completed = completed
-      ))
-    )
-  }
-
 }

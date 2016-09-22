@@ -57,7 +57,7 @@ public final class JavaKafkaWordCount {
   private JavaKafkaWordCount() {
   }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     if (args.length < 4) {
       System.err.println("Usage: JavaKafkaWordCount <zkQuorum> <group> <topics> <numThreads>");
       System.exit(1);

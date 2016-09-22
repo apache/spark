@@ -29,6 +29,18 @@ trait CatalystConf {
   def groupByOrdinal: Boolean
 
   def optimizerMaxIterations: Int
+  def optimizerInSetConversionThreshold: Int
+  def maxCaseBranchesForCodegen: Int
+
+  def runSQLonFile: Boolean
+
+  def warehousePath: String
+
+  /** If true, cartesian products between relations will be allowed for all
+   * join types(inner, (left|right|full) outer).
+   * If false, cartesian products will require explicit CROSS JOIN syntax.
+   */
+  def crossJoinEnabled: Boolean
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -45,6 +57,10 @@ case class SimpleCatalystConf(
     caseSensitiveAnalysis: Boolean,
     orderByOrdinal: Boolean = true,
     groupByOrdinal: Boolean = true,
-    optimizerMaxIterations: Int = 100)
-  extends CatalystConf {
-}
+    optimizerMaxIterations: Int = 100,
+    optimizerInSetConversionThreshold: Int = 10,
+    maxCaseBranchesForCodegen: Int = 20,
+    runSQLonFile: Boolean = true,
+    crossJoinEnabled: Boolean = false,
+    warehousePath: String = "/user/hive/warehouse")
+  extends CatalystConf

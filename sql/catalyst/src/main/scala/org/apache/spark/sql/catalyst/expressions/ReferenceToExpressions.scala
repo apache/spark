@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -44,6 +45,7 @@ case class ReferenceToExpressions(result: Expression, children: Seq[Expression])
     var maxOrdinal = -1
     result foreach {
       case b: BoundReference if b.ordinal > maxOrdinal => maxOrdinal = b.ordinal
+      case _ =>
     }
     if (maxOrdinal > children.length) {
       return TypeCheckFailure(s"The result expression need $maxOrdinal input expressions, but " +
@@ -59,19 +61,17 @@ case class ReferenceToExpressions(result: Expression, children: Seq[Expression])
     result.eval(projection(input))
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val childrenGen = children.map(_.gen(ctx))
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childrenGen = children.map(_.genCode(ctx))
     val childrenVars = childrenGen.zip(children).map {
       case (childGen, child) => LambdaVariable(childGen.value, childGen.isNull, child.dataType)
     }
 
     val resultGen = result.transform {
       case b: BoundReference => childrenVars(b.ordinal)
-    }.gen(ctx)
+    }.genCode(ctx)
 
-    ev.value = resultGen.value
-    ev.isNull = resultGen.isNull
-
-    childrenGen.map(_.code).mkString("\n") + "\n" + resultGen.code
+    ExprCode(code = childrenGen.map(_.code).mkString("\n") + "\n" + resultGen.code,
+      isNull = resultGen.isNull, value = resultGen.value)
   }
 }

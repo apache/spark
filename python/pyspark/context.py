@@ -155,10 +155,6 @@ class SparkContext(object):
         self.appName = self._conf.get("spark.app.name")
         self.sparkHome = self._conf.get("spark.home", None)
 
-        # Let YARN know it's a pyspark app, so it distributes needed libraries.
-        if self.master == "yarn-client":
-            self._conf.set("spark.yarn.isPython", "true")
-
         for (k, v) in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
@@ -170,6 +166,8 @@ class SparkContext(object):
 
         # Create the Java SparkContext through Py4J
         self._jsc = jsc or self._initialize_context(self._conf._jconf)
+        # Reset the SparkConf to the one actually used by the SparkContext in JVM.
+        self._conf = SparkConf(_jconf=self._jsc.sc().conf())
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
@@ -333,6 +331,11 @@ class SparkContext(object):
         u'local-...'
         """
         return self._jsc.sc().applicationId()
+
+    @property
+    def uiWebUrl(self):
+        """Return the URL of the SparkUI instance started by this SparkContext"""
+        return self._jsc.sc().uiWebUrl().get()
 
     @property
     def startTime(self):
@@ -764,7 +767,7 @@ class SparkContext(object):
         SparkContext._next_accum_id += 1
         return Accumulator(SparkContext._next_accum_id - 1, value, accum_param)
 
-    def addFile(self, path):
+    def addFile(self, path, recursive=False):
         """
         Add a file to be downloaded with this Spark job on every node.
         The C{path} passed can be either a local file, a file in HDFS
@@ -774,6 +777,9 @@ class SparkContext(object):
         To access the file in Spark jobs, use
         L{SparkFiles.get(fileName)<pyspark.files.SparkFiles.get>} with the
         filename to find its download location.
+
+        A directory can be given if the recursive option is set to True.
+        Currently directories are only supported for Hadoop-supported filesystems.
 
         >>> from pyspark import SparkFiles
         >>> path = os.path.join(tempdir, "test.txt")
@@ -787,15 +793,7 @@ class SparkContext(object):
         >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
         [100, 200, 300, 400]
         """
-        self._jsc.sc().addFile(path)
-
-    def clearFiles(self):
-        """
-        Clear the job's list of files added by L{addFile} or L{addPyFile} so
-        that they do not get downloaded to any new nodes.
-        """
-        # TODO: remove added .py or .zip files from the PYTHONPATH?
-        self._jsc.sc().clearFiles()
+        self._jsc.sc().addFile(path, recursive)
 
     def addPyFile(self, path):
         """
@@ -951,6 +949,11 @@ class SparkContext(object):
         """ Dump the profile stats into directory `path`
         """
         self.profiler_collector.dump_profiles(path)
+
+    def getConf(self):
+        conf = SparkConf()
+        conf.setAll(self._conf.getAll())
+        return conf
 
 
 def _test():

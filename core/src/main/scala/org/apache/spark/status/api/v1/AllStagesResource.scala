@@ -20,10 +20,10 @@ import java.util.{Arrays, Date, List => JList}
 import javax.ws.rs.{GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.executor.{InputMetrics => InternalInputMetrics, OutputMetrics => InternalOutputMetrics, ShuffleReadMetrics => InternalShuffleReadMetrics, ShuffleWriteMetrics => InternalShuffleWriteMetrics, TaskMetrics => InternalTaskMetrics}
 import org.apache.spark.scheduler.{AccumulableInfo => InternalAccumulableInfo, StageInfo}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
+import org.apache.spark.ui.jobs.UIData.{InputMetricsUIData => InternalInputMetrics, OutputMetricsUIData => InternalOutputMetrics, ShuffleReadMetricsUIData => InternalShuffleReadMetrics, ShuffleWriteMetricsUIData => InternalShuffleWriteMetrics, TaskMetricsUIData => InternalTaskMetrics}
 import org.apache.spark.util.Distribution
 
 @Produces(Array(MediaType.APPLICATION_JSON))
@@ -167,47 +167,32 @@ private[v1] object AllStagesResource {
     // to make it a little easier to deal w/ all of the nested options.  Mostly it lets us just
     // implement one "build" method, which just builds the quantiles for each field.
 
-    val inputMetrics: Option[InputMetricDistributions] =
+    val inputMetrics: InputMetricDistributions =
       new MetricHelper[InternalInputMetrics, InputMetricDistributions](rawMetrics, quantiles) {
-        def getSubmetrics(raw: InternalTaskMetrics): Option[InternalInputMetrics] = {
-          if (raw.inputMetrics.isUpdated) {
-            Some(raw.inputMetrics)
-          } else {
-            None
-          }
-        }
+        def getSubmetrics(raw: InternalTaskMetrics): InternalInputMetrics = raw.inputMetrics
 
         def build: InputMetricDistributions = new InputMetricDistributions(
           bytesRead = submetricQuantiles(_.bytesRead),
           recordsRead = submetricQuantiles(_.recordsRead)
         )
-      }.metricOption
+      }.build
 
-    val outputMetrics: Option[OutputMetricDistributions] =
+    val outputMetrics: OutputMetricDistributions =
       new MetricHelper[InternalOutputMetrics, OutputMetricDistributions](rawMetrics, quantiles) {
-        def getSubmetrics(raw: InternalTaskMetrics): Option[InternalOutputMetrics] = {
-          if (raw.outputMetrics.isUpdated) {
-            Some(raw.outputMetrics)
-          } else {
-            None
-          }
-        }
+        def getSubmetrics(raw: InternalTaskMetrics): InternalOutputMetrics = raw.outputMetrics
+
         def build: OutputMetricDistributions = new OutputMetricDistributions(
           bytesWritten = submetricQuantiles(_.bytesWritten),
           recordsWritten = submetricQuantiles(_.recordsWritten)
         )
-      }.metricOption
+      }.build
 
-    val shuffleReadMetrics: Option[ShuffleReadMetricDistributions] =
+    val shuffleReadMetrics: ShuffleReadMetricDistributions =
       new MetricHelper[InternalShuffleReadMetrics, ShuffleReadMetricDistributions](rawMetrics,
         quantiles) {
-        def getSubmetrics(raw: InternalTaskMetrics): Option[InternalShuffleReadMetrics] = {
-          if (raw.shuffleReadMetrics.isUpdated) {
-            Some(raw.shuffleReadMetrics)
-          } else {
-            None
-          }
-        }
+        def getSubmetrics(raw: InternalTaskMetrics): InternalShuffleReadMetrics =
+          raw.shuffleReadMetrics
+
         def build: ShuffleReadMetricDistributions = new ShuffleReadMetricDistributions(
           readBytes = submetricQuantiles(_.totalBytesRead),
           readRecords = submetricQuantiles(_.recordsRead),
@@ -217,24 +202,20 @@ private[v1] object AllStagesResource {
           totalBlocksFetched = submetricQuantiles(_.totalBlocksFetched),
           fetchWaitTime = submetricQuantiles(_.fetchWaitTime)
         )
-      }.metricOption
+      }.build
 
-    val shuffleWriteMetrics: Option[ShuffleWriteMetricDistributions] =
+    val shuffleWriteMetrics: ShuffleWriteMetricDistributions =
       new MetricHelper[InternalShuffleWriteMetrics, ShuffleWriteMetricDistributions](rawMetrics,
         quantiles) {
-        def getSubmetrics(raw: InternalTaskMetrics): Option[InternalShuffleWriteMetrics] = {
-          if (raw.shuffleWriteMetrics.isUpdated) {
-            Some(raw.shuffleWriteMetrics)
-          } else {
-            None
-          }
-        }
+        def getSubmetrics(raw: InternalTaskMetrics): InternalShuffleWriteMetrics =
+          raw.shuffleWriteMetrics
+
         def build: ShuffleWriteMetricDistributions = new ShuffleWriteMetricDistributions(
           writeBytes = submetricQuantiles(_.bytesWritten),
           writeRecords = submetricQuantiles(_.recordsWritten),
           writeTime = submetricQuantiles(_.writeTime)
         )
-      }.metricOption
+      }.build
 
     new TaskMetricDistributions(
       quantiles = quantiles,
@@ -273,84 +254,55 @@ private[v1] object AllStagesResource {
     )
   }
 
-  def convertInputMetrics(internal: InternalInputMetrics): Option[InputMetrics] = {
-    if (internal.isUpdated) {
-      Some(new InputMetrics(
-        bytesRead = internal.bytesRead,
-        recordsRead = internal.recordsRead
-      ))
-    } else {
-      None
-    }
+  def convertInputMetrics(internal: InternalInputMetrics): InputMetrics = {
+    new InputMetrics(
+      bytesRead = internal.bytesRead,
+      recordsRead = internal.recordsRead
+    )
   }
 
-  def convertOutputMetrics(internal: InternalOutputMetrics): Option[OutputMetrics] = {
-    if (internal.isUpdated) {
-      Some(new OutputMetrics(
-        bytesWritten = internal.bytesWritten,
-        recordsWritten = internal.recordsWritten
-      ))
-    } else {
-      None
-    }
+  def convertOutputMetrics(internal: InternalOutputMetrics): OutputMetrics = {
+    new OutputMetrics(
+      bytesWritten = internal.bytesWritten,
+      recordsWritten = internal.recordsWritten
+    )
   }
 
-  def convertShuffleReadMetrics(
-      internal: InternalShuffleReadMetrics): Option[ShuffleReadMetrics] = {
-    if (internal.isUpdated) {
-      Some(new ShuffleReadMetrics(
-        remoteBlocksFetched = internal.remoteBlocksFetched,
-        localBlocksFetched = internal.localBlocksFetched,
-        fetchWaitTime = internal.fetchWaitTime,
-        remoteBytesRead = internal.remoteBytesRead,
-        totalBlocksFetched = internal.totalBlocksFetched,
-        recordsRead = internal.recordsRead
-      ))
-    } else {
-      None
-    }
+  def convertShuffleReadMetrics(internal: InternalShuffleReadMetrics): ShuffleReadMetrics = {
+    new ShuffleReadMetrics(
+      remoteBlocksFetched = internal.remoteBlocksFetched,
+      localBlocksFetched = internal.localBlocksFetched,
+      fetchWaitTime = internal.fetchWaitTime,
+      remoteBytesRead = internal.remoteBytesRead,
+      localBytesRead = internal.localBytesRead,
+      recordsRead = internal.recordsRead
+    )
   }
 
-  def convertShuffleWriteMetrics(
-      internal: InternalShuffleWriteMetrics): Option[ShuffleWriteMetrics] = {
-    if ((internal.bytesWritten | internal.writeTime | internal.recordsWritten) == 0) {
-      None
-    } else {
-      Some(new ShuffleWriteMetrics(
-        bytesWritten = internal.bytesWritten,
-        writeTime = internal.writeTime,
-        recordsWritten = internal.recordsWritten
-      ))
-    }
+  def convertShuffleWriteMetrics(internal: InternalShuffleWriteMetrics): ShuffleWriteMetrics = {
+    new ShuffleWriteMetrics(
+      bytesWritten = internal.bytesWritten,
+      writeTime = internal.writeTime,
+      recordsWritten = internal.recordsWritten
+    )
   }
 }
 
 /**
- * Helper for getting distributions from nested metric types.  Many of the metrics we want are
- * contained in options inside TaskMetrics (eg., ShuffleWriteMetrics). This makes it easy to handle
- * the options (returning None if the metrics are all empty), and extract the quantiles for each
- * metric.  After creating an instance, call metricOption to get the result type.
+ * Helper for getting distributions from nested metric types.
  */
 private[v1] abstract class MetricHelper[I, O](
     rawMetrics: Seq[InternalTaskMetrics],
     quantiles: Array[Double]) {
 
-  def getSubmetrics(raw: InternalTaskMetrics): Option[I]
+  def getSubmetrics(raw: InternalTaskMetrics): I
 
   def build: O
 
-  val data: Seq[I] = rawMetrics.flatMap(getSubmetrics)
+  val data: Seq[I] = rawMetrics.map(getSubmetrics)
 
   /** applies the given function to all input metrics, and returns the quantiles */
   def submetricQuantiles(f: I => Double): IndexedSeq[Double] = {
     Distribution(data.map { d => f(d) }).get.getQuantiles(quantiles)
-  }
-
-  def metricOption: Option[O] = {
-    if (data.isEmpty) {
-      None
-    } else {
-      Some(build)
-    }
   }
 }

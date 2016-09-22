@@ -110,8 +110,8 @@ def determine_modules_to_test(changed_modules):
     ['graphx', 'examples']
     >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
     >>> x # doctest: +NORMALIZE_WHITESPACE
-    ['sql', 'hive', 'mllib', 'examples', 'hive-thriftserver', 'pyspark-sql', 'sparkr',
-     'pyspark-mllib', 'pyspark-ml']
+    ['sql', 'hive', 'mllib', 'examples', 'hive-thriftserver',
+     'pyspark-sql', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
     """
     modules_to_test = set()
     for module in changed_modules:
@@ -294,7 +294,7 @@ def exec_sbt(sbt_args=()):
             print(line, end='')
     retcode = sbt_proc.wait()
 
-    if retcode > 0:
+    if retcode != 0:
         exit_from_command_with_retcode(sbt_cmd, retcode)
 
 
@@ -305,11 +305,11 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
-        "hadoop2.3": ["-Pyarn", "-Phadoop-2.3"],
-        "hadoop2.4": ["-Pyarn", "-Phadoop-2.4"],
-        "hadoop2.6": ["-Pyarn", "-Phadoop-2.6"],
-        "hadoop2.7": ["-Pyarn", "-Phadoop-2.7"],
+        "hadoop2.2": ["-Phadoop-2.2"],
+        "hadoop2.3": ["-Phadoop-2.3"],
+        "hadoop2.4": ["-Phadoop-2.4"],
+        "hadoop2.6": ["-Phadoop-2.6"],
+        "hadoop2.7": ["-Phadoop-2.7"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
@@ -335,8 +335,8 @@ def build_spark_maven(hadoop_version):
 def build_spark_sbt(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
-    sbt_goals = ["package",
-                 "streaming-kafka-assembly/assembly",
+    sbt_goals = ["test:package",  # Build test jars as some tests depend on them
+                 "streaming-kafka-0-8-assembly/assembly",
                  "streaming-flume-assembly/assembly",
                  "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals

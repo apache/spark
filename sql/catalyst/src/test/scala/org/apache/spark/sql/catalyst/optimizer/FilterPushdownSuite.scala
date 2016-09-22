@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{LeftOuter, LeftSemi, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.IntegerType
@@ -34,7 +34,6 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
-        SamplePushDown,
         CombineFilters,
         PushDownPredicate,
         BooleanSimplification,
@@ -92,6 +91,30 @@ class FilterPushdownSuite extends PlanTest {
         .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {
+    val originalQuery =
+      testRelation
+        .where('a === 1)
+        .select('a, 'b)
+        .where('b === 1)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where('a === 1 && 'b === 1)
+        .select('a, 'b)
+        .analyze
+
+    // We can not use comparePlans here because it normalized the plan.
+    assert(optimized == correctAnswer)
+  }
+
+  test("SPARK-16994: filter should not be pushed through limit") {
+    val originalQuery = testRelation.limit(10).where('a === 1).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, originalQuery)
   }
 
   test("can't push without rewrite") {
@@ -513,14 +536,14 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = {
       testRelationWithArrayType
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6))
+        .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6) && ('c > 6))
     }
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = {
       testRelationWithArrayType
         .where('b >= 5)
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where('a + Rand(10).as("rnd") > 6)
+        .where('a + Rand(10).as("rnd") > 6 && 'c > 6)
         .analyze
     }
 
@@ -565,22 +588,6 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
 
     comparePlans(optimized, originalQuery)
-  }
-
-  test("push project and filter down into sample") {
-    val x = testRelation.subquery('x)
-    val originalQuery =
-      Sample(0.0, 0.6, false, 11L, x)().select('a)
-
-    val originalQueryAnalyzed =
-      EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(originalQuery))
-
-    val optimized = Optimize.execute(originalQueryAnalyzed)
-
-    val correctAnswer =
-      Sample(0.0, 0.6, false, 11L, x.select('a))()
-
-    comparePlans(optimized, correctAnswer.analyze)
   }
 
   test("aggregate: push down filter when filter on group by expression") {
@@ -697,50 +704,301 @@ class FilterPushdownSuite extends PlanTest {
     val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
 
     val originalQuery = Union(Seq(testRelation, testRelation2))
-      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
+      .where('a === 2L && 'b + Rand(10).as("rnd") === 3 && 'c > 5L)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = Union(Seq(
       testRelation.where('a === 2L),
       testRelation2.where('d === 2L)))
-      .where('b + Rand(10).as("rnd") === 3)
+      .where('b + Rand(10).as("rnd") === 3 && 'c > 5L)
       .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
-  test("intersect") {
-    val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
-
-    val originalQuery = Intersect(testRelation, testRelation2)
-      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-
-    val correctAnswer = Intersect(
-      testRelation.where('a === 2L),
-      testRelation2.where('d === 2L))
-      .where('b + Rand(10).as("rnd") === 3)
+  test("expand") {
+    val agg = testRelation
+      .groupBy(Cube(Seq('a, 'b)))('a, 'b, sum('c))
       .analyze
+      .asInstanceOf[Aggregate]
 
-    comparePlans(optimized, correctAnswer)
+    val a = agg.output(0)
+    val b = agg.output(1)
+
+    val query = agg.where(a > 1 && b > 2)
+    val optimized = Optimize.execute(query)
+    val correctedAnswer = agg.copy(child = agg.child.where(a > 1 && b > 2)).analyze
+    comparePlans(optimized, correctedAnswer)
   }
 
-  test("except") {
-    val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
+  test("predicate subquery: push down simple") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val z = LocalRelation('a.int, 'b.int, 'c.int).subquery('z)
 
-    val originalQuery = Except(testRelation, testRelation2)
-      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-
-    val correctAnswer = Except(
-      testRelation.where('a === 2L),
-      testRelation2)
-      .where('b + Rand(10).as("rnd") === 3)
+    val query = x
+      .join(y, Inner, Option("x.a".attr === "y.a".attr))
+      .where(Exists(z.where("x.a".attr === "z.a".attr)))
       .analyze
+    val answer = x
+      .where(Exists(z.where("x.a".attr === "z.a".attr)))
+      .join(y, Inner, Option("x.a".attr === "y.a".attr))
+      .analyze
+    val optimized = Optimize.execute(Optimize.execute(query))
+    comparePlans(optimized, answer)
+  }
 
-    comparePlans(optimized, correctAnswer)
+  test("predicate subquery: push down complex") {
+    val w = testRelation.subquery('w)
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val z = LocalRelation('a.int, 'b.int, 'c.int).subquery('z)
+
+    val query = w
+      .join(x, Inner, Option("w.a".attr === "x.a".attr))
+      .join(y, LeftOuter, Option("x.a".attr === "y.a".attr))
+      .where(Exists(z.where("w.a".attr === "z.a".attr)))
+      .analyze
+    val answer = w
+      .where(Exists(z.where("w.a".attr === "z.a".attr)))
+      .join(x, Inner, Option("w.a".attr === "x.a".attr))
+      .join(y, LeftOuter, Option("x.a".attr === "y.a".attr))
+      .analyze
+    val optimized = Optimize.execute(Optimize.execute(query))
+    comparePlans(optimized, answer)
+  }
+
+  test("Window: predicate push down -- basic") {
+    val winExpr = windowExpr(count('b), windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a > 1)
+    val correctAnswer = testRelation
+      .where('a > 1).select('a, 'b, 'c)
+      .window(winExpr.as('window) :: Nil, 'a :: Nil, 'b.asc :: Nil)
+      .select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("Window: predicate push down -- predicates with compound predicate using only one column") {
+    val winExpr =
+      windowExpr(count('b), windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a * 3 > 15)
+    val correctAnswer = testRelation
+      .where('a * 3 > 15).select('a, 'b, 'c)
+      .window(winExpr.as('window) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("Window: predicate push down -- multi window expressions with the same window spec") {
+    val winSpec = windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr1 = windowExpr(count('b), winSpec)
+    val winExpr2 = windowExpr(sum('b), winSpec)
+    val originalQuery = testRelation
+      .select('a, 'b, 'c, winExpr1.as('window1), winExpr2.as('window2)).where('a > 1)
+
+    val correctAnswer = testRelation
+      .where('a > 1).select('a, 'b, 'c)
+      .window(winExpr1.as('window1) :: winExpr2.as('window2) :: Nil,
+        'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .select('a, 'b, 'c, 'window1, 'window2).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("Window: predicate push down -- multi window specification - 1") {
+    // order by clauses are different between winSpec1 and winSpec2
+    val winSpec1 = windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr1 = windowExpr(count('b), winSpec1)
+    val winSpec2 = windowSpec('a.attr :: 'b.attr :: Nil, 'a.asc :: Nil, UnspecifiedFrame)
+    val winExpr2 = windowExpr(count('b), winSpec2)
+    val originalQuery = testRelation
+      .select('a, 'b, 'c, winExpr1.as('window1), winExpr2.as('window2)).where('a > 1)
+
+    val correctAnswer1 = testRelation
+      .where('a > 1).select('a, 'b, 'c)
+      .window(winExpr1.as('window1) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .window(winExpr2.as('window2) :: Nil, 'a.attr :: 'b.attr :: Nil, 'a.asc :: Nil)
+      .select('a, 'b, 'c, 'window1, 'window2).analyze
+
+    val correctAnswer2 = testRelation
+      .where('a > 1).select('a, 'b, 'c)
+      .window(winExpr2.as('window2) :: Nil, 'a.attr :: 'b.attr :: Nil, 'a.asc :: Nil)
+      .window(winExpr1.as('window1) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .select('a, 'b, 'c, 'window1, 'window2).analyze
+
+    // When Analyzer adding Window operators after grouping the extracted Window Expressions
+    // based on their Partition and Order Specs, the order of Window operators is
+    // non-deterministic. Thus, we have two correct plans
+    val optimizedQuery = Optimize.execute(originalQuery.analyze)
+    try {
+      comparePlans(optimizedQuery, correctAnswer1)
+    } catch {
+      case ae: Throwable => comparePlans(optimizedQuery, correctAnswer2)
+    }
+  }
+
+  test("Window: predicate push down -- multi window specification - 2") {
+    // partitioning clauses are different between winSpec1 and winSpec2
+    val winSpec1 = windowSpec('a.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr1 = windowExpr(count('b), winSpec1)
+    val winSpec2 = windowSpec('b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr2 = windowExpr(count('a), winSpec2)
+    val originalQuery = testRelation
+      .select('a, winExpr1.as('window1), 'b, 'c, winExpr2.as('window2)).where('b > 1)
+
+    val correctAnswer1 = testRelation.select('a, 'b, 'c)
+      .window(winExpr1.as('window1) :: Nil, 'a.attr :: Nil, 'b.asc :: Nil)
+      .where('b > 1)
+      .window(winExpr2.as('window2) :: Nil, 'b.attr :: Nil, 'b.asc :: Nil)
+      .select('a, 'window1, 'b, 'c, 'window2).analyze
+
+    val correctAnswer2 = testRelation.select('a, 'b, 'c)
+      .window(winExpr2.as('window2) :: Nil, 'b.attr :: Nil, 'b.asc :: Nil)
+      .window(winExpr1.as('window1) :: Nil, 'a.attr :: Nil, 'b.asc :: Nil)
+      .where('b > 1)
+      .select('a, 'window1, 'b, 'c, 'window2).analyze
+
+    val optimizedQuery = Optimize.execute(originalQuery.analyze)
+    // When Analyzer adding Window operators after grouping the extracted Window Expressions
+    // based on their Partition and Order Specs, the order of Window operators is
+    // non-deterministic. Thus, we have two correct plans
+    try {
+      comparePlans(optimizedQuery, correctAnswer1)
+    } catch {
+      case ae: Throwable => comparePlans(optimizedQuery, correctAnswer2)
+    }
+  }
+
+  test("Window: predicate push down -- predicates with multiple partitioning columns") {
+    val winExpr =
+      windowExpr(count('b), windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a + 'b > 1)
+    val correctAnswer = testRelation
+      .where('a + 'b > 1).select('a, 'b, 'c)
+      .window(winExpr.as('window) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  // complex predicates with the same references but the same expressions
+  // Todo: in Analyzer, to enable it, we need to convert the expression in conditions
+  // to the alias that is defined as the same expression
+  ignore("Window: predicate push down -- complex predicate with the same expressions") {
+    val winSpec = windowSpec(
+      partitionSpec = 'a.attr + 'b.attr :: Nil,
+      orderSpec = 'b.asc :: Nil,
+      UnspecifiedFrame)
+    val winExpr = windowExpr(count('b), winSpec)
+
+    val winSpecAnalyzed = windowSpec(
+      partitionSpec = '_w0.attr :: Nil,
+      orderSpec = 'b.asc :: Nil,
+      UnspecifiedFrame)
+    val winExprAnalyzed = windowExpr(count('b), winSpecAnalyzed)
+
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a + 'b > 1)
+    val correctAnswer = testRelation
+      .where('a + 'b > 1).select('a, 'b, 'c, ('a + 'b).as("_w0"))
+      .window(winExprAnalyzed.as('window) :: Nil, '_w0 :: Nil, 'b.asc :: Nil)
+      .select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("Window: no predicate push down -- predicates are not from partitioning keys") {
+    val winSpec = windowSpec(
+      partitionSpec = 'a.attr :: 'b.attr :: Nil,
+      orderSpec = 'b.asc :: Nil,
+      UnspecifiedFrame)
+    val winExpr = windowExpr(count('b), winSpec)
+
+    // No push down: the predicate is c > 1, but the partitioning key is (a, b).
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('c > 1)
+    val correctAnswer = testRelation.select('a, 'b, 'c)
+      .window(winExpr.as('window) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .where('c > 1).select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("Window: no predicate push down -- partial compound partition key") {
+    val winSpec = windowSpec(
+      partitionSpec = 'a.attr + 'b.attr :: 'b.attr :: Nil,
+      orderSpec = 'b.asc :: Nil,
+      UnspecifiedFrame)
+    val winExpr = windowExpr(count('b), winSpec)
+
+    // No push down: the predicate is a > 1, but the partitioning key is (a + b, b)
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a > 1)
+
+    val winSpecAnalyzed = windowSpec(
+      partitionSpec = '_w0.attr :: 'b.attr :: Nil,
+      orderSpec = 'b.asc :: Nil,
+      UnspecifiedFrame)
+    val winExprAnalyzed = windowExpr(count('b), winSpecAnalyzed)
+    val correctAnswer = testRelation.select('a, 'b, 'c, ('a + 'b).as("_w0"))
+      .window(winExprAnalyzed.as('window) :: Nil, '_w0 :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .where('a > 1).select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("Window: no predicate push down -- complex predicates containing non partitioning columns") {
+    val winSpec =
+      windowSpec(partitionSpec = 'b.attr :: Nil, orderSpec = 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count('b), winSpec)
+
+    // No push down: the predicate is a + b > 1, but the partitioning key is b.
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a + 'b > 1)
+    val correctAnswer = testRelation
+      .select('a, 'b, 'c)
+      .window(winExpr.as('window) :: Nil, 'b.attr :: Nil, 'b.asc :: Nil)
+      .where('a + 'b > 1).select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  // complex predicates with the same references but different expressions
+  test("Window: no predicate push down -- complex predicate with different expressions") {
+    val winSpec = windowSpec(
+      partitionSpec = 'a.attr + 'b.attr :: Nil,
+      orderSpec = 'b.asc :: Nil,
+      UnspecifiedFrame)
+    val winExpr = windowExpr(count('b), winSpec)
+
+    val winSpecAnalyzed = windowSpec(
+      partitionSpec = '_w0.attr :: Nil,
+      orderSpec = 'b.asc :: Nil,
+      UnspecifiedFrame)
+    val winExprAnalyzed = windowExpr(count('b), winSpecAnalyzed)
+
+    // No push down: the predicate is a + b > 1, but the partitioning key is a + b.
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a - 'b > 1)
+    val correctAnswer = testRelation.select('a, 'b, 'c, ('a + 'b).as("_w0"))
+      .window(winExprAnalyzed.as('window) :: Nil, '_w0 :: Nil, 'b.asc :: Nil)
+      .where('a - 'b > 1).select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("join condition pushdown: deterministic and non-deterministic") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    // Verify that all conditions preceding the first non-deterministic condition are pushed down
+    // by the optimizer and others are not.
+    val originalQuery = x.join(y, condition = Some("x.a".attr === 5 && "y.a".attr === 5 &&
+      "x.a".attr === Rand(10) && "y.b".attr === 5))
+    val correctAnswer = x.where("x.a".attr === 5).join(y.where("y.a".attr === 5),
+        condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 }

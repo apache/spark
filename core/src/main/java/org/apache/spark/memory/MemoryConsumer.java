@@ -23,7 +23,7 @@ import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
- * An memory consumer of TaskMemoryManager, which support spilling.
+ * A memory consumer of {@link TaskMemoryManager} that supports spilling.
  *
  * Note: this only supports allocation / spilling of Tungsten memory.
  */
@@ -31,21 +31,30 @@ public abstract class MemoryConsumer {
 
   protected final TaskMemoryManager taskMemoryManager;
   private final long pageSize;
+  private final MemoryMode mode;
   protected long used;
 
-  protected MemoryConsumer(TaskMemoryManager taskMemoryManager, long pageSize) {
+  protected MemoryConsumer(TaskMemoryManager taskMemoryManager, long pageSize, MemoryMode mode) {
     this.taskMemoryManager = taskMemoryManager;
     this.pageSize = pageSize;
+    this.mode = mode;
   }
 
   protected MemoryConsumer(TaskMemoryManager taskMemoryManager) {
-    this(taskMemoryManager, taskMemoryManager.pageSizeBytes());
+    this(taskMemoryManager, taskMemoryManager.pageSizeBytes(), MemoryMode.ON_HEAP);
+  }
+
+  /**
+   * Returns the memory mode, {@link MemoryMode#ON_HEAP} or {@link MemoryMode#OFF_HEAP}.
+   */
+  public MemoryMode getMode() {
+    return mode;
   }
 
   /**
    * Returns the size of used memory in bytes.
    */
-  long getUsed() {
+  protected long getUsed() {
     return used;
   }
 
@@ -129,5 +138,22 @@ public abstract class MemoryConsumer {
   protected void freePage(MemoryBlock page) {
     used -= page.size();
     taskMemoryManager.freePage(page, this);
+  }
+
+  /**
+   * Allocates memory of `size`.
+   */
+  public long acquireMemory(long size) {
+    long granted = taskMemoryManager.acquireExecutionMemory(size, this);
+    used += granted;
+    return granted;
+  }
+
+  /**
+   * Release N bytes of memory.
+   */
+  public void freeMemory(long size) {
+    taskMemoryManager.releaseExecutionMemory(size, this);
+    used -= size;
   }
 }

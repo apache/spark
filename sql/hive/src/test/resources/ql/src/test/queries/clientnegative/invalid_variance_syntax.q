@@ -1,1 +1,0 @@
-SELECT variance(*) FROM src;

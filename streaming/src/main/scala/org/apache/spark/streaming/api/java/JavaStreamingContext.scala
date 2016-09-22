@@ -349,7 +349,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   }
 
   /**
-   * Create an input stream from an queue of RDDs. In each batch,
+   * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
    * NOTE:
@@ -369,7 +369,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   }
 
   /**
-   * Create an input stream from an queue of RDDs. In each batch,
+   * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
    * NOTE:
@@ -393,7 +393,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   }
 
   /**
-   * Create an input stream from an queue of RDDs. In each batch,
+   * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
    * NOTE:
@@ -558,6 +558,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
    */
+  @throws[InterruptedException]
   def awaitTermination(): Unit = {
     ssc.awaitTermination()
   }
@@ -570,6 +571,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @return `true` if it's stopped; or throw the reported error during the execution; or `false`
    *         if the waiting time elapsed before returning from the method.
    */
+  @throws[InterruptedException]
   def awaitTerminationOrTimeout(timeout: Long): Boolean = {
     ssc.awaitTerminationOrTimeout(timeout)
   }

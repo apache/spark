@@ -33,7 +33,10 @@ private final class ShuffledRowRDDPartition(
     val startPreShufflePartitionIndex: Int,
     val endPreShufflePartitionIndex: Int) extends Partition {
   override val index: Int = postShufflePartitionIndex
+
   override def hashCode(): Int = postShufflePartitionIndex
+
+  override def equals(other: Any): Boolean = super.equals(other)
 }
 
 /**
@@ -92,7 +95,7 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
  * interfaces / internals.
  *
  * This RDD takes a [[ShuffleDependency]] (`dependency`),
- * and a optional array of partition start indices as input arguments
+ * and an optional array of partition start indices as input arguments
  * (`specifiedPartitionStartIndices`).
  *
  * The `dependency` has the parent RDD of this RDD, which represents the dataset before shuffle

@@ -14,29 +14,42 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
 
+import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.tree.TerminalNode
+
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
-import org.apache.spark.sql.execution.command.{DescribeCommand => _, _}
-import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
+import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.{CreateTable, CreateTempViewUsing, _}
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Concrete parser for Spark SQL statements.
  */
-object SparkSqlParser extends AbstractSqlParser{
-  val astBuilder = new SparkSqlAstBuilder
+class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser {
+  val astBuilder = new SparkSqlAstBuilder(conf)
+
+  private val substitutor = new VariableSubstitution(conf)
+
+  protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
+    super.parse(substitutor.substitute(command))(toResult)
+  }
 }
 
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class SparkSqlAstBuilder extends AstBuilder {
+class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
   /**
@@ -58,6 +71,35 @@ class SparkSqlAstBuilder extends AstBuilder {
       SetCommand(Some(raw.trim -> None))
     } else {
       SetCommand(None)
+    }
+  }
+
+  /**
+   * Create a [[ResetCommand]] logical plan.
+   * Example SQL :
+   * {{{
+   *   RESET;
+   * }}}
+   */
+  override def visitResetConfiguration(
+      ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
+    ResetCommand
+  }
+
+  /**
+   * Create an [[AnalyzeTableCommand]] command. This currently only implements the NOSCAN
+   * option (other options are passed on to Hive) e.g.:
+   * {{{
+   *   ANALYZE TABLE table COMPUTE STATISTICS NOSCAN;
+   * }}}
+   */
+  override def visitAnalyze(ctx: AnalyzeContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.partitionSpec == null &&
+      ctx.identifier != null &&
+      ctx.identifier.getText.toLowerCase == "noscan") {
+      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString)
+    } else {
+      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString, noscan = false)
     }
   }
 
@@ -109,6 +151,54 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * A command for users to list the column names for a table.
+   * This function creates a [[ShowColumnsCommand]] logical plan.
+   *
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW COLUMNS (FROM | IN) table_identifier [(FROM | IN) database];
+   * }}}
+   */
+  override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
+    val table = visitTableIdentifier(ctx.tableIdentifier)
+
+    val lookupTable = Option(ctx.db) match {
+      case None => table
+      case Some(db) if table.database.exists(_ != db) =>
+        operationNotAllowed(
+          s"SHOW COLUMNS with conflicting databases: '$db' != '${table.database.get}'",
+          ctx)
+      case Some(db) => TableIdentifier(table.identifier, Some(db.getText))
+    }
+    ShowColumnsCommand(lookupTable)
+  }
+
+  /**
+   * A command for users to list the partition names of a table. If partition spec is specified,
+   * partitions that match the spec are returned. Otherwise an empty result set is returned.
+   *
+   * This function creates a [[ShowPartitionsCommand]] logical plan
+   *
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW PARTITIONS table_identifier [partition_spec];
+   * }}}
+   */
+  override def visitShowPartitions(ctx: ShowPartitionsContext): LogicalPlan = withOrigin(ctx) {
+    val table = visitTableIdentifier(ctx.tableIdentifier)
+    val partitionKeys = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
+    ShowPartitionsCommand(table, partitionKeys)
+  }
+
+  /**
+   * Creates a [[ShowCreateTableCommand]]
+   */
+  override def visitShowCreateTable(ctx: ShowCreateTableContext): LogicalPlan = withOrigin(ctx) {
+    val table = visitTableIdentifier(ctx.tableIdentifier())
+    ShowCreateTableCommand(table)
+  }
+
+  /**
    * Create a [[RefreshTable]] logical plan.
    */
   override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
@@ -116,18 +206,32 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[RefreshTable]] logical plan.
+   */
+  override def visitRefreshResource(ctx: RefreshResourceContext): LogicalPlan = withOrigin(ctx) {
+    val resourcePath = remainder(ctx.REFRESH.getSymbol).trim
+    RefreshResource(resourcePath)
+  }
+
+  /**
    * Create a [[CacheTableCommand]] logical plan.
    */
   override def visitCacheTable(ctx: CacheTableContext): LogicalPlan = withOrigin(ctx) {
     val query = Option(ctx.query).map(plan)
-    CacheTableCommand(ctx.identifier.getText, query, ctx.LAZY != null)
+    val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
+    if (query.isDefined && tableIdent.database.isDefined) {
+      val database = tableIdent.database.get
+      throw new ParseException(s"It is not allowed to add database prefix `$database` to " +
+        s"the table name in CACHE TABLE AS SELECT", ctx)
+    }
+    CacheTableCommand(tableIdent, query, ctx.LAZY != null)
   }
 
   /**
    * Create an [[UncacheTableCommand]] logical plan.
    */
   override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
-    UncacheTableCommand(ctx.identifier.getText)
+    UncacheTableCommand(visitTableIdentifier(ctx.tableIdentifier))
   }
 
   /**
@@ -139,18 +243,22 @@ class SparkSqlAstBuilder extends AstBuilder {
 
   /**
    * Create an [[ExplainCommand]] logical plan.
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   EXPLAIN (EXTENDED | CODEGEN) SELECT * FROM ...
+   * }}}
    */
   override def visitExplain(ctx: ExplainContext): LogicalPlan = withOrigin(ctx) {
-    val options = ctx.explainOption.asScala
-    if (options.exists(_.FORMATTED != null)) {
-      logWarning("Unsupported operation: EXPLAIN FORMATTED option")
+    if (ctx.FORMATTED != null) {
+      operationNotAllowed("EXPLAIN FORMATTED", ctx)
+    }
+    if (ctx.LOGICAL != null) {
+      operationNotAllowed("EXPLAIN LOGICAL", ctx)
     }
 
-    // Create the explain comment.
     val statement = plan(ctx.statement)
     if (isExplainableStatement(statement)) {
-      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
-        codegen = options.exists(_.CODEGEN != null))
+      ExplainCommand(statement, extended = ctx.EXTENDED != null, codegen = ctx.CODEGEN != null)
     } else {
       ExplainCommand(OneRowRelation)
     }
@@ -160,22 +268,23 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Determine if a plan should be explained at all.
    */
   protected def isExplainableStatement(plan: LogicalPlan): Boolean = plan match {
-    case _: datasources.DescribeCommand => false
+    case _: DescribeTableCommand => false
     case _ => true
   }
 
   /**
-   * Create a [[DescribeCommand]] logical plan.
+   * Create a [[DescribeTableCommand]] logical plan.
    */
   override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
-    // FORMATTED and columns are not supported. Return null and let the parser decide what to do
-    // with this (create an exception or pass it on to a different system).
-    if (ctx.describeColName != null || ctx.FORMATTED != null || ctx.partitionSpec != null) {
+    // Describe partition and column are not supported yet. Return null and let the parser decide
+    // what to do with this (create an exception or pass it on to a different system).
+    if (ctx.describeColName != null || ctx.partitionSpec != null) {
       null
     } else {
-      datasources.DescribeCommand(
+      DescribeTableCommand(
         visitTableIdentifier(ctx.tableIdentifier),
-        ctx.EXTENDED != null)
+        ctx.EXTENDED != null,
+        ctx.FORMATTED != null)
     }
   }
 
@@ -191,54 +300,177 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx: CreateTableHeaderContext): TableHeader = withOrigin(ctx) {
     val temporary = ctx.TEMPORARY != null
     val ifNotExists = ctx.EXISTS != null
-    assert(!temporary || !ifNotExists,
-      "a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause.",
-      ctx)
+    if (temporary && ifNotExists) {
+      operationNotAllowed("CREATE TEMPORARY TABLE ... IF NOT EXISTS", ctx)
+    }
     (visitTableIdentifier(ctx.tableIdentifier), temporary, ifNotExists, ctx.EXTERNAL != null)
   }
 
   /**
-   * Create a [[CreateTableUsing]] or a [[CreateTableUsingAsSelect]] logical plan.
-   *
-   * TODO add bucketing and partitioning.
+   * Create a [[CreateTable]] logical plan.
    */
   override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
     if (external) {
-      throw new ParseException("Unsupported operation: EXTERNAL option", ctx)
+      operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
     }
-    val options = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
+    val options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
+    if (provider.toLowerCase == "hive") {
+      throw new AnalysisException("Cannot create hive serde table with CREATE TABLE USING")
+    }
+    val schema = Option(ctx.colTypeList()).map(createStructType)
+    val partitionColumnNames =
+      Option(ctx.partitionColumnNames)
+        .map(visitIdentifierList(_).toArray)
+        .getOrElse(Array.empty[String])
+    val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
+
+    // TODO: this may be wrong for non file-based data source like JDBC, which should be external
+    // even there is no `path` in options. We should consider allow the EXTERNAL keyword.
+    val tableType = if (new CaseInsensitiveMap(options).contains("path")) {
+      CatalogTableType.EXTERNAL
+    } else {
+      CatalogTableType.MANAGED
+    }
+
+    val tableDesc = CatalogTable(
+      identifier = table,
+      tableType = tableType,
+      storage = CatalogStorageFormat.empty.copy(properties = options),
+      schema = schema.getOrElse(new StructType),
+      provider = Some(provider),
+      partitionColumnNames = partitionColumnNames,
+      bucketSpec = bucketSpec
+    )
+
+    // Determine the storage mode.
+    val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
 
     if (ctx.query != null) {
       // Get the backing query.
       val query = plan(ctx.query)
 
-      // Determine the storage mode.
-      val mode = if (ifNotExists) {
-        SaveMode.Ignore
-      } else if (temp) {
-        SaveMode.Overwrite
-      } else {
-        SaveMode.ErrorIfExists
+      if (temp) {
+        operationNotAllowed("CREATE TEMPORARY TABLE ... USING ... AS query", ctx)
       }
-      CreateTableUsingAsSelect(table, provider, temp, Array.empty, None, mode, options, query)
+
+      CreateTable(tableDesc, mode, Some(query))
     } else {
-      val struct = Option(ctx.colTypeList).map(createStructType)
-      CreateTableUsing(table, struct, provider, temp, options, ifNotExists, managedIfNoPath = false)
+      if (temp) {
+        if (ifNotExists) {
+          operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
+        }
+
+        logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
+          "CREATE TEMPORARY VIEW ... USING ... instead")
+        CreateTempViewUsing(table, schema, replace = true, provider, options)
+      } else {
+        CreateTable(tableDesc, mode, None)
+      }
     }
   }
 
   /**
+   * Creates a [[CreateTempViewUsing]] logical plan.
+   */
+  override def visitCreateTempViewUsing(
+      ctx: CreateTempViewUsingContext): LogicalPlan = withOrigin(ctx) {
+    CreateTempViewUsing(
+      tableIdent = visitTableIdentifier(ctx.tableIdentifier()),
+      userSpecifiedSchema = Option(ctx.colTypeList()).map(createStructType),
+      replace = ctx.REPLACE != null,
+      provider = ctx.tableProvider.qualifiedName.getText,
+      options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
+  }
+
+  /**
+   * Create a [[LoadDataCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   LOAD DATA [LOCAL] INPATH 'filepath' [OVERWRITE] INTO TABLE tablename
+   *   [PARTITION (partcol1=val1, partcol2=val2 ...)]
+   * }}}
+   */
+  override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
+    LoadDataCommand(
+      table = visitTableIdentifier(ctx.tableIdentifier),
+      path = string(ctx.path),
+      isLocal = ctx.LOCAL != null,
+      isOverwrite = ctx.OVERWRITE != null,
+      partition = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
+    )
+  }
+
+  /**
+   * Create a [[TruncateTableCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   TRUNCATE TABLE tablename [PARTITION (partcol1=val1, partcol2=val2 ...)]
+   * }}}
+   */
+  override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
+    TruncateTableCommand(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
+  }
+
+  /**
+   * Create a [[AlterTableRecoverPartitionsCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   MSCK REPAIR TABLE tablename
+   * }}}
+   */
+  override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableRecoverPartitionsCommand(
+      visitTableIdentifier(ctx.tableIdentifier),
+      "MSCK REPAIR TABLE")
+  }
+
+  /**
    * Convert a table property list into a key-value map.
+   * This should be called through [[visitPropertyKeyValues]] or [[visitPropertyKeys]].
    */
   override def visitTablePropertyList(
       ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
-    ctx.tableProperty.asScala.map { property =>
+    val properties = ctx.tableProperty.asScala.map { property =>
       val key = visitTablePropertyKey(property.key)
-      val value = Option(property.value).map(string).orNull
+      val value = visitTablePropertyValue(property.value)
       key -> value
-    }.toMap
+    }
+    // Check for duplicate property names.
+    checkDuplicateKeys(properties, ctx)
+    properties.toMap
+  }
+
+  /**
+   * Parse a key-value map from a [[TablePropertyListContext]], assuming all values are specified.
+   */
+  private def visitPropertyKeyValues(ctx: TablePropertyListContext): Map[String, String] = {
+    val props = visitTablePropertyList(ctx)
+    val badKeys = props.collect { case (key, null) => key }
+    if (badKeys.nonEmpty) {
+      operationNotAllowed(
+        s"Values must be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
+    }
+    props
+  }
+
+  /**
+   * Parse a list of keys from a [[TablePropertyListContext]], assuming no values are specified.
+   */
+  private def visitPropertyKeys(ctx: TablePropertyListContext): Seq[String] = {
+    val props = visitTablePropertyList(ctx)
+    val badKeys = props.filter { case (_, v) => v != null }.keys
+    if (badKeys.nonEmpty) {
+      operationNotAllowed(
+        s"Values should not be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
+    }
+    props.keys.toSeq
   }
 
   /**
@@ -255,7 +487,23 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create a [[CreateDatabase]] command.
+   * A table property value can be String, Integer, Boolean or Decimal. This function extracts
+   * the property value based on whether its a string, integer, boolean or decimal literal.
+   */
+  override def visitTablePropertyValue(value: TablePropertyValueContext): String = {
+    if (value == null) {
+      null
+    } else if (value.STRING != null) {
+      string(value.STRING)
+    } else if (value.booleanValue != null) {
+      value.getText.toLowerCase
+    } else {
+      value.getText
+    }
+  }
+
+  /**
+   * Create a [[CreateDatabaseCommand]] command.
    *
    * For example:
    * {{{
@@ -264,16 +512,16 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitCreateDatabase(ctx: CreateDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    CreateDatabase(
+    CreateDatabaseCommand(
       ctx.identifier.getText,
       ctx.EXISTS != null,
       Option(ctx.locationSpec).map(visitLocationSpec),
       Option(ctx.comment).map(string),
-      Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty))
+      Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
 
   /**
-   * Create an [[AlterDatabaseProperties]] command.
+   * Create an [[AlterDatabasePropertiesCommand]] command.
    *
    * For example:
    * {{{
@@ -282,13 +530,13 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitSetDatabaseProperties(
       ctx: SetDatabasePropertiesContext): LogicalPlan = withOrigin(ctx) {
-    AlterDatabaseProperties(
+    AlterDatabasePropertiesCommand(
       ctx.identifier.getText,
-      visitTablePropertyList(ctx.tablePropertyList))
+      visitPropertyKeyValues(ctx.tablePropertyList))
   }
 
   /**
-   * Create a [[DropDatabase]] command.
+   * Create a [[DropDatabaseCommand]] command.
    *
    * For example:
    * {{{
@@ -296,11 +544,11 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitDropDatabase(ctx: DropDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DropDatabase(ctx.identifier.getText, ctx.EXISTS != null, ctx.CASCADE != null)
+    DropDatabaseCommand(ctx.identifier.getText, ctx.EXISTS != null, ctx.CASCADE != null)
   }
 
   /**
-   * Create a [[DescribeDatabase]] command.
+   * Create a [[DescribeDatabaseCommand]] command.
    *
    * For example:
    * {{{
@@ -308,11 +556,51 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitDescribeDatabase(ctx: DescribeDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DescribeDatabase(ctx.identifier.getText, ctx.EXTENDED != null)
+    DescribeDatabaseCommand(ctx.identifier.getText, ctx.EXTENDED != null)
   }
 
   /**
-   * Create a [[CreateFunction]] command.
+   * Create a plan for a DESCRIBE FUNCTION command.
+   */
+  override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {
+    import ctx._
+    val functionName =
+      if (describeFuncName.STRING() != null) {
+        FunctionIdentifier(string(describeFuncName.STRING()), database = None)
+      } else if (describeFuncName.qualifiedName() != null) {
+        visitFunctionName(describeFuncName.qualifiedName)
+      } else {
+        FunctionIdentifier(describeFuncName.getText, database = None)
+      }
+    DescribeFunctionCommand(functionName, EXTENDED != null)
+  }
+
+  /**
+   * Create a plan for a SHOW FUNCTIONS command.
+   */
+  override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
+    import ctx._
+    val (user, system) = Option(ctx.identifier).map(_.getText.toLowerCase) match {
+      case None | Some("all") => (true, true)
+      case Some("system") => (false, true)
+      case Some("user") => (true, false)
+      case Some(x) => throw new ParseException(s"SHOW $x FUNCTIONS not supported", ctx)
+    }
+
+    val (db, pat) = if (qualifiedName != null) {
+      val name = visitFunctionName(qualifiedName)
+      (name.database, Some(name.funcName))
+    } else if (pattern != null) {
+      (None, Some(string(pattern)))
+    } else {
+      (None, None)
+    }
+
+    ShowFunctionsCommand(db, pat, user, system)
+  }
+
+  /**
+   * Create a [[CreateFunctionCommand]] command.
    *
    * For example:
    * {{{
@@ -325,24 +613,24 @@ class SparkSqlAstBuilder extends AstBuilder {
       val resourceType = resource.identifier.getText.toLowerCase
       resourceType match {
         case "jar" | "file" | "archive" =>
-          resourceType -> string(resource.STRING)
+          FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
         case other =>
-          throw new ParseException(s"Resource Type '$resourceType' is not supported.", ctx)
+          operationNotAllowed(s"CREATE FUNCTION with resource type '$resourceType'", ctx)
       }
     }
 
     // Extract database, name & alias.
-    val (database, function) = visitFunctionName(ctx.qualifiedName)
-    CreateFunction(
-      database,
-      function,
+    val functionIdentifier = visitFunctionName(ctx.qualifiedName)
+    CreateFunctionCommand(
+      functionIdentifier.database,
+      functionIdentifier.funcName,
       string(ctx.className),
       resources,
       ctx.TEMPORARY != null)
   }
 
   /**
-   * Create a [[DropFunction]] command.
+   * Create a [[DropFunctionCommand]] command.
    *
    * For example:
    * {{{
@@ -350,39 +638,27 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val (database, function) = visitFunctionName(ctx.qualifiedName)
-    DropFunction(database, function, ctx.EXISTS != null, ctx.TEMPORARY != null)
+    val functionIdentifier = visitFunctionName(ctx.qualifiedName)
+    DropFunctionCommand(
+      functionIdentifier.database,
+      functionIdentifier.funcName,
+      ctx.EXISTS != null,
+      ctx.TEMPORARY != null)
   }
 
   /**
-   * Create a function database (optional) and name pair.
-   */
-  private def visitFunctionName(ctx: QualifiedNameContext): (Option[String], String) = {
-    ctx.identifier().asScala.map(_.getText) match {
-      case Seq(db, fn) => (Option(db), fn)
-      case Seq(fn) => (None, fn)
-      case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
-    }
-  }
-
-  /**
-   * Create a [[DropTable]] command.
+   * Create a [[DropTableCommand]] command.
    */
   override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.PURGE != null) {
-      throw new ParseException("Unsupported operation: PURGE option", ctx)
-    }
-    if (ctx.REPLICATION != null) {
-      throw new ParseException("Unsupported operation: REPLICATION clause", ctx)
-    }
-    DropTable(
+    DropTableCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       ctx.EXISTS != null,
-      ctx.VIEW != null)
+      ctx.VIEW != null,
+      ctx.PURGE != null)
   }
 
   /**
-   * Create a [[AlterTableRename]] command.
+   * Create a [[AlterTableRenameCommand]] command.
    *
    * For example:
    * {{{
@@ -391,14 +667,20 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRename(
-      visitTableIdentifier(ctx.from),
-      visitTableIdentifier(ctx.to),
+    val fromName = visitTableIdentifier(ctx.from)
+    val toName = visitTableIdentifier(ctx.to)
+    if (toName.database.isDefined) {
+      operationNotAllowed("Can not specify database in table/view name after RENAME TO", ctx)
+    }
+
+    AlterTableRenameCommand(
+      fromName,
+      toName.table,
       ctx.VIEW != null)
   }
 
   /**
-   * Create an [[AlterTableSetProperties]] command.
+   * Create an [[AlterTableSetPropertiesCommand]] command.
    *
    * For example:
    * {{{
@@ -408,14 +690,14 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitSetTableProperties(
       ctx: SetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSetProperties(
+    AlterTableSetPropertiesCommand(
       visitTableIdentifier(ctx.tableIdentifier),
-      visitTablePropertyList(ctx.tablePropertyList),
+      visitPropertyKeyValues(ctx.tablePropertyList),
       ctx.VIEW != null)
   }
 
   /**
-   * Create an [[AlterTableUnsetProperties]] command.
+   * Create an [[AlterTableUnsetPropertiesCommand]] command.
    *
    * For example:
    * {{{
@@ -425,15 +707,15 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitUnsetTableProperties(
       ctx: UnsetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableUnsetProperties(
+    AlterTableUnsetPropertiesCommand(
       visitTableIdentifier(ctx.tableIdentifier),
-      visitTablePropertyList(ctx.tablePropertyList).keys.toSeq,
+      visitPropertyKeys(ctx.tablePropertyList),
       ctx.EXISTS != null,
       ctx.VIEW != null)
   }
 
   /**
-   * Create an [[AlterTableSerDeProperties]] command.
+   * Create an [[AlterTableSerDePropertiesCommand]] command.
    *
    * For example:
    * {{{
@@ -442,50 +724,16 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitSetTableSerDe(ctx: SetTableSerDeContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSerDeProperties(
+    AlterTableSerDePropertiesCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.STRING).map(string),
-      Option(ctx.tablePropertyList).map(visitTablePropertyList),
+      Option(ctx.tablePropertyList).map(visitPropertyKeyValues),
       // TODO a partition spec is allowed to have optional values. This is currently violated.
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
-  // TODO: don't even bother parsing alter table commands related to bucketing and skewing
-
-  override def visitBucketTable(ctx: BucketTableContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException(
-      "Operation not allowed: ALTER TABLE ... CLUSTERED BY ... INTO N BUCKETS")
-  }
-
-  override def visitUnclusterTable(ctx: UnclusterTableContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException("Operation not allowed: ALTER TABLE ... NOT CLUSTERED")
-  }
-
-  override def visitUnsortTable(ctx: UnsortTableContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException("Operation not allowed: ALTER TABLE ... NOT SORTED")
-  }
-
-  override def visitSkewTable(ctx: SkewTableContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException("Operation not allowed: ALTER TABLE ... SKEWED BY ...")
-  }
-
-  override def visitUnskewTable(ctx: UnskewTableContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException("Operation not allowed: ALTER TABLE ... NOT SKEWED")
-  }
-
-  override def visitUnstoreTable(ctx: UnstoreTableContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException(
-      "Operation not allowed: ALTER TABLE ... NOT STORED AS DIRECTORIES")
-  }
-
-  override def visitSetTableSkewLocations(
-      ctx: SetTableSkewLocationsContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException(
-      "Operation not allowed: ALTER TABLE ... SET SKEWED LOCATION ...")
-  }
-
   /**
-   * Create an [[AlterTableAddPartition]] command.
+   * Create an [[AlterTableAddPartitionCommand]] command.
    *
    * For example:
    * {{{
@@ -499,7 +747,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitAddTablePartition(
       ctx: AddTablePartitionContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.VIEW != null) {
-      throw new AnalysisException(s"Operation not allowed: partitioned views")
+      operationNotAllowed("ALTER VIEW ... ADD PARTITION", ctx)
     }
     // Create partition spec to location mapping.
     val specsAndLocs = if (ctx.partitionSpec.isEmpty) {
@@ -513,28 +761,14 @@ class SparkSqlAstBuilder extends AstBuilder {
       // Alter View: the location clauses are not allowed.
       ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec(_) -> None)
     }
-    AlterTableAddPartition(
+    AlterTableAddPartitionCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       specsAndLocs,
       ctx.EXISTS != null)
   }
 
   /**
-   * Create an [[AlterTableExchangePartition]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table1 EXCHANGE PARTITION spec WITH TABLE table2;
-   * }}}
-   */
-  override def visitExchangeTablePartition(
-      ctx: ExchangeTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException(
-      "Operation not allowed: ALTER TABLE ... EXCHANGE PARTITION ...")
-  }
-
-  /**
-   * Create an [[AlterTableRenamePartition]] command
+   * Create an [[AlterTableRenamePartitionCommand]] command
    *
    * For example:
    * {{{
@@ -543,14 +777,14 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitRenameTablePartition(
       ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRenamePartition(
+    AlterTableRenamePartitionCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       visitNonOptionalPartitionSpec(ctx.from),
       visitNonOptionalPartitionSpec(ctx.to))
   }
 
   /**
-   * Create an [[AlterTableDropPartition]] command
+   * Create an [[AlterTableDropPartitionCommand]] command
    *
    * For example:
    * {{{
@@ -564,76 +798,30 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitDropTablePartitions(
       ctx: DropTablePartitionsContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.VIEW != null) {
-      throw new AnalysisException(s"Operation not allowed: partitioned views")
+      operationNotAllowed("ALTER VIEW ... DROP PARTITION", ctx)
     }
-    if (ctx.PURGE != null) {
-      throw new AnalysisException(s"Operation not allowed: PURGE")
-    }
-    AlterTableDropPartition(
+    AlterTableDropPartitionCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
-      ctx.EXISTS != null)
+      ctx.EXISTS != null,
+      ctx.PURGE != null)
   }
 
   /**
-   * Create an [[AlterTableArchivePartition]] command
+   * Create an [[AlterTableRecoverPartitionsCommand]] command
    *
    * For example:
    * {{{
-   *   ALTER TABLE table ARCHIVE PARTITION spec;
+   *   ALTER TABLE table RECOVER PARTITIONS;
    * }}}
    */
-  override def visitArchiveTablePartition(
-      ctx: ArchiveTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException(
-      "Operation not allowed: ALTER TABLE ... ARCHIVE PARTITION ...")
+  override def visitRecoverPartitions(
+      ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableRecoverPartitionsCommand(visitTableIdentifier(ctx.tableIdentifier))
   }
 
   /**
-   * Create an [[AlterTableUnarchivePartition]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table UNARCHIVE PARTITION spec;
-   * }}}
-   */
-  override def visitUnarchiveTablePartition(
-      ctx: UnarchiveTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException(
-      "Operation not allowed: ALTER TABLE ... UNARCHIVE PARTITION ...")
-  }
-
-  /**
-   * Create an [[AlterTableSetFileFormat]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table [PARTITION spec] SET FILEFORMAT file_format;
-   * }}}
-   */
-  override def visitSetTableFileFormat(
-      ctx: SetTableFileFormatContext): LogicalPlan = withOrigin(ctx) {
-    // AlterTableSetFileFormat currently takes both a GenericFileFormat and a
-    // TableFileFormatContext. This is a bit weird because it should only take one. It also should
-    // use a CatalogFileFormat instead of either a String or a Sequence of Strings. We will address
-    // this in a follow-up PR.
-    val (fileFormat, genericFormat) = ctx.fileFormat match {
-      case s: GenericFileFormatContext =>
-        (Seq.empty[String], Option(s.identifier.getText))
-      case s: TableFileFormatContext =>
-        val elements = Seq(s.inFmt, s.outFmt) ++ Option(s.serdeCls).toSeq
-        (elements.map(string), None)
-    }
-    AlterTableSetFileFormat(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      fileFormat,
-      genericFormat)(
-      command(ctx))
-  }
-
-  /**
-   * Create an [[AlterTableSetLocation]] command
+   * Create an [[AlterTableSetLocationCommand]] command
    *
    * For example:
    * {{{
@@ -641,119 +829,10 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitSetTableLocation(ctx: SetTableLocationContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSetLocation(
+    AlterTableSetLocationCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       visitLocationSpec(ctx.locationSpec))
-  }
-
-  /**
-   * Create an [[AlterTableTouch]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table TOUCH [PARTITION spec];
-   * }}}
-   */
-  override def visitTouchTable(ctx: TouchTableContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException("Operation not allowed: ALTER TABLE ... TOUCH ...")
-  }
-
-  /**
-   * Create an [[AlterTableCompact]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table [PARTITION spec] COMPACT 'compaction_type';
-   * }}}
-   */
-  override def visitCompactTable(ctx: CompactTableContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException("Operation not allowed: ALTER TABLE ... COMPACT ...")
-  }
-
-  /**
-   * Create an [[AlterTableMerge]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table [PARTITION spec] CONCATENATE;
-   * }}}
-   */
-  override def visitConcatenateTable(ctx: ConcatenateTableContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException("Operation not allowed: ALTER TABLE ... CONCATENATE")
-  }
-
-  /**
-   * Create an [[AlterTableChangeCol]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE tableIdentifier [PARTITION spec]
-   *    CHANGE [COLUMN] col_old_name col_new_name column_type [COMMENT col_comment]
-   *    [FIRST|AFTER column_name] [CASCADE|RESTRICT];
-   * }}}
-   */
-  override def visitChangeColumn(ctx: ChangeColumnContext): LogicalPlan = withOrigin(ctx) {
-    val col = visitColType(ctx.colType())
-    val comment = if (col.metadata.contains("comment")) {
-      Option(col.metadata.getString("comment"))
-    } else {
-      None
-    }
-
-    AlterTableChangeCol(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      ctx.oldName.getText,
-      // We could also pass in a struct field - seems easier.
-      col.name,
-      col.dataType,
-      comment,
-      Option(ctx.after).map(_.getText),
-      // Note that Restrict and Cascade are mutually exclusive.
-      ctx.RESTRICT != null,
-      ctx.CASCADE != null)(
-      command(ctx))
-  }
-
-  /**
-   * Create an [[AlterTableAddCol]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE tableIdentifier [PARTITION spec]
-   *    ADD COLUMNS (name type [COMMENT comment], ...) [CASCADE|RESTRICT]
-   * }}}
-   */
-  override def visitAddColumns(ctx: AddColumnsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableAddCol(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      createStructType(ctx.colTypeList),
-      // Note that Restrict and Cascade are mutually exclusive.
-      ctx.RESTRICT != null,
-      ctx.CASCADE != null)(
-      command(ctx))
-  }
-
-  /**
-   * Create an [[AlterTableReplaceCol]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE tableIdentifier [PARTITION spec]
-   *    REPLACE COLUMNS (name type [COMMENT comment], ...) [CASCADE|RESTRICT]
-   * }}}
-   */
-  override def visitReplaceColumns(ctx: ReplaceColumnsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableReplaceCol(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      createStructType(ctx.colTypeList),
-      // Note that Restrict and Cascade are mutually exclusive.
-      ctx.RESTRICT != null,
-      ctx.CASCADE != null)(
-      command(ctx))
   }
 
   /**
@@ -770,9 +849,18 @@ class SparkSqlAstBuilder extends AstBuilder {
     BucketSpec(
       ctx.INTEGER_VALUE.getText.toInt,
       visitIdentifierList(ctx.identifierList),
-      Option(ctx.orderedIdentifierList).toSeq
+      Option(ctx.orderedIdentifierList)
+        .toSeq
         .flatMap(_.orderedIdentifier.asScala)
-        .map(_.identifier.getText))
+        .map { orderedIdCtx =>
+          Option(orderedIdCtx.ordering).map(_.getText).foreach { dir =>
+            if (dir.toLowerCase != "asc") {
+              operationNotAllowed(s"Column ordering must be ASC, was '$dir'", ctx)
+            }
+          }
+
+          orderedIdCtx.identifier.getText
+        })
   }
 
   /**
@@ -788,5 +876,496 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitConstantList(ctx: ConstantListContext): Seq[String] = withOrigin(ctx) {
     ctx.constant.asScala.map(visitStringConstant)
+  }
+
+  /**
+   * Fail an unsupported Hive native command.
+   */
+  override def visitFailNativeCommand(
+    ctx: FailNativeCommandContext): LogicalPlan = withOrigin(ctx) {
+    val keywords = if (ctx.unsupportedHiveNativeCommands != null) {
+      ctx.unsupportedHiveNativeCommands.children.asScala.collect {
+        case n: TerminalNode => n.getText
+      }.mkString(" ")
+    } else {
+      // SET ROLE is the exception to the rule, because we handle this before other SET commands.
+      "SET ROLE"
+    }
+    operationNotAllowed(keywords, ctx)
+  }
+
+  /**
+   * Create a [[AddFileCommand]], [[AddJarCommand]], [[ListFilesCommand]] or [[ListJarsCommand]]
+   * command depending on the requested operation on resources.
+   * Expected format:
+   * {{{
+   *   ADD (FILE[S] <filepath ...> | JAR[S] <jarpath ...>)
+   *   LIST (FILE[S] [filepath ...] | JAR[S] [jarpath ...])
+   * }}}
+   */
+  override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
+    val mayebePaths = remainder(ctx.identifier).trim
+    ctx.op.getType match {
+      case SqlBaseParser.ADD =>
+        ctx.identifier.getText.toLowerCase match {
+          case "file" => AddFileCommand(mayebePaths)
+          case "jar" => AddJarCommand(mayebePaths)
+          case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
+        }
+      case SqlBaseParser.LIST =>
+        ctx.identifier.getText.toLowerCase match {
+          case "files" | "file" =>
+            if (mayebePaths.length > 0) {
+              ListFilesCommand(mayebePaths.split("\\s+"))
+            } else {
+              ListFilesCommand()
+            }
+          case "jars" | "jar" =>
+            if (mayebePaths.length > 0) {
+              ListJarsCommand(mayebePaths.split("\\s+"))
+            } else {
+              ListJarsCommand()
+            }
+          case other => operationNotAllowed(s"LIST with resource type '$other'", ctx)
+        }
+      case _ => operationNotAllowed(s"Other types of operation on resources", ctx)
+    }
+  }
+
+  /**
+   * Create a table, returning a [[CreateTable]] logical plan.
+   *
+   * This is not used to create datasource tables, which is handled through
+   * "CREATE TABLE ... USING ...".
+   *
+   * Note: several features are currently not supported - temporary tables, bucketing,
+   * skewed columns and storage handlers (STORED BY).
+   *
+   * Expected format:
+   * {{{
+   *   CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
+   *   [(col1[:] data_type [COMMENT col_comment], ...)]
+   *   [COMMENT table_comment]
+   *   [PARTITIONED BY (col2[:] data_type [COMMENT col_comment], ...)]
+   *   [ROW FORMAT row_format]
+   *   [STORED AS file_format]
+   *   [LOCATION path]
+   *   [TBLPROPERTIES (property_name=property_value, ...)]
+   *   [AS select_statement];
+   * }}}
+   */
+  override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
+    val (name, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
+    // TODO: implement temporary tables
+    if (temp) {
+      throw new ParseException(
+        "CREATE TEMPORARY TABLE is not supported yet. " +
+          "Please use CREATE TEMPORARY VIEW as an alternative.", ctx)
+    }
+    if (ctx.skewSpec != null) {
+      operationNotAllowed("CREATE TABLE ... SKEWED BY", ctx)
+    }
+    if (ctx.bucketSpec != null) {
+      operationNotAllowed("CREATE TABLE ... CLUSTERED BY", ctx)
+    }
+    val comment = Option(ctx.STRING).map(string)
+    val dataCols = Option(ctx.columns).map(visitColTypeList).getOrElse(Nil)
+    val partitionCols = Option(ctx.partitionColumns).map(visitColTypeList).getOrElse(Nil)
+    val properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val selectQuery = Option(ctx.query).map(plan)
+
+    // Note: Hive requires partition columns to be distinct from the schema, so we need
+    // to include the partition columns here explicitly
+    val schema = StructType(dataCols ++ partitionCols)
+
+    // Storage format
+    val defaultStorage: CatalogStorageFormat = {
+      val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
+      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType)
+      CatalogStorageFormat(
+        locationUri = None,
+        inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
+          .orElse(Some("org.apache.hadoop.mapred.TextInputFormat")),
+        outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
+          .orElse(Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
+        // Note: Keep this unspecified because we use the presence of the serde to decide
+        // whether to convert a table created by CTAS to a datasource table.
+        serde = None,
+        compressed = false,
+        properties = Map())
+    }
+    validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
+    val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
+      .getOrElse(CatalogStorageFormat.empty)
+    val rowStorage = Option(ctx.rowFormat).map(visitRowFormat)
+      .getOrElse(CatalogStorageFormat.empty)
+    val location = Option(ctx.locationSpec).map(visitLocationSpec)
+    // If we are creating an EXTERNAL table, then the LOCATION field is required
+    if (external && location.isEmpty) {
+      operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
+    }
+    val storage = CatalogStorageFormat(
+      locationUri = location,
+      inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
+      outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
+      serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
+      compressed = false,
+      properties = rowStorage.properties ++ fileStorage.properties)
+    // If location is defined, we'll assume this is an external table.
+    // Otherwise, we may accidentally delete existing data.
+    val tableType = if (external || location.isDefined) {
+      CatalogTableType.EXTERNAL
+    } else {
+      CatalogTableType.MANAGED
+    }
+
+    // TODO support the sql text - have a proper location for this!
+    val tableDesc = CatalogTable(
+      identifier = name,
+      tableType = tableType,
+      storage = storage,
+      schema = schema,
+      provider = Some("hive"),
+      partitionColumnNames = partitionCols.map(_.name),
+      properties = properties,
+      comment = comment)
+
+    val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+
+    selectQuery match {
+      case Some(q) =>
+        // Hive does not allow to use a CTAS statement to create a partitioned table.
+        if (tableDesc.partitionColumnNames.nonEmpty) {
+          val errorMessage = "A Create Table As Select (CTAS) statement is not allowed to " +
+            "create a partitioned table using Hive's file formats. " +
+            "Please use the syntax of \"CREATE TABLE tableName USING dataSource " +
+            "OPTIONS (...) PARTITIONED BY ...\" to create a partitioned table through a " +
+            "CTAS statement."
+          operationNotAllowed(errorMessage, ctx)
+        }
+        // Just use whatever is projected in the select statement as our schema
+        if (schema.nonEmpty) {
+          operationNotAllowed(
+            "Schema may not be specified in a Create Table As Select (CTAS) statement",
+            ctx)
+        }
+
+        val hasStorageProperties = (ctx.createFileFormat != null) || (ctx.rowFormat != null)
+        if (conf.convertCTAS && !hasStorageProperties) {
+          // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
+          // are empty Maps.
+          val optionsWithPath = if (location.isDefined) {
+            Map("path" -> location.get)
+          } else {
+            Map.empty[String, String]
+          }
+
+          val newTableDesc = tableDesc.copy(
+            storage = CatalogStorageFormat.empty.copy(properties = optionsWithPath),
+            provider = Some(conf.defaultDataSourceName)
+          )
+
+          CreateTable(newTableDesc, mode, Some(q))
+        } else {
+          CreateTable(tableDesc, mode, Some(q))
+        }
+      case None => CreateTable(tableDesc, mode, None)
+    }
+  }
+
+  /**
+   * Create a [[CreateTableLikeCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
+   *   LIKE [other_db_name.]existing_table_name
+   * }}}
+   */
+  override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
+    val targetTable = visitTableIdentifier(ctx.target)
+    val sourceTable = visitTableIdentifier(ctx.source)
+    CreateTableLikeCommand(targetTable, sourceTable, ctx.EXISTS != null)
+  }
+
+  /**
+   * Create a [[CatalogStorageFormat]] for creating tables.
+   *
+   * Format: STORED AS ...
+   */
+  override def visitCreateFileFormat(
+      ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+    (ctx.fileFormat, ctx.storageHandler) match {
+      // Expected format: INPUTFORMAT input_format OUTPUTFORMAT output_format
+      case (c: TableFileFormatContext, null) =>
+        visitTableFileFormat(c)
+      // Expected format: SEQUENCEFILE | TEXTFILE | RCFILE | ORC | PARQUET | AVRO
+      case (c: GenericFileFormatContext, null) =>
+        visitGenericFileFormat(c)
+      case (null, storageHandler) =>
+        operationNotAllowed("STORED BY", ctx)
+      case _ =>
+        throw new ParseException("Expected either STORED AS or STORED BY, not both", ctx)
+    }
+  }
+
+  /**
+   * Create a [[CatalogStorageFormat]].
+   */
+  override def visitTableFileFormat(
+      ctx: TableFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+    CatalogStorageFormat.empty.copy(
+      inputFormat = Option(string(ctx.inFmt)),
+      outputFormat = Option(string(ctx.outFmt)))
+  }
+
+  /**
+   * Resolve a [[HiveSerDe]] based on the name given and return it as a [[CatalogStorageFormat]].
+   */
+  override def visitGenericFileFormat(
+      ctx: GenericFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+    val source = ctx.identifier.getText
+    HiveSerDe.sourceToSerDe(source) match {
+      case Some(s) =>
+        CatalogStorageFormat.empty.copy(
+          inputFormat = s.inputFormat,
+          outputFormat = s.outputFormat,
+          serde = s.serde)
+      case None =>
+        operationNotAllowed(s"STORED AS with file format '$source'", ctx)
+    }
+  }
+
+  /**
+   * Create a [[CatalogStorageFormat]] used for creating tables.
+   *
+   * Example format:
+   * {{{
+   *   SERDE serde_name [WITH SERDEPROPERTIES (k1=v1, k2=v2, ...)]
+   * }}}
+   *
+   * OR
+   *
+   * {{{
+   *   DELIMITED [FIELDS TERMINATED BY char [ESCAPED BY char]]
+   *   [COLLECTION ITEMS TERMINATED BY char]
+   *   [MAP KEYS TERMINATED BY char]
+   *   [LINES TERMINATED BY char]
+   *   [NULL DEFINED AS char]
+   * }}}
+   */
+  private def visitRowFormat(ctx: RowFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+    ctx match {
+      case serde: RowFormatSerdeContext => visitRowFormatSerde(serde)
+      case delimited: RowFormatDelimitedContext => visitRowFormatDelimited(delimited)
+    }
+  }
+
+  /**
+   * Create SERDE row format name and properties pair.
+   */
+  override def visitRowFormatSerde(
+      ctx: RowFormatSerdeContext): CatalogStorageFormat = withOrigin(ctx) {
+    import ctx._
+    CatalogStorageFormat.empty.copy(
+      serde = Option(string(name)),
+      properties = Option(tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
+  }
+
+  /**
+   * Create a delimited row format properties object.
+   */
+  override def visitRowFormatDelimited(
+      ctx: RowFormatDelimitedContext): CatalogStorageFormat = withOrigin(ctx) {
+    // Collect the entries if any.
+    def entry(key: String, value: Token): Seq[(String, String)] = {
+      Option(value).toSeq.map(x => key -> string(x))
+    }
+    // TODO we need proper support for the NULL format.
+    val entries =
+      entry("field.delim", ctx.fieldsTerminatedBy) ++
+        entry("serialization.format", ctx.fieldsTerminatedBy) ++
+        entry("escape.delim", ctx.escapedBy) ++
+        // The following typo is inherited from Hive...
+        entry("colelction.delim", ctx.collectionItemsTerminatedBy) ++
+        entry("mapkey.delim", ctx.keysTerminatedBy) ++
+        Option(ctx.linesSeparatedBy).toSeq.map { token =>
+          val value = string(token)
+          validate(
+            value == "\n",
+            s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
+            ctx)
+          "line.delim" -> value
+        }
+    CatalogStorageFormat.empty.copy(properties = entries.toMap)
+  }
+
+  /**
+   * Throw a [[ParseException]] if the user specified incompatible SerDes through ROW FORMAT
+   * and STORED AS.
+   *
+   * The following are allowed. Anything else is not:
+   *   ROW FORMAT SERDE ... STORED AS [SEQUENCEFILE | RCFILE | TEXTFILE]
+   *   ROW FORMAT DELIMITED ... STORED AS TEXTFILE
+   *   ROW FORMAT ... STORED AS INPUTFORMAT ... OUTPUTFORMAT ...
+   */
+  private def validateRowFormatFileFormat(
+      rowFormatCtx: RowFormatContext,
+      createFileFormatCtx: CreateFileFormatContext,
+      parentCtx: ParserRuleContext): Unit = {
+    if (rowFormatCtx == null || createFileFormatCtx == null) {
+      return
+    }
+    (rowFormatCtx, createFileFormatCtx.fileFormat) match {
+      case (_, ffTable: TableFileFormatContext) => // OK
+      case (rfSerde: RowFormatSerdeContext, ffGeneric: GenericFileFormatContext) =>
+        ffGeneric.identifier.getText.toLowerCase match {
+          case ("sequencefile" | "textfile" | "rcfile") => // OK
+          case fmt =>
+            operationNotAllowed(
+              s"ROW FORMAT SERDE is incompatible with format '$fmt', which also specifies a serde",
+              parentCtx)
+        }
+      case (rfDelimited: RowFormatDelimitedContext, ffGeneric: GenericFileFormatContext) =>
+        ffGeneric.identifier.getText.toLowerCase match {
+          case "textfile" => // OK
+          case fmt => operationNotAllowed(
+            s"ROW FORMAT DELIMITED is only compatible with 'textfile', not '$fmt'", parentCtx)
+        }
+      case _ =>
+        // should never happen
+        def str(ctx: ParserRuleContext): String = {
+          (0 until ctx.getChildCount).map { i => ctx.getChild(i).getText }.mkString(" ")
+        }
+        operationNotAllowed(
+          s"Unexpected combination of ${str(rowFormatCtx)} and ${str(createFileFormatCtx)}",
+          parentCtx)
+    }
+  }
+
+  /**
+   * Create or replace a view. This creates a [[CreateViewCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   CREATE [OR REPLACE] [TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_name
+   *   [(column_name [COMMENT column_comment], ...) ]
+   *   [COMMENT view_comment]
+   *   [TBLPROPERTIES (property_name = property_value, ...)]
+   *   AS SELECT ...;
+   * }}}
+   */
+  override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.identifierList != null) {
+      operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
+    } else {
+      val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
+        icl.identifierComment.asScala.map { ic =>
+          ic.identifier.getText -> Option(ic.STRING).map(string)
+        }
+      }
+
+      CreateViewCommand(
+        name = visitTableIdentifier(ctx.tableIdentifier),
+        userSpecifiedColumns = userSpecifiedColumns,
+        comment = Option(ctx.STRING).map(string),
+        properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty),
+        originalText = Option(source(ctx.query)),
+        child = plan(ctx.query),
+        allowExisting = ctx.EXISTS != null,
+        replace = ctx.REPLACE != null,
+        isTemporary = ctx.TEMPORARY != null)
+    }
+  }
+
+  /**
+   * Alter the query of a view. This creates a [[AlterViewAsCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER VIEW [db_name.]view_name AS SELECT ...;
+   * }}}
+   */
+  override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
+    AlterViewAsCommand(
+      name = visitTableIdentifier(ctx.tableIdentifier),
+      originalText = source(ctx.query),
+      query = plan(ctx.query))
+  }
+
+  /**
+   * Create a [[ScriptInputOutputSchema]].
+   */
+  override protected def withScriptIOSchema(
+      ctx: QuerySpecificationContext,
+      inRowFormat: RowFormatContext,
+      recordWriter: Token,
+      outRowFormat: RowFormatContext,
+      recordReader: Token,
+      schemaLess: Boolean): ScriptInputOutputSchema = {
+    if (recordWriter != null || recordReader != null) {
+      // TODO: what does this message mean?
+      throw new ParseException(
+        "Unsupported operation: Used defined record reader/writer classes.", ctx)
+    }
+
+    // Decode and input/output format.
+    type Format = (Seq[(String, String)], Option[String], Seq[(String, String)], Option[String])
+    def format(
+        fmt: RowFormatContext,
+        configKey: String,
+        defaultConfigValue: String): Format = fmt match {
+      case c: RowFormatDelimitedContext =>
+        // TODO we should use the visitRowFormatDelimited function here. However HiveScriptIOSchema
+        // expects a seq of pairs in which the old parsers' token names are used as keys.
+        // Transforming the result of visitRowFormatDelimited would be quite a bit messier than
+        // retrieving the key value pairs ourselves.
+        def entry(key: String, value: Token): Seq[(String, String)] = {
+          Option(value).map(t => key -> t.getText).toSeq
+        }
+        val entries = entry("TOK_TABLEROWFORMATFIELD", c.fieldsTerminatedBy) ++
+          entry("TOK_TABLEROWFORMATCOLLITEMS", c.collectionItemsTerminatedBy) ++
+          entry("TOK_TABLEROWFORMATMAPKEYS", c.keysTerminatedBy) ++
+          entry("TOK_TABLEROWFORMATLINES", c.linesSeparatedBy) ++
+          entry("TOK_TABLEROWFORMATNULL", c.nullDefinedAs)
+
+        (entries, None, Seq.empty, None)
+
+      case c: RowFormatSerdeContext =>
+        // Use a serde format.
+        val CatalogStorageFormat(None, None, None, Some(name), _, props) = visitRowFormatSerde(c)
+
+        // SPARK-10310: Special cases LazySimpleSerDe
+        val recordHandler = if (name == "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe") {
+          Option(conf.getConfString(configKey, defaultConfigValue))
+        } else {
+          None
+        }
+        (Seq.empty, Option(name), props.toSeq, recordHandler)
+
+      case null =>
+        // Use default (serde) format.
+        val name = conf.getConfString("hive.script.serde",
+          "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+        val props = Seq("field.delim" -> "\t")
+        val recordHandler = Option(conf.getConfString(configKey, defaultConfigValue))
+        (Nil, Option(name), props, recordHandler)
+    }
+
+    val (inFormat, inSerdeClass, inSerdeProps, reader) =
+      format(
+        inRowFormat, "hive.script.recordreader", "org.apache.hadoop.hive.ql.exec.TextRecordReader")
+
+    val (outFormat, outSerdeClass, outSerdeProps, writer) =
+      format(
+        outRowFormat, "hive.script.recordwriter",
+        "org.apache.hadoop.hive.ql.exec.TextRecordWriter")
+
+    ScriptInputOutputSchema(
+      inFormat, outFormat,
+      inSerdeClass, outSerdeClass,
+      inSerdeProps, outSerdeProps,
+      reader, writer,
+      schemaLess)
   }
 }

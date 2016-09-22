@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.{DataType, LongType}
       represent the record number within each partition. The assumption is that the data frame has
       less than 1 billion partitions, and each partition has less than 8 billion records.""",
   extended = "> SELECT _FUNC_();\n 0")
-private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {
+case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {
 
   /**
    * Record ID within each partition. By being transient, count's value is reset to 0 every time
@@ -65,18 +65,16 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with 
     partitionMask + currentCount
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val countTerm = ctx.freshName("count")
     val partitionMaskTerm = ctx.freshName("partitionMask")
     ctx.addMutableState(ctx.JAVA_LONG, countTerm, s"$countTerm = 0L;")
     ctx.addMutableState(ctx.JAVA_LONG, partitionMaskTerm,
       s"$partitionMaskTerm = ((long) org.apache.spark.TaskContext.getPartitionId()) << 33;")
 
-    ev.isNull = "false"
-    s"""
+    ev.copy(code = s"""
       final ${ctx.javaType(dataType)} ${ev.value} = $partitionMaskTerm + $countTerm;
-      $countTerm++;
-    """
+      $countTerm++;""", isNull = "false")
   }
 
   override def prettyName: String = "monotonically_increasing_id"

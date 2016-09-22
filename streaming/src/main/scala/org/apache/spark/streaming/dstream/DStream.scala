@@ -52,7 +52,7 @@ import org.apache.spark.util.{CallSite, Utils}
  * `join`. These operations are automatically available on any DStream of pairs
  * (e.g., DStream[(Int, Int)] through implicit conversions.
  *
- * DStreams internally is characterized by a few basic properties:
+ * A DStream internally is characterized by a few basic properties:
  *  - A list of other DStreams that the DStream depends on
  *  - A time interval at which the DStream generates an RDD
  *  - A function that is used to generate an RDD after each time interval
@@ -157,7 +157,7 @@ abstract class DStream[T: ClassTag] (
   def persist(level: StorageLevel): DStream[T] = {
     if (this.isInitialized) {
       throw new UnsupportedOperationException(
-        "Cannot change storage level of an DStream after streaming context has started")
+        "Cannot change storage level of a DStream after streaming context has started")
     }
     this.storageLevel = level
     this
@@ -176,7 +176,7 @@ abstract class DStream[T: ClassTag] (
   def checkpoint(interval: Duration): DStream[T] = {
     if (isInitialized) {
       throw new UnsupportedOperationException(
-        "Cannot change checkpoint interval of an DStream after streaming context has started")
+        "Cannot change checkpoint interval of a DStream after streaming context has started")
     }
     persist()
     checkpointDuration = interval
@@ -793,7 +793,8 @@ abstract class DStream[T: ClassTag] (
    *  This is more efficient than reduceByWindow without "inverse reduce" function.
    *  However, it is applicable to only "invertible reduce functions".
    * @param reduceFunc associative and commutative reduce function
-   * @param invReduceFunc inverse reduce function
+   * @param invReduceFunc inverse reduce function; such that for all y, invertible x:
+   *                      `invReduceFunc(reduceFunc(x, y), x) = y`
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which

@@ -23,6 +23,7 @@ import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -194,6 +195,10 @@ private[spark] class Executor(
     /** Whether this task has been killed. */
     @volatile private var killed = false
 
+    /** Whether this task has been finished. */
+    @GuardedBy("TaskRunner.this")
+    private var finished = false
+
     /** How much the JVM process has spent in GC when the task starts to run. */
     @volatile var startGCTime: Long = _
 
@@ -207,8 +212,23 @@ private[spark] class Executor(
       logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
       killed = true
       if (task != null) {
-        task.kill(interruptThread)
+        synchronized {
+          if (!finished) {
+            task.kill(interruptThread)
+          }
+        }
       }
+    }
+
+    /**
+     * Set the finished flag to true and clear the current thread's interrupt status
+     */
+    private def setTaskFinishedAndClearInterruptStatus(): Unit = synchronized {
+      this.finished = true
+      // SPARK-14234 - Reset the interrupted status of the thread to avoid the
+      // ClosedByInterruptException during execBackend.statusUpdate which causes
+      // Executor to crash
+      Thread.interrupted()
     }
 
     override def run(): Unit = {
@@ -261,20 +281,20 @@ private[spark] class Executor(
           val releasedLocks = env.blockManager.releaseAllLocksForTask(taskId)
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
 
-          if (freedMemory > 0) {
+          if (freedMemory > 0 && !threwException) {
             val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
-            if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false) && !threwException) {
+            if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)) {
               throw new SparkException(errMsg)
             } else {
-              logError(errMsg)
+              logWarning(errMsg)
             }
           }
 
-          if (releasedLocks.nonEmpty) {
+          if (releasedLocks.nonEmpty && !threwException) {
             val errMsg =
               s"${releasedLocks.size} block locks were not released by TID = $taskId:\n" +
                 releasedLocks.mkString("[", ", ", "]")
-            if (conf.getBoolean("spark.storage.exceptionOnPinLeak", false) && !threwException) {
+            if (conf.getBoolean("spark.storage.exceptionOnPinLeak", false)) {
               throw new SparkException(errMsg)
             } else {
               logWarning(errMsg)
@@ -293,16 +313,14 @@ private[spark] class Executor(
         val valueBytes = resultSer.serialize(value)
         val afterSerialization = System.currentTimeMillis()
 
-        for (m <- task.metrics) {
-          // Deserialization happens in two parts: first, we deserialize a Task object, which
-          // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
-          m.setExecutorDeserializeTime(
-            (taskStart - deserializeStartTime) + task.executorDeserializeTime)
-          // We need to subtract Task.run()'s deserialization time to avoid double-counting
-          m.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
-          m.setJvmGCTime(computeTotalGcTime() - startGCTime)
-          m.setResultSerializationTime(afterSerialization - beforeSerialization)
-        }
+        // Deserialization happens in two parts: first, we deserialize a Task object, which
+        // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
+        task.metrics.setExecutorDeserializeTime(
+          (taskStart - deserializeStartTime) + task.executorDeserializeTime)
+        // We need to subtract Task.run()'s deserialization time to avoid double-counting
+        task.metrics.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
+        task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
+        task.metrics.setResultSerializationTime(afterSerialization - beforeSerialization)
 
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()
@@ -337,15 +355,23 @@ private[spark] class Executor(
 
       } catch {
         case ffe: FetchFailedException =>
-          val reason = ffe.toTaskEndReason
+          val reason = ffe.toTaskFailedReason
+          setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
-        case _: TaskKilledException | _: InterruptedException if task.killed =>
+        case _: TaskKilledException =>
           logInfo(s"Executor killed $taskName (TID $taskId)")
+          setTaskFinishedAndClearInterruptStatus()
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
+
+        case _: InterruptedException if task.killed =>
+          logInfo(s"Executor interrupted and killed $taskName (TID $taskId)")
+          setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
 
         case CausedBy(cDE: CommitDeniedException) =>
-          val reason = cDE.toTaskEndReason
+          val reason = cDE.toTaskFailedReason
+          setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
         case t: Throwable =>
@@ -355,26 +381,27 @@ private[spark] class Executor(
           logError(s"Exception in $taskName (TID $taskId)", t)
 
           // Collect latest accumulator values to report back to the driver
-          val accumulatorUpdates: Seq[AccumulableInfo] =
+          val accums: Seq[AccumulatorV2[_, _]] =
             if (task != null) {
-              task.metrics.foreach { m =>
-                m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
-                m.setJvmGCTime(computeTotalGcTime() - startGCTime)
-              }
+              task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+              task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
               task.collectAccumulatorUpdates(taskFailed = true)
             } else {
-              Seq.empty[AccumulableInfo]
+              Seq.empty
             }
+
+          val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
 
           val serializedTaskEndReason = {
             try {
-              ser.serialize(new ExceptionFailure(t, accumulatorUpdates))
+              ser.serialize(new ExceptionFailure(t, accUpdates).withAccums(accums))
             } catch {
               case _: NotSerializableException =>
                 // t is not serializable so just send the stacktrace
-                ser.serialize(new ExceptionFailure(t, accumulatorUpdates, preserveCause = false))
+                ser.serialize(new ExceptionFailure(t, accUpdates, false).withAccums(accums))
             }
           }
+          setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
@@ -480,16 +507,14 @@ private[spark] class Executor(
   /** Reports heartbeat and metrics for active tasks to the driver. */
   private def reportHeartBeat(): Unit = {
     // list of (task id, accumUpdates) to send back to the driver
-    val accumUpdates = new ArrayBuffer[(Long, Seq[AccumulableInfo])]()
+    val accumUpdates = new ArrayBuffer[(Long, Seq[AccumulatorV2[_, _]])]()
     val curGCTime = computeTotalGcTime()
 
     for (taskRunner <- runningTasks.values().asScala) {
       if (taskRunner.task != null) {
-        taskRunner.task.metrics.foreach { metrics =>
-          metrics.mergeShuffleReadMetrics()
-          metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
-          accumUpdates += ((taskRunner.taskId, metrics.accumulatorUpdates()))
-        }
+        taskRunner.task.metrics.mergeShuffleReadMetrics()
+        taskRunner.task.metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
+        accumUpdates += ((taskRunner.taskId, taskRunner.task.metrics.accumulators()))
       }
     }
 

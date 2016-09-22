@@ -18,14 +18,13 @@
 package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 /**
- * A special [[SQLContext]] prepared for testing.
+ * A special [[SparkSession]] prepared for testing.
  */
-private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { self =>
-
+private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
   def this(sparkConf: SparkConf) {
     this(new SparkContext("local[2]", "test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
@@ -55,9 +54,10 @@ private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { sel
   }
 
   private object testData extends SQLTestData {
-    protected override def sqlContext: SQLContext = self
+    protected override def spark: SparkSession = self
   }
 }
+
 
 private[sql] object TestSQLContext {
 

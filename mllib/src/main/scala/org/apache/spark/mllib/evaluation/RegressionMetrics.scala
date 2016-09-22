@@ -73,7 +73,7 @@ class RegressionMetrics @Since("2.0.0") (
 
   /**
    * Returns the variance explained by regression.
-   * explainedVariance = \sum_i (\hat{y_i} - \bar{y})^2 / n
+   * explainedVariance = $\sum_i (\hat{y_i} - \bar{y})^2 / n$
    * @see [[https://en.wikipedia.org/wiki/Fraction_of_variance_unexplained]]
    */
   @Since("1.2.0")

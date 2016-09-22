@@ -45,10 +45,10 @@ import org.apache.spark.util.Utils
  *  - sqrt: recommended by Breiman manual for random forests
  *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
  *    package.
+ *
  * @see [[http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf  Breiman (2001)]]
  * @see [[http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf  Breiman manual for
  *     random forests]]
- *
  * @param strategy The configuration parameters for the random forest algorithm which specify
  *                 the type of random forest (classification or regression), feature type
  *                 (continuous, categorical), depth of the tree, quantile calculation strategy,
@@ -90,8 +90,8 @@ private class RandomForest (
    * @return RandomForestModel that can be used for prediction.
    */
   def run(input: RDD[LabeledPoint]): RandomForestModel = {
-    val trees: Array[NewDTModel] =
-      NewRandomForest.run(input, strategy, numTrees, featureSubsetStrategy, seed.toLong)
+    val trees: Array[NewDTModel] = NewRandomForest.run(input.map(_.asML), strategy, numTrees,
+      featureSubsetStrategy, seed.toLong, None)
     new RandomForestModel(strategy.algo, trees.map(_.toOld))
   }
 

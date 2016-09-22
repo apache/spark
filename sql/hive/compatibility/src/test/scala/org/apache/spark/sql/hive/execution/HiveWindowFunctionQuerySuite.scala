@@ -38,7 +38,8 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   private val testTempDir = Utils.createTempDir()
 
   override def beforeAll() {
-    TestHive.cacheTables = true
+    super.beforeAll()
+    TestHive.setCacheTables(true)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
@@ -100,11 +101,14 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   }
 
   override def afterAll() {
-    TestHive.cacheTables = false
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-    TestHive.reset()
-    super.afterAll()
+    try {
+      TestHive.setCacheTables(false)
+      TimeZone.setDefault(originalTimeZone)
+      Locale.setDefault(originalLocale)
+      TestHive.reset()
+    } finally {
+      super.afterAll()
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -530,31 +534,6 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
       |             rows between 2 preceding and 2 following);
     """.stripMargin, reset = false)
 
-  // collect_set() output array in an arbitrary order, hence causes different result
-  // when running this test suite under Java 7 and 8.
-  // We change the original sql query a little bit for making the test suite passed
-  // under different JDK
-  /* Disabled because:
-     - Spark uses a different default stddev.
-     - Tiny numerical differences in stddev results.
-  createQueryTest("windowing.q -- 20. testSTATs",
-    """
-      |select p_mfgr,p_name, p_size, sdev, sdev_pop, uniq_data, var, cor, covarp
-      |from (
-      |select  p_mfgr,p_name, p_size,
-      |stddev(p_retailprice) over w1 as sdev,
-      |stddev_pop(p_retailprice) over w1 as sdev_pop,
-      |collect_set(p_size) over w1 as uniq_size,
-      |variance(p_retailprice) over w1 as var,
-      |corr(p_size, p_retailprice) over w1 as cor,
-      |covar_pop(p_size, p_retailprice) over w1 as covarp
-      |from part
-      |window w1 as (distribute by p_mfgr sort by p_mfgr, p_name
-      |             rows between 2 preceding and 2 following)
-      |) t lateral view explode(uniq_size) d as uniq_data
-      |order by p_mfgr,p_name, p_size, sdev, sdev_pop, uniq_data, var, cor, covarp
-    """.stripMargin, reset = false)
-  */
   createQueryTest("windowing.q -- 21. testDISTs",
     """
       |select  p_mfgr,p_name, p_size,
@@ -773,7 +752,8 @@ class HiveWindowFunctionQueryFileSuite
   private val testTempDir = Utils.createTempDir()
 
   override def beforeAll() {
-    TestHive.cacheTables = true
+    super.beforeAll()
+    TestHive.setCacheTables(true)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
@@ -790,10 +770,14 @@ class HiveWindowFunctionQueryFileSuite
   }
 
   override def afterAll() {
-    TestHive.cacheTables = false
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-    TestHive.reset()
+    try {
+      TestHive.setCacheTables(false)
+      TimeZone.setDefault(originalTimeZone)
+      Locale.setDefault(originalLocale)
+      TestHive.reset()
+    } finally {
+      super.afterAll()
+    }
   }
 
   override def blackList: Seq[String] = Seq(
@@ -817,13 +801,15 @@ class HiveWindowFunctionQueryFileSuite
     "windowing_ntile",
     "windowing_udaf",
     "windowing_windowspec",
-    "windowing_rank"
+    "windowing_rank",
+
+    // These tests DROP TABLE that don't exist (but do not specify IF EXISTS)
+    "windowing_columnPruning",
+    "windowing_adjust_rowcontainer_sz"
   )
 
   override def whiteList: Seq[String] = Seq(
-    "windowing_udaf2",
-    "windowing_columnPruning",
-    "windowing_adjust_rowcontainer_sz"
+    "windowing_udaf2"
   )
 
   // Only run those query tests in the realWhileList (do not try other ignored query files).
