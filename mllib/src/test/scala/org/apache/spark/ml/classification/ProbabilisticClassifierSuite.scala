@@ -45,9 +45,8 @@ final class TestProbabilisticClassificationModel(
 class ProbabilisticClassifierSuite extends SparkFunSuite {
 
   test("test thresholding") {
-    val thresholds = Array(0.5, 0.2)
     val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2)
-      .setThresholds(thresholds)
+      .setThresholds(Array(0.5, 0.2))
     assert(testModel.friendlyPredict(1.0, 1.0) === 1.0)
     assert(testModel.friendlyPredict(1.0, 0.2) === 0.0)
   }
@@ -63,10 +62,14 @@ class ProbabilisticClassifierSuite extends SparkFunSuite {
     assert(testModel.friendlyPredict(0.6, 0.6) === 0.0)
   }
 
+  test("test one zero threshold") {
+    val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2)
+      .setThresholds(Array(0.0, 0.1))
+    assert(testModel.friendlyPredict(1.0, 10.0) === 0.0)
+    assert(testModel.friendlyPredict(0.0, 10.0) === 1.0)
+  }
+
   test("bad thresholds") {
-    intercept[IllegalArgumentException] {
-      new TestProbabilisticClassificationModel("myuid", 2, 2).setThresholds(Array(0.0, 0.1))
-    }
     intercept[IllegalArgumentException] {
       new TestProbabilisticClassificationModel("myuid", 2, 2).setThresholds(Array(0.0, 0.0))
     }
