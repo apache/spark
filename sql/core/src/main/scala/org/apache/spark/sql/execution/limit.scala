@@ -142,14 +142,15 @@ case class TakeOrderedAndProjectExec(
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val localTopK: RDD[InternalRow] = {
       child.execute().map(_.copy()).mapPartitions { iter =>
-        util.collection.Utils.takeOrdered(iter, limit, serializer)(ord)
+        util.collection.Utils.takeOrdered(iter, limit, serializer)(classTag[InternalRow], ord)
       }
     }
     val shuffled = new ShuffledRowRDD(
       ShuffleExchange.prepareShuffleDependency(
         localTopK, child.output, SinglePartition, serializer))
     shuffled.mapPartitions { iter =>
-      val topK = util.collection.Utils.takeOrdered(iter.map(_.copy()), limit, serializer)(ord)
+      val topK = util.collection.Utils.takeOrdered(iter.map(_.copy()),
+        limit, serializer)(classTag[InternalRow], ord)
       if (projectList != child.output) {
         val proj = UnsafeProjection.create(projectList, child.output)
         topK.map(r => proj(r))

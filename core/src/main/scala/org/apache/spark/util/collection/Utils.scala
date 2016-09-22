@@ -18,6 +18,7 @@
 package org.apache.spark.util.collection
 
 import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 
 import com.google.common.collect.{Ordering => GuavaOrdering}
 
@@ -45,7 +46,7 @@ private[spark] object Utils {
    * Returns the first K elements from the input as defined by the specified implicit Ordering[T]
    * and maintains the ordering.
    */
-  def takeOrdered[T](input: Iterator[T], num: Int, ser: Serializer)
+  def takeOrdered[T: ClassTag](input: Iterator[T], num: Int, ser: Serializer)
       (implicit ord: Ordering[T]): Iterator[T] = {
     val context = TaskContext.get()
     if (context == null || !input.hasNext) {
