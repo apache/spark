@@ -19,17 +19,17 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.10</artifactId>
-    <version>1.6.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.11</artifactId>
+    <version>2.1.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
-  <artifactId>spark-yarn_2.10</artifactId>
+  <artifactId>spark-yarn_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project YARN</name>
   <properties>
     <sbt.project.name>yarn</sbt.project.name>
+    <jersey-1.version>1.9</jersey-1.version>
   </properties>
 
   <dependencies>
@@ -50,6 +50,10 @@
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
@@ -97,6 +101,10 @@
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-servlet</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-servlets</artifactId>
+    </dependency>
     <!-- End of shaded deps. -->
 
     <!--
@@ -143,21 +151,60 @@
       </exclusions>
       <scope>test</scope>
      </dependency>
+
+     <!--
+       Jersey 1 dependencies only required for YARN integration testing. Creating a YARN cluster
+       in the JVM requires starting a Jersey 1-based web application.
+     -->
      <dependency>
        <groupId>com.sun.jersey</groupId>
        <artifactId>jersey-core</artifactId>
        <scope>test</scope>
+       <version>${jersey-1.version}</version>
      </dependency>
      <dependency>
        <groupId>com.sun.jersey</groupId>
        <artifactId>jersey-json</artifactId>
        <scope>test</scope>
+       <version>${jersey-1.version}</version>
      </dependency>
      <dependency>
        <groupId>com.sun.jersey</groupId>
        <artifactId>jersey-server</artifactId>
        <scope>test</scope>
+       <version>${jersey-1.version}</version>
      </dependency>
+     <dependency>
+       <groupId>com.sun.jersey.contribs</groupId>
+       <artifactId>jersey-guice</artifactId>
+       <scope>test</scope>
+       <version>${jersey-1.version}</version>
+     </dependency>
+
+    <!--
+     Testing Hive reflection needs hive on the test classpath only.
+     It doesn't need the spark hive modules, so the -Phive flag is not checked.
+      -->
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-exec</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-metastore</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libthrift</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libfb303</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

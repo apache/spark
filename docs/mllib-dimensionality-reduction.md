@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Dimensionality Reduction - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Dimensionality Reduction
+title: Dimensionality Reduction - RDD-based API
+displayTitle: Dimensionality Reduction - RDD-based API
 ---
 
 * Table of contents
@@ -11,7 +11,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Dimensionality Reduction
 of reducing the number of variables under consideration.
 It can be used to extract latent features from raw and noisy features
 or compress data while maintaining the structure.
-MLlib provides support for dimensionality reduction on the <a href="mllib-data-types.html#rowmatrix">RowMatrix</a> class.
+`spark.mllib` provides support for dimensionality reduction on the <a href="mllib-data-types.html#rowmatrix">RowMatrix</a> class.
 
 ## Singular value decomposition (SVD)
 
@@ -57,66 +57,22 @@ passes, $O(n)$ storage on each executor, and $O(n k)$ storage on the driver.
 
 ### SVD Example
  
-MLlib provides SVD functionality to row-oriented matrices, provided in the
+`spark.mllib` provides SVD functionality to row-oriented matrices, provided in the
 <a href="mllib-data-types.html#rowmatrix">RowMatrix</a> class. 
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.Matrix
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
-import org.apache.spark.mllib.linalg.SingularValueDecomposition
+Refer to the [`SingularValueDecomposition` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.SingularValueDecomposition) for details on the API.
 
-val mat: RowMatrix = ...
-
-// Compute the top 20 singular values and corresponding singular vectors.
-val svd: SingularValueDecomposition[RowMatrix, Matrix] = mat.computeSVD(20, computeU = true)
-val U: RowMatrix = svd.U // The U factor is a RowMatrix.
-val s: Vector = svd.s // The singular values are stored in a local dense vector.
-val V: Matrix = svd.V // The V factor is a local dense matrix.
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/SVDExample.scala %}
 
 The same code applies to `IndexedRowMatrix` if `U` is defined as an
 `IndexedRowMatrix`.
 </div>
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import java.util.LinkedList;
+Refer to the [`SingularValueDecomposition` Java docs](api/java/org/apache/spark/mllib/linalg/SingularValueDecomposition.html) for details on the API.
 
-import org.apache.spark.api.java.*;
-import org.apache.spark.mllib.linalg.distributed.RowMatrix;
-import org.apache.spark.mllib.linalg.Matrix;
-import org.apache.spark.mllib.linalg.SingularValueDecomposition;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.rdd.RDD;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
-
-public class SVD {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("SVD Example");
-    SparkContext sc = new SparkContext(conf);
-     
-    double[][] array = ...
-    LinkedList<Vector> rowsList = new LinkedList<Vector>();
-    for (int i = 0; i < array.length; i++) {
-      Vector currentRow = Vectors.dense(array[i]);
-      rowsList.add(currentRow);
-    }
-    JavaRDD<Vector> rows = JavaSparkContext.fromSparkContext(sc).parallelize(rowsList);
-
-    // Create a RowMatrix from JavaRDD<Vector>.
-    RowMatrix mat = new RowMatrix(rows.rdd());
-
-    // Compute the top 4 singular values and corresponding singular vectors.
-    SingularValueDecomposition<RowMatrix, Matrix> svd = mat.computeSVD(4, true, 1.0E-9d);
-    RowMatrix U = svd.U();
-    Vector s = svd.s();
-    Matrix V = svd.V();
-  }
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaSVDExample.java %}
 
 The same code applies to `IndexedRowMatrix` if `U` is defined as an
 `IndexedRowMatrix`.
@@ -137,7 +93,7 @@ statistical method to find a rotation such that the first coordinate has the lar
 possible, and each succeeding coordinate in turn has the largest variance possible. The columns of
 the rotation matrix are called principal components. PCA is used widely in dimensionality reduction.
 
-MLlib supports PCA for tall-and-skinny matrices stored in row-oriented format and any Vectors.
+`spark.mllib` supports PCA for tall-and-skinny matrices stored in row-oriented format and any Vectors.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -145,34 +101,16 @@ MLlib supports PCA for tall-and-skinny matrices stored in row-oriented format an
 The following code demonstrates how to compute principal components on a `RowMatrix`
 and use them to project the vectors into a low-dimensional space.
 
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.Matrix
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
+Refer to the [`RowMatrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) for details on the API.
 
-val mat: RowMatrix = ...
-
-// Compute the top 10 principal components.
-val pc: Matrix = mat.computePrincipalComponents(10) // Principal components are stored in a local dense matrix.
-
-// Project the rows to the linear space spanned by the top 10 principal components.
-val projected: RowMatrix = mat.multiply(pc)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/PCAOnRowMatrixExample.scala %}
 
 The following code demonstrates how to compute principal components on source vectors
 and use them to project the vectors into a low-dimensional space while keeping associated labels:
 
-{% highlight scala %}
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.feature.PCA
+Refer to the [`PCA` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.PCA) for details on the API.
 
-val data: RDD[LabeledPoint] = ...
-
-// Compute the top 10 principal components.
-val pca = new PCA(10).fit(data.map(_.features))
-
-// Project vectors to the linear space spanned by the top 10 principal components, keeping the label
-val projected = data.map(p => p.copy(features = pca.transform(p.features)))
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/PCAOnSourceVectorExample.scala %}
 
 </div>
 
@@ -182,40 +120,9 @@ The following code demonstrates how to compute principal components on a `RowMat
 and use them to project the vectors into a low-dimensional space.
 The number of columns should be small, e.g, less than 1000.
 
-{% highlight java %}
-import java.util.LinkedList;
+Refer to the [`RowMatrix` Java docs](api/java/org/apache/spark/mllib/linalg/distributed/RowMatrix.html) for details on the API.
 
-import org.apache.spark.api.java.*;
-import org.apache.spark.mllib.linalg.distributed.RowMatrix;
-import org.apache.spark.mllib.linalg.Matrix;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.rdd.RDD;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
-
-public class PCA {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("PCA Example");
-    SparkContext sc = new SparkContext(conf);
-     
-    double[][] array = ...
-    LinkedList<Vector> rowsList = new LinkedList<Vector>();
-    for (int i = 0; i < array.length; i++) {
-      Vector currentRow = Vectors.dense(array[i]);
-      rowsList.add(currentRow);
-    }
-    JavaRDD<Vector> rows = JavaSparkContext.fromSparkContext(sc).parallelize(rowsList);
-
-    // Create a RowMatrix from JavaRDD<Vector>.
-    RowMatrix mat = new RowMatrix(rows.rdd());
-
-    // Compute the top 3 principal components.
-    Matrix pc = mat.computePrincipalComponents(3);
-    RowMatrix projected = mat.multiply(pc);
-  }
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaPCAExample.java %}
 
 </div>
 </div>

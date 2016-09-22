@@ -19,48 +19,42 @@
 
 # Starts the master on the machine this script is executed on.
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
+
+# NOTE: This exact class name is matched downstream by SparkSubmit.
+# Any changes need to be reflected there.
+CLASS="org.apache.spark.deploy.master.Master"
+
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+  echo "Usage: ./sbin/start-master.sh [options]"
+  pattern="Usage:"
+  pattern+="\|Using Spark's default log4j profile:"
+  pattern+="\|Registered signal handlers for"
+
+  "${SPARK_HOME}"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
+  exit 1
+fi
 
 ORIGINAL_ARGS="$@"
 
-START_TACHYON=false
+. "${SPARK_HOME}/sbin/spark-config.sh"
 
-while (( "$#" )); do
-case $1 in
-    --with-tachyon)
-      if [ ! -e "$sbin"/../tachyon/bin/tachyon ]; then
-        echo "Error: --with-tachyon specified, but tachyon not found."
-        exit -1
-      fi
-      START_TACHYON=true
-      ;;
-  esac
-shift
-done
-
-. "$sbin/spark-config.sh"
-
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+. "${SPARK_HOME}/bin/load-spark-env.sh"
 
 if [ "$SPARK_MASTER_PORT" = "" ]; then
   SPARK_MASTER_PORT=7077
 fi
 
-if [ "$SPARK_MASTER_IP" = "" ]; then
-  SPARK_MASTER_IP=`hostname`
+if [ "$SPARK_MASTER_HOST" = "" ]; then
+  SPARK_MASTER_HOST=`hostname -f`
 fi
 
 if [ "$SPARK_MASTER_WEBUI_PORT" = "" ]; then
   SPARK_MASTER_WEBUI_PORT=8080
 fi
 
-"$sbin"/spark-daemon.sh start org.apache.spark.deploy.master.Master 1 \
-  --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT \
+"${SPARK_HOME}/sbin"/spark-daemon.sh start $CLASS 1 \
+  --host $SPARK_MASTER_HOST --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT \
   $ORIGINAL_ARGS
-
-if [ "$START_TACHYON" == "true" ]; then
-  "$sbin"/../tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP
-  "$sbin"/../tachyon/bin/tachyon format -s
-  "$sbin"/../tachyon/bin/tachyon-start.sh master
-fi

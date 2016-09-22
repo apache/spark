@@ -17,19 +17,27 @@
 
 package org.apache.spark.deploy.master
 
+import scala.annotation.tailrec
+
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.{IntParam, Utils}
 
 /**
  * Command-line parser for the master.
  */
-private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
+private[master] class MasterArguments(args: Array[String], conf: SparkConf) extends Logging {
   var host = Utils.localHostName()
   var port = 7077
   var webUiPort = 8080
   var propertiesFile: String = null
 
   // Check for settings in environment variables
+  if (System.getenv("SPARK_MASTER_IP") != null) {
+    logWarning("SPARK_MASTER_IP is deprecated, please use SPARK_MASTER_HOST")
+    host = System.getenv("SPARK_MASTER_IP")
+  }
+
   if (System.getenv("SPARK_MASTER_HOST") != null) {
     host = System.getenv("SPARK_MASTER_HOST")
   }
@@ -49,6 +57,7 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
     webUiPort = conf.get("spark.master.ui.port").toInt
   }
 
+  @tailrec
   private def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
       Utils.checkHost(value, "ip no longer supported, please use hostname " + value)
@@ -75,7 +84,7 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
     case ("--help") :: tail =>
       printUsageAndExit(0)
 
-    case Nil => {}
+    case Nil => // No-op
 
     case _ =>
       printUsageAndExit(1)

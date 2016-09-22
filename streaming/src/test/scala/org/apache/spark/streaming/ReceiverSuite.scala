@@ -24,8 +24,8 @@ import java.util.concurrent.Semaphore
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.concurrent.Timeouts
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
@@ -215,7 +215,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     def getCurrentLogFiles(logDirectory: File): Seq[String] = {
       try {
         if (logDirectory.exists()) {
-          logDirectory1.listFiles().filter { _.getName.startsWith("log") }.map { _.toString }
+          logDirectory.listFiles().filter { _.getName.startsWith("log") }.map { _.toString }
         } else {
           Seq.empty
         }

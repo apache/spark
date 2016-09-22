@@ -17,7 +17,10 @@
 
 package org.apache.spark.deploy.history
 
-import org.apache.spark.{Logging, SparkConf}
+import scala.annotation.tailrec
+
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -29,27 +32,35 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
 
   parse(args.toList)
 
+  @tailrec
   private def parse(args: List[String]): Unit = {
-    args match {
-      case ("--dir" | "-d") :: value :: tail =>
-        logWarning("Setting log directory through the command line is deprecated as of " +
-          "Spark 1.1.0. Please set this through spark.history.fs.logDirectory instead.")
-        conf.set("spark.history.fs.logDirectory", value)
-        System.setProperty("spark.history.fs.logDirectory", value)
-        parse(tail)
+    if (args.length == 1) {
+      setLogDirectory(args.head)
+    } else {
+      args match {
+        case ("--dir" | "-d") :: value :: tail =>
+          setLogDirectory(value)
+          parse(tail)
 
-      case ("--help" | "-h") :: tail =>
-        printUsageAndExit(0)
+        case ("--help" | "-h") :: tail =>
+          printUsageAndExit(0)
 
-      case ("--properties-file") :: value :: tail =>
-        propertiesFile = value
-        parse(tail)
+        case ("--properties-file") :: value :: tail =>
+          propertiesFile = value
+          parse(tail)
 
-      case Nil =>
+        case Nil =>
 
-      case _ =>
-        printUsageAndExit(1)
+        case _ =>
+          printUsageAndExit(1)
+      }
     }
+  }
+
+  private def setLogDirectory(value: String): Unit = {
+    logWarning("Setting log directory through the command line is deprecated as of " +
+      "Spark 1.1.0. Please set this through spark.history.fs.logDirectory instead.")
+    conf.set("spark.history.fs.logDirectory", value)
   }
 
    // This mutates the SparkConf, so all accesses to it must be made after this line
@@ -62,6 +73,8 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
       |Usage: HistoryServer [options]
       |
       |Options:
+      |  DIR                         Deprecated; set spark.history.fs.logDirectory directly
+      |  --dir DIR (-d DIR)          Deprecated; set spark.history.fs.logDirectory directly
       |  --properties-file FILE      Path to a custom Spark properties file.
       |                              Default is conf/spark-defaults.conf.
       |
@@ -90,3 +103,4 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
   }
 
 }
+

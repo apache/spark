@@ -29,6 +29,7 @@ import org.apache.spark.streaming.Time
  *                        the streaming scheduler queue
  * @param processingStartTime Clock time of when the first job of this batch started processing
  * @param processingEndTime Clock time of when the last job of this batch finished processing
+ * @param outputOperationInfos The output operations in this batch
  */
 @DeveloperApi
 case class BatchInfo(
@@ -36,13 +37,9 @@ case class BatchInfo(
     streamIdToInputInfo: Map[Int, StreamInputInfo],
     submissionTime: Long,
     processingStartTime: Option[Long],
-    processingEndTime: Option[Long]
+    processingEndTime: Option[Long],
+    outputOperationInfos: Map[Int, OutputOperationInfo]
   ) {
-
-  private var _failureReasons: Map[Int, String] = Map.empty
-
-  @deprecated("Use streamIdToInputInfo instead", "1.5.0")
-  def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords)
 
   /**
    * Time taken for the first job of this batch to start processing from the time this batch
@@ -70,11 +67,4 @@ case class BatchInfo(
    */
   def numRecords: Long = streamIdToInputInfo.values.map(_.numRecords).sum
 
-  /** Set the failure reasons corresponding to every output ops in the batch */
-  private[streaming] def setFailureReason(reasons: Map[Int, String]): Unit = {
-    _failureReasons = reasons
-  }
-
-  /** Failure reasons corresponding to every output ops in the batch */
-  private[streaming] def failureReasons = _failureReasons
 }

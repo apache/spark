@@ -17,15 +17,14 @@
 
 library(SparkR)
 
-# Initialize SparkContext and SQLContext
-sc <- sparkR.init(appName="SparkR-DataFrame-example")
-sqlContext <- sparkRSQL.init(sc)
+# Initialize SparkSession
+sparkR.session(appName = "SparkR-DataFrame-example")
 
 # Create a simple local data.frame
 localDF <- data.frame(name=c("John", "Smith", "Sarah"), age=c(19, 23, 18))
 
-# Convert local data frame to a SparkR DataFrame
-df <- createDataFrame(sqlContext, localDF)
+# Convert local data frame to a SparkDataFrame
+df <- createDataFrame(localDF)
 
 # Print its schema
 printSchema(df)
@@ -35,20 +34,23 @@ printSchema(df)
 
 # Create a DataFrame from a JSON file
 path <- file.path(Sys.getenv("SPARK_HOME"), "examples/src/main/resources/people.json")
-peopleDF <- jsonFile(sqlContext, path)
+peopleDF <- read.json(path)
 printSchema(peopleDF)
+# root
+#  |-- age: long (nullable = true)
+#  |-- name: string (nullable = true)
 
 # Register this DataFrame as a table.
-registerTempTable(peopleDF, "people")
+createOrReplaceTempView(peopleDF, "people")
 
-# SQL statements can be run by using the sql methods provided by sqlContext
-teenagers <- sql(sqlContext, "SELECT name FROM people WHERE age >= 13 AND age <= 19")
+# SQL statements can be run by using the sql methods
+teenagers <- sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
 # Call collect to get a local data.frame
 teenagersLocalDF <- collect(teenagers)
 
-# Print the teenagers in our dataset 
+# Print the teenagers in our dataset
 print(teenagersLocalDF)
 
-# Stop the SparkContext now
-sparkR.stop()
+# Stop the SparkSession now
+sparkR.session.stop()

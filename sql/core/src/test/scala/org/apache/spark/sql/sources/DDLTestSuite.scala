@@ -28,17 +28,24 @@ class DDLScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    SimpleDDLScan(parameters("from").toInt, parameters("TO").toInt, parameters("Table"))(sqlContext)
+    SimpleDDLScan(
+      parameters("from").toInt,
+      parameters("TO").toInt,
+      parameters("Table"))(sqlContext.sparkSession)
   }
 }
 
-case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlContext: SQLContext)
+case class SimpleDDLScan(
+    from: Int,
+    to: Int,
+    table: String)(@transient val sparkSession: SparkSession)
   extends BaseRelation with TableScan {
+
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType =
     StructType(Seq(
-      StructField("intType", IntegerType, nullable = false,
-        new MetadataBuilder().putString("comment", s"test comment $table").build()),
+      StructField("intType", IntegerType, nullable = false).withComment(s"test comment $table"),
       StructField("stringType", StringType, nullable = false),
       StructField("dateType", DateType, nullable = false),
       StructField("timestampType", TimestampType, nullable = false),
@@ -63,14 +70,14 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
 
   override def buildScan(): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
-    sqlContext.sparkContext.parallelize(from to to).map { e =>
+    sparkSession.sparkContext.parallelize(from to to).map { e =>
       InternalRow(UTF8String.fromString(s"people$e"), e * 2)
     }.asInstanceOf[RDD[Row]]
   }
 }
 
 class DDLTestSuite extends DataSourceTest with SharedSQLContext {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+  protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -90,21 +97,21 @@ class DDLTestSuite extends DataSourceTest with SharedSQLContext {
       "describe ddlPeople",
       Seq(
         Row("intType", "int", "test comment test1"),
-        Row("stringType", "string", ""),
-        Row("dateType", "date", ""),
-        Row("timestampType", "timestamp", ""),
-        Row("doubleType", "double", ""),
-        Row("bigintType", "bigint", ""),
-        Row("tinyintType", "tinyint", ""),
-        Row("decimalType", "decimal(10,0)", ""),
-        Row("fixedDecimalType", "decimal(5,1)", ""),
-        Row("binaryType", "binary", ""),
-        Row("booleanType", "boolean", ""),
-        Row("smallIntType", "smallint", ""),
-        Row("floatType", "float", ""),
-        Row("mapType", "map<string,string>", ""),
-        Row("arrayType", "array<string>", ""),
-        Row("structType", "struct<f1:string,f2:int>", "")
+        Row("stringType", "string", null),
+        Row("dateType", "date", null),
+        Row("timestampType", "timestamp", null),
+        Row("doubleType", "double", null),
+        Row("bigintType", "bigint", null),
+        Row("tinyintType", "tinyint", null),
+        Row("decimalType", "decimal(10,0)", null),
+        Row("fixedDecimalType", "decimal(5,1)", null),
+        Row("binaryType", "binary", null),
+        Row("booleanType", "boolean", null),
+        Row("smallIntType", "smallint", null),
+        Row("floatType", "float", null),
+        Row("mapType", "map<string,string>", null),
+        Row("arrayType", "array<string>", null),
+        Row("structType", "struct<f1:string,f2:int>", null)
       ))
 
   test("SPARK-7686 DescribeCommand should have correct physical plan output attributes") {

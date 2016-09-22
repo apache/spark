@@ -47,13 +47,13 @@ trait VectorTransformer extends Serializable {
    */
   @Since("1.1.0")
   def transform(data: RDD[Vector]): RDD[Vector] = {
-    // Later in #1498 , all RDD objects are sent via broadcasting instead of akka.
+    // Later in #1498 , all RDD objects are sent via broadcasting instead of RPC.
     // So it should be no longer necessary to explicitly broadcast `this` object.
     data.map(x => this.transform(x))
   }
 
   /**
-   * Applies transformation on an JavaRDD[Vector].
+   * Applies transformation on a JavaRDD[Vector].
    *
    * @param data JavaRDD[Vector] to be transformed.
    * @return transformed JavaRDD[Vector].

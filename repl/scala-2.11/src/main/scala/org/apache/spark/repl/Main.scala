@@ -19,89 +19,97 @@ package org.apache.spark.repl
 
 import java.io.File
 
-import scala.tools.nsc.Settings
+import scala.tools.nsc.GenericRunnerSettings
 
-import org.apache.spark.util.Utils
 import org.apache.spark._
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.Utils
 
 object Main extends Logging {
 
+  initializeLogIfNecessary(true)
+
   val conf = new SparkConf()
-  val tmp = System.getProperty("java.io.tmpdir")
-  val rootDir = conf.get("spark.repl.classdir", tmp)
-  val outputDir = Utils.createTempDir(rootDir)
-  val s = new Settings()
-  s.processArguments(List("-Yrepl-class-based",
-    "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
-    "-classpath", getAddedJars.mkString(File.pathSeparator)), true)
-  // the creation of SecurityManager has to be lazy so SPARK_YARN_MODE is set if needed
-  lazy val classServer = new HttpServer(conf, outputDir, new SecurityManager(conf))
+  val rootDir = conf.getOption("spark.repl.classdir").getOrElse(Utils.getLocalDir(conf))
+  val outputDir = Utils.createTempDir(root = rootDir, namePrefix = "repl")
+
   var sparkContext: SparkContext = _
-  var sqlContext: SQLContext = _
-  var interp = new SparkILoop // this is a public var because tests reset it.
+  var sparkSession: SparkSession = _
+  // this is a public var because tests reset it.
+  var interp: SparkILoop = _
+
+  private var hasErrors = false
+
+  private def scalaOptionError(msg: String): Unit = {
+    hasErrors = true
+    Console.err.println(msg)
+  }
 
   def main(args: Array[String]) {
-    if (getMaster == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
-    // Start the classServer and store its URI in a spark system property
-    // (which will be passed to executors so that they can connect to it)
-    classServer.start()
-    interp.process(s) // Repl starts and goes in loop of R.E.P.L
-    classServer.stop()
-    Option(sparkContext).map(_.stop)
+    doMain(args, new SparkILoop)
   }
 
-  def getAddedJars: Array[String] = {
-    val envJars = sys.env.get("ADD_JARS")
-    if (envJars.isDefined) {
-      logWarning("ADD_JARS environment variable is deprecated, use --jar spark submit argument instead")
+  // Visible for testing
+  private[repl] def doMain(args: Array[String], _interp: SparkILoop): Unit = {
+    interp = _interp
+    val jars = Utils.getUserJars(conf, isShell = true).mkString(File.pathSeparator)
+    val interpArguments = List(
+      "-Yrepl-class-based",
+      "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
+      "-classpath", jars
+    ) ++ args.toList
+
+    val settings = new GenericRunnerSettings(scalaOptionError)
+    settings.processArguments(interpArguments, true)
+
+    if (!hasErrors) {
+      interp.process(settings) // Repl starts and goes in loop of R.E.P.L
+      Option(sparkContext).map(_.stop)
     }
-    val propJars = sys.props.get("spark.jars").flatMap { p => if (p == "") None else Some(p) }
-    val jars = propJars.orElse(envJars).getOrElse("")
-    Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
   }
 
-  def createSparkContext(): SparkContext = {
+  def createSparkSession(): SparkSession = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
-    val jars = getAddedJars
-    val conf = new SparkConf()
-      .setMaster(getMaster)
-      .setJars(jars)
-      .set("spark.repl.class.uri", classServer.uri)
-      .setIfMissing("spark.app.name", "Spark shell")
-    logInfo("Spark class server started at " + classServer.uri)
+    conf.setIfMissing("spark.app.name", "Spark shell")
+    // SparkContext will detect this configuration and register it with the RpcEnv's
+    // file server, setting spark.repl.class.uri to the actual URI for executors to
+    // use. This is sort of ugly but since executors are started as part of SparkContext
+    // initialization in certain cases, there's an initialization order issue that prevents
+    // this from being set after SparkContext is instantiated.
+    conf.set("spark.repl.class.outputDir", outputDir.getAbsolutePath())
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
     }
     if (System.getenv("SPARK_HOME") != null) {
       conf.setSparkHome(System.getenv("SPARK_HOME"))
     }
-    sparkContext = new SparkContext(conf)
-    logInfo("Created spark context..")
-    sparkContext
+
+    val builder = SparkSession.builder.config(conf)
+    if (conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase == "hive") {
+      if (SparkSession.hiveClassesArePresent) {
+        // In the case that the property is not set at all, builder's config
+        // does not have this value set to 'hive' yet. The original default
+        // behavior is that when there are hive classes, we use hive catalog.
+        sparkSession = builder.enableHiveSupport().getOrCreate()
+        logInfo("Created Spark session with Hive support")
+      } else {
+        // Need to change it back to 'in-memory' if no hive classes are found
+        // in the case that the property is set to hive in spark-defaults.conf
+        builder.config(CATALOG_IMPLEMENTATION.key, "in-memory")
+        sparkSession = builder.getOrCreate()
+        logInfo("Created Spark session")
+      }
+    } else {
+      // In the case that the property is set but not to 'hive', the internal
+      // default is 'in-memory'. So the sparkSession will use in-memory catalog.
+      sparkSession = builder.getOrCreate()
+      logInfo("Created Spark session")
+    }
+    sparkContext = sparkSession.sparkContext
+    Signaling.cancelOnInterrupt(sparkContext)
+    sparkSession
   }
 
-  def createSQLContext(): SQLContext = {
-    val name = "org.apache.spark.sql.hive.HiveContext"
-    val loader = Utils.getContextOrSparkClassLoader
-    try {
-      sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
-        .newInstance(sparkContext).asInstanceOf[SQLContext]
-      logInfo("Created sql context (with Hive support)..")
-    } catch {
-      case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
-        sqlContext = new SQLContext(sparkContext)
-        logInfo("Created sql context..")
-    }
-    sqlContext
-  }
-
-  private def getMaster: String = {
-    val master = {
-      val envMaster = sys.env.get("MASTER")
-      val propMaster = sys.props.get("spark.master")
-      propMaster.orElse(envMaster).getOrElse("local[*]")
-    }
-    master
-  }
 }

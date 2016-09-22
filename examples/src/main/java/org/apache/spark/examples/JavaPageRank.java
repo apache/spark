@@ -17,25 +17,22 @@
 
 package org.apache.spark.examples;
 
-
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Iterator;
+import java.util.regex.Pattern;
 
 import scala.Tuple2;
 
 import com.google.common.collect.Iterables;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.PairFunction;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Iterator;
-import java.util.regex.Pattern;
+import org.apache.spark.sql.SparkSession;
 
 /**
  * Computes the PageRank of URLs from an input file. Input file should
@@ -48,6 +45,11 @@ import java.util.regex.Pattern;
  *
  * This is an example implementation for learning how to use Spark. For more conventional use,
  * please refer to org.apache.spark.graphx.lib.PageRank
+ *
+ * Example Usage:
+ * <pre>
+ * bin/run-example JavaPageRank data/mllib/pagerank_data.txt 10
+ * </pre>
  */
 public final class JavaPageRank {
   private static final Pattern SPACES = Pattern.compile("\\s+");
@@ -75,24 +77,27 @@ public final class JavaPageRank {
 
     showWarning();
 
-    SparkConf sparkConf = new SparkConf().setAppName("JavaPageRank");
-    JavaSparkContext ctx = new JavaSparkContext(sparkConf);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaPageRank")
+      .getOrCreate();
 
     // Loads in input file. It should be in format of:
     //     URL         neighbor URL
     //     URL         neighbor URL
     //     URL         neighbor URL
     //     ...
-    JavaRDD<String> lines = ctx.textFile(args[0], 1);
+    JavaRDD<String> lines = spark.read().textFile(args[0]).javaRDD();
 
     // Loads all URLs from input file and initialize their neighbors.
-    JavaPairRDD<String, Iterable<String>> links = lines.mapToPair(new PairFunction<String, String, String>() {
-      @Override
-      public Tuple2<String, String> call(String s) {
-        String[] parts = SPACES.split(s);
-        return new Tuple2<String, String>(parts[0], parts[1]);
-      }
-    }).distinct().groupByKey().cache();
+    JavaPairRDD<String, Iterable<String>> links = lines.mapToPair(
+      new PairFunction<String, String, String>() {
+        @Override
+        public Tuple2<String, String> call(String s) {
+          String[] parts = SPACES.split(s);
+          return new Tuple2<>(parts[0], parts[1]);
+        }
+      }).distinct().groupByKey().cache();
 
     // Loads all URLs with other URL(s) link to from input file and initialize ranks of them to one.
     JavaPairRDD<String, Double> ranks = links.mapValues(new Function<Iterable<String>, Double>() {
@@ -108,13 +113,13 @@ public final class JavaPageRank {
       JavaPairRDD<String, Double> contribs = links.join(ranks).values()
         .flatMapToPair(new PairFlatMapFunction<Tuple2<Iterable<String>, Double>, String, Double>() {
           @Override
-          public Iterable<Tuple2<String, Double>> call(Tuple2<Iterable<String>, Double> s) {
+          public Iterator<Tuple2<String, Double>> call(Tuple2<Iterable<String>, Double> s) {
             int urlCount = Iterables.size(s._1);
-            List<Tuple2<String, Double>> results = new ArrayList<Tuple2<String, Double>>();
+            List<Tuple2<String, Double>> results = new ArrayList<>();
             for (String n : s._1) {
-              results.add(new Tuple2<String, Double>(n, s._2() / urlCount));
+              results.add(new Tuple2<>(n, s._2() / urlCount));
             }
-            return results;
+            return results.iterator();
           }
       });
 
@@ -133,6 +138,6 @@ public final class JavaPageRank {
         System.out.println(tuple._1() + " has rank: " + tuple._2() + ".");
     }
 
-    ctx.stop();
+    spark.stop();
   }
 }

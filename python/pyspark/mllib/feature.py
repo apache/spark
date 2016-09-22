@@ -30,7 +30,7 @@ if sys.version >= '3':
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import SparkContext, since
+from pyspark import since
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import (
@@ -60,8 +60,6 @@ class VectorTransformer(object):
 
 class Normalizer(VectorTransformer):
     """
-    .. note:: Experimental
-
     Normalizes samples individually to unit L\ :sup:`p`\  norm
 
     For any 1 <= `p` < float('inf'), normalizes samples using
@@ -100,8 +98,6 @@ class Normalizer(VectorTransformer):
         :return: normalized vector. If the norm of the input is zero, it
                  will return the input vector.
         """
-        sc = SparkContext._active_spark_context
-        assert sc is not None, "SparkContext should be initialized first"
         if isinstance(vector, RDD):
             vector = vector.map(_convert_to_vector)
         else:
@@ -133,8 +129,6 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
 
 class StandardScalerModel(JavaVectorTransformer):
     """
-    .. note:: Experimental
-
     Represents a StandardScaler model that can transform vectors.
 
     .. versionadded:: 1.2.0
@@ -174,19 +168,48 @@ class StandardScalerModel(JavaVectorTransformer):
         self.call("setWithStd", withStd)
         return self
 
+    @property
+    @since('2.0.0')
+    def withStd(self):
+        """
+        Returns if the model scales the data to unit standard deviation.
+        """
+        return self.call("withStd")
+
+    @property
+    @since('2.0.0')
+    def withMean(self):
+        """
+        Returns if the model centers the data before scaling.
+        """
+        return self.call("withMean")
+
+    @property
+    @since('2.0.0')
+    def std(self):
+        """
+        Return the column standard deviation values.
+        """
+        return self.call("std")
+
+    @property
+    @since('2.0.0')
+    def mean(self):
+        """
+        Return the column mean values.
+        """
+        return self.call("mean")
+
 
 class StandardScaler(object):
     """
-    .. note:: Experimental
-
     Standardizes features by removing the mean and scaling to unit
     variance using column summary statistics on the samples in the
     training set.
 
     :param withMean: False by default. Centers the data with mean
-                     before scaling. It will build a dense output, so this
-                     does not work on sparse input and will raise an
-                     exception.
+                     before scaling. It will build a dense output, so take
+                     care when applying to sparse input.
     :param withStd: True by default. Scales the data to unit
                     standard deviation.
 
@@ -198,6 +221,14 @@ class StandardScaler(object):
     >>> for r in result.collect(): r
     DenseVector([-0.7071, 0.7071, -0.7071])
     DenseVector([0.7071, -0.7071, 0.7071])
+    >>> int(model.std[0])
+    4
+    >>> int(model.mean[0]*10)
+    9
+    >>> model.withStd
+    True
+    >>> model.withMean
+    True
 
     .. versionadded:: 1.2.0
     """
@@ -224,8 +255,6 @@ class StandardScaler(object):
 
 class ChiSqSelectorModel(JavaVectorTransformer):
     """
-    .. note:: Experimental
-
     Represents a Chi Squared selector model.
 
     .. versionadded:: 1.4.0
@@ -244,8 +273,6 @@ class ChiSqSelectorModel(JavaVectorTransformer):
 
 class ChiSqSelector(object):
     """
-    .. note:: Experimental
-
     Creates a ChiSquared feature selector.
 
     :param numTopFeatures: number of features that selector will select.
@@ -323,8 +350,6 @@ class PCA(object):
 
 class HashingTF(object):
     """
-    .. note:: Experimental
-
     Maps a sequence of terms to their term frequencies using the hashing
     trick.
 
@@ -341,6 +366,17 @@ class HashingTF(object):
     """
     def __init__(self, numFeatures=1 << 20):
         self.numFeatures = numFeatures
+        self.binary = False
+
+    @since("2.0.0")
+    def setBinary(self, value):
+        """
+        If True, term frequency vector will be binary such that non-zero
+        term counts will be set to 1
+        (default: False)
+        """
+        self.binary = value
+        return self
 
     @since('1.2.0')
     def indexOf(self, term):
@@ -360,7 +396,7 @@ class HashingTF(object):
         freq = {}
         for term in document:
             i = self.indexOf(term)
-            freq[i] = freq.get(i, 0) + 1.0
+            freq[i] = 1.0 if self.binary else freq.get(i, 0) + 1.0
         return Vectors.sparse(self.numFeatures, freq.items())
 
 
@@ -399,8 +435,6 @@ class IDFModel(JavaVectorTransformer):
 
 class IDF(object):
     """
-    .. note:: Experimental
-
     Inverse document frequency (IDF).
 
     The standard formulation is used: `idf = log((m + 1) / (d(t) + 1))`,
@@ -504,13 +538,13 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         """
         jmodel = sc._jvm.org.apache.spark.mllib.feature \
             .Word2VecModel.load(sc._jsc.sc(), path)
-        return Word2VecModel(jmodel)
+        model = sc._jvm.org.apache.spark.mllib.api.python.Word2VecModelWrapper(jmodel)
+        return Word2VecModel(model)
 
 
 @ignore_unicode_prefix
 class Word2Vec(object):
-    """
-    Word2Vec creates vector representation of words in a text corpus.
+    """Word2Vec creates vector representation of words in a text corpus.
     The algorithm first constructs a vocabulary from the corpus
     and then learns vector representation of words in the vocabulary.
     The vector representation can be used as features in
@@ -532,13 +566,19 @@ class Word2Vec(object):
     >>> doc = sc.parallelize(localDoc).map(lambda line: line.split(" "))
     >>> model = Word2Vec().setVectorSize(10).setSeed(42).fit(doc)
 
+    Querying for synonyms of a word will not return that word:
+
     >>> syms = model.findSynonyms("a", 2)
     >>> [s[0] for s in syms]
     [u'b', u'c']
+
+    But querying for synonyms of a vector may return the word whose
+    representation is that vector:
+
     >>> vec = model.transform("a")
     >>> syms = model.findSynonyms(vec, 2)
     >>> [s[0] for s in syms]
-    [u'b', u'c']
+    [u'a', u'b']
 
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
@@ -546,6 +586,9 @@ class Word2Vec(object):
     >>> sameModel = Word2VecModel.load(sc, path)
     >>> model.transform("a") == sameModel.transform("a")
     True
+    >>> syms = sameModel.findSynonyms("a", 2)
+    >>> [s[0] for s in syms]
+    [u'b', u'c']
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
@@ -553,6 +596,7 @@ class Word2Vec(object):
     ...     pass
 
     .. versionadded:: 1.2.0
+
     """
     def __init__(self):
         """
@@ -562,8 +606,9 @@ class Word2Vec(object):
         self.learningRate = 0.025
         self.numPartitions = 1
         self.numIterations = 1
-        self.seed = random.randint(0, sys.maxsize)
+        self.seed = None
         self.minCount = 5
+        self.windowSize = 5
 
     @since('1.2.0')
     def setVectorSize(self, vectorSize):
@@ -616,6 +661,14 @@ class Word2Vec(object):
         self.minCount = minCount
         return self
 
+    @since('2.0.0')
+    def setWindowSize(self, windowSize):
+        """
+        Sets window size (default: 5).
+        """
+        self.windowSize = windowSize
+        return self
+
     @since('1.2.0')
     def fit(self, data):
         """
@@ -628,15 +681,13 @@ class Word2Vec(object):
             raise TypeError("data should be an RDD of list of string")
         jmodel = callMLlibFunc("trainWord2VecModel", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
-                               int(self.numIterations), int(self.seed),
-                               int(self.minCount))
+                               int(self.numIterations), self.seed,
+                               int(self.minCount), int(self.windowSize))
         return Word2VecModel(jmodel)
 
 
 class ElementwiseProduct(VectorTransformer):
     """
-    .. note:: Experimental
-
     Scales each column of the vector, with the supplied weight vector.
     i.e the elementwise product.
 
@@ -670,11 +721,15 @@ class ElementwiseProduct(VectorTransformer):
 
 def _test():
     import doctest
-    from pyspark import SparkContext
+    from pyspark.sql import SparkSession
     globs = globals().copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("mllib.feature tests")\
+        .getOrCreate()
+    globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

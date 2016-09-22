@@ -20,7 +20,8 @@ package org.apache.spark.scheduler
 import scala.collection.mutable
 
 import org.apache.spark._
-import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, RpcEndpoint}
+import org.apache.spark.internal.Logging
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 
 private sealed trait OutputCommitCoordinationMessage extends Serializable
 
@@ -47,6 +48,8 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
   private type PartitionId = Int
   private type TaskAttemptNumber = Int
 
+  private val NO_AUTHORIZED_COMMITTER: TaskAttemptNumber = -1
+
   /**
    * Map from active stages's id => partition id => task attempt with exclusive lock on committing
    * output for that partition.
@@ -56,9 +59,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
    *
    * Access to this map should be guarded by synchronizing on the OutputCommitCoordinator instance.
    */
-  private val authorizedCommittersByStage: CommittersByStageMap = mutable.Map()
-  private type CommittersByStageMap =
-    mutable.Map[StageId, mutable.Map[PartitionId, TaskAttemptNumber]]
+  private val authorizedCommittersByStage = mutable.Map[StageId, Array[TaskAttemptNumber]]()
 
   /**
    * Returns whether the OutputCommitCoordinator's internal data structures are all empty.
@@ -95,9 +96,21 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
     }
   }
 
-  // Called by DAGScheduler
-  private[scheduler] def stageStart(stage: StageId): Unit = synchronized {
-    authorizedCommittersByStage(stage) = mutable.HashMap[PartitionId, TaskAttemptNumber]()
+  /**
+   * Called by the DAGScheduler when a stage starts.
+   *
+   * @param stage the stage id.
+   * @param maxPartitionId the maximum partition id that could appear in this stage's tasks (i.e.
+   *                       the maximum possible value of `context.partitionId`).
+   */
+  private[scheduler] def stageStart(
+      stage: StageId,
+      maxPartitionId: Int): Unit = {
+    val arr = new Array[TaskAttemptNumber](maxPartitionId + 1)
+    java.util.Arrays.fill(arr, NO_AUTHORIZED_COMMITTER)
+    synchronized {
+      authorizedCommittersByStage(stage) = arr
+    }
   }
 
   // Called by DAGScheduler
@@ -122,10 +135,10 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
         logInfo(s"Task was denied committing, stage: $stage, partition: $partition, " +
           s"attempt: $attemptNumber")
       case otherReason =>
-        if (authorizedCommitters.get(partition).exists(_ == attemptNumber)) {
+        if (authorizedCommitters(partition) == attemptNumber) {
           logDebug(s"Authorized committer (attemptNumber=$attemptNumber, stage=$stage, " +
             s"partition=$partition) failed; clearing lock")
-          authorizedCommitters.remove(partition)
+          authorizedCommitters(partition) = NO_AUTHORIZED_COMMITTER
         }
     }
   }
@@ -145,16 +158,16 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       attemptNumber: TaskAttemptNumber): Boolean = synchronized {
     authorizedCommittersByStage.get(stage) match {
       case Some(authorizedCommitters) =>
-        authorizedCommitters.get(partition) match {
-          case Some(existingCommitter) =>
-            logDebug(s"Denying attemptNumber=$attemptNumber to commit for stage=$stage, " +
-              s"partition=$partition; existingCommitter = $existingCommitter")
-            false
-          case None =>
+        authorizedCommitters(partition) match {
+          case NO_AUTHORIZED_COMMITTER =>
             logDebug(s"Authorizing attemptNumber=$attemptNumber to commit for stage=$stage, " +
               s"partition=$partition")
             authorizedCommitters(partition) = attemptNumber
             true
+          case existingCommitter =>
+            logDebug(s"Denying attemptNumber=$attemptNumber to commit for stage=$stage, " +
+              s"partition=$partition; existingCommitter = $existingCommitter")
+            false
         }
       case None =>
         logDebug(s"Stage $stage has completed, so not allowing attempt number $attemptNumber of" +
@@ -170,6 +183,8 @@ private[spark] object OutputCommitCoordinator {
   private[spark] class OutputCommitCoordinatorEndpoint(
       override val rpcEnv: RpcEnv, outputCommitCoordinator: OutputCommitCoordinator)
     extends RpcEndpoint with Logging {
+
+    logDebug("init") // force eager creation of logger
 
     override def receive: PartialFunction[Any, Unit] = {
       case StopCoordinator =>

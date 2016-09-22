@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.execution.ui.SparkPlanGraph
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd,
+  SparkListenerSQLExecutionStart}
 
-private[sql] object SQLExecution {
+object SQLExecution {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
 
@@ -37,33 +37,27 @@ private[sql] object SQLExecution {
    * we can connect them with an execution.
    */
   def withNewExecutionId[T](
-      sqlContext: SQLContext, queryExecution: QueryExecution)(body: => T): T = {
-    val sc = sqlContext.sparkContext
+      sparkSession: SparkSession,
+      queryExecution: QueryExecution)(body: => T): T = {
+    val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     if (oldExecutionId == null) {
       val executionId = SQLExecution.nextExecutionId
       sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
       val r = try {
-        val callSite = Utils.getCallSite()
-        sqlContext.listener.onExecutionStart(
-          executionId,
-          callSite.shortForm,
-          callSite.longForm,
-          queryExecution.toString,
-          SparkPlanGraph(queryExecution.executedPlan),
-          System.currentTimeMillis())
+        // sparkContext.getCallSite() would first try to pick up any call site that was previously
+        // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
+        // streaming queries would give us call site like "run at <unknown>:0"
+        val callSite = sparkSession.sparkContext.getCallSite()
+
+        sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
+          executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
+          SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
         try {
           body
         } finally {
-          // Ideally, we need to make sure onExecutionEnd happens after onJobStart and onJobEnd.
-          // However, onJobStart and onJobEnd run in the listener thread. Because we cannot add new
-          // SQL event types to SparkListener since it's a public API, we cannot guarantee that.
-          //
-          // SQLListener should handle the case that onExecutionEnd happens before onJobEnd.
-          //
-          // The worst case is onExecutionEnd may happen before onJobStart when the listener thread
-          // is very busy. If so, we cannot track the jobs for the execution. It seems acceptable.
-          sqlContext.listener.onExecutionEnd(executionId, System.currentTimeMillis())
+          sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionEnd(
+            executionId, System.currentTimeMillis()))
         }
       } finally {
         sc.setLocalProperty(EXECUTION_ID_KEY, null)

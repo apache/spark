@@ -17,9 +17,11 @@
 # limitations under the License.
 #
 
-SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
 # disable randomized hash for string in Python 3.3+
 export PYTHONHASHSEED=0
 
-exec "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit "$@"
+exec "${SPARK_HOME}"/bin/spark-class org.apache.spark.deploy.SparkSubmit "$@"

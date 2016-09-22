@@ -17,13 +17,12 @@
 
 package org.apache.spark.streaming.util
 
-import scala.annotation.tailrec
-
 import java.io.OutputStream
 import java.util.concurrent.TimeUnit._
 
-import org.apache.spark.Logging
+import scala.annotation.tailrec
 
+import org.apache.spark.internal.Logging
 
 private[streaming]
 class RateLimitedOutputStream(out: OutputStream, desiredBytesPerSec: Int)

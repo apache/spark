@@ -18,22 +18,36 @@
 package org.apache.spark.deploy.master
 
 import java.util.Date
+import java.util.concurrent.ConcurrentLinkedQueue
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.language.postfixOps
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.{Matchers, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfter, Matchers, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy._
-import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.rpc.{RpcEndpoint, RpcEnv}
 
-class MasterSuite extends SparkFunSuite with Matchers with Eventually with PrivateMethodTester {
+class MasterSuite extends SparkFunSuite
+  with Matchers with Eventually with PrivateMethodTester with BeforeAndAfter {
+
+  private var _master: Master = _
+
+  after {
+    if (_master != null) {
+      _master.rpcEnv.shutdown()
+      _master.rpcEnv.awaitTermination()
+      _master = null
+    }
+  }
 
   test("can use a custom recovery mode factory") {
     val conf = new SparkConf(loadDefaults = false)
@@ -90,15 +104,14 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
       cores = 0,
       memory = 0,
       endpoint = null,
-      webUiPort = 0,
-      publicAddress = ""
+      webUiAddress = "http://localhost:80"
     )
 
     val (rpcEnv, _, _) =
       Master.startRpcEnvAndEndpoint("127.0.0.1", 0, 0, conf)
 
     try {
-      rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, rpcEnv.address, Master.ENDPOINT_NAME)
+      rpcEnv.setupEndpointRef(rpcEnv.address, Master.ENDPOINT_NAME)
 
       CustomPersistenceEngine.lastInstance.isDefined shouldBe true
       val persistenceEngine = CustomPersistenceEngine.lastInstance.get
@@ -137,6 +150,33 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
           val workerResponse = parse(Source.fromURL(s"${workerWebUi}/json")
             .getLines().mkString("\n"))
           (workerResponse \ "cores").extract[Int] should be (2)
+        }
+      }
+    } finally {
+      localCluster.stop()
+    }
+  }
+
+  test("master/worker web ui available with reverseProxy") {
+    implicit val formats = org.json4s.DefaultFormats
+    val reverseProxyUrl = "http://localhost:8080"
+    val conf = new SparkConf()
+    conf.set("spark.ui.reverseProxy", "true")
+    conf.set("spark.ui.reverseProxyUrl", reverseProxyUrl)
+    val localCluster = new LocalSparkCluster(2, 2, 512, conf)
+    localCluster.start()
+    try {
+      eventually(timeout(5 seconds), interval(100 milliseconds)) {
+        val json = Source.fromURL(s"http://localhost:${localCluster.masterWebUIPort}/json")
+          .getLines().mkString("\n")
+        val JArray(workers) = (parse(json) \ "workers")
+        workers.size should be (2)
+        workers.foreach { workerSummaryJson =>
+          val JString(workerId) = workerSummaryJson \ "id"
+          val url = s"http://localhost:${localCluster.masterWebUIPort}/proxy/${workerId}/json"
+          val workerResponse = parse(Source.fromURL(url).getLines().mkString("\n"))
+          (workerResponse \ "cores").extract[Int] should be (2)
+          (workerResponse \ "masterwebuiurl").extract[String] should be (reverseProxyUrl)
         }
       }
     } finally {
@@ -358,10 +398,11 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
   private val workerInfos = Array(workerInfo, workerInfo, workerInfo)
 
   private def makeMaster(conf: SparkConf = new SparkConf): Master = {
+    assert(_master === null, "Some Master's RpcEnv is leaked in tests")
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityMgr)
-    val master = new Master(rpcEnv, rpcEnv.address, 0, securityMgr, conf)
-    master
+    _master = new Master(rpcEnv, rpcEnv.address, 0, securityMgr, conf)
+    _master
   }
 
   private def makeAppInfo(
@@ -376,7 +417,7 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
 
   private def makeWorkerInfo(memoryMb: Int, cores: Int): WorkerInfo = {
     val workerId = System.currentTimeMillis.toString
-    new WorkerInfo(workerId, "host", 100, cores, memoryMb, null, 101, "address")
+    new WorkerInfo(workerId, "host", 100, cores, memoryMb, null, "http://localhost:80")
   }
 
   private def scheduleExecutorsOnWorkers(
@@ -387,4 +428,35 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     master.invokePrivate(_scheduleExecutorsOnWorkers(appInfo, workerInfos, spreadOut))
   }
 
+  test("SPARK-13604: Master should ask Worker kill unknown executors and drivers") {
+    val master = makeMaster()
+    master.rpcEnv.setupEndpoint(Master.ENDPOINT_NAME, master)
+    eventually(timeout(10.seconds)) {
+      val masterState = master.self.askWithRetry[MasterStateResponse](RequestMasterState)
+      assert(masterState.status === RecoveryState.ALIVE, "Master is not alive")
+    }
+
+    val killedExecutors = new ConcurrentLinkedQueue[(String, Int)]()
+    val killedDrivers = new ConcurrentLinkedQueue[String]()
+    val fakeWorker = master.rpcEnv.setupEndpoint("worker", new RpcEndpoint {
+      override val rpcEnv: RpcEnv = master.rpcEnv
+
+      override def receive: PartialFunction[Any, Unit] = {
+        case KillExecutor(_, appId, execId) => killedExecutors.add(appId, execId)
+        case KillDriver(driverId) => killedDrivers.add(driverId)
+      }
+    })
+
+    master.self.ask(
+      RegisterWorker("1", "localhost", 9999, fakeWorker, 10, 1024, "http://localhost:8080"))
+    val executors = (0 until 3).map { i =>
+      new ExecutorDescription(appId = i.toString, execId = i, 2, ExecutorState.RUNNING)
+    }
+    master.self.send(WorkerLatestState("1", executors, driverIds = Seq("0", "1", "2")))
+
+    eventually(timeout(10.seconds)) {
+      assert(killedExecutors.asScala.toList.sorted === List("0" -> 0, "1" -> 1, "2" -> 2))
+      assert(killedDrivers.asScala.toList.sorted === List("0", "1", "2"))
+    }
+  }
 }

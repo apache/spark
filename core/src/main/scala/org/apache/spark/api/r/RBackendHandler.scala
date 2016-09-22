@@ -22,11 +22,11 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import scala.collection.mutable.HashMap
 import scala.language.existentials
 
-import io.netty.channel.ChannelHandler.Sharable
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
+import io.netty.channel.ChannelHandler.Sharable
 
-import org.apache.spark.Logging
 import org.apache.spark.api.r.SerDe._
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -198,7 +198,7 @@ private[r] class RBackendHandler(server: RBackend)
       args: Array[Object]): Option[Int] = {
     val numArgs = args.length
 
-    for (index <- 0 until parameterTypesOfMethods.length) {
+    for (index <- parameterTypesOfMethods.indices) {
       val parameterTypes = parameterTypesOfMethods(index)
 
       if (parameterTypes.length == numArgs) {
@@ -224,7 +224,8 @@ private[r] class RBackendHandler(server: RBackend)
                 case _ => parameterType
               }
             }
-            if (!parameterWrapperType.isInstance(args(i))) {
+            if ((parameterType.isPrimitive || args(i) != null) &&
+                !parameterWrapperType.isInstance(args(i))) {
               argMatched = false
             }
           }
@@ -239,7 +240,7 @@ private[r] class RBackendHandler(server: RBackend)
           // Convert args if needed
           val parameterTypes = parameterTypesOfMethods(index)
 
-          (0 until numArgs).map { i =>
+          for (i <- 0 until numArgs) {
             if (parameterTypes(i) == classOf[Seq[Any]] && args(i).getClass.isArray) {
               // Convert a Java array to scala Seq
               args(i) = args(i).asInstanceOf[Array[_]].toSeq

@@ -17,14 +17,12 @@
 
 package org.apache.spark.mllib.tree.configuration
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 
 /**
- * :: Experimental ::
  * Enum to describe whether a feature is "continuous" or "categorical"
  */
 @Since("1.0.0")
-@Experimental
 object FeatureType extends Enumeration {
   @Since("1.0.0")
   type FeatureType = Value

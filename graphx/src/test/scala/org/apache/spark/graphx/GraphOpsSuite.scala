@@ -19,8 +19,6 @@ package org.apache.spark.graphx
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.Graph._
-import org.apache.spark.graphx.impl.EdgePartition
-import org.apache.spark.rdd._
 
 class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -52,6 +50,21 @@ class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
           assert(s.contains((vid + 1) % 100))
           assert(s.contains(if (vid > 0) vid - 1 else 99))
       }
+    }
+  }
+
+  test("removeSelfEdges") {
+    withSpark { sc =>
+      val edgeArray = Array((1 -> 2), (2 -> 3), (3 -> 3), (4 -> 3), (1 -> 1))
+        .map {
+          case (a, b) => (a.toLong, b.toLong)
+        }
+      val correctEdges = edgeArray.filter { case (a, b) => a != b }.toSet
+      val graph = Graph.fromEdgeTuples(sc.parallelize(edgeArray), 1)
+      val canonicalizedEdges = graph.removeSelfEdges().edges.map(e => (e.srcId, e.dstId))
+        .collect
+      assert(canonicalizedEdges.toSet.size === canonicalizedEdges.size)
+      assert(canonicalizedEdges.toSet === correctEdges)
     }
   }
 

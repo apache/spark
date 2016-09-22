@@ -17,16 +17,23 @@
 
 package org.apache.spark
 
+import java.lang.{Byte => JByte}
 import java.net.{Authenticator, PasswordAuthentication}
-import java.security.KeyStore
+import java.security.{KeyStore, SecureRandom}
 import java.security.cert.X509Certificate
+import javax.crypto.KeyGenerator
 import javax.net.ssl._
 
+import com.google.common.hash.HashCodes
 import com.google.common.io.Files
 import org.apache.hadoop.io.Text
+import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.network.sasl.SecretKeyHolder
+import org.apache.spark.security.CryptoStreamUtils._
 import org.apache.spark.util.Utils
 
 /**
@@ -47,17 +54,19 @@ import org.apache.spark.util.Utils
  * secure the UI if it has data that other users should not be allowed to see. The javax
  * servlet filter specified by the user can authenticate the user and then once the user
  * is logged in, Spark can compare that user versus the view acls to make sure they are
- * authorized to view the UI. The configs 'spark.acls.enable' and 'spark.ui.view.acls'
- * control the behavior of the acls. Note that the person who started the application
- * always has view access to the UI.
+ * authorized to view the UI. The configs 'spark.acls.enable', 'spark.ui.view.acls' and
+ * 'spark.ui.view.acls.groups' control the behavior of the acls. Note that the person who
+ * started the application always has view access to the UI.
  *
- * Spark has a set of modify acls (`spark.modify.acls`) that controls which users have permission
- * to  modify a single application. This would include things like killing the application. By
- * default the person who started the application has modify access. For modify access through
- * the UI, you must have a filter that does authentication in place for the modify acls to work
- * properly.
+ * Spark has a set of individual and group modify acls (`spark.modify.acls`) and
+ * (`spark.modify.acls.groups`) that controls which users and groups have permission to
+ * modify a single application. This would include things like killing the application.
+ * By default the person who started the application has modify access. For modify access
+ * through the UI, you must have a filter that does authentication in place for the modify
+ * acls to work properly.
  *
- * Spark also has a set of admin acls (`spark.admin.acls`) which is a set of users/administrators
+ * Spark also has a set of individual and group admin acls (`spark.admin.acls`) and
+ * (`spark.admin.acls.groups`) which is a set of users/administrators and admin groups
  * who always have permission to view or modify the Spark application.
  *
  * Starting from version 1.3, Spark has partial support for encrypted connections with SSL.
@@ -65,20 +74,9 @@ import org.apache.spark.util.Utils
  * At this point spark has multiple communication protocols that need to be secured and
  * different underlying mechanisms are used depending on the protocol:
  *
- *  - Akka -> The only option here is to use the Akka Remote secure-cookie functionality.
- *            Akka remoting allows you to specify a secure cookie that will be exchanged
- *            and ensured to be identical in the connection handshake between the client
- *            and the server. If they are not identical then the client will be refused
- *            to connect to the server. There is no control of the underlying
- *            authentication mechanism so its not clear if the password is passed in
- *            plaintext or uses DIGEST-MD5 or some other mechanism.
- *
- *            Akka also has an option to turn on SSL, this option is currently supported (see
- *            the details below).
- *
  *  - HTTP for broadcast and file server (via HttpServer) ->  Spark currently uses Jetty
  *            for the HttpServer. Jetty supports multiple authentication mechanisms -
- *            Basic, Digest, Form, Spengo, etc. It also supports multiple different login
+ *            Basic, Digest, Form, Spnego, etc. It also supports multiple different login
  *            services - Hash, JAAS, Spnego, JDBC, etc.  Spark currently uses the HashLoginService
  *            to authenticate using DIGEST-MD5 via a single user and the shared secret.
  *            Since we are using DIGEST-MD5, the shared secret is not passed on the wire
@@ -130,15 +128,16 @@ import org.apache.spark.util.Utils
  *
  *  The exact mechanisms used to generate/distribute the shared secret are deployment-specific.
  *
- *  For Yarn deployments, the secret is automatically generated using the Akka remote
- *  Crypt.generateSecureCookie() API. The secret is placed in the Hadoop UGI which gets passed
- *  around via the Hadoop RPC mechanism. Hadoop RPC can be configured to support different levels
- *  of protection. See the Hadoop documentation for more details. Each Spark application on Yarn
- *  gets a different shared secret. On Yarn, the Spark UI gets configured to use the Hadoop Yarn
- *  AmIpFilter which requires the user to go through the ResourceManager Proxy. That Proxy is there
- *  to reduce the possibility of web based attacks through YARN. Hadoop can be configured to use
- *  filters to do authentication. That authentication then happens via the ResourceManager Proxy
- *  and Spark will use that to do authorization against the view acls.
+ *  For YARN deployments, the secret is automatically generated. The secret is placed in the Hadoop
+ *  UGI which gets passed around via the Hadoop RPC mechanism. Hadoop RPC can be configured to
+ *  support different levels of protection. See the Hadoop documentation for more details. Each
+ *  Spark application on YARN gets a different shared secret.
+ *
+ *  On YARN, the Spark UI gets configured to use the Hadoop YARN AmIpFilter which requires the user
+ *  to go through the ResourceManager Proxy. That proxy is there to reduce the possibility of web
+ *  based attacks through YARN. Hadoop can be configured to use filters to do authentication. That
+ *  authentication then happens via the ResourceManager Proxy and Spark will use that to do
+ *  authorization against the view acls.
  *
  *  For other Spark deployments, the shared secret must be specified via the
  *  spark.authenticate.secret config.
@@ -165,16 +164,16 @@ import org.apache.spark.util.Utils
  *  denote the global configuration for all the supported protocols. In order to override the global
  *  configuration for the particular protocol, the properties must be overwritten in the
  *  protocol-specific namespace. Use `spark.ssl.yyy.xxx` settings to overwrite the global
- *  configuration for particular protocol denoted by `yyy`. Currently `yyy` can be either `akka` for
- *  Akka based connections or `fs` for broadcast and file server.
+ *  configuration for particular protocol denoted by `yyy`. Currently `yyy` can be only`fs` for
+ *  broadcast and file server.
  *
  *  Refer to [[org.apache.spark.SSLOptions]] documentation for the list of
  *  options that can be specified.
  *
  *  SecurityManager initializes SSLOptions objects for different protocols separately. SSLOptions
  *  object parses Spark configuration at a given namespace and builds the common representation
- *  of SSL settings. SSLOptions is then used to provide protocol-specific configuration like
- *  TypeSafe configuration for Akka or SSLContextFactory for Jetty.
+ *  of SSL settings. SSLOptions is then used to provide protocol-specific SSLContextFactory for
+ *  Jetty.
  *
  *  SSL must be configured on each node and configured for each component involved in
  *  communication using the particular protocol. In YARN clusters, the key-store can be prepared on
@@ -189,8 +188,10 @@ import org.apache.spark.util.Utils
 private[spark] class SecurityManager(sparkConf: SparkConf)
   extends Logging with SecretKeyHolder {
 
-  // key used to store the spark secret in the Hadoop UGI
-  private val sparkSecretLookupKey = "sparkCookie"
+  import SecurityManager._
+
+  // allow all users/groups to have view/modify permissions
+  private val WILDCARD_ACL = "*"
 
   private val authOn = sparkConf.getBoolean(SecurityManager.SPARK_AUTH_CONF, false)
   // keep spark.ui.acls.enable for backwards compatibility with 1.0
@@ -201,11 +202,19 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   private var adminAcls: Set[String] =
     stringToSet(sparkConf.get("spark.admin.acls", ""))
 
+  // admin group acls should be set before view or modify group acls
+  private var adminAclsGroups : Set[String] =
+    stringToSet(sparkConf.get("spark.admin.acls.groups", ""))
+
   private var viewAcls: Set[String] = _
+
+  private var viewAclsGroups: Set[String] = _
 
   // list of users who have permission to modify the application. This should
   // apply to both UI and CLI for things like killing the application.
   private var modifyAcls: Set[String] = _
+
+  private var modifyAclsGroups: Set[String] = _
 
   // always add the current user and SPARK_USER to the viewAcls
   private val defaultAclUsers = Set[String](System.getProperty("user.name", ""),
@@ -214,11 +223,16 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   setViewAcls(defaultAclUsers, sparkConf.get("spark.ui.view.acls", ""))
   setModifyAcls(defaultAclUsers, sparkConf.get("spark.modify.acls", ""))
 
+  setViewAclsGroups(sparkConf.get("spark.ui.view.acls.groups", ""));
+  setModifyAclsGroups(sparkConf.get("spark.modify.acls.groups", ""));
+
   private val secretKey = generateSecretKey()
   logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
     "; ui acls " + (if (aclsOn) "enabled" else "disabled") +
-    "; users with view permissions: " + viewAcls.toString() +
-    "; users with modify permissions: " + modifyAcls.toString())
+    "; users  with view permissions: " + viewAcls.toString() +
+    "; groups with view permissions: " + viewAclsGroups.toString() +
+    "; users  with modify permissions: " + modifyAcls.toString() +
+    "; groups with modify permissions: " + modifyAclsGroups.toString())
 
   // Set our own authenticator to properly negotiate user/password for HTTP connections.
   // This is needed by the HTTP client fetching from the HttpServer. Put here so its
@@ -242,14 +256,8 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   // the default SSL configuration - it will be used by all communication layers unless overwritten
   private val defaultSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl", defaults = None)
 
-  // SSL configuration for different communication layers - they can override the default
-  // configuration at a specified namespace. The namespace *must* start with spark.ssl.
-  val fileServerSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.fs", Some(defaultSSLOptions))
-  val akkaSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.akka", Some(defaultSSLOptions))
-
-  logDebug(s"SSLConfiguration for file server: $fileServerSSLOptions")
-  logDebug(s"SSLConfiguration for Akka: $akkaSSLOptions")
-
+  // SSL configuration for the file server. This is used by Utils.setupSecureURLConnection().
+  val fileServerSSLOptions = getSSLOptions("fs")
   val (sslSocketFactory, hostnameVerifier) = if (fileServerSSLOptions.enabled) {
     val trustStoreManagers =
       for (trustStore <- fileServerSSLOptions.trustStore) yield {
@@ -278,7 +286,10 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
       }: TrustManager
     })
 
-    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.getOrElse("Default"))
+    require(fileServerSSLOptions.protocol.isDefined,
+      "spark.ssl.protocol is required when enabling SSL connections.")
+
+    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.get)
     sslContext.init(null, trustStoreManagers.getOrElse(credulousTrustStoreManagers), null)
 
     val hostVerifier = new HostnameVerifier {
@@ -288,6 +299,12 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     (Some(sslContext.getSocketFactory), Some(hostVerifier))
   } else {
     (None, None)
+  }
+
+  def getSSLOptions(module: String): SSLOptions = {
+    val opts = SSLOptions.parse(sparkConf, s"spark.ssl.$module", Some(defaultSSLOptions))
+    logDebug(s"Created SSL options for $module: $opts")
+    opts
   }
 
   /**
@@ -311,13 +328,30 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   }
 
   /**
+   * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
+   * acls groups you should also set the view and modify acls groups again to pick up the changes.
+   */
+  def setViewAclsGroups(allowedUserGroups: String) {
+    viewAclsGroups = (adminAclsGroups ++ stringToSet(allowedUserGroups));
+    logInfo("Changing view acls groups to: " + viewAclsGroups.mkString(","))
+  }
+
+  /**
    * Checking the existence of "*" is necessary as YARN can't recognize the "*" in "defaultuser,*"
    */
   def getViewAcls: String = {
-    if (viewAcls.contains("*")) {
-      "*"
+    if (viewAcls.contains(WILDCARD_ACL)) {
+      WILDCARD_ACL
     } else {
       viewAcls.mkString(",")
+    }
+  }
+
+  def getViewAclsGroups: String = {
+    if (viewAclsGroups.contains(WILDCARD_ACL)) {
+      WILDCARD_ACL
+    } else {
+      viewAclsGroups.mkString(",")
     }
   }
 
@@ -331,13 +365,30 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   }
 
   /**
+   * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
+   * acls groups you should also set the view and modify acls groups again to pick up the changes.
+   */
+  def setModifyAclsGroups(allowedUserGroups: String) {
+    modifyAclsGroups = (adminAclsGroups ++ stringToSet(allowedUserGroups));
+    logInfo("Changing modify acls groups to: " + modifyAclsGroups.mkString(","))
+  }
+
+  /**
    * Checking the existence of "*" is necessary as YARN can't recognize the "*" in "defaultuser,*"
    */
   def getModifyAcls: String = {
-    if (modifyAcls.contains("*")) {
-      "*"
+    if (modifyAcls.contains(WILDCARD_ACL)) {
+      WILDCARD_ACL
     } else {
       modifyAcls.mkString(",")
+    }
+  }
+
+  def getModifyAclsGroups: String = {
+    if (modifyAclsGroups.contains(WILDCARD_ACL)) {
+      WILDCARD_ACL
+    } else {
+      modifyAclsGroups.mkString(",")
     }
   }
 
@@ -348,6 +399,15 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   def setAdminAcls(adminUsers: String) {
     adminAcls = stringToSet(adminUsers)
     logInfo("Changing admin acls to: " + adminAcls.mkString(","))
+  }
+
+  /**
+   * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
+   * acls groups you should also set the view and modify acls groups again to pick up the changes.
+   */
+  def setAdminAclsGroups(adminUserGroups: String) {
+    adminAclsGroups = stringToSet(adminUserGroups)
+    logInfo("Changing admin acls groups to: " + adminAclsGroups.mkString(","))
   }
 
   def setAcls(aclSetting: Boolean) {
@@ -365,33 +425,38 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
    * we throw an exception.
    */
   private def generateSecretKey(): String = {
-    if (!isAuthenticationEnabled) return null
-    // first check to see if the secret is already set, else generate a new one if on yarn
-    val sCookie = if (SparkHadoopUtil.get.isYarnMode) {
-      val secretKey = SparkHadoopUtil.get.getSecretKeyFromUserCredentials(sparkSecretLookupKey)
-      if (secretKey != null) {
-        logDebug("in yarn mode, getting secret from credentials")
-        return new Text(secretKey).toString
+    if (!isAuthenticationEnabled) {
+      null
+    } else if (SparkHadoopUtil.get.isYarnMode) {
+      // In YARN mode, the secure cookie will be created by the driver and stashed in the
+      // user's credentials, where executors can get it. The check for an array of size 0
+      // is because of the test code in YarnSparkHadoopUtilSuite.
+      val secretKey = SparkHadoopUtil.get.getSecretKeyFromUserCredentials(SECRET_LOOKUP_KEY)
+      if (secretKey == null || secretKey.length == 0) {
+        logDebug("generateSecretKey: yarn mode, secret key from credentials is null")
+        val rnd = new SecureRandom()
+        val length = sparkConf.getInt("spark.authenticate.secretBitLength", 256) / JByte.SIZE
+        val secret = new Array[Byte](length)
+        rnd.nextBytes(secret)
+
+        val cookie = HashCodes.fromBytes(secret).toString()
+        SparkHadoopUtil.get.addSecretKeyToUserCredentials(SECRET_LOOKUP_KEY, cookie)
+        cookie
       } else {
-        logDebug("getSecretKey: yarn mode, secret key from credentials is null")
+        new Text(secretKey).toString
       }
-      val cookie = akka.util.Crypt.generateSecureCookie
-      // if we generated the secret then we must be the first so lets set it so t
-      // gets used by everyone else
-      SparkHadoopUtil.get.addSecretKeyToUserCredentials(sparkSecretLookupKey, cookie)
-      logInfo("adding secret to credentials in yarn mode")
-      cookie
     } else {
       // user must have set spark.authenticate.secret config
       // For Master/Worker, auth secret is in conf; for Executors, it is in env variable
-      sys.env.get(SecurityManager.ENV_AUTH_SECRET)
+      Option(sparkConf.getenv(SecurityManager.ENV_AUTH_SECRET))
         .orElse(sparkConf.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF)) match {
         case Some(value) => value
-        case None => throw new Exception("Error: a secret key must be specified via the " +
-          SecurityManager.SPARK_AUTH_SECRET_CONF + " config")
+        case None =>
+          throw new IllegalArgumentException(
+            "Error: a secret key must be specified via the " +
+              SecurityManager.SPARK_AUTH_SECRET_CONF + " config")
       }
     }
-    sCookie
   }
 
   /**
@@ -401,35 +466,48 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   def aclsEnabled(): Boolean = aclsOn
 
   /**
-   * Checks the given user against the view acl list to see if they have
+   * Checks the given user against the view acl and groups list to see if they have
    * authorization to view the UI. If the UI acls are disabled
    * via spark.acls.enable, all users have view access. If the user is null
-   * it is assumed authentication is off and all users have access.
+   * it is assumed authentication is off and all users have access. Also if any one of the
+   * UI acls or groups specify the WILDCARD(*) then all users have view access.
    *
    * @param user to see if is authorized
    * @return true is the user has permission, otherwise false
    */
   def checkUIViewPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
-      viewAcls.mkString(","))
-    !aclsEnabled || user == null || viewAcls.contains(user) || viewAcls.contains("*")
+      viewAcls.mkString(",") + " viewAclsGroups=" + viewAclsGroups.mkString(","))
+    if (!aclsEnabled || user == null || viewAcls.contains(user) ||
+        viewAcls.contains(WILDCARD_ACL) || viewAclsGroups.contains(WILDCARD_ACL)) {
+      return true
+    }
+    val currentUserGroups = Utils.getCurrentUserGroups(sparkConf, user)
+    logDebug("userGroups=" + currentUserGroups.mkString(","))
+    viewAclsGroups.exists(currentUserGroups.contains(_))
   }
 
   /**
-   * Checks the given user against the modify acl list to see if they have
-   * authorization to modify the application. If the UI acls are disabled
+   * Checks the given user against the modify acl and groups list to see if they have
+   * authorization to modify the application. If the modify acls are disabled
    * via spark.acls.enable, all users have modify access. If the user is null
-   * it is assumed authentication isn't turned on and all users have access.
+   * it is assumed authentication isn't turned on and all users have access. Also if any one
+   * of the modify acls or groups specify the WILDCARD(*) then all users have modify access.
    *
    * @param user to see if is authorized
    * @return true is the user has permission, otherwise false
    */
   def checkModifyPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
-      modifyAcls.mkString(","))
-    !aclsEnabled || user == null || modifyAcls.contains(user) || modifyAcls.contains("*")
+      modifyAcls.mkString(",") + " modifyAclsGroups=" + modifyAclsGroups.mkString(","))
+    if (!aclsEnabled || user == null || modifyAcls.contains(user) ||
+        modifyAcls.contains(WILDCARD_ACL) || modifyAclsGroups.contains(WILDCARD_ACL)) {
+      return true
+    }
+    val currentUserGroups = Utils.getCurrentUserGroups(sparkConf, user)
+    logDebug("userGroups=" + currentUserGroups)
+    modifyAclsGroups.exists(currentUserGroups.contains(_))
   }
-
 
   /**
    * Check to see if authentication for the Spark communication protocols is enabled
@@ -475,6 +553,25 @@ private[spark] object SecurityManager {
   val SPARK_AUTH_CONF: String = "spark.authenticate"
   val SPARK_AUTH_SECRET_CONF: String = "spark.authenticate.secret"
   // This is used to set auth secret to an executor's env variable. It should have the same
-  // value as SPARK_AUTH_SECERET_CONF set in SparkConf
+  // value as SPARK_AUTH_SECRET_CONF set in SparkConf
   val ENV_AUTH_SECRET = "_SPARK_AUTH_SECRET"
+
+  // key used to store the spark secret in the Hadoop UGI
+  val SECRET_LOOKUP_KEY = "sparkCookie"
+
+  /**
+   * Setup the cryptographic key used by IO encryption in credentials. The key is generated using
+   * [[KeyGenerator]]. The algorithm and key length is specified by the [[SparkConf]].
+   */
+  def initIOEncryptionKey(conf: SparkConf, credentials: Credentials): Unit = {
+    if (credentials.getSecretKey(SPARK_IO_TOKEN) == null) {
+      val keyLen = conf.get(IO_ENCRYPTION_KEY_SIZE_BITS)
+      val ioKeyGenAlgorithm = conf.get(IO_ENCRYPTION_KEYGEN_ALGORITHM)
+      val keyGen = KeyGenerator.getInstance(ioKeyGenAlgorithm)
+      keyGen.init(keyLen)
+
+      val ioKey = keyGen.generateKey()
+      credentials.addSecretKey(SPARK_IO_TOKEN, ioKey.getEncoded)
+    }
+  }
 }

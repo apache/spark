@@ -20,8 +20,9 @@ package org.apache.spark.rpc
 import scala.concurrent.Future
 import scala.reflect.ClassTag
 
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.RpcUtils
-import org.apache.spark.{SparkException, Logging, SparkConf}
 
 /**
  * A reference for a remote [[RpcEndpoint]]. [[RpcEndpointRef]] is thread-safe.
@@ -67,7 +68,7 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
    * The default `timeout` will be used in every trial of calling `sendWithReply`. Because this
    * method retries, the message handling in the receiver side should be idempotent.
    *
-   * Note: this is a blocking action which may cost a lot of time,  so don't call it in an message
+   * Note: this is a blocking action which may cost a lot of time,  so don't call it in a message
    * loop of [[RpcEndpoint]].
    *
    * @param message the message to send
@@ -82,7 +83,7 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
    * retries. `timeout` will be used in every trial of calling `sendWithReply`. Because this method
    * retries, the message handling in the receiver side should be idempotent.
    *
-   * Note: this is a blocking action which may cost a lot of time, so don't call it in an message
+   * Note: this is a blocking action which may cost a lot of time, so don't call it in a message
    * loop of [[RpcEndpoint]].
    *
    * @param message the message to send

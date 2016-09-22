@@ -32,7 +32,7 @@ To get started, follow the steps below to install Mesos and deploy Spark jobs vi
 
 # Installing Mesos
 
-Spark {{site.SPARK_VERSION}} is designed for use with Mesos {{site.MESOS_VERSION}} and does not
+Spark {{site.SPARK_VERSION}} is designed for use with Mesos {{site.MESOS_VERSION}} or newer and does not
 require any special patches of Mesos.
 
 If you already have a Mesos cluster running, you can skip this Mesos installation step.
@@ -98,17 +98,17 @@ To host on HDFS, use the Hadoop fs put command: `hadoop fs -put spark-{{site.SPA
 
 
 Or if you are using a custom-compiled version of Spark, you will need to create a package using
-the `make-distribution.sh` script included in a Spark source tarball/checkout.
+the `dev/make-distribution.sh` script included in a Spark source tarball/checkout.
 
 1. Download and build Spark using the instructions [here](index.html)
-2. Create a binary package using `make-distribution.sh --tgz`.
+2. Create a binary package using `./dev/make-distribution.sh --tgz`.
 3. Upload archive to http/s3/hdfs
 
 
 ## Using a Mesos Master URL
 
 The Master URLs for Mesos are in the form `mesos://host:5050` for a single-master Mesos
-cluster, or `mesos://zk://host:2181` for a multi-master Mesos cluster using ZooKeeper.
+cluster, or `mesos://zk://host1:2181,host2:2181,host3:2181/mesos` for a multi-master Mesos cluster using ZooKeeper.
 
 ## Client Mode
 
@@ -150,49 +150,115 @@ it does not need to be redundantly passed in as a system property.
 Spark on Mesos also supports cluster mode, where the driver is launched in the cluster and the client
 can find the results of the driver from the Mesos Web UI.
 
-To use cluster mode, you must start the MesosClusterDispatcher in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
-passing in the Mesos master url (e.g: mesos://host:5050).
+To use cluster mode, you must start the `MesosClusterDispatcher` in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
+passing in the Mesos master URL (e.g: mesos://host:5050). This starts the `MesosClusterDispatcher` as a daemon running on the host.
 
-From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master url
-to the url of the MesosClusterDispatcher (e.g: mesos://dispatcher:7077). You can view driver statuses on the
+If you like to run the `MesosClusterDispatcher` with Marathon, you need to run the `MesosClusterDispatcher` in the foreground (i.e: `bin/spark-class org.apache.spark.deploy.mesos.MesosClusterDispatcher`). Note that the `MesosClusterDispatcher` not yet supports multiple instances for HA.
+
+The `MesosClusterDispatcher` also supports writing recovery state into Zookeeper. This will allow the `MesosClusterDispatcher` to be able to recover all submitted and running containers on relaunch.   In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
+For more information about these configurations please refer to the configurations (doc)[configurations.html#deploy].
+
+From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master URL
+to the URL of the `MesosClusterDispatcher` (e.g: mesos://dispatcher:7077). You can view driver statuses on the
 Spark cluster Web UI.
 
-Note that jars or python files that are passed to spark-submit should be URIs reachable by Mesos slaves.
+For example:
+{% highlight bash %}
+./bin/spark-submit \
+  --class org.apache.spark.examples.SparkPi \
+  --master mesos://207.184.161.138:7077 \
+  --deploy-mode cluster \
+  --supervise \
+  --executor-memory 20G \
+  --total-executor-cores 100 \
+  http://path/to/examples.jar \
+  1000
+{% endhighlight %}
+
+
+Note that jars or python files that are passed to spark-submit should be URIs reachable by Mesos slaves, as the Spark driver doesn't automatically upload local jars.
 
 # Mesos Run Modes
 
-Spark can run over Mesos in two modes: "fine-grained" (default) and "coarse-grained".
+Spark can run over Mesos in two modes: "coarse-grained" (default) and
+"fine-grained" (deprecated).
 
-In "fine-grained" mode (default), each Spark task runs as a separate Mesos task. This allows
-multiple instances of Spark (and other frameworks) to share machines at a very fine granularity,
-where each application gets more or fewer machines as it ramps up and down, but it comes with an
-additional overhead in launching each task. This mode may be inappropriate for low-latency
-requirements like interactive queries or serving web requests.
+## Coarse-Grained
 
-The "coarse-grained" mode will instead launch only *one* long-running Spark task on each Mesos
-machine, and dynamically schedule its own "mini-tasks" within it. The benefit is much lower startup
-overhead, but at the cost of reserving the Mesos resources for the complete duration of the
-application.
+In "coarse-grained" mode, each Spark executor runs as a single Mesos
+task.  Spark executors are sized according to the following
+configuration variables:
 
-To run in coarse-grained mode, set the `spark.mesos.coarse` property in your
+* Executor memory: `spark.executor.memory`
+* Executor cores: `spark.executor.cores`
+* Number of executors: `spark.cores.max`/`spark.executor.cores`
+
+Please see the [Spark Configuration](configuration.html) page for
+details and default values.
+
+Executors are brought up eagerly when the application starts, until
+`spark.cores.max` is reached.  If you don't set `spark.cores.max`, the
+Spark application will reserve all resources offered to it by Mesos,
+so we of course urge you to set this variable in any sort of
+multi-tenant cluster, including one which runs multiple concurrent
+Spark applications.
+
+The scheduler will start executors round-robin on the offers Mesos
+gives it, but there are no spread guarantees, as Mesos does not
+provide such guarantees on the offer stream.
+
+In this mode spark executors will honor port allocation if such is
+provided from the user. Specifically if the user defines
+`spark.executor.port` or `spark.blockManager.port` in Spark configuration,
+the mesos scheduler will check the available offers for a valid port
+range containing the port numbers. If no such range is available it will
+not launch any task. If no restriction is imposed on port numbers by the
+user, ephemeral ports are used as usual. This port honouring implementation
+implies one task per host if the user defines a port. In the future network
+isolation shall be supported.
+
+The benefit of coarse-grained mode is much lower startup overhead, but
+at the cost of reserving Mesos resources for the complete duration of
+the application.  To configure your job to dynamically adjust to its
+resource requirements, look into
+[Dynamic Allocation](#dynamic-resource-allocation-with-mesos).
+
+## Fine-Grained (deprecated)
+
+**NOTE:** Fine-grained mode is deprecated as of Spark 2.0.0.  Consider
+ using [Dynamic Allocation](#dynamic-resource-allocation-with-mesos)
+ for some of the benefits.  For a full explanation see
+ [SPARK-11857](https://issues.apache.org/jira/browse/SPARK-11857)
+
+In "fine-grained" mode, each Spark task inside the Spark executor runs
+as a separate Mesos task. This allows multiple instances of Spark (and
+other frameworks) to share cores at a very fine granularity, where
+each application gets more or fewer cores as it ramps up and down, but
+it comes with an additional overhead in launching each task. This mode
+may be inappropriate for low-latency requirements like interactive
+queries or serving web requests.
+
+Note that while Spark tasks in fine-grained will relinquish cores as
+they terminate, they will not relinquish memory, as the JVM does not
+give memory back to the Operating System.  Neither will executors
+terminate when they're idle.
+
+To run in fine-grained mode, set the `spark.mesos.coarse` property to false in your
 [SparkConf](configuration.html#spark-properties):
 
 {% highlight scala %}
-conf.set("spark.mesos.coarse", "true")
+conf.set("spark.mesos.coarse", "false")
 {% endhighlight %}
 
-In addition, for coarse-grained mode, you can control the maximum number of resources Spark will
-acquire. By default, it will acquire *all* cores in the cluster (that get offered by Mesos), which
-only makes sense if you run just one application at a time. You can cap the maximum number of cores
-using `conf.set("spark.cores.max", "10")` (for example).
-
-You may also make use of `spark.mesos.constraints` to set attribute based constraints on mesos resource offers. By default, all resource offers will be accepted.
+You may also make use of `spark.mesos.constraints` to set
+attribute-based constraints on Mesos resource offers. By default, all
+resource offers will be accepted.
 
 {% highlight scala %}
-conf.set("spark.mesos.constraints", "tachyon:true;us-east-1:false")
+conf.set("spark.mesos.constraints", "os:centos7;us-east-1:false")
 {% endhighlight %}
 
-For example, Let's say `spark.mesos.constraints` is set to `tachyon:true;us-east-1:false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+For example, Let's say `spark.mesos.constraints` is set to `os:centos7;us-east-1:false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
 
 # Mesos Docker Support
 
@@ -203,6 +269,10 @@ The Docker image used must have an appropriate version of Spark already part of 
 have Mesos download Spark via the usual methods.
 
 Requires Mesos version 0.20.1 or later.
+
+Note that by default Mesos agents will not pull the image if it already exists on the agent. If you use mutable image
+tags you can set `spark.mesos.executor.docker.forcePullImage` to `true` in order to force the agent to always pull the
+image before running the executor. Force pulling images is only available in Mesos version 0.22 and above.
 
 # Running Alongside Hadoop
 
@@ -220,18 +290,15 @@ In either case, HDFS runs separately from Hadoop MapReduce, without being schedu
 
 # Dynamic Resource Allocation with Mesos
 
-Mesos supports dynamic allocation only with coarse grain mode, which can resize the number of executors based on statistics
-of the application. While dynamic allocation supports both scaling up and scaling down the number of executors, the coarse grain scheduler only supports scaling down
-since it is already designed to run one executor per slave with the configured amount of resources. However, after scaling down the number of executors the coarse grain scheduler
-can scale back up to the same amount of executors when Spark signals more executors are needed.
+Mesos supports dynamic allocation only with coarse-grained mode, which can resize the number of
+executors based on statistics of the application. For general information,
+see [Dynamic Resource Allocation](job-scheduling.html#dynamic-resource-allocation).
 
-Users that like to utilize this feature should launch the Mesos Shuffle Service that
-provides shuffle data cleanup functionality on top of the Shuffle Service since Mesos doesn't yet support notifying another framework's
-termination. To launch/stop the Mesos Shuffle Service please use the provided sbin/start-mesos-shuffle-service.sh and sbin/stop-mesos-shuffle-service.sh
-scripts accordingly.
+The External Shuffle Service to use is the Mesos Shuffle Service. It provides shuffle data cleanup functionality
+on top of the Shuffle Service since Mesos doesn't yet support notifying another framework's
+termination. To launch it, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.sh` on all slave nodes, with `spark.shuffle.service.enabled` set to `true`.
 
-The Shuffle Service is expected to be running on each slave node that will run Spark executors. One way to easily achieve this with Mesos
-is to launch the Shuffle Service with Marathon with a unique host constraint.
+This can also be achieved through Marathon, using a unique host constraint, and the following command: `bin/spark-class org.apache.spark.deploy.mesos.MesosExternalShuffleService`.
 
 # Configuration
 
@@ -243,22 +310,22 @@ See the [configuration page](configuration.html) for information on Spark config
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.mesos.coarse</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
-    If set to <code>true</code>, runs over Mesos clusters in
-    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
-    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per
-    Spark task. This gives lower-latency scheduling for short queries, but leaves resources in use
-    for the whole duration of the Spark job.
+    If set to <code>true</code>, runs over Mesos clusters in "coarse-grained" sharing mode, where Spark acquires one long-lived Mesos task on each machine.
+    If set to <code>false</code>, runs over Mesos cluster in "fine-grained" sharing mode, where one Mesos task is created per Spark task.
+    Detailed information in <a href="running-on-mesos.html#mesos-run-modes">'Mesos Run Modes'</a>.
   </td>
 </tr>
 <tr>
   <td><code>spark.mesos.extra.cores</code></td>
   <td><code>0</code></td>
   <td>
-    Set the extra amount of cpus to request per task. This setting is only used for Mesos coarse grain mode.
-    The total amount of cores requested per task is the number of cores in the offer plus the extra cores configured.
-    Note that total amount of cores the executor will request in total will not exceed the <code>spark.cores.max</code> setting.
+    Set the extra number of cores for an executor to advertise. This
+    does not result in more cores allocated.  It instead means that an
+    executor will "pretend" it has more cores, so that the driver will
+    send it more tasks.  Use this to increase parallelism.  This
+    setting is only used for Mesos coarse-grained mode.
   </td>
 </tr>
 <tr>
@@ -278,7 +345,15 @@ See the [configuration page](configuration.html) for information on Spark config
     Set the name of the docker image that the Spark executors will run in. The selected
     image must have Spark installed, as well as a compatible version of the Mesos library.
     The installed path of Spark in the image can be specified with <code>spark.mesos.executor.home</code>;
-    the installed path of the Mesos library can be specified with <code>spark.executorEnv.MESOS_NATIVE_LIBRARY</code>.
+    the installed path of the Mesos library can be specified with <code>spark.executorEnv.MESOS_NATIVE_JAVA_LIBRARY</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.docker.forcePullImage</code></td>
+  <td>false</td>
+  <td>
+    Force Mesos agents to pull the image specified in <code>spark.mesos.executor.docker.image</code>.
+    By default Mesos agents will not pull images they already have cached.
   </td>
 </tr>
 <tr>
@@ -326,8 +401,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.uris</code></td>
   <td>(none)</td>
   <td>
-    A list of URIs to be downloaded to the sandbox when driver or executor is launched by Mesos.
-    This applies to both coarse-grain and fine-grain mode.
+    A comma-separated list of URIs to be downloaded to the sandbox
+    when driver or executor is launched by Mesos.  This applies to
+    both coarse-grained and fine-grained mode.
   </td>
 </tr>
 <tr>
@@ -361,11 +437,68 @@ See the [configuration page](configuration.html) for information on Spark config
       <li>Scalar constraints are matched with "less than equal" semantics i.e. value in the constraint must be less than or equal to the value in the resource offer.</li>
       <li>Range constraints are matched with "contains" semantics i.e. value in the constraint must be within the resource offer's value.</li>
       <li>Set constraints are matched with "subset of" semantics i.e. value in the constraint must be a subset of the resource offer's value.</li>
-      <li>Text constraints are metched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
+      <li>Text constraints are matched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
       <li>In case there is no value present as a part of the constraint any offer with the corresponding attribute will be accepted (without value check).</li>
     </ul>
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.containerizer</code></td>
+  <td><code>docker</code></td>
+  <td>
+    This only affects docker containers, and must be one of "docker"
+    or "mesos".  Mesos supports two types of
+    containerizers for docker: the "docker" containerizer, and the preferred
+    "mesos" containerizer.  Read more here: http://mesos.apache.org/documentation/latest/container-image/
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.webui.url</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the Spark Mesos driver webui_url for interacting with the framework.
+    If unset it will point to Spark's internal web UI.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driverEnv.[EnvironmentVariableName]</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    This only affects drivers submitted in cluster mode.  Add the
+    environment variable specified by EnvironmentVariableName to the
+    driver process. The user can specify multiple of these to set
+    multiple environment variables.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.webui.url</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the Spark Mesos dispatcher webui_url for interacting with the framework.
+    If unset it will point to Spark's internal web UI.
+  </td>
+  </tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.driverDefault.[PropertyName]</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set default properties for drivers submitted through the
+    dispatcher.  For example,
+    spark.mesos.dispatcher.driverProperty.spark.executor.memory=32g
+    results in the executors for all drivers submitted in cluster mode
+    to run in 32g containers.
+</td>
+</tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.historyServer.url</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the URL of the <a href="http://spark.apache.org/docs/latest/monitoring.html#viewing-after-the-fact">history
+    server</a>.  The dispatcher will then link each driver to its entry
+    in the history server.
+  </td>
+</tr>
+
 </table>
 
 # Troubleshooting and Debugging

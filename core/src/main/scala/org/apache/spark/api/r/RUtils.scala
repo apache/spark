@@ -23,6 +23,10 @@ import java.util.Arrays
 import org.apache.spark.{SparkEnv, SparkException}
 
 private[spark] object RUtils {
+  // Local path where R binary packages built from R source code contained in the spark
+  // packages specified with "--packages" or "--jars" command line option reside.
+  var rPackages: Option[String] = None
+
   /**
    * Get the SparkR package path in the local spark distribution.
    */
@@ -34,11 +38,24 @@ private[spark] object RUtils {
   }
 
   /**
-   * Get the SparkR package path in various deployment modes.
+   * Check if SparkR is installed before running tests that use SparkR.
+   */
+  def isSparkRInstalled: Boolean = {
+    localSparkRPackagePath.filter { pkgDir =>
+      new File(Seq(pkgDir, "SparkR").mkString(File.separator)).exists
+    }.isDefined
+  }
+
+  /**
+   * Get the list of paths for R packages in various deployment modes, of which the first
+   * path is for the SparkR package itself. The second path is for R packages built as
+   * part of Spark Packages, if any exist. Spark Packages can be provided through the
+   *  "--packages" or "--jars" command line options.
+   *
    * This assumes that Spark properties `spark.master` and `spark.submit.deployMode`
    * and environment variable `SPARK_HOME` are set.
    */
-  def sparkRPackagePath(isDriver: Boolean): String = {
+  def sparkRPackagePath(isDriver: Boolean): Seq[String] = {
     val (master, deployMode) =
       if (isDriver) {
         (sys.props("spark.master"), sys.props("spark.submit.deployMode"))
@@ -51,15 +68,30 @@ private[spark] object RUtils {
     val isYarnClient = master != null && master.contains("yarn") && deployMode == "client"
 
     // In YARN mode, the SparkR package is distributed as an archive symbolically
-    // linked to the "sparkr" file in the current directory. Note that this does not apply
-    // to the driver in client mode because it is run outside of the cluster.
+    // linked to the "sparkr" file in the current directory and additional R packages
+    // are distributed as an archive symbolically linked to the "rpkg" file in the
+    // current directory.
+    //
+    // Note that this does not apply to the driver in client mode because it is run
+    // outside of the cluster.
     if (isYarnCluster || (isYarnClient && !isDriver)) {
-      new File("sparkr").getAbsolutePath
+      val sparkRPkgPath = new File("sparkr").getAbsolutePath
+      val rPkgPath = new File("rpkg")
+      if (rPkgPath.exists()) {
+        Seq(sparkRPkgPath, rPkgPath.getAbsolutePath)
+      } else {
+        Seq(sparkRPkgPath)
+      }
     } else {
       // Otherwise, assume the package is local
       // TODO: support this for Mesos
-      localSparkRPackagePath.getOrElse {
-        throw new SparkException("SPARK_HOME not set. Can't locate SparkR package.")
+      val sparkRPkgPath = localSparkRPackagePath.getOrElse {
+          throw new SparkException("SPARK_HOME not set. Can't locate SparkR package.")
+      }
+      if (!rPackages.isEmpty) {
+        Seq(sparkRPkgPath, rPackages.get)
+      } else {
+        Seq(sparkRPkgPath)
       }
     }
   }

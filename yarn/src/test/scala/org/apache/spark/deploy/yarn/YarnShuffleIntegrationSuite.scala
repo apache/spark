@@ -18,20 +18,23 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
+import org.apache.spark.tags.ExtendedYarnTest
 
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
  */
+@ExtendedYarnTest
 class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 
   override def newYarnConfig(): YarnConfiguration = {
@@ -51,7 +54,7 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 
     logInfo("Shuffle service port = " + shuffleServicePort)
     val result = File.createTempFile("result", null, tempDir)
-    runSpark(
+    val finalState = runSpark(
       false,
       mainClassName(YarnExternalShuffleDriver.getClass),
       appArgs = Seq(result.getAbsolutePath(), registeredExecFile.getAbsolutePath),
@@ -60,7 +63,7 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
         "spark.shuffle.service.port" -> shuffleServicePort.toString
       )
     )
-    checkResult(result)
+    checkResult(finalState, result)
     assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
   }
 }
@@ -76,7 +79,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
-        |Usage: ExternalShuffleDriver [result file] [registed exec file]
+        |Usage: ExternalShuffleDriver [result file] [registered exec file]
         """.stripMargin)
       // scalastyle:on println
       System.exit(1)
@@ -102,7 +105,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
     } finally {
       sc.stop()
       FileUtils.deleteDirectory(execStateCopy)
-      Files.write(result, status, UTF_8)
+      Files.write(result, status, StandardCharsets.UTF_8)
     }
   }
 

@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{RoundingMode, MathContext}
+import java.lang.{Long => JLong}
+import java.math.{BigInteger, MathContext, RoundingMode}
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -88,7 +89,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (precision < 19) {
         return null  // Requested precision is too low to represent this value
       }
-      this.decimalVal = BigDecimal(unscaled)
+      this.decimalVal = BigDecimal(unscaled, scale)
       this.longVal = 0L
     } else {
       val p = POW_10(math.min(precision, MAX_LONG_DIGITS))
@@ -107,8 +108,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * Set this Decimal to the given BigDecimal value, with a given precision and scale.
    */
   def set(decimal: BigDecimal, precision: Int, scale: Int): Decimal = {
-    this.decimalVal = decimal.setScale(scale, ROUNDING_MODE)
-    require(decimalVal.precision <= precision, "Overflowed precision")
+    this.decimalVal = decimal.setScale(scale, ROUND_HALF_UP)
+    require(
+      decimalVal.precision <= precision,
+      s"Decimal precision ${decimalVal.precision} exceeds max precision $precision")
     this.longVal = 0L
     this._precision = precision
     this._scale = scale
@@ -123,6 +126,21 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     this.longVal = 0L
     this._precision = decimal.precision
     this._scale = decimal.scale
+    this
+  }
+
+  /**
+   * Set this Decimal to the given BigInteger value. Will have precision 38 and scale 0.
+   */
+  def set(bigintval: BigInteger): Decimal = {
+    // TODO: Remove this once we migrate to java8 and use longValueExact() instead.
+    require(
+      bigintval.compareTo(LONG_MAX_BIG_INT) <= 0 && bigintval.compareTo(LONG_MIN_BIG_INT) >= 0,
+      s"BigInteger $bigintval too large for decimal")
+    this.decimalVal = null
+    this.longVal = bigintval.longValue()
+    this._precision = DecimalType.MAX_PRECISION
+    this._scale = 0
     this
   }
 
@@ -145,7 +163,17 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  def toJavaBigDecimal: java.math.BigDecimal = toBigDecimal.underlying()
+  def toJavaBigDecimal: java.math.BigDecimal = {
+    if (decimalVal.ne(null)) {
+      decimalVal.underlying()
+    } else {
+      java.math.BigDecimal.valueOf(longVal, _scale)
+    }
+  }
+
+  def toScalaBigInt: BigInt = BigInt(toLong)
+
+  def toJavaBigInteger: java.math.BigInteger = java.math.BigInteger.valueOf(toLong)
 
   def toUnscaledLong: Long = {
     if (decimalVal.ne(null)) {
@@ -190,6 +218,21 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * @return true if successful, false if overflow would occur
    */
   def changePrecision(precision: Int, scale: Int): Boolean = {
+    changePrecision(precision, scale, ROUND_HALF_UP)
+  }
+
+  def changePrecision(precision: Int, scale: Int, mode: Int): Boolean = mode match {
+    case java.math.BigDecimal.ROUND_HALF_UP => changePrecision(precision, scale, ROUND_HALF_UP)
+    case java.math.BigDecimal.ROUND_HALF_EVEN => changePrecision(precision, scale, ROUND_HALF_EVEN)
+  }
+
+  /**
+   * Update precision and scale while keeping our value the same, and return true if successful.
+   *
+   * @return true if successful, false if overflow would occur
+   */
+  private[sql] def changePrecision(precision: Int, scale: Int,
+                      roundMode: BigDecimal.RoundingMode.Value): Boolean = {
     // fast path for UnsafeProjection
     if (precision == this.precision && scale == this.scale) {
       return true
@@ -223,7 +266,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.ne(null)) {
       // We get here if either we started with a BigDecimal, or we switched to one because we would
       // have overflowed our Long; in either case we must rescale decimalVal to the new scale.
-      val newVal = decimalVal.setScale(scale, ROUNDING_MODE)
+      val newVal = decimalVal.setScale(scale, roundMode)
       if (newVal.precision > precision) {
         return false
       }
@@ -279,7 +322,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  // HiveTypeCoercion will take care of the precision, scale of result
+  // TypeCoercion will take care of the precision, scale of result
   def * (that: Decimal): Decimal =
     Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
 
@@ -301,10 +344,30 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   def abs: Decimal = if (this.compare(Decimal.ZERO) < 0) this.unary_- else this
+
+  def floor: Decimal = if (scale == 0) this else {
+    val value = this.clone()
+    value.changePrecision(
+      DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_FLOOR)
+    value
+  }
+
+  def ceil: Decimal = if (scale == 0) this else {
+    val value = this.clone()
+    value.changePrecision(
+      DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_CEILING)
+    value
+  }
 }
 
 object Decimal {
-  private val ROUNDING_MODE = BigDecimal.RoundingMode.HALF_UP
+  val ROUND_HALF_UP = BigDecimal.RoundingMode.HALF_UP
+  val ROUND_HALF_EVEN = BigDecimal.RoundingMode.HALF_EVEN
+  val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
+  val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
+
+  /** Maximum number of decimal digits an Int can represent */
+  val MAX_INT_DIGITS = 9
 
   /** Maximum number of decimal digits a Long can represent */
   val MAX_LONG_DIGITS = 18
@@ -318,6 +381,9 @@ object Decimal {
   private[sql] val ZERO = Decimal(0)
   private[sql] val ONE = Decimal(1)
 
+  private val LONG_MAX_BIG_INT = BigInteger.valueOf(JLong.MAX_VALUE)
+  private val LONG_MIN_BIG_INT = BigInteger.valueOf(JLong.MIN_VALUE)
+
   def apply(value: Double): Decimal = new Decimal().set(value)
 
   def apply(value: Long): Decimal = new Decimal().set(value)
@@ -327,6 +393,10 @@ object Decimal {
   def apply(value: BigDecimal): Decimal = new Decimal().set(value)
 
   def apply(value: java.math.BigDecimal): Decimal = new Decimal().set(value)
+
+  def apply(value: java.math.BigInteger): Decimal = new Decimal().set(value)
+
+  def apply(value: scala.math.BigInt): Decimal = new Decimal().set(value.bigInteger)
 
   def apply(value: BigDecimal, precision: Int, scale: Int): Decimal =
     new Decimal().set(value, precision, scale)
@@ -338,6 +408,28 @@ object Decimal {
     new Decimal().set(unscaled, precision, scale)
 
   def apply(value: String): Decimal = new Decimal().set(BigDecimal(value))
+
+  // This is used for RowEncoder to handle Decimal inside external row.
+  def fromDecimal(value: Any): Decimal = {
+    value match {
+      case j: java.math.BigDecimal => apply(j)
+      case d: BigDecimal => apply(d)
+      case k: scala.math.BigInt => apply(k)
+      case l: java.math.BigInteger => apply(l)
+      case d: Decimal => d
+    }
+  }
+
+  /**
+   * Creates a decimal from unscaled, precision and scale without checking the bounds.
+   */
+  def createUnsafe(unscaled: Long, precision: Int, scale: Int): Decimal = {
+    val dec = new Decimal()
+    dec.longVal = unscaled
+    dec._precision = precision
+    dec._scale = scale
+    dec
+  }
 
   // Evidence parameters for Decimal considered either as Fractional or Integral. We provide two
   // parameters inheriting from a common trait since both traits define mkNumericOps.

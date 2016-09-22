@@ -19,21 +19,18 @@ package org.apache.spark.mllib.linalg.distributed
 
 import breeze.linalg.{DenseMatrix => BDM}
 
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.SingularValueDecomposition
+import org.apache.spark.rdd.RDD
 
 /**
- * :: Experimental ::
  * Represents a row of [[org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix]].
  */
 @Since("1.0.0")
-@Experimental
 case class IndexedRow(index: Long, vector: Vector)
 
 /**
- * :: Experimental ::
  * Represents a row-oriented [[org.apache.spark.mllib.linalg.distributed.DistributedMatrix]] with
  * indexed rows.
  *
@@ -44,7 +41,6 @@ case class IndexedRow(index: Long, vector: Vector)
  *              columns will be determined by the size of the first row.
  */
 @Since("1.0.0")
-@Experimental
 class IndexedRowMatrix @Since("1.0.0") (
     @Since("1.0.0") val rows: RDD[IndexedRow],
     private var nRows: Long,
@@ -70,6 +66,19 @@ class IndexedRowMatrix @Since("1.0.0") (
       nRows = rows.map(_.index).reduce(math.max) + 1L
     }
     nRows
+  }
+
+
+  /**
+   * Compute all cosine similarities between columns of this matrix using the brute-force
+   * approach of computing normalized dot products.
+   *
+   * @return An n x n sparse upper-triangular matrix of cosine similarities between
+   *         columns of this matrix.
+   */
+  @Since("1.6.0")
+  def columnSimilarities(): CoordinateMatrix = {
+    toRowMatrix().columnSimilarities()
   }
 
   /**
@@ -111,9 +120,9 @@ class IndexedRowMatrix @Since("1.0.0") (
       val rowIndex = row.index
       row.vector match {
         case SparseVector(size, indices, values) =>
-          Iterator.tabulate(indices.size)(i => MatrixEntry(rowIndex, indices(i), values(i)))
+          Iterator.tabulate(indices.length)(i => MatrixEntry(rowIndex, indices(i), values(i)))
         case DenseVector(values) =>
-          Iterator.tabulate(values.size)(i => MatrixEntry(rowIndex, i, values(i)))
+          Iterator.tabulate(values.length)(i => MatrixEntry(rowIndex, i, values(i)))
       }
     }
     new CoordinateMatrix(entries, numRows(), numCols())
@@ -179,7 +188,8 @@ class IndexedRowMatrix @Since("1.0.0") (
   }
 
   /**
-   * Computes the Gramian matrix `A^T A`.
+   * Computes the Gramian matrix `A^T A`. Note that this cannot be
+   * computed on matrices with more than 65535 columns.
    */
   @Since("1.0.0")
   def computeGramianMatrix(): Matrix = {

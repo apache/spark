@@ -38,7 +38,7 @@ private[spark] class ApproximateActionListener[T, U, R](
   extends JobListener {
 
   val startTime = System.currentTimeMillis()
-  val totalTasks = rdd.partitions.size
+  val totalTasks = rdd.partitions.length
   var finishedTasks = 0
   var failure: Option[Exception] = None             // Set if the job has failed (permanently)
   var resultObject: Option[PartialResult[R]] = None // Set if we've already returned a PartialResult

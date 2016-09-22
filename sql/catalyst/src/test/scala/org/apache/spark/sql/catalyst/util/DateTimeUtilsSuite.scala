@@ -22,8 +22,8 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.unsafe.types.UTF8String
 
 class DateTimeUtilsSuite extends SparkFunSuite {
 
@@ -110,6 +110,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c.set(Calendar.MILLISECOND, 0)
     assert(stringToDate(UTF8String.fromString("2015")).get ===
       millisToDays(c.getTimeInMillis))
+    c.set(1, 0, 1, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(stringToDate(UTF8String.fromString("0001")).get ===
+      millisToDays(c.getTimeInMillis))
     c = Calendar.getInstance()
     c.set(2015, 2, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
@@ -134,11 +138,15 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToDate(UTF8String.fromString("2015.03.18")).isEmpty)
     assert(stringToDate(UTF8String.fromString("20150318")).isEmpty)
     assert(stringToDate(UTF8String.fromString("2015-031-8")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("02015-03-18")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("015-03-18")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("015")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("02015")).isEmpty)
   }
 
   test("string to time") {
     // Tests with UTC.
-    var c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+    val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
     c.set(Calendar.MILLISECOND, 0)
 
     c.set(1900, 0, 1, 0, 0, 0)
@@ -174,9 +182,9 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c.set(Calendar.MILLISECOND, 0)
     assert(stringToTimestamp(UTF8String.fromString("1969-12-31 16:00:00")).get ===
       c.getTimeInMillis * 1000)
-    c.set(2015, 0, 1, 0, 0, 0)
+    c.set(1, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(stringToTimestamp(UTF8String.fromString("2015")).get ===
+    assert(stringToTimestamp(UTF8String.fromString("0001")).get ===
       c.getTimeInMillis * 1000)
     c = Calendar.getInstance()
     c.set(2015, 2, 1, 0, 0, 0)
@@ -319,6 +327,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       UTF8String.fromString("2011-05-06 07:08:09.1000")).get === c.getTimeInMillis * 1000)
 
     assert(stringToTimestamp(UTF8String.fromString("238")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("00238")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("2015-03-18 123142")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("2015-03-18T123123")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("2015-03-18X")).isEmpty)
@@ -326,12 +335,41 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToTimestamp(UTF8String.fromString("2015.03.18")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("20150318")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("2015-031-8")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("02015-01-18")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("015-01-18")).isEmpty)
     assert(stringToTimestamp(
       UTF8String.fromString("2015-03-18T12:03.17-20:0")).isEmpty)
     assert(stringToTimestamp(
       UTF8String.fromString("2015-03-18T12:03.17-0:70")).isEmpty)
     assert(stringToTimestamp(
       UTF8String.fromString("2015-03-18T12:03.17-1:0:0")).isEmpty)
+
+    // Truncating the fractional seconds
+    c = Calendar.getInstance(TimeZone.getTimeZone("GMT+00:00"))
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(stringToTimestamp(
+      UTF8String.fromString("2015-03-18T12:03:17.123456789+0:00")).get ===
+        c.getTimeInMillis * 1000 + 123456)
+  }
+
+  test("SPARK-15379: special invalid date string") {
+    // Test stringToDate
+    assert(stringToDate(
+      UTF8String.fromString("2015-02-29 00:00:00")).isEmpty)
+    assert(stringToDate(
+      UTF8String.fromString("2015-04-31 00:00:00")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("2015-02-29")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("2015-04-31")).isEmpty)
+
+
+    // Test stringToTimestamp
+    assert(stringToTimestamp(
+      UTF8String.fromString("2015-02-29 00:00:00")).isEmpty)
+    assert(stringToTimestamp(
+      UTF8String.fromString("2015-04-31 00:00:00")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("2015-02-29")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("2015-04-31")).isEmpty)
   }
 
   test("hours") {
@@ -356,6 +394,16 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(getSeconds(c.getTimeInMillis * 1000) === 11)
     c.set(2015, 2, 8, 2, 7, 9)
     assert(getSeconds(c.getTimeInMillis * 1000) === 9)
+  }
+
+  test("hours / minutes / seconds") {
+    Seq(Timestamp.valueOf("2015-06-11 10:12:35.789"),
+      Timestamp.valueOf("2015-06-11 20:13:40.789"),
+      Timestamp.valueOf("1900-06-11 12:14:50.789"),
+      Timestamp.valueOf("1700-02-28 12:14:50.123456")).foreach { t =>
+      val us = fromJavaTimestamp(t)
+      assert(toJavaTimestamp(us) === t)
+    }
   }
 
   test("get day in year") {
@@ -440,10 +488,23 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       assert(toJavaTimestamp(fromUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
         === expected)
     }
-    test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
-    test("2011-12-25 09:00:00.123456", "JST", "2011-12-25 18:00:00.123456")
-    test("2011-12-25 09:00:00.123456", "PST", "2011-12-25 01:00:00.123456")
-    test("2011-12-25 09:00:00.123456", "Asia/Shanghai", "2011-12-25 17:00:00.123456")
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+      DateTimeTestUtils.withDefaultTimeZone(tz) {
+        test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 09:00:00.123456", "JST", "2011-12-25 18:00:00.123456")
+        test("2011-12-25 09:00:00.123456", "PST", "2011-12-25 01:00:00.123456")
+        test("2011-12-25 09:00:00.123456", "Asia/Shanghai", "2011-12-25 17:00:00.123456")
+      }
+    }
+
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
+      // Daylight Saving Time
+      test("2016-03-13 09:59:59.0", "PST", "2016-03-13 01:59:59.0")
+      test("2016-03-13 10:00:00.0", "PST", "2016-03-13 03:00:00.0")
+      test("2016-11-06 08:59:59.0", "PST", "2016-11-06 01:59:59.0")
+      test("2016-11-06 09:00:00.0", "PST", "2016-11-06 01:00:00.0")
+      test("2016-11-06 10:00:00.0", "PST", "2016-11-06 02:00:00.0")
+    }
   }
 
   test("to UTC timestamp") {
@@ -451,9 +512,50 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       assert(toJavaTimestamp(toUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
         === expected)
     }
-    test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
-    test("2011-12-25 18:00:00.123456", "JST", "2011-12-25 09:00:00.123456")
-    test("2011-12-25 01:00:00.123456", "PST", "2011-12-25 09:00:00.123456")
-    test("2011-12-25 17:00:00.123456", "Asia/Shanghai", "2011-12-25 09:00:00.123456")
+
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+      DateTimeTestUtils.withDefaultTimeZone(tz) {
+        test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 18:00:00.123456", "JST", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 01:00:00.123456", "PST", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 17:00:00.123456", "Asia/Shanghai", "2011-12-25 09:00:00.123456")
+      }
+    }
+
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
+      // Daylight Saving Time
+      test("2016-03-13 01:59:59", "PST", "2016-03-13 09:59:59.0")
+      // 2016-03-13 02:00:00 PST does not exists
+      test("2016-03-13 02:00:00", "PST", "2016-03-13 10:00:00.0")
+      test("2016-03-13 03:00:00", "PST", "2016-03-13 10:00:00.0")
+      test("2016-11-06 00:59:59", "PST", "2016-11-06 07:59:59.0")
+      // 2016-11-06 01:00:00 PST could be 2016-11-06 08:00:00 UTC or 2016-11-06 09:00:00 UTC
+      test("2016-11-06 01:00:00", "PST", "2016-11-06 09:00:00.0")
+      test("2016-11-06 01:59:59", "PST", "2016-11-06 09:59:59.0")
+      test("2016-11-06 02:00:00", "PST", "2016-11-06 10:00:00.0")
+    }
+  }
+
+  test("daysToMillis and millisToDays") {
+    // There are some days are skipped entirely in some timezone, skip them here.
+    val skipped_days = Map[String, Int](
+      "Kwajalein" -> 8632,
+      "Pacific/Apia" -> 15338,
+      "Pacific/Enderbury" -> 9131,
+      "Pacific/Fakaofo" -> 15338,
+      "Pacific/Kiritimati" -> 9131,
+      "Pacific/Kwajalein" -> 8632,
+      "MIT" -> 15338)
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+      DateTimeTestUtils.withDefaultTimeZone(tz) {
+        val skipped = skipped_days.getOrElse(tz.getID, Int.MinValue)
+        (-20000 to 20000).foreach { d =>
+          if (d != skipped) {
+            assert(millisToDays(daysToMillis(d)) === d,
+              s"Round trip of ${d} did not work in tz ${tz}")
+          }
+        }
+      }
+    }
   }
 }

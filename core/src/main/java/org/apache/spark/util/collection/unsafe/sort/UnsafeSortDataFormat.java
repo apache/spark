@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
+import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.util.collection.SortDataFormat;
 
 /**
@@ -26,14 +28,17 @@ import org.apache.spark.util.collection.SortDataFormat;
  * Within each long[] buffer, position {@code 2 * i} holds a pointer pointer to the record at
  * index {@code i}, while position {@code 2 * i + 1} in the array holds an 8-byte key prefix.
  */
-final class UnsafeSortDataFormat extends SortDataFormat<RecordPointerAndKeyPrefix, long[]> {
+public final class UnsafeSortDataFormat
+  extends SortDataFormat<RecordPointerAndKeyPrefix, LongArray> {
 
-  public static final UnsafeSortDataFormat INSTANCE = new UnsafeSortDataFormat();
+  private final LongArray buffer;
 
-  private UnsafeSortDataFormat() { }
+  public UnsafeSortDataFormat(LongArray buffer) {
+    this.buffer = buffer;
+  }
 
   @Override
-  public RecordPointerAndKeyPrefix getKey(long[] data, int pos) {
+  public RecordPointerAndKeyPrefix getKey(LongArray data, int pos) {
     // Since we re-use keys, this method shouldn't be called.
     throw new UnsupportedOperationException();
   }
@@ -44,37 +49,44 @@ final class UnsafeSortDataFormat extends SortDataFormat<RecordPointerAndKeyPrefi
   }
 
   @Override
-  public RecordPointerAndKeyPrefix getKey(long[] data, int pos, RecordPointerAndKeyPrefix reuse) {
-    reuse.recordPointer = data[pos * 2];
-    reuse.keyPrefix = data[pos * 2 + 1];
+  public RecordPointerAndKeyPrefix getKey(LongArray data, int pos,
+                                          RecordPointerAndKeyPrefix reuse) {
+    reuse.recordPointer = data.get(pos * 2);
+    reuse.keyPrefix = data.get(pos * 2 + 1);
     return reuse;
   }
 
   @Override
-  public void swap(long[] data, int pos0, int pos1) {
-    long tempPointer = data[pos0 * 2];
-    long tempKeyPrefix = data[pos0 * 2 + 1];
-    data[pos0 * 2] = data[pos1 * 2];
-    data[pos0 * 2 + 1] = data[pos1 * 2 + 1];
-    data[pos1 * 2] = tempPointer;
-    data[pos1 * 2 + 1] = tempKeyPrefix;
+  public void swap(LongArray data, int pos0, int pos1) {
+    long tempPointer = data.get(pos0 * 2);
+    long tempKeyPrefix = data.get(pos0 * 2 + 1);
+    data.set(pos0 * 2, data.get(pos1 * 2));
+    data.set(pos0 * 2 + 1, data.get(pos1 * 2 + 1));
+    data.set(pos1 * 2, tempPointer);
+    data.set(pos1 * 2 + 1, tempKeyPrefix);
   }
 
   @Override
-  public void copyElement(long[] src, int srcPos, long[] dst, int dstPos) {
-    dst[dstPos * 2] = src[srcPos * 2];
-    dst[dstPos * 2 + 1] = src[srcPos * 2 + 1];
+  public void copyElement(LongArray src, int srcPos, LongArray dst, int dstPos) {
+    dst.set(dstPos * 2, src.get(srcPos * 2));
+    dst.set(dstPos * 2 + 1, src.get(srcPos * 2 + 1));
   }
 
   @Override
-  public void copyRange(long[] src, int srcPos, long[] dst, int dstPos, int length) {
-    System.arraycopy(src, srcPos * 2, dst, dstPos * 2, length * 2);
+  public void copyRange(LongArray src, int srcPos, LongArray dst, int dstPos, int length) {
+    Platform.copyMemory(
+      src.getBaseObject(),
+      src.getBaseOffset() + srcPos * 16L,
+      dst.getBaseObject(),
+      dst.getBaseOffset() + dstPos * 16L,
+      length * 16L);
   }
 
   @Override
-  public long[] allocate(int length) {
-    assert (length < Integer.MAX_VALUE / 2) : "Length " + length + " is too large";
-    return new long[length * 2];
+  public LongArray allocate(int length) {
+    assert (length * 2 <= buffer.size()) :
+      "the buffer is smaller than required: " + buffer.size() + " < " + (length * 2);
+    return buffer;
   }
 
 }

@@ -17,10 +17,11 @@
 
 package org.apache.spark.mllib.util
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.TestingUtils._
 import org.scalatest.exceptions.TestFailedException
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.linalg.{Matrices, Vectors}
+import org.apache.spark.mllib.util.TestingUtils._
 
 class TestingUtilsSuite extends SparkFunSuite {
 
@@ -108,6 +109,10 @@ class TestingUtilsSuite extends SparkFunSuite {
     assert(Vectors.dense(Array(3.1, 3.5)) !~= Vectors.dense(Array(3.135, 3.534)) relTol 0.01)
     assert(!(Vectors.dense(Array(3.1, 3.5)) !~= Vectors.dense(Array(3.130, 3.534)) relTol 0.01))
     assert(!(Vectors.dense(Array(3.1, 3.5)) ~= Vectors.dense(Array(3.135, 3.534)) relTol 0.01))
+    assert(Vectors.dense(Array(3.1)) !~= Vectors.dense(Array(3.130, 3.534)) relTol 0.01)
+    assert(Vectors.dense(Array[Double]()) !~= Vectors.dense(Array(3.130, 3.534)) relTol 0.01)
+    assert(Vectors.dense(Array(3.1)) !~== Vectors.dense(Array(3.130, 3.534)) relTol 0.01)
+    assert(Vectors.dense(Array[Double]()) !~== Vectors.dense(Array(3.130, 3.534)) relTol 0.01)
 
     // Should throw exception with message when test fails.
     intercept[TestFailedException](
@@ -115,6 +120,12 @@ class TestingUtilsSuite extends SparkFunSuite {
 
     intercept[TestFailedException](
       Vectors.dense(Array(3.1, 3.5)) ~== Vectors.dense(Array(3.135, 3.534)) relTol 0.01)
+
+    intercept[TestFailedException](
+      Vectors.dense(Array(3.1)) ~== Vectors.dense(Array(3.535, 3.534)) relTol 0.01)
+
+    intercept[TestFailedException](
+      Vectors.dense(Array[Double]()) ~== Vectors.dense(Array(3.135)) relTol 0.01)
 
     // Comparing against zero should fail the test and throw exception with message
     // saying that the relative error is meaningless in this situation.
@@ -124,12 +135,18 @@ class TestingUtilsSuite extends SparkFunSuite {
     intercept[TestFailedException](
       Vectors.dense(Array(3.1, 0.01)) ~== Vectors.sparse(2, Array(0), Array(3.13)) relTol 0.01)
 
-    // Comparisons of two sparse vectors
+    // Comparisons of a sparse vector and a dense vector
     assert(Vectors.dense(Array(3.1, 3.5)) ~==
       Vectors.sparse(2, Array(0, 1), Array(3.130, 3.534)) relTol 0.01)
 
     assert(Vectors.dense(Array(3.1, 3.5)) !~==
       Vectors.sparse(2, Array(0, 1), Array(3.135, 3.534)) relTol 0.01)
+
+    assert(Vectors.dense(Array(3.1)) !~==
+      Vectors.sparse(2, Array(0, 1), Array(3.130, 3.534)) relTol 0.01)
+
+    assert(Vectors.dense(Array[Double]()) !~==
+      Vectors.sparse(2, Array(0, 1), Array(3.130, 3.534)) relTol 0.01)
   }
 
   test("Comparing vectors using absolute error.") {
@@ -153,12 +170,33 @@ class TestingUtilsSuite extends SparkFunSuite {
     assert(!(Vectors.dense(Array(3.1, 3.5, 0.0)) ~=
       Vectors.dense(Array(3.1 + 1E-5, 3.5 + 2E-7, 1 + 1E-3)) absTol 1E-6))
 
+    assert(Vectors.dense(Array(3.1)) !~=
+      Vectors.dense(Array(3.1 + 1E-6, 3.5 + 2E-7)) absTol 1E-5)
+
+    assert(!(Vectors.dense(Array(3.1)) ~=
+      Vectors.dense(Array(3.1 + 1E-6, 3.5 + 2E-7)) absTol 1E-5))
+
+    assert(Vectors.dense(Array[Double]()) !~=
+      Vectors.dense(Array(3.1 + 1E-6, 3.5 + 2E-7)) absTol 1E-5)
+
+    assert(!(Vectors.dense(Array[Double]()) ~=
+      Vectors.dense(Array(3.1 + 1E-6, 3.5 + 2E-7)) absTol 1E-5))
+
+    assert(Vectors.dense(Array[Double]()) ~=
+      Vectors.dense(Array[Double]()) absTol 1E-5)
+
     // Should throw exception with message when test fails.
     intercept[TestFailedException](Vectors.dense(Array(3.1, 3.5, 0.0)) !~==
       Vectors.dense(Array(3.1 + 1E-8, 3.5 + 2E-7, 1E-8)) absTol 1E-6)
 
     intercept[TestFailedException](Vectors.dense(Array(3.1, 3.5, 0.0)) ~==
       Vectors.dense(Array(3.1 + 1E-5, 3.5 + 2E-7, 1 + 1E-3)) absTol 1E-6)
+
+    intercept[TestFailedException](Vectors.dense(Array(3.1)) ~==
+      Vectors.dense(Array(3.1 + 1E-5, 3.5 + 2E-7)) absTol 1E-6)
+
+    intercept[TestFailedException](Vectors.dense(Array[Double]()) ~==
+      Vectors.dense(Array(3.1 + 1E-5, 3.5 + 2E-7)) absTol 1E-6)
 
     // Comparisons of two sparse vectors
     assert(Vectors.sparse(3, Array(0, 2), Array(3.1, 2.4)) ~==
@@ -173,6 +211,12 @@ class TestingUtilsSuite extends SparkFunSuite {
     assert(Vectors.sparse(3, Array(0, 2), Array(3.1 + 1E-3, 2.4)) !~==
       Vectors.sparse(3, Array(0, 2), Array(3.1, 2.4)) absTol 1E-6)
 
+    assert(Vectors.sparse(3, Array(0, 2), Array(3.1 + 1E-6, 2.4)) !~==
+      Vectors.sparse(1, Array(0), Array(3.1)) absTol 1E-3)
+
+    assert(Vectors.sparse(0, Array[Int](), Array[Double]()) !~==
+      Vectors.sparse(1, Array(0), Array(3.1)) absTol 1E-3)
+
     // Comparisons of a dense vector and a sparse vector
     assert(Vectors.sparse(3, Array(0, 2), Array(3.1, 2.4)) ~==
       Vectors.dense(Array(3.1 + 1E-8, 0, 2.4 + 1E-7)) absTol 1E-6)
@@ -182,5 +226,235 @@ class TestingUtilsSuite extends SparkFunSuite {
 
     assert(Vectors.sparse(3, Array(0, 2), Array(3.1, 2.4)) !~==
       Vectors.dense(Array(3.1, 1E-3, 2.4)) absTol 1E-6)
+
+    assert(Vectors.sparse(3, Array(0, 2), Array(3.1, 2.4)) !~==
+      Vectors.dense(Array(3.1)) absTol 1E-6)
+
+    assert(Vectors.dense(Array[Double]()) !~==
+      Vectors.sparse(3, Array(0, 2), Array(0, 2.4)) absTol 1E-6)
+
+    assert(Vectors.sparse(1, Array(0), Array(3.1)) !~==
+      Vectors.dense(Array(3.1, 3.2)) absTol 1E-6)
+
+    assert(Vectors.dense(Array(3.1)) !~==
+      Vectors.sparse(0, Array[Int](), Array[Double]()) absTol 1E-6)
+  }
+
+  test("Comparing Matrices using absolute error.") {
+
+    // Comparisons of two dense Matrices
+    assert(Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) ~==
+      Matrices.dense(2, 2, Array(3.1 + 1E-8, 3.5 + 2E-7, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    assert(Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) ~=
+      Matrices.dense(2, 2, Array(3.1 + 1E-8, 3.5 + 2E-7, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    assert(Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) !~==
+      Matrices.dense(2, 2, Array(3.1 + 1E-5, 3.5 + 2E-6, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    assert(Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) !~=
+      Matrices.dense(2, 2, Array(3.1 + 1E-5, 3.5 + 2E-6, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    assert(!(Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) ~=
+      Matrices.dense(2, 2, Array(3.1 + 1E-5, 3.5 + 2E-6, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6))
+
+    assert(!(Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) !~=
+      Matrices.dense(2, 2, Array(3.1 + 1E-7, 3.5 + 2E-8, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6))
+
+    assert(Matrices.dense(2, 1, Array(3.1, 3.5)) !~==
+      Matrices.dense(2, 2, Array(3.1 + 1E-7, 3.5 + 2E-8, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    assert(Matrices.dense(2, 1, Array(3.1, 3.5)) !~=
+      Matrices.dense(2, 2, Array(3.1 + 1E-7, 3.5 + 2E-8, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    assert(Matrices.dense(0, 0, Array()) !~=
+      Matrices.dense(2, 2, Array(3.1 + 1E-7, 3.5 + 2E-8, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    assert(Matrices.dense(0, 0, Array()) !~==
+      Matrices.dense(2, 2, Array(3.1 + 1E-7, 3.5 + 2E-8, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    // Should throw exception with message when test fails.
+    intercept[TestFailedException](Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) !~==
+      Matrices.dense(2, 2, Array(3.1 + 1E-8, 3.5 + 2E-7, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    intercept[TestFailedException](Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) ~==
+      Matrices.dense(2, 2, Array(3.1 + 1E-8, 3.5 + 2E-7, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-9)
+
+    intercept[TestFailedException](Matrices.dense(2, 1, Array(3.1, 3.5)) ~==
+      Matrices.dense(2, 2, Array(3.1 + 1E-8, 3.5 + 2E-7, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-5)
+
+    intercept[TestFailedException](Matrices.dense(0, 0, Array()) ~==
+      Matrices.dense(2, 2, Array(3.1 + 1E-8, 3.5 + 2E-7, 3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-5)
+
+    // Comparisons of two sparse Matrices
+    assert(Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) ~==
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    assert(Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) ~=
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    assert(Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) !~=
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-9)
+
+    assert(Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) !~==
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-9)
+
+    assert(!(Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) ~=
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1 + 1E-8, 3.5)) absTol 1E-9))
+
+    assert(!(Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) !~=
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1 + 1E-8, 3.5)) absTol 1E-6))
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~=
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-9)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~==
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    assert(Matrices.sparse(0, 0, Array(1), Array(0), Array(0)) !~==
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    assert(Matrices.sparse(0, 0, Array(1), Array(0), Array(0)) !~=
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1 + 1E-8, 3.5 + 1E-7)) absTol 1E-6)
+
+    // Comparisons of a dense Matrix and a sparse Matrix
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) ~=
+      Matrices.dense(2, 2, Array(3.1 + 1E-8, 0, 0, 3.5 + 1E-7)) absTol 1E-6)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) ~==
+      Matrices.dense(2, 2, Array(3.1 + 1E-8, 0, 0, 3.5 + 1E-7)) absTol 1E-6)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~==
+      Matrices.dense(2, 2, Array(3.1 + 1E-8, 0, 0, 3.5 + 1E-7)) absTol 1E-9)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~==
+      Matrices.dense(2, 2, Array(3.1 + 1E-8, 0, 0, 3.5 + 1E-7)) absTol 1E-9)
+
+    assert(!(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) ~=
+      Matrices.dense(2, 2, Array(3.1 + 1E-8, 0, 0, 3.5 + 1E-7)) absTol 1E-9))
+
+    assert(!(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~=
+      Matrices.dense(2, 2, Array(3.1 + 1E-8, 0, 0, 3.5 + 1E-7)) absTol 1E-6))
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~=
+      Matrices.dense(2, 1, Array(3.1 + 1E-8, 0)) absTol 1E-6)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~==
+      Matrices.dense(2, 1, Array(3.1 + 1E-8, 0)) absTol 1E-6)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~==
+      Matrices.dense(0, 0, Array()) absTol 1E-6)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~=
+      Matrices.dense(0, 0, Array()) absTol 1E-6)
+  }
+
+  test("Comparing Matrices using relative error.") {
+
+    // Comparisons of two dense Matrices
+    assert(Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) ~==
+      Matrices.dense(2, 2, Array(3.130, 3.534, 3.130, 3.534)) relTol 0.01)
+
+    assert(Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) ~=
+      Matrices.dense(2, 2, Array(3.130, 3.534, 3.130, 3.534)) relTol 0.01)
+
+    assert(Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) !~==
+      Matrices.dense(2, 2, Array(3.135, 3.534, 3.135, 3.534)) relTol 0.01)
+
+    assert(Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) !~=
+      Matrices.dense(2, 2, Array(3.135, 3.534, 3.135, 3.534)) relTol 0.01)
+
+    assert(!(Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) ~=
+      Matrices.dense(2, 2, Array(3.134, 3.535, 3.134, 3.535)) relTol 0.01))
+
+    assert(!(Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) !~=
+      Matrices.dense(2, 2, Array(3.130, 3.534, 3.130, 3.534)) relTol 0.01))
+
+    assert(Matrices.dense(2, 1, Array(3.1, 3.5)) !~==
+      Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) relTol 0.01)
+
+    assert(Matrices.dense(2, 1, Array(3.1, 3.5)) !~=
+      Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) relTol 0.01)
+
+    assert(Matrices.dense(0, 0, Array()) !~=
+      Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) relTol 0.01)
+
+    assert(Matrices.dense(0, 0, Array()) !~==
+      Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) relTol 0.01)
+
+    // Should throw exception with message when test fails.
+    intercept[TestFailedException](Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) !~==
+      Matrices.dense(2, 2, Array(3.130, 3.534, 3.130, 3.534)) relTol 0.01)
+
+    intercept[TestFailedException](Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) ~==
+      Matrices.dense(2, 2, Array(3.135, 3.534, 3.135, 3.534)) relTol 0.01)
+
+    intercept[TestFailedException](Matrices.dense(2, 1, Array(3.1, 3.5)) ~==
+      Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) relTol 0.01)
+
+    intercept[TestFailedException](Matrices.dense(0, 0, Array()) ~==
+      Matrices.dense(2, 2, Array(3.1, 3.5, 3.1, 3.5)) relTol 0.01)
+
+    // Comparisons of two sparse Matrices
+    assert(Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) ~==
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.130, 3.534)) relTol 0.01)
+
+    assert(Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) ~=
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.130, 3.534)) relTol 0.01)
+
+    assert(Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) !~=
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.135, 3.534)) relTol 0.01)
+
+    assert(Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) !~==
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.135, 3.534)) relTol 0.01)
+
+    assert(!(Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) ~=
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.135, 3.534)) relTol 0.01))
+
+    assert(!(Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) !~=
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.130, 3.534)) relTol 0.01))
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~=
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) relTol 0.01)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~==
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) relTol 0.01)
+
+    assert(Matrices.sparse(0, 0, Array(1), Array(0), Array(0)) !~==
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) relTol 0.01)
+
+    assert(Matrices.sparse(0, 0, Array(1), Array(0), Array(0)) !~=
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(3.1, 3.5)) relTol 0.01)
+
+    // Comparisons of a dense Matrix and a sparse Matrix
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) ~=
+      Matrices.dense(2, 2, Array(3.130, 0, 0, 3.534)) relTol 0.01)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) ~==
+      Matrices.dense(2, 2, Array(3.130, 0, 0, 3.534)) relTol 0.01)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~=
+      Matrices.dense(2, 2, Array(3.135, 0, 0, 3.534)) relTol 0.01)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~==
+      Matrices.dense(2, 2, Array(3.135, 0, 0, 3.534)) relTol 0.01)
+
+    assert(!(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) ~=
+      Matrices.dense(2, 2, Array(3.135, 0, 0, 3.534)) relTol 0.01))
+
+    assert(!(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~=
+      Matrices.dense(2, 2, Array(3.130, 0, 0, 3.534)) relTol 0.01))
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~=
+      Matrices.dense(2, 1, Array(3.1, 0)) relTol 0.01)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~==
+      Matrices.dense(2, 1, Array(3.1, 0)) relTol 0.01)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~==
+      Matrices.dense(0, 0, Array()) relTol 0.01)
+
+    assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~=
+      Matrices.dense(0, 0, Array()) relTol 0.01)
   }
 }

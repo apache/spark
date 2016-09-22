@@ -22,9 +22,11 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart, TaskLocality}
+import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.dstream.{ConstantInputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.receiver._
 
 /** Testsuite for receiver scheduling */
@@ -32,8 +34,6 @@ class ReceiverTrackerSuite extends TestSuiteBase {
 
   test("send rate update to receivers") {
     withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
-      ssc.scheduler.listenerBus.start(ssc.sc)
-
       val newRateLimit = 100L
       val inputDStream = new RateTestInputDStream(ssc)
       val tracker = new ReceiverTracker(ssc)
@@ -80,11 +80,54 @@ class ReceiverTrackerSuite extends TestSuiteBase {
       }
     }
   }
+
+  test("SPARK-11063: TaskSetManager should use Receiver RDD's preferredLocations") {
+    // Use ManualClock to prevent from starting batches so that we can make sure the only task is
+    // for starting the Receiver
+    val _conf = conf.clone.set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
+    withStreamingContext(new StreamingContext(_conf, Milliseconds(100))) { ssc =>
+      @volatile var receiverTaskLocality: TaskLocality = null
+      ssc.sparkContext.addSparkListener(new SparkListener {
+        override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+          receiverTaskLocality = taskStart.taskInfo.taskLocality
+        }
+      })
+      val input = ssc.receiverStream(new TestReceiver)
+      val output = new TestOutputStream(input)
+      output.register()
+      ssc.start()
+      eventually(timeout(10 seconds), interval(10 millis)) {
+        // If preferredLocations is set correctly, receiverTaskLocality should be PROCESS_LOCAL
+        assert(receiverTaskLocality === TaskLocality.PROCESS_LOCAL)
+      }
+    }
+  }
+
+  test("get allocated executors") {
+    // Test get allocated executors when 1 receiver is registered
+    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+      val input = ssc.receiverStream(new TestReceiver)
+      val output = new TestOutputStream(input)
+      output.register()
+      ssc.start()
+      assert(ssc.scheduler.receiverTracker.allocatedExecutors().size === 1)
+    }
+
+    // Test get allocated executors when there's no receiver registered
+    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+      val rdd = ssc.sc.parallelize(1 to 10)
+      val input = new ConstantInputDStream(ssc, rdd)
+      val output = new TestOutputStream(input)
+      output.register()
+      ssc.start()
+      assert(ssc.scheduler.receiverTracker.allocatedExecutors() === Map.empty)
+    }
+  }
 }
 
 /** An input DStream with for testing rate controlling */
-private[streaming] class RateTestInputDStream(@transient ssc_ : StreamingContext)
-  extends ReceiverInputDStream[Int](ssc_) {
+private[streaming] class RateTestInputDStream(_ssc: StreamingContext)
+  extends ReceiverInputDStream[Int](_ssc) {
 
   override def getReceiver(): Receiver[Int] = new RateTestReceiver(id)
 

@@ -19,15 +19,15 @@ package org.apache.spark
 
 import java.util.concurrent.Semaphore
 
-import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.concurrent.future
+import scala.concurrent.Future
 
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Test suite for cancelling running jobs. We run the cancellation tasks for single job action
@@ -38,8 +38,11 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   with LocalSparkContext {
 
   override def afterEach() {
-    super.afterEach()
-    resetSparkContext()
+    try {
+      resetSparkContext()
+    } finally {
+      super.afterEach()
+    }
   }
 
   test("local mode, FIFO scheduler") {
@@ -100,7 +103,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
     val rdd1 = rdd.map(x => x)
 
-    future {
+    Future {
       taskStartedSemaphore.acquire()
       sc.cancelAllJobs()
       taskCancelledSemaphore.release(100000)
@@ -123,7 +126,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     })
 
     // jobA is the one to be cancelled.
-    val jobA = future {
+    val jobA = Future {
       sc.setJobGroup("jobA", "this is a job to be cancelled")
       sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.count()
     }
@@ -134,7 +137,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     sc.clearJobGroup()
     val jobB = sc.parallelize(1 to 100, 2).countAsync()
     sc.cancelJobGroup("jobA")
-    val e = intercept[SparkException] { Await.result(jobA, Duration.Inf) }
+    val e = intercept[SparkException] { ThreadUtils.awaitResult(jobA, Duration.Inf) }.getCause
     assert(e.getMessage contains "cancel")
 
     // Once A is cancelled, job B should finish fairly quickly.
@@ -188,7 +191,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     })
 
     // jobA is the one to be cancelled.
-    val jobA = future {
+    val jobA = Future {
       sc.setJobGroup("jobA", "this is a job to be cancelled", interruptOnCancel = true)
       sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100000); i }.count()
     }
@@ -199,7 +202,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     sc.clearJobGroup()
     val jobB = sc.parallelize(1 to 100, 2).countAsync()
     sc.cancelJobGroup("jobA")
-    val e = intercept[SparkException] { Await.result(jobA, 5.seconds) }
+    val e = intercept[SparkException] { ThreadUtils.awaitResult(jobA, 5.seconds) }.getCause
     assert(e.getMessage contains "cancel")
 
     // Once A is cancelled, job B should finish fairly quickly.
@@ -228,7 +231,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     val f2 = rdd.countAsync()
 
     // Kill one of the action.
-    future {
+    Future {
       sem1.acquire()
       f1.cancel()
       JobCancellationSuite.twoJobsSharingStageSemaphore.release(10)
@@ -244,8 +247,8 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // Cancel before launching any tasks
     {
       val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.countAsync()
-      future { f.cancel() }
-      val e = intercept[SparkException] { f.get() }
+      Future { f.cancel() }
+      val e = intercept[SparkException] { f.get() }.getCause
       assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
     }
 
@@ -260,12 +263,12 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       })
 
       val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.countAsync()
-      future {
+      Future {
         // Wait until some tasks were launched before we cancel the job.
         sem.acquire()
         f.cancel()
       }
-      val e = intercept[SparkException] { f.get() }
+      val e = intercept[SparkException] { f.get() }.getCause
       assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
     }
   }
@@ -274,8 +277,8 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // Cancel before launching any tasks
     {
       val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.takeAsync(5000)
-      future { f.cancel() }
-      val e = intercept[SparkException] { f.get() }
+      Future { f.cancel() }
+      val e = intercept[SparkException] { f.get() }.getCause
       assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
     }
 
@@ -289,11 +292,11 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
         }
       })
       val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.takeAsync(5000)
-      future {
+      Future {
         sem.acquire()
         f.cancel()
       }
-      val e = intercept[SparkException] { f.get() }
+      val e = intercept[SparkException] { f.get() }.getCause
       assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
     }
   }

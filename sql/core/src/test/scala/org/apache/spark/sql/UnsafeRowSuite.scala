@@ -19,15 +19,43 @@ package org.apache.spark.sql
 
 import java.io.ByteArrayOutputStream
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.memory.MemoryAllocator
 import org.apache.spark.unsafe.types.UTF8String
 
 class UnsafeRowSuite extends SparkFunSuite {
+
+  test("UnsafeRow Java serialization") {
+    // serializing an UnsafeRow pointing to a large buffer should only serialize the relevant data
+    val data = new Array[Byte](1024)
+    val row = new UnsafeRow(1)
+    row.pointTo(data, 16)
+    row.setLong(0, 19285)
+
+    val ser = new JavaSerializer(new SparkConf).newInstance()
+    val row1 = ser.deserialize[UnsafeRow](ser.serialize(row))
+    assert(row1.getLong(0) == 19285)
+    assert(row1.getBaseObject().asInstanceOf[Array[Byte]].length == 16)
+  }
+
+  test("UnsafeRow Kryo serialization") {
+    // serializing an UnsafeRow pointing to a large buffer should only serialize the relevant data
+    val data = new Array[Byte](1024)
+    val row = new UnsafeRow(1)
+    row.pointTo(data, 16)
+    row.setLong(0, 19285)
+
+    val ser = new KryoSerializer(new SparkConf).newInstance()
+    val row1 = ser.deserialize[UnsafeRow](ser.serialize(row))
+    assert(row1.getLong(0) == 19285)
+    assert(row1.getBaseObject().asInstanceOf[Array[Byte]].length == 16)
+  }
 
   test("bitset width calculation") {
     assert(UnsafeRow.calculateBitSetWidthInBytes(0) === 0)
@@ -58,11 +86,10 @@ class UnsafeRowSuite extends SparkFunSuite {
           offheapRowPage.getBaseOffset,
           arrayBackedUnsafeRow.getSizeInBytes
         )
-        val offheapUnsafeRow: UnsafeRow = new UnsafeRow()
+        val offheapUnsafeRow: UnsafeRow = new UnsafeRow(3)
         offheapUnsafeRow.pointTo(
           offheapRowPage.getBaseObject,
           offheapRowPage.getBaseOffset,
-          3, // num fields
           arrayBackedUnsafeRow.getSizeInBytes
         )
         assert(offheapUnsafeRow.getBaseObject === null)
@@ -130,5 +157,12 @@ class UnsafeRowSuite extends SparkFunSuite {
     assert(emptyRow.getSizeInBytes() === unsafeRow.getSizeInBytes)
     assert(emptyRow.getInt(0) === unsafeRow.getInt(0))
     assert(emptyRow.getUTF8String(1) === unsafeRow.getUTF8String(1))
+  }
+
+  test("calling hashCode on unsafe array returned by getArray(ordinal)") {
+    val row = InternalRow.apply(new GenericArrayData(Array(1L)))
+    val unsafeRow = UnsafeProjection.create(Array[DataType](ArrayType(LongType))).apply(row)
+    // Makes sure hashCode on unsafe array won't crash
+    unsafeRow.getArray(0).hashCode()
   }
 }

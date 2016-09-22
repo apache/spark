@@ -20,7 +20,7 @@ package org.apache.spark.mllib.linalg
 import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
 import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * BLAS routines for MLlib's vectors and matrices.
@@ -75,7 +75,7 @@ private[spark] object BLAS extends Serializable with Logging {
     val xValues = x.values
     val xIndices = x.indices
     val yValues = y.values
-    val nnz = xIndices.size
+    val nnz = xIndices.length
 
     if (a == 1.0) {
       var k = 0
@@ -135,7 +135,7 @@ private[spark] object BLAS extends Serializable with Logging {
     val xValues = x.values
     val xIndices = x.indices
     val yValues = y.values
-    val nnz = xIndices.size
+    val nnz = xIndices.length
 
     var sum = 0.0
     var k = 0
@@ -154,8 +154,8 @@ private[spark] object BLAS extends Serializable with Logging {
     val xIndices = x.indices
     val yValues = y.values
     val yIndices = y.indices
-    val nnzx = xIndices.size
-    val nnzy = yIndices.size
+    val nnzx = xIndices.length
+    val nnzy = yIndices.length
 
     var kx = 0
     var ky = 0
@@ -188,7 +188,7 @@ private[spark] object BLAS extends Serializable with Logging {
             val sxIndices = sx.indices
             val sxValues = sx.values
             val dyValues = dy.values
-            val nnz = sxIndices.size
+            val nnz = sxIndices.length
 
             var i = 0
             var k = 0
@@ -237,7 +237,7 @@ private[spark] object BLAS extends Serializable with Logging {
   }
 
   /**
-   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
    * @param U the upper triangular part of the matrix in a [[DenseVector]](column major)
    */
@@ -246,7 +246,7 @@ private[spark] object BLAS extends Serializable with Logging {
   }
 
   /**
-   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
    * @param U the upper triangular part of the matrix packed in an array (column major)
    */
@@ -267,7 +267,6 @@ private[spark] object BLAS extends Serializable with Logging {
           col = indices(j)
           // Skip empty columns.
           colStartIdx += (col - prevCol) * (col + prevCol + 1) / 2
-          col = indices(j)
           av = alpha * values(j)
           i = 0
           while (i <= j) {
@@ -420,7 +419,7 @@ private[spark] object BLAS extends Serializable with Logging {
     val AcolPtrs = A.colPtrs
 
     // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (A.isTransposed){
+    if (A.isTransposed) {
       var colCounterForB = 0
       if (!B.isTransposed) { // Expensive to put the check inside the loop
         while (colCounterForB < nB) {

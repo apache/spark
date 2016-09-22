@@ -17,16 +17,22 @@
 
 package org.apache.spark.ml.tuning
 
-import com.github.fommil.netlib.F2jBLAS
+import java.util.{List => JList}
 
-import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import scala.collection.JavaConverters._
+
+import com.github.fommil.netlib.F2jBLAS
+import org.apache.hadoop.fs.Path
+import org.json4s.DefaultFormats
+
+import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -36,6 +42,7 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
   /**
    * Param for number of folds for cross validation.  Must be >= 2.
    * Default: 3
+   *
    * @group param
    */
   val numFolds: IntParam = new IntParam(this, "numFolds",
@@ -48,42 +55,56 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
 }
 
 /**
- * :: Experimental ::
- * K-fold cross validation.
+ * K-fold cross validation performs model selection by splitting the dataset into a set of
+ * non-overlapping randomly partitioned folds which are used as separate training and test datasets
+ * e.g., with k=3 folds, K-fold cross validation will generate 3 (training, test) dataset pairs,
+ * each of which uses 2/3 of the data for training and 1/3 for testing. Each fold is used as the
+ * test set exactly once.
  */
-@Experimental
-class CrossValidator(override val uid: String) extends Estimator[CrossValidatorModel]
-  with CrossValidatorParams with Logging {
+@Since("1.2.0")
+class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
+  extends Estimator[CrossValidatorModel]
+  with CrossValidatorParams with MLWritable with Logging {
 
+  @Since("1.2.0")
   def this() = this(Identifiable.randomUID("cv"))
 
   private val f2jBLAS = new F2jBLAS
 
   /** @group setParam */
+  @Since("1.2.0")
   def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setEstimatorParamMaps(value: Array[ParamMap]): this.type = set(estimatorParamMaps, value)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setEvaluator(value: Evaluator): this.type = set(evaluator, value)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setNumFolds(value: Int): this.type = set(numFolds, value)
 
-  override def fit(dataset: DataFrame): CrossValidatorModel = {
+  /** @group setParam */
+  @Since("2.0.0")
+  def setSeed(value: Long): this.type = set(seed, value)
+
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): CrossValidatorModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
-    val sqlCtx = dataset.sqlContext
+    val sparkSession = dataset.sparkSession
     val est = $(estimator)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
     val numModels = epm.length
     val metrics = new Array[Double](epm.length)
-    val splits = MLUtils.kFold(dataset.rdd, $(numFolds), 0)
+    val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
-      val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
-      val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
+      val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
+      val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
       // multi-model training
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
       val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
@@ -109,18 +130,10 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
     copyValues(new CrossValidatorModel(uid, bestModel, metrics).setParent(this))
   }
 
-  override def transformSchema(schema: StructType): StructType = {
-    $(estimator).transformSchema(schema)
-  }
+  @Since("1.4.0")
+  override def transformSchema(schema: StructType): StructType = transformSchemaImpl(schema)
 
-  override def validateParams(): Unit = {
-    super.validateParams()
-    val est = $(estimator)
-    for (paramMap <- $(estimatorParamMaps)) {
-      est.copy(paramMap).validateParams()
-    }
-  }
-
+  @Since("1.4.0")
   override def copy(extra: ParamMap): CrossValidator = {
     val copied = defaultCopy(extra).asInstanceOf[CrossValidator]
     if (copied.isDefined(estimator)) {
@@ -131,37 +144,142 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
     }
     copied
   }
+
+  // Currently, this only works if all [[Param]]s in [[estimatorParamMaps]] are simple types.
+  // E.g., this may fail if a [[Param]] is an instance of an [[Estimator]].
+  // However, this case should be unusual.
+  @Since("1.6.0")
+  override def write: MLWriter = new CrossValidator.CrossValidatorWriter(this)
+}
+
+@Since("1.6.0")
+object CrossValidator extends MLReadable[CrossValidator] {
+
+  @Since("1.6.0")
+  override def read: MLReader[CrossValidator] = new CrossValidatorReader
+
+  @Since("1.6.0")
+  override def load(path: String): CrossValidator = super.load(path)
+
+  private[CrossValidator] class CrossValidatorWriter(instance: CrossValidator) extends MLWriter {
+
+    ValidatorParams.validateParams(instance)
+
+    override protected def saveImpl(path: String): Unit =
+      ValidatorParams.saveImpl(path, instance, sc)
+  }
+
+  private class CrossValidatorReader extends MLReader[CrossValidator] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[CrossValidator].getName
+
+    override def load(path: String): CrossValidator = {
+      implicit val format = DefaultFormats
+
+      val (metadata, estimator, evaluator, estimatorParamMaps) =
+        ValidatorParams.loadImpl(path, sc, className)
+      val numFolds = (metadata.params \ "numFolds").extract[Int]
+      val seed = (metadata.params \ "seed").extract[Long]
+      new CrossValidator(metadata.uid)
+        .setEstimator(estimator)
+        .setEvaluator(evaluator)
+        .setEstimatorParamMaps(estimatorParamMaps)
+        .setNumFolds(numFolds)
+        .setSeed(seed)
+    }
+  }
 }
 
 /**
- * :: Experimental ::
- * Model from k-fold cross validation.
+ * CrossValidatorModel contains the model with the highest average cross-validation
+ * metric across folds and uses this model to transform input data. CrossValidatorModel
+ * also tracks the metrics for each param map evaluated.
+ *
+ * @param bestModel The best model selected from k-fold cross validation.
+ * @param avgMetrics Average cross-validation metrics for each paramMap in
+ *                   [[CrossValidator.estimatorParamMaps]], in the corresponding order.
  */
-@Experimental
+@Since("1.2.0")
 class CrossValidatorModel private[ml] (
-    override val uid: String,
-    val bestModel: Model[_],
-    val avgMetrics: Array[Double])
-  extends Model[CrossValidatorModel] with CrossValidatorParams {
+    @Since("1.4.0") override val uid: String,
+    @Since("1.2.0") val bestModel: Model[_],
+    @Since("1.5.0") val avgMetrics: Array[Double])
+  extends Model[CrossValidatorModel] with CrossValidatorParams with MLWritable {
 
-  override def validateParams(): Unit = {
-    bestModel.validateParams()
+  /** A Python-friendly auxiliary constructor. */
+  private[ml] def this(uid: String, bestModel: Model[_], avgMetrics: JList[Double]) = {
+    this(uid, bestModel, avgMetrics.asScala.toArray)
   }
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     bestModel.transformSchema(schema)
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): CrossValidatorModel = {
     val copied = new CrossValidatorModel(
       uid,
       bestModel.copy(extra).asInstanceOf[Model[_]],
       avgMetrics.clone())
     copyValues(copied, extra).setParent(parent)
+  }
+
+  @Since("1.6.0")
+  override def write: MLWriter = new CrossValidatorModel.CrossValidatorModelWriter(this)
+}
+
+@Since("1.6.0")
+object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
+
+  @Since("1.6.0")
+  override def read: MLReader[CrossValidatorModel] = new CrossValidatorModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): CrossValidatorModel = super.load(path)
+
+  private[CrossValidatorModel]
+  class CrossValidatorModelWriter(instance: CrossValidatorModel) extends MLWriter {
+
+    ValidatorParams.validateParams(instance)
+
+    override protected def saveImpl(path: String): Unit = {
+      import org.json4s.JsonDSL._
+      val extraMetadata = "avgMetrics" -> instance.avgMetrics.toSeq
+      ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
+      val bestModelPath = new Path(path, "bestModel").toString
+      instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
+    }
+  }
+
+  private class CrossValidatorModelReader extends MLReader[CrossValidatorModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[CrossValidatorModel].getName
+
+    override def load(path: String): CrossValidatorModel = {
+      implicit val format = DefaultFormats
+
+      val (metadata, estimator, evaluator, estimatorParamMaps) =
+        ValidatorParams.loadImpl(path, sc, className)
+      val numFolds = (metadata.params \ "numFolds").extract[Int]
+      val seed = (metadata.params \ "seed").extract[Long]
+      val bestModelPath = new Path(path, "bestModel").toString
+      val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
+      val avgMetrics = (metadata.metadata \ "avgMetrics").extract[Seq[Double]].toArray
+      val model = new CrossValidatorModel(metadata.uid, bestModel, avgMetrics)
+      model.set(model.estimator, estimator)
+        .set(model.evaluator, evaluator)
+        .set(model.estimatorParamMaps, estimatorParamMaps)
+        .set(model.numFolds, numFolds)
+        .set(model.seed, seed)
+    }
   }
 }

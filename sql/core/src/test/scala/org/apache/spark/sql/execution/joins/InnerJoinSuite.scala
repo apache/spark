@@ -17,19 +17,22 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.{DataFrame, execution, Row, SQLConf}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.exchange.EnsureRequirements
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
-  import testImplicits.localSeqToDataFrameHolder
+  import testImplicits.newProductEncoder
+  import testImplicits.localSeqToDatasetHolder
 
-  private lazy val myUpperCaseData = sqlContext.createDataFrame(
+  private lazy val myUpperCaseData = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(1, "A"),
       Row(2, "B"),
@@ -40,7 +43,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       Row(null, "G")
     )), new StructType().add("N", IntegerType).add("L", StringType))
 
-  private lazy val myLowerCaseData = sqlContext.createDataFrame(
+  private lazy val myLowerCaseData = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(1, "a"),
       Row(2, "b"),
@@ -49,7 +52,16 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       Row(null, "e")
     )), new StructType().add("n", IntegerType).add("l", StringType))
 
-  private lazy val myTestData = Seq(
+  private lazy val myTestData1 = Seq(
+    (1, 1),
+    (1, 2),
+    (2, 1),
+    (2, 2),
+    (3, 1),
+    (3, 2)
+  ).toDF("a", "b")
+
+  private lazy val myTestData2 = Seq(
     (1, 1),
     (1, 2),
     (2, 1),
@@ -79,9 +91,15 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         leftPlan: SparkPlan,
         rightPlan: SparkPlan,
         side: BuildSide) = {
-      val broadcastHashJoin =
-        execution.joins.BroadcastHashJoin(leftKeys, rightKeys, side, leftPlan, rightPlan)
-      boundCondition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin)
+      val broadcastJoin = joins.BroadcastHashJoinExec(
+        leftKeys,
+        rightKeys,
+        Inner,
+        side,
+        boundCondition,
+        leftPlan,
+        rightPlan)
+      EnsureRequirements(spark.sessionState.conf).apply(broadcastJoin)
     }
 
     def makeShuffledHashJoin(
@@ -91,11 +109,11 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         leftPlan: SparkPlan,
         rightPlan: SparkPlan,
         side: BuildSide) = {
-      val shuffledHashJoin =
-        execution.joins.ShuffledHashJoin(leftKeys, rightKeys, side, leftPlan, rightPlan)
+      val shuffledHashJoin = joins.ShuffledHashJoinExec(leftKeys, rightKeys, Inner,
+        side, None, leftPlan, rightPlan)
       val filteredJoin =
-        boundCondition.map(Filter(_, shuffledHashJoin)).getOrElse(shuffledHashJoin)
-      EnsureRequirements(sqlContext).apply(filteredJoin)
+        boundCondition.map(FilterExec(_, shuffledHashJoin)).getOrElse(shuffledHashJoin)
+      EnsureRequirements(spark.sessionState.conf).apply(filteredJoin)
     }
 
     def makeSortMergeJoin(
@@ -104,10 +122,9 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         boundCondition: Option[Expression],
         leftPlan: SparkPlan,
         rightPlan: SparkPlan) = {
-      val sortMergeJoin =
-        execution.joins.SortMergeJoin(leftKeys, rightKeys, leftPlan, rightPlan)
-      val filteredJoin = boundCondition.map(Filter(_, sortMergeJoin)).getOrElse(sortMergeJoin)
-      EnsureRequirements(sqlContext).apply(filteredJoin)
+      val sortMergeJoin = joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, boundCondition,
+        leftPlan, rightPlan)
+      EnsureRequirements(spark.sessionState.conf).apply(sortMergeJoin)
     }
 
     test(s"$testName using BroadcastHashJoin (build=left)") {
@@ -168,6 +185,34 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         }
       }
     }
+
+    test(s"$testName using CartesianProduct") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+        SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          CartesianProductExec(left, right, Some(condition())),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = true)
+      }
+    }
+
+    test(s"$testName using BroadcastNestedLoopJoin build left") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          BroadcastNestedLoopJoinExec(left, right, BuildLeft, Inner, Some(condition())),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = true)
+      }
+    }
+
+    test(s"$testName using BroadcastNestedLoopJoin build right") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          BroadcastNestedLoopJoinExec(left, right, BuildRight, Inner, Some(condition())),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = true)
+      }
+    }
   }
 
   testInnerJoin(
@@ -184,8 +229,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
   )
 
   {
-    lazy val left = myTestData.where("a = 1")
-    lazy val right = myTestData.where("a = 1")
+    lazy val left = myTestData1.where("a = 1")
+    lazy val right = myTestData2.where("a = 1")
     testInnerJoin(
       "inner join, multiple matches",
       left,
@@ -201,8 +246,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   {
-    lazy val left = myTestData.where("a = 1")
-    lazy val right = myTestData.where("a = 2")
+    lazy val left = myTestData1.where("a = 1")
+    lazy val right = myTestData2.where("a = 2")
     testInnerJoin(
       "inner join, no matches",
       left,
@@ -212,4 +257,33 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     )
   }
 
+  {
+    lazy val left = Seq((1, Some(0)), (2, None)).toDF("a", "b")
+    lazy val right = Seq((1, Some(0)), (2, None)).toDF("a", "b")
+    testInnerJoin(
+      "inner join, null safe",
+      left,
+      right,
+      () => (left.col("b") <=> right.col("b")).expr,
+      Seq(
+        (1, 0, 1, 0),
+        (2, null, 2, null)
+      )
+    )
+  }
+
+  {
+    def df: DataFrame = spark.range(3).selectExpr("struct(id, id) as key", "id as value")
+    lazy val left = df.selectExpr("key", "concat('L', value) as value").alias("left")
+    lazy val right = df.selectExpr("key", "concat('R', value) as value").alias("right")
+    testInnerJoin(
+      "SPARK-15822 - test structs as keys",
+      left,
+      right,
+      () => (left.col("key") === right.col("key")).expr,
+      Seq(
+        (Row(0, 0), "L0", Row(0, 0), "R0"),
+        (Row(1, 1), "L1", Row(1, 1), "R1"),
+        (Row(2, 2), "L2", Row(2, 2), "R2")))
+  }
 }

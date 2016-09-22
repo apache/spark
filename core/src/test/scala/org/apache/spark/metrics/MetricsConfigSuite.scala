@@ -17,10 +17,9 @@
 
 package org.apache.spark.metrics
 
-import org.apache.spark.SparkConf
-
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkFunSuite
 
 class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
@@ -140,7 +139,7 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     val conf = new MetricsConfig(sparkConf)
     conf.initialize()
 
-    val propCategories = conf.propertyCategories
+    val propCategories = conf.perInstanceSubProperties
     assert(propCategories.size === 3)
 
     val masterProp = conf.getInstance("master")

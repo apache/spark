@@ -17,19 +17,84 @@
 
 package org.apache.spark.sql.execution.stat
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.{Row, Column, DataFrame}
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Cast}
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.catalyst.expressions.{Cast, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-private[sql] object StatFunctions extends Logging {
+object StatFunctions extends Logging {
+
+  /**
+   * Calculates the approximate quantiles of multiple numerical columns of a DataFrame in one pass.
+   *
+   * The result of this algorithm has the following deterministic bound:
+   * If the DataFrame has N elements and if we request the quantile at probability `p` up to error
+   * `err`, then the algorithm will return a sample `x` from the DataFrame so that the *exact* rank
+   * of `x` is close to (p * N).
+   * More precisely,
+   *
+   *   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
+   *
+   * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
+   * optimizations).
+   * The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670 Space-efficient
+   * Online Computation of Quantile Summaries]] by Greenwald and Khanna.
+   *
+   * @param df the dataframe
+   * @param cols numerical columns of the dataframe
+   * @param probabilities a list of quantile probabilities
+   *   Each number must belong to [0, 1].
+   *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+   * @param relativeError The relative target precision to achieve (>= 0).
+   *   If set to zero, the exact quantiles are computed, which could be very expensive.
+   *   Note that values greater than 1 are accepted but give the same result as 1.
+   *
+   * @return for each column, returns the requested approximations
+   */
+  def multipleApproxQuantiles(
+      df: DataFrame,
+      cols: Seq[String],
+      probabilities: Seq[Double],
+      relativeError: Double): Seq[Seq[Double]] = {
+    val columns: Seq[Column] = cols.map { colName =>
+      val field = df.schema(colName)
+      require(field.dataType.isInstanceOf[NumericType],
+        s"Quantile calculation for column $colName with data type ${field.dataType}" +
+        " is not supported.")
+      Column(Cast(Column(colName).expr, DoubleType))
+    }
+    val emptySummaries = Array.fill(cols.size)(
+      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))
+
+    // Note that it works more or less by accident as `rdd.aggregate` is not a pure function:
+    // this function returns the same array as given in the input (because `aggregate` reuses
+    // the same argument).
+    def apply(summaries: Array[QuantileSummaries], row: Row): Array[QuantileSummaries] = {
+      var i = 0
+      while (i < summaries.length) {
+        summaries(i) = summaries(i).insert(row.getDouble(i))
+        i += 1
+      }
+      summaries
+    }
+
+    def merge(
+        sum1: Array[QuantileSummaries],
+        sum2: Array[QuantileSummaries]): Array[QuantileSummaries] = {
+      sum1.zip(sum2).map { case (s1, s2) => s1.compress().merge(s2.compress()) }
+    }
+    val summaries = df.select(columns: _*).rdd.aggregate(emptySummaries)(apply, merge)
+
+    summaries.map { summary => probabilities.map(summary.query) }
+  }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */
-  private[sql] def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
-    val counts = collectStatisticalData(df, cols)
+  def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
+    val counts = collectStatisticalData(df, cols, "correlation")
     counts.Ck / math.sqrt(counts.MkX * counts.MkY)
   }
 
@@ -73,13 +138,14 @@ private[sql] object StatFunctions extends Logging {
     def cov: Double = Ck / (count - 1)
   }
 
-  private def collectStatisticalData(df: DataFrame, cols: Seq[String]): CovarianceCounter = {
-    require(cols.length == 2, "Currently cov supports calculating the covariance " +
+  private def collectStatisticalData(df: DataFrame, cols: Seq[String],
+              functionName: String): CovarianceCounter = {
+    require(cols.length == 2, s"Currently $functionName calculation is supported " +
       "between two columns.")
     cols.map(name => (name, df.schema.fields.find(_.name == name))).foreach { case (name, data) =>
       require(data.nonEmpty, s"Couldn't find column with name $name")
-      require(data.get.dataType.isInstanceOf[NumericType], "Covariance calculation for columns " +
-        s"with dataType ${data.get.dataType} not supported.")
+      require(data.get.dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
+        s"for columns with dataType ${data.get.dataType} not supported.")
     }
     val columns = cols.map(n => Column(Cast(Column(n).expr, DoubleType)))
     df.select(columns: _*).queryExecution.toRdd.aggregate(new CovarianceCounter)(
@@ -97,13 +163,13 @@ private[sql] object StatFunctions extends Logging {
    * @param cols the column names
    * @return the covariance of the two columns.
    */
-  private[sql] def calculateCov(df: DataFrame, cols: Seq[String]): Double = {
-    val counts = collectStatisticalData(df, cols)
+  def calculateCov(df: DataFrame, cols: Seq[String]): Double = {
+    val counts = collectStatisticalData(df, cols, "covariance")
     counts.cov
   }
 
   /** Generate a table of frequencies for the elements of two columns. */
-  private[sql] def crossTabulate(df: DataFrame, col1: String, col2: String): DataFrame = {
+  def crossTabulate(df: DataFrame, col1: String, col2: String): DataFrame = {
     val tableName = s"${col1}_$col2"
     val counts = df.groupBy(col1, col2).agg(count("*")).take(1e6.toInt)
     if (counts.length == 1e6.toInt) {
@@ -113,9 +179,9 @@ private[sql] object StatFunctions extends Logging {
     def cleanElement(element: Any): String = {
       if (element == null) "null" else element.toString
     }
-    // get the distinct values of column 2, so that we can make them the column names
+    // get the distinct sorted values of column 2, so that we can make them the column names
     val distinctCol2: Map[Any, Int] =
-      counts.map(e => cleanElement(e.get(1))).distinct.zipWithIndex.toMap
+      counts.map(e => cleanElement(e.get(1))).distinct.sorted.zipWithIndex.toMap
     val columnSize = distinctCol2.size
     require(columnSize < 1e4, s"The number of distinct values for $col2, can't " +
       s"exceed 1e4. Currently $columnSize")
@@ -144,6 +210,6 @@ private[sql] object StatFunctions extends Logging {
     }
     val schema = StructType(StructField(tableName, StringType) +: headerNames)
 
-    new DataFrame(df.sqlContext, LocalRelation(schema.toAttributes, table)).na.fill(0.0)
+    Dataset.ofRows(df.sparkSession, LocalRelation(schema.toAttributes, table)).na.fill(0.0)
   }
 }

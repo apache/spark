@@ -17,19 +17,20 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{File, ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File}
+import java.util.Properties
 
-import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark._
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.ShuffleBlockId
-import org.apache.spark.util.collection.ExternalSorter
-import org.apache.spark.util.Utils
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types._
-import org.apache.spark._
-
+import org.apache.spark.storage.ShuffleBlockId
+import org.apache.spark.util.collection.ExternalSorter
+import org.apache.spark.util.Utils
 
 /**
  * used to test close InputStream in UnsafeRowSerializer
@@ -101,20 +102,24 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
     val oldEnv = SparkEnv.get // save the old SparkEnv, as it will be overwritten
     Utils.tryWithSafeFinally {
       val conf = new SparkConf()
-        .set("spark.shuffle.spill.initialMemoryThreshold", "1024")
+        .set("spark.shuffle.spill.initialMemoryThreshold", "1")
         .set("spark.shuffle.sort.bypassMergeThreshold", "0")
-        .set("spark.shuffle.memoryFraction", "0.0001")
+        .set("spark.testing.memory", "80000")
 
       sc = new SparkContext("local", "test", conf)
       outputFile = File.createTempFile("test-unsafe-row-serializer-spill", "")
       // prepare data
       val converter = unsafeRowConverter(Array(IntegerType))
-      val data = (1 to 1000).iterator.map { i =>
+      val data = (1 to 10000).iterator.map { i =>
         (i, converter(Row(i)))
       }
+      val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0)
+      val taskContext = new TaskContextImpl(0, 0, 0, 0, taskMemoryManager, new Properties, null)
+
       val sorter = new ExternalSorter[Int, UnsafeRow, UnsafeRow](
+        taskContext,
         partitioner = Some(new HashPartitioner(10)),
-        serializer = Some(new UnsafeRowSerializer(numFields = 1)))
+        serializer = new UnsafeRowSerializer(numFields = 1))
 
       // Ensure we spilled something and have to merge them later
       assert(sorter.numSpills === 0)
@@ -122,10 +127,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
       assert(sorter.numSpills > 0)
 
       // Merging spilled files should not throw assertion error
-      val taskContext =
-        new TaskContextImpl(0, 0, 0, 0, null, null, InternalAccumulator.create(sc))
-      taskContext.taskMetrics.shuffleWriteMetrics = Some(new ShuffleWriteMetrics)
-      sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0), taskContext, outputFile)
+      sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0), outputFile)
     } {
       // Clean up
       if (sc != null) {
@@ -141,15 +143,19 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("SPARK-10403: unsafe row serializer with UnsafeShuffleManager") {
-    val conf = new SparkConf()
-      .set("spark.shuffle.manager", "tungsten-sort")
+  test("SPARK-10403: unsafe row serializer with SortShuffleManager") {
+    val conf = new SparkConf().set("spark.shuffle.manager", "sort")
     sc = new SparkContext("local", "test", conf)
     val row = Row("Hello", 123)
     val unsafeRow = toUnsafeRow(row, Array(StringType, IntegerType))
     val rowsRDD = sc.parallelize(Seq((0, unsafeRow), (1, unsafeRow), (0, unsafeRow)))
       .asInstanceOf[RDD[Product2[Int, InternalRow]]]
-    val shuffled = new ShuffledRowRDD(rowsRDD, new UnsafeRowSerializer(2), 2)
+    val dependency =
+      new ShuffleDependency[Int, InternalRow, InternalRow](
+        rowsRDD,
+        new PartitionIdPassthrough(2),
+        new UnsafeRowSerializer(2))
+    val shuffled = new ShuffledRowRDD(dependency)
     shuffled.count()
   }
 }

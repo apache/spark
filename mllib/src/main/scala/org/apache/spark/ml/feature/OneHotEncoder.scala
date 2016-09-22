@@ -17,19 +17,18 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.ml.util._
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{DoubleType, StructType}
+import org.apache.spark.sql.types.{DoubleType, NumericType, StructType}
 
 /**
- * :: Experimental ::
  * A one-hot encoder that maps a column of category indices to a column of binary vectors, with
  * at most a single one-value per row that indicates the input category index.
  * For example with 5 categories, an input value of 2.0 would map to an output vector of
@@ -42,34 +41,45 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  *
  * @see [[StringIndexer]] for converting categorical values into category indices
  */
-@Experimental
-class OneHotEncoder(override val uid: String) extends Transformer
-  with HasInputCol with HasOutputCol {
+@Since("1.4.0")
+class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends Transformer
+  with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("oneHot"))
 
   /**
    * Whether to drop the last category in the encoded vector (default: true)
    * @group param
    */
+  @Since("1.4.0")
   final val dropLast: BooleanParam =
     new BooleanParam(this, "dropLast", "whether to drop the last category")
   setDefault(dropLast -> true)
 
+  /** @group getParam */
+  @Since("2.0.0")
+  def getDropLast: Boolean = $(dropLast)
+
   /** @group setParam */
+  @Since("1.4.0")
   def setDropLast(value: Boolean): this.type = set(dropLast, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputColName = $(inputCol)
     val outputColName = $(outputCol)
 
-    SchemaUtils.checkColumnType(schema, inputColName, DoubleType)
+    require(schema(inputColName).dataType.isInstanceOf[NumericType],
+      s"Input column must be of type NumericType but got ${schema(inputColName).dataType}")
     val inputFields = schema.fields
     require(!inputFields.exists(_.name == outputColName),
       s"Output column $outputColName already exists.")
@@ -120,7 +130,8 @@ class OneHotEncoder(override val uid: String) extends Transformer
     StructType(outputFields)
   }
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     // schema transformation
     val inputColName = $(inputCol)
     val outputColName = $(outputCol)
@@ -129,10 +140,12 @@ class OneHotEncoder(override val uid: String) extends Transformer
       transformSchema(dataset.schema)(outputColName))
     if (outputAttrGroup.size < 0) {
       // If the number of attributes is unknown, we check the values from the input column.
-      val numAttrs = dataset.select(col(inputColName).cast(DoubleType)).map(_.getDouble(0))
+      val numAttrs = dataset.select(col(inputColName).cast(DoubleType)).rdd.map(_.getDouble(0))
         .aggregate(0.0)(
           (m, x) => {
-            assert(x >=0.0 && x == x.toInt,
+            assert(x <= Int.MaxValue,
+              s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got $x")
+            assert(x >= 0.0 && x == x.toInt,
               s"Values from column $inputColName must be indices, but got $x.")
             math.max(m, x)
           },
@@ -151,8 +164,8 @@ class OneHotEncoder(override val uid: String) extends Transformer
     // data transformation
     val size = outputAttrGroup.size
     val oneValue = Array(1.0)
-    val emptyValues = Array[Double]()
-    val emptyIndices = Array[Int]()
+    val emptyValues = Array.empty[Double]
+    val emptyIndices = Array.empty[Int]
     val encode = udf { label: Double =>
       if (label < size) {
         Vectors.sparse(size, Array(label.toInt), oneValue)
@@ -164,5 +177,13 @@ class OneHotEncoder(override val uid: String) extends Transformer
     dataset.select(col("*"), encode(col(inputColName).cast(DoubleType)).as(outputColName, metadata))
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): OneHotEncoder = defaultCopy(extra)
+}
+
+@Since("1.6.0")
+object OneHotEncoder extends DefaultParamsReadable[OneHotEncoder] {
+
+  @Since("1.6.0")
+  override def load(path: String): OneHotEncoder = super.load(path)
 }

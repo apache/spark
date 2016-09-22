@@ -58,6 +58,12 @@ object DenseGaussianMixture {
         (clusters.weights(i), clusters.gaussians(i).mu, clusters.gaussians(i).sigma))
     }
 
+    println("The membership value of each vector to all mixture components (first <= 100):")
+    val membership = clusters.predictSoft(data)
+    membership.take(100).foreach { x =>
+      print(" " + x.mkString(","))
+    }
+    println()
     println("Cluster labels (first <= 100):")
     val clusterLabels = clusters.predict(data)
     clusterLabels.take(100).foreach { x =>

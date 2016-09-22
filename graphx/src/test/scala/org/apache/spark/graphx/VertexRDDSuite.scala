@@ -32,7 +32,7 @@ class VertexRDDSuite extends SparkFunSuite with LocalSparkContext {
       val n = 100
       val verts = vertices(sc, n)
       val evens = verts.filter(q => ((q._2 % 2) == 0))
-      assert(evens.count === (0 to n).filter(_ % 2 == 0).size)
+      assert(evens.count === (0 to n).count(_ % 2 == 0))
     }
   }
 

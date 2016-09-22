@@ -19,7 +19,7 @@ package org.apache.spark.mllib.stat.correlation
 
 import breeze.linalg.{DenseMatrix => BDM}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.rdd.RDD
@@ -52,10 +52,10 @@ private[stat] object PearsonCorrelation extends Correlation with Logging {
 
   /**
    * Compute the Pearson correlation matrix from the covariance matrix.
-   * 0 covariance results in a correlation value of Double.NaN.
+   * 0 variance results in a correlation value of Double.NaN.
    */
   def computeCorrelationMatrixFromCovariance(covarianceMatrix: Matrix): Matrix = {
-    val cov = covarianceMatrix.toBreeze.asInstanceOf[BDM[Double]]
+    val cov = covarianceMatrix.asBreeze.asInstanceOf[BDM[Double]]
     val n = cov.cols
 
     // Compute the standard deviation on the diagonals first

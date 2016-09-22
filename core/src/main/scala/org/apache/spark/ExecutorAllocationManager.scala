@@ -24,9 +24,11 @@ import scala.util.control.ControlThrowable
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
-import org.apache.spark.scheduler._
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS}
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.util.{ThreadUtils, Clock, SystemClock, Utils}
+import org.apache.spark.scheduler._
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
@@ -86,9 +88,9 @@ private[spark] class ExecutorAllocationManager(
   import ExecutorAllocationManager._
 
   // Lower and upper bounds on the number of executors.
-  private val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", 0)
-  private val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors",
-    Integer.MAX_VALUE)
+  private val minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)
+  private val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
+  private val initialNumExecutors = Utils.getDynamicAllocationInitialExecutors(conf)
 
   // How long there must be backlogged tasks for before an addition is triggered (seconds)
   private val schedulerBacklogTimeoutS = conf.getTimeAsSeconds(
@@ -121,8 +123,7 @@ private[spark] class ExecutorAllocationManager(
 
   // The desired number of executors at this moment in time. If all our executors were to die, this
   // is the number of executors we would immediately want from the cluster manager.
-  private var numExecutorsTarget =
-    conf.getInt("spark.dynamicAllocation.initialExecutors", minNumExecutors)
+  private var numExecutorsTarget = initialNumExecutors
 
   // Executors that have been requested to be removed but have not been killed yet
   private val executorsPendingToRemove = new mutable.HashSet[String]
@@ -229,7 +230,9 @@ private[spark] class ExecutorAllocationManager(
         }
       }
     }
-    executor.scheduleAtFixedRate(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
+    executor.scheduleWithFixedDelay(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
+
+    client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
   }
 
   /**
@@ -238,6 +241,19 @@ private[spark] class ExecutorAllocationManager(
   def stop(): Unit = {
     executor.shutdown()
     executor.awaitTermination(10, TimeUnit.SECONDS)
+  }
+
+  /**
+   * Reset the allocation manager to the initial state. Currently this will only be called in
+   * yarn-client mode when AM re-registers after a failure.
+   */
+  def reset(): Unit = synchronized {
+    initializing = true
+    numExecutorsTarget = initialNumExecutors
+    numExecutorsToAdd = 1
+
+    executorsPendingToRemove.clear()
+    removeTimes.clear()
   }
 
   /**
@@ -370,6 +386,7 @@ private[spark] class ExecutorAllocationManager(
     } else {
       logWarning(
         s"Unable to reach the cluster manager to request $numExecutorsTarget total executors!")
+      numExecutorsTarget = oldNumExecutorsTarget
       0
     }
   }
@@ -408,7 +425,8 @@ private[spark] class ExecutorAllocationManager(
       executorsPendingToRemove.add(executorId)
       true
     } else {
-      logWarning(s"Unable to reach the cluster manager to kill executor $executorId!")
+      logWarning(s"Unable to reach the cluster manager to kill executor $executorId," +
+        s"or no executor eligible to kill!")
       false
     }
   }

@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql
 
-import java.{util => ju, lang => jl}
+import java.{lang => jl, util => ju}
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
+import org.apache.spark.sql.types._
+import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
 /**
  * :: Experimental ::
@@ -32,6 +35,50 @@ import org.apache.spark.sql.execution.stat._
  */
 @Experimental
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
+
+  /**
+   * Calculates the approximate quantiles of a numerical column of a DataFrame.
+   *
+   * The result of this algorithm has the following deterministic bound:
+   * If the DataFrame has N elements and if we request the quantile at probability `p` up to error
+   * `err`, then the algorithm will return a sample `x` from the DataFrame so that the *exact* rank
+   * of `x` is close to (p * N).
+   * More precisely,
+   *
+   *   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
+   *
+   * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
+   * optimizations).
+   * The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670 Space-efficient
+   * Online Computation of Quantile Summaries]] by Greenwald and Khanna.
+   *
+   * @param col the name of the numerical column
+   * @param probabilities a list of quantile probabilities
+   *   Each number must belong to [0, 1].
+   *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+   * @param relativeError The relative target precision to achieve (>= 0).
+   *   If set to zero, the exact quantiles are computed, which could be very expensive.
+   *   Note that values greater than 1 are accepted but give the same result as 1.
+   * @return the approximate quantiles at the given probabilities
+   *
+   * @since 2.0.0
+   */
+  def approxQuantile(
+      col: String,
+      probabilities: Array[Double],
+      relativeError: Double): Array[Double] = {
+    StatFunctions.multipleApproxQuantiles(df, Seq(col), probabilities, relativeError).head.toArray
+  }
+
+  /**
+   * Python-friendly version of [[approxQuantile()]]
+   */
+  private[spark] def approxQuantile(
+      col: String,
+      probabilities: List[Double],
+      relativeError: Double): java.util.List[Double] = {
+    approxQuantile(col, probabilities.toArray, relativeError).toList.asJava
+  }
 
   /**
    * Calculate the sample covariance of two numerical columns of a DataFrame.
@@ -106,7 +153,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * Null elements will be replaced by "null", and back ticks will be dropped from elements if they
    * exist.
    *
-   *
    * @param col1 The name of the first column. Distinct items will make the first item of
    *             each row.
    * @param col2 The name of the second column. Distinct items will make the column names
@@ -114,8 +160,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @return A DataFrame containing for the contingency table.
    *
    * {{{
-   *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
-   *      (3, 3))).toDF("key", "value")
+   *    val df = spark.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2), (3, 3)))
+   *      .toDF("key", "value")
    *    val ct = df.stat.crosstab("key", "value")
    *    ct.show()
    *    +---------+---+---+---+
@@ -151,7 +197,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *    val rows = Seq.tabulate(100) { i =>
    *      if (i % 2 == 0) (1, -1.0) else (i, i * -1.0)
    *    }
-   *    val df = sqlContext.createDataFrame(rows).toDF("a", "b")
+   *    val df = spark.createDataFrame(rows).toDF("a", "b")
    *    // find the items with a frequency greater than 0.4 (observed 40% of the time) for columns
    *    // "a" and "b"
    *    val freqSingles = df.stat.freqItems(Array("a", "b"), 0.4)
@@ -212,7 +258,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *    val rows = Seq.tabulate(100) { i =>
    *      if (i % 2 == 0) (1, -1.0) else (i, i * -1.0)
    *    }
-   *    val df = sqlContext.createDataFrame(rows).toDF("a", "b")
+   *    val df = spark.createDataFrame(rows).toDF("a", "b")
    *    // find the items with a frequency greater than 0.4 (observed 40% of the time) for columns
    *    // "a" and "b"
    *    val freqSingles = df.stat.freqItems(Seq("a", "b"), 0.4)
@@ -268,7 +314,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @return a new [[DataFrame]] that represents the stratified sample
    *
    * {{{
-   *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
+   *    val df = spark.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
    *      (3, 3))).toDF("key", "value")
    *    val fractions = Map(1 -> 1.0, 3 -> 0.5)
    *    df.stat.sampleBy("key", fractions, 36L).show()
@@ -308,5 +354,169 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    */
   def sampleBy[T](col: String, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
     sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
+  }
+
+  /**
+   * Builds a Count-min Sketch over a specified column.
+   *
+   * @param colName name of the column over which the sketch is built
+   * @param depth depth of the sketch
+   * @param width width of the sketch
+   * @param seed random seed
+   * @return a [[CountMinSketch]] over column `colName`
+   * @since 2.0.0
+   */
+  def countMinSketch(colName: String, depth: Int, width: Int, seed: Int): CountMinSketch = {
+    countMinSketch(Column(colName), depth, width, seed)
+  }
+
+  /**
+   * Builds a Count-min Sketch over a specified column.
+   *
+   * @param colName name of the column over which the sketch is built
+   * @param eps relative error of the sketch
+   * @param confidence confidence of the sketch
+   * @param seed random seed
+   * @return a [[CountMinSketch]] over column `colName`
+   * @since 2.0.0
+   */
+  def countMinSketch(
+      colName: String, eps: Double, confidence: Double, seed: Int): CountMinSketch = {
+    countMinSketch(Column(colName), eps, confidence, seed)
+  }
+
+  /**
+   * Builds a Count-min Sketch over a specified column.
+   *
+   * @param col the column over which the sketch is built
+   * @param depth depth of the sketch
+   * @param width width of the sketch
+   * @param seed random seed
+   * @return a [[CountMinSketch]] over column `colName`
+   * @since 2.0.0
+   */
+  def countMinSketch(col: Column, depth: Int, width: Int, seed: Int): CountMinSketch = {
+    countMinSketch(col, CountMinSketch.create(depth, width, seed))
+  }
+
+  /**
+   * Builds a Count-min Sketch over a specified column.
+   *
+   * @param col the column over which the sketch is built
+   * @param eps relative error of the sketch
+   * @param confidence confidence of the sketch
+   * @param seed random seed
+   * @return a [[CountMinSketch]] over column `colName`
+   * @since 2.0.0
+   */
+  def countMinSketch(col: Column, eps: Double, confidence: Double, seed: Int): CountMinSketch = {
+    countMinSketch(col, CountMinSketch.create(eps, confidence, seed))
+  }
+
+  private def countMinSketch(col: Column, zero: CountMinSketch): CountMinSketch = {
+    val singleCol = df.select(col)
+    val colType = singleCol.schema.head.dataType
+
+    val updater: (CountMinSketch, InternalRow) => Unit = colType match {
+      // For string type, we can get bytes of our `UTF8String` directly, and call the `addBinary`
+      // instead of `addString` to avoid unnecessary conversion.
+      case StringType => (sketch, row) => sketch.addBinary(row.getUTF8String(0).getBytes)
+      case ByteType => (sketch, row) => sketch.addLong(row.getByte(0))
+      case ShortType => (sketch, row) => sketch.addLong(row.getShort(0))
+      case IntegerType => (sketch, row) => sketch.addLong(row.getInt(0))
+      case LongType => (sketch, row) => sketch.addLong(row.getLong(0))
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Count-min Sketch only supports string type and integral types, " +
+            s"and does not support type $colType."
+        )
+    }
+
+    singleCol.queryExecution.toRdd.aggregate(zero)(
+      (sketch: CountMinSketch, row: InternalRow) => {
+        updater(sketch, row)
+        sketch
+      },
+      (sketch1, sketch2) => sketch1.mergeInPlace(sketch2)
+    )
+  }
+
+  /**
+   * Builds a Bloom filter over a specified column.
+   *
+   * @param colName name of the column over which the filter is built
+   * @param expectedNumItems expected number of items which will be put into the filter.
+   * @param fpp expected false positive probability of the filter.
+   * @since 2.0.0
+   */
+  def bloomFilter(colName: String, expectedNumItems: Long, fpp: Double): BloomFilter = {
+    buildBloomFilter(Column(colName), BloomFilter.create(expectedNumItems, fpp))
+  }
+
+  /**
+   * Builds a Bloom filter over a specified column.
+   *
+   * @param col the column over which the filter is built
+   * @param expectedNumItems expected number of items which will be put into the filter.
+   * @param fpp expected false positive probability of the filter.
+   * @since 2.0.0
+   */
+  def bloomFilter(col: Column, expectedNumItems: Long, fpp: Double): BloomFilter = {
+    buildBloomFilter(col, BloomFilter.create(expectedNumItems, fpp))
+  }
+
+  /**
+   * Builds a Bloom filter over a specified column.
+   *
+   * @param colName name of the column over which the filter is built
+   * @param expectedNumItems expected number of items which will be put into the filter.
+   * @param numBits expected number of bits of the filter.
+   * @since 2.0.0
+   */
+  def bloomFilter(colName: String, expectedNumItems: Long, numBits: Long): BloomFilter = {
+    buildBloomFilter(Column(colName), BloomFilter.create(expectedNumItems, numBits))
+  }
+
+  /**
+   * Builds a Bloom filter over a specified column.
+   *
+   * @param col the column over which the filter is built
+   * @param expectedNumItems expected number of items which will be put into the filter.
+   * @param numBits expected number of bits of the filter.
+   * @since 2.0.0
+   */
+  def bloomFilter(col: Column, expectedNumItems: Long, numBits: Long): BloomFilter = {
+    buildBloomFilter(col, BloomFilter.create(expectedNumItems, numBits))
+  }
+
+  private def buildBloomFilter(col: Column, zero: BloomFilter): BloomFilter = {
+    val singleCol = df.select(col)
+    val colType = singleCol.schema.head.dataType
+
+    require(colType == StringType || colType.isInstanceOf[IntegralType],
+      s"Bloom filter only supports string type and integral types, but got $colType.")
+
+    val updater: (BloomFilter, InternalRow) => Unit = colType match {
+      // For string type, we can get bytes of our `UTF8String` directly, and call the `putBinary`
+      // instead of `putString` to avoid unnecessary conversion.
+      case StringType => (filter, row) => filter.putBinary(row.getUTF8String(0).getBytes)
+      case ByteType => (filter, row) => filter.putLong(row.getByte(0))
+      case ShortType => (filter, row) => filter.putLong(row.getShort(0))
+      case IntegerType => (filter, row) => filter.putLong(row.getInt(0))
+      case LongType => (filter, row) => filter.putLong(row.getLong(0))
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Bloom filter only supports string type and integral types, " +
+            s"and does not support type $colType."
+        )
+    }
+
+    singleCol.queryExecution.toRdd.aggregate(zero)(
+      (filter: BloomFilter, row: InternalRow) => {
+        updater(filter, row)
+        filter
+      },
+      (filter1, filter2) => filter1.mergeInPlace(filter2)
+    )
   }
 }

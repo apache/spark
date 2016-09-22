@@ -17,8 +17,10 @@
 
 package org.apache.spark.streaming
 
+import java.util.concurrent.ConcurrentLinkedQueue
+
+import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.language.existentials
 import scala.reflect.ClassTag
 
@@ -74,7 +76,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     assert(numInputPartitions === 2, "Number of input partitions has been changed from 2")
     val input = Seq(1 to 4, 5 to 8, 9 to 12)
     val output = Seq(Seq(3, 7), Seq(11, 15), Seq(19, 23))
-    val operation = (r: DStream[Int]) => r.mapPartitions(x => Iterator(x.reduce(_ + _)))
+    val operation = (r: DStream[Int]) => r.mapPartitions(x => Iterator(x.sum))
     testOperation(input, operation, output, true)
   }
 
@@ -84,9 +86,10 @@ class BasicOperationsSuite extends TestSuiteBase {
     withStreamingContext(setupStreams(input, operation, 2)) { ssc =>
       val output = runStreamsWithPartitions(ssc, 3, 3)
       assert(output.size === 3)
-      val first = output(0)
-      val second = output(1)
-      val third = output(2)
+      val outputArray = output.toArray
+      val first = outputArray(0)
+      val second = outputArray(1)
+      val third = outputArray(2)
 
       assert(first.size === 5)
       assert(second.size === 5)
@@ -104,9 +107,10 @@ class BasicOperationsSuite extends TestSuiteBase {
     withStreamingContext(setupStreams(input, operation, 5)) { ssc =>
       val output = runStreamsWithPartitions(ssc, 3, 3)
       assert(output.size === 3)
-      val first = output(0)
-      val second = output(1)
-      val third = output(2)
+      val outputArray = output.toArray
+      val first = outputArray(0)
+      val second = outputArray(1)
+      val third = outputArray(2)
 
       assert(first.size === 2)
       assert(second.size === 2)
@@ -186,9 +190,23 @@ class BasicOperationsSuite extends TestSuiteBase {
     val output = Seq(1 to 8, 101 to 108, 201 to 208)
     testOperation(
       input,
-      (s: DStream[Int]) => s.union(s.map(_ + 4)) ,
+      (s: DStream[Int]) => s.union(s.map(_ + 4)),
       output
     )
+  }
+
+  test("union with input stream return None") {
+    val input = Seq(1 to 4, 101 to 104, 201 to 204, null)
+    val output = Seq(1 to 8, 101 to 108, 201 to 208)
+    intercept[SparkException] {
+      testOperation(
+        input,
+        (s: DStream[Int]) => s.union(s.map(_ + 4)),
+        output,
+        input.length,
+        false
+      )
+    }
   }
 
   test("StreamingContext.union") {
@@ -211,6 +229,32 @@ class BasicOperationsSuite extends TestSuiteBase {
     )
   }
 
+  test("transform with NULL") {
+    val input = Seq(1 to 4)
+    intercept[SparkException] {
+      testOperation(
+        input,
+        (r: DStream[Int]) => r.transform(rdd => null.asInstanceOf[RDD[Int]]),
+        Seq(Seq()),
+        1,
+        false
+      )
+    }
+  }
+
+  test("transform with input stream return None") {
+    val input = Seq(1 to 4, 5 to 8, null)
+    intercept[SparkException] {
+      testOperation(
+        input,
+        (r: DStream[Int]) => r.transform(rdd => rdd.map(_.toString)),
+        input.filterNot(_ == null).map(_.map(_.toString)),
+        input.length,
+        false
+      )
+    }
+  }
+
   test("transformWith") {
     val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
     val inputData2 = Seq( Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
@@ -231,6 +275,27 @@ class BasicOperationsSuite extends TestSuiteBase {
     testOperation(inputData1, inputData2, operation, outputData, true)
   }
 
+  test("transformWith with input stream return None") {
+    val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), null )
+    val inputData2 = Seq( Seq("a", "b"), Seq("b", ""), Seq(), null )
+    val outputData = Seq(
+      Seq("a", "b", "a", "b"),
+      Seq("a", "b", "", ""),
+      Seq("")
+    )
+
+    val operation = (s1: DStream[String], s2: DStream[String]) => {
+      s1.transformWith(           // RDD.join in transform
+        s2,
+        (rdd1: RDD[String], rdd2: RDD[String]) => rdd1.union(rdd2)
+      )
+    }
+
+    intercept[SparkException] {
+      testOperation(inputData1, inputData2, operation, outputData, inputData1.length, true)
+    }
+  }
+
   test("StreamingContext.transform") {
     val input = Seq(1 to 4, 101 to 104, 201 to 204)
     val output = Seq(1 to 12, 101 to 112, 201 to 212)
@@ -245,6 +310,24 @@ class BasicOperationsSuite extends TestSuiteBase {
     }
 
     testOperation(input, operation, output)
+  }
+
+  test("StreamingContext.transform with input stream return None") {
+    val input = Seq(1 to 4, 101 to 104, 201 to 204, null)
+    val output = Seq(1 to 12, 101 to 112, 201 to 212)
+
+    // transform over 3 DStreams by doing union of the 3 RDDs
+    val operation = (s: DStream[Int]) => {
+      s.context.transform(
+        Seq(s, s.map(_ + 4), s.map(_ + 8)),   // 3 DStreams
+        (rdds: Seq[RDD[_]], time: Time) =>
+          rdds.head.context.union(rdds.map(_.asInstanceOf[RDD[Int]]))  // union of RDDs
+      )
+    }
+
+    intercept[SparkException] {
+      testOperation(input, operation, output, input.length, false)
+    }
   }
 
   test("cogroup") {
@@ -455,10 +538,9 @@ class BasicOperationsSuite extends TestSuiteBase {
         val stateObj = state.getOrElse(new StateObject)
         values.sum match {
           case 0 => stateObj.expireCounter += 1 // no new values
-          case n => { // has new values, increment and reset expireCounter
+          case n => // has new values, increment and reset expireCounter
             stateObj.counter += n
             stateObj.expireCounter = 0
-          }
         }
         stateObj.expireCounter match {
           case 2 => None // seen twice with no new values, give it the boot
@@ -566,8 +648,8 @@ class BasicOperationsSuite extends TestSuiteBase {
         val networkStream =
           ssc.socketTextStream("localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
         val mappedStream = networkStream.map(_ + ".").persist()
-        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-        val outputStream = new TestOutputStream(mappedStream, outputBuffer)
+        val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
+        val outputStream = new TestOutputStream(mappedStream, outputQueue)
 
         outputStream.register()
         ssc.start()
@@ -606,7 +688,7 @@ class BasicOperationsSuite extends TestSuiteBase {
         testServer.stop()
 
         // verify data has been received
-        assert(outputBuffer.size > 0)
+        assert(!outputQueue.isEmpty)
         assert(blockRdds.size > 0)
         assert(persistentRddIds.size > 0)
 

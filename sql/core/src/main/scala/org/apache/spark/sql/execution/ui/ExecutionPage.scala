@@ -19,14 +19,12 @@ package org.apache.spark.sql.execution.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{Node, Unparsed}
+import scala.xml.Node
 
-import org.apache.commons.lang3.StringEscapeUtils
-
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
-private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
+class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
 
   private val listener = parent.listener
 
@@ -100,8 +98,8 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
     // scalastyle:on
   }
 
-  private def planVisualization(metrics: Map[Long, Any], graph: SparkPlanGraph): Seq[Node] = {
-    val metadata = graph.nodes.flatMap { node =>
+  private def planVisualization(metrics: Map[Long, String], graph: SparkPlanGraph): Seq[Node] = {
+    val metadata = graph.allNodes.flatMap { node =>
       val nodeId = s"plan-meta-data-${node.id}"
       <div id={nodeId}>{node.desc}</div>
     }
@@ -112,11 +110,11 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
         <div class="dot-file">
           {graph.makeDotFile(metrics)}
         </div>
-        <div id="plan-viz-metadata-size">{graph.nodes.size.toString}</div>
+        <div id="plan-viz-metadata-size">{graph.allNodes.size.toString}</div>
         {metadata}
       </div>
       {planVisualizationResources}
-      <script>$(function(){{ renderPlanViz(); }})</script>
+      <script>$(function() {{ renderPlanViz(); }})</script>
     </div>
   }
 

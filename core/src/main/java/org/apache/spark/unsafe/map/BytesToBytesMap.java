@@ -18,23 +18,29 @@
 package org.apache.spark.unsafe.map;
 
 import javax.annotation.Nullable;
+import java.io.File;
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.io.Closeables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.shuffle.ShuffleMemoryManager;
+import org.apache.spark.SparkEnv;
+import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.serializer.SerializerManager;
+import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.array.LongArray;
-import org.apache.spark.unsafe.bitset.BitSet;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.unsafe.memory.MemoryLocation;
-import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader;
+import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
 
 /**
  * An append-only hash map where keys and values are contiguous regions of bytes.
@@ -50,42 +56,34 @@ import org.apache.spark.unsafe.memory.TaskMemoryManager;
  *   Bytes 4 to 8: len(k)
  *   Bytes 8 to 8 + len(k): key data
  *   Bytes 8 + len(k) to 8 + len(k) + len(v): value data
+ *   Bytes 8 + len(k) + len(v) to 8 + len(k) + len(v) + 8: pointer to next pair
  *
  * This means that the first four bytes store the entire record (key + value) length. This format
- * is consistent with {@link org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter},
+ * is compatible with {@link org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter},
  * so we can pass records from this map directly into the sorter to sort records in place.
  */
-public final class BytesToBytesMap {
+public final class BytesToBytesMap extends MemoryConsumer {
 
-  private final Logger logger = LoggerFactory.getLogger(BytesToBytesMap.class);
-
-  private static final Murmur3_x86_32 HASHER = new Murmur3_x86_32(0);
+  private static final Logger logger = LoggerFactory.getLogger(BytesToBytesMap.class);
 
   private static final HashMapGrowthStrategy growthStrategy = HashMapGrowthStrategy.DOUBLING;
 
-  /**
-   * Special record length that is placed after the last record in a data page.
-   */
-  private static final int END_OF_PAGE_MARKER = -1;
-
   private final TaskMemoryManager taskMemoryManager;
-
-  private final ShuffleMemoryManager shuffleMemoryManager;
 
   /**
    * A linked list for tracking all allocated data pages so that we can free all of our memory.
    */
-  private final List<MemoryBlock> dataPages = new LinkedList<MemoryBlock>();
+  private final LinkedList<MemoryBlock> dataPages = new LinkedList<>();
 
   /**
    * The data page that will be used to store keys and values for new hashtable entries. When this
    * page becomes full, a new page will be allocated and this pointer will change to point to that
    * new page.
    */
-  private MemoryBlock currentDataPage = null;
+  private MemoryBlock currentPage = null;
 
   /**
-   * Offset into `currentDataPage` that points to the location where new data can be inserted into
+   * Offset into `currentPage` that points to the location where new data can be inserted into
    * the page. This does not incorporate the page's base offset.
    */
   private long pageCursor = 0;
@@ -120,10 +118,9 @@ public final class BytesToBytesMap {
   // absolute memory addresses.
 
   /**
-   * A {@link BitSet} used to track location of the map where the key is set.
-   * Size of the bitset should be half of the size of the long array.
+   * Whether or not the longArray can grow. We will not insert more elements if it's false.
    */
-  @Nullable private BitSet bitset;
+  private boolean canGrowArray = true;
 
   private final double loadFactor;
 
@@ -136,7 +133,12 @@ public final class BytesToBytesMap {
   /**
    * Number of keys defined in the map.
    */
-  private int numElements;
+  private int numKeys;
+
+  /**
+   * Number of values defined in the map. A key could have multiple values.
+   */
+  private int numValues;
 
   /**
    * The map will be expanded once the number of keys exceeds this threshold.
@@ -167,15 +169,23 @@ public final class BytesToBytesMap {
 
   private long peakMemoryUsedBytes = 0L;
 
+  private final BlockManager blockManager;
+  private final SerializerManager serializerManager;
+  private volatile MapIterator destructiveIterator = null;
+  private LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
+
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
-      ShuffleMemoryManager shuffleMemoryManager,
+      BlockManager blockManager,
+      SerializerManager serializerManager,
       int initialCapacity,
       double loadFactor,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
+    super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
     this.taskMemoryManager = taskMemoryManager;
-    this.shuffleMemoryManager = shuffleMemoryManager;
+    this.blockManager = blockManager;
+    this.serializerManager = serializerManager;
     this.loadFactor = loadFactor;
     this.loc = new Location();
     this.pageSizeBytes = pageSizeBytes;
@@ -192,32 +202,27 @@ public final class BytesToBytesMap {
         TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES);
     }
     allocate(initialCapacity);
-
-    // Acquire a new page as soon as we construct the map to ensure that we have at least
-    // one page to work with. Otherwise, other operators in the same task may starve this
-    // map (SPARK-9747).
-    acquireNewPage();
   }
 
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
-      ShuffleMemoryManager shuffleMemoryManager,
       int initialCapacity,
       long pageSizeBytes) {
-    this(taskMemoryManager, shuffleMemoryManager, initialCapacity, 0.70, pageSizeBytes, false);
+    this(taskMemoryManager, initialCapacity, pageSizeBytes, false);
   }
 
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
-      ShuffleMemoryManager shuffleMemoryManager,
       int initialCapacity,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
     this(
       taskMemoryManager,
-      shuffleMemoryManager,
+      SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
+      SparkEnv.get() != null ? SparkEnv.get().serializerManager() :  null,
       initialCapacity,
-      0.70,
+      // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
+      0.5,
       pageSizeBytes,
       enablePerfMetrics);
   }
@@ -225,64 +230,167 @@ public final class BytesToBytesMap {
   /**
    * Returns the number of keys defined in the map.
    */
-  public int numElements() { return numElements; }
+  public int numKeys() { return numKeys; }
 
-  public static final class BytesToBytesMapIterator implements Iterator<Location> {
+  /**
+   * Returns the number of values defined in the map. A key could have multiple values.
+   */
+  public int numValues() { return numValues; }
 
-    private final int numRecords;
-    private final Iterator<MemoryBlock> dataPagesIterator;
+  public final class MapIterator implements Iterator<Location> {
+
+    private int numRecords;
     private final Location loc;
 
     private MemoryBlock currentPage = null;
-    private int currentRecordNumber = 0;
+    private int recordsInPage = 0;
     private Object pageBaseObject;
     private long offsetInPage;
 
     // If this iterator destructive or not. When it is true, it frees each page as it moves onto
     // next one.
     private boolean destructive = false;
-    private BytesToBytesMap bmap;
+    private UnsafeSorterSpillReader reader = null;
 
-    private BytesToBytesMapIterator(
-        int numRecords, Iterator<MemoryBlock> dataPagesIterator, Location loc,
-        boolean destructive, BytesToBytesMap bmap) {
+    private MapIterator(int numRecords, Location loc, boolean destructive) {
       this.numRecords = numRecords;
-      this.dataPagesIterator = dataPagesIterator;
       this.loc = loc;
       this.destructive = destructive;
-      this.bmap = bmap;
-      if (dataPagesIterator.hasNext()) {
-        advanceToNextPage();
+      if (destructive) {
+        destructiveIterator = this;
       }
     }
 
     private void advanceToNextPage() {
-      if (destructive && currentPage != null) {
-        dataPagesIterator.remove();
-        this.bmap.taskMemoryManager.freePage(currentPage);
-        this.bmap.shuffleMemoryManager.release(currentPage.size());
+      synchronized (this) {
+        int nextIdx = dataPages.indexOf(currentPage) + 1;
+        if (destructive && currentPage != null) {
+          dataPages.remove(currentPage);
+          freePage(currentPage);
+          nextIdx --;
+        }
+        if (dataPages.size() > nextIdx) {
+          currentPage = dataPages.get(nextIdx);
+          pageBaseObject = currentPage.getBaseObject();
+          offsetInPage = currentPage.getBaseOffset();
+          recordsInPage = Platform.getInt(pageBaseObject, offsetInPage);
+          offsetInPage += 4;
+        } else {
+          currentPage = null;
+          if (reader != null) {
+            // remove the spill file from disk
+            File file = spillWriters.removeFirst().getFile();
+            if (file != null && file.exists()) {
+              if (!file.delete()) {
+                logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+              }
+            }
+          }
+          try {
+            Closeables.close(reader, /* swallowIOException = */ false);
+            reader = spillWriters.getFirst().getReader(serializerManager);
+            recordsInPage = -1;
+          } catch (IOException e) {
+            // Scala iterator does not handle exception
+            Platform.throwException(e);
+          }
+        }
       }
-      currentPage = dataPagesIterator.next();
-      pageBaseObject = currentPage.getBaseObject();
-      offsetInPage = currentPage.getBaseOffset();
     }
 
     @Override
     public boolean hasNext() {
-      return currentRecordNumber != numRecords;
+      if (numRecords == 0) {
+        if (reader != null) {
+          // remove the spill file from disk
+          File file = spillWriters.removeFirst().getFile();
+          if (file != null && file.exists()) {
+            if (!file.delete()) {
+              logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+            }
+          }
+        }
+      }
+      return numRecords > 0;
     }
 
     @Override
     public Location next() {
-      int totalLength = Platform.getInt(pageBaseObject, offsetInPage);
-      if (totalLength == END_OF_PAGE_MARKER) {
+      if (recordsInPage == 0) {
         advanceToNextPage();
-        totalLength = Platform.getInt(pageBaseObject, offsetInPage);
       }
-      loc.with(currentPage, offsetInPage);
-      offsetInPage += 4 + totalLength;
-      currentRecordNumber++;
-      return loc;
+      numRecords--;
+      if (currentPage != null) {
+        int totalLength = Platform.getInt(pageBaseObject, offsetInPage);
+        loc.with(currentPage, offsetInPage);
+        // [total size] [key size] [key] [value] [pointer to next]
+        offsetInPage += 4 + totalLength + 8;
+        recordsInPage --;
+        return loc;
+      } else {
+        assert(reader != null);
+        if (!reader.hasNext()) {
+          advanceToNextPage();
+        }
+        try {
+          reader.loadNext();
+        } catch (IOException e) {
+          try {
+            reader.close();
+          } catch(IOException e2) {
+            logger.error("Error while closing spill reader", e2);
+          }
+          // Scala iterator does not handle exception
+          Platform.throwException(e);
+        }
+        loc.with(reader.getBaseObject(), reader.getBaseOffset(), reader.getRecordLength());
+        return loc;
+      }
+    }
+
+    public long spill(long numBytes) throws IOException {
+      synchronized (this) {
+        if (!destructive || dataPages.size() == 1) {
+          return 0L;
+        }
+
+        // TODO: use existing ShuffleWriteMetrics
+        ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
+
+        long released = 0L;
+        while (dataPages.size() > 0) {
+          MemoryBlock block = dataPages.getLast();
+          // The currentPage is used, cannot be released
+          if (block == currentPage) {
+            break;
+          }
+
+          Object base = block.getBaseObject();
+          long offset = block.getBaseOffset();
+          int numRecords = Platform.getInt(base, offset);
+          offset += 4;
+          final UnsafeSorterSpillWriter writer =
+            new UnsafeSorterSpillWriter(blockManager, 32 * 1024, writeMetrics, numRecords);
+          while (numRecords > 0) {
+            int length = Platform.getInt(base, offset);
+            writer.write(base, offset + 4, length, 0);
+            offset += 4 + length + 8;
+            numRecords--;
+          }
+          writer.close();
+          spillWriters.add(writer);
+
+          dataPages.removeLast();
+          released += block.size();
+          freePage(block);
+
+          if (released >= numBytes) {
+            break;
+          }
+        }
+
+        return released;
+      }
     }
 
     @Override
@@ -299,8 +407,8 @@ public final class BytesToBytesMap {
    * If any other lookups or operations are performed on this map while iterating over it, including
    * `lookup()`, the behavior of the returned iterator is undefined.
    */
-  public BytesToBytesMapIterator iterator() {
-    return new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc, false, this);
+  public MapIterator iterator() {
+    return new MapIterator(numValues, loc, false);
   }
 
   /**
@@ -313,8 +421,8 @@ public final class BytesToBytesMap {
    * If any other lookups or operations are performed on this map while iterating over it, including
    * `lookup()`, the behavior of the returned iterator is undefined.
    */
-  public BytesToBytesMapIterator destructiveIterator() {
-    return new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc, true, this);
+  public MapIterator destructiveIterator() {
+    return new MapIterator(numValues, loc, true);
   }
 
   /**
@@ -323,11 +431,20 @@ public final class BytesToBytesMap {
    *
    * This function always return the same {@link Location} instance to avoid object allocation.
    */
-  public Location lookup(
-      Object keyBaseObject,
-      long keyBaseOffset,
-      int keyRowLengthBytes) {
-    safeLookup(keyBaseObject, keyBaseOffset, keyRowLengthBytes, loc);
+  public Location lookup(Object keyBase, long keyOffset, int keyLength) {
+    safeLookup(keyBase, keyOffset, keyLength, loc,
+      Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
+    return loc;
+  }
+
+  /**
+   * Looks up a key, and return a {@link Location} handle that can be used to test existence
+   * and read/write values.
+   *
+   * This function always return the same {@link Location} instance to avoid object allocation.
+   */
+  public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash) {
+    safeLookup(keyBase, keyOffset, keyLength, loc, hash);
     return loc;
   }
 
@@ -336,43 +453,34 @@ public final class BytesToBytesMap {
    *
    * This is a thread-safe version of `lookup`, could be used by multiple threads.
    */
-  public void safeLookup(
-      Object keyBaseObject,
-      long keyBaseOffset,
-      int keyRowLengthBytes,
-      Location loc) {
-    assert(bitset != null);
+  public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     assert(longArray != null);
 
     if (enablePerfMetrics) {
       numKeyLookups++;
     }
-    final int hashcode = HASHER.hashUnsafeWords(keyBaseObject, keyBaseOffset, keyRowLengthBytes);
-    int pos = hashcode & mask;
+    int pos = hash & mask;
     int step = 1;
     while (true) {
       if (enablePerfMetrics) {
         numProbes++;
       }
-      if (!bitset.isSet(pos)) {
+      if (longArray.get(pos * 2) == 0) {
         // This is a new key.
-        loc.with(pos, hashcode, false);
+        loc.with(pos, hash, false);
         return;
       } else {
         long stored = longArray.get(pos * 2 + 1);
-        if ((int) (stored) == hashcode) {
+        if ((int) (stored) == hash) {
           // Full hash code matches.  Let's compare the keys for equality.
-          loc.with(pos, hashcode, true);
-          if (loc.getKeyLength() == keyRowLengthBytes) {
-            final MemoryLocation keyAddress = loc.getKeyAddress();
-            final Object storedKeyBaseObject = keyAddress.getBaseObject();
-            final long storedKeyBaseOffset = keyAddress.getBaseOffset();
+          loc.with(pos, hash, true);
+          if (loc.getKeyLength() == keyLength) {
             final boolean areEqual = ByteArrayMethods.arrayEquals(
-              keyBaseObject,
-              keyBaseOffset,
-              storedKeyBaseObject,
-              storedKeyBaseOffset,
-              keyRowLengthBytes
+              keyBase,
+              keyOffset,
+              loc.getKeyBase(),
+              loc.getKeyOffset(),
+              keyLength
             );
             if (areEqual) {
               return;
@@ -399,13 +507,14 @@ public final class BytesToBytesMap {
     private boolean isDefined;
     /**
      * The hashcode of the most recent key passed to
-     * {@link BytesToBytesMap#lookup(Object, long, int)}. Caching this hashcode here allows us to
-     * avoid re-hashing the key when storing a value for that key.
+     * {@link BytesToBytesMap#lookup(Object, long, int, int)}. Caching this hashcode here allows us
+     * to avoid re-hashing the key when storing a value for that key.
      */
     private int keyHashcode;
-    private final MemoryLocation keyMemoryLocation = new MemoryLocation();
-    private final MemoryLocation valueMemoryLocation = new MemoryLocation();
+    private Object baseObject;  // the base object for key and value
+    private long keyOffset;
     private int keyLength;
+    private long valueOffset;
     private int valueLength;
 
     /**
@@ -419,18 +528,15 @@ public final class BytesToBytesMap {
         taskMemoryManager.getOffsetInPage(fullKeyAddress));
     }
 
-    private void updateAddressesAndSizes(final Object page, final long offsetInPage) {
-      long position = offsetInPage;
-      final int totalLength = Platform.getInt(page, position);
-      position += 4;
-      keyLength = Platform.getInt(page, position);
-      position += 4;
+    private void updateAddressesAndSizes(final Object base, long offset) {
+      baseObject = base;
+      final int totalLength = Platform.getInt(base, offset);
+      offset += 4;
+      keyLength = Platform.getInt(base, offset);
+      offset += 4;
+      keyOffset = offset;
+      valueOffset = offset + keyLength;
       valueLength = totalLength - keyLength - 4;
-
-      keyMemoryLocation.setObjAndOffset(page, position);
-
-      position += keyLength;
-      valueMemoryLocation.setObjAndOffset(page, position);
     }
 
     private Location with(int pos, int keyHashcode, boolean isDefined) {
@@ -453,6 +559,34 @@ public final class BytesToBytesMap {
     }
 
     /**
+     * This is only used for spilling
+     */
+    private Location with(Object base, long offset, int length) {
+      this.isDefined = true;
+      this.memoryPage = null;
+      baseObject = base;
+      keyOffset = offset + 4;
+      keyLength = Platform.getInt(base, offset);
+      valueOffset = offset + 4 + keyLength;
+      valueLength = length - 4 - keyLength;
+      return this;
+    }
+
+    /**
+     * Find the next pair that has the same key as current one.
+     */
+    public boolean nextValue() {
+      assert isDefined;
+      long nextAddr = Platform.getLong(baseObject, valueOffset + valueLength);
+      if (nextAddr == 0) {
+        return false;
+      } else {
+        updateAddressesAndSizes(nextAddr);
+        return true;
+      }
+    }
+
+    /**
      * Returns the memory page that contains the current record.
      * This is only valid if this is returned by {@link BytesToBytesMap#iterator()}.
      */
@@ -468,14 +602,35 @@ public final class BytesToBytesMap {
     }
 
     /**
-     * Returns the address of the key defined at this position.
-     * This points to the first byte of the key data.
-     * Unspecified behavior if the key is not defined.
-     * For efficiency reasons, calls to this method always returns the same MemoryLocation object.
+     * Returns the base object for key.
      */
-    public MemoryLocation getKeyAddress() {
+    public Object getKeyBase() {
       assert (isDefined);
-      return keyMemoryLocation;
+      return baseObject;
+    }
+
+    /**
+     * Returns the offset for key.
+     */
+    public long getKeyOffset() {
+      assert (isDefined);
+      return keyOffset;
+    }
+
+    /**
+     * Returns the base object for value.
+     */
+    public Object getValueBase() {
+      assert (isDefined);
+      return baseObject;
+    }
+
+    /**
+     * Returns the offset for value.
+     */
+    public long getValueOffset() {
+      assert (isDefined);
+      return valueOffset;
     }
 
     /**
@@ -488,17 +643,6 @@ public final class BytesToBytesMap {
     }
 
     /**
-     * Returns the address of the value defined at this position.
-     * This points to the first byte of the value data.
-     * Unspecified behavior if the key is not defined.
-     * For efficiency reasons, calls to this method always returns the same MemoryLocation object.
-     */
-    public MemoryLocation getValueAddress() {
-      assert (isDefined);
-      return valueMemoryLocation;
-    }
-
-    /**
      * Returns the length of the value defined at this position.
      * Unspecified behavior if the key is not defined.
      */
@@ -508,10 +652,9 @@ public final class BytesToBytesMap {
     }
 
     /**
-     * Store a new key and value. This method may only be called once for a given key; if you want
-     * to update the value associated with a key, then you can directly manipulate the bytes stored
-     * at the value address. The return value indicates whether the put succeeded or whether it
-     * failed because additional memory could not be acquired.
+     * Append a new value for the key. This method could be called multiple times for a given key.
+     * The return value indicates whether the put succeeded or whether it failed because additional
+     * memory could not be acquired.
      * <p>
      * It is only valid to call this method immediately after calling `lookup()` using the same key.
      * </p>
@@ -520,15 +663,15 @@ public final class BytesToBytesMap {
      * </p>
      * <p>
      * After calling this method, calls to `get[Key|Value]Address()` and `get[Key|Value]Length`
-     * will return information on the data stored by this `putNewKey` call.
+     * will return information on the data stored by this `append` call.
      * </p>
      * <p>
      * As an example usage, here's the proper way to store a new key:
      * </p>
      * <pre>
-     *   Location loc = map.lookup(keyBaseObject, keyBaseOffset, keyLengthInBytes);
+     *   Location loc = map.lookup(keyBase, keyOffset, keyLength);
      *   if (!loc.isDefined()) {
-     *     if (!loc.putNewKey(keyBaseObject, keyBaseOffset, keyLengthInBytes, ...)) {
+     *     if (!loc.append(keyBase, keyOffset, keyLength, ...)) {
      *       // handle failure to grow map (by spilling, for example)
      *     }
      *   }
@@ -540,136 +683,91 @@ public final class BytesToBytesMap {
      * @return true if the put() was successful and false if the put() failed because memory could
      *         not be acquired.
      */
-    public boolean putNewKey(
-        Object keyBaseObject,
-        long keyBaseOffset,
-        int keyLengthBytes,
-        Object valueBaseObject,
-        long valueBaseOffset,
-        int valueLengthBytes) {
-      assert (!isDefined) : "Can only set value once for a key";
-      assert (keyLengthBytes % 8 == 0);
-      assert (valueLengthBytes % 8 == 0);
-      assert(bitset != null);
-      assert(longArray != null);
+    public boolean append(Object kbase, long koff, int klen, Object vbase, long voff, int vlen) {
+      assert (klen % 8 == 0);
+      assert (vlen % 8 == 0);
+      assert (longArray != null);
 
-      if (numElements == MAX_CAPACITY) {
-        throw new IllegalStateException("BytesToBytesMap has reached maximum capacity");
+      if (numKeys == MAX_CAPACITY
+        // The map could be reused from last spill (because of no enough memory to grow),
+        // then we don't try to grow again if hit the `growthThreshold`.
+        || !canGrowArray && numKeys > growthThreshold) {
+        return false;
       }
 
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
-      // (8 byte key length) (key) (value)
-      final long requiredSize = 8 + keyLengthBytes + valueLengthBytes;
-
-      // --- Figure out where to insert the new record ---------------------------------------------
-
-      final MemoryBlock dataPage;
-      final Object dataPageBaseObject;
-      final long dataPageInsertOffset;
-      boolean useOverflowPage = requiredSize > pageSizeBytes - 8;
-      if (useOverflowPage) {
-        // The record is larger than the page size, so allocate a special overflow page just to hold
-        // that record.
-        final long memoryRequested = requiredSize + 8;
-        final long memoryGranted = shuffleMemoryManager.tryToAcquire(memoryRequested);
-        if (memoryGranted != memoryRequested) {
-          shuffleMemoryManager.release(memoryGranted);
-          logger.debug("Failed to acquire {} bytes of memory", memoryRequested);
+      // (8 byte key length) (key) (value) (8 byte pointer to next value)
+      final long recordLength = 8 + klen + vlen + 8;
+      if (currentPage == null || currentPage.size() - pageCursor < recordLength) {
+        if (!acquireNewPage(recordLength + 4L)) {
           return false;
         }
-        MemoryBlock overflowPage = taskMemoryManager.allocatePage(memoryRequested);
-        dataPages.add(overflowPage);
-        dataPage = overflowPage;
-        dataPageBaseObject = overflowPage.getBaseObject();
-        dataPageInsertOffset = overflowPage.getBaseOffset();
-      } else if (currentDataPage == null || pageSizeBytes - 8 - pageCursor < requiredSize) {
-        // The record can fit in a data page, but either we have not allocated any pages yet or
-        // the current page does not have enough space.
-        if (currentDataPage != null) {
-          // There wasn't enough space in the current page, so write an end-of-page marker:
-          final Object pageBaseObject = currentDataPage.getBaseObject();
-          final long lengthOffsetInPage = currentDataPage.getBaseOffset() + pageCursor;
-          Platform.putInt(pageBaseObject, lengthOffsetInPage, END_OF_PAGE_MARKER);
-        }
-        if (!acquireNewPage()) {
-          return false;
-        }
-        dataPage = currentDataPage;
-        dataPageBaseObject = currentDataPage.getBaseObject();
-        dataPageInsertOffset = currentDataPage.getBaseOffset();
-      } else {
-        // There is enough space in the current data page.
-        dataPage = currentDataPage;
-        dataPageBaseObject = currentDataPage.getBaseObject();
-        dataPageInsertOffset = currentDataPage.getBaseOffset() + pageCursor;
       }
 
       // --- Append the key and value data to the current data page --------------------------------
+      final Object base = currentPage.getBaseObject();
+      long offset = currentPage.getBaseOffset() + pageCursor;
+      final long recordOffset = offset;
+      Platform.putInt(base, offset, klen + vlen + 4);
+      Platform.putInt(base, offset + 4, klen);
+      offset += 8;
+      Platform.copyMemory(kbase, koff, base, offset, klen);
+      offset += klen;
+      Platform.copyMemory(vbase, voff, base, offset, vlen);
+      offset += vlen;
+      // put this value at the beginning of the list
+      Platform.putLong(base, offset, isDefined ? longArray.get(pos * 2) : 0);
 
-      long insertCursor = dataPageInsertOffset;
-
-      // Compute all of our offsets up-front:
-      final long recordOffset = insertCursor;
-      insertCursor += 4;
-      final long keyLengthOffset = insertCursor;
-      insertCursor += 4;
-      final long keyDataOffsetInPage = insertCursor;
-      insertCursor += keyLengthBytes;
-      final long valueDataOffsetInPage = insertCursor;
-      insertCursor += valueLengthBytes; // word used to store the value size
-
-      Platform.putInt(dataPageBaseObject, recordOffset,
-        keyLengthBytes + valueLengthBytes + 4);
-      Platform.putInt(dataPageBaseObject, keyLengthOffset, keyLengthBytes);
-      // Copy the key
-      Platform.copyMemory(
-        keyBaseObject, keyBaseOffset, dataPageBaseObject, keyDataOffsetInPage, keyLengthBytes);
-      // Copy the value
-      Platform.copyMemory(valueBaseObject, valueBaseOffset, dataPageBaseObject,
-        valueDataOffsetInPage, valueLengthBytes);
-
-      // --- Update bookeeping data structures -----------------------------------------------------
-
-      if (useOverflowPage) {
-        // Store the end-of-page marker at the end of the data page
-        Platform.putInt(dataPageBaseObject, insertCursor, END_OF_PAGE_MARKER);
-      } else {
-        pageCursor += requiredSize;
-      }
-
-      numElements++;
-      bitset.set(pos);
+      // --- Update bookkeeping data structures ----------------------------------------------------
+      offset = currentPage.getBaseOffset();
+      Platform.putInt(base, offset, Platform.getInt(base, offset) + 1);
+      pageCursor += recordLength;
       final long storedKeyAddress = taskMemoryManager.encodePageNumberAndOffset(
-        dataPage, recordOffset);
+        currentPage, recordOffset);
       longArray.set(pos * 2, storedKeyAddress);
-      longArray.set(pos * 2 + 1, keyHashcode);
       updateAddressesAndSizes(storedKeyAddress);
-      isDefined = true;
-      if (numElements > growthThreshold && longArray.size() < MAX_CAPACITY) {
-        growAndRehash();
+      numValues++;
+      if (!isDefined) {
+        numKeys++;
+        longArray.set(pos * 2 + 1, keyHashcode);
+        isDefined = true;
+
+        if (numKeys > growthThreshold && longArray.size() < MAX_CAPACITY) {
+          try {
+            growAndRehash();
+          } catch (OutOfMemoryError oom) {
+            canGrowArray = false;
+          }
+        }
       }
       return true;
     }
   }
 
   /**
-   * Acquire a new page from the {@link ShuffleMemoryManager}.
+   * Acquire a new page from the memory manager.
    * @return whether there is enough space to allocate the new page.
    */
-  private boolean acquireNewPage() {
-    final long memoryGranted = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
-    if (memoryGranted != pageSizeBytes) {
-      shuffleMemoryManager.release(memoryGranted);
-      logger.debug("Failed to acquire {} bytes of memory", pageSizeBytes);
+  private boolean acquireNewPage(long required) {
+    try {
+      currentPage = allocatePage(required);
+    } catch (OutOfMemoryError e) {
       return false;
     }
-    MemoryBlock newPage = taskMemoryManager.allocatePage(pageSizeBytes);
-    dataPages.add(newPage);
-    pageCursor = 0;
-    currentDataPage = newPage;
+    dataPages.add(currentPage);
+    Platform.putInt(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);
+    pageCursor = 4;
     return true;
+  }
+
+  @Override
+  public long spill(long size, MemoryConsumer trigger) throws IOException {
+    if (trigger != this && destructiveIterator != null) {
+      return destructiveIterator.spill(size);
+    }
+    return 0L;
   }
 
   /**
@@ -680,11 +778,10 @@ public final class BytesToBytesMap {
    */
   private void allocate(int capacity) {
     assert (capacity >= 0);
-    // The capacity needs to be divisible by 64 so that our bit set can be sized properly
     capacity = Math.max((int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
-    longArray = new LongArray(MemoryBlock.fromLongArray(new long[capacity * 2]));
-    bitset = new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]));
+    longArray = allocateArray(capacity * 2);
+    longArray.zeroOut();
 
     this.growthThreshold = (int) (capacity * loadFactor);
     this.mask = capacity - 1;
@@ -698,24 +795,30 @@ public final class BytesToBytesMap {
    */
   public void free() {
     updatePeakMemoryUsed();
-    longArray = null;
-    bitset = null;
+    if (longArray != null) {
+      freeArray(longArray);
+      longArray = null;
+    }
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
     while (dataPagesIterator.hasNext()) {
       MemoryBlock dataPage = dataPagesIterator.next();
       dataPagesIterator.remove();
-      taskMemoryManager.freePage(dataPage);
-      shuffleMemoryManager.release(dataPage.size());
+      freePage(dataPage);
     }
     assert(dataPages.isEmpty());
+
+    while (!spillWriters.isEmpty()) {
+      File file = spillWriters.removeFirst().getFile();
+      if (file != null && file.exists()) {
+        if (!file.delete()) {
+          logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+        }
+      }
+    }
   }
 
   public TaskMemoryManager getTaskMemoryManager() {
     return taskMemoryManager;
-  }
-
-  public ShuffleMemoryManager getShuffleMemoryManager() {
-    return shuffleMemoryManager;
   }
 
   public long getPageSizeBytes() {
@@ -730,9 +833,7 @@ public final class BytesToBytesMap {
     for (MemoryBlock dataPage : dataPages) {
       totalDataPagesSize += dataPage.size();
     }
-    return totalDataPagesSize +
-      ((bitset != null) ? bitset.memoryBlock().size() : 0L) +
-      ((longArray != null) ? longArray.memoryBlock().size() : 0L);
+    return totalDataPagesSize + ((longArray != null) ? longArray.memoryBlock().size() : 0L);
   }
 
   private void updatePeakMemoryUsed() {
@@ -783,11 +884,34 @@ public final class BytesToBytesMap {
   }
 
   /**
+   * Returns the underline long[] of longArray.
+   */
+  public LongArray getArray() {
+    assert(longArray != null);
+    return longArray;
+  }
+
+  /**
+   * Reset this map to initialized state.
+   */
+  public void reset() {
+    numKeys = 0;
+    numValues = 0;
+    longArray.zeroOut();
+
+    while (dataPages.size() > 0) {
+      MemoryBlock dataPage = dataPages.removeLast();
+      freePage(dataPage);
+    }
+    currentPage = null;
+    pageCursor = 0;
+  }
+
+  /**
    * Grows the size of the hash table and re-hash everything.
    */
   @VisibleForTesting
   void growAndRehash() {
-    assert(bitset != null);
     assert(longArray != null);
 
     long resizeStartTime = -1;
@@ -796,34 +920,28 @@ public final class BytesToBytesMap {
     }
     // Store references to the old data structures to be used when we re-hash
     final LongArray oldLongArray = longArray;
-    final BitSet oldBitSet = bitset;
-    final int oldCapacity = (int) oldBitSet.capacity();
+    final int oldCapacity = (int) oldLongArray.size() / 2;
 
     // Allocate the new data structures
     allocate(Math.min(growthStrategy.nextCapacity(oldCapacity), MAX_CAPACITY));
 
     // Re-mask (we don't recompute the hashcode because we stored all 32 bits of it)
-    for (int pos = oldBitSet.nextSetBit(0); pos >= 0; pos = oldBitSet.nextSetBit(pos + 1)) {
-      final long keyPointer = oldLongArray.get(pos * 2);
-      final int hashcode = (int) oldLongArray.get(pos * 2 + 1);
+    for (int i = 0; i < oldLongArray.size(); i += 2) {
+      final long keyPointer = oldLongArray.get(i);
+      if (keyPointer == 0) {
+        continue;
+      }
+      final int hashcode = (int) oldLongArray.get(i + 1);
       int newPos = hashcode & mask;
       int step = 1;
-      boolean keepGoing = true;
-
-      // No need to check for equality here when we insert so this has one less if branch than
-      // the similar code path in addWithoutResize.
-      while (keepGoing) {
-        if (!bitset.isSet(newPos)) {
-          bitset.set(newPos);
-          longArray.set(newPos * 2, keyPointer);
-          longArray.set(newPos * 2 + 1, hashcode);
-          keepGoing = false;
-        } else {
-          newPos = (newPos + step) & mask;
-          step++;
-        }
+      while (longArray.get(newPos * 2) != 0) {
+        newPos = (newPos + step) & mask;
+        step++;
       }
+      longArray.set(newPos * 2, keyPointer);
+      longArray.set(newPos * 2 + 1, hashcode);
     }
+    freeArray(oldLongArray);
 
     if (enablePerfMetrics) {
       timeSpentResizingNs += System.nanoTime() - resizeStartTime;

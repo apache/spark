@@ -42,11 +42,17 @@ object TypeUtils {
   }
 
   def checkForSameTypeInputExpr(types: Seq[DataType], caller: String): TypeCheckResult = {
-    if (types.distinct.size > 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to $caller should all be the same type, but it's " +
-          types.map(_.simpleString).mkString("[", ", ", "]"))
+    if (types.size <= 1) {
+      TypeCheckResult.TypeCheckSuccess
     } else {
+      val firstType = types.head
+      types.foreach { t =>
+        if (!t.sameType(firstType)) {
+          return TypeCheckResult.TypeCheckFailure(
+            s"input to $caller should all be the same type, but it's " +
+              types.map(_.simpleString).mkString("[", ", ", "]"))
+        }
+      }
       TypeCheckResult.TypeCheckSuccess
     }
   }
@@ -57,6 +63,7 @@ object TypeUtils {
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
       case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
+      case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
   }

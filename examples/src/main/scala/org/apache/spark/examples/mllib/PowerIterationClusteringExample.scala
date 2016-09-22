@@ -21,9 +21,11 @@ package org.apache.spark.examples.mllib
 import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
-import org.apache.spark.mllib.clustering.PowerIterationClustering
-import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
+// $example on$
+import org.apache.spark.mllib.clustering.PowerIterationClustering
+// $example off$
+import org.apache.spark.rdd.RDD
 
 /**
  * An example Power Iteration Clustering http://www.icml2010.org/papers/387.pdf app.
@@ -40,27 +42,23 @@ import org.apache.spark.{SparkConf, SparkContext}
  *   n:  Number of sampled points on innermost circle.. There are proportionally more points
  *      within the outer/larger circles
  *   maxIterations:   Number of Power Iterations
- *   outerRadius:  radius of the outermost of the concentric circles
  * }}}
  *
  * Here is a sample run and output:
  *
- * ./bin/run-example mllib.PowerIterationClusteringExample -k 3 --n 30 --maxIterations 15
+ * ./bin/run-example mllib.PowerIterationClusteringExample -k 2 --n 10 --maxIterations 15
  *
- * Cluster assignments: 1 -> [0,1,2,3,4],2 -> [5,6,7,8,9,10,11,12,13,14],
- * 0 -> [15,16,17,18,19,20,21,22,23,24,25,26,27,28,29]
- *
+ * Cluster assignments: 1 -> [0,1,2,3,4,5,6,7,8,9],
+ *   0 -> [10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29]
  *
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object PowerIterationClusteringExample {
 
   case class Params(
-      input: String = null,
-      k: Int = 3,
-      numPoints: Int = 5,
-      maxIterations: Int = 10,
-      outerRadius: Double = 3.0
+      k: Int = 2,
+      numPoints: Int = 10,
+      maxIterations: Int = 15
     ) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
@@ -69,7 +67,7 @@ object PowerIterationClusteringExample {
     val parser = new OptionParser[Params]("PowerIterationClusteringExample") {
       head("PowerIterationClusteringExample: an example PIC app using concentric circles.")
       opt[Int]('k', "k")
-        .text(s"number of circles (/clusters), default: ${defaultParams.k}")
+        .text(s"number of circles (clusters), default: ${defaultParams.k}")
         .action((x, c) => c.copy(k = x))
       opt[Int]('n', "n")
         .text(s"number of points in smallest circle, default: ${defaultParams.numPoints}")
@@ -77,19 +75,15 @@ object PowerIterationClusteringExample {
       opt[Int]("maxIterations")
         .text(s"number of iterations, default: ${defaultParams.maxIterations}")
         .action((x, c) => c.copy(maxIterations = x))
-      opt[Double]('r', "r")
-        .text(s"radius of outermost circle, default: ${defaultParams.outerRadius}")
-        .action((x, c) => c.copy(outerRadius = x))
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    }.getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
+  def run(params: Params): Unit = {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName(s"PowerIterationClustering with $params")
@@ -97,22 +91,25 @@ object PowerIterationClusteringExample {
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
-    val circlesRdd = generateCirclesRdd(sc, params.k, params.numPoints, params.outerRadius)
+    // $example on$
+    val circlesRdd = generateCirclesRdd(sc, params.k, params.numPoints)
     val model = new PowerIterationClustering()
       .setK(params.k)
       .setMaxIterations(params.maxIterations)
+      .setInitializationMode("degree")
       .run(circlesRdd)
 
     val clusters = model.assignments.collect().groupBy(_.cluster).mapValues(_.map(_.id))
-    val assignments = clusters.toList.sortBy { case (k, v) => v.length}
+    val assignments = clusters.toList.sortBy { case (k, v) => v.length }
     val assignmentsStr = assignments
       .map { case (k, v) =>
-      s"$k -> ${v.sorted.mkString("[", ",", "]")}"
-    }.mkString(",")
+        s"$k -> ${v.sorted.mkString("[", ",", "]")}"
+      }.mkString(", ")
     val sizesStr = assignments.map {
-      _._2.size
+      _._2.length
     }.sorted.mkString("(", ",", ")")
     println(s"Cluster assignments: $assignmentsStr\ncluster sizes: $sizesStr")
+    // $example off$
 
     sc.stop()
   }
@@ -124,20 +121,17 @@ object PowerIterationClusteringExample {
     }
   }
 
-  def generateCirclesRdd(sc: SparkContext,
-      nCircles: Int = 3,
-      nPoints: Int = 30,
-      outerRadius: Double): RDD[(Long, Long, Double)] = {
-
-    val radii = Array.tabulate(nCircles) { cx => outerRadius / (nCircles - cx)}
-    val groupSizes = Array.tabulate(nCircles) { cx => (cx + 1) * nPoints}
-    val points = (0 until nCircles).flatMap { cx =>
-      generateCircle(radii(cx), groupSizes(cx))
+  def generateCirclesRdd(
+      sc: SparkContext,
+      nCircles: Int,
+      nPoints: Int): RDD[(Long, Long, Double)] = {
+    val points = (1 to nCircles).flatMap { i =>
+      generateCircle(i, i * nPoints)
     }.zipWithIndex
     val rdd = sc.parallelize(points)
     val distancesRdd = rdd.cartesian(rdd).flatMap { case (((x0, y0), i0), ((x1, y1), i1)) =>
       if (i0 < i1) {
-        Some((i0.toLong, i1.toLong, gaussianSimilarity((x0, y0), (x1, y1), 1.0)))
+        Some((i0.toLong, i1.toLong, gaussianSimilarity((x0, y0), (x1, y1))))
       } else {
         None
       }
@@ -148,11 +142,9 @@ object PowerIterationClusteringExample {
   /**
    * Gaussian Similarity:  http://en.wikipedia.org/wiki/Radial_basis_function_kernel
    */
-  def gaussianSimilarity(p1: (Double, Double), p2: (Double, Double), sigma: Double): Double = {
-    val coeff = 1.0 / (math.sqrt(2.0 * math.Pi) * sigma)
-    val expCoeff = -1.0 / 2.0 * math.pow(sigma, 2.0)
+  def gaussianSimilarity(p1: (Double, Double), p2: (Double, Double)): Double = {
     val ssquares = (p1._1 - p2._1) * (p1._1 - p2._1) + (p1._2 - p2._2) * (p1._2 - p2._2)
-    coeff * math.exp(expCoeff * ssquares)
+    math.exp(-ssquares / 2.0)
   }
 }
 // scalastyle:on println

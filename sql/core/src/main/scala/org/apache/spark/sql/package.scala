@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
 
 /**
  * Allows the execution of relational queries, including those expressed in SQL using Spark.
@@ -40,12 +40,7 @@ package object sql {
    * [[org.apache.spark.sql.sources]]
    */
   @DeveloperApi
-  type Strategy = org.apache.spark.sql.catalyst.planning.GenericStrategy[SparkPlan]
+  type Strategy = SparkStrategy
 
-  /**
-   * Type alias for [[DataFrame]]. Kept here for backward source compatibility for Scala.
-   * @deprecated As of 1.3.0, replaced by `DataFrame`.
-   */
-  @deprecated("use DataFrame", "1.3.0")
-  type SchemaRDD = DataFrame
+  type DataFrame = Dataset[Row]
 }

@@ -23,10 +23,10 @@ import com.fasterxml.jackson.core.JsonParseException
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
+import org.apache.spark.{JsonTestUtils, SparkFunSuite}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, RecoveryState}
 import org.apache.spark.deploy.worker.ExecutorRunner
-import org.apache.spark.{JsonTestUtils, SparkFunSuite}
 
 class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
 

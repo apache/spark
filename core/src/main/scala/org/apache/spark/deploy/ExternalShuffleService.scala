@@ -21,14 +21,16 @@ import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{Logging, SparkConf, SecurityManager}
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.internal.Logging
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.sasl.SaslServerBootstrap
-import org.apache.spark.network.server.{TransportServerBootstrap, TransportServer}
+import org.apache.spark.network.server.{TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 import org.apache.spark.network.util.TransportConf
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * Provides a server from which Executors can read shuffle files (rather than reading directly from
@@ -40,16 +42,22 @@ import org.apache.spark.util.Utils
 private[deploy]
 class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityManager)
   extends Logging {
+  protected val masterMetricsSystem =
+    MetricsSystem.createMetricsSystem("shuffleService", sparkConf, securityManager)
 
   private val enabled = sparkConf.getBoolean("spark.shuffle.service.enabled", false)
   private val port = sparkConf.getInt("spark.shuffle.service.port", 7337)
   private val useSasl: Boolean = securityManager.isAuthenticationEnabled()
 
-  private val transportConf = SparkTransportConf.fromSparkConf(sparkConf, numUsableCores = 0)
+  private val transportConf =
+    SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
   private val blockHandler = newShuffleBlockHandler(transportConf)
-  private val transportContext: TransportContext = new TransportContext(transportConf, blockHandler)
+  private val transportContext: TransportContext =
+    new TransportContext(transportConf, blockHandler, true)
 
   private var server: TransportServer = _
+
+  private val shuffleServiceSource = new ExternalShuffleServiceSource(blockHandler)
 
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
@@ -74,6 +82,9 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
         Nil
       }
     server = transportContext.createServer(port, bootstraps.asJava)
+
+    masterMetricsSystem.registerSource(shuffleServiceSource)
+    masterMetricsSystem.start()
   }
 
   /** Clean up all shuffle files associated with an application that has exited. */
@@ -106,6 +117,7 @@ object ExternalShuffleService extends Logging {
   private[spark] def main(
       args: Array[String],
       newShuffleService: (SparkConf, SecurityManager) => ExternalShuffleService): Unit = {
+    Utils.initDaemon(log)
     val sparkConf = new SparkConf
     Utils.loadDefaultSparkProperties(sparkConf)
     val securityManager = new SecurityManager(sparkConf)
@@ -116,19 +128,14 @@ object ExternalShuffleService extends Logging {
     server = newShuffleService(sparkConf, securityManager)
     server.start()
 
-    installShutdownHook()
+    logDebug("Adding shutdown hook") // force eager creation of logger
+    ShutdownHookManager.addShutdownHook { () =>
+      logInfo("Shutting down shuffle service.")
+      server.stop()
+      barrier.countDown()
+    }
 
     // keep running until the process is terminated
     barrier.await()
-  }
-
-  private def installShutdownHook(): Unit = {
-    Runtime.getRuntime.addShutdownHook(new Thread("External Shuffle Service shutdown thread") {
-      override def run() {
-        logInfo("Shutting down shuffle service.")
-        server.stop()
-        barrier.countDown()
-      }
-    })
   }
 }

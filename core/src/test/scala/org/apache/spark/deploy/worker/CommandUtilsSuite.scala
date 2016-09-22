@@ -17,10 +17,11 @@
 
 package org.apache.spark.deploy.worker
 
+import org.scalatest.{Matchers, PrivateMethodTester}
+
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.Command
 import org.apache.spark.util.Utils
-import org.scalatest.{Matchers, PrivateMethodTester}
 
 class CommandUtilsSuite extends SparkFunSuite with Matchers with PrivateMethodTester {
 

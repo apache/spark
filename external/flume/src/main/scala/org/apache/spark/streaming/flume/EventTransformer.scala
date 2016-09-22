@@ -17,12 +17,12 @@
 
 package org.apache.spark.streaming.flume
 
-import java.io.{ObjectOutput, ObjectInput}
+import java.io.{ObjectInput, ObjectOutput}
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
-import org.apache.spark.Logging
 
 /**
  * A simple object that provides the implementation of readExternal and writeExternal for both

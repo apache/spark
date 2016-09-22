@@ -19,13 +19,15 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
 
-class VectorAssemblerSuite extends SparkFunSuite with MLlibTestSparkContext {
+class VectorAssemblerSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new VectorAssembler)
@@ -55,7 +57,7 @@ class VectorAssemblerSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("VectorAssembler") {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L)
     )).toDF("id", "x", "y", "name", "z", "n")
     val assembler = new VectorAssembler()
@@ -67,6 +69,17 @@ class VectorAssemblerSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("transform should throw an exception in case of unsupported type") {
+    val df = spark.createDataFrame(Seq(("a", "b", "c"))).toDF("a", "b", "c")
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("a", "b", "c"))
+      .setOutputCol("features")
+    val thrown = intercept[IllegalArgumentException] {
+      assembler.transform(df)
+    }
+    assert(thrown.getMessage contains "Data type StringType is not supported")
+  }
+
   test("ML attributes") {
     val browser = NominalAttribute.defaultAttr.withValues("chrome", "firefox", "safari")
     val hour = NumericAttribute.defaultAttr.withMin(0.0).withMax(24.0)
@@ -74,7 +87,7 @@ class VectorAssemblerSuite extends SparkFunSuite with MLlibTestSparkContext {
       NominalAttribute.defaultAttr.withName("gender").withValues("male", "female"),
       NumericAttribute.defaultAttr.withName("salary")))
     val row = (1.0, 0.5, 1, Vectors.dense(1.0, 1000.0), Vectors.sparse(2, Array(1), Array(2.0)))
-    val df = sqlContext.createDataFrame(Seq(row)).toDF("browser", "hour", "count", "user", "ad")
+    val df = spark.createDataFrame(Seq(row)).toDF("browser", "hour", "count", "user", "ad")
       .select(
         col("browser").as("browser", browser.toMetadata()),
         col("hour").as("hour", hour.toMetadata()),
@@ -98,7 +111,14 @@ class VectorAssemblerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(userGenderOut === user.getAttr("gender").withName("user_gender").withIndex(3))
     val userSalaryOut = features.getAttr(4)
     assert(userSalaryOut === user.getAttr("salary").withName("user_salary").withIndex(4))
-    assert(features.getAttr(5) === NumericAttribute.defaultAttr.withIndex(5))
-    assert(features.getAttr(6) === NumericAttribute.defaultAttr.withIndex(6))
+    assert(features.getAttr(5) === NumericAttribute.defaultAttr.withIndex(5).withName("ad_0"))
+    assert(features.getAttr(6) === NumericAttribute.defaultAttr.withIndex(6).withName("ad_1"))
+  }
+
+  test("read/write") {
+    val t = new VectorAssembler()
+      .setInputCols(Array("myInputCol", "myInputCol2"))
+      .setOutputCol("myOutputCol")
+    testDefaultReadWrite(t)
   }
 }

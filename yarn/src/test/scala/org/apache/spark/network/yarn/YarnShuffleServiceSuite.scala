@@ -16,37 +16,41 @@
  */
 package org.apache.spark.network.yarn
 
-import java.io.{DataOutputStream, File, FileOutputStream}
+import java.io.{DataOutputStream, File, FileOutputStream, IOException}
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermission._
+import java.util.EnumSet
 
 import scala.annotation.tailrec
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
-import org.apache.commons.io.FileUtils
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.service.ServiceStateException
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.api.{ApplicationInitializationContext, ApplicationTerminationContext}
 import org.scalatest.{BeforeAndAfterEach, Matchers}
+import org.scalatest.concurrent.Eventually._
 
+import org.apache.spark.SecurityManager
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
+import org.apache.spark.util.Utils
 
 class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
   private[yarn] var yarnConfig: YarnConfiguration = new YarnConfiguration
+  private[yarn] val SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager"
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
       classOf[YarnShuffleService].getCanonicalName)
     yarnConfig.setInt("spark.shuffle.service.port", 0)
-
-    yarnConfig.get("yarn.nodemanager.local-dirs").split(",").foreach { dir =>
-      val d = new File(dir)
-      if (d.exists()) {
-        FileUtils.deleteDirectory(d)
-      }
-      FileUtils.forceMkdir(d)
-      logInfo(s"creating yarn.nodemanager.local-dirs: $d")
-    }
+    val localDir = Utils.createTempDir()
+    yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, localDir.getAbsolutePath)
   }
 
   var s1: YarnShuffleService = null
@@ -54,22 +58,28 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
   var s3: YarnShuffleService = null
 
   override def afterEach(): Unit = {
-    if (s1 != null) {
-      s1.stop()
-      s1 = null
-    }
-    if (s2 != null) {
-      s2.stop()
-      s2 = null
-    }
-    if (s3 != null) {
-      s3.stop()
-      s3 = null
+    try {
+      if (s1 != null) {
+        s1.stop()
+        s1 = null
+      }
+      if (s2 != null) {
+        s2.stop()
+        s2 = null
+      }
+      if (s3 != null) {
+        s3.stop()
+        s3 = null
+      }
+    } finally {
+      super.afterEach()
     }
   }
 
   test("executor state kept across NM restart") {
     s1 = new YarnShuffleService
+    // set auth to true to test the secrets recovery
+    yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, true)
     s1.init(yarnConfig)
     val app1Id = ApplicationId.newInstance(0, 1)
     val app1Data: ApplicationInitializationContext =
@@ -82,8 +92,10 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     val execStateFile = s1.registeredExecutorFile
     execStateFile should not be (null)
-    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, "sort")
-    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, "hash")
+    val secretsFile = s1.secretsFile
+    secretsFile should not be (null)
+    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, SORT_MANAGER)
+    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, SORT_MANAGER)
 
     val blockHandler = s1.blockHandler
     val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
@@ -111,6 +123,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     s1.stop()
     s2 = new YarnShuffleService
     s2.init(yarnConfig)
+    s2.secretsFile should be (secretsFile)
     s2.registeredExecutorFile should be (execStateFile)
 
     val handler2 = s2.blockHandler
@@ -128,6 +141,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     s3 = new YarnShuffleService
     s3.init(yarnConfig)
     s3.registeredExecutorFile should be (execStateFile)
+    s3.secretsFile should be (secretsFile)
 
     val handler3 = s3.blockHandler
     val resolver3 = ShuffleTestAccessor.getBlockResolver(handler3)
@@ -141,7 +155,10 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
   test("removed applications should not be in registered executor file") {
     s1 = new YarnShuffleService
+    yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, false)
     s1.init(yarnConfig)
+    val secretsFile = s1.secretsFile
+    secretsFile should be (null)
     val app1Id = ApplicationId.newInstance(0, 1)
     val app1Data: ApplicationInitializationContext =
       new ApplicationInitializationContext("user", app1Id, null)
@@ -153,8 +170,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     val execStateFile = s1.registeredExecutorFile
     execStateFile should not be (null)
-    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, "sort")
-    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, "hash")
+    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, SORT_MANAGER)
+    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, SORT_MANAGER)
 
     val blockHandler = s1.blockHandler
     val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
@@ -181,7 +198,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     s1.initializeApplication(app1Data)
 
     val execStateFile = s1.registeredExecutorFile
-    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, "sort")
+    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, SORT_MANAGER)
 
     val blockHandler = s1.blockHandler
     val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
@@ -213,7 +230,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     val app2Data: ApplicationInitializationContext =
       new ApplicationInitializationContext("user", app2Id, null)
     s2.initializeApplication(app2Data)
-    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, "hash")
+    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, SORT_MANAGER)
     resolver2.registerExecutor(app2Id.toString, "exec-2", shuffleInfo2)
     ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver2) should be (Some(shuffleInfo2))
     s2.stop()
@@ -228,7 +245,123 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     s3.initializeApplication(app2Data)
     ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver3) should be (Some(shuffleInfo2))
     s3.stop()
+  }
 
+  test("get correct recovery path") {
+    // Test recovery path is set outside the shuffle service, this is to simulate NM recovery
+    // enabled scenario, where recovery path will be set by yarn.
+    s1 = new YarnShuffleService
+    val recoveryPath = new Path(Utils.createTempDir().toURI)
+    s1.setRecoveryPath(recoveryPath)
+
+    s1.init(yarnConfig)
+    s1._recoveryPath should be (recoveryPath)
+    s1.stop()
+
+    // Test recovery path is set inside the shuffle service, this will be happened when NM
+    // recovery is not enabled or there's no NM recovery (Hadoop 2.5-).
+    s2 = new YarnShuffleService
+    s2.init(yarnConfig)
+    s2._recoveryPath should be
+      (new Path(yarnConfig.getTrimmedStrings("yarn.nodemanager.local-dirs")(0)))
+    s2.stop()
+  }
+
+  test("moving recovery file from NM local dir to recovery path") {
+    // This is to test when Hadoop is upgrade to 2.5+ and NM recovery is enabled, we should move
+    // old recovery file to the new path to keep compatibility
+
+    // Simulate s1 is running on old version of Hadoop in which recovery file is in the NM local
+    // dir.
+    s1 = new YarnShuffleService
+    // set auth to true to test the secrets recovery
+    yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, true)
+    s1.init(yarnConfig)
+    val app1Id = ApplicationId.newInstance(0, 1)
+    val app1Data: ApplicationInitializationContext =
+      new ApplicationInitializationContext("user", app1Id, null)
+    s1.initializeApplication(app1Data)
+    val app2Id = ApplicationId.newInstance(0, 2)
+    val app2Data: ApplicationInitializationContext =
+      new ApplicationInitializationContext("user", app2Id, null)
+    s1.initializeApplication(app2Data)
+
+    val execStateFile = s1.registeredExecutorFile
+    execStateFile should not be (null)
+    val secretsFile = s1.secretsFile
+    secretsFile should not be (null)
+    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, SORT_MANAGER)
+    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, SORT_MANAGER)
+
+    val blockHandler = s1.blockHandler
+    val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
+    ShuffleTestAccessor.registeredExecutorFile(blockResolver) should be (execStateFile)
+
+    blockResolver.registerExecutor(app1Id.toString, "exec-1", shuffleInfo1)
+    blockResolver.registerExecutor(app2Id.toString, "exec-2", shuffleInfo2)
+    ShuffleTestAccessor.getExecutorInfo(app1Id, "exec-1", blockResolver) should
+      be (Some(shuffleInfo1))
+    ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", blockResolver) should
+      be (Some(shuffleInfo2))
+
+    assert(execStateFile.exists(), s"$execStateFile did not exist")
+
+    s1.stop()
+
+    // Simulate s2 is running on Hadoop 2.5+ with NM recovery is enabled.
+    assert(execStateFile.exists())
+    val recoveryPath = new Path(Utils.createTempDir().toURI)
+    s2 = new YarnShuffleService
+    s2.setRecoveryPath(recoveryPath)
+    s2.init(yarnConfig)
+
+    val execStateFile2 = s2.registeredExecutorFile
+    val secretsFile2 = s2.secretsFile
+
+    recoveryPath.toString should be (new Path(execStateFile2.getParentFile.toURI).toString)
+    recoveryPath.toString should be (new Path(secretsFile2.getParentFile.toURI).toString)
+    eventually(timeout(10 seconds), interval(5 millis)) {
+      assert(!execStateFile.exists())
+    }
+    eventually(timeout(10 seconds), interval(5 millis)) {
+      assert(!secretsFile.exists())
+    }
+
+    val handler2 = s2.blockHandler
+    val resolver2 = ShuffleTestAccessor.getBlockResolver(handler2)
+
+    // now we reinitialize only one of the apps, and expect yarn to tell us that app2 was stopped
+    // during the restart
+    // Since recovery file is got from old path, so the previous state should be stored.
+    s2.initializeApplication(app1Data)
+    s2.stopApplication(new ApplicationTerminationContext(app2Id))
+    ShuffleTestAccessor.getExecutorInfo(app1Id, "exec-1", resolver2) should be (Some(shuffleInfo1))
+    ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver2) should be (None)
+
+    s2.stop()
+  }
+
+  test("service throws error if cannot start") {
+    // Create a different config with a read-only local dir.
+    val roConfig = new YarnConfiguration(yarnConfig)
+    val roDir = Utils.createTempDir()
+    Files.setPosixFilePermissions(roDir.toPath(), EnumSet.of(OWNER_READ, OWNER_EXECUTE))
+    roConfig.set(YarnConfiguration.NM_LOCAL_DIRS, roDir.getAbsolutePath())
+    roConfig.setBoolean(YarnShuffleService.STOP_ON_FAILURE_KEY, true)
+
+    // Try to start the shuffle service, it should fail.
+    val service = new YarnShuffleService()
+
+    try {
+      val error = intercept[ServiceStateException] {
+        service.init(roConfig)
+      }
+      assert(error.getCause().isInstanceOf[IOException])
+    } finally {
+      service.stop()
+      Files.setPosixFilePermissions(roDir.toPath(),
+        EnumSet.of(OWNER_READ, OWNER_WRITE, OWNER_EXECUTE))
+    }
   }
 
 }

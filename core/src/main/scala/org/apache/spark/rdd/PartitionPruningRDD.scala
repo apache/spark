@@ -65,7 +65,7 @@ class PartitionPruningRDD[T: ClassTag](
   }
 
   override protected def getPartitions: Array[Partition] =
-    getDependencies.head.asInstanceOf[PruneDependency[T]].partitions
+    dependencies.head.asInstanceOf[PruneDependency[T]].partitions
 }
 
 

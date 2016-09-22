@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst
 
+import com.google.common.collect.Maps
+
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * A set of classes that can be used to represent trees of relational expressions.  A key goal of
@@ -80,4 +83,52 @@ package object expressions  {
     /** Uses the given row to store the output of the projection. */
     def target(row: MutableRow): MutableProjection
   }
+
+
+  /**
+   * Helper functions for working with `Seq[Attribute]`.
+   */
+  implicit class AttributeSeq(val attrs: Seq[Attribute]) extends Serializable {
+    /** Creates a StructType with a schema matching this `Seq[Attribute]`. */
+    def toStructType: StructType = {
+      StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
+    }
+
+    // It's possible that `attrs` is a linked list, which can lead to bad O(n^2) loops when
+    // accessing attributes by their ordinals. To avoid this performance penalty, convert the input
+    // to an array.
+    @transient private lazy val attrsArray = attrs.toArray
+
+    @transient private lazy val exprIdToOrdinal = {
+      val arr = attrsArray
+      val map = Maps.newHashMapWithExpectedSize[ExprId, Int](arr.length)
+      // Iterate over the array in reverse order so that the final map value is the first attribute
+      // with a given expression id.
+      var index = arr.length - 1
+      while (index >= 0) {
+        map.put(arr(index).exprId, index)
+        index -= 1
+      }
+      map
+    }
+
+    /**
+     * Returns the attribute at the given index.
+     */
+    def apply(ordinal: Int): Attribute = attrsArray(ordinal)
+
+    /**
+     * Returns the index of first attribute with a matching expression id, or -1 if no match exists.
+     */
+    def indexOf(exprId: ExprId): Int = {
+      Option(exprIdToOrdinal.get(exprId)).getOrElse(-1)
+    }
+  }
+
+  /**
+   * When an expression inherits this, meaning the expression is null intolerant (i.e. any null
+   * input will result in null output). We will use this information during constructing IsNotNull
+   * constraints.
+   */
+  trait NullIntolerant
 }

@@ -22,13 +22,12 @@ import java.{lang => jl}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
+import org.apache.spark.annotation.Since
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 
 /**
- * ::Experimental::
  * Evaluator for ranking algorithms.
  *
  * Java users should use [[RankingMetrics$.of]] to create a [[RankingMetrics]] instance.
@@ -36,7 +35,6 @@ import org.apache.spark.rdd.RDD
  * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
  */
 @Since("1.2.0")
-@Experimental
 class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])])
   extends Logging with Serializable {
 
@@ -84,7 +82,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   /**
    * Returns the mean average precision (MAP) of all the queries.
    * If a query has an empty ground truth set, the average precision will be zero and a log
-   * warining is generated.
+   * warning is generated.
    */
   lazy val meanAveragePrecision: Double = {
     predictionAndLabels.map { case (pred, lab) =>
@@ -141,7 +139,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
         var i = 0
         while (i < n) {
           val gain = 1.0 / math.log(i + 2)
-          if (labSet.contains(pred(i))) {
+          if (i < pred.length && labSet.contains(pred(i))) {
             dcg += gain
           }
           if (i < labSetSize) {
@@ -159,7 +157,6 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
 
 }
 
-@Experimental
 object RankingMetrics {
 
   /**

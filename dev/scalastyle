@@ -17,14 +17,18 @@
 # limitations under the License.
 #
 
-echo -e "q\n" | build/sbt -Pkinesis-asl -Phive -Phive-thriftserver scalastyle > scalastyle.txt
-echo -e "q\n" | build/sbt -Pkinesis-asl -Phive -Phive-thriftserver test:scalastyle >> scalastyle.txt
-# Check style with YARN built too
-echo -e "q\n" | build/sbt -Pkinesis-asl -Pyarn -Phadoop-2.2 scalastyle >> scalastyle.txt
-echo -e "q\n" | build/sbt -Pkinesis-asl -Pyarn -Phadoop-2.2 test:scalastyle >> scalastyle.txt
-
-ERRORS=$(cat scalastyle.txt | awk '{if($1~/error/)print}')
-rm scalastyle.txt
+# NOTE: echo "q" is needed because SBT prompts the user for input on encountering a build file
+# with failure (either resolution or compilation); the "q" makes SBT quit.
+ERRORS=$(echo -e "q\n" \
+    | build/sbt \
+        -Pkinesis-asl \
+        -Pmesos \
+        -Pyarn \
+        -Phive \
+        -Phive-thriftserver \
+        scalastyle test:scalastyle \
+    | awk '{if($1~/error/)print}' \
+)
 
 if test ! -z "$ERRORS"; then
     echo -e "Scalastyle checks failed at following occurrences:\n$ERRORS"

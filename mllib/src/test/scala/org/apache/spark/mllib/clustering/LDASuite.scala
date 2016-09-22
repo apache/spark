@@ -19,7 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import java.util.{ArrayList => JArrayList}
 
-import breeze.linalg.{DenseMatrix => BDM, argtopk, max, argmax}
+import breeze.linalg.{argmax, argtopk, max, DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx.Edge
@@ -116,10 +116,10 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       case (docId, (topicDistribution, (indices, weights))) =>
         assert(indices.length == 2)
         assert(weights.length == 2)
-        val bdvTopicDist = topicDistribution.toBreeze
+        val bdvTopicDist = topicDistribution.asBreeze
         val top2Indices = argtopk(bdvTopicDist, 2)
-        assert(top2Indices.toArray === indices)
-        assert(bdvTopicDist(top2Indices).toArray === weights)
+        assert(top2Indices.toSet === indices.toSet)
+        assert(bdvTopicDist(top2Indices).toArray.toSet === weights.toSet)
     }
 
     // Check: log probabilities
@@ -366,17 +366,26 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       (0, 0.99504), (1, 0.99504),
       (1, 0.99504), (1, 0.99504))
 
-    val actualPredictions = ldaModel.topicDistributions(docs).map { case (id, topics) =>
+    val actualPredictions = ldaModel.topicDistributions(docs).cache()
+    val topTopics = actualPredictions.map { case (id, topics) =>
         // convert results to expectedPredictions format, which only has highest probability topic
-        val topicsBz = topics.toBreeze.toDenseVector
+        val topicsBz = topics.asBreeze.toDenseVector
         (id, (argmax(topicsBz), max(topicsBz)))
       }.sortByKey()
       .values
       .collect()
 
-    expectedPredictions.zip(actualPredictions).forall { case (expected, actual) =>
-      expected._1 === actual._1 && (expected._2 ~== actual._2 relTol 1E-3D)
+    expectedPredictions.zip(topTopics).foreach { case (expected, actual) =>
+      assert(expected._1 === actual._1 && (expected._2 ~== actual._2 relTol 1E-3D))
     }
+
+    docs.collect()
+      .map(doc => ldaModel.topicDistribution(doc._2))
+      .zip(actualPredictions.map(_._2).collect())
+      .foreach { case (single, batch) =>
+        assert(single ~== batch relTol 1E-3D)
+      }
+    actualPredictions.unpersist()
   }
 
   test("OnlineLDAOptimizer with asymmetric prior") {

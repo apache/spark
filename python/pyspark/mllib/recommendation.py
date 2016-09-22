@@ -76,25 +76,37 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     >>> first_user = model.userFeatures().take(1)[0]
     >>> latents = first_user[1]
-    >>> len(latents) == 4
-    True
+    >>> len(latents)
+    4
 
     >>> model.productFeatures().collect()
     [(1, array('d', [...])), (2, array('d', [...]))]
 
     >>> first_product = model.productFeatures().take(1)[0]
     >>> latents = first_product[1]
-    >>> len(latents) == 4
-    True
+    >>> len(latents)
+    4
+
+    >>> products_for_users = model.recommendProductsForUsers(1).collect()
+    >>> len(products_for_users)
+    2
+    >>> products_for_users[0]
+    (1, (Rating(user=1, product=2, rating=...),))
+
+    >>> users_for_products = model.recommendUsersForProducts(1).collect()
+    >>> len(users_for_products)
+    2
+    >>> users_for_products[0]
+    (1, (Rating(user=2, product=1, rating=...),))
 
     >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
     >>> model.predict(2, 2)
-    3.8...
+    3.73...
 
     >>> df = sqlContext.createDataFrame([Rating(1, 1, 1.0), Rating(1, 2, 2.0), Rating(2, 1, 2.0)])
     >>> model = ALS.train(df, 1, nonnegative=True, seed=10)
     >>> model.predict(2, 2)
-    3.8...
+    3.73...
 
     >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=10)
     >>> model.predict(2, 2)
@@ -126,7 +138,8 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     @since("0.9.0")
     def predictAll(self, user_product):
         """
-        Returns a list of predicted ratings for input user and product pairs.
+        Returns a list of predicted ratings for input user and product
+        pairs.
         """
         assert isinstance(user_product, RDD), "user_product should be RDD of (user, product)"
         first = user_product.first()
@@ -153,18 +166,35 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     @since("1.4.0")
     def recommendUsers(self, product, num):
         """
-        Recommends the top "num" number of users for a given product and returns a list
-        of Rating objects sorted by the predicted rating in descending order.
+        Recommends the top "num" number of users for a given product and
+        returns a list of Rating objects sorted by the predicted rating in
+        descending order.
         """
         return list(self.call("recommendUsers", product, num))
 
     @since("1.4.0")
     def recommendProducts(self, user, num):
         """
-        Recommends the top "num" number of products for a given user and returns a list
-        of Rating objects sorted by the predicted rating in descending order.
+        Recommends the top "num" number of products for a given user and
+        returns a list of Rating objects sorted by the predicted rating in
+        descending order.
         """
         return list(self.call("recommendProducts", user, num))
+
+    def recommendProductsForUsers(self, num):
+        """
+        Recommends the top "num" number of products for all users. The
+        number of recommendations returned per user may be less than "num".
+        """
+        return self.call("wrappedRecommendProductsForUsers", num)
+
+    def recommendUsersForProducts(self, num):
+        """
+        Recommends the top "num" number of users for all products. The
+        number of recommendations returned per product may be less than
+        "num".
+        """
+        return self.call("wrappedRecommendUsersForProducts", num)
 
     @property
     @since("1.4.0")
@@ -177,7 +207,7 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     def load(cls, sc, path):
         """Load a model from the given path"""
         model = cls._load_java(sc, path)
-        wrapper = sc._jvm.MatrixFactorizationModelWrapper(model)
+        wrapper = sc._jvm.org.apache.spark.mllib.api.python.MatrixFactorizationModelWrapper(model)
         return MatrixFactorizationModel(wrapper)
 
 
@@ -210,11 +240,34 @@ class ALS(object):
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, nonnegative=False,
               seed=None):
         """
-        Train a matrix factorization model given an RDD of ratings given by users to some products,
-        in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
-        product of two lower-rank matrices of a given rank (number of features). To solve for these
-        features, we run a given number of iterations of ALS. This is done using a level of
-        parallelism given by `blocks`.
+        Train a matrix factorization model given an RDD of ratings by users
+        for a subset of products. The ratings matrix is approximated as the
+        product of two lower-rank matrices of a given rank (number of
+        features). To solve for these features, ALS is run iteratively with
+        a configurable level of parallelism.
+
+        :param ratings:
+          RDD of `Rating` or (userID, productID, rating) tuple.
+        :param rank:
+          Rank of the feature matrices computed (number of features).
+        :param iterations:
+          Number of iterations of ALS.
+          (default: 5)
+        :param lambda_:
+          Regularization parameter.
+          (default: 0.01)
+        :param blocks:
+          Number of blocks used to parallelize the computation. A value
+          of -1 will use an auto-configured number of blocks.
+          (default: -1)
+        :param nonnegative:
+          A value of True will solve least-squares with nonnegativity
+          constraints.
+          (default: False)
+        :param seed:
+          Random seed for initial matrix factorization model. A value
+          of None will use system time as the seed.
+          (default: None)
         """
         model = callMLlibFunc("trainALSModel", cls._prepare(ratings), rank, iterations,
                               lambda_, blocks, nonnegative, seed)
@@ -225,11 +278,37 @@ class ALS(object):
     def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01,
                       nonnegative=False, seed=None):
         """
-        Train a matrix factorization model given an RDD of 'implicit preferences' given by users
-        to some products, in the form of (userID, productID, preference) pairs. We approximate the
-        ratings matrix as the product of two lower-rank matrices of a given rank (number of
-        features).  To solve for these features, we run a given number of iterations of ALS.
-        This is done using a level of parallelism given by `blocks`.
+        Train a matrix factorization model given an RDD of 'implicit
+        preferences' of users for a subset of products. The ratings matrix
+        is approximated as the product of two lower-rank matrices of a
+        given rank (number of features). To solve for these features, ALS
+        is run iteratively with a configurable level of parallelism.
+
+        :param ratings:
+          RDD of `Rating` or (userID, productID, rating) tuple.
+        :param rank:
+          Rank of the feature matrices computed (number of features).
+        :param iterations:
+          Number of iterations of ALS.
+          (default: 5)
+        :param lambda_:
+          Regularization parameter.
+          (default: 0.01)
+        :param blocks:
+          Number of blocks used to parallelize the computation. A value
+          of -1 will use an auto-configured number of blocks.
+          (default: -1)
+        :param alpha:
+          A constant used in computing confidence.
+          (default: 0.01)
+        :param nonnegative:
+          A value of True will solve least-squares with nonnegativity
+          constraints.
+          (default: False)
+        :param seed:
+          Random seed for initial matrix factorization model. A value
+          of None will use system time as the seed.
+          (default: None)
         """
         model = callMLlibFunc("trainImplicitALSModel", cls._prepare(ratings), rank,
                               iterations, lambda_, blocks, alpha, nonnegative, seed)

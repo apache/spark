@@ -20,7 +20,7 @@ package org.apache.spark.ml.attribute
 import scala.annotation.varargs
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.types.{DoubleType, NumericType, Metadata, MetadataBuilder, StructField}
+import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, NumericType, StructField}
 
 /**
  * :: DeveloperApi ::
@@ -481,7 +481,7 @@ object NominalAttribute extends AttributeFactory {
  * A binary attribute.
  * @param name optional name
  * @param index optional index
- * @param values optionla values. If set, its size must be 2.
+ * @param values optional values. If set, its size must be 2.
  */
 @DeveloperApi
 class BinaryAttribute private[ml] (

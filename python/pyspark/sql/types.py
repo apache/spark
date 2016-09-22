@@ -27,7 +27,7 @@ from array import array
 
 if sys.version >= "3":
     long = int
-    unicode = str
+    basestring = unicode = str
 
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
@@ -189,7 +189,7 @@ class TimestampType(AtomicType):
         if dt is not None:
             seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
                        else time.mktime(dt.timetuple()))
-            return int(seconds * 1e6 + dt.microsecond)
+            return int(seconds) * 1000000 + dt.microsecond
 
     def fromInternal(self, ts):
         if ts is not None:
@@ -401,6 +401,7 @@ class StructField(DataType):
         False
         """
         assert isinstance(dataType, DataType), "dataType should be DataType"
+        assert isinstance(name, basestring), "field name should be string"
         if not isinstance(name, str):
             name = name.encode('utf-8')
         self.name = name
@@ -442,6 +443,15 @@ class StructType(DataType):
     """Struct type, consisting of a list of :class:`StructField`.
 
     This is the data type representing a :class:`Row`.
+
+    Iterating a :class:`StructType` will iterate its :class:`StructField`s.
+    A contained :class:`StructField` can be accessed by name or position.
+
+    >>> struct1 = StructType([StructField("f1", StringType(), True)])
+    >>> struct1["f1"]
+    StructField(f1,StringType,true)
+    >>> struct1[0]
+    StructField(f1,StringType,true)
     """
     def __init__(self, fields=None):
         """
@@ -463,7 +473,7 @@ class StructType(DataType):
             self.names = [f.name for f in fields]
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
-        self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
+        self._needSerializeAnyField = any(f.needConversion() for f in self)
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
@@ -476,8 +486,8 @@ class StructType(DataType):
                DataType object.
 
         >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
-        >>> struct2 = StructType([StructField("f1", StringType(), True),\
-         StructField("f2", StringType(), True, None)])
+        >>> struct2 = StructType([StructField("f1", StringType(), True), \\
+        ...     StructField("f2", StringType(), True, None)])
         >>> struct1 == struct2
         True
         >>> struct1 = StructType().add(StructField("f1", StringType(), True))
@@ -508,19 +518,44 @@ class StructType(DataType):
                 data_type_f = data_type
             self.fields.append(StructField(field, data_type_f, nullable, metadata))
             self.names.append(field)
-        self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
+        self._needSerializeAnyField = any(f.needConversion() for f in self)
         return self
 
+    def __iter__(self):
+        """Iterate the fields"""
+        return iter(self.fields)
+
+    def __len__(self):
+        """Return the number of fields."""
+        return len(self.fields)
+
+    def __getitem__(self, key):
+        """Access fields by name or slice."""
+        if isinstance(key, str):
+            for field in self:
+                if field.name == key:
+                    return field
+            raise KeyError('No StructField named {0}'.format(key))
+        elif isinstance(key, int):
+            try:
+                return self.fields[key]
+            except IndexError:
+                raise IndexError('StructType index out of range')
+        elif isinstance(key, slice):
+            return StructType(self.fields[key])
+        else:
+            raise TypeError('StructType keys should be strings, integers or slices')
+
     def simpleString(self):
-        return 'struct<%s>' % (','.join(f.simpleString() for f in self.fields))
+        return 'struct<%s>' % (','.join(f.simpleString() for f in self))
 
     def __repr__(self):
         return ("StructType(List(%s))" %
-                ",".join(str(field) for field in self.fields))
+                ",".join(str(field) for field in self))
 
     def jsonValue(self):
         return {"type": self.typeName(),
-                "fields": [f.jsonValue() for f in self.fields]}
+                "fields": [f.jsonValue() for f in self]}
 
     @classmethod
     def fromJson(cls, json):
@@ -547,6 +582,8 @@ class StructType(DataType):
         else:
             if isinstance(obj, dict):
                 return tuple(obj.get(n) for n in self.names)
+            elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
+                return tuple(obj[n] for n in self.names)
             elif isinstance(obj, (list, tuple)):
                 return tuple(obj)
             elif hasattr(obj, "__dict__"):
@@ -613,10 +650,13 @@ class UserDefinedType(DataType):
         return cls._cached_sql_type
 
     def toInternal(self, obj):
-        return self._cachedSqlType().toInternal(self.serialize(obj))
+        if obj is not None:
+            return self._cachedSqlType().toInternal(self.serialize(obj))
 
     def fromInternal(self, obj):
-        return self.deserialize(self._cachedSqlType().fromInternal(obj))
+        v = self._cachedSqlType().fromInternal(obj)
+        if v is not None:
+            return self.deserialize(v)
 
     def serialize(self, obj):
         """
@@ -681,13 +721,137 @@ _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])
 
 
+_FIXED_DECIMAL = re.compile("decimal\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)")
+
+
+_BRACKETS = {'(': ')', '[': ']', '{': '}'}
+
+
+def _parse_basic_datatype_string(s):
+    if s in _all_atomic_types.keys():
+        return _all_atomic_types[s]()
+    elif s == "int":
+        return IntegerType()
+    elif _FIXED_DECIMAL.match(s):
+        m = _FIXED_DECIMAL.match(s)
+        return DecimalType(int(m.group(1)), int(m.group(2)))
+    else:
+        raise ValueError("Could not parse datatype: %s" % s)
+
+
+def _ignore_brackets_split(s, separator):
+    """
+    Splits the given string by given separator, but ignore separators inside brackets pairs, e.g.
+    given "a,b" and separator ",", it will return ["a", "b"], but given "a<b,c>, d", it will return
+    ["a<b,c>", "d"].
+    """
+    parts = []
+    buf = ""
+    level = 0
+    for c in s:
+        if c in _BRACKETS.keys():
+            level += 1
+            buf += c
+        elif c in _BRACKETS.values():
+            if level == 0:
+                raise ValueError("Brackets are not correctly paired: %s" % s)
+            level -= 1
+            buf += c
+        elif c == separator and level > 0:
+            buf += c
+        elif c == separator:
+            parts.append(buf)
+            buf = ""
+        else:
+            buf += c
+
+    if len(buf) == 0:
+        raise ValueError("The %s cannot be the last char: %s" % (separator, s))
+    parts.append(buf)
+    return parts
+
+
+def _parse_struct_fields_string(s):
+    parts = _ignore_brackets_split(s, ",")
+    fields = []
+    for part in parts:
+        name_and_type = _ignore_brackets_split(part, ":")
+        if len(name_and_type) != 2:
+            raise ValueError("The strcut field string format is: 'field_name:field_type', " +
+                             "but got: %s" % part)
+        field_name = name_and_type[0].strip()
+        field_type = _parse_datatype_string(name_and_type[1])
+        fields.append(StructField(field_name, field_type))
+    return StructType(fields)
+
+
+def _parse_datatype_string(s):
+    """
+    Parses the given data type string to a :class:`DataType`. The data type string format equals
+    to :class:`DataType.simpleString`, except that top level struct type can omit
+    the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use ``byte`` instead
+    of ``tinyint`` for :class:`ByteType`. We can also use ``int`` as a short name
+    for :class:`IntegerType`.
+
+    >>> _parse_datatype_string("int ")
+    IntegerType
+    >>> _parse_datatype_string("a: byte, b: decimal(  16 , 8   ) ")
+    StructType(List(StructField(a,ByteType,true),StructField(b,DecimalType(16,8),true)))
+    >>> _parse_datatype_string("a: array< short>")
+    StructType(List(StructField(a,ArrayType(ShortType,true),true)))
+    >>> _parse_datatype_string(" map<string , string > ")
+    MapType(StringType,StringType,true)
+
+    >>> # Error cases
+    >>> _parse_datatype_string("blabla") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _parse_datatype_string("a: int,") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _parse_datatype_string("array<int") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _parse_datatype_string("map<int, boolean>>") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    """
+    s = s.strip()
+    if s.startswith("array<"):
+        if s[-1] != ">":
+            raise ValueError("'>' should be the last char, but got: %s" % s)
+        return ArrayType(_parse_datatype_string(s[6:-1]))
+    elif s.startswith("map<"):
+        if s[-1] != ">":
+            raise ValueError("'>' should be the last char, but got: %s" % s)
+        parts = _ignore_brackets_split(s[4:-1], ",")
+        if len(parts) != 2:
+            raise ValueError("The map type string format is: 'map<key_type,value_type>', " +
+                             "but got: %s" % s)
+        kt = _parse_datatype_string(parts[0])
+        vt = _parse_datatype_string(parts[1])
+        return MapType(kt, vt)
+    elif s.startswith("struct<"):
+        if s[-1] != ">":
+            raise ValueError("'>' should be the last char, but got: %s" % s)
+        return _parse_struct_fields_string(s[7:-1])
+    elif ":" in s:
+        return _parse_struct_fields_string(s)
+    else:
+        return _parse_basic_datatype_string(s)
+
+
 def _parse_datatype_json_string(json_string):
     """Parses the given data type JSON string.
     >>> import pickle
     >>> def check_datatype(datatype):
     ...     pickled = pickle.loads(pickle.dumps(datatype))
     ...     assert datatype == pickled
-    ...     scala_datatype = sqlContext._ssql_ctx.parseDataType(datatype.json())
+    ...     scala_datatype = spark._jsparkSession.parseDataType(datatype.json())
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
     >>> for cls in _all_atomic_types.values():
@@ -728,9 +892,6 @@ def _parse_datatype_json_string(json_string):
     >>> check_datatype(complex_maptype)
     """
     return _parse_datatype_json_value(json.loads(json_string))
-
-
-_FIXED_DECIMAL = re.compile("decimal\\((\\d+),(\\d+)\\)")
 
 
 def _parse_datatype_json_value(json_value):
@@ -891,7 +1052,7 @@ def _need_converter(dataType):
 
 
 def _create_converter(dataType):
-    """Create an converter to drop the names of fields in obj """
+    """Create a converter to drop the names of fields in obj """
     if not _need_converter(dataType):
         return lambda x: x
 
@@ -938,9 +1099,6 @@ def _create_converter(dataType):
             return tuple([d.get(name) for name in names])
 
     return convert_struct
-
-
-_BRACKETS = {'(': ')', '[': ']', '{': '}'}
 
 
 def _split_schema_abstract(s):
@@ -1087,14 +1245,17 @@ _acceptable_types = {
     TimestampType: (datetime.datetime,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),
-    StructType: (tuple, list),
+    StructType: (tuple, list, dict),
 }
 
 
-def _verify_type(obj, dataType):
+def _verify_type(obj, dataType, nullable=True):
     """
-    Verify the type of obj against dataType, raise an exception if
-    they do not match.
+    Verify the type of obj against dataType, raise a TypeError if they do not match.
+
+    Also verify the value of obj against datatype, raise a ValueError if it's not within the allowed
+    range, e.g. using 128 as ByteType will overflow. Note that, Python float is not checked, so it
+    will become infinity when cast to Java float if it overflows.
 
     >>> _verify_type(None, StructType([]))
     >>> _verify_type("", StringType())
@@ -1111,10 +1272,35 @@ def _verify_type(obj, dataType):
     Traceback (most recent call last):
         ...
     ValueError:...
+    >>> # Check if numeric values are within the allowed range.
+    >>> _verify_type(12, ByteType())
+    >>> _verify_type(1234, ByteType()) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _verify_type(None, ByteType(), False) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _verify_type([1, None], ArrayType(ShortType(), False)) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _verify_type({None: 1}, MapType(StringType(), IntegerType()))
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> schema = StructType().add("a", IntegerType()).add("b", StringType(), False)
+    >>> _verify_type((1, None), schema) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
     """
-    # all objects are nullable
     if obj is None:
-        return
+        if nullable:
+            return
+        else:
+            raise ValueError("This field is not nullable, but got None")
 
     # StringType can work with any types
     if isinstance(dataType, StringType):
@@ -1127,31 +1313,57 @@ def _verify_type(obj, dataType):
         return
 
     _type = type(dataType)
-    assert _type in _acceptable_types, "unknown datatype: %s" % dataType
+    assert _type in _acceptable_types, "unknown datatype: %s for object %r" % (dataType, obj)
 
     if _type is StructType:
-        if not isinstance(obj, (tuple, list)):
-            raise TypeError("StructType can not accept object in type %s" % type(obj))
+        # check the type and fields later
+        pass
     else:
-        # subclass of them can not be fromInternald in JVM
+        # subclass of them can not be fromInternal in JVM
         if type(obj) not in _acceptable_types[_type]:
-            raise TypeError("%s can not accept object in type %s" % (dataType, type(obj)))
+            raise TypeError("%s can not accept object %r in type %s" % (dataType, obj, type(obj)))
 
-    if isinstance(dataType, ArrayType):
+    if isinstance(dataType, ByteType):
+        if obj < -128 or obj > 127:
+            raise ValueError("object of ByteType out of range, got: %s" % obj)
+
+    elif isinstance(dataType, ShortType):
+        if obj < -32768 or obj > 32767:
+            raise ValueError("object of ShortType out of range, got: %s" % obj)
+
+    elif isinstance(dataType, IntegerType):
+        if obj < -2147483648 or obj > 2147483647:
+            raise ValueError("object of IntegerType out of range, got: %s" % obj)
+
+    elif isinstance(dataType, ArrayType):
         for i in obj:
-            _verify_type(i, dataType.elementType)
+            _verify_type(i, dataType.elementType, dataType.containsNull)
 
     elif isinstance(dataType, MapType):
         for k, v in obj.items():
-            _verify_type(k, dataType.keyType)
-            _verify_type(v, dataType.valueType)
+            _verify_type(k, dataType.keyType, False)
+            _verify_type(v, dataType.valueType, dataType.valueContainsNull)
 
     elif isinstance(dataType, StructType):
-        if len(obj) != len(dataType.fields):
-            raise ValueError("Length of object (%d) does not match with "
-                             "length of fields (%d)" % (len(obj), len(dataType.fields)))
-        for v, f in zip(obj, dataType.fields):
-            _verify_type(v, f.dataType)
+        if isinstance(obj, dict):
+            for f in dataType.fields:
+                _verify_type(obj.get(f.name), f.dataType, f.nullable)
+        elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
+            # the order in obj could be different than dataType.fields
+            for f in dataType.fields:
+                _verify_type(obj[f.name], f.dataType, f.nullable)
+        elif isinstance(obj, (tuple, list)):
+            if len(obj) != len(dataType.fields):
+                raise ValueError("Length of object (%d) does not match with "
+                                 "length of fields (%d)" % (len(obj), len(dataType.fields)))
+            for v, f in zip(obj, dataType.fields):
+                _verify_type(v, f.dataType, f.nullable)
+        elif hasattr(obj, "__dict__"):
+            d = obj.__dict__
+            for f in dataType.fields:
+                _verify_type(d.get(f.name), f.dataType, f.nullable)
+        else:
+            raise TypeError("StructType can not accept object %r in type %s" % (obj, type(obj)))
 
 
 # This is used to unpickle a Row from JVM
@@ -1168,7 +1380,13 @@ def _create_row(fields, values):
 class Row(tuple):
 
     """
-    A row in L{DataFrame}. The fields in it can be accessed like attributes.
+    A row in L{DataFrame}.
+    The fields in it can be accessed:
+
+    * like attributes (``row.key``)
+    * like dictionary values (``row[key]``)
+
+    ``key in row`` will search through row keys.
 
     Row can be used to create a row object by using named arguments,
     the fields will be sorted by names.
@@ -1180,6 +1398,10 @@ class Row(tuple):
     ('Alice', 11)
     >>> row.name, row.age
     ('Alice', 11)
+    >>> 'name' in row
+    True
+    >>> 'wrong_key' in row
+    False
 
     Row also can be used to create another Row like class, then it
     could be used to create Row objects, such as
@@ -1187,6 +1409,10 @@ class Row(tuple):
     >>> Person = Row("name", "age")
     >>> Person
     <Row(name, age)>
+    >>> 'name' in Person
+    True
+    >>> 'wrong_key' in Person
+    False
     >>> Person("Alice", 11)
     Row(name='Alice', age=11)
     """
@@ -1195,19 +1421,17 @@ class Row(tuple):
         if args and kwargs:
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
-        if args:
-            # create row class or objects
-            return tuple.__new__(self, args)
-
-        elif kwargs:
+        if kwargs:
             # create row objects
             names = sorted(kwargs.keys())
             row = tuple.__new__(self, [kwargs[n] for n in names])
             row.__fields__ = names
+            row.__from_dict__ = True
             return row
 
         else:
-            raise ValueError("No args or kwargs")
+            # create row class or objects
+            return tuple.__new__(self, args)
 
     def asDict(self, recursive=False):
         """
@@ -1239,6 +1463,12 @@ class Row(tuple):
             return dict(zip(self.__fields__, (conv(o) for o in self)))
         else:
             return dict(zip(self.__fields__, self))
+
+    def __contains__(self, item):
+        if hasattr(self, "__fields__"):
+            return item in self.__fields__
+        else:
+            return super(Row, self).__contains__(item)
 
     # let object acts like class
     def __call__(self, *args):
@@ -1272,7 +1502,7 @@ class Row(tuple):
             raise AttributeError(item)
 
     def __setattr__(self, key, value):
-        if key != '__fields__':
+        if key != '__fields__' and key != "__from_dict__":
             raise Exception("Row is read-only")
         self.__dict__[key] = value
 
@@ -1321,11 +1551,11 @@ register_input_converter(DateConverter())
 def _test():
     import doctest
     from pyspark.context import SparkContext
-    from pyspark.sql import SQLContext
+    from pyspark.sql import SparkSession
     globs = globals()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlContext'] = SQLContext(sc)
+    globs['spark'] = SparkSession.builder.getOrCreate()
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:

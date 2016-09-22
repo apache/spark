@@ -23,10 +23,10 @@ import scala.xml.Node
 
 import org.json4s.JValue
 
+import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
 import org.apache.spark.deploy.JsonProtocol
-import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, RequestKillDriver, MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master._
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
@@ -107,18 +107,18 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                   </li>
                 }.getOrElse { Seq.empty }
               }
-              <li><strong>Alive Workers:</strong> {aliveWorkers.size}</li>
+              <li><strong>Alive Workers:</strong> {aliveWorkers.length}</li>
               <li><strong>Cores in use:</strong> {aliveWorkers.map(_.cores).sum} Total,
                 {aliveWorkers.map(_.coresUsed).sum} Used</li>
               <li><strong>Memory in use:</strong>
                 {Utils.megabytesToString(aliveWorkers.map(_.memory).sum)} Total,
                 {Utils.megabytesToString(aliveWorkers.map(_.memoryUsed).sum)} Used</li>
               <li><strong>Applications:</strong>
-                {state.activeApps.size} Running,
-                {state.completedApps.size} Completed </li>
+                {state.activeApps.length} <a href="#running-app">Running</a>,
+                {state.completedApps.length} <a href="#completed-app">Completed</a> </li>
               <li><strong>Drivers:</strong>
-                {state.activeDrivers.size} Running,
-                {state.completedDrivers.size} Completed </li>
+                {state.activeDrivers.length} Running,
+                {state.completedDrivers.length} Completed </li>
               <li><strong>Status:</strong> {state.status}</li>
             </ul>
           </div>
@@ -133,7 +133,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row-fluid">
           <div class="span12">
-            <h4> Running Applications </h4>
+            <h4 id="running-app"> Running Applications </h4>
             {activeAppsTable}
           </div>
         </div>
@@ -152,7 +152,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row-fluid">
           <div class="span12">
-            <h4> Completed Applications </h4>
+            <h4 id="completed-app"> Completed Applications </h4>
             {completedAppsTable}
           </div>
         </div>
@@ -176,7 +176,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def workerRow(worker: WorkerInfo): Seq[Node] = {
     <tr>
       <td>
-        <a href={worker.webUiAddress}>{worker.id}</a>
+          <a href={UIUtils.makeHref(parent.master.reverseProxy,
+            worker.id, worker.webUiAddress)}>{worker.id}</a>
       </td>
       <td>{worker.host}:{worker.port}</td>
       <td>{worker.state}</td>
@@ -206,7 +207,14 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         {killLink}
       </td>
       <td>
-        <a href={app.desc.appUiUrl}>{app.desc.name}</a>
+        {
+          if (app.isFinished) {
+            app.desc.name
+          } else {
+            <a href={UIUtils.makeHref(parent.master.reverseProxy,
+              app.id, app.desc.appUiUrl)}>{app.desc.name}</a>
+          }
+        }
       </td>
       <td>
         {app.coresGranted}
@@ -238,7 +246,11 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     <tr>
       <td>{driver.id} {killLink}</td>
       <td>{driver.submitDate}</td>
-      <td>{driver.worker.map(w => <a href={w.webUiAddress}>{w.id.toString}</a>).getOrElse("None")}
+      <td>{driver.worker.map(w =>
+        <a href=
+          {UIUtils.makeHref(parent.master.reverseProxy, w.id, w.webUiAddress)}>
+          {w.id.toString}</a>
+        ).getOrElse("None")}
       </td>
       <td>{driver.state}</td>
       <td sorttable_customkey={driver.desc.cores.toString}>

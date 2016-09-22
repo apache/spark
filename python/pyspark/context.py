@@ -19,8 +19,10 @@ from __future__ import print_function
 
 import os
 import shutil
+import signal
 import sys
-from threading import Lock
+import threading
+from threading import RLock
 from tempfile import NamedTemporaryFile
 
 from pyspark import accumulators
@@ -64,7 +66,7 @@ class SparkContext(object):
     _jvm = None
     _next_accum_id = 0
     _active_spark_context = None
-    _lock = Lock()
+    _lock = RLock()
     _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
 
     PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
@@ -153,10 +155,6 @@ class SparkContext(object):
         self.appName = self._conf.get("spark.app.name")
         self.sparkHome = self._conf.get("spark.home", None)
 
-        # Let YARN know it's a pyspark app, so it distributes needed libraries.
-        if self.master == "yarn-client":
-            self._conf.set("spark.yarn.isPython", "true")
-
         for (k, v) in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
@@ -168,6 +166,8 @@ class SparkContext(object):
 
         # Create the Java SparkContext through Py4J
         self._jsc = jsc or self._initialize_context(self._conf._jconf)
+        # Reset the SparkConf to the one actually used by the SparkContext in JVM.
+        self._conf = SparkConf(_jconf=self._jsc.sc().conf())
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
@@ -216,6 +216,15 @@ class SparkContext(object):
             self.profiler_collector = ProfilerCollector(profiler_cls, dump_path)
         else:
             self.profiler_collector = None
+
+        # create a signal handler which would be invoked on receiving SIGINT
+        def signal_handler(signal, frame):
+            self.cancelAllJobs()
+            raise KeyboardInterrupt()
+
+        # see http://stackoverflow.com/questions/23206787/
+        if isinstance(threading.current_thread(), threading._MainThread):
+            signal.signal(signal.SIGINT, signal_handler)
 
     def _initialize_context(self, jconf):
         """
@@ -272,6 +281,18 @@ class SparkContext(object):
         Specifically stop the context on exit of the with block.
         """
         self.stop()
+
+    @classmethod
+    def getOrCreate(cls, conf=None):
+        """
+        Get or instantiate a SparkContext and register it as a singleton object.
+
+        :param conf: SparkConf (optional)
+        """
+        with SparkContext._lock:
+            if SparkContext._active_spark_context is None:
+                SparkContext(conf=conf or SparkConf())
+            return SparkContext._active_spark_context
 
     def setLogLevel(self, logLevel):
         """
@@ -405,15 +426,19 @@ class SparkContext(object):
         # because it sends O(n) Py4J commands.  As an alternative, serialized
         # objects are written to a file and loaded through textFile().
         tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
-        # Make sure we distribute data evenly if it's smaller than self.batchSize
-        if "__len__" not in dir(c):
-            c = list(c)    # Make it a list so we can compute its length
-        batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
-        serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
-        serializer.dump_stream(c, tempFile)
-        tempFile.close()
-        readRDDFromFile = self._jvm.PythonRDD.readRDDFromFile
-        jrdd = readRDDFromFile(self._jsc, tempFile.name, numSlices)
+        try:
+            # Make sure we distribute data evenly if it's smaller than self.batchSize
+            if "__len__" not in dir(c):
+                c = list(c)    # Make it a list so we can compute its length
+            batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
+            serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
+            serializer.dump_stream(c, tempFile)
+            tempFile.close()
+            readRDDFromFile = self._jvm.PythonRDD.readRDDFromFile
+            jrdd = readRDDFromFile(self._jsc, tempFile.name, numSlices)
+        finally:
+            # readRDDFromFile eagerily reads the file so we can delete right after.
+            os.unlink(tempFile.name)
         return RDD(jrdd, self, serializer)
 
     def pickleFile(self, name, minPartitions=None):
@@ -762,14 +787,6 @@ class SparkContext(object):
         """
         self._jsc.sc().addFile(path)
 
-    def clearFiles(self):
-        """
-        Clear the job's list of files added by L{addFile} or L{addPyFile} so
-        that they do not get downloaded to any new nodes.
-        """
-        # TODO: remove added .py or .zip files from the PYTHONPATH?
-        self._jsc.sc().clearFiles()
-
     def addPyFile(self, path):
         """
         Add a .py or .zip dependency for all tasks to be executed on this
@@ -924,6 +941,11 @@ class SparkContext(object):
         """ Dump the profile stats into directory `path`
         """
         self.profiler_collector.dump_profiles(path)
+
+    def getConf(self):
+        conf = SparkConf()
+        conf.setAll(self._conf.getAll())
+        return conf
 
 
 def _test():

@@ -27,7 +27,7 @@ if [%SPARK_ENV_LOADED%] == [] (
   if not [%SPARK_CONF_DIR%] == [] (
     set user_conf_dir=%SPARK_CONF_DIR%
   ) else (
-    set user_conf_dir=%~dp0..\..\conf
+    set user_conf_dir=..\conf
   )
 
   call :LoadSparkEnv
@@ -35,8 +35,8 @@ if [%SPARK_ENV_LOADED%] == [] (
 
 rem Setting SPARK_SCALA_VERSION if not already set.
 
-set ASSEMBLY_DIR2=%SPARK_HOME%/assembly/target/scala-2.11
-set ASSEMBLY_DIR1=%SPARK_HOME%/assembly/target/scala-2.10
+set ASSEMBLY_DIR2="%SPARK_HOME%\assembly\target\scala-2.11"
+set ASSEMBLY_DIR1="%SPARK_HOME%\assembly\target\scala-2.10"
 
 if [%SPARK_SCALA_VERSION%] == [] (
 

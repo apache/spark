@@ -21,25 +21,25 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.BlockId
+import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.scheduler.{RateController, ReceivedBlockInfo, StreamInputInfo}
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
-import org.apache.spark.streaming.scheduler.{ReceivedBlockInfo, RateController, StreamInputInfo}
 import org.apache.spark.streaming.util.WriteAheadLogUtils
-import org.apache.spark.streaming.{StreamingContext, Time}
 
 /**
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
  * that has to start a receiver on worker nodes to receive external data.
  * Specific implementations of ReceiverInputDStream must
- * define `the getReceiver()` function that gets the receiver object of type
+ * define [[getReceiver]] function that gets the receiver object of type
  * [[org.apache.spark.streaming.receiver.Receiver]] that will be sent
  * to the workers to receive data.
- * @param ssc_ Streaming context that will execute this input stream
+ * @param _ssc Streaming context that will execute this input stream
  * @tparam T Class type of the object of this stream
  */
-abstract class ReceiverInputDStream[T: ClassTag](ssc_ : StreamingContext)
-  extends InputDStream[T](ssc_) {
+abstract class ReceiverInputDStream[T: ClassTag](_ssc: StreamingContext)
+  extends InputDStream[T](_ssc) {
 
   /**
    * Asynchronously maintains & sends new rate limits to the receiver through the receiver tracker.
@@ -108,7 +108,7 @@ abstract class ReceiverInputDStream[T: ClassTag](ssc_ : StreamingContext)
       } else {
         // Else, create a BlockRDD. However, if there are some blocks with WAL info but not
         // others then that is unexpected and log a warning accordingly.
-        if (blockInfos.find(_.walRecordHandleOption.nonEmpty).nonEmpty) {
+        if (blockInfos.exists(_.walRecordHandleOption.nonEmpty)) {
           if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
             logError("Some blocks do not have Write Ahead Log information; " +
               "this is unexpected and data may not be recoverable after driver failures")
@@ -119,9 +119,9 @@ abstract class ReceiverInputDStream[T: ClassTag](ssc_ : StreamingContext)
         val validBlockIds = blockIds.filter { id =>
           ssc.sparkContext.env.blockManager.master.contains(id)
         }
-        if (validBlockIds.size != blockIds.size) {
+        if (validBlockIds.length != blockIds.length) {
           logWarning("Some blocks could not be recovered as they were not found in memory. " +
-            "To prevent such data loss, enabled Write Ahead Log (see programming guide " +
+            "To prevent such data loss, enable Write Ahead Log (see programming guide " +
             "for more details.")
         }
         new BlockRDD[T](ssc.sc, validBlockIds)

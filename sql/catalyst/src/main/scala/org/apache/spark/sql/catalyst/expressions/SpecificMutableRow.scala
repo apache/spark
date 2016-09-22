@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A parent class for mutable container objects that are reused when the values are changed,
@@ -41,7 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *     val newCopy = new Mutable$tpe
  *     newCopy.isNull = isNull
  *     newCopy.value = value
- *     newCopy.asInstanceOf[this.type]
+ *     newCopy
  *   }
  * }"""
  * }.foreach(println)
@@ -63,7 +62,7 @@ import org.apache.spark.unsafe.types.UTF8String
 abstract class MutableValue extends Serializable {
   var isNull: Boolean = true
   def boxed: Any
-  def update(v: Any)
+  def update(v: Any): Unit
   def copy(): MutableValue
 }
 
@@ -78,7 +77,7 @@ final class MutableInt extends MutableValue {
     val newCopy = new MutableInt
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableInt]
+    newCopy
   }
 }
 
@@ -93,7 +92,7 @@ final class MutableFloat extends MutableValue {
     val newCopy = new MutableFloat
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableFloat]
+    newCopy
   }
 }
 
@@ -108,7 +107,7 @@ final class MutableBoolean extends MutableValue {
     val newCopy = new MutableBoolean
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableBoolean]
+    newCopy
   }
 }
 
@@ -123,7 +122,7 @@ final class MutableDouble extends MutableValue {
     val newCopy = new MutableDouble
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableDouble]
+    newCopy
   }
 }
 
@@ -138,7 +137,7 @@ final class MutableShort extends MutableValue {
     val newCopy = new MutableShort
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableShort]
+    newCopy
   }
 }
 
@@ -153,7 +152,7 @@ final class MutableLong extends MutableValue {
     val newCopy = new MutableLong
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableLong]
+    newCopy
   }
 }
 
@@ -168,7 +167,7 @@ final class MutableByte extends MutableValue {
     val newCopy = new MutableByte
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableByte]
+    newCopy
   }
 }
 
@@ -183,7 +182,7 @@ final class MutableAny extends MutableValue {
     val newCopy = new MutableAny
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableAny]
+    newCopy
   }
 }
 
@@ -211,6 +210,8 @@ final class SpecificMutableRow(val values: Array[MutableValue])
       }.toArray)
 
   def this() = this(Seq.empty)
+
+  def this(schema: StructType) = this(schema.fields.map(_.dataType))
 
   override def numFields: Int = values.length
 

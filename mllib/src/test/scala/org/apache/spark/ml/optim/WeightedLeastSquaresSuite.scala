@@ -18,15 +18,16 @@
 package org.apache.spark.ml.optim
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.optim.WeightedLeastSquares.Instance
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 
 class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   private var instances: RDD[Instance] = _
+  private var instancesConstLabel: RDD[Instance] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -38,10 +39,24 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
        w <- c(1, 2, 3, 4)
      */
     instances = sc.parallelize(Seq(
-      Instance(1.0, Vectors.dense(0.0, 5.0).toSparse, 17.0),
-      Instance(2.0, Vectors.dense(1.0, 7.0), 19.0),
-      Instance(3.0, Vectors.dense(2.0, 11.0), 23.0),
-      Instance(4.0, Vectors.dense(3.0, 13.0), 29.0)
+      Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(19.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(23.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(29.0, 4.0, Vectors.dense(3.0, 13.0))
+    ), 2)
+
+    /*
+       R code:
+
+       A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
+       b.const <- c(17, 17, 17, 17)
+       w <- c(1, 2, 3, 4)
+     */
+    instancesConstLabel = sc.parallelize(Seq(
+      Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(17.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(17.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(17.0, 4.0, Vectors.dense(3.0, 13.0))
     ), 2)
   }
 
@@ -65,12 +80,56 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
 
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
-      val wls = new WeightedLeastSquares(
-        fitIntercept, regParam = 0.0, standardizeFeatures = false, standardizeLabel = false)
-        .fit(instances)
-      val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
-      assert(actual ~== expected(idx) absTol 1e-4)
+       for (standardization <- Seq(false, true)) {
+         val wls = new WeightedLeastSquares(
+           fitIntercept, regParam = 0.0, standardizeFeatures = standardization,
+           standardizeLabel = standardization).fit(instances)
+         val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
+         assert(actual ~== expected(idx) absTol 1e-4)
+       }
       idx += 1
+    }
+  }
+
+  test("WLS against lm when label is constant and no regularization") {
+    /*
+       R code:
+
+       df.const.label <- as.data.frame(cbind(A, b.const))
+       for (formula in c(b.const ~ . -1, b.const ~ .)) {
+         model <- lm(formula, data=df.const.label, weights=w)
+         print(as.vector(coef(model)))
+       }
+
+      [1] -9.221298  3.394343
+      [1] 17  0  0
+    */
+
+    val expected = Seq(
+      Vectors.dense(0.0, -9.221298, 3.394343),
+      Vectors.dense(17.0, 0.0, 0.0))
+
+    var idx = 0
+    for (fitIntercept <- Seq(false, true)) {
+      for (standardization <- Seq(false, true)) {
+        val wls = new WeightedLeastSquares(
+          fitIntercept, regParam = 0.0, standardizeFeatures = standardization,
+          standardizeLabel = standardization).fit(instancesConstLabel)
+        val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
+        assert(actual ~== expected(idx) absTol 1e-4)
+      }
+      idx += 1
+    }
+  }
+
+  test("WLS with regularization when label is constant") {
+    // if regParam is non-zero and standardization is true, the problem is ill-defined and
+    // an exception is thrown.
+    val wls = new WeightedLeastSquares(
+      fitIntercept = false, regParam = 0.1, standardizeFeatures = true,
+      standardizeLabel = true)
+    intercept[IllegalArgumentException]{
+      wls.fit(instancesConstLabel)
     }
   }
 

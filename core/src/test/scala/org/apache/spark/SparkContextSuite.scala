@@ -18,19 +18,19 @@
 package org.apache.spark
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
-
-import com.google.common.base.Charsets._
-import com.google.common.io.Files
-
-import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
-import org.apache.hadoop.mapred.TextInputFormat
-import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
-import org.apache.spark.util.Utils
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
+
+import com.google.common.io.Files
+import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
+import org.apache.hadoop.mapred.TextInputFormat
+import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
+
+import org.apache.spark.util.Utils
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -39,8 +39,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf().setAppName("test").setMaster("local")
       .set("spark.driver.allowMultipleContexts", "false")
     sc = new SparkContext(conf)
+    val envBefore = SparkEnv.get
     // A SparkContext is already running, so we shouldn't be able to create a second one
     intercept[SparkException] { new SparkContext(conf) }
+    val envAfter = SparkEnv.get
+    // SparkEnv and other context variables should be the same
+    assert(envBefore == envAfter)
     // After stopping the running context, we should be able to create a new one
     resetSparkContext()
     sc = new SparkContext(conf)
@@ -104,7 +108,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     assert(byteArray2.length === 0)
   }
 
-  test("addFile works") {
+  test("basic case for addFile and listFiles") {
     val dir = Utils.createTempDir()
 
     val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
@@ -115,8 +119,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     val absolutePath2 = file2.getAbsolutePath
 
     try {
-      Files.write("somewords1", file1, UTF_8)
-      Files.write("somewords2", file2, UTF_8)
+      Files.write("somewords1", file1, StandardCharsets.UTF_8)
+      Files.write("somewords2", file2, StandardCharsets.UTF_8)
       val length1 = file1.length()
       val length2 = file2.length()
 
@@ -152,6 +156,18 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
         }
         x
       }).count()
+      assert(sc.listFiles().filter(_.contains("somesuffix1")).size == 1)
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("add and list jar files") {
+    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    try {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addJar(jarPath.toString)
+      assert(sc.listJars().filter(_.contains("TestUDTF.jar")).size == 1)
     } finally {
       sc.stop()
     }
@@ -200,6 +216,57 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("cannot call addFile with different paths that have the same filename") {
+    val dir = Utils.createTempDir()
+    try {
+      val subdir1 = new File(dir, "subdir1")
+      val subdir2 = new File(dir, "subdir2")
+      assert(subdir1.mkdir())
+      assert(subdir2.mkdir())
+      val file1 = new File(subdir1, "file")
+      val file2 = new File(subdir2, "file")
+      Files.write("old", file1, StandardCharsets.UTF_8)
+      Files.write("new", file2, StandardCharsets.UTF_8)
+      sc = new SparkContext("local-cluster[1,1,1024]", "test")
+      sc.addFile(file1.getAbsolutePath)
+      def getAddedFileContents(): String = {
+        sc.parallelize(Seq(0)).map { _ =>
+          scala.io.Source.fromFile(SparkFiles.get("file")).mkString
+        }.first()
+      }
+      assert(getAddedFileContents() === "old")
+      intercept[IllegalArgumentException] {
+        sc.addFile(file2.getAbsolutePath)
+      }
+      assert(getAddedFileContents() === "old")
+    } finally {
+      Utils.deleteRecursively(dir)
+    }
+  }
+
+  // Regression tests for SPARK-16787
+  for (
+    schedulingMode <- Seq("local-mode", "non-local-mode");
+    method <- Seq("addJar", "addFile")
+  ) {
+    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar").toString
+    val master = schedulingMode match {
+      case "local-mode" => "local"
+      case "non-local-mode" => "local-cluster[1,1,1024]"
+    }
+    test(s"$method can be called twice with same file in $schedulingMode (SPARK-16787)") {
+      sc = new SparkContext(master, "test")
+      method match {
+        case "addJar" =>
+          sc.addJar(jarPath)
+          sc.addJar(jarPath)
+        case "addFile" =>
+          sc.addFile(jarPath)
+          sc.addFile(jarPath)
+      }
+    }
+  }
+
   test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
@@ -243,11 +310,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
     try {
       // Create 5 text files.
-      Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", file1, UTF_8)
-      Files.write("someline1 in file2\nsomeline2 in file2", file2, UTF_8)
-      Files.write("someline1 in file3", file3, UTF_8)
-      Files.write("someline1 in file4\nsomeline2 in file4", file4, UTF_8)
-      Files.write("someline1 in file2\nsomeline2 in file5", file5, UTF_8)
+      Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", file1,
+        StandardCharsets.UTF_8)
+      Files.write("someline1 in file2\nsomeline2 in file2", file2, StandardCharsets.UTF_8)
+      Files.write("someline1 in file3", file3, StandardCharsets.UTF_8)
+      Files.write("someline1 in file4\nsomeline2 in file4", file4, StandardCharsets.UTF_8)
+      Files.write("someline1 in file2\nsomeline2 in file5", file5, StandardCharsets.UTF_8)
 
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
 
@@ -274,6 +342,31 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("Default path for file based RDDs is properly set (SPARK-12517)") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+
+    // Test filetextFile, wholeTextFiles, binaryFiles, hadoopFile and
+    // newAPIHadoopFile for setting the default path as the RDD name
+    val mockPath = "default/path/for/"
+
+    var targetPath = mockPath + "textFile"
+    assert(sc.textFile(targetPath).name === targetPath)
+
+    targetPath = mockPath + "wholeTextFiles"
+    assert(sc.wholeTextFiles(targetPath).name === targetPath)
+
+    targetPath = mockPath + "binaryFiles"
+    assert(sc.binaryFiles(targetPath).name === targetPath)
+
+    targetPath = mockPath + "hadoopFile"
+    assert(sc.hadoopFile(targetPath).name === targetPath)
+
+    targetPath = mockPath + "newAPIHadoopFile"
+    assert(sc.newAPIHadoopFile(targetPath).name === targetPath)
+
+    sc.stop()
+  }
+
   test("calling multiple sc.stop() must not throw any exception") {
     noException should be thrownBy {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
@@ -291,6 +384,49 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
         .set("spark.dynamicAllocation.enabled", "true").set("spark.executor.instances", "6"))
       assert(sc.executorAllocationManager.isEmpty)
       assert(sc.getConf.getInt("spark.executor.instances", 0) === 6)
+    }
+  }
+
+
+  test("localProperties are inherited by spawned threads.") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    sc.setLocalProperty("testProperty", "testValue")
+    var result = "unset";
+    val thread = new Thread() { override def run() = {result = sc.getLocalProperty("testProperty")}}
+    thread.start()
+    thread.join()
+    sc.stop()
+    assert(result == "testValue")
+  }
+
+  test("localProperties do not cross-talk between threads.") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    var result = "unset";
+    val thread1 = new Thread() {
+      override def run() = {sc.setLocalProperty("testProperty", "testValue")}}
+    // testProperty should be unset and thus return null
+    val thread2 = new Thread() {
+      override def run() = {result = sc.getLocalProperty("testProperty")}}
+    thread1.start()
+    thread1.join()
+    thread2.start()
+    thread2.join()
+    sc.stop()
+    assert(result == null)
+  }
+
+  test("log level case-insensitive and reset log level") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    val originalLevel = org.apache.log4j.Logger.getRootLogger().getLevel
+    try {
+      sc.setLogLevel("debug")
+      assert(org.apache.log4j.Logger.getRootLogger().getLevel === org.apache.log4j.Level.DEBUG)
+      sc.setLogLevel("INfo")
+      assert(org.apache.log4j.Logger.getRootLogger().getLevel === org.apache.log4j.Level.INFO)
+    } finally {
+      sc.setLogLevel(originalLevel.toString)
+      assert(org.apache.log4j.Logger.getRootLogger().getLevel === originalLevel)
+      sc.stop()
     }
   }
 }

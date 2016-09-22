@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.test
 
-import java.util
-
-import scala.collection.JavaConverters._
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -28,7 +26,15 @@ import org.apache.spark.sql.types._
  * @param y y coordinate
  */
 @SQLUserDefinedType(udt = classOf[ExamplePointUDT])
-private[sql] class ExamplePoint(val x: Double, val y: Double) extends Serializable
+private[sql] class ExamplePoint(val x: Double, val y: Double) extends Serializable {
+
+  override def hashCode(): Int = 31 * (31 * x.hashCode()) + y.hashCode()
+
+  override def equals(other: Any): Boolean = other match {
+    case that: ExamplePoint => this.x == that.x && this.y == that.y
+    case _ => false
+  }
+}
 
 /**
  * User-defined type for [[ExamplePoint]].
@@ -39,14 +45,11 @@ private[sql] class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
 
   override def pyUDT: String = "pyspark.sql.tests.ExamplePointUDT"
 
-  override def serialize(obj: Any): GenericArrayData = {
-    obj match {
-      case p: ExamplePoint =>
-        val output = new Array[Any](2)
-        output(0) = p.x
-        output(1) = p.y
-        new GenericArrayData(output)
-    }
+  override def serialize(p: ExamplePoint): GenericArrayData = {
+    val output = new Array[Any](2)
+    output(0) = p.x
+    output(1) = p.y
+    new GenericArrayData(output)
   }
 
   override def deserialize(datum: Any): ExamplePoint = {

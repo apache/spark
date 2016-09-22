@@ -18,7 +18,8 @@
 package org.apache.spark.api.r
 
 import java.io.{DataInputStream, DataOutputStream}
-import java.sql.{Timestamp, Date, Time}
+import java.nio.charset.StandardCharsets
+import java.sql.{Date, Time, Timestamp}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.WrappedArray
@@ -27,6 +28,14 @@ import scala.collection.mutable.WrappedArray
  * Utility functions to serialize, deserialize objects to / from R
  */
 private[spark] object SerDe {
+  type ReadObject = (DataInputStream, Char) => Object
+  type WriteObject = (DataOutputStream, Object) => Boolean
+
+  var sqlSerDe: (ReadObject, WriteObject) = _
+
+  def registerSqlSerDe(sqlSerDe: (ReadObject, WriteObject)): Unit = {
+    this.sqlSerDe = sqlSerDe
+  }
 
   // Type mapping from R to Java
   //
@@ -63,11 +72,22 @@ private[spark] object SerDe {
       case 'c' => readString(dis)
       case 'e' => readMap(dis)
       case 'r' => readBytes(dis)
+      case 'a' => readArray(dis)
       case 'l' => readList(dis)
       case 'D' => readDate(dis)
       case 't' => readTime(dis)
       case 'j' => JVMObjectTracker.getObject(readString(dis))
-      case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
+      case _ =>
+        if (sqlSerDe == null || sqlSerDe._1 == null) {
+          throw new IllegalArgumentException (s"Invalid type $dataType")
+        } else {
+          val obj = (sqlSerDe._1)(dis, dataType)
+          if (obj == null) {
+            throw new IllegalArgumentException (s"Invalid type $dataType")
+          } else {
+            obj
+          }
+        }
     }
   }
 
@@ -90,7 +110,7 @@ private[spark] object SerDe {
     val bytes = new Array[Byte](len)
     in.readFully(bytes)
     assert(bytes(len - 1) == 0)
-    val str = new String(bytes.dropRight(1), "UTF-8")
+    val str = new String(bytes.dropRight(1), StandardCharsets.UTF_8)
     str
   }
 
@@ -141,7 +161,8 @@ private[spark] object SerDe {
     (0 until len).map(_ => readString(in)).toArray
   }
 
-  def readList(dis: DataInputStream): Array[_] = {
+  // All elements of an array must be of the same type
+  def readArray(dis: DataInputStream): Array[_] = {
     val arrType = readObjectType(dis)
     arrType match {
       case 'i' => readIntArr(dis)
@@ -150,26 +171,43 @@ private[spark] object SerDe {
       case 'b' => readBooleanArr(dis)
       case 'j' => readStringArr(dis).map(x => JVMObjectTracker.getObject(x))
       case 'r' => readBytesArr(dis)
-      case 'l' => {
+      case 'a' =>
+        val len = readInt(dis)
+        (0 until len).map(_ => readArray(dis)).toArray
+      case 'l' =>
         val len = readInt(dis)
         (0 until len).map(_ => readList(dis)).toArray
-      }
-      case _ => throw new IllegalArgumentException(s"Invalid array type $arrType")
+      case _ =>
+        if (sqlSerDe == null || sqlSerDe._1 == null) {
+          throw new IllegalArgumentException (s"Invalid array type $arrType")
+        } else {
+          val len = readInt(dis)
+          (0 until len).map { _ =>
+            val obj = (sqlSerDe._1)(dis, arrType)
+            if (obj == null) {
+              throw new IllegalArgumentException (s"Invalid array type $arrType")
+            } else {
+              obj
+            }
+          }.toArray
+        }
     }
+  }
+
+  // Each element of a list can be of different type. They are all represented
+  // as Object on JVM side
+  def readList(dis: DataInputStream): Array[Object] = {
+    val len = readInt(dis)
+    (0 until len).map(_ => readObject(dis)).toArray
   }
 
   def readMap(in: DataInputStream): java.util.Map[Object, Object] = {
     val len = readInt(in)
     if (len > 0) {
-      val keysType = readObjectType(in)
-      val keysLen = readInt(in)
-      val keys = (0 until keysLen).map(_ => readTypedObject(in, keysType))
+      // Keys is an array of String
+      val keys = readArray(in).asInstanceOf[Array[Object]]
+      val values = readList(in)
 
-      val valuesLen = readInt(in)
-      val values = (0 until valuesLen).map(_ => {
-        val valueType = readObjectType(in)
-        readTypedObject(in, valueType)
-      })
       keys.zip(values).toMap.asJava
     } else {
       new java.util.HashMap[Object, Object]()
@@ -318,6 +356,13 @@ private[spark] object SerDe {
           writeInt(dos, v.length)
           v.foreach(elem => writeObject(dos, elem))
 
+        // Handle Properties
+        // This must be above the case java.util.Map below.
+        // (Properties implements Map<Object,Object> and will be serialized as map otherwise)
+        case v: java.util.Properties =>
+          writeType(dos, "jobj")
+          writeJObj(dos, value)
+
         // Handle map
         case v: java.util.Map[_, _] =>
           writeType(dos, "map")
@@ -338,8 +383,10 @@ private[spark] object SerDe {
           }
 
         case _ =>
-          writeType(dos, "jobj")
-          writeJObj(dos, value)
+          if (sqlSerDe == null || sqlSerDe._2 == null || !(sqlSerDe._2)(dos, value)) {
+            writeType(dos, "jobj")
+            writeJObj(dos, value)
+          }
       }
     }
   }
@@ -370,7 +417,7 @@ private[spark] object SerDe {
   }
 
   def writeString(out: DataOutputStream, value: String): Unit = {
-    val utf8 = value.getBytes("UTF-8")
+    val utf8 = value.getBytes(StandardCharsets.UTF_8)
     val len = utf8.length
     out.writeInt(len)
     out.write(utf8, 0, len)
@@ -412,7 +459,7 @@ private[spark] object SerDe {
 
 }
 
-private[r] object SerializationFormats {
+private[spark] object SerializationFormats {
   val BYTE = "byte"
   val STRING = "string"
   val ROW = "row"

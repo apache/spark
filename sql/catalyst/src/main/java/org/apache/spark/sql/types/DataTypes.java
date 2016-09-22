@@ -191,7 +191,7 @@ public class DataTypes {
    * Creates a StructType with the given list of StructFields ({@code fields}).
    */
   public static StructType createStructType(List<StructField> fields) {
-    return createStructType(fields.toArray(new StructField[0]));
+    return createStructType(fields.toArray(new StructField[fields.size()]));
   }
 
   /**
@@ -201,7 +201,7 @@ public class DataTypes {
     if (fields == null) {
       throw new IllegalArgumentException("fields should not be null.");
     }
-    Set<String> distinctNames = new HashSet<String>();
+    Set<String> distinctNames = new HashSet<>();
     for (StructField field : fields) {
       if (field == null) {
         throw new IllegalArgumentException(

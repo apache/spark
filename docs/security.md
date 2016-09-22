@@ -6,16 +6,20 @@ title: Security
 
 Spark currently supports authentication via a shared secret. Authentication can be configured to be on via the `spark.authenticate` configuration parameter. This parameter controls whether the Spark communication protocols do authentication using the shared secret. This authentication is a basic handshake to make sure both sides have the same shared secret and are allowed to communicate. If the shared secret is not identical they will not be allowed to communicate. The shared secret is created as follows:
 
-* For Spark on [YARN](running-on-yarn.html) deployments, configuring `spark.authenticate` to `true` will automatically handle generating and distributing the shared secret. Each application will use a unique shared secret. 
+* For Spark on [YARN](running-on-yarn.html) deployments, configuring `spark.authenticate` to `true` will automatically handle generating and distributing the shared secret. Each application will use a unique shared secret.
 * For other types of Spark deployments, the Spark parameter `spark.authenticate.secret` should be configured on each of the nodes. This secret will be used by all the Master/Workers and applications.
 
 ## Web UI
 
-The Spark UI can also be secured by using [javax servlet filters](http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html) via the `spark.ui.filters` setting. A user may want to secure the UI if it has data that other users should not be allowed to see. The javax servlet filter specified by the user can authenticate the user and then once the user is logged in, Spark can compare that user versus the view ACLs to make sure they are authorized to view the UI. The configs `spark.acls.enable` and `spark.ui.view.acls` control the behavior of the ACLs. Note that the user who started the application always has view access to the UI.  On YARN, the Spark UI uses the standard YARN web application proxy mechanism and will authenticate via any installed Hadoop filters.
+The Spark UI can be secured by using [javax servlet filters](http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html) via the `spark.ui.filters` setting
+and by using [https/SSL](http://en.wikipedia.org/wiki/HTTPS) via the `spark.ui.https.enabled` setting.
 
-Spark also supports modify ACLs to control who has access to modify a running Spark application.  This includes things like killing the application or a task. This is controlled by the configs `spark.acls.enable` and `spark.modify.acls`. Note that if you are authenticating the web UI, in order to use the kill button on the web UI it might be necessary to add the users in the modify acls to the view acls also. On YARN, the modify acls are passed in and control who has modify access via YARN interfaces.
+### Authentication
 
-Spark allows for a set of administrators to be specified in the acls who always have view and modify permissions to all the applications. is controlled by the config `spark.admin.acls`. This is useful on a shared cluster where you might have administrators or support staff who help users debug applications.
+A user may want to secure the UI if it has data that other users should not be allowed to see. The javax servlet filter specified by the user can authenticate the user and then once the user is logged in, Spark can compare that user versus the view ACLs to make sure they are authorized to view the UI. The configs `spark.acls.enable`, `spark.ui.view.acls` and `spark.ui.view.acls.groups` control the behavior of the ACLs. Note that the user who started the application always has view access to the UI.  On YARN, the Spark UI uses the standard YARN web application proxy mechanism and will authenticate via any installed Hadoop filters.
+
+Spark also supports modify ACLs to control who has access to modify a running Spark application. This includes things like killing the application or a task. This is controlled by the configs `spark.acls.enable`, `spark.modify.acls` and `spark.modify.acls.groups`. Note that if you are authenticating the web UI, in order to use the kill button on the web UI it might be necessary to add the users in the modify acls to the view acls also. On YARN, the modify acls are passed in and control who has modify access via YARN interfaces.
+Spark allows for a set of administrators to be specified in the acls who always have view and modify permissions to all the applications. is controlled by the configs `spark.admin.acls` and `spark.admin.acls.groups`. This is useful on a shared cluster where you might have administrators or support staff who help users debug applications.
 
 ## Event Logging
 
@@ -23,8 +27,8 @@ If your applications are using event logging, the directory where the event logs
 
 ## Encryption
 
-Spark supports SSL for Akka and HTTP (for broadcast and file server) protocols. SASL encryption is
-supported for the block transfer service. Encryption is not yet supported for the WebUI.
+Spark supports SSL for HTTP protocols. SASL encryption is supported for the block transfer service
+and the RPC endpoints.
 
 Encryption is not yet supported for data stored by Spark in temporary local storage, such as shuffle
 files, cached data, and other application files. If encrypting this data is desired, a workaround is
@@ -32,8 +36,37 @@ to configure your cluster manager to store application data on encrypted disks.
 
 ### SSL Configuration
 
-Configuration for SSL is organized hierarchically. The user can configure the default SSL settings which will be used for all the supported communication protocols unless they are overwritten by protocol-specific settings. This way the user can easily provide the common settings for all the protocols without disabling the ability to configure each one individually. The common SSL settings are at `spark.ssl` namespace in Spark configuration, while Akka SSL configuration is at `spark.ssl.akka` and HTTP for broadcast and file server SSL configuration is at `spark.ssl.fs`. The full breakdown can be found on the [configuration page](configuration.html).
+Configuration for SSL is organized hierarchically. The user can configure the default SSL settings
+which will be used for all the supported communication protocols unless they are overwritten by
+protocol-specific settings. This way the user can easily provide the common settings for all the
+protocols without disabling the ability to configure each one individually. The common SSL settings
+are at `spark.ssl` namespace in Spark configuration. The following table describes the
+component-specific configuration namespaces used to override the default settings:
 
+<table class="table">
+  <tr>
+    <th>Config Namespace</th>
+    <th>Component</th>
+  </tr>
+  <tr>
+    <td><code>spark.ssl.fs</code></td>
+    <td>HTTP file server and broadcast server</td>
+  </tr>
+  <tr>
+    <td><code>spark.ssl.ui</code></td>
+    <td>Spark application Web UI</td>
+  </tr>
+  <tr>
+    <td><code>spark.ssl.standalone</code></td>
+    <td>Standalone Master / Worker Web UI</td>
+  </tr>
+  <tr>
+    <td><code>spark.ssl.historyServer</code></td>
+    <td>History Server Web UI</td>
+  </tr>
+</table>
+
+The full breakdown of available SSL options  can be found on the [configuration page](configuration.html).
 SSL must be configured on each node and configured for each component involved in communication using the particular protocol.
 
 ### YARN mode
@@ -100,7 +133,7 @@ configure those ports.
     <td>7077</td>
     <td>Submit job to cluster /<br> Join cluster</td>
     <td><code>SPARK_MASTER_PORT</code></td>
-    <td>Akka-based. Set to "0" to choose a port randomly. Standalone mode only.</td>
+    <td>Set to "0" to choose a port randomly. Standalone mode only.</td>
   </tr>
   <tr>
     <td>Standalone Master</td>
@@ -108,7 +141,7 @@ configure those ports.
     <td>(random)</td>
     <td>Schedule executors</td>
     <td><code>SPARK_WORKER_PORT</code></td>
-    <td>Akka-based. Set to "0" to choose a port randomly. Standalone mode only.</td>
+    <td>Set to "0" to choose a port randomly. Standalone mode only.</td>
   </tr>
 </table>
 
@@ -141,40 +174,7 @@ configure those ports.
     <td>(random)</td>
     <td>Connect to application /<br> Notify executor state changes</td>
     <td><code>spark.driver.port</code></td>
-    <td>Akka-based. Set to "0" to choose a port randomly.</td>
-  </tr>
-  <tr>
-    <td>Driver</td>
-    <td>Executor</td>
-    <td>(random)</td>
-    <td>Schedule tasks</td>
-    <td><code>spark.executor.port</code></td>
-    <td>Akka-based. Set to "0" to choose a port randomly.</td>
-  </tr>
-  <tr>
-    <td>Executor</td>
-    <td>Driver</td>
-    <td>(random)</td>
-    <td>File server for files and jars</td>
-    <td><code>spark.fileserver.port</code></td>
-    <td>Jetty-based</td>
-  </tr>
-  <tr>
-    <td>Executor</td>
-    <td>Driver</td>
-    <td>(random)</td>
-    <td>HTTP Broadcast</td>
-    <td><code>spark.broadcast.port</code></td>
-    <td>Jetty-based. Not used by TorrentBroadcast, which sends data through the block manager
-    instead.</td>
-  </tr>
-  <tr>
-    <td>Executor</td>
-    <td>Driver</td>
-    <td>(random)</td>
-    <td>Class file server</td>
-    <td><code>spark.replClassServer.port</code></td>
-    <td>Jetty-based. Only used in Spark shells.</td>
+    <td>Set to "0" to choose a port randomly.</td>
   </tr>
   <tr>
     <td>Executor / Driver</td>

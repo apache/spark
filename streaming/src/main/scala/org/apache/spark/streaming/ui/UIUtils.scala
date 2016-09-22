@@ -21,6 +21,10 @@ import java.text.SimpleDateFormat
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
+import scala.xml.Node
+
+import org.apache.commons.lang3.StringEscapeUtils
+
 private[streaming] object UIUtils {
 
   /**
@@ -122,6 +126,62 @@ private[streaming] object UIUtils {
         batchTimeFormat.get.setTimeZone(oldTimezones._1)
         batchTimeFormatWithMilliseconds.get.setTimeZone(oldTimezones._2)
       }
+    }
+  }
+
+  def createOutputOperationFailureForUI(failure: String): String = {
+    if (failure.startsWith("org.apache.spark.Spark")) {
+      // SparkException or SparkDriverExecutionException
+      "Failed due to Spark job error\n" + failure
+    } else {
+      var nextLineIndex = failure.indexOf("\n")
+      if (nextLineIndex < 0) {
+        nextLineIndex = failure.length
+      }
+      val firstLine = failure.substring(0, nextLineIndex)
+      s"Failed due to error: $firstLine\n$failure"
+    }
+  }
+
+  def failureReasonCell(
+      failureReason: String,
+      rowspan: Int = 1,
+      includeFirstLineInExpandDetails: Boolean = true): Seq[Node] = {
+    val isMultiline = failureReason.indexOf('\n') >= 0
+    // Display the first line by default
+    val failureReasonSummary = StringEscapeUtils.escapeHtml4(
+      if (isMultiline) {
+        failureReason.substring(0, failureReason.indexOf('\n'))
+      } else {
+        failureReason
+      })
+    val failureDetails =
+      if (isMultiline && !includeFirstLineInExpandDetails) {
+        // Skip the first line
+        failureReason.substring(failureReason.indexOf('\n') + 1)
+      } else {
+        failureReason
+      }
+    val details = if (isMultiline) {
+      // scalastyle:off
+      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
+            class="expand-details">
+        +details
+      </span> ++
+        <div class="stacktrace-details collapsed">
+          <pre>{failureDetails}</pre>
+        </div>
+      // scalastyle:on
+    } else {
+      ""
+    }
+
+    if (rowspan == 1) {
+      <td valign="middle" style="max-width: 300px">{failureReasonSummary}{details}</td>
+    } else {
+      <td valign="middle" style="max-width: 300px" rowspan={rowspan.toString}>
+        {failureReasonSummary}{details}
+      </td>
     }
   }
 }

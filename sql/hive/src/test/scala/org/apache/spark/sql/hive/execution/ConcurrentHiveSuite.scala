@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql.hive.test.TestHiveContext
-import org.scalatest.BeforeAndAfterAll
 
 class ConcurrentHiveSuite extends SparkFunSuite with BeforeAndAfterAll {
   ignore("multiple instances not supported") {
@@ -29,9 +30,9 @@ class ConcurrentHiveSuite extends SparkFunSuite with BeforeAndAfterAll {
         conf.set("spark.ui.enabled", "false")
         val ts =
           new TestHiveContext(new SparkContext("local", s"TestSQLContext$i", conf))
-        ts.executeSql("SHOW TABLES").toRdd.collect()
-        ts.executeSql("SELECT * FROM src").toRdd.collect()
-        ts.executeSql("SHOW TABLES").toRdd.collect()
+        ts.sparkSession.sql("SHOW TABLES").collect()
+        ts.sparkSession.sql("SELECT * FROM src").collect()
+        ts.sparkSession.sql("SHOW TABLES").collect()
       }
     }
   }

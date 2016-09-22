@@ -24,9 +24,7 @@ import org.apache.spark.SparkFunSuite
 /**
  * Verify that some classes load and that others are not found on the classpath.
  *
- *
- * This is used to detect classpath and shading conflict, especially between
- * Spark's required Kryo version and that which can be found in some Hive versions.
+ * This is used to detect classpath and shading conflicts.
  */
 class ClasspathDependenciesSuite extends SparkFunSuite {
   private val classloader = this.getClass.getClassLoader
@@ -38,10 +36,6 @@ class ClasspathDependenciesSuite extends SparkFunSuite {
 
     logInfo(s"Class $classname at $resourceURL")
     classloader.loadClass(classname)
-  }
-
-  private def assertLoads(classes: String*): Unit = {
-    classes.foreach(assertLoads)
   }
 
   private def findResource(classname: String): URL = {
@@ -63,17 +57,12 @@ class ClasspathDependenciesSuite extends SparkFunSuite {
     }
   }
 
-  private def assertClassNotFound(classes: String*): Unit = {
-    classes.foreach(assertClassNotFound)
+  test("shaded Protobuf") {
+    assertLoads("org.apache.hive.com.google.protobuf.ServiceException")
   }
 
-  private val KRYO = "com.esotericsoftware.kryo.Kryo"
-
-  private val SPARK_HIVE = "org.apache.hive."
-  private val SPARK_SHADED = "org.spark-project.hive.shaded."
-
-  test("shaded Protobuf") {
-    assertLoads(SPARK_SHADED + "com.google.protobuf.ServiceException")
+  test("shaded Kryo") {
+    assertLoads("org.apache.hive.com.esotericsoftware.kryo.Kryo")
   }
 
   test("hive-common") {
@@ -86,25 +75,13 @@ class ClasspathDependenciesSuite extends SparkFunSuite {
 
   private val STD_INSTANTIATOR = "org.objenesis.strategy.StdInstantiatorStrategy"
 
-  test("unshaded kryo") {
-    assertLoads(KRYO, STD_INSTANTIATOR)
-  }
-
   test("Forbidden Dependencies") {
-    assertClassNotFound(
-      SPARK_HIVE + KRYO,
-      SPARK_SHADED + KRYO,
-      "org.apache.hive." + KRYO,
-      "com.esotericsoftware.shaded." + STD_INSTANTIATOR,
-      SPARK_HIVE + "com.esotericsoftware.shaded." + STD_INSTANTIATOR,
-      "org.apache.hive.com.esotericsoftware.shaded." + STD_INSTANTIATOR
-    )
+    assertClassNotFound("com.esotericsoftware.shaded." + STD_INSTANTIATOR)
+    assertClassNotFound("org.apache.hive.com.esotericsoftware.shaded." + STD_INSTANTIATOR)
   }
 
   test("parquet-hadoop-bundle") {
-    assertLoads(
-      "parquet.hadoop.ParquetOutputFormat",
-      "parquet.hadoop.ParquetInputFormat"
-    )
+    assertLoads("parquet.hadoop.ParquetOutputFormat")
+    assertLoads("parquet.hadoop.ParquetInputFormat")
   }
 }

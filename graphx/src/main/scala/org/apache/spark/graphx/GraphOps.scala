@@ -20,11 +20,10 @@ package org.apache.spark.graphx
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.SparkException
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.RDD
-
 import org.apache.spark.graphx.lib._
+import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkException
 
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the
@@ -186,6 +185,15 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
+   * Remove self edges.
+   *
+   * @return a graph with all self edges removed
+   */
+  def removeSelfEdges(): Graph[VD, ED] = {
+    graph.subgraph(epred = e => e.srcId != e.dstId)
+  }
+
+  /**
    * Join the vertices with an RDD and then apply a function from the
    * vertex and RDD entry to a new vertex value.  The input table
    * should contain at most one entry for each vertex.  If no entry is
@@ -229,11 +237,11 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * @param preprocess a function to compute new vertex and edge data before filtering
    * @param epred edge pred to filter on after preprocess, see more details under
    *  [[org.apache.spark.graphx.Graph#subgraph]]
-   * @param vpred vertex pred to filter on after prerocess, see more details under
+   * @param vpred vertex pred to filter on after preprocess, see more details under
    *  [[org.apache.spark.graphx.Graph#subgraph]]
    * @tparam VD2 vertex type the vpred operates on
    * @tparam ED2 edge type the epred operates on
-   * @return a subgraph of the orginal graph, with its data unchanged
+   * @return a subgraph of the original graph, with its data unchanged
    *
    * @example This function can be used to filter the graph based on some property, without
    * changing the vertex and edge values in your program. For example, we could remove the vertices
@@ -269,10 +277,10 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
         if (Random.nextDouble() < probability) { Some(vidVvals._1) }
         else { None }
       }
-      if (selectedVertices.count > 1) {
+      if (selectedVertices.count > 0) {
         found = true
         val collectedVertices = selectedVertices.collect()
-        retVal = collectedVertices(Random.nextInt(collectedVertices.size))
+        retVal = collectedVertices(Random.nextInt(collectedVertices.length))
       }
     }
    retVal
@@ -282,7 +290,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Convert bi-directional edges into uni-directional ones.
    * Some graph algorithms (e.g., TriangleCount) assume that an input graph
    * has its edges in canonical direction.
-   * This function rewrites the vertex ids of edges so that srcIds are bigger
+   * This function rewrites the vertex ids of edges so that srcIds are smaller
    * than dstIds, and merges the duplicated edges.
    *
    * @param mergeFunc the user defined reduce function which should
@@ -380,8 +388,17 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * @see [[org.apache.spark.graphx.lib.PageRank$#runUntilConvergenceWithOptions]]
    */
   def personalizedPageRank(src: VertexId, tol: Double,
-    resetProb: Double = 0.15) : Graph[Double, Double] = {
+    resetProb: Double = 0.15): Graph[Double, Double] = {
     PageRank.runUntilConvergenceWithOptions(graph, tol, resetProb, Some(src))
+  }
+
+  /**
+   * Run parallel personalized PageRank for a given array of source vertices, such
+   * that all random walks are started relative to the source vertices
+   */
+  def staticParallelPersonalizedPageRank(sources: Array[VertexId], numIter: Int,
+    resetProb: Double = 0.15) : Graph[Vector, Double] = {
+    PageRank.runParallelPersonalizedPageRank(graph, numIter, resetProb, sources)
   }
 
   /**
@@ -393,7 +410,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * @see [[org.apache.spark.graphx.lib.PageRank$#runWithOptions]]
    */
   def staticPersonalizedPageRank(src: VertexId, numIter: Int,
-    resetProb: Double = 0.15) : Graph[Double, Double] = {
+    resetProb: Double = 0.15): Graph[Double, Double] = {
     PageRank.runWithOptions(graph, numIter, resetProb, Some(src))
   }
 
@@ -415,6 +432,16 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    */
   def connectedComponents(): Graph[VertexId, ED] = {
     ConnectedComponents.run(graph)
+  }
+
+  /**
+   * Compute the connected component membership of each vertex and return a graph with the vertex
+   * value containing the lowest vertex id in the connected component containing that vertex.
+   *
+   * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
+   */
+  def connectedComponents(maxIterations: Int): Graph[VertexId, ED] = {
+    ConnectedComponents.run(graph, maxIterations)
   }
 
   /**

@@ -15,16 +15,18 @@
 # limitations under the License.
 #
 
-from py4j.java_gateway import Py4JJavaError
+from py4j.protocol import Py4JJavaError
 
 from pyspark.rdd import RDD
 from pyspark.storagelevel import StorageLevel
-from pyspark.serializers import PairDeserializer, NoOpSerializer
+from pyspark.serializers import AutoBatchedSerializer, PickleSerializer, PairDeserializer, \
+    NoOpSerializer
 from pyspark.streaming import DStream
 from pyspark.streaming.dstream import TransformedDStream
 from pyspark.streaming.util import TransformFunction
 
-__all__ = ['Broker', 'KafkaUtils', 'OffsetRange', 'TopicAndPartition', 'utf8_decoder']
+__all__ = ['Broker', 'KafkaMessageAndMetadata', 'KafkaUtils', 'OffsetRange',
+           'TopicAndPartition', 'utf8_decoder']
 
 
 def utf8_decoder(s):
@@ -38,7 +40,7 @@ class KafkaUtils(object):
 
     @staticmethod
     def createStream(ssc, zkQuorum, groupId, topics, kafkaParams=None,
-                     storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2,
+                     storageLevel=StorageLevel.MEMORY_AND_DISK_2,
                      keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
         Create an input stream that pulls messages from a Kafka Broker.
@@ -64,25 +66,16 @@ class KafkaUtils(object):
         if not isinstance(topics, dict):
             raise TypeError("topics should be dict")
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
-
-        try:
-            # Use KafkaUtilsPythonHelper to access Scala's KafkaUtils (see SPARK-6027)
-            helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader()\
-                .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
-            helper = helperClass.newInstance()
-            jstream = helper.createStream(ssc._jssc, kafkaParams, topics, jlevel)
-        except Py4JJavaError as e:
-            # TODO: use --jar once it also work on driver
-            if 'ClassNotFoundException' in str(e.java_exception):
-                KafkaUtils._printErrorMsg(ssc.sparkContext)
-            raise e
+        helper = KafkaUtils._get_helper(ssc._sc)
+        jstream = helper.createStream(ssc._jssc, kafkaParams, topics, jlevel)
         ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
         stream = DStream(jstream, ssc, ser)
         return stream.map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
 
     @staticmethod
     def createDirectStream(ssc, topics, kafkaParams, fromOffsets=None,
-                           keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
+                           keyDecoder=utf8_decoder, valueDecoder=utf8_decoder,
+                           messageHandler=None):
         """
         .. note:: Experimental
 
@@ -107,6 +100,8 @@ class KafkaUtils(object):
                             point of the stream.
         :param keyDecoder:  A function used to decode key (default is utf8_decoder).
         :param valueDecoder:  A function used to decode value (default is utf8_decoder).
+        :param messageHandler: A function used to convert KafkaMessageAndMetadata. You can assess
+                               meta using messageHandler (default is None).
         :return: A DStream object
         """
         if fromOffsets is None:
@@ -116,27 +111,36 @@ class KafkaUtils(object):
         if not isinstance(kafkaParams, dict):
             raise TypeError("kafkaParams should be dict")
 
-        try:
-            helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
-                .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
-            helper = helperClass.newInstance()
+        def funcWithoutMessageHandler(k_v):
+            return (keyDecoder(k_v[0]), valueDecoder(k_v[1]))
 
-            jfromOffsets = dict([(k._jTopicAndPartition(helper),
-                                  v) for (k, v) in fromOffsets.items()])
-            jstream = helper.createDirectStream(ssc._jssc, kafkaParams, set(topics), jfromOffsets)
-        except Py4JJavaError as e:
-            if 'ClassNotFoundException' in str(e.java_exception):
-                KafkaUtils._printErrorMsg(ssc.sparkContext)
-            raise e
+        def funcWithMessageHandler(m):
+            m._set_key_decoder(keyDecoder)
+            m._set_value_decoder(valueDecoder)
+            return messageHandler(m)
 
-        ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
-        stream = DStream(jstream, ssc, ser) \
-            .map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
+        helper = KafkaUtils._get_helper(ssc._sc)
+
+        jfromOffsets = dict([(k._jTopicAndPartition(helper),
+                              v) for (k, v) in fromOffsets.items()])
+        if messageHandler is None:
+            ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
+            func = funcWithoutMessageHandler
+            jstream = helper.createDirectStreamWithoutMessageHandler(
+                ssc._jssc, kafkaParams, set(topics), jfromOffsets)
+        else:
+            ser = AutoBatchedSerializer(PickleSerializer())
+            func = funcWithMessageHandler
+            jstream = helper.createDirectStreamWithMessageHandler(
+                ssc._jssc, kafkaParams, set(topics), jfromOffsets)
+
+        stream = DStream(jstream, ssc, ser).map(func)
         return KafkaDStream(stream._jdstream, ssc, stream._jrdd_deserializer)
 
     @staticmethod
     def createRDD(sc, kafkaParams, offsetRanges, leaders=None,
-                  keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
+                  keyDecoder=utf8_decoder, valueDecoder=utf8_decoder,
+                  messageHandler=None):
         """
         .. note:: Experimental
 
@@ -149,6 +153,8 @@ class KafkaUtils(object):
             map, in which case leaders will be looked up on the driver.
         :param keyDecoder:  A function used to decode key (default is utf8_decoder)
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
+        :param messageHandler: A function used to convert KafkaMessageAndMetadata. You can assess
+                               meta using messageHandler (default is None).
         :return: A RDD object
         """
         if leaders is None:
@@ -158,22 +164,39 @@ class KafkaUtils(object):
         if not isinstance(offsetRanges, list):
             raise TypeError("offsetRanges should be list")
 
-        try:
-            helperClass = sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
-                .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
-            helper = helperClass.newInstance()
-            joffsetRanges = [o._jOffsetRange(helper) for o in offsetRanges]
-            jleaders = dict([(k._jTopicAndPartition(helper),
-                              v._jBroker(helper)) for (k, v) in leaders.items()])
-            jrdd = helper.createRDD(sc._jsc, kafkaParams, joffsetRanges, jleaders)
-        except Py4JJavaError as e:
-            if 'ClassNotFoundException' in str(e.java_exception):
-                KafkaUtils._printErrorMsg(sc)
-            raise e
+        def funcWithoutMessageHandler(k_v):
+            return (keyDecoder(k_v[0]), valueDecoder(k_v[1]))
 
-        ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
-        rdd = RDD(jrdd, sc, ser).map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
-        return KafkaRDD(rdd._jrdd, rdd.ctx, rdd._jrdd_deserializer)
+        def funcWithMessageHandler(m):
+            m._set_key_decoder(keyDecoder)
+            m._set_value_decoder(valueDecoder)
+            return messageHandler(m)
+
+        helper = KafkaUtils._get_helper(sc)
+
+        joffsetRanges = [o._jOffsetRange(helper) for o in offsetRanges]
+        jleaders = dict([(k._jTopicAndPartition(helper),
+                          v._jBroker(helper)) for (k, v) in leaders.items()])
+        if messageHandler is None:
+            jrdd = helper.createRDDWithoutMessageHandler(
+                sc._jsc, kafkaParams, joffsetRanges, jleaders)
+            ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
+            rdd = RDD(jrdd, sc, ser).map(funcWithoutMessageHandler)
+        else:
+            jrdd = helper.createRDDWithMessageHandler(
+                sc._jsc, kafkaParams, joffsetRanges, jleaders)
+            rdd = RDD(jrdd, sc).map(funcWithMessageHandler)
+
+        return KafkaRDD(rdd._jrdd, sc, rdd._jrdd_deserializer)
+
+    @staticmethod
+    def _get_helper(sc):
+        try:
+            return sc._jvm.org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper()
+        except TypeError as e:
+            if str(e) == "'JavaPackage' object is not callable":
+                KafkaUtils._printErrorMsg(sc)
+            raise
 
     @staticmethod
     def _printErrorMsg(sc):
@@ -185,13 +208,13 @@ ________________________________________________________________________________
   1. Include the Kafka library and its dependencies with in the
      spark-submit command as
 
-     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kafka:%s ...
+     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kafka-0-8:%s ...
 
   2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
-     Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-assembly, Version = %s.
+     Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-0-8-assembly, Version = %s.
      Then, include the jar in the spark-submit command as
 
-     $ bin/spark-submit --jars <spark-streaming-kafka-assembly.jar> ...
+     $ bin/spark-submit --jars <spark-streaming-kafka-0-8-assembly.jar> ...
 
 ________________________________________________________________________________________________
 
@@ -205,7 +228,7 @@ class OffsetRange(object):
 
     def __init__(self, topic, partition, fromOffset, untilOffset):
         """
-        Create a OffsetRange to represent  range of offsets
+        Create an OffsetRange to represent range of offsets
         :param topic: Kafka topic name.
         :param partition: Kafka partition id.
         :param fromOffset: Inclusive starting offset.
@@ -254,6 +277,19 @@ class TopicAndPartition(object):
     def _jTopicAndPartition(self, helper):
         return helper.createTopicAndPartition(self._topic, self._partition)
 
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return (self._topic == other._topic
+                    and self._partition == other._partition)
+        else:
+            return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __hash__(self):
+        return (self._topic, self._partition).__hash__()
+
 
 class Broker(object):
     """
@@ -286,16 +322,8 @@ class KafkaRDD(RDD):
         Get the OffsetRange of specific KafkaRDD.
         :return: A list of OffsetRange
         """
-        try:
-            helperClass = self.ctx._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
-                .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
-            helper = helperClass.newInstance()
-            joffsetRanges = helper.offsetRangesOfKafkaRDD(self._jrdd.rdd())
-        except Py4JJavaError as e:
-            if 'ClassNotFoundException' in str(e.java_exception):
-                KafkaUtils._printErrorMsg(self.ctx)
-            raise e
-
+        helper = KafkaUtils._get_helper(self.ctx)
+        joffsetRanges = helper.offsetRangesOfKafkaRDD(self._jrdd.rdd())
         ranges = [OffsetRange(o.topic(), o.partition(), o.fromOffset(), o.untilOffset())
                   for o in joffsetRanges]
         return ranges
@@ -355,3 +383,53 @@ class KafkaTransformedDStream(TransformedDStream):
         dstream = self._sc._jvm.PythonTransformedDStream(self.prev._jdstream.dstream(), jfunc)
         self._jdstream_val = dstream.asJavaDStream()
         return self._jdstream_val
+
+
+class KafkaMessageAndMetadata(object):
+    """
+    Kafka message and metadata information. Including topic, partition, offset and message
+    """
+
+    def __init__(self, topic, partition, offset, key, message):
+        """
+        Python wrapper of Kafka MessageAndMetadata
+        :param topic: topic name of this Kafka message
+        :param partition: partition id of this Kafka message
+        :param offset: Offset of this Kafka message in the specific partition
+        :param key: key payload of this Kafka message, can be null if this Kafka message has no key
+                    specified, the return data is undecoded bytearry.
+        :param message: actual message payload of this Kafka message, the return data is
+                        undecoded bytearray.
+        """
+        self.topic = topic
+        self.partition = partition
+        self.offset = offset
+        self._rawKey = key
+        self._rawMessage = message
+        self._keyDecoder = utf8_decoder
+        self._valueDecoder = utf8_decoder
+
+    def __str__(self):
+        return "KafkaMessageAndMetadata(topic: %s, partition: %d, offset: %d, key and message...)" \
+               % (self.topic, self.partition, self.offset)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __reduce__(self):
+        return (KafkaMessageAndMetadata,
+                (self.topic, self.partition, self.offset, self._rawKey, self._rawMessage))
+
+    def _set_key_decoder(self, decoder):
+        self._keyDecoder = decoder
+
+    def _set_value_decoder(self, decoder):
+        self._valueDecoder = decoder
+
+    @property
+    def key(self):
+        return self._keyDecoder(self._rawKey)
+
+    @property
+    def message(self):
+        return self._valueDecoder(self._rawMessage)

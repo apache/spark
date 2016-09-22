@@ -20,21 +20,19 @@ package org.apache.spark.scheduler
 import java.io.File
 import java.util.concurrent.TimeoutException
 
+import scala.concurrent.duration._
+import scala.language.postfixOps
+
+import org.apache.hadoop.mapred.{JobConf, OutputCommitter, TaskAttemptContext, TaskAttemptID}
 import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
-import org.apache.hadoop.mapred.{TaskAttemptID, JobConf, TaskAttemptContext, OutputCommitter}
-
 import org.apache.spark._
-import org.apache.spark.rdd.{RDD, FakeOutputCommitter}
-import org.apache.spark.util.Utils
-
-import scala.concurrent.Await
-import scala.concurrent.duration._
-import scala.language.postfixOps
+import org.apache.spark.rdd.{FakeOutputCommitter, RDD}
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Unit tests for the output commit coordination functionality.
@@ -78,7 +76,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     val conf = new SparkConf()
       .setMaster("local[4]")
       .setAppName(classOf[OutputCommitCoordinatorSuite].getSimpleName)
-      .set("spark.speculation", "true")
+      .set("spark.hadoop.outputCommitCoordination.enabled", "true")
     sc = new SparkContext(conf) {
       override private[spark] def createSparkEnv(
           conf: SparkConf,
@@ -87,7 +85,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
         outputCommitCoordinator = spy(new OutputCommitCoordinator(conf, isDriver = true))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
-        SparkEnv.createDriverEnv(conf, isLocal, listenerBus, Some(outputCommitCoordinator))
+        SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
+          SparkContext.numDriverCores(master), Some(outputCommitCoordinator))
       }
     }
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
@@ -159,9 +158,10 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       0 until rdd.partitions.size, resultHandler, () => Unit)
     // It's an error if the job completes successfully even though no committer was authorized,
     // so throw an exception if the job was allowed to complete.
-    intercept[TimeoutException] {
-      Await.result(futureAction, 5 seconds)
+    val e = intercept[SparkException] {
+      ThreadUtils.awaitResult(futureAction, 5 seconds)
     }
+    assert(e.getCause.isInstanceOf[TimeoutException])
     assert(tempDir.list().size === 0)
   }
 
@@ -170,7 +170,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     val partition: Int = 2
     val authorizedCommitter: Int = 3
     val nonAuthorizedCommitter: Int = 100
-    outputCommitCoordinator.stageStart(stage)
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 2)
 
     assert(outputCommitCoordinator.canCommit(stage, partition, authorizedCommitter))
     assert(!outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter))

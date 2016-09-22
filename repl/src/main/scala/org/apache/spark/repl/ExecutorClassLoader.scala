@@ -17,27 +17,33 @@
 
 package org.apache.spark.repl
 
-import java.io.{IOException, ByteArrayOutputStream, InputStream}
+import java.io.{ByteArrayOutputStream, FileNotFoundException, FilterInputStream, InputStream, IOException}
 import java.net.{HttpURLConnection, URI, URL, URLEncoder}
+import java.nio.channels.Channels
 
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.xbean.asm5._
+import org.apache.xbean.asm5.Opcodes._
 
-import org.apache.spark.{SparkConf, SparkEnv, Logging}
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.Utils
-import org.apache.spark.util.ParentClassLoader
-
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.{ParentClassLoader, Utils}
 
 /**
  * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,
  * used to load classes defined by the interpreter when the REPL is used.
- * Allows the user to specify if user class path should be first
+ * Allows the user to specify if user class path should be first.
+ * This class loader delegates getting/finding resources to parent loader,
+ * which makes sense until REPL never provide resource dynamically.
  */
-class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader,
+class ExecutorClassLoader(
+    conf: SparkConf,
+    env: SparkEnv,
+    classUri: String,
+    parent: ClassLoader,
     userClassPathFirst: Boolean) extends ClassLoader with Logging {
   val uri = new URI(classUri)
   val directory = uri.getPath
@@ -47,29 +53,56 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
   // Allows HTTP connect and read timeouts to be controlled for testing / debugging purposes
   private[repl] var httpUrlConnectionTimeoutMillis: Int = -1
 
-  // Hadoop FileSystem object for our URI, if it isn't using HTTP
-  var fileSystem: FileSystem = {
-    if (Set("http", "https", "ftp").contains(uri.getScheme)) {
-      null
-    } else {
-      FileSystem.get(uri, SparkHadoopUtil.get.newConfiguration(conf))
-    }
+  private val fetchFn: (String) => InputStream = uri.getScheme() match {
+    case "spark" => getClassFileInputStreamFromSparkRPC
+    case "http" | "https" | "ftp" => getClassFileInputStreamFromHttpServer
+    case _ =>
+      val fileSystem = FileSystem.get(uri, SparkHadoopUtil.get.newConfiguration(conf))
+      getClassFileInputStreamFromFileSystem(fileSystem)
+  }
+
+  override def getResource(name: String): URL = {
+    parentLoader.getResource(name)
+  }
+
+  override def getResources(name: String): java.util.Enumeration[URL] = {
+    parentLoader.getResources(name)
   }
 
   override def findClass(name: String): Class[_] = {
-    userClassPathFirst match {
-      case true => findClassLocally(name).getOrElse(parentLoader.loadClass(name))
-      case false => {
-        try {
-          parentLoader.loadClass(name)
-        } catch {
-          case e: ClassNotFoundException => {
-            val classOption = findClassLocally(name)
-            classOption match {
-              case None => throw new ClassNotFoundException(name, e)
-              case Some(a) => a
-            }
+    if (userClassPathFirst) {
+      findClassLocally(name).getOrElse(parentLoader.loadClass(name))
+    } else {
+      try {
+        parentLoader.loadClass(name)
+      } catch {
+        case e: ClassNotFoundException =>
+          val classOption = findClassLocally(name)
+          classOption match {
+            case None => throw new ClassNotFoundException(name, e)
+            case Some(a) => a
           }
+      }
+    }
+  }
+
+  private def getClassFileInputStreamFromSparkRPC(path: String): InputStream = {
+    val channel = env.rpcEnv.openChannel(s"$classUri/$path")
+    new FilterInputStream(Channels.newInputStream(channel)) {
+
+      override def read(): Int = toClassNotFound(super.read())
+
+      override def read(b: Array[Byte]): Int = toClassNotFound(super.read(b))
+
+      override def read(b: Array[Byte], offset: Int, len: Int) =
+        toClassNotFound(super.read(b, offset, len))
+
+      private def toClassNotFound(fn: => Int): Int = {
+        try {
+          fn
+        } catch {
+          case e: Exception =>
+            throw new ClassNotFoundException(path, e)
         }
       }
     }
@@ -111,12 +144,14 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
     }
   }
 
-  private def getClassFileInputStreamFromFileSystem(pathInDirectory: String): InputStream = {
+  private def getClassFileInputStreamFromFileSystem(fileSystem: FileSystem)(
+      pathInDirectory: String): InputStream = {
     val path = new Path(directory, pathInDirectory)
-    if (fileSystem.exists(path)) {
+    try {
       fileSystem.open(path)
-    } else {
-      throw new ClassNotFoundException(s"Class file not found at path $path")
+    } catch {
+      case _: FileNotFoundException =>
+        throw new ClassNotFoundException(s"Class file not found at path $path")
     }
   }
 
@@ -124,13 +159,7 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
     val pathInDirectory = name.replace('.', '/') + ".class"
     var inputStream: InputStream = null
     try {
-      inputStream = {
-        if (fileSystem != null) {
-          getClassFileInputStreamFromFileSystem(pathInDirectory)
-        } else {
-          getClassFileInputStreamFromHttpServer(pathInDirectory)
-        }
-      }
+      inputStream = fetchFn(pathInDirectory)
       val bytes = readAndTransformClass(name, inputStream)
       Some(defineClass(name, bytes, 0, bytes.length))
     } catch {
@@ -192,7 +221,7 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
 }
 
 class ConstructorCleaner(className: String, cv: ClassVisitor)
-extends ClassVisitor(ASM4, cv) {
+extends ClassVisitor(ASM5, cv) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     val mv = cv.visitMethod(access, name, desc, sig, exceptions)
@@ -202,7 +231,7 @@ extends ClassVisitor(ASM4, cv) {
       // field in the class to point to it, but do nothing otherwise.
       mv.visitCode()
       mv.visitVarInsn(ALOAD, 0) // load this
-      mv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V")
+      mv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false)
       mv.visitVarInsn(ALOAD, 0) // load this
       // val classType = className.replace('.', '/')
       // mv.visitFieldInsn(PUTSTATIC, classType, "MODULE$", "L" + classType + ";")

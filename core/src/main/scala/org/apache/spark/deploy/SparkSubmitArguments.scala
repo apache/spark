@@ -20,6 +20,7 @@ package org.apache.spark.deploy
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.lang.reflect.InvocationTargetException
 import java.net.URI
+import java.nio.charset.StandardCharsets
 import java.util.{List => JList}
 import java.util.jar.JarFile
 
@@ -172,11 +173,15 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orNull
     name = Option(name).orElse(sparkProperties.get("spark.app.name")).orNull
     jars = Option(jars).orElse(sparkProperties.get("spark.jars")).orNull
+    files = Option(files).orElse(sparkProperties.get("spark.files")).orNull
     ivyRepoPath = sparkProperties.get("spark.jars.ivy").orNull
     packages = Option(packages).orElse(sparkProperties.get("spark.jars.packages")).orNull
     packagesExclusions = Option(packagesExclusions)
       .orElse(sparkProperties.get("spark.jars.excludes")).orNull
-    deployMode = Option(deployMode).orElse(env.get("DEPLOY_MODE")).orNull
+    deployMode = Option(deployMode)
+      .orElse(sparkProperties.get("spark.submit.deployMode"))
+      .orElse(env.get("DEPLOY_MODE"))
+      .orNull
     numExecutors = Option(numExecutors)
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
     keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
@@ -251,6 +256,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         throw new Exception(s"When running with master '$master' " +
           "either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.")
       }
+    }
+
+    if (proxyUser != null && principal != null) {
+      SparkSubmit.printErrorAndExit("Only one of --proxy-user or --principal can be provided.")
     }
   }
 
@@ -470,7 +479,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     val command = sys.env.get("_SPARK_CMD_USAGE").getOrElse(
       """Usage: spark-submit [options] <app jar | python file> [app arguments]
         |Usage: spark-submit --kill [submission ID] --master [spark://...]
-        |Usage: spark-submit --status [submission ID] --master [spark://...]""".stripMargin)
+        |Usage: spark-submit --status [submission ID] --master [spark://...]
+        |Usage: spark-submit run-example [options] example-class [example args]""".stripMargin)
     outStream.println(command)
 
     val mem_mb = Utils.DEFAULT_DRIVER_MEM_MB
@@ -514,10 +524,11 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
         |
         |  --proxy-user NAME           User to impersonate when submitting the application.
+        |                              This argument does not work with --principal / --keytab.
         |
-        |  --help, -h                  Show this help message and exit
-        |  --verbose, -v               Print additional debug output
-        |  --version,                  Print the version of current Spark
+        |  --help, -h                  Show this help message and exit.
+        |  --verbose, -v               Print additional debug output.
+        |  --version,                  Print the version of current Spark.
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
@@ -539,6 +550,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              (Default: 1).
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
         |  --num-executors NUM         Number of executors to launch (Default: 2).
+        |                              If dynamic allocation is enabled, the initial number of
+        |                              executors will be at least NUM.
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
         |                              working directory of each executor.
         |  --principal PRINCIPAL       Principal to be used to login to KDC, while running on
@@ -600,7 +613,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       stream.flush()
 
       // Get the output and discard any unnecessary lines from it.
-      Source.fromString(new String(out.toByteArray())).getLines
+      Source.fromString(new String(out.toByteArray(), StandardCharsets.UTF_8)).getLines
         .filter { line =>
           !line.startsWith("log4j") && !line.startsWith("usage")
         }

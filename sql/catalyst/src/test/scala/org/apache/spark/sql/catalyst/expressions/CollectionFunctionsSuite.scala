@@ -40,8 +40,21 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Size(m1), 0)
     checkEvaluation(Size(m2), 1)
 
-    checkEvaluation(Literal.create(null, MapType(StringType, StringType)), null)
-    checkEvaluation(Literal.create(null, ArrayType(StringType)), null)
+    checkEvaluation(Size(Literal.create(null, MapType(StringType, StringType))), -1)
+    checkEvaluation(Size(Literal.create(null, ArrayType(StringType))), -1)
+  }
+
+  test("MapKeys/MapValues") {
+    val m0 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
+    val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
+    val m2 = Literal.create(null, MapType(StringType, StringType))
+
+    checkEvaluation(MapKeys(m0), Seq("a", "b"))
+    checkEvaluation(MapValues(m0), Seq("1", "2"))
+    checkEvaluation(MapKeys(m1), Seq())
+    checkEvaluation(MapValues(m1), Seq())
+    checkEvaluation(MapKeys(m2), null)
+    checkEvaluation(MapValues(m2), null)
   }
 
   test("Sort Array") {
@@ -49,6 +62,7 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))
     val a2 = Literal.create(Seq("b", "a"), ArrayType(StringType))
     val a3 = Literal.create(Seq("b", null, "a"), ArrayType(StringType))
+    val a4 = Literal.create(Seq(null, null), ArrayType(NullType))
 
     checkEvaluation(new SortArray(a0), Seq(1, 2, 3))
     checkEvaluation(new SortArray(a1), Seq[Integer]())
@@ -64,6 +78,12 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(new SortArray(a3, Literal(false)), Seq("b", "a", null))
 
     checkEvaluation(Literal.create(null, ArrayType(StringType)), null)
+    checkEvaluation(new SortArray(a4), Seq(null, null))
+
+    val typeAS = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val arrayStruct = Literal.create(Seq(create_row(2), create_row(1)), typeAS)
+
+    checkEvaluation(new SortArray(arrayStruct), Seq(create_row(1), create_row(2)))
   }
 
   test("Array contains") {

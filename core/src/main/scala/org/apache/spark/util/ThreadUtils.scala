@@ -15,15 +15,18 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.util
 
 import java.util.concurrent._
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.concurrent.{Await, Awaitable, ExecutionContext, ExecutionContextExecutor}
+import scala.concurrent.duration.Duration
+import scala.concurrent.forkjoin.{ForkJoinPool => SForkJoinPool, ForkJoinWorkerThread => SForkJoinWorkerThread}
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
+
+import org.apache.spark.SparkException
 
 private[spark] object ThreadUtils {
 
@@ -57,10 +60,18 @@ private[spark] object ThreadUtils {
    * Create a cached thread pool whose max number of threads is `maxThreadNumber`. Thread names
    * are formatted as prefix-ID, where ID is a unique, sequentially assigned integer.
    */
-  def newDaemonCachedThreadPool(prefix: String, maxThreadNumber: Int): ThreadPoolExecutor = {
+  def newDaemonCachedThreadPool(
+      prefix: String, maxThreadNumber: Int, keepAliveSeconds: Int = 60): ThreadPoolExecutor = {
     val threadFactory = namedThreadFactory(prefix)
-    new ThreadPoolExecutor(
-      0, maxThreadNumber, 60L, TimeUnit.SECONDS, new SynchronousQueue[Runnable], threadFactory)
+    val threadPool = new ThreadPoolExecutor(
+      maxThreadNumber, // corePoolSize: the max number of threads to create before queuing the tasks
+      maxThreadNumber, // maximumPoolSize: because we use LinkedBlockingDeque, this one is not used
+      keepAliveSeconds,
+      TimeUnit.SECONDS,
+      new LinkedBlockingQueue[Runnable],
+      threadFactory)
+    threadPool.allowCoreThreadTimeOut(true)
+    threadPool
   }
 
   /**
@@ -81,11 +92,15 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Wrapper over newSingleThreadScheduledExecutor.
+   * Wrapper over ScheduledThreadPoolExecutor.
    */
   def newDaemonSingleThreadScheduledExecutor(threadName: String): ScheduledExecutorService = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
-    Executors.newSingleThreadScheduledExecutor(threadFactory)
+    val executor = new ScheduledThreadPoolExecutor(1, threadFactory)
+    // By default, a cancelled task is not automatically removed from the work queue until its delay
+    // elapses. We have to enable it manually.
+    executor.setRemoveOnCancelPolicy(true)
+    executor
   }
 
   /**
@@ -143,6 +158,40 @@ private[spark] object ThreadUtils {
         throw realException
       case None =>
         result
+    }
+  }
+
+  /**
+   * Construct a new Scala ForkJoinPool with a specified max parallelism and name prefix.
+   */
+  def newForkJoinPool(prefix: String, maxThreadNumber: Int): SForkJoinPool = {
+    // Custom factory to set thread names
+    val factory = new SForkJoinPool.ForkJoinWorkerThreadFactory {
+      override def newThread(pool: SForkJoinPool) =
+        new SForkJoinWorkerThread(pool) {
+          setName(prefix + "-" + super.getName)
+        }
+    }
+    new SForkJoinPool(maxThreadNumber, factory,
+      null, // handler
+      false // asyncMode
+    )
+  }
+
+  // scalastyle:off awaitresult
+  /**
+   * Preferred alternative to [[Await.result()]]. This method wraps and re-throws any exceptions
+   * thrown by the underlying [[Await]] call, ensuring that this thread's stack trace appears in
+   * logs.
+   */
+  @throws(classOf[SparkException])
+  def awaitResult[T](awaitable: Awaitable[T], atMost: Duration): T = {
+    try {
+      Await.result(awaitable, atMost)
+      // scalastyle:on awaitresult
+    } catch {
+      case NonFatal(t) =>
+        throw new SparkException("Exception thrown in awaitResult: ", t)
     }
   }
 }

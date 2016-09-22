@@ -21,6 +21,7 @@ import scala.language.existentials
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -28,13 +29,15 @@ class PrunedScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    SimplePrunedScan(parameters("from").toInt, parameters("to").toInt)(sqlContext)
+    SimplePrunedScan(parameters("from").toInt, parameters("to").toInt)(sqlContext.sparkSession)
   }
 }
 
-case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
+case class SimplePrunedScan(from: Int, to: Int)(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with PrunedScan {
+
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType =
     StructType(
@@ -47,19 +50,19 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLCo
       case "b" => (i: Int) => Seq(i * 2)
     }
 
-    sqlContext.sparkContext.parallelize(from to to).map(i =>
+    sparkSession.sparkContext.parallelize(from to to).map(i =>
       Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
   }
 }
 
 class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+  protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTenPruned
+        |CREATE TEMPORARY VIEW oneToTenPruned
         |USING org.apache.spark.sql.sources.PrunedScanSource
         |OPTIONS (
         |  from '1',
@@ -117,28 +120,35 @@ class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
 
   def testPruning(sqlString: String, expectedColumns: String*): Unit = {
     test(s"Columns output ${expectedColumns.mkString(",")}: $sqlString") {
-      val queryExecution = sql(sqlString).queryExecution
-      val rawPlan = queryExecution.executedPlan.collect {
-        case p: execution.PhysicalRDD => p
-      } match {
-        case Seq(p) => p
-        case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
-      }
-      val rawColumns = rawPlan.output.map(_.name)
-      val rawOutput = rawPlan.execute().first()
 
-      if (rawColumns != expectedColumns) {
-        fail(
-          s"Wrong column names. Got $rawColumns, Expected $expectedColumns\n" +
-          s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
-            queryExecution)
-      }
+      // These tests check a particular plan, disable whole stage codegen.
+      spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, false)
+      try {
+        val queryExecution = sql(sqlString).queryExecution
+        val rawPlan = queryExecution.executedPlan.collect {
+          case p: execution.DataSourceScanExec => p
+        } match {
+          case Seq(p) => p
+          case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
+        }
+        val rawColumns = rawPlan.output.map(_.name)
+        val rawOutput = rawPlan.execute().first()
 
-      if (rawOutput.numFields != expectedColumns.size) {
-        fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
+        if (rawColumns != expectedColumns) {
+          fail(
+            s"Wrong column names. Got $rawColumns, Expected $expectedColumns\n" +
+              s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
+              queryExecution)
+        }
+
+        if (rawOutput.numFields != expectedColumns.size) {
+          fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
+        }
+      } finally {
+        spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
       }
     }
   }
-
 }
 

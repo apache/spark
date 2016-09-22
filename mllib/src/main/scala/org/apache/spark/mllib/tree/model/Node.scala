@@ -18,9 +18,9 @@
 package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.Logging
-import org.apache.spark.mllib.tree.configuration.FeatureType._
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.tree.configuration.FeatureType._
 
 /**
  * :: DeveloperApi ::
@@ -57,33 +57,12 @@ class Node @Since("1.2.0") (
   }
 
   /**
-   * build the left node and right nodes if not leaf
-   * @param nodes array of nodes
-   */
-  @Since("1.0.0")
-  @deprecated("build should no longer be used since trees are constructed on-the-fly in training",
-    "1.2.0")
-  def build(nodes: Array[Node]): Unit = {
-    logDebug("building node " + id + " at level " + Node.indexToLevel(id))
-    logDebug("id = " + id + ", split = " + split)
-    logDebug("stats = " + stats)
-    logDebug("predict = " + predict)
-    logDebug("impurity = " + impurity)
-    if (!isLeaf) {
-      leftNode = Some(nodes(Node.leftChildIndex(id)))
-      rightNode = Some(nodes(Node.rightChildIndex(id)))
-      leftNode.get.build(nodes)
-      rightNode.get.build(nodes)
-    }
-  }
-
-  /**
    * predict value if node is not leaf
    * @param features feature value
    * @return predicted value
    */
   @Since("1.1.0")
-  def predict(features: Vector) : Double = {
+  def predict(features: Vector): Double = {
     if (isLeaf) {
       predict.predict
     } else {

@@ -18,7 +18,7 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.SparkConf
-import org.apache.spark.mllib.stat.test.StreamingTest
+import org.apache.spark.mllib.stat.test.{BinarySample, StreamingTest}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.util.Utils
 
@@ -59,13 +59,14 @@ object StreamingTestExample {
 
     val conf = new SparkConf().setMaster("local").setAppName("StreamingTestExample")
     val ssc = new StreamingContext(conf, batchDuration)
-    ssc.checkpoint({
+    ssc.checkpoint {
       val dir = Utils.createTempDir()
       dir.toString
-    })
+    }
 
+    // $example on$
     val data = ssc.textFileStream(dataDir).map(line => line.split(",") match {
-      case Array(label, value) => (label.toBoolean, value.toDouble)
+      case Array(label, value) => BinarySample(label.toBoolean, value.toDouble)
     })
 
     val streamingTest = new StreamingTest()
@@ -75,6 +76,7 @@ object StreamingTestExample {
 
     val out = streamingTest.registerStream(data)
     out.print()
+    // $example off$
 
     // Stop processing if test becomes significant or we time out
     var timeoutCounter = numBatchesTimeout

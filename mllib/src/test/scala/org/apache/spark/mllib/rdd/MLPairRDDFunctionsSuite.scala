@@ -18,8 +18,8 @@
 package org.apache.spark.mllib.rdd
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class MLPairRDDFunctionsSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("topByKey") {

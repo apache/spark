@@ -17,17 +17,19 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{TimeUnit, Executors}
+import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.util.{Try, Random}
+import scala.util.{Random, Try}
 
-import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.{RpcUtils, ResetSystemProperties}
 import com.esotericsoftware.kryo.Kryo
+
+import org.apache.spark.internal.config._
+import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
+import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
 class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("Test byteString conversion") {
@@ -50,8 +52,10 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
   test("loading from system properties") {
     System.setProperty("spark.test.testProperty", "2")
+    System.setProperty("nonspark.test.testProperty", "0")
     val conf = new SparkConf()
     assert(conf.get("spark.test.testProperty") === "2")
+    assert(!conf.contains("nonspark.test.testProperty"))
   }
 
   test("initializing without loading defaults") {
@@ -236,7 +240,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set(newName, "4")
     assert(conf.get(newName) === "4")
 
-    val count = conf.getAll.filter { case (k, v) => k.startsWith("spark.history.") }.size
+    val count = conf.getAll.count { case (k, v) => k.startsWith("spark.history.") }
     assert(count === 4)
 
     conf.set("spark.yarn.applicationMaster.waitTries", "42")
@@ -266,6 +270,39 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set("spark.akka.lookupTimeout", "4")
     assert(RpcUtils.lookupRpcTimeout(conf).duration === (4 seconds))
   }
+
+  test("SPARK-13727") {
+    val conf = new SparkConf()
+    // set the conf in the deprecated way
+    conf.set("spark.io.compression.lz4.block.size", "12345")
+    // get the conf in the recommended way
+    assert(conf.get("spark.io.compression.lz4.blockSize") === "12345")
+    // we can still get the conf in the deprecated way
+    assert(conf.get("spark.io.compression.lz4.block.size") === "12345")
+    // the contains() also works as expected
+    assert(conf.contains("spark.io.compression.lz4.block.size"))
+    assert(conf.contains("spark.io.compression.lz4.blockSize"))
+    assert(conf.contains("spark.io.unknown") === false)
+  }
+
+  val serializers = Map(
+    "java" -> new JavaSerializer(new SparkConf()),
+    "kryo" -> new KryoSerializer(new SparkConf()))
+
+  serializers.foreach { case (name, ser) =>
+    test(s"SPARK-17240: SparkConf should be serializable ($name)") {
+      val conf = new SparkConf()
+      conf.set(DRIVER_CLASS_PATH, "${" + DRIVER_JAVA_OPTIONS.key + "}")
+      conf.set(DRIVER_JAVA_OPTIONS, "test")
+
+      val serializer = ser.newInstance()
+      val bytes = serializer.serialize(conf)
+      val deser = serializer.deserialize[SparkConf](bytes)
+
+      assert(conf.get(DRIVER_CLASS_PATH) === deser.get(DRIVER_CLASS_PATH))
+    }
+  }
+
 }
 
 class Class1 {}

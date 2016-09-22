@@ -17,6 +17,8 @@
 
 package org.apache.spark.ui.jobs
 
+import java.net.URLEncoder
+
 import scala.collection.mutable.HashMap
 import scala.xml.Node
 
@@ -59,7 +61,7 @@ private[ui] class PoolTable(pools: Seq[Schedulable], parent: StagesTab) {
       case None => 0
     }
     val href = "%s/stages/pool?poolname=%s"
-      .format(UIUtils.prependBaseUri(parent.basePath), p.name)
+      .format(UIUtils.prependBaseUri(parent.basePath), URLEncoder.encode(p.name, "UTF-8"))
     <tr>
       <td>
         <a href={href}>{p.name}</a>

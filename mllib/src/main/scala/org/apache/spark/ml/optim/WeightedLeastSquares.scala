@@ -17,22 +17,27 @@
 
 package org.apache.spark.ml.optim
 
-import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
-import org.netlib.util.intW
-
-import org.apache.spark.Logging
-import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
+import org.apache.spark.internal.Logging
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.linalg._
+import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.rdd.RDD
 
 /**
  * Model fitted by [[WeightedLeastSquares]].
  * @param coefficients model coefficients
  * @param intercept model intercept
+ * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1
  */
 private[ml] class WeightedLeastSquaresModel(
     val coefficients: DenseVector,
-    val intercept: Double) extends Serializable
+    val intercept: Double,
+    val diagInvAtWA: DenseVector) extends Serializable {
+
+  def predict(features: Vector): Double = {
+    BLAS.dot(coefficients, features) + intercept
+  }
+}
 
 /**
  * Weighted least squares solver via normal equation.
@@ -76,7 +81,9 @@ private[ml] class WeightedLeastSquares(
     val summary = instances.treeAggregate(new Aggregator)(_.add(_), _.merge(_))
     summary.validate()
     logInfo(s"Number of instances: ${summary.count}.")
+    val k = if (fitIntercept) summary.k + 1 else summary.k
     val triK = summary.triK
+    val wSum = summary.wSum
     val bBar = summary.bBar
     val bStd = summary.bStd
     val aBar = summary.aBar
@@ -85,12 +92,22 @@ private[ml] class WeightedLeastSquares(
     val aaBar = summary.aaBar
     val aaValues = aaBar.values
 
-    if (fitIntercept) {
-      // shift centers
-      // A^T A - aBar aBar^T
-      BLAS.spr(-1.0, aBar, aaValues)
-      // A^T b - bBar aBar
-      BLAS.axpy(-bBar, aBar, abBar)
+    if (bStd == 0) {
+      if (fitIntercept) {
+        logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
+          s"zeros and the intercept will be the mean of the label; as a result, " +
+          s"training is not needed.")
+        val coefficients = new DenseVector(Array.ofDim(k-1))
+        val intercept = bBar
+        val diagInvAtWA = new DenseVector(Array(0D))
+        return new WeightedLeastSquaresModel(coefficients, intercept, diagInvAtWA)
+      } else {
+        require(!(regParam > 0.0 && standardizeLabel),
+          "The standard deviation of the label is zero. " +
+            "Model cannot be regularized with standardization=true")
+        logWarning(s"The standard deviation of the label is zero. " +
+          "Consider setting fitIntercept=true.")
+      }
     }
 
     // add regularization to diagonals
@@ -101,8 +118,7 @@ private[ml] class WeightedLeastSquares(
       if (standardizeFeatures) {
         lambda *= aVar(j - 2)
       }
-      if (standardizeLabel) {
-        // TODO: handle the case when bStd = 0
+      if (standardizeLabel && bStd != 0) {
         lambda /= bStd
       }
       aaValues(i) += lambda
@@ -110,47 +126,42 @@ private[ml] class WeightedLeastSquares(
       j += 1
     }
 
-    val x = choleskySolve(aaBar.values, abBar)
-
-    // compute intercept
-    val intercept = if (fitIntercept) {
-      bBar - BLAS.dot(aBar, x)
+    val aa = if (fitIntercept) {
+      Array.concat(aaBar.values, aBar.values, Array(1.0))
     } else {
-      0.0
+      aaBar.values
+    }
+    val ab = if (fitIntercept) {
+      Array.concat(abBar.values, Array(bBar))
+    } else {
+      abBar.values
     }
 
-    new WeightedLeastSquaresModel(x, intercept)
-  }
+    val x = CholeskyDecomposition.solve(aa, ab)
 
-  /**
-   * Solves a symmetric positive definite linear system via Cholesky factorization.
-   * The input arguments are modified in-place to store the factorization and the solution.
-   * @param A the upper triangular part of A
-   * @param bx right-hand side
-   * @return the solution vector
-   */
-  // TODO: SPARK-10490 - consolidate this and the Cholesky solver in ALS
-  private def choleskySolve(A: Array[Double], bx: DenseVector): DenseVector = {
-    val k = bx.size
-    val info = new intW(0)
-    lapack.dppsv("U", k, 1, A, bx.values, k, info)
-    val code = info.`val`
-    assert(code == 0, s"lapack.dpotrs returned $code.")
-    bx
+    val aaInv = CholeskyDecomposition.inverse(aa, k)
+
+    // aaInv is a packed upper triangular matrix, here we get all elements on diagonal
+    val diagInvAtWA = new DenseVector((1 to k).map { i =>
+      aaInv(i + (i - 1) * i / 2 - 1) / wSum }.toArray)
+
+    val (coefficients, intercept) = if (fitIntercept) {
+      (new DenseVector(x.slice(0, x.length - 1)), x.last)
+    } else {
+      (new DenseVector(x), 0.0)
+    }
+
+    new WeightedLeastSquaresModel(coefficients, intercept, diagInvAtWA)
   }
 }
 
 private[ml] object WeightedLeastSquares {
 
   /**
-   * Case class for weighted observations.
-   * @param w weight, must be positive
-   * @param a features
-   * @param b label
+   * In order to take the normal equation approach efficiently, [[WeightedLeastSquares]]
+   * only supports the number of features is no more than 4096.
    */
-  case class Instance(w: Double, a: Vector, b: Double) {
-    require(w >= 0.0, s"Weight cannot be negative: $w.")
-  }
+  val MAX_NUM_FEATURES: Int = 4096
 
   /**
    * Aggregator to provide necessary summary statistics for solving [[WeightedLeastSquares]].
@@ -161,7 +172,7 @@ private[ml] object WeightedLeastSquares {
     var k: Int = _
     var count: Long = _
     var triK: Int = _
-    private var wSum: Double = _
+    var wSum: Double = _
     private var wwSum: Double = _
     private var bSum: Double = _
     private var bbSum: Double = _
@@ -170,8 +181,8 @@ private[ml] object WeightedLeastSquares {
     private var aaSum: DenseVector = _
 
     private def init(k: Int): Unit = {
-      require(k <= 4096, "In order to take the normal equation approach efficiently, " +
-        s"we set the max number of features to 4096 but got $k.")
+      require(k <= MAX_NUM_FEATURES, "In order to take the normal equation approach efficiently, " +
+        s"we set the max number of features to $MAX_NUM_FEATURES but got $k.")
       this.k = k
       triK = k * (k + 1) / 2
       count = 0L
@@ -189,8 +200,8 @@ private[ml] object WeightedLeastSquares {
      * Adds an instance.
      */
     def add(instance: Instance): this.type = {
-      val Instance(w, a, b) = instance
-      val ak = a.size
+      val Instance(l, w, f) = instance
+      val ak = f.size
       if (!initialized) {
         init(ak)
       }
@@ -198,11 +209,11 @@ private[ml] object WeightedLeastSquares {
       count += 1L
       wSum += w
       wwSum += w * w
-      bSum += w * b
-      bbSum += w * b * b
-      BLAS.axpy(w, a, aSum)
-      BLAS.axpy(w * b, a, abSum)
-      BLAS.spr(w, a, aaSum)
+      bSum += w * l
+      bbSum += w * l * l
+      BLAS.axpy(w, f, aSum)
+      BLAS.axpy(w * l, f, abSum)
+      BLAS.spr(w, f, aaSum)
       this
     }
 

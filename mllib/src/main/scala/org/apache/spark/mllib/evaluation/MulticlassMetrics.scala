@@ -19,20 +19,17 @@ package org.apache.spark.mllib.evaluation
 
 import scala.collection.Map
 
-import org.apache.spark.SparkContext._
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Matrices, Matrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 /**
- * ::Experimental::
  * Evaluator for multiclass classification.
  *
  * @param predictionAndLabels an RDD of (prediction, label) pairs.
  */
 @Since("1.1.0")
-@Experimental
 class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Double)]) {
 
   /**
@@ -40,7 +37,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
    * @param predictionAndLabels a DataFrame with two double columns: prediction and label
    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
-    this(predictionAndLabels.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(predictionAndLabels.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
 
   private lazy val labelCountByClass: Map[Double, Long] = predictionAndLabels.values.countByValue()
   private lazy val labelCount: Long = labelCountByClass.values.sum
@@ -68,7 +65,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
    */
   @Since("1.1.0")
   def confusionMatrix: Matrix = {
-    val n = labels.size
+    val n = labels.length
     val values = Array.ofDim[Double](n * n)
     var i = 0
     while (i < n) {
@@ -141,7 +138,8 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
    * Returns precision
    */
   @Since("1.1.0")
-  lazy val precision: Double = tpByClass.values.sum.toDouble / labelCount
+  @deprecated("Use accuracy.", "2.0.0")
+  lazy val precision: Double = accuracy
 
   /**
    * Returns recall
@@ -150,14 +148,24 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
    * of all false negatives)
    */
   @Since("1.1.0")
-  lazy val recall: Double = precision
+  @deprecated("Use accuracy.", "2.0.0")
+  lazy val recall: Double = accuracy
 
   /**
    * Returns f-measure
    * (equals to precision and recall because precision equals recall)
    */
   @Since("1.1.0")
-  lazy val fMeasure: Double = precision
+  @deprecated("Use accuracy.", "2.0.0")
+  lazy val fMeasure: Double = accuracy
+
+  /**
+   * Returns accuracy
+   * (equals to the total number of correctly classified instances
+   * out of the total number of instances.)
+   */
+  @Since("2.0.0")
+  lazy val accuracy: Double = tpByClass.values.sum.toDouble / labelCount
 
   /**
    * Returns weighted true positive rate

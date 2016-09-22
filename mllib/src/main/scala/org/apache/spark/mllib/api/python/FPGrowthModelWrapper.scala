@@ -17,8 +17,7 @@
 
 package org.apache.spark.mllib.api.python
 
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.fpm.{FPGrowth, FPGrowthModel}
+import org.apache.spark.mllib.fpm.FPGrowthModel
 import org.apache.spark.rdd.RDD
 
 /**

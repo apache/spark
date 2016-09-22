@@ -19,18 +19,16 @@ package org.apache.spark.launcher;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.jar.JarFile;
 import java.util.regex.Pattern;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
@@ -47,7 +45,7 @@ abstract class AbstractCommandBuilder {
   String javaHome;
   String mainClass;
   String master;
-  String propertiesFile;
+  protected String propertiesFile;
   final List<String> appArgs;
   final List<String> jars;
   final List<String> files;
@@ -55,13 +53,17 @@ abstract class AbstractCommandBuilder {
   final Map<String, String> childEnv;
   final Map<String, String> conf;
 
-  public AbstractCommandBuilder() {
-    this.appArgs = new ArrayList<String>();
-    this.childEnv = new HashMap<String, String>();
-    this.conf = new HashMap<String, String>();
-    this.files = new ArrayList<String>();
-    this.jars = new ArrayList<String>();
-    this.pyFiles = new ArrayList<String>();
+  // The merged configuration for the application. Cached to avoid having to read / parse
+  // properties files multiple times.
+  private Map<String, String> effectiveConfig;
+
+  AbstractCommandBuilder() {
+    this.appArgs = new ArrayList<>();
+    this.childEnv = new HashMap<>();
+    this.conf = new HashMap<>();
+    this.files = new ArrayList<>();
+    this.jars = new ArrayList<>();
+    this.pyFiles = new ArrayList<>();
   }
 
   /**
@@ -72,7 +74,8 @@ abstract class AbstractCommandBuilder {
    *            SparkLauncher constructor that takes an environment), and may be modified to
    *            include other variables needed by the process to be executed.
    */
-  abstract List<String> buildCommand(Map<String, String> env) throws IOException;
+  abstract List<String> buildCommand(Map<String, String> env)
+      throws IOException, IllegalArgumentException;
 
   /**
    * Builds a list of arguments to run java.
@@ -85,7 +88,7 @@ abstract class AbstractCommandBuilder {
    * class.
    */
   List<String> buildJavaCommand(String extraClassPath) throws IOException {
-    List<String> cmd = new ArrayList<String>();
+    List<String> cmd = new ArrayList<>();
     String envJavaHome;
 
     if (javaHome != null) {
@@ -100,7 +103,7 @@ abstract class AbstractCommandBuilder {
     File javaOpts = new File(join(File.separator, getConfDir(), "java-opts"));
     if (javaOpts.isFile()) {
       BufferedReader br = new BufferedReader(new InputStreamReader(
-          new FileInputStream(javaOpts), "UTF-8"));
+          new FileInputStream(javaOpts), StandardCharsets.UTF_8));
       try {
         String line;
         while ((line = br.readLine()) != null) {
@@ -114,29 +117,6 @@ abstract class AbstractCommandBuilder {
     cmd.add("-cp");
     cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
     return cmd;
-  }
-
-  /**
-   * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
-   * set it.
-   */
-  void addPermGenSizeOpt(List<String> cmd) {
-    // Don't set MaxPermSize for IBM Java, or Oracle Java 8 and later.
-    if (getJavaVendor() == JavaVendor.IBM) {
-      return;
-    }
-    String[] version = System.getProperty("java.version").split("\\.");
-    if (Integer.parseInt(version[0]) > 1 || Integer.parseInt(version[1]) > 7) {
-      return;
-    }
-
-    for (String arg : cmd) {
-      if (arg.startsWith("-XX:MaxPermSize=")) {
-        return;
-      }
-    }
-
-    cmd.add("-XX:MaxPermSize=256m");
   }
 
   void addOptionString(List<String> cmd, String options) {
@@ -155,7 +135,7 @@ abstract class AbstractCommandBuilder {
   List<String> buildClassPath(String appClassPath) throws IOException {
     String sparkHome = getSparkHome();
 
-    List<String> cp = new ArrayList<String>();
+    List<String> cp = new ArrayList<>();
     addToClassPath(cp, getenv("SPARK_CLASSPATH"));
     addToClassPath(cp, appClassPath);
 
@@ -165,9 +145,26 @@ abstract class AbstractCommandBuilder {
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     if (prependClasses || isTesting) {
       String scala = getScalaVersion();
-      List<String> projects = Arrays.asList("core", "repl", "mllib", "bagel", "graphx",
-        "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
-        "yarn", "launcher");
+      List<String> projects = Arrays.asList(
+        "common/network-common",
+        "common/network-shuffle",
+        "common/network-yarn",
+        "common/sketch",
+        "common/tags",
+        "common/unsafe",
+        "core",
+        "examples",
+        "graphx",
+        "launcher",
+        "mllib",
+        "repl",
+        "sql/catalyst",
+        "sql/core",
+        "sql/hive",
+        "sql/hive-thriftserver",
+        "streaming",
+        "yarn"
+      );
       if (prependClasses) {
         if (!isTesting) {
           System.err.println(
@@ -191,40 +188,13 @@ abstract class AbstractCommandBuilder {
       addToClassPath(cp, String.format("%s/core/target/jars/*", sparkHome));
     }
 
-    // We can't rely on the ENV_SPARK_ASSEMBLY variable to be set. Certain situations, such as
-    // when running unit tests, or user code that embeds Spark and creates a SparkContext
-    // with a local or local-cluster master, will cause this code to be called from an
-    // environment where that env variable is not guaranteed to exist.
-    //
-    // For the testing case, we rely on the test code to set and propagate the test classpath
-    // appropriately.
-    //
-    // For the user code case, we fall back to looking for the Spark assembly under SPARK_HOME.
-    // That duplicates some of the code in the shell scripts that look for the assembly, though.
-    String assembly = getenv(ENV_SPARK_ASSEMBLY);
-    if (assembly == null && !isTesting) {
-      assembly = findAssembly();
-    }
-    addToClassPath(cp, assembly);
-
-    // Datanucleus jars must be included on the classpath. Datanucleus jars do not work if only
-    // included in the uber jar as plugin.xml metadata is lost. Both sbt and maven will populate
-    // "lib_managed/jars/" with the datanucleus jars when Spark is built with Hive
-    File libdir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
-      libdir = new File(sparkHome, "lib");
-    } else {
-      libdir = new File(sparkHome, "lib_managed/jars");
-    }
-
-    if (libdir.isDirectory()) {
-      for (File jar : libdir.listFiles()) {
-        if (jar.getName().startsWith("datanucleus-")) {
-          addToClassPath(cp, jar.getAbsolutePath());
-        }
-      }
-    } else {
-      checkState(isTesting, "Library directory '%s' does not exist.", libdir.getAbsolutePath());
+    // Add Spark jars to the classpath. For the testing case, we rely on the test code to set and
+    // propagate the test classpath appropriately. For normal invocation, look for the jars
+    // directory under SPARK_HOME.
+    boolean isTestingSql = "1".equals(getenv("SPARK_SQL_TESTING"));
+    String jarsDir = findJarsDir(getSparkHome(), getScalaVersion(), !isTesting && !isTestingSql);
+    if (jarsDir != null) {
+      addToClassPath(cp, join(File.separator, jarsDir, "*"));
     }
 
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
@@ -280,12 +250,34 @@ abstract class AbstractCommandBuilder {
     return path;
   }
 
+  String getenv(String key) {
+    return firstNonEmpty(childEnv.get(key), System.getenv(key));
+  }
+
+  void setPropertiesFile(String path) {
+    effectiveConfig = null;
+    this.propertiesFile = path;
+  }
+
+  Map<String, String> getEffectiveConfig() throws IOException {
+    if (effectiveConfig == null) {
+      effectiveConfig = new HashMap<>(conf);
+      Properties p = loadPropertiesFile();
+      for (String key : p.stringPropertyNames()) {
+        if (!effectiveConfig.containsKey(key)) {
+          effectiveConfig.put(key, p.getProperty(key));
+        }
+      }
+    }
+    return effectiveConfig;
+  }
+
   /**
    * Loads the configuration file for the application, if it exists. This is either the
    * user-specified properties file, or the spark-defaults.conf file under the Spark configuration
    * directory.
    */
-  Properties loadPropertiesFile() throws IOException {
+  private Properties loadPropertiesFile() throws IOException {
     Properties props = new Properties();
     File propsFile;
     if (propertiesFile != null) {
@@ -299,7 +291,7 @@ abstract class AbstractCommandBuilder {
       FileInputStream fd = null;
       try {
         fd = new FileInputStream(propsFile);
-        props.load(new InputStreamReader(fd, "UTF-8"));
+        props.load(new InputStreamReader(fd, StandardCharsets.UTF_8));
         for (Map.Entry<Object, Object> e : props.entrySet()) {
           e.setValue(e.getValue().toString().trim());
         }
@@ -315,34 +307,6 @@ abstract class AbstractCommandBuilder {
     }
 
     return props;
-  }
-
-  String getenv(String key) {
-    return firstNonEmpty(childEnv.get(key), System.getenv(key));
-  }
-
-  private String findAssembly() {
-    String sparkHome = getSparkHome();
-    File libdir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
-      libdir = new File(sparkHome, "lib");
-      checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
-          libdir.getAbsolutePath());
-    } else {
-      libdir = new File(sparkHome, String.format("assembly/target/scala-%s", getScalaVersion()));
-    }
-
-    final Pattern re = Pattern.compile("spark-assembly.*hadoop.*\\.jar");
-    FileFilter filter = new FileFilter() {
-      @Override
-      public boolean accept(File file) {
-        return file.isFile() && re.matcher(file.getName()).matches();
-      }
-    };
-    File[] assemblies = libdir.listFiles(filter);
-    checkState(assemblies != null && assemblies.length > 0, "No assemblies found in '%s'.", libdir);
-    checkState(assemblies.length == 1, "Multiple assemblies found in '%s'.", libdir);
-    return assemblies[0].getAbsolutePath();
   }
 
   private String getConfDir() {

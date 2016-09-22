@@ -61,8 +61,8 @@ The [Kryo documentation](https://github.com/EsotericSoftware/kryo) describes mor
 registration options, such as adding custom serialization code.
 
 If your objects are large, you may also need to increase the `spark.kryoserializer.buffer`
-config property. The default is 2, but this value needs to be large enough to hold the *largest*
-object you will serialize.
+[config](configuration.html#compression-and-serialization). This value needs to be large enough
+to hold the *largest* object you will serialize.
 
 Finally, if you don't register your custom classes, Kryo will still work, but it will have to store
 the full class name with each object, which is wasteful.
@@ -88,9 +88,42 @@ than the "raw" data inside their fields. This is due to several reasons:
   but also pointers (typically 8 bytes each) to the next object in the list.
 * Collections of primitive types often store them as "boxed" objects such as `java.lang.Integer`.
 
-This section will discuss how to determine the memory usage of your objects, and how to improve
-it -- either by changing your data structures, or by storing data in a serialized format.
-We will then cover tuning Spark's cache size and the Java garbage collector.
+This section will start with an overview of memory management in Spark, then discuss specific
+strategies the user can take to make more efficient use of memory in his/her application. In
+particular, we will describe how to determine the memory usage of your objects, and how to
+improve it -- either by changing your data structures, or by storing data in a serialized
+format. We will then cover tuning Spark's cache size and the Java garbage collector.
+
+## Memory Management Overview
+
+Memory usage in Spark largely falls under one of two categories: execution and storage.
+Execution memory refers to that used for computation in shuffles, joins, sorts and aggregations,
+while storage memory refers to that used for caching and propagating internal data across the
+cluster. In Spark, execution and storage share a unified region (M). When no execution memory is
+used, storage can acquire all the available memory and vice versa. Execution may evict storage
+if necessary, but only until total storage memory usage falls under a certain threshold (R).
+In other words, `R` describes a subregion within `M` where cached blocks are never evicted.
+Storage may not evict execution due to complexities in implementation.
+
+This design ensures several desirable properties. First, applications that do not use caching
+can use the entire space for execution, obviating unnecessary disk spills. Second, applications
+that do use caching can reserve a minimum storage space (R) where their data blocks are immune
+to being evicted. Lastly, this approach provides reasonable out-of-the-box performance for a
+variety of workloads without requiring user expertise of how memory is divided internally.
+
+Although there are two relevant configurations, the typical user should not need to adjust them
+as the default values are applicable to most workloads:
+
+* `spark.memory.fraction` expresses the size of `M` as a fraction of the (JVM heap space - 300MB)
+(default 0.6). The rest of the space (40%) is reserved for user data structures, internal
+metadata in Spark, and safeguarding against OOM errors in the case of sparse and unusually
+large records.
+* `spark.memory.storageFraction` expresses the size of `R` as a fraction of `M` (default 0.5).
+`R` is the storage space within `M` where cached blocks immune to being evicted by execution.
+
+The value of `spark.memory.fraction` should be set in order to fit this amount of heap space
+comfortably within the JVM's old or "tenured" generation. See the discussion of advanced GC
+tuning below for details.
 
 ## Determining Memory Consumption
 
@@ -151,18 +184,6 @@ time spent GC. This can be done by adding `-verbose:gc -XX:+PrintGCDetails -XX:+
 each time a garbage collection occurs. Note these logs will be on your cluster's worker nodes (in the `stdout` files in
 their work directories), *not* on your driver program.
 
-**Cache Size Tuning**
-
-One important configuration parameter for GC is the amount of memory that should be used for caching RDDs.
-By default, Spark uses 60% of the configured executor memory (`spark.executor.memory`) to
-cache RDDs. This means that 40% of memory is available for any objects created during task execution.
-
-In case your tasks slow down and you find that your JVM is garbage-collecting frequently or running out of
-memory, lowering this value will help reduce the memory consumption. To change this to, say, 50%, you can call
-`conf.set("spark.storage.memoryFraction", "0.5")` on your SparkConf. Combined with the use of serialized caching,
-using a smaller cache should be sufficient to mitigate most of the garbage collection problems.
-In case you are interested in further tuning the Java GC, continue reading below.
-
 **Advanced GC Tuning**
 
 To further tune garbage collection, we first need to understand some basic information about memory management in the JVM:
@@ -183,14 +204,22 @@ temporary objects created during task execution. Some steps which may be useful 
 * Check if there are too many garbage collections by collecting GC stats. If a full GC is invoked multiple times for
   before a task completes, it means that there isn't enough memory available for executing tasks.
 
-* In the GC stats that are printed, if the OldGen is close to being full, reduce the amount of memory used for caching.
-  This can be done using the `spark.storage.memoryFraction` property. It is better to cache fewer objects than to slow
-  down task execution!
-
 * If there are too many minor collections but not many major GCs, allocating more memory for Eden would help. You
   can set the size of the Eden to be an over-estimate of how much memory each task will need. If the size of Eden
   is determined to be `E`, then you can set the size of the Young generation using the option `-Xmn=4/3*E`. (The scaling
   up by 4/3 is to account for space used by survivor regions as well.)
+  
+* In the GC stats that are printed, if the OldGen is close to being full, reduce the amount of
+  memory used for caching by lowering `spark.memory.fraction`; it is better to cache fewer
+  objects than to slow down task execution. Alternatively, consider decreasing the size of
+  the Young generation. This means lowering `-Xmn` if you've set it as above. If not, try changing the 
+  value of the JVM's `NewRatio` parameter. Many JVMs default this to 2, meaning that the Old generation 
+  occupies 2/3 of the heap. It should be large enough such that this fraction exceeds `spark.memory.fraction`.
+  
+* Try the G1GC garbage collector with `-XX:+UseG1GC`. It can improve performance in some situations where
+  garbage collection is a bottleneck. Note that with large executor heap sizes, it may be important to
+  increase the [G1 region size](https://blogs.oracle.com/g1gc/entry/g1_gc_tuning_a_case) 
+  with `-XX:G1HeapRegionSize`
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
   the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the
@@ -202,6 +231,9 @@ temporary objects created during task execution. Some steps which may be useful 
 Our experience suggests that the effect of GC tuning depends on your application and the amount of memory available.
 There are [many more tuning options](http://www.oracle.com/technetwork/java/javase/gc-tuning-6-140523.html) described online,
 but at a high level, managing how frequently full GC takes place can help in reducing the overhead.
+
+GC tuning flags for executors can be specified by setting `spark.executor.extraJavaOptions` in
+a job's configuration.
 
 # Other Considerations
 

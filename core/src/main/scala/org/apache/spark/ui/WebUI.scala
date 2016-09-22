@@ -26,9 +26,10 @@ import scala.xml.Node
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.json4s.JsonAST.{JNothing, JValue}
 
+import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
  * The top level component of the UI hierarchy that contains the server.
@@ -38,6 +39,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
  */
 private[spark] abstract class WebUI(
     val securityManager: SecurityManager,
+    val sslOptions: SSLOptions,
     port: Int,
     conf: SparkConf,
     basePath: String = "",
@@ -81,8 +83,8 @@ private[spark] abstract class WebUI(
       (request: HttpServletRequest) => page.renderJson(request), securityManager, conf, basePath)
     attachHandler(renderHandler)
     attachHandler(renderJsonHandler)
-    pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
-      .append(renderHandler)
+    val handlers = pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
+    handlers += renderHandler
   }
 
   /** Attach a handler to this UI. */
@@ -127,20 +129,24 @@ private[spark] abstract class WebUI(
   }
 
   /** Initialize all components of the server. */
-  def initialize()
+  def initialize(): Unit
 
   /** Bind to the HTTP server behind this web interface. */
   def bind() {
-    assert(!serverInfo.isDefined, "Attempted to bind %s more than once!".format(className))
+    assert(!serverInfo.isDefined, s"Attempted to bind $className more than once!")
     try {
-      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf, name))
-      logInfo("Started %s at http://%s:%d".format(className, publicHostName, boundPort))
+      val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
+      serverInfo = Some(startJettyServer(host, port, sslOptions, handlers, conf, name))
+      logInfo(s"Bound $className to $host, and started at $webUrl")
     } catch {
       case e: Exception =>
-        logError("Failed to bind %s".format(className), e)
+        logError(s"Failed to bind $className", e)
         System.exit(1)
     }
   }
+
+  /** Return the url of web interface. Only valid after bind(). */
+  def webUrl: String = s"http://$publicHostName:$boundPort"
 
   /** Return the actual port to which this server is bound. Only valid after bind(). */
   def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
@@ -148,8 +154,8 @@ private[spark] abstract class WebUI(
   /** Stop the server behind this web interface. Only valid after bind(). */
   def stop() {
     assert(serverInfo.isDefined,
-      "Attempted to stop %s before binding to a server!".format(className))
-    serverInfo.get.server.stop()
+      s"Attempted to stop $className before binding to a server!")
+    serverInfo.get.stop()
   }
 }
 

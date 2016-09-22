@@ -25,8 +25,12 @@ To build Spark and its example programs, run:
     build/mvn -DskipTests clean package
 
 (You do not need to do this if you downloaded a pre-built package.)
+
+You can build Spark using more than one thread by using the -T option with Maven, see ["Parallel builds in Maven 3"](https://cwiki.apache.org/confluence/display/MAVEN/Parallel+builds+in+Maven+3).
 More detailed documentation is available from the project site, at
 ["Building Spark"](http://spark.apache.org/docs/latest/building-spark.html).
+For developing Spark using an IDE, see [Eclipse](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-Eclipse)
+and [IntelliJ](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-IntelliJ).
 
 ## Interactive Scala Shell
 
@@ -59,7 +63,7 @@ will run the Pi example locally.
 
 You can set the MASTER environment variable when running examples to submit
 examples to a cluster. This can be a mesos:// or spark:// URL,
-"yarn-cluster" or "yarn-client" to run on YARN, and "local" to run
+"yarn" to run on YARN, and "local" to run
 locally with one thread, or "local[N]" to run locally with N threads. You
 can also use an abbreviated class name if the class is in the `examples`
 package. For instance:
@@ -87,10 +91,7 @@ Hadoop, you must build Spark against the same version that your cluster runs.
 Please refer to the build documentation at
 ["Specifying the Hadoop Version"](http://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version)
 for detailed guidance on building for a particular distribution of Hadoop, including
-building for particular Hive and Hive Thriftserver distributions. See also
-["Third Party Hadoop Distributions"](http://spark.apache.org/docs/latest/hadoop-third-party-distributions.html)
-for guidance on building a Spark application that works with a particular
-distribution.
+building for particular Hive and Hive Thriftserver distributions.
 
 ## Configuration
 

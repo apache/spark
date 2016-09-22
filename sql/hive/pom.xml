@@ -21,13 +21,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.10</artifactId>
-    <version>1.6.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.11</artifactId>
+    <version>2.1.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
-  <artifactId>spark-hive_2.10</artifactId>
+  <artifactId>spark-hive_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Hive</name>
   <url>http://spark.apache.org/</url>
@@ -58,6 +57,10 @@
       <artifactId>spark-sql_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
+    </dependency>
 <!--
     <dependency>
       <groupId>com.google.guava</groupId>
@@ -68,6 +71,8 @@
       <artifactId>protobuf-java</artifactId>
       <version>${protobuf.version}</version>
     </dependency>
+-->
+<!--
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-common</artifactId>
@@ -161,11 +166,6 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_${scala.binary.version}</artifactId>
       <type>test-jar</type>
@@ -221,42 +221,22 @@
         </configuration>
       </plugin>
       <plugin>
-         <groupId>org.codehaus.mojo</groupId>
-         <artifactId>build-helper-maven-plugin</artifactId>
-         <executions>
-           <execution>
-             <id>add-default-sources</id>
-             <phase>generate-sources</phase>
-             <goals>
-               <goal>add-source</goal>
-             </goals>
-             <configuration>
-               <sources>
-                 <source>v${hive.version.short}/src/main/scala</source>
-               </sources>
-             </configuration>
-           </execution>
-         </executions>
-      </plugin>
-
-      <!-- Deploy datanucleus jars to the spark/lib_managed/jars directory -->
-      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-dependency-plugin</artifactId>
+        <artifactId>maven-enforcer-plugin</artifactId>
         <executions>
           <execution>
-            <id>copy-dependencies</id>
-            <phase>package</phase>
+            <id>enforce-versions</id>
             <goals>
-              <goal>copy-dependencies</goal>
+              <goal>enforce</goal>
             </goals>
             <configuration>
-              <!-- basedir is spark/sql/hive/ -->
-              <outputDirectory>${basedir}/../../lib_managed/jars</outputDirectory>
-              <overWriteReleases>false</overWriteReleases>
-              <overWriteSnapshots>false</overWriteSnapshots>
-              <overWriteIfNewer>true</overWriteIfNewer>
-              <includeGroupIds>org.datanucleus</includeGroupIds>
+              <rules>
+                <bannedDependencies>
+                  <excludes combine.children="append">
+                    <exclude>*:hive-cli</exclude>
+                  </excludes>
+                </bannedDependencies>
+              </rules>
             </configuration>
           </execution>
         </executions>

@@ -21,6 +21,7 @@ import java.lang.Double.longBitsToDouble
 import java.lang.Float.intBitsToFloat
 import java.math.MathContext
 
+import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
@@ -46,9 +47,9 @@ object RandomDataGenerator {
    */
   private val PROBABILITY_OF_NULL: Float = 0.1f
 
-  private val MAX_STR_LEN: Int = 1024
-  private val MAX_ARR_SIZE: Int = 128
-  private val MAX_MAP_SIZE: Int = 128
+  final val MAX_STR_LEN: Int = 1024
+  final val MAX_ARR_SIZE: Int = 128
+  final val MAX_MAP_SIZE: Int = 128
 
   /**
    * Helper function for constructing a biased random number generator which returns "interesting"
@@ -74,11 +75,45 @@ object RandomDataGenerator {
    * @param numFields the number of fields in this schema
    * @param acceptedTypes types to draw from.
    */
-  def randomSchema(numFields: Int, acceptedTypes: Seq[DataType]): StructType = {
+  def randomSchema(rand: Random, numFields: Int, acceptedTypes: Seq[DataType]): StructType = {
     StructType(Seq.tabulate(numFields) { i =>
-      val dt = acceptedTypes(Random.nextInt(acceptedTypes.size))
-      StructField("col_" + i, dt, nullable = true)
+      val dt = acceptedTypes(rand.nextInt(acceptedTypes.size))
+      StructField("col_" + i, dt, nullable = rand.nextBoolean())
     })
+  }
+
+  /**
+   * Returns a random nested schema. This will randomly generate structs and arrays drawn from
+   * acceptedTypes.
+   */
+  def randomNestedSchema(rand: Random, totalFields: Int, acceptedTypes: Seq[DataType]):
+      StructType = {
+    val fields = mutable.ArrayBuffer.empty[StructField]
+    var i = 0
+    var numFields = totalFields
+    while (numFields > 0) {
+      val v = rand.nextInt(3)
+      if (v == 0) {
+        // Simple type:
+        val dt = acceptedTypes(rand.nextInt(acceptedTypes.size))
+        fields += new StructField("col_" + i, dt, rand.nextBoolean())
+        numFields -= 1
+      } else if (v == 1) {
+        // Array
+        val dt = acceptedTypes(rand.nextInt(acceptedTypes.size))
+        fields += new StructField("col_" + i, ArrayType(dt), rand.nextBoolean())
+        numFields -= 1
+      } else {
+        // Struct
+        // TODO: do empty structs make sense?
+        val n = Math.max(rand.nextInt(numFields), 1)
+        val nested = randomNestedSchema(rand, n, acceptedTypes)
+        fields += new StructField("col_" + i, nested, rand.nextBoolean())
+        numFields -= n
+      }
+      i += 1
+    }
+    StructType(fields)
   }
 
   /**
@@ -90,16 +125,13 @@ object RandomDataGenerator {
    *
    * @param dataType the type to generate values for
    * @param nullable whether null values should be generated
-   * @param seed an optional seed for the random number generator
+   * @param rand an optional random number generator
    * @return a function which can be called to generate random values.
    */
   def forType(
       dataType: DataType,
       nullable: Boolean = true,
-      seed: Option[Long] = None): Option[() => Any] = {
-    val rand = new Random()
-    seed.foreach(rand.setSeed)
-
+      rand: Random = new Random): Option[() => Any] = {
     val valueGenerator: Option[() => Any] = dataType match {
       case StringType => Some(() => rand.nextString(rand.nextInt(MAX_STR_LEN)))
       case BinaryType => Some(() => {
@@ -116,7 +148,7 @@ object RandomDataGenerator {
             // for "0001-01-01 00:00:00.000000". We need to find a
             // number that is greater or equals to this number as a valid timestamp value.
             while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the the number of milliseconds since
+              // 253402329599999L is the number of milliseconds since
               // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
               milliseconds = rand.nextLong() % 253402329599999L
             }
@@ -131,7 +163,7 @@ object RandomDataGenerator {
             // for "0001-01-01 00:00:00.000000". We need to find a
             // number that is greater or equals to this number as a valid timestamp value.
             while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the the number of milliseconds since
+              // 253402329599999L is the number of milliseconds since
               // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
               milliseconds = rand.nextLong() % 253402329599999L
             }
@@ -148,7 +180,7 @@ object RandomDataGenerator {
         () => BigDecimal.apply(
           rand.nextLong() % math.pow(10, precision).toLong,
           scale,
-          new MathContext(precision)))
+          new MathContext(precision)).bigDecimal)
       case DoubleType => randomNumeric[Double](
         rand, r => longBitsToDouble(r.nextLong()), Seq(Double.MinValue, Double.MinPositiveValue,
           Double.MaxValue, Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0))
@@ -164,25 +196,33 @@ object RandomDataGenerator {
       case ShortType => randomNumeric[Short](
         rand, _.nextInt().toShort, Seq(Short.MinValue, Short.MaxValue, 0.toShort))
       case NullType => Some(() => null)
-      case ArrayType(elementType, containsNull) => {
-        forType(elementType, nullable = containsNull, seed = Some(rand.nextLong())).map {
-          elementGenerator => () => Array.fill(rand.nextInt(MAX_ARR_SIZE))(elementGenerator())
+      case ArrayType(elementType, containsNull) =>
+        forType(elementType, nullable = containsNull, rand).map {
+          elementGenerator => () => Seq.fill(rand.nextInt(MAX_ARR_SIZE))(elementGenerator())
         }
-      }
-      case MapType(keyType, valueType, valueContainsNull) => {
+      case MapType(keyType, valueType, valueContainsNull) =>
         for (
-          keyGenerator <- forType(keyType, nullable = false, seed = Some(rand.nextLong()));
+          keyGenerator <- forType(keyType, nullable = false, rand);
           valueGenerator <-
-            forType(valueType, nullable = valueContainsNull, seed = Some(rand.nextLong()))
+            forType(valueType, nullable = valueContainsNull, rand)
         ) yield {
           () => {
-            Seq.fill(rand.nextInt(MAX_MAP_SIZE))((keyGenerator(), valueGenerator())).toMap
+            val length = rand.nextInt(MAX_MAP_SIZE)
+            val keys = scala.collection.mutable.HashSet(Seq.fill(length)(keyGenerator()): _*)
+            // In case the number of different keys is not enough, set a max iteration to avoid
+            // infinite loop.
+            var count = 0
+            while (keys.size < length && count < MAX_MAP_SIZE) {
+              keys += keyGenerator()
+              count += 1
+            }
+            val values = Seq.fill(keys.size)(valueGenerator())
+            keys.zip(values).toMap
           }
         }
-      }
-      case StructType(fields) => {
+      case StructType(fields) =>
         val maybeFieldGenerators: Seq[Option[() => Any]] = fields.map { field =>
-          forType(field.dataType, nullable = field.nullable, seed = Some(rand.nextLong()))
+          forType(field.dataType, nullable = field.nullable, rand)
         }
         if (maybeFieldGenerators.forall(_.isDefined)) {
           val fieldGenerators: Seq[() => Any] = maybeFieldGenerators.map(_.get)
@@ -190,16 +230,14 @@ object RandomDataGenerator {
         } else {
           None
         }
-      }
-      case udt: UserDefinedType[_] => {
-        val maybeSqlTypeGenerator = forType(udt.sqlType, nullable, seed)
+      case udt: UserDefinedType[_] =>
+        val maybeSqlTypeGenerator = forType(udt.sqlType, nullable, rand)
         // Because random data generator at here returns scala value, we need to
         // convert it to catalyst value to call udt's deserialize.
         val toCatalystType = CatalystTypeConverters.createToCatalystConverter(udt.sqlType)
 
-        if (maybeSqlTypeGenerator.isDefined) {
-          val sqlTypeGenerator = maybeSqlTypeGenerator.get
-          val generator = () => {
+        maybeSqlTypeGenerator.map { sqlTypeGenerator =>
+          () => {
             val generatedScalaValue = sqlTypeGenerator.apply()
             if (generatedScalaValue == null) {
               null
@@ -207,11 +245,7 @@ object RandomDataGenerator {
               udt.deserialize(toCatalystType(generatedScalaValue))
             }
           }
-          Some(generator)
-        } else {
-          None
         }
-      }
       case unsupportedType => None
     }
     // Handle nullability by wrapping the non-null value generator:
@@ -228,5 +262,39 @@ object RandomDataGenerator {
         valueGenerator
       }
     }
+  }
+
+  // Generates a random row for `schema`.
+  def randomRow(rand: Random, schema: StructType): Row = {
+    val fields = mutable.ArrayBuffer.empty[Any]
+    schema.fields.foreach { f =>
+      f.dataType match {
+        case ArrayType(childType, nullable) =>
+          val data = if (f.nullable && rand.nextFloat() <= PROBABILITY_OF_NULL) {
+            null
+          } else {
+            val arr = mutable.ArrayBuffer.empty[Any]
+            val n = 1// rand.nextInt(10)
+            var i = 0
+            val generator = RandomDataGenerator.forType(childType, nullable, rand)
+            assert(generator.isDefined, "Unsupported type")
+            val gen = generator.get
+            while (i < n) {
+              arr += gen()
+              i += 1
+            }
+            arr
+          }
+          fields += data
+        case StructType(children) =>
+          fields += randomRow(rand, StructType(children))
+        case _ =>
+          val generator = RandomDataGenerator.forType(f.dataType, f.nullable, rand)
+          assert(generator.isDefined, "Unsupported type")
+          val gen = generator.get
+          fields += gen()
+      }
+    }
+    Row.fromSeq(fields)
   }
 }

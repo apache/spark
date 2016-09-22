@@ -20,13 +20,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.10</artifactId>
-    <version>1.6.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.11</artifactId>
+    <version>2.1.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming-flume-assembly_2.10</artifactId>
+  <artifactId>spark-streaming-flume-assembly_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project External Flume Assembly</name>
   <url>http://spark.apache.org/</url>

@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.SparkFunSuite
 
@@ -60,6 +60,12 @@ class DummyString(val arr: Array[Char]) {
   @transient val hash32: Int = 0
 }
 
+class DummyClass8 extends KnownSizeEstimation {
+  val x: Int = 0
+
+  override def estimatedSize: Long = 2015
+}
+
 class SizeEstimatorSuite
   extends SparkFunSuite
   with BeforeAndAfterEach
@@ -71,6 +77,10 @@ class SizeEstimatorSuite
     super.beforeEach()
     System.setProperty("os.arch", "amd64")
     System.setProperty("spark.test.useCompressedOops", "true")
+  }
+
+  override def afterEach(): Unit = {
+    super.afterEach()
   }
 
   test("simple classes") {
@@ -140,12 +150,12 @@ class SizeEstimatorSuite
 
     val buf = new ArrayBuffer[DummyString]()
     for (i <- 0 until 5000) {
-      buf.append(new DummyString(new Array[Char](10)))
+      buf += new DummyString(new Array[Char](10))
     }
     assertResult(340016)(SizeEstimator.estimate(buf.toArray))
 
     for (i <- 0 until 5000) {
-      buf.append(new DummyString(arr))
+      buf += new DummyString(arr)
     }
     assertResult(683912)(SizeEstimator.estimate(buf.toArray))
 
@@ -213,5 +223,11 @@ class SizeEstimatorSuite
     SizeEstimator invokePrivate initialize()
     // Class should be 32 bytes on s390x if recognised as 64 bit platform
     assertResult(32)(SizeEstimator.estimate(new DummyClass7))
+  }
+
+  test("SizeEstimation can provide the estimated size") {
+    // DummyClass8 provides its size estimation.
+    assertResult(2015)(SizeEstimator.estimate(new DummyClass8))
+    assertResult(20206)(SizeEstimator.estimate(Array.fill(10)(new DummyClass8)))
   }
 }

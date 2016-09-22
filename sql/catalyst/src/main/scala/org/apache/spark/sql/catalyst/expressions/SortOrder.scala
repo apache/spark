@@ -19,20 +19,45 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.BinaryPrefixComparator
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.DoublePrefixComparator
+import org.apache.spark.util.collection.unsafe.sort.PrefixComparators._
 
-abstract sealed class SortDirection
-case object Ascending extends SortDirection
-case object Descending extends SortDirection
+abstract sealed class SortDirection {
+  def sql: String
+  def defaultNullOrdering: NullOrdering
+}
+
+abstract sealed class NullOrdering {
+  def sql: String
+}
+
+case object Ascending extends SortDirection {
+  override def sql: String = "ASC"
+  override def defaultNullOrdering: NullOrdering = NullsFirst
+}
+
+case object Descending extends SortDirection {
+  override def sql: String = "DESC"
+  override def defaultNullOrdering: NullOrdering = NullsLast
+}
+
+case object NullsFirst extends NullOrdering{
+  override def sql: String = "NULLS FIRST"
+}
+
+case object NullsLast extends NullOrdering{
+  override def sql: String = "NULLS LAST"
+}
 
 /**
  * An expression that can be used to sort a tuple.  This class extends expression primarily so that
  * transformations over expression will descend into its child.
  */
-case class SortOrder(child: Expression, direction: SortDirection)
+case class SortOrder(
+  child: Expression,
+  direction: SortDirection,
+  nullOrdering: NullOrdering)
   extends UnaryExpression with Unevaluable {
 
   /** Sort order is not foldable because we don't have an eval for it. */
@@ -49,38 +74,76 @@ case class SortOrder(child: Expression, direction: SortDirection)
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
 
-  override def toString: String = s"$child ${if (direction == Ascending) "ASC" else "DESC"}"
+  override def toString: String = s"$child ${direction.sql} ${nullOrdering.sql}"
+  override def sql: String = child.sql + " " + direction.sql + " " + nullOrdering.sql
 
   def isAscending: Boolean = direction == Ascending
 }
 
+object SortOrder {
+  def apply(child: Expression, direction: SortDirection): SortOrder = {
+    new SortOrder(child, direction, direction.defaultNullOrdering)
+  }
+}
+
 /**
- * An expression to generate a 64-bit long prefix used in sorting.
+ * An expression to generate a 64-bit long prefix used in sorting. If the sort must operate over
+ * null keys as well, this.nullValue can be used in place of emitted null prefixes in the sort.
  */
 case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
+  val nullValue = child.child.dataType match {
+    case BooleanType | DateType | TimestampType | _: IntegralType =>
+      if (nullAsSmallest) {
+        Long.MinValue
+      } else {
+        Long.MaxValue
+      }
+    case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
+      if (nullAsSmallest) {
+        Long.MinValue
+      } else {
+        Long.MaxValue
+      }
+    case _: DecimalType =>
+      if (nullAsSmallest) {
+        DoublePrefixComparator.computePrefix(Double.NegativeInfinity)
+      } else {
+        DoublePrefixComparator.computePrefix(Double.NaN)
+      }
+    case _ =>
+      if (nullAsSmallest) {
+        0L
+      } else {
+        -1L
+      }
+  }
+
+  private def nullAsSmallest: Boolean = (child.isAscending && child.nullOrdering == NullsFirst) ||
+      (!child.isAscending && child.nullOrdering == NullsLast)
+
+
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val childCode = child.child.gen(ctx)
-    val input = childCode.primitive
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childCode = child.child.genCode(ctx)
+    val input = childCode.value
     val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getName
     val DoublePrefixCmp = classOf[DoublePrefixComparator].getName
-
-    val (nullValue: Long, prefixCode: String) = child.child.dataType match {
+    val StringPrefixCmp = classOf[StringPrefixComparator].getName
+    val prefixCode = child.child.dataType match {
       case BooleanType =>
-        (Long.MinValue, s"$input ? 1L : 0L")
+        s"$input ? 1L : 0L"
       case _: IntegralType =>
-        (Long.MinValue, s"(long) $input")
+        s"(long) $input"
       case DateType | TimestampType =>
-        (Long.MinValue, s"(long) $input")
+        s"(long) $input"
       case FloatType | DoubleType =>
-        (DoublePrefixComparator.computePrefix(Double.NegativeInfinity),
-          s"$DoublePrefixCmp.computePrefix((double)$input)")
-      case StringType => (0L, s"$input.getPrefix()")
-      case BinaryType => (0L, s"$BinaryPrefixCmp.computePrefix($input)")
+        s"$DoublePrefixCmp.computePrefix((double)$input)"
+      case StringType => s"$StringPrefixCmp.computePrefix($input)"
+      case BinaryType => s"$BinaryPrefixCmp.computePrefix($input)"
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-        val prefix = if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
+        if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
           s"$input.toUnscaledLong()"
         } else {
           // reduce the scale to fit in a long
@@ -88,21 +151,19 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
           val s = p - (dt.precision - dt.scale)
           s"$input.changePrecision($p, $s) ? $input.toUnscaledLong() : ${Long.MinValue}L"
         }
-        (Long.MinValue, prefix)
       case dt: DecimalType =>
-        (DoublePrefixComparator.computePrefix(Double.NegativeInfinity),
-          s"$DoublePrefixCmp.computePrefix($input.toDouble())")
-      case _ => (0L, "0L")
+        s"$DoublePrefixCmp.computePrefix($input.toDouble())"
+      case _ => "0L"
     }
 
-    childCode.code +
-    s"""
-      |long ${ev.primitive} = ${nullValue}L;
-      |boolean ${ev.isNull} = false;
-      |if (!${childCode.isNull}) {
-      |  ${ev.primitive} = $prefixCode;
-      |}
-    """.stripMargin
+    ev.copy(code = childCode.code +
+      s"""
+         |long ${ev.value} = 0L;
+         |boolean ${ev.isNull} = ${childCode.isNull};
+         |if (!${childCode.isNull}) {
+         |  ${ev.value} = $prefixCode;
+         |}
+      """.stripMargin)
   }
 
   override def dataType: DataType = LongType
