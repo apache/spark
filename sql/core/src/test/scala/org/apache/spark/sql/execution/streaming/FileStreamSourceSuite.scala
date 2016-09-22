@@ -92,7 +92,7 @@ class FileStreamSourceSuite extends SparkFunSuite with SharedSQLContext {
       val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
       val metadataLog =
         new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath)
-      assert(metadataLog.add(0, Array(FileEntry(s"$scheme:///file1", 100L))))
+      assert(metadataLog.add(0, Array(FileEntry(s"$scheme:///file1", 100L, 0))))
 
       val newSource = new FileStreamSource(spark, s"$scheme:///", "parquet", StructType(Nil),
         dir.getAbsolutePath, Map.empty)
