@@ -439,6 +439,16 @@ private[spark] class TaskSetManager(
           // Found a task; do some bookkeeping and return a task description
           val task = tasks(index)
           val taskId = sched.newTaskId()
+
+          val executorManager = sched.sc.executorAllocationManager.getOrElse(null)
+          if (executorManager != null) {
+            if (!executorManager.isExecutorPendingToRemove(execId)) {
+              logWarning(s"Executor $execId is removed before scheduler task.")
+              return None
+            }
+            executorManager.onExecutorBusy(execId)
+          }
+
           // Do various bookkeeping
           copiesRunning(index) += 1
           val attemptNum = taskAttempts(index).size
