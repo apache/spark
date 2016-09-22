@@ -268,6 +268,7 @@ object SparkBuild extends PomBuild {
     BintrayKeys.bintrayOrganization := Some("palantir"),
     BintrayKeys.bintrayRepository := "releases",
     BintrayKeys.bintrayVcsUrl := Some("https://github.com/palantir/parquet-mr"),
+    BintrayKeys.bintrayReleaseOnPublish := true,
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
 
     // Override SBT's default resolvers:

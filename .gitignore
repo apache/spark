@@ -67,7 +67,8 @@ streaming-tests.log
 target/
 unit-tests.log
 work/
-pr-deps/
+.credentials
+dev/pr-deps
 
 # For Hive
 TempStatsStore/
