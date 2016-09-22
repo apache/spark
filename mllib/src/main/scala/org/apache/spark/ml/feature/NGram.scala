@@ -68,7 +68,7 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       s"Input type must be ArrayType(StringType) but got $inputType.")
   }
 
-  override protected def outputDataType: DataType = new ArrayType(StringType, true)
+  override protected def outputDataType: DataType = new ArrayType(StringType, false)
 }
 
 @Since("1.6.0")
