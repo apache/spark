@@ -74,15 +74,11 @@ case class CreateDataSourceTableCommand(
     }
 
     val sessionState = sparkSession.sessionState
-    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-    val tableIdentWithDB = tableIdent.copy(database = Some(db))
-    // Pass a table identifier with database part, so that `tableExists` won't check temp views
-    // unexpectedly.
-    if (sessionState.catalog.tableExists(tableIdentWithDB)) {
+    if (sessionState.catalog.tableExists(tableIdent)) {
       if (ignoreIfExists) {
         return Seq.empty[Row]
       } else {
-        throw new AnalysisException(s"Table ${tableIdentWithDB.unquotedString} already exists.")
+        throw new AnalysisException(s"Table ${tableIdent.unquotedString} already exists.")
       }
     }
 
