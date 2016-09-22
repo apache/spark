@@ -155,6 +155,38 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
     testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
   }
 
+  test("users will delete topics") {
+    val topicPrefix = newTopic()
+    val topic = topicPrefix + "-seems"
+    val topic2 = topicPrefix + "-bad"
+    testUtils.createTopic(topic, partitions = 5)
+    testUtils.sendMessages(topic, Array("-1"))
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.group.id", s"group-$topic")
+      .option("kafka.auto.offset.reset", s"latest")
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribePattern", s"$topicPrefix-.*")
+
+    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
+    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
+
+    testStream(mapped)(
+      AddKafkaData(Set(topic), 1, 2, 3),
+      CheckAnswer(2, 3, 4),
+      Assert {
+        testUtils.deleteTopic(topic, 5)
+        testUtils.createTopic(topic2, partitions = 5)
+        true
+      },
+      AddKafkaData(Set(topic2), 4, 5, 6),
+      CheckAnswer(2, 3, 4, 5, 6, 7)
+    )
+  }
 
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
