@@ -215,7 +215,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Filter out executors under killing
       val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
       val workOffers = activeExecutors.map { case (id, executorData) =>
-        new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
+        new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
+          Some(executorData.logUrlMap))
       }.toSeq
       launchTasks(scheduler.resourceOffers(workOffers))
     }
@@ -234,7 +235,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       if (executorIsAlive(executorId)) {
         val executorData = executorDataMap(executorId)
         val workOffers = Seq(
-          new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
+          new WorkerOffer(executorId, executorData.executorHost,
+            executorData.freeCores, Some(executorData.logUrlMap)))
         launchTasks(scheduler.resourceOffers(workOffers))
       }
     }

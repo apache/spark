@@ -254,6 +254,7 @@ private[spark] object JsonProtocol {
     val submissionTime = stageInfo.submissionTime.map(JInt(_)).getOrElse(JNothing)
     val completionTime = stageInfo.completionTime.map(JInt(_)).getOrElse(JNothing)
     val failureReason = stageInfo.failureReason.map(JString(_)).getOrElse(JNothing)
+    val logUrl = stageInfo.logUrlMap.map(mapToJson(_)).getOrElse(JNothing)
     ("Stage ID" -> stageInfo.stageId) ~
     ("Stage Attempt ID" -> stageInfo.attemptId) ~
     ("Stage Name" -> stageInfo.name) ~
@@ -264,6 +265,7 @@ private[spark] object JsonProtocol {
     ("Submission Time" -> submissionTime) ~
     ("Completion Time" -> completionTime) ~
     ("Failure Reason" -> failureReason) ~
+    ("Log Urls" -> logUrl) ~
     ("Accumulables" -> JArray(
       stageInfo.accumulables.values.map(accumulableInfoToJson).toList))
   }
@@ -277,6 +279,7 @@ private[spark] object JsonProtocol {
     ("Host" -> taskInfo.host) ~
     ("Locality" -> taskInfo.taskLocality.toString) ~
     ("Speculative" -> taskInfo.speculative) ~
+    ("Log Urls" -> taskInfo.logUrlMap.map(mapToJson(_)).getOrElse(JNothing)) ~
     ("Getting Result Time" -> taskInfo.gettingResultTime) ~
     ("Finish Time" -> taskInfo.finishTime) ~
     ("Failed" -> taskInfo.failed) ~
@@ -671,6 +674,7 @@ private[spark] object JsonProtocol {
     val submissionTime = Utils.jsonOption(json \ "Submission Time").map(_.extract[Long])
     val completionTime = Utils.jsonOption(json \ "Completion Time").map(_.extract[Long])
     val failureReason = Utils.jsonOption(json \ "Failure Reason").map(_.extract[String])
+    val logUrlMap = Utils.jsonOption(json \ "Log Urls").map(mapFromJson(_).toMap)
     val accumulatedValues = (json \ "Accumulables").extractOpt[List[JValue]] match {
       case Some(values) => values.map(accumulableInfoFromJson)
       case None => Seq[AccumulableInfo]()
@@ -681,6 +685,7 @@ private[spark] object JsonProtocol {
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
     stageInfo.failureReason = failureReason
+    stageInfo.logUrlMap = logUrlMap
     for (accInfo <- accumulatedValues) {
       stageInfo.accumulables(accInfo.id) = accInfo
     }
@@ -696,6 +701,7 @@ private[spark] object JsonProtocol {
     val host = (json \ "Host").extract[String]
     val taskLocality = TaskLocality.withName((json \ "Locality").extract[String])
     val speculative = (json \ "Speculative").extractOpt[Boolean].getOrElse(false)
+    val logUrlMap = Utils.jsonOption(json \ "Log Urls").map(mapFromJson(_).toMap)
     val gettingResultTime = (json \ "Getting Result Time").extract[Long]
     val finishTime = (json \ "Finish Time").extract[Long]
     val failed = (json \ "Failed").extract[Boolean]
@@ -706,7 +712,8 @@ private[spark] object JsonProtocol {
     }
 
     val taskInfo =
-      new TaskInfo(taskId, index, attempt, launchTime, executorId, host, taskLocality, speculative)
+      new TaskInfo(taskId, index, attempt, launchTime, executorId, host, taskLocality, speculative,
+        logUrlMap)
     taskInfo.gettingResultTime = gettingResultTime
     taskInfo.finishTime = finishTime
     taskInfo.failed = failed

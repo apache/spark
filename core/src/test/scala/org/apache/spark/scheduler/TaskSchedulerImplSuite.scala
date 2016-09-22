@@ -73,7 +73,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       override def taskSetFailed(
           taskSet: TaskSet,
           reason: String,
-          exception: Option[Throwable]): Unit = {
+          exception: Option[Throwable],
+          logUrlMap: Option[scala.collection.immutable.Map[String, String]] = None): Unit = {
         // Normally the DAGScheduler puts this in the event loop, which will eventually fail
         // dependent jobs
         failedTaskSet = true

@@ -312,6 +312,7 @@ private[ui] class StagePagedTable(
 
   private def failureReasonHtml(s: StageInfo): Seq[Node] = {
     val failureReason = s.failureReason.getOrElse("")
+    val logUrlMap = s.logUrlMap
     val isMultiline = failureReason.indexOf('\n') >= 0
     // Display the first line by default
     val failureReasonSummary = StringEscapeUtils.escapeHtml4(
@@ -333,7 +334,8 @@ private[ui] class StagePagedTable(
     } else {
       ""
     }
-    <td valign="middle">{failureReasonSummary}{details}</td>
+    val logUrls = logUrlMap.map(_.flatMap(x => Seq(<a href={x._2}>{x._1}</a>, "    ")))
+    <td valign="middle"><p>{logUrls.getOrElse("")}</p>{failureReasonSummary}{details}</td>
   }
 
   private def makeDescription(s: StageInfo, descriptionOption: Option[String]): Seq[Node] = {
