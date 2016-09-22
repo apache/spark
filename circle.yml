@@ -1,0 +1,58 @@
+general:
+  artifacts:
+    - target
+
+machine:
+  pre:
+    - sudo pkill -u postgres
+  java:
+    version: oraclejdk8
+  environment:
+    TERM: dumb
+    HADOOP_PROFILE: "hadoop2.7"
+  post:
+    - sudo pkill mongod || true
+    - sudo pkill mysqld || true
+    - sudo pkill postgres || true
+
+checkout:
+  post:
+    - "[[ ! -s \"$(git rev-parse --git-dir)/shallow\" ]] || git fetch --unshallow"
+    - echo "user=$BINTRAY_USER" > .credentials
+    - echo "password=$BINTRAY_PASSWORD" >> .credentials
+    - echo "realm=Bintray API Realm" >> .credentials
+    - echo "host=api.bintray.com" >> .credentials
+
+dependencies:
+  override:
+    - ./build/sbt -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive update
+
+test:
+  override:
+    - /bin/true
+    #- ./dev/run-tests -p 1
+
+deployment:
+  release:
+    tag: /[0-9]+(?:\.[0-9]+)+-palantir[0-9]+/
+    commands:
+	  - ? |
+			set -euo pipefail
+			FLAGS="-Psparkr -Phive -Phive-thriftserver -Pyarn -Pmesos"
+			case $CIRCLE_NODE_INDEX in
+			0)
+			  ./build/sbt -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive publish
+			  ;;
+			1)
+			  ./dev/make-distribution.sh --name without-hadoop --tgz "-Psparkr -Phadoop-provided -Pyarn -Pmesos" \
+				  2>&1 >  binary-release-without-hadoop.log
+			  ;;
+			2)
+			  ./dev/make-distribution.sh --name hadoop2.7 --tgz "-Phadoop2.7 $FLAGS" \
+				  2>&1 >  binary-release-hadoop2.7.log
+			  ;;
+			esac
+		:
+		  parallel: true
+		  timeout: 1200
+

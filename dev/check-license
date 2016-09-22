@@ -40,7 +40,7 @@ acquire_rat_jar () {
   fi
 
   unzip -tq "$JAR" &> /dev/null
-  if [ $? -ne 0 ]; then 
+  if [ $? -ne 0 ]; then
     # We failed to download
     rm "$JAR"
     printf "Our attempt to download rat locally to ${JAR} failed. Please install rat manually.\n"
@@ -67,7 +67,7 @@ mkdir -p "$FWDIR"/lib
     exit 1
 }
 
-mkdir target
+mkdir -p target
 $java_cmd -jar "$rat_jar" -E "$FWDIR"/dev/.rat-excludes -d "$FWDIR" > target/rat-results.txt
 
 if [ $? -ne 0 ]; then
@@ -77,10 +77,10 @@ fi
 
 ERRORS="$(cat target/rat-results.txt | grep -e "??")"
 
-if test ! -z "$ERRORS"; then 
+if test ! -z "$ERRORS"; then
     echo "Could not find Apache license headers in the following files:"
     echo "$ERRORS"
     exit 1
-else 
+else
     echo -e "RAT checks passed."
 fi

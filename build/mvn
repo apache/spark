@@ -36,15 +36,8 @@ install_app() {
   local binary="${_DIR}/$3"
 
   # setup `curl` and `wget` silent options if we're running on Jenkins
-  local curl_opts="-L"
-  local wget_opts=""
-  if [ -n "$AMPLAB_JENKINS" ]; then
-    curl_opts="-s ${curl_opts}"
-    wget_opts="--quiet ${wget_opts}"
-  else
-    curl_opts="--progress-bar ${curl_opts}"
-    wget_opts="--progress=bar:force ${wget_opts}"
-  fi
+  local curl_opts="-s -L"
+  local wget_opts="--quiet"
 
   if [ -z "$3" -o ! -f "$binary" ]; then
     # check if we already have the tarball
@@ -85,7 +78,10 @@ install_mvn() {
       "apache-maven-${MVN_VERSION}-bin.tar.gz" \
       "apache-maven-${MVN_VERSION}/bin/mvn"
 
-    MVN_BIN="${_DIR}/apache-maven-${MVN_VERSION}/bin/mvn"
+    export M2_HOME="${_DIR}/apache-maven-${MVN_VERSION}"
+    export M2="$M2_HOME/bin"
+    export PATH=$M2:$PATH
+    MVN_BIN="$M2/mvn"
   fi
 }
 
@@ -158,4 +154,4 @@ export MAVEN_OPTS=${MAVEN_OPTS:-"$_COMPILE_JVM_OPTS"}
 echo "Using \`mvn\` from path: $MVN_BIN" 1>&2
 
 # Last, call the `mvn` command as usual
-${MVN_BIN} -DzincPort=${ZINC_PORT} "$@"
+${MVN_BIN} -DzincPort=${ZINC_PORT} -e "$@"

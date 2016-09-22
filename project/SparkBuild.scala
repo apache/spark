@@ -23,12 +23,15 @@ import scala.util.Properties
 import scala.collection.JavaConverters._
 import scala.collection.mutable.Stack
 
+import bintray.BintrayKeys
+import bintray.BintrayPlugin._
 import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.simplytyped.Antlr4Plugin._
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
+import com.typesafe.sbt.SbtGit._
 import com.typesafe.tools.mima.plugin.MimaKeys
 import org.scalastyle.sbt.ScalastylePlugin._
 import org.scalastyle.sbt.Tasks
@@ -233,7 +236,7 @@ object SparkBuild extends PomBuild {
     }
   )
 
-  lazy val sharedSettings = sparkGenjavadocSettings ++
+  lazy val sharedSettings = bintraySettings ++ versionWithGit ++ sparkGenjavadocSettings ++
       (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
     exportJars in Compile := true,
     exportJars in Test := false,
@@ -243,6 +246,29 @@ object SparkBuild extends PomBuild {
     incOptions := incOptions.value.withNameHashing(true),
     publishMavenStyle := true,
     unidocGenjavadocVersion := "0.10",
+    git.useGitDescribe := true,
+    useJGit,
+    version := {
+      val uncommittedSuffix =
+        git.makeUncommittedSignifierSuffix(git.gitUncommittedChanges.value, git.uncommittedSignifier.value)
+      val releaseVersion =
+        git.releaseVersion(git.gitCurrentTags.value, git.gitTagToVersionNumber.value, uncommittedSuffix)
+      val describedVersion =
+        git.flaggedOptional(git.useGitDescribe.value, git.describeVersion(git.gitDescribedVersion.value, uncommittedSuffix))
+      val commitVersion = git.formattedShaVersion.value
+      //Now we fall through the potential version numbers...
+      git.makeVersion(Seq(
+        releaseVersion,
+        describedVersion,
+        commitVersion
+      )) get
+    },
+    BintrayKeys.bintrayCredentialsFile := new File(".credentials"),
+    licenses += ("Apache 2.0", url("https://www.apache.org/licenses/LICENSE-2.0")),
+    BintrayKeys.bintrayOrganization := Some("palantir"),
+    BintrayKeys.bintrayRepository := "releases",
+    BintrayKeys.bintrayVcsUrl := Some("https://github.com/palantir/parquet-mr"),
+    concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
 
     // Override SBT's default resolvers:
     resolvers := Seq(
