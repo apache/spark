@@ -23,7 +23,7 @@ import com.google.common.collect.{Ordering => GuavaOrdering}
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.{CompletionIterator, SizeEstimator}
 
 /**
  * Utility functions for collections.
@@ -34,18 +34,43 @@ private[spark] object Utils {
    * Returns the first K elements from the input as defined by the specified implicit Ordering[T]
    * and maintains the ordering.
    */
-  def takeOrdered[T](input: Iterator[T], num: Int,
-      ser: Serializer = SparkEnv.get.serializer)(implicit ord: Ordering[T]): Iterator[T] = {
+  def takeOrdered[T](input: Iterator[T], num: Int)(implicit ord: Ordering[T]): Iterator[T] = {
+    val ordering = new GuavaOrdering[T] {
+      override def compare(l: T, r: T): Int = ord.compare(l, r)
+    }
+    ordering.leastOf(input.asJava, num).iterator.asScala
+  }
+
+  /**
+   * Returns the first K elements from the input as defined by the specified implicit Ordering[T]
+   * and maintains the ordering.
+   */
+  def takeOrdered[T](input: Iterator[T], num: Int, ser: Serializer)
+      (implicit ord: Ordering[T]): Iterator[T] = {
     val context = TaskContext.get()
-    if (context == null) {
-      val ordering = new GuavaOrdering[T] {
-        override def compare(l: T, r: T): Int = ord.compare(l, r)
-      }
-      ordering.leastOf(input.asJava, num).iterator.asScala
+    if (context == null || !input.hasNext) {
+      return takeOrdered(input, num)(ord)
+    }
+
+    val iter = input.buffered
+    var size = SizeEstimator.estimate(iter.head)
+    if (size == 0) {
+      size = 1024
+    }
+
+    val executorMemory = SparkEnv.get.conf.getOption("spark.executor.memory")
+      .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
+      .orElse(Option(System.getenv("SPARK_MEM")))
+      .map(Utils.memoryStringToMb)
+      .getOrElse(1024L) * 1024 * 1024
+
+    val limit = (executorMemory / size) * 0.1
+
+    if (num < limit) {
+      takeOrdered(iter, num)(ord)
     } else {
-      val sorter =
-        new ExternalSorter[T, Any, Any](context, None, None, Some(ord), ser)
-      sorter.insertAll(input.map(x => (x, null)))
+      val sorter = new ExternalSorter[T, Any, Any](context, None, None, Some(ord), ser)
+      sorter.insertAll(iter.map(x => (x, null)))
       context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
       context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
       context.taskMetrics().incPeakExecutionMemory(sorter.peakMemoryUsedBytes)

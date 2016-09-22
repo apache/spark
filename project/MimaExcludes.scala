@@ -70,8 +70,6 @@ object MimaExcludes {
         "org.apache.spark.status.api.v1.ApplicationAttemptInfo.<init>$default$5"),
       // SPARK-14042 Add custom coalescer support
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.rdd.RDD.coalesce"),
-      // SPARK-17488 Add external sorter for takeOrdered
-      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.rdd.RDD.takeOrdered"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rdd.PartitionCoalescer$LocationIterator"),
       ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.rdd.PartitionCoalescer"),
       // SPARK-15532 Remove isRootContext flag from SQLContext.

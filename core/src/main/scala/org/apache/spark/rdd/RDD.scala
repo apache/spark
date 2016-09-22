@@ -31,7 +31,6 @@ import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
-import org.apache.spark.serializer.Serializer
 import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
@@ -1385,15 +1384,14 @@ abstract class RDD[T: ClassTag](
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
-  def takeOrdered(num: Int, ser: Serializer = SparkEnv.get.serializer)
-      (implicit ord: Ordering[T]): Array[T] = withScope {
+  def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = withScope {
     if (num == 0) {
       Array.empty
     } else {
       val mapRDDs = mapPartitions { items =>
         // Priority keeps the largest elements, so let's reverse the ordering.
         val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
-        queue ++= util.collection.Utils.takeOrdered[T](items, num, ser)(ord)
+        queue ++= util.collection.Utils.takeOrdered(items, num)(ord)
         Iterator.single(queue)
       }
       if (mapRDDs.partitions.length == 0) {
