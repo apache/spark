@@ -173,11 +173,26 @@ private[spark] object RandomForest extends Logging {
 
     timer.stop("init")
 
+    // Variables used to keep track of runtime statistics (i.e. how many
+    // nodes get processed in each group/iteration on average)
+    var totalNodesProcessed = 0
+    var numGroups = 0
+    var minNodesPerGroup = Int.MaxValue
+    var maxNodesPerGroup = 0
+
     while (nodeQueue.nonEmpty) {
       // Collect some nodes to split, and choose features for each node (if subsampling).
       // Each group of nodes may come from one or multiple trees, and at multiple levels.
       val (nodesForGroup, treeToNodeToIndexInfo) =
         RandomForest.selectNodesToSplit(nodeQueue, maxMemoryUsage, metadata, rng)
+
+      // Update runtime statistics
+      val groupSize = nodesForGroup.values.map(_.length).sum
+      totalNodesProcessed += groupSize
+      numGroups += 1
+      minNodesPerGroup = Math.min(minNodesPerGroup, groupSize)
+      maxNodesPerGroup = Math.max(maxNodesPerGroup, groupSize)
+
       // Sanity check (should never occur):
       assert(nodesForGroup.nonEmpty,
         s"RandomForest selected empty nodesForGroup.  Error for unknown reason.")
@@ -195,6 +210,14 @@ private[spark] object RandomForest extends Logging {
 
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
+
+    // Print out runtime statistics
+    logInfo(s"Processed $numGroups groups of nodes")
+    if (numGroups > 0) {
+      logInfo(s"Max nodes per group: $maxNodesPerGroup")
+      logInfo(s"Min nodes per group: $minNodesPerGroup")
+      logInfo(s"Average nodes per group: ${totalNodesProcessed / numGroups.toDouble}")
+    }
 
     // Delete any remaining checkpoints used for node Id cache.
     if (nodeIdCache.nonEmpty) {

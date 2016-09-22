@@ -28,7 +28,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * particularly for bagging (e.g., for random forests).
  *
  * This holds one instance, as well as an array of weights which represent the (weighted)
- * number of times which this instance appears in each subsamplingRate.
+ * number of times which this instance appears in each subsample.
  * E.g., (datum, [1, 0, 4]) indicates that there are 3 subsamples of the dataset and that
  * this datum has 1 copy, 0 copies, and 4 copies in the 3 subsamples, respectively.
  *
