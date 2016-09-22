@@ -183,32 +183,25 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (!catalog.tableExists(tableName)) {
-      if (!ifExists) {
-        val objectName = if (isView) "View" else "Table"
-        throw new AnalysisException(s"$objectName to drop '$tableName' does not exist")
-      }
-    } else {
-      // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
-      // issue an exception.
-      catalog.getTableMetadataOption(tableName).map(_.tableType match {
-        case CatalogTableType.VIEW if !isView =>
-          throw new AnalysisException(
-            "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
-        case o if o != CatalogTableType.VIEW && isView =>
-          throw new AnalysisException(
-            s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
-        case _ =>
-      })
-      try {
-        sparkSession.sharedState.cacheManager.uncacheQuery(
-          sparkSession.table(tableName.quotedString))
-      } catch {
-        case NonFatal(e) => log.warn(e.toString, e)
-      }
-      catalog.refreshTable(tableName)
-      catalog.dropTable(tableName, ifExists, purge)
+    // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
+    // issue an exception.
+    catalog.getTableMetadataOption(tableName).map(_.tableType match {
+      case CatalogTableType.VIEW if !isView =>
+        throw new AnalysisException(
+          "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+      case o if o != CatalogTableType.VIEW && isView =>
+        throw new AnalysisException(
+          s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
+      case _ =>
+    })
+    try {
+      sparkSession.sharedState.cacheManager.uncacheQuery(
+        sparkSession.table(tableName.quotedString))
+    } catch {
+      case NonFatal(e) => log.warn(e.toString, e)
     }
+    catalog.refreshTable(tableName)
+    catalog.dropTable(tableName, ifExists, purge)
     Seq.empty[Row]
   }
 }
@@ -264,7 +257,7 @@ case class AlterTableUnsetPropertiesCommand(
       propKeys.foreach { k =>
         if (!table.properties.contains(k)) {
           throw new AnalysisException(
-            s"Attempted to unset non-existent property '$k' in table '$tableName'")
+            s"Attempted to unset non-existent property '$k' in table '${table.identifier}'")
         }
       }
     }
@@ -317,11 +310,11 @@ case class AlterTableSerDePropertiesCommand(
       catalog.alterTable(newTable)
     } else {
       val spec = partSpec.get
-      val part = catalog.getPartition(tableName, spec)
+      val part = catalog.getPartition(table.identifier, spec)
       val newPart = part.copy(storage = part.storage.copy(
         serde = serdeClassName.orElse(part.storage.serde),
         properties = part.storage.properties ++ serdeProperties.getOrElse(Map())))
-      catalog.alterPartitions(tableName, Seq(newPart))
+      catalog.alterPartitions(table.identifier, Seq(newPart))
     }
     Seq.empty[Row]
   }
@@ -358,7 +351,7 @@ case class AlterTableAddPartitionCommand(
       // inherit table storage format (possibly except for location)
       CatalogTablePartition(spec, table.storage.copy(locationUri = location))
     }
-    catalog.createPartitions(tableName, parts, ignoreIfExists = ifNotExists)
+    catalog.createPartitions(table.identifier, parts, ignoreIfExists = ifNotExists)
     Seq.empty[Row]
   }
 
@@ -422,7 +415,7 @@ case class AlterTableDropPartitionCommand(
       throw new AnalysisException(
         "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
     }
-    catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists, purge = purge)
+    catalog.dropPartitions(table.identifier, specs, ignoreIfNotExists = ifExists, purge = purge)
     Seq.empty[Row]
   }
 
@@ -471,26 +464,20 @@ case class AlterTableRecoverPartitionsCommand(
 
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
-    if (!catalog.tableExists(tableName)) {
-      throw new AnalysisException(s"Table $tableName in $cmd does not exist.")
-    }
-    if (catalog.isTemporaryTable(tableName)) {
-      throw new AnalysisException(
-        s"Operation not allowed: $cmd on temporary tables: $tableName")
-    }
     val table = catalog.getTableMetadata(tableName)
+    val tableIdentWithDB = table.identifier.quotedString
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
-        s"Operation not allowed: $cmd on datasource tables: $tableName")
+        s"Operation not allowed: $cmd on datasource tables: $tableIdentWithDB")
     }
     if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
-        s"Operation not allowed: $cmd only works on partitioned tables: $tableName")
+        s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
     }
     if (table.storage.locationUri.isEmpty) {
-      throw new AnalysisException(
-        s"Operation not allowed: $cmd only works on table with location provided: $tableName")
+      throw new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
+        s"location provided: $tableIdentWithDB")
     }
 
     val root = new Path(table.storage.locationUri.get)
@@ -659,7 +646,7 @@ case class AlterTableSetLocationCommand(
     partitionSpec match {
       case Some(spec) =>
         // Partition spec is specified, so we set the location only for this partition
-        val part = catalog.getPartition(tableName, spec)
+        val part = catalog.getPartition(table.identifier, spec)
         val newPart =
           if (DDLUtils.isDatasourceTable(table)) {
             throw new AnalysisException(
@@ -668,7 +655,7 @@ case class AlterTableSetLocationCommand(
           } else {
             part.copy(storage = part.storage.copy(locationUri = Some(location)))
           }
-        catalog.alterPartitions(tableName, Seq(newPart))
+        catalog.alterPartitions(table.identifier, Seq(newPart))
       case None =>
         // No partition spec is specified, so we set the location for the table itself
         val newTable =

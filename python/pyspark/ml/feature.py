@@ -1155,6 +1155,11 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
 
     `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
     categorical features. The number of bins can be set using the :py:attr:`numBuckets` parameter.
+    It is possible that the number of buckets used will be less than this value, for example, if
+    there are too few distinct values of the input to create enough distinct quantiles. Note also
+    that NaN values are handled specially and placed into their own bucket. For example, if 4
+    buckets are used, then non-NaN data will be put into buckets(0-3), but NaNs will be counted in
+    a special bucket(4).
     The bin ranges are chosen using an approximate algorithm (see the documentation for
     :py:meth:`~.DataFrameStatFunctions.approxQuantile` for a detailed description).
     The precision of the approximation can be controlled with the

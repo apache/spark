@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.FileNotFoundException
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileStatus, LocatedFileStatus, Path}
@@ -97,8 +99,14 @@ class ListingFileCatalog(
         logTrace(s"Listing $path on driver")
 
         val childStatuses = {
-          val stats = fs.listStatus(path)
-          if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
+          try {
+            val stats = fs.listStatus(path)
+            if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
+          } catch {
+            case _: FileNotFoundException =>
+              logWarning(s"The directory $path was not found. Was it deleted very recently?")
+              Array.empty[FileStatus]
+          }
         }
 
         childStatuses.map {
