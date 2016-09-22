@@ -49,6 +49,16 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     comparePlans(input, rewrite)
   }
 
+  test("single distinct group with partial aggregates") {
+    val input = testRelation
+      .groupBy('a, 'd)(
+        countDistinct('e, 'c).as('agg1),
+        max('b).as('agg2))
+      .analyze
+    val rewrite = RewriteDistinctAggregates(input)
+    comparePlans(input, rewrite)
+  }
+
   test("single distinct group with non-partial aggregates") {
     val input = testRelation
       .groupBy('a, 'd)(
@@ -60,14 +70,24 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
 
   test("multiple distinct groups") {
     val input = testRelation
+      .groupBy('a)(countDistinct('b, 'c), countDistinct('d))
+      .analyze
+    checkRewrite(RewriteDistinctAggregates(input))
+  }
+
+  test("multiple distinct groups with partial aggregates") {
+    val input = testRelation
       .groupBy('a)(countDistinct('b, 'c), countDistinct('d), sum('e))
       .analyze
     checkRewrite(RewriteDistinctAggregates(input))
   }
 
-  test("multiple distinct groups without non-distinct aggregates") {
+  test("multiple distinct groups with non-partial aggregates") {
     val input = testRelation
-      .groupBy('a)(countDistinct('b, 'c), countDistinct('d))
+      .groupBy('a)(
+        countDistinct('b, 'c),
+        countDistinct('d),
+        CollectSet('b).toAggregateExpression())
       .analyze
     checkRewrite(RewriteDistinctAggregates(input))
   }
