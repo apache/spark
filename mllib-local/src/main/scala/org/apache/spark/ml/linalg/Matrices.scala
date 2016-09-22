@@ -150,9 +150,49 @@ sealed trait Matrix extends Serializable {
    */
   private[spark] def foreachActive(f: (Int, Int, Double) => Unit)
 
-  def toSparse: SparseMatrix
+  def toSparse(columnMajor: Boolean): SparseMatrix
 
-  def toDense: DenseMatrix = new DenseMatrix(numRows, numCols, this.toArray)
+  // always creates a new array in column major format
+  // this is a problem and it is not the behavior in the vector class
+  // we need to NOT create a new array if it's already dense....
+  // this should be abstract.
+  def toDense: DenseMatrix //= new DenseMatrix(numRows, numCols, this.toArray)
+
+  def compressed(columnMajor: Boolean): Matrix = {
+    if (getDenseSize < getSparseSize(columnMajor)) {
+      toDense
+    } else {
+      toSparse(columnMajor)
+    }
+  }
+
+  def compressed: Matrix = {
+    val cscSize = getSparseSize(true)
+    val csrSize = getSparseSize(false)
+    val minSparseSize = cscSize.min(csrSize)
+    if (getDenseSize < minSparseSize) {
+      toDense
+    } else {
+      if (cscSize == minSparseSize) toSparse(true) else toSparse(false)
+    }
+  }
+
+  def getDenseSize: Int = {
+    val nnz = numNonzeros
+    8 * (numRows + numCols) + 8
+  }
+
+  def getSparseSize(columnMajor: Boolean): Int = {
+    // TODO: use long?
+    val nnz = numNonzeros
+    if (columnMajor) {
+      8 * nnz + 4 * nnz + 4 * (numCols + 1)
+    } else {
+      8 * nnz + 4 * nnz + 4 * (numRows + 1)
+    }
+  }
+
+//  def getSparseSize: Int = getSparseSize(true).min(getSparseSize(false))
 
   /**
    * Find the number of non-zero active values.
@@ -301,7 +341,8 @@ class DenseMatrix @Since("2.0.0") (
   @Since("2.0.0")
   def toSparse: SparseMatrix = toSparse(columnMajor = true)
 
-  private[ml] def toSparse(columnMajor: Boolean): SparseMatrix = {
+  // before, this always returned column major
+  def toSparse(columnMajor: Boolean): SparseMatrix = {
     if (!columnMajor) this.transpose.toSparse.transpose
     else {
       val spVals: MArrayBuilder[Double] = new MArrayBuilder.ofDouble
@@ -324,6 +365,30 @@ class DenseMatrix @Since("2.0.0") (
         colPtrs(j) = nnz
       }
       new SparseMatrix(numRows, numCols, colPtrs, rowIndices.result(), spVals.result())
+    }
+  }
+
+  def toDense: DenseMatrix = toDense(columnMajor = true)
+
+  def toDense(columnMajor: Boolean): DenseMatrix = {
+    if (isTransposed ^ columnMajor) {
+      if (isTransposed) {
+        // it is row major and we want column major
+        val newValues = Array.fill[Double](values.length)(0.0)
+        values.indices.foreach { i =>
+          newValues(i / numCols + (i % numCols) * numRows) = values(i)
+        }
+        new DenseMatrix(numRows, numCols, newValues, isTransposed = false)
+      } else {
+        // it is col major and we want row major
+        val newValues = Array.fill[Double](values.length)(0.0)
+        values.indices.foreach { i =>
+          newValues(i / numRows + (i % numRows) * numCols) = values(i)
+        }
+        new DenseMatrix(numRows, numCols, newValues, isTransposed = true)
+      }
+    } else {
+      this
     }
   }
 
@@ -534,6 +599,11 @@ class SparseMatrix @Since("2.0.0") (
     }
   }
 
+  def toSparse(columnMajor: Boolean): SparseMatrix = {
+    // TODO
+    this
+  }
+
   override def apply(i: Int, j: Int): Double = {
     val ind = index(i, j)
     if (ind < 0) 0.0 else values(ind)
@@ -611,7 +681,7 @@ class SparseMatrix @Since("2.0.0") (
    * set to false.
    */
   @Since("2.0.0")
-  def toDense: DenseMatrix = {
+  override def toDense: DenseMatrix = {
     new DenseMatrix(numRows, numCols, toArray)
   }
 

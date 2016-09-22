@@ -28,6 +28,14 @@ import org.apache.spark.ml.SparkMLFunSuite
 import org.apache.spark.ml.util.TestingUtils._
 
 class MatricesSuite extends SparkMLFunSuite {
+  def computeSpace(matrix: Matrix): Int = {
+    matrix match {
+      case dm: DenseMatrix =>
+        12 * dm.values.length + 8
+      case sm: SparseMatrix =>
+        12 * sm.numNonzeros + 4 * (if (!sm.isTransposed) sm.numCols + 1 else sm.numRows + 1)
+    }
+  }
   test("dense matrix construction") {
     val m = 3
     val n = 2
@@ -42,6 +50,15 @@ class MatricesSuite extends SparkMLFunSuite {
     intercept[RuntimeException] {
       Matrices.dense(3, 2, Array(0.0, 1.0, 2.0))
     }
+  }
+
+  test("compressed dense") {
+    val dm1 = new DenseMatrix(3, 4, List(List.fill(4)(1.0), List.fill(8)(0.0)).flatten.toArray)
+    println(computeSpace(dm1))
+    println(computeSpace(dm1.toSparse(true)))
+    println(computeSpace(dm1.toSparse(false)))
+    val cm = dm1.compressed
+    println(cm.isInstanceOf[SparseMatrix])
   }
 
   test("sparse matrix construction") {
