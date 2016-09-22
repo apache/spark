@@ -38,10 +38,13 @@ compileScala.dependsOn generateGrammarSource
 
 sourceSets.main.antlr.srcDirs = [ 'src/main/antlr4' ]
 
+// use an output directory that IDEA can easily find
+String antlrOut = 'src/generated/antlr4'
 // add generated sources to scala compiler path (plugin adds it to java path)
-sourceSets.main.scala.srcDir generateGrammarSource.outputDirectory
+sourceSets.main.scala.srcDir antlrOut
 sourceSets.main.java.srcDirs = []
 
 generateGrammarSource {
   arguments += [ '-package', 'org.apache.spark.sql.catalyst.parser', '-visitor' ]
+  outputDirectory = file(antlrOut)
 }
