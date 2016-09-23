@@ -17,83 +17,104 @@
 
 package org.apache.spark.ml.classification
 
-
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
+import org.apache.hadoop.fs.Path
+import scala.collection.mutable
+
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
+import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
-import org.apache.spark.mllib.linalg.BLAS._
-import org.apache.spark.mllib.linalg.{Vector, Vectors, _}
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.util.VersionUtils
 
-import scala.collection.mutable
-
-/** Params for Multilayer Perceptron. */
-private[ml] trait SVMParams extends PredictorParams
-  with HasSeed with HasStepSize
-with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-with HasStandardization with HasWeightCol with HasThreshold {
+/** Params for SVM. */
+private[ml] trait SVMParams extends ProbabilisticClassifierParams
+  with HasSeed with HasStepSize with HasRegParam with HasMaxIter
+  with HasFitIntercept with HasTol with HasStandardization with HasWeightCol with HasThreshold
+  with HasAggregationDepth {
 
 }
 
 /**
  * :: Experimental ::
- * Classifier trainer based on the Multilayer Perceptron.
- * Each layer has sigmoid activation function, output layer has softmax.
- * Number of inputs has to be equal to the size of feature vectors.
- * Number of outputs has to be equal to the total number of labels.
- *
+ * SVM with Hinge and OWLQN
  */
-@Since("1.5.0")
+@Since("2.1.0")
 @Experimental
-class SVM @Since("1.5.0") (
-    @Since("1.5.0") override val uid: String)
+class SVM @Since("2.1.0") (
+    @Since("2.1.0") override val uid: String)
   extends Predictor[Vector, SVM, SVMModel]
   with SVMParams with DefaultParamsWritable {
 
-  @Since("1.5.0")
-  def this() = this(Identifiable.randomUID("mlpc"))
+  @Since("2.1.0")
+  def this() = this(Identifiable.randomUID("svm"))
 
   /**
    * Set the maximum number of iterations.
    * Default is 100.
-    *
-    * @group setParam
+   *
+   * @group setParam
    */
-  @Since("1.5.0")
+  @Since("2.1.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
+  setDefault(maxIter -> 100)
+
+  /**
+   * Set the regularization parameter.
+   * Default is 0.0.
+   *
+   * @group setParam
+   */
+  @Since("2.1.0")
+  def setRegParam(value: Double): this.type = set(regParam, value)
+  setDefault(regParam -> 0.0)
 
   /**
    * Set the convergence tolerance of iterations.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
    * Default is 1E-4.
-    *
-    * @group setParam
+   *
+   * @group setParam
    */
-  @Since("1.5.0")
+  @Since("2.1.0")
   def setTol(value: Double): this.type = set(tol, value)
+  setDefault(tol -> 1E-6)
 
   /**
    * Set the seed for weights initialization if weights are not set
-    *
-    * @group setParam
+   *
+   * @group setParam
    */
-  @Since("1.5.0")
+  @Since("2.1.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  @Since("1.5.0")
+  @Since("2.1.0")
   override def copy(extra: ParamMap): SVM = defaultCopy(extra)
-  setDefault(weightCol -> "")
-  setDefault(regParam -> 0.0)
+
+  /**
+   * Sets the value of param [[weightCol]].
+   * If this is not set or empty, we treat all instance weights as 1.0.
+   * Default is not set, so all instances have weight one.
+   *
+   * @group setParam
+   */
+  @Since("2.1.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+
   /**
    * Train a model using the given dataset and parameters.
    * Developers can implement this instead of [[fit()]] to avoid dealing with schema validation
@@ -103,12 +124,15 @@ class SVM @Since("1.5.0") (
    * @return Fitted model
    */
   override protected def train(dataset: Dataset[_]): SVMModel = {
-    val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
         case Row(label: Double, weight: Double, features: Vector) =>
           Instance(label, weight, features)
       }
+
+    val instr = Instrumentation.create(this, instances)
+    instr.logParams(regParam, standardization, threshold, maxIter, tol, fitIntercept)
 
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
@@ -120,233 +144,228 @@ class SVM @Since("1.5.0") (
           (c1._1.merge(c2._1), c1._2.merge(c2._2))
 
       instances.treeAggregate(
-        new MultivariateOnlineSummarizer, new MultiClassSummarizer)(seqOp, combOp)
+        new MultivariateOnlineSummarizer, new MultiClassSummarizer
+      )(seqOp, combOp, $(aggregationDepth))
     }
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
-    val numClasses = histogram.length
     val numFeatures = summarizer.mean.size
+    val numFeaturesPlusIntercept = if (getFitIntercept) numFeatures + 1 else numFeatures
 
-    val (coefficients, intercept, objectiveHistory) = {
+    val numClasses = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
+      case Some(n: Int) =>
+        require(n >= histogram.length, s"Specified number of classes $n was " +
+          s"less than the number of unique labels ${histogram.length}.")
+        n
+      case None => histogram.length
+    }
+
+    if (isDefined(thresholds)) {
+      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
+        ".train() called with non-matching numClasses and thresholds.length." +
+        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
+    }
+
+    instr.logNumClasses(numClasses)
+    instr.logNumFeatures(numFeatures)
+
+    val (coefficientMatrix, interceptVector, objectiveHistory) = {
       if (numInvalid != 0) {
-        val msg = s"Classification labels should be in {0 to ${numClasses - 1} " +
+        val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
           s"Found $numInvalid invalid labels."
         logError(msg)
         throw new SparkException(msg)
       }
 
-      if (numClasses > 2) {
-        val msg = s"Currently, LogisticRegression with ElasticNet in ML package only supports " +
-          s"binary classification. Found $numClasses in the input dataset."
+      val featuresStd = summarizer.variance.toArray.map(math.sqrt)
+      val regParamL2 = $(regParam)
+      val bcFeaturesStd = instances.context.broadcast(featuresStd)
+      val costFun = new SVMCostFun(instances, numClasses, $(fitIntercept),
+        $(standardization), bcFeaturesStd, regParamL2, false,
+        $(aggregationDepth))
+
+      def regParamL1Fun = (index: Int) => 0D
+      val optimizer = new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
+
+      val initialCoefficientsWithIntercept = Vectors.zeros(numFeaturesPlusIntercept)
+
+      initialCoefficientsWithIntercept.toArray(numFeatures) = math.log(
+        histogram(1) / histogram(0))
+
+      val states = optimizer.iterations(new CachedDiffFunction(costFun),
+        initialCoefficientsWithIntercept.asBreeze.toDenseVector)
+
+      val arrayBuilder = mutable.ArrayBuilder.make[Double]
+      var state: optimizer.State = null
+      while (states.hasNext) {
+        state = states.next()
+        arrayBuilder += state.adjustedValue
+      }
+
+      bcFeaturesStd.destroy(blocking = false)
+      if (state == null) {
+        val msg = s"${optimizer.getClass.getName} failed."
         logError(msg)
         throw new SparkException(msg)
-      } else if ($(fitIntercept) && numClasses == 2 && histogram(0) == 0.0) {
-        logWarning(s"All labels are one and fitIntercept=true, so the coefficients will be " +
-          s"zeros and the intercept will be positive infinity; as a result, " +
-          s"training is not needed.")
-        (Vectors.sparse(numFeatures, Seq()), Double.PositiveInfinity, Array.empty[Double])
-      } else if ($(fitIntercept) && numClasses == 1) {
-        logWarning(s"All labels are zero and fitIntercept=true, so the coefficients will be " +
-          s"zeros and the intercept will be negative infinity; as a result, " +
-          s"training is not needed.")
-        (Vectors.sparse(numFeatures, Seq()), Double.NegativeInfinity, Array.empty[Double])
-      } else {
-        if (!$(fitIntercept) && numClasses == 2 && histogram(0) == 0.0) {
-          logWarning(s"All labels are one and fitIntercept=false. It's a dangerous ground, " +
-            s"so the algorithm may not converge.")
-        } else if (!$(fitIntercept) && numClasses == 1) {
-          logWarning(s"All labels are zero and fitIntercept=false. It's a dangerous ground, " +
-            s"so the algorithm may not converge.")
-        }
+      }
 
-        val featuresMean = summarizer.mean.toArray
-        val featuresStd = summarizer.variance.toArray.map(math.sqrt)
-
-        val regParamL1 = $(regParam)
-        val regParamL2 = $(regParam)
-
-        val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept),
-          $(standardization), featuresStd, featuresMean, regParamL2)
-
-        val standardizationParam = $(standardization)
-        def regParamL1Fun = (index: Int) => {
-          // Remove the L1 penalization on the intercept
-          if (index == numFeatures) {
-            0.0
-          } else {
-            if (standardizationParam) {
-              regParamL1
-            } else {
-              // If `standardization` is false, we still standardize the data
-              // to improve the rate of convergence; as a result, we have to
-              // perform this reverse standardization by penalizing each component
-              // differently to get effectively the same objective function when
-              // the training dataset is not standardized.
-              if (featuresStd(index) != 0.0) regParamL1 / featuresStd(index) else 0.0
-            }
-          }
-        }
-        val optimizer =
-          new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
-
-
-        val initialCoefficientsWithIntercept =
-          Vectors.zeros(if ($(fitIntercept)) numFeatures + 1 else numFeatures)
-
-
-
-        if ($(fitIntercept)) {
-          /*
-             For binary logistic regression, when we initialize the coefficients as zeros,
-             it will converge faster if we initialize the intercept such that
-             it follows the distribution of the labels.
-
-             {{{
-               P(0) = 1 / (1 + \exp(b)), and
-               P(1) = \exp(b) / (1 + \exp(b))
-             }}}, hence
-             {{{
-               b = \log{P(1) / P(0)} = \log{count_1 / count_0}
-             }}}
-           */
-          initialCoefficientsWithIntercept.toArray(numFeatures) = math.log(
-            histogram(1) / histogram(0))
-        }
-
-        val states = optimizer.iterations(new CachedDiffFunction(costFun),
-          initialCoefficientsWithIntercept.toBreeze.toDenseVector)
-
-        /*
-           Note that in Logistic Regression, the objective history (loss + regularization)
-           is log-likelihood which is invariance under feature standardization. As a result,
-           the objective history from optimizer is the same as the one in the original space.
-         */
-        val arrayBuilder = mutable.ArrayBuilder.make[Double]
-        var state: optimizer.State = null
-        while (states.hasNext) {
-          state = states.next()
-          arrayBuilder += state.adjustedValue
-        }
-
-        if (state == null) {
-          val msg = s"${optimizer.getClass.getName} failed."
-          logError(msg)
-          throw new SparkException(msg)
-        }
-
-        /*
-           The coefficients are trained in the scaled space; we're converting them back to
-           the original space.
-           Note that the intercept in scaled space and original space is the same;
-           as a result, no scaling is needed.
-         */
-        val rawCoefficients = state.x.toArray.clone()
-        var i = 0
-        while (i < numFeatures) {
-          rawCoefficients(i) *= { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0 }
-          i += 1
-        }
-
-        if ($(fitIntercept)) {
-          (Vectors.dense(rawCoefficients.dropRight(1)).compressed, rawCoefficients.last,
-            arrayBuilder.result())
+      /*
+         The coefficients are trained in the scaled space; we're converting them back to
+         the original space.
+         Note that the intercept in scaled space and original space is the same;
+         as a result, no scaling is needed.
+       */
+      val rawCoefficients = state.x.toArray.clone()
+      val coefficientArray = Array.tabulate(numFeatures) { i =>
+        // flatIndex will loop though rawCoefficients, and skip the intercept terms.
+        val flatIndex = if ($(fitIntercept)) i + i / numFeatures else i
+        val featureIndex = i % numFeatures
+        if (featuresStd(featureIndex) != 0.0) {
+          rawCoefficients(flatIndex) / featuresStd(featureIndex)
         } else {
-          (Vectors.dense(rawCoefficients).compressed, 0.0, arrayBuilder.result())
+          0.0
         }
       }
+
+      val intercept = rawCoefficients(numFeaturesPlusIntercept - 1)
+      (Vectors.dense(coefficientArray), intercept, arrayBuilder.result())
     }
 
-    copyValues(new SVMModel(uid, coefficients, intercept))
-
+    val model = copyValues(new SVMModel(uid, coefficientMatrix, interceptVector))
+    instr.logSuccess(model)
+    model
   }
 }
 
-@Since("2.0.0")
-object SVM
-  extends DefaultParamsReadable[SVM] {
+@Since("2.1.0")
+object SVM extends DefaultParamsReadable[SVM] {
 
-  @Since("2.0.0")
+  @Since("2.1.0")
   override def load(path: String): SVM = super.load(path)
 }
 
 /**
  * :: Experimental ::
- * Classification model based on the Multilayer Perceptron.
- * Each layer has sigmoid activation function, output layer has softmax.
-  *
-  * @param uid uid
- * @param weights vector of initial weights for the model that consists of the weights of layers
- * @return prediction model
+ * SVM Model trained by [[SVM]]
  */
-@Since("1.5.0")
+@Since("2.1.0")
 @Experimental
 class SVMModel private[ml] (
-    @Since("1.5.0") override val uid: String,
-    @Since("1.0.0") val weights: Vector,
-    @Since("0.8.0") val intercept: Double)
+    @Since("2.1.0") override val uid: String,
+    @Since("2.1.0") val weights: Vector,
+    @Since("2.1.0") val intercept: Double)
   extends PredictionModel[Vector, SVMModel]
-  with Serializable  {
-
-
+  with SVMParams with MLWritable {
 
   /**
    * Predict label for the given features.
    * This internal method is used to implement [[transform()]] and output [[predictionCol]].
    */
   override protected def predict(features: Vector): Double = {
-//    LabelConverter.decodeLabel(mlpModel.predict(features))
-    val margin = features.toBreeze.dot(weights.toBreeze) + intercept
-    if (margin > 0.5) 1.0 else 0.0
+    val margin = features.asBreeze.dot(weights.asBreeze) + intercept
+    if (margin > $(threshold)) 1.0 else 0.0
   }
 
-  @Since("1.5.0")
+  @Since("2.1.0")
   override def copy(extra: ParamMap): SVMModel = {
     copyValues(new SVMModel(uid, weights, intercept), extra)
   }
 
+  /**
+   * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
+   */
+  @Since("2.1.0")
+  override def write: MLWriter = new SVMModel.SVMModelWriter(this)
+
+}
+
+
+@Since("2.1.0")
+object SVMModel extends MLReadable[SVMModel] {
+
+  @Since("2.1.0")
+  override def read: MLReader[SVMModel] = new SVMModelReader
+
+  @Since("2.1.0")
+  override def load(path: String): SVMModel = super.load(path)
+
+  /** [[MLWriter]] instance for [[SVMModel]] */
+  private[SVMModel]
+  class SVMModelWriter(instance: SVMModel)
+    extends MLWriter with Logging {
+
+    private case class Data(
+        coefficients: Vector,
+        intercept: Double)
+
+    override protected def saveImpl(path: String): Unit = {
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      // Save model data: numClasses, numFeatures, intercept, coefficients
+      val data = Data(instance.weights, instance.intercept)
+      val dataPath = new Path(path, "data").toString
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class SVMModelReader extends MLReader[SVMModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[SVMModel].getName
+
+    override def load(path: String): SVMModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val dataPath = new Path(path, "data").toString
+      val data = sparkSession.read.format("parquet").load(dataPath)
+      val Row(coefficients: Vector, intercept: Double) =
+        data.select("coefficients", "intercept").head()
+      val model = new SVMModel(metadata.uid, coefficients, intercept)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
 }
 
 
 /**
- * LogisticCostFun implements Breeze's DiffFunction[T] for a multinomial logistic loss function,
- * as used in multi-class classification (it is also used in binary logistic regression).
- * It returns the loss and gradient with L2 regularization at a particular point (coefficients).
- * It's used in Breeze's convex optimization routines.
+ * SVMCostFun implements Breeze's DiffFunction[T] for hinge loss function
  */
 private class SVMCostFun(
-                               instances: RDD[Instance],
-                               numClasses: Int,
-                               fitIntercept: Boolean,
-                               standardization: Boolean,
-                               featuresStd: Array[Double],
-                               featuresMean: Array[Double],
-                               regParamL2: Double) extends DiffFunction[BDV[Double]] {
+    instances: RDD[Instance],
+    numClasses: Int,
+    fitIntercept: Boolean,
+    standardization: Boolean,
+    bcFeaturesStd: Broadcast[Array[Double]],
+    regParamL2: Double,
+    multinomial: Boolean,
+    aggregationDepth: Int) extends DiffFunction[BDV[Double]] {
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
-    val numFeatures = featuresStd.length
     val coeffs = Vectors.fromBreeze(coefficients)
+    val bcCoeffs = instances.context.broadcast(coeffs)
+    val featuresStd = bcFeaturesStd.value
+    val numFeatures = featuresStd.length
 
-    val logisticAggregator = {
+    val svmAggregator = {
       val seqOp = (c: SVMAggregator, instance: Instance) => c.add(instance)
       val combOp = (c1: SVMAggregator, c2: SVMAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new SVMAggregator(coeffs, numClasses, fitIntercept, featuresStd, featuresMean)
-      )(seqOp, combOp)
+        new SVMAggregator(bcCoeffs, bcFeaturesStd, numClasses, fitIntercept, false)
+      )(seqOp, combOp, aggregationDepth)
     }
 
-    val totalGradientArray = logisticAggregator.gradient.toArray
-
+    val totalGradientArray = svmAggregator.gradient.toArray
     // regVal is the sum of coefficients squares excluding intercept for L2 regularization.
     val regVal = if (regParamL2 == 0.0) {
       0.0
     } else {
       var sum = 0.0
-      coeffs.foreachActive { (index, value) =>
-        // If `fitIntercept` is true, the last term which is intercept doesn't
-        // contribute to the regularization.
-        if (index != numFeatures) {
+      coeffs.foreachActive { case (index, value) =>
+        // We do not apply regularization to the intercepts
+        val isIntercept = fitIntercept && ((index + 1) % (numFeatures + 1) == 0)
+        if (!isIntercept) {
           // The following code will compute the loss of the regularization; also
           // the gradient of the regularization, and add back to totalGradientArray.
           sum += {
@@ -354,13 +373,18 @@ private class SVMCostFun(
               totalGradientArray(index) += regParamL2 * value
               value * value
             } else {
-              if (featuresStd(index) != 0.0) {
+              val featureIndex = if (fitIntercept) {
+                index % (numFeatures + 1)
+              } else {
+                index % numFeatures
+              }
+              if (featuresStd(featureIndex) != 0.0) {
                 // If `standardization` is false, we still standardize the data
                 // to improve the rate of convergence; as a result, we have to
                 // perform this reverse standardization by penalizing each component
                 // differently to get effectively the same objective function when
                 // the training dataset is not standardized.
-                val temp = value / (featuresStd(index) * featuresStd(index))
+                val temp = value / (featuresStd(featureIndex) * featuresStd(featureIndex))
                 totalGradientArray(index) += regParamL2 * temp
                 value * temp
               } else {
@@ -372,35 +396,35 @@ private class SVMCostFun(
       }
       0.5 * regParamL2 * sum
     }
+    bcCoeffs.destroy(blocking = false)
 
-    (logisticAggregator.loss + regVal, new BDV(totalGradientArray))
+    (svmAggregator.loss + regVal, new BDV(totalGradientArray))
   }
 }
 
 
 /**
- * LogisticAggregator computes the gradient and loss for binary logistic loss function, as used
+ * SVMAggregator computes the gradient and loss for hinge loss function, as used
  * in binary classification for instances in sparse or dense vector in a online fashion.
  *
- * Note that multinomial logistic loss is not supported yet!
- *
- * Two LogisticAggregator can be merged together to have a summary of loss and gradient of
+ * Two SVMAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
  *
- * @param coefficients The coefficients corresponding to the features.
- * @param numClasses the number of possible outcomes for k classes classification problem in
- *                   Multinomial Logistic Regression.
+ * @param bcCoefficients The coefficients corresponding to the features.
  * @param fitIntercept Whether to fit an intercept term.
- * @param featuresStd The standard deviation values of the features.
- * @param featuresMean The mean values of the features.
+ * @param bcFeaturesStd The standard deviation values of the features.
  */
 private class SVMAggregator(
-    coefficients: Vector,
+    bcCoefficients: Broadcast[Vector],
+    bcFeaturesStd: Broadcast[Array[Double]],
     numClasses: Int,
     fitIntercept: Boolean,
-    featuresStd: Array[Double],
-    featuresMean: Array[Double]) extends Serializable {
+    multinomial: Boolean) extends Serializable {
 
+  private val numFeatures = bcFeaturesStd.value.length
+  private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
+  private val coefficients = bcCoefficients.value
+  private val featuresStd = bcFeaturesStd.value
   private var weightSum = 0.0
   private var lossSum = 0.0
 
@@ -416,11 +440,11 @@ private class SVMAggregator(
   private val gradientSumArray = Array.ofDim[Double](coefficientsArray.length)
 
   /**
-   * Add a new training instance to this LogisticAggregator, and update the loss and gradient
+   * Add a new training instance to this SVMAggregator, and update the loss and gradient
    * of the objective function.
    *
    * @param instance The instance of data point to be added.
-   * @return This LogisticAggregator object.
+   * @return This SVMAggregator object.
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
@@ -435,24 +459,16 @@ private class SVMAggregator(
 
       numClasses match {
         case 2 =>
-          // For Binary Logistic Regression.
-//          val margin = - {
-//            var sum = 0.0
-//            features.foreachActive { (index, value) =>
-//              if (featuresStd(index) != 0.0 && value != 0.0) {
-//                sum += localCoefficientsArray(index) * (value / featuresStd(index))
-//              }
-//            }
-//            sum + {
-//              if (fitIntercept) localCoefficientsArray(dim) else 0.0
-//            }
-//          }
-//
-//          val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
-
-
-
-          val dotProduct = dot(features, new DenseVector(localCoefficientsArray))
+          val dotProduct = {
+          var sum = 0.0
+          features.foreachActive { (index, value) =>
+            if (featuresStd(index) != 0.0 && value != 0.0) {
+              sum += coefficients(index) * value / featuresStd(index)
+            }
+          }
+          if (fitIntercept) sum += coefficients(numFeaturesPlusIntercept - 1)
+          sum
+        }
           // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
           // Therefore the gradient is -(2y - 1)*x
           val labelScaled = 2 * label - 1.0
@@ -473,17 +489,9 @@ private class SVMAggregator(
           if (fitIntercept) {
             localGradientSumArray(dim) += gradient.toArray.last
           }
-
-//          if (label > 0) {
-//            // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
-//            lossSum += weight * MLUtils.log1pExp(margin)
-//          } else {
-//            lossSum += weight * (MLUtils.log1pExp(margin) - margin)
-//          }
           lossSum += loss
         case _ =>
-          new NotImplementedError("LogisticRegression with ElasticNet in ML package " +
-            "only supports binary classification for now.")
+          new NotImplementedError("SVM in ML package only supports binary classification for now.")
       }
       weightSum += weight
       this
@@ -491,12 +499,12 @@ private class SVMAggregator(
   }
 
   /**
-   * Merge another LogisticAggregator, and update the loss and gradient
+   * Merge another SVMAggregator, and update the loss and gradient
    * of the objective function.
    * (Note that it's in place merging; as a result, `this` object will be modified.)
    *
-   * @param other The other LogisticAggregator to be merged.
-   * @return This LogisticAggregator object.
+   * @param other The other SVMAggregator to be merged.
+   * @return This SVMAggregator object.
    */
   def merge(other: SVMAggregator): this.type = {
     require(dim == other.dim, s"Dimensions mismatch when merging with another " +
