@@ -18,11 +18,10 @@
 package org.apache.spark.scheduler
 
 import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.internal.Logging
-
-import scala.collection.mutable
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start() {}
