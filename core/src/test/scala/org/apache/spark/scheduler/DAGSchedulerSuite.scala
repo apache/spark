@@ -2112,6 +2112,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   test("The failed stage never resubmitted due to abort stage in another thread") {
     implicit val executorContext = ExecutionContext
       .fromExecutorService(Executors.newFixedThreadPool(5))
+    val duration = 60.seconds
+
     val f1 = Future {
       try {
         val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
@@ -2125,10 +2127,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
         }.count()
       } catch {
         case e: Throwable =>
-          logInfo("expected abort stage: " + e.getMessage)
+          logInfo("expected abort stage1: " + e.getMessage)
       }
     }
-    Thread.sleep(10000)
+    ThreadUtils.awaitResult(f1, duration)
     val f2 = Future {
       try {
         val rdd2 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
@@ -2142,11 +2144,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
         }.count()
       } catch {
         case e: Throwable =>
-          println("expected abort stage2: " + e.getMessage)
+          logInfo("expected abort stage2: " + e.getMessage)
       }
     }
-
-    val duration = 60.seconds
     ThreadUtils.awaitResult(f2, duration)
   }
 
