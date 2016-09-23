@@ -41,8 +41,8 @@ deployment:
       - ./build/sbt -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive publish
       - ./dev/make-distribution.sh --name hadoop2.7 --tgz "-Phadoop2.7 -Psparkr -Phive -Phive-thriftserver -Pyarn -Pmesos" \
           2>&1 > binary-release-hadoop2.7.log
-      - curl -u $BINTRAY_USER:$BINTRAY_PASSWORD -T "spark-$(git describe --tags)-bin-hadoop2.7.tgz" "https://api.bintray.com/content/palantir/releases/org/apache/spark/dist/$(git describe --tags)/spark-$(git describe --tags)-bin-hadoop2.7.tgz"
+      - curl -u $BINTRAY_USER:$BINTRAY_PASSWORD -T "spark-$(git describe --tags)-bin-hadoop2.7.tgz" "https://api.bintray.com/content/palantir/releases/spark/$(git describe --tags)/org/apache/spark/dist/spark-$(git describe --tags)-bin-hadoop2.7.tgz"
       - ./build/sbt -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive clean
       - ./dev/make-distribution.sh --name without-hadoop --tgz "-Psparkr -Phadoop-provided -Pyarn -Pmesos" \
           2>&1 > binary-release-without-hadoop.log
-      - curl -u $BINTRAY_USER:$BINTRAY_PASSWORD -T "spark-$(git describe --tags)-bin-without-hadoop.tgz" "https://api.bintray.com/content/palantir/releases/org/apache/spark/dist/$(git describe --tags)/spark-$(git describe --tags)-bin-without-hadoop.tgz"
+      - curl -u $BINTRAY_USER:$BINTRAY_PASSWORD -T "spark-$(git describe --tags)-bin-without-hadoop.tgz" "https://api.bintray.com/content/palantir/releases/spark/$(git describe --tags)/org/apache/spark/dist/spark-$(git describe --tags)-bin-without-hadoop.tgz"
