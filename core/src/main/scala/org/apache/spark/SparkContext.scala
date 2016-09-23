@@ -1419,7 +1419,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * supported for Hadoop-supported filesystems.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
-    val uri = new URI(path)
+    val uri = new Path(path).toUri
     val schemeCorrectedPath = uri.getScheme match {
       case null | "local" => new File(path).getCanonicalFile.toURI.toString
       case _ => path
@@ -1453,8 +1453,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       logInfo(s"Added file $path at $key with timestamp $timestamp")
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
-      Utils.fetchFile(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager,
-        hadoopConfiguration, timestamp, useCache = false)
+      Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory()), conf,
+        env.securityManager, hadoopConfiguration, timestamp, useCache = false)
       postEnvironmentUpdate()
     }
   }
