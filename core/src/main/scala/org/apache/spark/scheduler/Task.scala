@@ -139,6 +139,7 @@ private[spark] abstract class Task[T](
   @volatile @transient private var _killed = false
 
   protected var _executorDeserializeTime: Long = 0
+  protected var _executorDeserializeCpuTime: Long = 0
 
   /**
    * Whether the task has been killed.
@@ -149,6 +150,7 @@ private[spark] abstract class Task[T](
    * Returns the amount of time spent deserializing the RDD and function to be run.
    */
   def executorDeserializeTime: Long = _executorDeserializeTime
+  def executorDeserializeCpuTime: Long = _executorDeserializeCpuTime
 
   /**
    * Collect the latest values of accumulators used in this task. If the task failed,

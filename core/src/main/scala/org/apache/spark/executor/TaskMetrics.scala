@@ -47,7 +47,9 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, Accumulat
 class TaskMetrics private[spark] () extends Serializable {
   // Each metric is internally represented as an accumulator
   private val _executorDeserializeTime = new LongAccumulator
+  private val _executorDeserializeCpuTime = new LongAccumulator
   private val _executorRunTime = new LongAccumulator
+  private val _executorCpuTime = new LongAccumulator
   private val _resultSize = new LongAccumulator
   private val _jvmGCTime = new LongAccumulator
   private val _resultSerializationTime = new LongAccumulator
@@ -62,9 +64,20 @@ class TaskMetrics private[spark] () extends Serializable {
   def executorDeserializeTime: Long = _executorDeserializeTime.sum
 
   /**
+   * CPU Time taken on the executor to deserialize this task in nanoseconds.
+   */
+  def executorDeserializeCpuTime: Long = _executorDeserializeCpuTime.sum
+
+  /**
    * Time the executor spends actually running the task (including fetching shuffle data).
    */
   def executorRunTime: Long = _executorRunTime.sum
+
+  /**
+   * CPU Time the executor spends actually running the task
+   * (including fetching shuffle data) in nanoseconds.
+   */
+  def executorCpuTime: Long = _executorCpuTime.sum
 
   /**
    * The number of bytes this task transmitted back to the driver as the TaskResult.
@@ -111,7 +124,10 @@ class TaskMetrics private[spark] () extends Serializable {
   // Setters and increment-ers
   private[spark] def setExecutorDeserializeTime(v: Long): Unit =
     _executorDeserializeTime.setValue(v)
+  private[spark] def setExecutorDeserializeCpuTime(v: Long): Unit =
+    _executorDeserializeCpuTime.setValue(v)
   private[spark] def setExecutorRunTime(v: Long): Unit = _executorRunTime.setValue(v)
+  private[spark] def setExecutorCpuTime(v: Long): Unit = _executorCpuTime.setValue(v)
   private[spark] def setResultSize(v: Long): Unit = _resultSize.setValue(v)
   private[spark] def setJvmGCTime(v: Long): Unit = _jvmGCTime.setValue(v)
   private[spark] def setResultSerializationTime(v: Long): Unit =
@@ -188,7 +204,9 @@ class TaskMetrics private[spark] () extends Serializable {
   import InternalAccumulator._
   @transient private[spark] lazy val nameToAccums = LinkedHashMap(
     EXECUTOR_DESERIALIZE_TIME -> _executorDeserializeTime,
+    EXECUTOR_DESERIALIZE_CPU_TIME -> _executorDeserializeCpuTime,
     EXECUTOR_RUN_TIME -> _executorRunTime,
+    EXECUTOR_CPU_TIME -> _executorCpuTime,
     RESULT_SIZE -> _resultSize,
     JVM_GC_TIME -> _jvmGCTime,
     RESULT_SERIALIZATION_TIME -> _resultSerializationTime,
