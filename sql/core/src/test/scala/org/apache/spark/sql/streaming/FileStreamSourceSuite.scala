@@ -102,6 +102,12 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext with Private
     }
   }
 
+  case class DeleteFile(file: File) extends ExternalAction {
+    def runAction(): Unit = {
+      Utils.deleteRecursively(file)
+    }
+  }
+
   /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
   def createFileStream(
       format: String,
@@ -669,7 +675,15 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
           // Append to same partition=bar sub dir
           AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
-          CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"))
+          CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar")),
+
+          // Delete the two partition dirs
+          DeleteFile(partitionFooSubDir),
+          DeleteFile(partitionBarSubDir),
+
+          AddTextFileData("{'value': 'keep6'}", partitionBarSubDir, tmp),
+          CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"),
+            ("keep6", "bar"))
         )
       }
     }
