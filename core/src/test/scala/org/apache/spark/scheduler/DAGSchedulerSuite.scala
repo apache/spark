@@ -2149,7 +2149,12 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
           logInfo("expected abort stage2: " + e.getMessage)
       }
     }
-    ThreadUtils.awaitResult(f2, duration)
+    try {
+      ThreadUtils.awaitResult(f2, duration)
+    } catch {
+      case e: Throwable => fail("The failed stage never resubmitted")
+    }
+    executorContext.shutdown()
   }
 
   /**
