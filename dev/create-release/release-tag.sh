@@ -60,12 +60,17 @@ git config user.email $GIT_EMAIL
 
 # Create release version
 $MVN versions:set -DnewVersion=$RELEASE_VERSION | grep -v "no value" # silence logs
+# Set the release version in R/pkg/DESCRIPTION
+sed -i".tmp" 's/Version.*$/Version: '"$RELEASE_VERSION"'/g' R/pkg/DESCRIPTION
 git commit -a -m "Preparing Spark release $RELEASE_TAG"
 echo "Creating tag $RELEASE_TAG at the head of $GIT_BRANCH"
 git tag $RELEASE_TAG
 
 # Create next version
 $MVN versions:set -DnewVersion=$NEXT_VERSION | grep -v "no value" # silence logs
+# Remove -SNAPSHOT before setting the R version as R expects version strings to only have numbers
+R_NEXT_VERSION=`echo $NEXT_VERSION | sed 's/-SNAPSHOT//g'`
+sed -i".tmp" 's/Version.*$/Version: '"$R_NEXT_VERSION"'/g' R/pkg/DESCRIPTION
 git commit -a -m "Preparing development version $NEXT_VERSION"
 
 # Push changes
