@@ -18,9 +18,12 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
+import java.util.concurrent.Executors
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.DurationConversions
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
@@ -32,8 +35,9 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.shuffle.MetadataFetchFailedException
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, LongAccumulator, Utils}
+import org.apache.spark.util._
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -2103,6 +2107,47 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(scheduler.getShuffleDependencies(rddC) === Set(shuffleDepB))
     assert(scheduler.getShuffleDependencies(rddD) === Set(shuffleDepC))
     assert(scheduler.getShuffleDependencies(rddE) === Set(shuffleDepA, shuffleDepC))
+  }
+
+  test("The failed stage never resubmitted due to abort stage in another thread") {
+    implicit val executorContext = ExecutionContext
+      .fromExecutorService(Executors.newFixedThreadPool(5))
+    val f1 = Future {
+      try {
+        val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
+        val shuffleHandle =
+          rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
+        rdd1.map { x =>
+              if (x._1 == 1) {
+                throw new FetchFailedException(BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
+              }
+              x._1
+        }.count()
+      } catch {
+        case e: Throwable =>
+          logInfo("expected abort stage: " + e.getMessage)
+      }
+    }
+    Thread.sleep(10000)
+    val f2 = Future {
+      try {
+        val rdd2 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
+        val shuffleHandle =
+          rdd2.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
+        rdd2.map { x =>
+          if (x._1 == 1) {
+            throw new FetchFailedException(BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
+          }
+          x._1
+        }.count()
+      } catch {
+        case e: Throwable =>
+          println("expected abort stage2: " + e.getMessage)
+      }
+    }
+
+    val duration = 60.seconds
+    ThreadUtils.awaitResult(f2, duration)
   }
 
   /**
