@@ -694,12 +694,19 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' }
 #' @note spark.mlp since 2.1.0
 setMethod("spark.mlp", signature(data = "SparkDataFrame"),
-          function(data, blockSize = 128, layers = c(3, 5, 2), solver = "l-bfgs", maxIter = 100,
-                   tol = 0.5, stepSize = 1, seed = 1) {
+          function(data, layers, blockSize = 128, solver = "l-bfgs", maxIter = 100,
+                   tol = 1E-6, stepSize = 0.03, seed = NULL) {
+            layers <- as.integer(na.omit(layers))
+            if (length(layers) <= 1) {
+              stop ("layers must be a integer vector with length > 1.")
+            }
+            if (!is.null(seed)) {
+              seed <- as.character(as.integer(seed))
+            }
             jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
                                 "fit", data@sdf, as.integer(blockSize), as.array(layers),
                                 as.character(solver), as.integer(maxIter), as.numeric(tol),
-                                as.numeric(stepSize), as.integer(seed))
+                                as.numeric(stepSize), seed)
             new("MultilayerPerceptronClassificationModel", jobj = jobj)
           })
 

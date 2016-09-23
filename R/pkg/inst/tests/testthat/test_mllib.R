@@ -391,6 +391,25 @@ test_that("spark.mlp", {
 
   unlink(modelPath)
 
+  # Test default parameter
+  model <- spark.mlp(df, layers = c(4, 5, 4, 3))
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 10), c(1, 1, 1, 1, 0, 1, 2, 2, 1, 0))
+
+  # Test illegal parameter
+  expect_error(spark.mlp(df, layers = NULL), "layers must be a integer vector with length > 1.")
+  expect_error(spark.mlp(df, layers = c()), "layers must be a integer vector with length > 1.")
+  expect_error(spark.mlp(df, layers = c(3)), "layers must be a integer vector with length > 1.")
+
+  # Test random seed
+  # default seed
+  model <- spark.mlp(df, layers = c(4, 5, 4, 3), maxIter = 10)
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 12), c(1, 1, 1, 1, 0, 1, 2, 2, 1, 2, 0, 1))
+  # seed equals 10
+  model <- spark.mlp(df, layers = c(4, 5, 4, 3), maxIter = 10, seed = 10)
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 12), c(1, 1, 1, 1, 2, 1, 2, 2, 1, 0, 0, 1))
 })
 
 test_that("spark.naiveBayes", {
