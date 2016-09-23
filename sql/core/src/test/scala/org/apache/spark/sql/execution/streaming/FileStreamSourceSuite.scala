@@ -17,9 +17,19 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.SparkFunSuite
+import java.io.File
+import java.net.URI
 
-class FileStreamSourceSuite extends SparkFunSuite {
+import scala.util.Random
+
+import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.streaming.ExistsThrowsExceptionFileSystem._
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.StructType
+
+class FileStreamSourceSuite extends SparkFunSuite with SharedSQLContext {
 
   import FileStreamSource._
 
@@ -73,4 +83,45 @@ class FileStreamSourceSuite extends SparkFunSuite {
     assert(map.isNewFile(FileEntry("b", 10)))
   }
 
+  testWithUninterruptibleThread("do not recheck that files exist during getBatch") {
+    withTempDir { temp =>
+      spark.conf.set(
+        s"fs.$scheme.impl",
+        classOf[ExistsThrowsExceptionFileSystem].getName)
+      // add the metadata entries as a pre-req
+      val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
+      val metadataLog =
+        new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath)
+      assert(metadataLog.add(0, Array(FileEntry(s"$scheme:///file1", 100L, 0))))
+
+      val newSource = new FileStreamSource(spark, s"$scheme:///", "parquet", StructType(Nil),
+        dir.getAbsolutePath, Map.empty)
+      // this method should throw an exception if `fs.exists` is called during resolveRelation
+      newSource.getBatch(None, LongOffset(1))
+    }
+  }
+}
+
+/** Fake FileSystem to test whether the method `fs.exists` is called during
+ * `DataSource.resolveRelation`.
+ */
+class ExistsThrowsExceptionFileSystem extends RawLocalFileSystem {
+  override def getUri: URI = {
+    URI.create(s"$scheme:///")
+  }
+
+  override def exists(f: Path): Boolean = {
+    throw new IllegalArgumentException("Exists shouldn't have been called!")
+  }
+
+  /** Simply return an empty file for now. */
+  override def listStatus(file: Path): Array[FileStatus] = {
+    val emptyFile = new FileStatus()
+    emptyFile.setPath(file)
+    Array(emptyFile)
+  }
+}
+
+object ExistsThrowsExceptionFileSystem {
+  val scheme = s"FileStreamSourceSuite${math.abs(Random.nextInt)}fs"
 }

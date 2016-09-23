@@ -166,3 +166,16 @@ test_that("spark.lapply should perform simple transforms", {
   expect_equal(doubled, as.list(2 * 1:10))
   sparkR.session.stop()
 })
+
+test_that("add and get file to be downloaded with Spark job on every node", {
+  sparkR.sparkContext()
+  path <- tempfile(pattern = "hello", fileext = ".txt")
+  filename <- basename(path)
+  words <- "Hello World!"
+  writeLines(words, path)
+  spark.addFile(path)
+  download_path <- spark.getSparkFiles(filename)
+  expect_equal(readLines(download_path), words)
+  unlink(path)
+  sparkR.session.stop()
+})

@@ -80,7 +80,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     conf.set("spark.memory.offHeap.size", maxMem.toString)
     val serializer = new KryoSerializer(conf)
     val transfer = transferService
-      .getOrElse(new NettyBlockTransferService(conf, securityMgr, "localhost", numCores = 1))
+      .getOrElse(new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1))
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
     val blockManager = new BlockManager(name, rpcEnv, master, serializerManager, conf,
@@ -854,13 +854,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
     conf.set("spark.testing.memory", "1200")
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", numCores = 1)
+    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
     val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
     store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, 0)
     memoryManager.setMemoryStore(store.memoryStore)
+    store.initialize("app-id")
 
     // The put should fail since a1 is not serializable.
     class UnserializableClass
@@ -1204,6 +1205,39 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .asInstanceOf[Option[ByteBuffer]]
     assert(block.isDefined)
     verify(mockBlockManagerMaster, times(2)).getLocations("item")
+  }
+
+  test("SPARK-17484: block status is properly updated following an exception in put()") {
+    val mockBlockTransferService = new MockBlockTransferService(maxFailures = 10) {
+      override def uploadBlock(
+          hostname: String,
+          port: Int, execId: String,
+          blockId: BlockId,
+          blockData: ManagedBuffer,
+          level: StorageLevel,
+          classTag: ClassTag[_]): Future[Unit] = {
+        throw new InterruptedException("Intentional interrupt")
+      }
+    }
+    store = makeBlockManager(8000, "executor1", transferService = Option(mockBlockTransferService))
+    store2 = makeBlockManager(8000, "executor2", transferService = Option(mockBlockTransferService))
+    intercept[InterruptedException] {
+      store.putSingle("item", "value", StorageLevel.MEMORY_ONLY_2, tellMaster = true)
+    }
+    assert(store.getLocalBytes("item").isEmpty)
+    assert(master.getLocations("item").isEmpty)
+    assert(store2.getRemoteBytes("item").isEmpty)
+  }
+
+  test("SPARK-17484: master block locations are updated following an invalid remote block fetch") {
+    store = makeBlockManager(8000, "executor1")
+    store2 = makeBlockManager(8000, "executor2")
+    store.putSingle("item", "value", StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(master.getLocations("item").nonEmpty)
+    store.removeBlock("item", tellMaster = false)
+    assert(master.getLocations("item").nonEmpty)
+    assert(store2.getRemoteBytes("item").isEmpty)
+    assert(master.getLocations("item").isEmpty)
   }
 
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {

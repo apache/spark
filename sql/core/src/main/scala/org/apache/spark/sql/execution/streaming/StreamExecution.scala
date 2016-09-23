@@ -58,7 +58,7 @@ class StreamExecution(
 
   import org.apache.spark.sql.streaming.StreamingQueryListener._
 
-  private val pollingDelayMs = sparkSession.conf.get(SQLConf.STREAMING_POLLING_DELAY)
+  private val pollingDelayMs = sparkSession.sessionState.conf.streamingPollingDelay
 
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
@@ -290,6 +290,13 @@ class StreamExecution(
       assert(offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
         s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
       logInfo(s"Committed offsets for batch $currentBatchId.")
+
+      // Now that we have logged the new batch, no further processing will happen for
+      // the previous batch, and it is safe to discard the old metadata.
+      // Note that purge is exclusive, i.e. it purges everything before currentBatchId.
+      // NOTE: If StreamExecution implements pipeline parallelism (multiple batches in
+      // flight at the same time), this cleanup logic will need to change.
+      offsetLog.purge(currentBatchId)
     } else {
       awaitBatchLock.lock()
       try {

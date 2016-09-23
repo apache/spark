@@ -142,12 +142,13 @@ case class DataSource(
                 } else if (provider.toLowerCase == "avro" ||
                   provider == "com.databricks.spark.avro") {
                   throw new AnalysisException(
-                    s"Failed to find data source: ${provider.toLowerCase}. Please use Spark " +
-                      "package http://spark-packages.org/package/databricks/spark-avro")
+                    s"Failed to find data source: ${provider.toLowerCase}. Please find an Avro " +
+                      "package at " +
+                      "https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider. Please find packages at " +
-                      "http://spark-packages.org",
+                      "https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects",
                     error)
                 }
             }
@@ -230,7 +231,7 @@ case class DataSource(
           }
         }
 
-        val isSchemaInferenceEnabled = sparkSession.conf.get(SQLConf.STREAMING_SCHEMA_INFERENCE)
+        val isSchemaInferenceEnabled = sparkSession.sessionState.conf.streamingSchemaInference
         val isTextSource = providingClass == classOf[text.TextFileFormat]
         // If the schema inference is disabled, only text sources require schema to be specified
         if (!isSchemaInferenceEnabled && !isTextSource && userSpecifiedSchema.isEmpty) {
@@ -315,8 +316,14 @@ case class DataSource(
   /**
    * Create a resolved [[BaseRelation]] that can be used to read data from or write data into this
    * [[DataSource]]
+   *
+   * @param checkFilesExist Whether to confirm that the files exist when generating the
+   *                        non-streaming file based datasource. StructuredStreaming jobs already
+   *                        list file existence, and when generating incremental jobs, the batch
+   *                        is considered as a non-streaming file based data source. Since we know
+   *                        that files already exist, we don't need to check them again.
    */
-  def resolveRelation(): BaseRelation = {
+  def resolveRelation(checkFilesExist: Boolean = true): BaseRelation = {
     val caseInsensitiveOptions = new CaseInsensitiveMap(options)
     val relation = (providingClass.newInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
@@ -326,8 +333,13 @@ case class DataSource(
         dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
       case (_: SchemaRelationProvider, None) =>
         throw new AnalysisException(s"A schema needs to be specified when using $className.")
-      case (_: RelationProvider, Some(_)) =>
-        throw new AnalysisException(s"$className does not allow user-specified schemas.")
+      case (dataSource: RelationProvider, Some(schema)) =>
+        val baseRelation =
+          dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
+        if (baseRelation.schema != schema) {
+          throw new AnalysisException(s"$className does not allow user-specified schemas.")
+        }
+        baseRelation
 
       // We are reading from the results of a streaming query. Load files from the metadata log
       // instead of listing them using HDFS APIs.
@@ -367,7 +379,7 @@ case class DataSource(
             throw new AnalysisException(s"Path does not exist: $qualified")
           }
           // Sufficient to check head of the globPath seq for non-glob scenario
-          if (!fs.exists(globPath.head)) {
+          if (checkFilesExist && !fs.exists(globPath.head)) {
             throw new AnalysisException(s"Path does not exist: ${globPath.head}")
           }
           globPath

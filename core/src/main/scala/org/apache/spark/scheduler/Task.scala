@@ -230,6 +230,7 @@ private[spark] object Task {
     dataOut.flush()
     val taskBytes = serializer.serialize(task)
     Utils.writeByteBuffer(taskBytes, out)
+    out.close()
     out.toByteBuffer
   }
 
@@ -238,7 +239,7 @@ private[spark] object Task {
    * and return the task itself as a serialized ByteBuffer. The caller can then update its
    * ClassLoaders and deserialize the task.
    *
-   * @return (taskFiles, taskJars, taskBytes)
+   * @return (taskFiles, taskJars, taskProps, taskBytes)
    */
   def deserializeWithDependencies(serializedTask: ByteBuffer)
     : (HashMap[String, Long], HashMap[String, Long], Properties, ByteBuffer) = {
