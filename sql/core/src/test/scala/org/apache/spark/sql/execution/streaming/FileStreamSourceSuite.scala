@@ -36,51 +36,51 @@ class FileStreamSourceSuite extends SparkFunSuite with SharedSQLContext {
   test("SeenFilesMap") {
     val map = new SeenFilesMap(maxAgeMs = 10)
 
-    map.add(FileEntry("a", 5))
+    map.add("a", 5)
     assert(map.size == 1)
     map.purge()
     assert(map.size == 1)
 
     // Add a new entry and purge should be no-op, since the gap is exactly 10 ms.
-    map.add(FileEntry("b", 15))
+    map.add("b", 15)
     assert(map.size == 2)
     map.purge()
     assert(map.size == 2)
 
     // Add a new entry that's more than 10 ms than the first entry. We should be able to purge now.
-    map.add(FileEntry("c", 16))
+    map.add("c", 16)
     assert(map.size == 3)
     map.purge()
     assert(map.size == 2)
 
     // Override existing entry shouldn't change the size
-    map.add(FileEntry("c", 25))
+    map.add("c", 25)
     assert(map.size == 2)
 
     // Not a new file because we have seen c before
-    assert(!map.isNewFile(FileEntry("c", 20)))
+    assert(!map.isNewFile("c", 20))
 
     // Not a new file because timestamp is too old
-    assert(!map.isNewFile(FileEntry("d", 5)))
+    assert(!map.isNewFile("d", 5))
 
     // Finally a new file: never seen and not too old
-    assert(map.isNewFile(FileEntry("e", 20)))
+    assert(map.isNewFile("e", 20))
   }
 
   test("SeenFilesMap should only consider a file old if it is earlier than last purge time") {
     val map = new SeenFilesMap(maxAgeMs = 10)
 
-    map.add(FileEntry("a", 20))
+    map.add("a", 20)
     assert(map.size == 1)
 
     // Timestamp 5 should still considered a new file because purge time should be 0
-    assert(map.isNewFile(FileEntry("b", 9)))
-    assert(map.isNewFile(FileEntry("b", 10)))
+    assert(map.isNewFile("b", 9))
+    assert(map.isNewFile("b", 10))
 
     // Once purge, purge time should be 10 and then b would be a old file if it is less than 10.
     map.purge()
-    assert(!map.isNewFile(FileEntry("b", 9)))
-    assert(map.isNewFile(FileEntry("b", 10)))
+    assert(!map.isNewFile("b", 9))
+    assert(map.isNewFile("b", 10))
   }
 
   testWithUninterruptibleThread("do not recheck that files exist during getBatch") {
