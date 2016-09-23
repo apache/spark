@@ -763,13 +763,13 @@ private[spark] object JsonProtocol {
     metrics.setExecutorDeserializeTime((json \ "Executor Deserialize Time").extract[Long])
     metrics.setExecutorDeserializeCpuTime((json \ "Executor Deserialize CPU Time") match {
       case JNothing => 0
-      case x => x.extract[Long]}
-    )
+      case x => x.extract[Long]
+    })
     metrics.setExecutorRunTime((json \ "Executor Run Time").extract[Long])
     metrics.setExecutorCpuTime((json \ "Executor CPU Time") match {
       case JNothing => 0
-      case x => x.extract[Long]}
-    )
+      case x => x.extract[Long]
+    })
     metrics.setResultSize((json \ "Result Size").extract[Long])
     metrics.setJvmGCTime((json \ "JVM GC Time").extract[Long])
     metrics.setResultSerializationTime((json \ "Result Serialization Time").extract[Long])

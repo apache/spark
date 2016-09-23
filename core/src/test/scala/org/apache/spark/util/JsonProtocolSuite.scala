@@ -819,8 +819,11 @@ private[spark] object JsonProtocolSuite extends Assertions {
       hasOutput: Boolean,
       hasRecords: Boolean = true) = {
     val t = TaskMetrics.empty
+    // Set CPU times same as wall times for testing purpose
     t.setExecutorDeserializeTime(a)
+    t.setExecutorDeserializeCpuTime(a)
     t.setExecutorRunTime(b)
+    t.setExecutorCpuTime(b)
     t.setResultSize(c)
     t.setJvmGCTime(d)
     t.setResultSerializationTime(a + b)
@@ -1100,9 +1103,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
-      |    "Executor Deserialize CPU Time": 0,
+      |    "Executor Deserialize CPU Time": 300,
       |    "Executor Run Time": 400,
-      |    "Executor CPU Time": 0,
+      |    "Executor CPU Time": 400,
       |    "Result Size": 500,
       |    "JVM GC Time": 600,
       |    "Result Serialization Time": 700,
@@ -1200,9 +1203,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
-      |    "Executor Deserialize CPU Time": 0,
+      |    "Executor Deserialize CPU Time": 300,
       |    "Executor Run Time": 400,
-      |    "Executor CPU Time": 0,
+      |    "Executor CPU Time": 400,
       |    "Result Size": 500,
       |    "JVM GC Time": 600,
       |    "Result Serialization Time": 700,
@@ -1300,9 +1303,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
-      |    "Executor Deserialize CPU Time": 0,
+      |    "Executor Deserialize CPU Time": 300,
       |    "Executor Run Time": 400,
-      |    "Executor CPU Time": 0,
+      |    "Executor CPU Time": 400,
       |    "Result Size": 500,
       |    "JVM GC Time": 600,
       |    "Result Serialization Time": 700,
@@ -1795,7 +1798,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        {
       |          "ID": 1,
       |          "Name": "$EXECUTOR_DESERIALIZE_CPU_TIME",
-      |          "Update": 0,
+      |          "Update": 300,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
@@ -1810,7 +1813,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        {
       |          "ID": 3,
       |          "Name": "$EXECUTOR_CPU_TIME",
-      |          "Update": 0,
+      |          "Update": 400,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
