@@ -170,7 +170,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
 
     val count = selectedExecutorIds.count(_ == workerOffers(0).executorId)
-    printf(s"result $count")
     assert(count == 4)
     assert(!failedTaskSet)
   }

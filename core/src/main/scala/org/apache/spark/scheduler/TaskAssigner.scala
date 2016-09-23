@@ -106,7 +106,7 @@ class BalancedAssigner(conf: SparkConf) extends TaskAssigner(conf) {
   }
 
   def taskAssigned(assigned: Boolean): Unit = {
-    if (current.cores > CPUS_PER_TASK && assigned) {
+    if (current.cores >= CPUS_PER_TASK && assigned) {
       maxHeap.enqueue(current)
     }
   }
