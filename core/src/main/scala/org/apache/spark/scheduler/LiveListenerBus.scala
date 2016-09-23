@@ -141,8 +141,10 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
         // And if another thread is increasing droppedEventsCounter, "compareAndSet" will fail and
         // then that thread will update it.
         if (droppedEventsCounter.compareAndSet(droppedEvents, 0)) {
+          val prevLastReportTimestamp = lastReportTimestamp
           lastReportTimestamp = System.currentTimeMillis()
-          logWarning(s"Dropped $droppedEvents SparkListenerEvents")
+          logWarning(s"Dropped $droppedEvents SparkListenerEvents since " +
+            new java.util.Date(prevLastReportTimestamp))
         }
       }
     }
