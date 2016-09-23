@@ -450,35 +450,6 @@ case class DescribeTableCommand(
     }
   }
 
-  private def describeExtendedDetailPartitionInfo(
-      tableIdentifier: TableIdentifier,
-      table: CatalogTable,
-      partition: CatalogTablePartition,
-      buffer: ArrayBuffer[Row]): Unit = {
-    append(buffer, "", "", "")
-    append(buffer, "Detailed Partition Information " + partition.toString, "", "")
-  }
-
-  private def describeFormattedDetailPartitionInfo(
-      tableIdentifier: TableIdentifier,
-      table: CatalogTable,
-      partition: CatalogTablePartition,
-      buffer: ArrayBuffer[Row]): Unit = {
-    append(buffer, "", "", "")
-    append(buffer, "# Detailed Partition Information", "", "")
-    append(buffer, "Partition Value:", s"[${partition.spec.values.mkString(", ")}]", "")
-    append(buffer, "Database:", table.database, "")
-    append(buffer, "Table:", tableIdentifier.table, "")
-    append(buffer, "Create Time:", "UNKNOWN", "")
-    append(buffer, "Last Access Time:", "UNKNOWN", "")
-    append(buffer, "Protect Mode:", "None", "")
-    append(buffer, "Location:", partition.storage.locationUri.getOrElse(""), "")
-    append(buffer, "Partition Parameters:", "", "")
-    partition.parameters.foreach { case (key, value) =>
-      append(buffer, s"  $key", value, "")
-    }
-  }
-
   private def describeExtendedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", table.toString, "")
@@ -535,6 +506,35 @@ case class DescribeTableCommand(
         append(buffer, "Sort Columns:", sortColumnNames.mkString("[", ", ", "]"), "")
 
       case _ =>
+    }
+  }
+
+  private def describeExtendedDetailPartitionInfo(
+      tableIdentifier: TableIdentifier,
+      table: CatalogTable,
+      partition: CatalogTablePartition,
+      buffer: ArrayBuffer[Row]): Unit = {
+    append(buffer, "", "", "")
+    append(buffer, "Detailed Partition Information " + partition.toString, "", "")
+  }
+
+  private def describeFormattedDetailPartitionInfo(
+      tableIdentifier: TableIdentifier,
+      table: CatalogTable,
+      partition: CatalogTablePartition,
+      buffer: ArrayBuffer[Row]): Unit = {
+    append(buffer, "", "", "")
+    append(buffer, "# Detailed Partition Information", "", "")
+    append(buffer, "Partition Value:", s"[${partition.spec.values.mkString(", ")}]", "")
+    append(buffer, "Database:", table.database, "")
+    append(buffer, "Table:", tableIdentifier.table, "")
+    append(buffer, "Create Time:", "UNKNOWN", "")
+    append(buffer, "Last Access Time:", "UNKNOWN", "")
+    append(buffer, "Protect Mode:", "None", "")
+    append(buffer, "Location:", partition.storage.locationUri.getOrElse(""), "")
+    append(buffer, "Partition Parameters:", "", "")
+    partition.parameters.foreach { case (key, value) =>
+      append(buffer, s"  $key", value, "")
     }
   }
 
