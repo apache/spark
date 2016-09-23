@@ -156,11 +156,13 @@ sealed trait Matrix extends Serializable {
   // this is a problem and it is not the behavior in the vector class
   // we need to NOT create a new array if it's already dense....
   // this should be abstract.
-  def toDense: DenseMatrix //= new DenseMatrix(numRows, numCols, this.toArray)
+  def toDense(columnMajor: Boolean): DenseMatrix //= new DenseMatrix(numRows, numCols, this.toArray)
+
+//  def toDense: DenseMatrix = toDense(true)
 
   def compressed(columnMajor: Boolean): Matrix = {
     if (getDenseSize < getSparseSize(columnMajor)) {
-      toDense
+      toDense(columnMajor)
     } else {
       toSparse(columnMajor)
     }
@@ -171,7 +173,8 @@ sealed trait Matrix extends Serializable {
     val csrSize = getSparseSize(false)
     val minSparseSize = cscSize.min(csrSize)
     if (getDenseSize < minSparseSize) {
-      toDense
+      // the size is the same either way, so default to column major
+      toDense(true)
     } else {
       if (cscSize == minSparseSize) toSparse(true) else toSparse(false)
     }
@@ -368,10 +371,12 @@ class DenseMatrix @Since("2.0.0") (
     }
   }
 
-  def toDense: DenseMatrix = toDense(columnMajor = true)
+  def toDense: DenseMatrix = toDense(true)
 
   def toDense(columnMajor: Boolean): DenseMatrix = {
-    if (isTransposed ^ columnMajor) {
+    // TODO: is this method needed anywhere, really?
+    // TODO: use while
+    if (!(isTransposed ^ columnMajor)) {
       if (isTransposed) {
         // it is row major and we want column major
         val newValues = Array.fill[Double](values.length)(0.0)
@@ -589,19 +594,51 @@ class SparseMatrix @Since("2.0.0") (
      }
   }
 
-  def toSparse: SparseMatrix = {
-    val nnz = numNonzeros
-    if (nnz == numNonzeros) {
-      this
-    } else {
-      // TODO
-      this
-    }
-  }
+  def toSparse: SparseMatrix = toSparse(true)
 
   def toSparse(columnMajor: Boolean): SparseMatrix = {
-    // TODO
-    this
+    if (!(columnMajor ^ isTransposed)) {
+      if (!isTransposed) {
+        // it is row major and we want col major
+        val breezeTransposed = asBreeze.asInstanceOf[BSM[Double]].t
+        Matrices.fromBreeze(breezeTransposed).transpose.asInstanceOf[SparseMatrix]
+      } else {
+        // it is col major and we want row major
+        val breezeTransposed = asBreeze.asInstanceOf[BSM[Double]]
+        Matrices.fromBreeze(breezeTransposed).asInstanceOf[SparseMatrix]
+      }
+    } else {
+      // TODO: this is technically incorrect since it ignores columnn major
+      val nnz = numNonzeros
+      if (nnz != numActives) {
+        // convert to sparse
+        val rr = new Array[Int](nnz)
+        val vv = new Array[Double](nnz)
+        val cc = new Array[Int](numCols + 1)
+        var k = 0
+        var colIdx = 0
+        var idx = 0
+        var numRemoved = 0
+        foreachActive { (i, j, value) =>
+          if (value != 0.0) {
+            rr(k) = i
+            vv(k) = value
+            k += 1
+          } else {
+            numRemoved += 1
+          }
+          if (idx == colPtrs(colIdx + 1)) {
+            colIdx += 1
+            cc(colIdx) = colPtrs(colIdx) - numRemoved + 1
+          }
+          idx += 1
+        }
+        cc(numCols) = nnz
+        new SparseMatrix(numRows, numCols, cc, rr, vv, isTransposed = isTransposed)
+      } else {
+        this
+      }
+    }
   }
 
   override def apply(i: Int, j: Int): Double = {
@@ -676,13 +713,16 @@ class SparseMatrix @Since("2.0.0") (
     }
   }
 
+  def toDense: DenseMatrix = toDense(true)
+
   /**
    * Generate a `DenseMatrix` from the given `SparseMatrix`. The new matrix will have isTransposed
    * set to false.
    */
   @Since("2.0.0")
-  override def toDense: DenseMatrix = {
-    new DenseMatrix(numRows, numCols, toArray)
+  override def toDense(columnMajor: Boolean): DenseMatrix = {
+    if (columnMajor) new DenseMatrix(numRows, numCols, toArray)
+    else new DenseMatrix(numRows, numCols, this.transpose.toArray, isTransposed = true)
   }
 
   override def numNonzeros: Int = values.count(_ != 0)

@@ -28,14 +28,14 @@ import org.apache.spark.ml.SparkMLFunSuite
 import org.apache.spark.ml.util.TestingUtils._
 
 class MatricesSuite extends SparkMLFunSuite {
-  def computeSpace(matrix: Matrix): Int = {
-    matrix match {
-      case dm: DenseMatrix =>
-        12 * dm.values.length + 8
-      case sm: SparseMatrix =>
-        12 * sm.numNonzeros + 4 * (if (!sm.isTransposed) sm.numCols + 1 else sm.numRows + 1)
-    }
+  def computeDenseSpace(length: Int): Int = {
+    12 * length + 8
   }
+  def computeSparseSpace(numNonzeros: Int, numRows: Int,
+                         numCols: Int, columnMajor: Boolean): Int = {
+    12 * numNonzeros + 4 * (if (columnMajor) numCols + 1 else numRows + 1)
+  }
+
   test("dense matrix construction") {
     val m = 3
     val n = 2
@@ -53,12 +53,31 @@ class MatricesSuite extends SparkMLFunSuite {
   }
 
   test("compressed dense") {
-    val dm1 = new DenseMatrix(3, 4, List(List.fill(4)(1.0), List.fill(8)(0.0)).flatten.toArray)
-    println(computeSpace(dm1))
-    println(computeSpace(dm1.toSparse(true)))
-    println(computeSpace(dm1.toSparse(false)))
-    val cm = dm1.compressed
-    println(cm.isInstanceOf[SparseMatrix])
+    val dm1 = new DenseMatrix(3, 4, Array.fill(2)(1.0) ++ Array.fill(10)(0.0))
+    val cm1 = dm1.compressed.asInstanceOf[SparseMatrix]
+    assert(cm1 === dm1)
+    assert(cm1.isTransposed)
+
+    val cm1CSC = dm1.compressed(true).asInstanceOf[SparseMatrix]
+    assert(cm1CSC === dm1)
+    assert(!cm1CSC.isTransposed)
+
+    val dm2 = dm1.transpose
+    val cm2 = dm2.compressed.asInstanceOf[SparseMatrix]
+    assert(cm2 === dm2)
+    assert(!cm2.isTransposed)
+
+
+    val dm3 = new DenseMatrix(3, 4, Array.fill(6)(1.0) ++ Array.fill(6)(0.0))
+    val cm3 = dm3.compressed.asInstanceOf[DenseMatrix]
+    assert(cm3 === dm3)
+
+    val sm1CSC = dm3.toSparse(true)
+    val cm4 = sm1CSC.compressed.asInstanceOf[DenseMatrix]
+    assert(cm4 === sm1CSC)
+    val sm1CSR = dm3.toSparse(false)
+    val cm5 = sm1CSR.compressed.asInstanceOf[DenseMatrix]
+    assert(cm5 === sm1CSR)
   }
 
   test("sparse matrix construction") {
@@ -177,6 +196,18 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sparseMat.values(2) === 10.0)
   }
 
+
+  test("tosparsesparse") {
+    val sm1 = new SparseMatrix(2, 3, Array(0, 1, 2, 3), Array(1, 0, 0), Array(3.0, 1, 2))
+    val sm3 = new SparseMatrix(2, 3, Array(0, 2, 3), Array(1, 2, 0), Array(1.0, 2.0, 3.0), true)
+    val sm2 = sm1.toSparse(false)
+    assert(sm2 === sm1)
+    assert(sm2.isTransposed)
+    val sm4 = sm3.toSparse(true)
+    assert(sm4 === sm3)
+    assert(!sm4.isTransposed)
+  }
+
   test("toSparse, toDense") {
     val m = 3
     val n = 2
@@ -188,11 +219,42 @@ class MatricesSuite extends SparkMLFunSuite {
     val spMat1 = new SparseMatrix(m, n, colPtrs, rowIndices, values)
     val deMat1 = new DenseMatrix(m, n, allValues)
 
-    val spMat2 = deMat1.toSparse
-    val deMat2 = spMat1.toDense
+    // sparse to dense
+    val deMat2 = spMat1.toDense(true)
+    val deMat3 = spMat1.toDense(false)
+    val deMat4 = spMat1.toDense
+    assert(deMat1 === deMat2)
+    assert(!deMat2.isTransposed)
+    assert(deMat1 === deMat3)
+    assert(deMat3.isTransposed)
+    assert(deMat1 === deMat4)
+    assert(!deMat4.isTransposed)
 
-    assert(spMat1.asBreeze === spMat2.asBreeze)
-    assert(deMat1.asBreeze === deMat2.asBreeze)
+    // sparse to sparse
+    // TODO: check sparse with explicit zeros changes
+    val sparseToSparse1 = spMat1.toSparse(true)
+    assert(sparseToSparse1 === spMat1)
+    assert(!sparseToSparse1.isTransposed)
+    val sparseToSparse2 = spMat1.toSparse(false)
+
+    // dense to sparse
+    val spMat2 = deMat1.toSparse(true)
+    val spMat3 = deMat1.toSparse(false)
+    val spMat4 = deMat1.toSparse
+    assert(deMat1 === spMat2)
+    assert(!spMat2.isTransposed)
+    assert(deMat1 === spMat3)
+    assert(spMat3.isTransposed)
+    assert(deMat1 === spMat4)
+    assert(!spMat4.isTransposed)
+
+    // dense to dense
+    val denseToDenseMat1 = deMat1.toDense(true)
+    assert(denseToDenseMat1 === deMat1)
+    assert(!denseToDenseMat1.isTransposed)
+    val denseToDenseMat2 = deMat1.toDense(false)
+    assert(denseToDenseMat2 === deMat1)
+    assert(denseToDenseMat2.isTransposed)
   }
 
   test("map, update") {
