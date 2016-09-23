@@ -60,7 +60,7 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
   /** A counter for dropped events. It will be reset every time we log it. */
   private val droppedEventsCounter = new AtomicLong(0L)
 
-  /** When `droppedEventsCounter` was logged last time. */
+  /** When `droppedEventsCounter` was logged last time in milliseconds. */
   @volatile private var lastReportTimestamp = 0L
 
   // Indicate if we are processing some event
