@@ -131,20 +131,19 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
       onDropEvent(event)
       droppedEventsCounter.incrementAndGet()
     }
-    // Don't log too frequently
-    if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
-      var droppedEvents = droppedEventsCounter.get
-      while (droppedEvents > 0) {
+
+    val droppedEvents = droppedEventsCounter.get
+    if (droppedEvents > 0) {
+      // Don't log too frequently
+      if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
         // There may be multiple threads trying to decrease droppedEventsCounter.
         // Use "compareAndSet" to make sure only one thread can win.
-        // And if another thread is increasing droppedEventsCounter, "compareAndSet" will fail
-        // and we will try again.
+        // And if another thread is increasing droppedEventsCounter, "compareAndSet" will fail and
+        // then that thread will update it.
         if (droppedEventsCounter.compareAndSet(droppedEvents, 0)) {
           lastReportTimestamp = System.currentTimeMillis()
           logWarning(s"Dropped $droppedEvents SparkListenerEvents")
-          return
         }
-        droppedEvents = droppedEventsCounter.get
       }
     }
   }
