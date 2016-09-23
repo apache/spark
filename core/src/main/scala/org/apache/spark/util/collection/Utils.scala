@@ -59,9 +59,9 @@ private[spark] object Utils {
     val head = iter.head
     var size =
       if (ScalaRunTime.isAnyVal(head)) {
-        SizeEstimator.primitiveSize(head)
+        SizeEstimator.primitiveSize(head.getClass)
       } else {
-        SizeEstimator.estimate(head)
+        SizeEstimator.estimate(head.asInstanceOf[AnyRef])
       }
 
     if (size == 0) {
