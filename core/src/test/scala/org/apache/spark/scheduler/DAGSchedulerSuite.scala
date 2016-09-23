@@ -18,12 +18,9 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.Executors
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration.DurationConversions
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
@@ -37,7 +34,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util._
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, LongAccumulator, Utils}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -2110,12 +2107,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   test("The failed stage never resubmitted due to abort stage in another thread") {
-    implicit val executorContext = ExecutionContext
-      .fromExecutorService(Executors.newFixedThreadPool(5))
-    val duration = 60.seconds
-
-    val f1 = Future {
-      try {
+    failAfter(60.seconds) {
+      val e = intercept[SparkException] {
         val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
         val shuffleHandle =
           rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
@@ -2125,14 +2118,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
               BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
           case (x, _) => x
         }.count()
-      } catch {
-        case e: Throwable =>
-          logInfo("expected abort stage1: " + e.getMessage)
       }
+      assert(e.getMessage.contains("org.apache.spark.shuffle.FetchFailedException"))
     }
-    ThreadUtils.awaitResult(f1, duration)
-    val f2 = Future {
-      try {
+
+    // The following job that fails due to fetching failure will hang without
+    // the fix for SPARK-17644
+    failAfter(60.seconds) {
+      val e = intercept[SparkException] {
         val rdd2 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
         val shuffleHandle =
           rdd2.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
@@ -2142,17 +2135,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
               BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
           case (x, _) => x
         }.count()
-      } catch {
-        case e: Throwable =>
-          logInfo("expected abort stage2: " + e.getMessage)
       }
+      assert(e.getMessage.contains("org.apache.spark.shuffle.FetchFailedException"))
     }
-    try {
-      ThreadUtils.awaitResult(f2, duration)
-    } catch {
-      case e: Throwable => fail("The failed stage never resubmitted")
-    }
-    executorContext.shutdown()
   }
 
   /**
