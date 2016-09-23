@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.util.concurrent._
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.util.DynamicVariable
 
@@ -56,6 +56,12 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
   private val started = new AtomicBoolean(false)
   // Indicate if `stop()` is called
   private val stopped = new AtomicBoolean(false)
+
+  /** A counter for dropped events. It will be reset every time we log it. */
+  private val droppedEventsCounter = new AtomicLong(0L)
+
+  /** When `droppedEventsCounter` was logged last time. */
+  @volatile private var lastReportTimestamp = 0L
 
   // Indicate if we are processing some event
   // Guarded by `self`
@@ -123,6 +129,23 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
       eventLock.release()
     } else {
       onDropEvent(event)
+      droppedEventsCounter.incrementAndGet()
+    }
+    // Don't log too frequently
+    if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
+      var droppedEvents = droppedEventsCounter.get
+      while (droppedEvents > 0) {
+        // There may be multiple threads trying to decrease droppedEventsCounter.
+        // Use "compareAndSet" to make sure only one thread can win.
+        // And if another thread is increasing droppedEventsCounter, "compareAndSet" will fail
+        // and we will try again.
+        if (droppedEventsCounter.compareAndSet(droppedEvents, 0)) {
+          lastReportTimestamp = System.currentTimeMillis()
+          logWarning(s"Dropped $droppedEvents SparkListenerEvents")
+          return
+        }
+        droppedEvents = droppedEventsCounter.get
+      }
     }
   }
 
