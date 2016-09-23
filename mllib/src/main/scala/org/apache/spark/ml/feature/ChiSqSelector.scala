@@ -64,23 +64,41 @@ private[feature] trait ChiSqSelectorParams extends Params
   /** @group getParam */
   def getPercentile: Double = $(percentile)
 
-  final val alpha = new DoubleParam(this, "alpha",
+  final val alphaFPR = new DoubleParam(this, "alphaFPR",
     "The highest p-value for features to be kept.",
     ParamValidators.inRange(0, 1))
-  setDefault(alpha -> 0.05)
+  setDefault(alphaFPR -> 0.05)
 
   /** @group getParam */
-  def getAlpha: Double = $(alpha)
+  def getAlphaFPR: Double = $(alphaFPR)
+
+  final val alphaFDR = new DoubleParam(this, "alphaFDR",
+    "The highest uncorrected p-value for features to be kept.",
+    ParamValidators.inRange(0, 1))
+  setDefault(alphaFPR -> 0.05)
+
+  /** @group getParam */
+  def getAlphaFDR: Double = $(alphaFDR)
+
+  final val alphaFWE = new DoubleParam(this, "alphaFWE",
+    "The highest uncorrected p-value for features to be kept.",
+    ParamValidators.inRange(0, 1))
+  setDefault(alphaFWE -> 0.05)
+
+  /** @group getParam */
+  def getAlphaFWE: Double = $(alphaFWE)
 
   /**
-   * The ChiSqSelector supports KBest, Percentile, FPR selection,
+   * The ChiSqSelector supports `KBest`, `Percentile`, `FPR`, `FDR`, `FWE` selection,
    * which is the same as ChiSqSelectorType defined in MLLIB.
    * when call setNumTopFeatures, the selectorType is set to KBest
    * when call setPercentile, the selectorType is set to Percentile
-   * when call setAlpha, the selectorType is set to FPR
+   * when call setFPR, the selectorType is set to FPR
+   * when call setFDR, the selectorType is set to FDR
+   * when call setFWE, the selectorType is set to FWE
    */
   final val selectorType = new Param[String](this, "selectorType",
-    "ChiSqSelector Type: KBest, Percentile, FPR")
+    "ChiSqSelector Type: KBest, Percentile, FPR, FDR, FWE")
   setDefault(selectorType -> ChiSqSelectorType.KBest.toString)
 
   /** @group getParam */
@@ -93,7 +111,9 @@ private[feature] trait ChiSqSelectorParams extends Params
  * The selector supports three selection methods: `KBest`, `Percentile` and `FPR`.
  * `KBest` chooses the `k` top features according to a chi-squared test.
  * `Percentile` is similar but chooses a fraction of all features instead of a fixed number.
- * `FPR` chooses all features whose false positive rate meets some threshold.
+ * `FPR` select features based on a false positive rate test.
+ * `FDR` select features based on an estimated false discovery rate.
+ * `FWE` select features based on family-wise error rate.
  * By default, the selection method is `KBest`, the default number of top features is 50.
  * User can use setNumTopFeatures, setPercentile and setAlpha to set different selection methods.
  */
@@ -118,9 +138,21 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
   }
 
   @Since("2.1.0")
-  def setAlpha(value: Double): this.type = {
+  def setFPR(value: Double): this.type = {
     set(selectorType, ChiSqSelectorType.FPR.toString)
-    set(alpha, value)
+    set(alphaFPR, value)
+  }
+
+  @Since("2.1.0")
+  def setFDR(value: Double): this.type = {
+    set(selectorType, ChiSqSelectorType.FDR.toString)
+    set(alphaFDR, value)
+  }
+
+  @Since("2.1.0")
+  def setFWE(value: Double): this.type = {
+    set(selectorType, ChiSqSelectorType.FWE.toString)
+    set(alphaFWE, value)
   }
 
   /** @group setParam */
@@ -143,14 +175,18 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
         case Row(label: Double, features: Vector) =>
           OldLabeledPoint(label, OldVectors.fromML(features))
       }
-    var selector = new feature.ChiSqSelector()
+    val selector = new feature.ChiSqSelector()
     ChiSqSelectorType.withName($(selectorType)) match {
       case ChiSqSelectorType.KBest =>
         selector.setNumTopFeatures($(numTopFeatures))
       case ChiSqSelectorType.Percentile =>
         selector.setPercentile($(percentile))
       case ChiSqSelectorType.FPR =>
-        selector.setAlpha($(alpha))
+        selector.setFPR($(alphaFPR))
+      case ChiSqSelectorType.FDR =>
+        selector.setFPR($(alphaFDR))
+      case ChiSqSelectorType.FWE =>
+        selector.setFPR($(alphaFWE))
       case errorType =>
         throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
     }

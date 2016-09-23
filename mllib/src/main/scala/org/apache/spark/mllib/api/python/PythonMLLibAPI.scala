@@ -657,7 +657,27 @@ private[python] class PythonMLLibAPI extends Serializable {
    * exit; see the Py4J documentation.
    */
   def fitChiSqSelectorFPR(alpha: Double, data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
-    new ChiSqSelector().setAlpha(alpha).fit(data.rdd)
+    new ChiSqSelector().setFPR(alpha).fit(data.rdd)
+  }
+
+  /**
+   * Java stub for ChiSqSelector.fit() when the selection type is FDR. This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitChiSqSelectorFDR(alpha: Double, data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
+    new ChiSqSelector().setFDR(alpha).fit(data.rdd)
+  }
+
+  /**
+   * Java stub for ChiSqSelector.fit() when the selection type is FWE. This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitChiSqSelectorFWE(alpha: Double, data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
+    new ChiSqSelector().setFWE(alpha).fit(data.rdd)
   }
 
   /**

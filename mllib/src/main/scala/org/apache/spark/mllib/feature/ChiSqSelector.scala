@@ -35,7 +35,7 @@ import org.apache.spark.sql.{Row, SparkSession}
 @Since("2.1.0")
 private[spark] object ChiSqSelectorType extends Enumeration {
   type SelectorType = Value
-  val KBest, Percentile, FPR = Value
+  val KBest, Percentile, FPR, FDR, FWE = Value
 }
 
 /**
@@ -166,10 +166,12 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
 
 /**
  * Creates a ChiSquared feature selector.
- * The selector supports three selection methods: `KBest`, `Percentile` and `FPR`.
+ * The selector supports five selection methods: `KBest`, `Percentile`, `FPR`, `FDR`, `FWE`.
  * `KBest` chooses the `k` top features according to a chi-squared test.
  * `Percentile` is similar but chooses a fraction of all features instead of a fixed number.
- * `FPR` chooses all features whose false positive rate meets some threshold.
+ * `FPR` select features based on a false positive rate test.
+ * `FDR` select features based on an estimated false discovery rate.
+ * `FWE` select features based on family-wise error rate.
  * By default, the selection method is `KBest`, the default number of top features is 50.
  * User can use setNumTopFeatures, setPercentile and setAlpha to set different selection methods.
  */
@@ -177,7 +179,9 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
 class ChiSqSelector @Since("2.1.0") () extends Serializable {
   var numTopFeatures: Int = 50
   var percentile: Double = 0.1
-  var alpha: Double = 0.05
+  var alphaFPR: Double = 0.05
+  var alphaFDR: Double = 0.05
+  var alphaFWE: Double = 0.05
   var selectorType = ChiSqSelectorType.KBest
 
   /**
@@ -205,10 +209,26 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
   }
 
   @Since("2.1.0")
-  def setAlpha(value: Double): this.type = {
+  def setFPR(value: Double): this.type = {
     require(0.0 <= value && value <= 1.0, "Alpha must be in [0,1]")
-    alpha = value
+    alphaFPR = value
     selectorType = ChiSqSelectorType.FPR
+    this
+  }
+
+  @Since("2.1.0")
+  def setFDR(value: Double): this.type = {
+    require(0.0 <= value && value <= 1.0, "Alpha must be in [0,1]")
+    alphaFDR = value
+    selectorType = ChiSqSelectorType.FDR
+    this
+  }
+
+  @Since("2.1.0")
+  def setFWE(value: Double): this.type = {
+    require(0.0 <= value && value <= 1.0, "Alpha must be in [0,1]")
+    alphaFWE = value
+    selectorType = ChiSqSelectorType.FWE
     this
   }
 
@@ -228,18 +248,32 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
   @Since("1.3.0")
   def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
     val chiSqTestResult = Statistics.chiSqTest(data)
-      .zipWithIndex.sortBy { case (res, _) => -res.statistic }
+      .zipWithIndex
     val features = selectorType match {
       case ChiSqSelectorType.KBest => chiSqTestResult
+        .sortBy { case (res, _) => -res.statistic }
         .take(numTopFeatures)
       case ChiSqSelectorType.Percentile => chiSqTestResult
+        .sortBy { case (res, _) => -res.statistic }
         .take((chiSqTestResult.length * percentile).toInt)
       case ChiSqSelectorType.FPR => chiSqTestResult
-        .filter{ case (res, _) => res.pValue < alpha }
+        .filter{ case (res, _) => res.pValue < alphaFPR }
+      case ChiSqSelectorType.FDR =>
+        val tempRDD = chiSqTestResult
+          .sortBy{ case (res, _) => res.pValue }
+        val maxIndex = tempRDD
+          .zipWithIndex
+          .filter{ case ((res, index1), index2) =>
+            res.pValue <= alphaFDR * (index2 + 1) / chiSqTestResult.length }
+          .map{ case (_, index) => index}
+          .max
+        tempRDD.take(maxIndex + 1)
+      case ChiSqSelectorType.FWE => chiSqTestResult
+        .filter{ case (res, _) => res.pValue < alphaFWE/chiSqTestResult.length }
       case errorType =>
         throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
     }
-    val indices = features.map { case (_, indices) => indices }
+    val indices = features.map { case (_, index) => index }
     new ChiSqSelectorModel(indices)
   }
 }
