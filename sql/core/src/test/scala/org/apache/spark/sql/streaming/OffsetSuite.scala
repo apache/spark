@@ -24,40 +24,8 @@ trait OffsetSuite extends SparkFunSuite {
   /** Creates test to check all the comparisons of offsets given a `one` that is less than `two`. */
   def compare(one: Offset, two: Offset): Unit = {
     test(s"comparison $one <=> $two") {
-      assert(one < two)
-      assert(one <= two)
-      assert(one <= one)
-      assert(two > one)
-      assert(two >= one)
-      assert(one >= one)
       assert(one == one)
       assert(two == two)
-      assert(one != two)
-      assert(two != one)
-    }
-  }
-
-  /** Creates test to check that non-equality comparisons throw exception. */
-  def compareInvalid(one: Offset, two: Offset): Unit = {
-    test(s"invalid comparison $one <=> $two") {
-      intercept[IllegalArgumentException] {
-        assert(one < two)
-      }
-
-      intercept[IllegalArgumentException] {
-        assert(one <= two)
-      }
-
-      intercept[IllegalArgumentException] {
-        assert(one > two)
-      }
-
-      intercept[IllegalArgumentException] {
-        assert(one >= two)
-      }
-
-      assert(!(one == two))
-      assert(!(two == one))
       assert(one != two)
       assert(two != one)
     }
@@ -79,10 +47,6 @@ class CompositeOffsetSuite extends OffsetSuite {
     one = CompositeOffset(None :: Nil),
     two = CompositeOffset(Some(LongOffset(2)) :: Nil))
 
-  compareInvalid(                                               // sizes must be same
-    one = CompositeOffset(Nil),
-    two = CompositeOffset(Some(LongOffset(2)) :: Nil))
-
   compare(
     one = CompositeOffset.fill(LongOffset(0), LongOffset(1)),
     two = CompositeOffset.fill(LongOffset(1), LongOffset(2)))
@@ -91,8 +55,5 @@ class CompositeOffsetSuite extends OffsetSuite {
     one = CompositeOffset.fill(LongOffset(1), LongOffset(1)),
     two = CompositeOffset.fill(LongOffset(1), LongOffset(2)))
 
-  compareInvalid(
-    one = CompositeOffset.fill(LongOffset(2), LongOffset(1)),   // vector time inconsistent
-    two = CompositeOffset.fill(LongOffset(1), LongOffset(2)))
 }
 
