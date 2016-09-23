@@ -280,7 +280,7 @@ object SparkBuild extends PomBuild {
       "-target", javacJVMVersion.value
     ) ++ sys.env.get("JAVA_7_HOME").toSeq.flatMap { jdk7 =>
       if (javacJVMVersion.value == "1.7") {
-        Seq("-bootclasspath", s"$jdk7/jre/lib/rt.jar:$jdk7/jre/lib/jce.jar")
+        Seq("-bootclasspath", s"$jdk7/jre/lib/rt.jar${File.pathSeparator}$jdk7/jre/lib/jce.jar")
       } else {
         Nil
       }
@@ -291,7 +291,7 @@ object SparkBuild extends PomBuild {
       "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath  // Required for relative source links in scaladoc
     ) ++ sys.env.get("JAVA_7_HOME").toSeq.flatMap { jdk7 =>
       if (javacJVMVersion.value == "1.7") {
-        Seq("-javabootclasspath", s"$jdk7/jre/lib/rt.jar:$jdk7/jre/lib/jce.jar")
+        Seq("-javabootclasspath", s"$jdk7/jre/lib/rt.jar${File.pathSeparator}$jdk7/jre/lib/jce.jar")
       } else {
         Nil
       }
