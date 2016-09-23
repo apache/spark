@@ -57,7 +57,7 @@ import org.apache.spark.sql.types._
  *    start reading from. This used to create the first batch.
  *
  *   - `getOffset()` uses the KafkaConsumer to query the latest available offsets, which are
- *   returned as a [[KafkaSourceOffset]].
+ *     returned as a [[KafkaSourceOffset]].
  *
  *   - `getBatch()` returns a DF that reads from the 'start offset' until the 'end offset' in
  *     for each partition. The end offset is excluded to be consistent with the semantics of
@@ -78,7 +78,6 @@ private[kafka010] case class KafkaSource(
   private val consumer = consumerStrategy.createConsumer()
   private val sc = sqlContext.sparkContext
   private val initialPartitionOffsets = fetchPartitionOffsets(seekToLatest = false)
-
   logInfo(s"Initial offsets: $initialPartitionOffsets")
 
   override def schema: StructType = KafkaSource.kafkaSchema
@@ -90,9 +89,7 @@ private[kafka010] case class KafkaSource(
     Some(offset)
   }
 
-  /**
-   * Returns the data that is between the offsets [`start`, `end`), i.e. end is exclusive.
-   */
+  /** Returns the data that is between the offsets [`start`, `end`), i.e. end is exclusive. */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     logInfo(s"GetBatch called with start = $start, end = $end")
     val untilPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(end)
@@ -103,6 +100,7 @@ private[kafka010] case class KafkaSource(
         initialPartitionOffsets
     }
 
+    // Find the new partitions, and get their earliest offsets
     val newPartitions = untilPartitionOffsets.keySet.diff(fromPartitionOffsets.keySet)
     val newPartitionOffsets = if (newPartitions.nonEmpty) {
       fetchNewPartitionEarliestOffsets(newPartitions.toSeq)
@@ -121,11 +119,12 @@ private[kafka010] case class KafkaSource(
       }
     }
     val sortedTopicPartitions = untilPartitionOffsets.keySet.toSeq.sorted(topicPartitionOrdering)
-    val sortedExecutors = getSortedExecutorList(sc)
     logDebug("Sorted topicPartitions: " + sortedTopicPartitions.mkString(", "))
+
+    val sortedExecutors = getSortedExecutorList(sc)
+    val numExecutors = sortedExecutors.length
     logDebug("Sorted executors: " + sortedExecutors.mkString(", "))
 
-    val numExecutors = sortedExecutors.size
     val offsetRanges = sortedTopicPartitions.map { tp =>
       val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
         newPartitionOffsets.getOrElse(tp, {
@@ -164,44 +163,48 @@ private[kafka010] case class KafkaSource(
    * Fetch the offset of a partition, either the latest offsets or the current offsets in the
    * KafkaConsumer.
    */
-  private def fetchPartitionOffsets(seekToLatest: Boolean): Map[TopicPartition, Long] = {
-    val partitionOffsets = fetchOffsetWithRetry {
-      logTrace("\tPolling")
-      consumer.poll(0)
-      val partitions = consumer.assignment()
-      consumer.pause(partitions)
-      logDebug(s"\tPartitioned assigned to consumer: $partitions")
-      if (seekToLatest) {
-        consumer.seekToEnd(partitions)
-        logDebug("\tSeeked to the end")
-      }
-      logTrace("Getting positions")
-      partitions.asScala.map(p => p -> consumer.position(p)).toMap
+  private def fetchPartitionOffsets(
+      seekToLatest: Boolean): Map[TopicPartition, Long] = withRetries {
+
+    // Poll to get the latest assigned partitions
+    logTrace("\tPolling")
+    consumer.poll(0)
+    val partitions = consumer.assignment()
+    consumer.pause(partitions)
+    logDebug(s"\tPartitioned assigned to consumer: $partitions")
+
+    // Get the current or latest offset of each partition
+    if (seekToLatest) {
+      consumer.seekToEnd(partitions)
+      logDebug("\tSeeked to the end")
     }
+    logTrace("Getting positions")
+    val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
     logInfo(s"Got partition offsets: $partitionOffsets")
     partitionOffsets
   }
 
   /** Fetch the earliest offsets for newly discovered partitions */
   private def fetchNewPartitionEarliestOffsets(
-      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = {
-    val partitionOffsets = fetchOffsetWithRetry {
-      consumer.poll(0)
-      val partitions = consumer.assignment()
-      logDebug(s"\tPartitioned assigned to consumer: $partitions")
-      require(newPartitions.forall(tp => partitions.contains(tp)),
-        s"$partitions doesn't contain all new paritions: $newPartitions")
-      consumer.seekToBeginning(newPartitions.asJava)
-      val partitionToOffsets = newPartitions.map(p => p -> consumer.position(p))
-      logDebug(s"Got earliest positions $partitionToOffsets")
-      partitionToOffsets.toMap
-    }
-    logDebug(s"Got offsets for new partitions: $partitionOffsets")
-    partitionOffsets
+      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = withRetries {
+
+    // Poll to get the latest assigned partitions
+    logTrace("\tPolling")
+    consumer.poll(0)
+    val partitions = consumer.assignment()
+    logDebug(s"\tPartitioned assigned to consumer: $partitions")
+    require(newPartitions.forall(tp => partitions.contains(tp)),
+      s"$partitions doesn't contain all new paritions: $newPartitions")
+
+    // Get the earliest offset of each partition
+    consumer.seekToBeginning(newPartitions.asJava)
+    val partitionToOffsets = newPartitions.map(p => p -> consumer.position(p)).toMap
+    logInfo(s"Got offsets for new partitions: $partitionToOffsets")
+    partitionToOffsets
   }
 
   /** Helper function that does multiple retries on the a body of code that returns offsets */
-  private def fetchOffsetWithRetry(
+  private def withRetries(
       body: => Map[TopicPartition, Long]): Map[TopicPartition, Long] = synchronized {
 
     var result: Option[Map[TopicPartition, Long]] = None

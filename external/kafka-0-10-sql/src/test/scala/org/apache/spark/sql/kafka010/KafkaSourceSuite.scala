@@ -150,7 +150,6 @@ class KafkaSourceSuite extends KafkaSourceTest {
       .readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.auto.offset.reset", s"latest")
       .option("kafka.metadata.max.age.ms", "1")
       .option("subscribePattern", s"$topicPrefix-.*")
 
@@ -210,6 +209,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
     }
 
     testUnsupportedConfig("kafka.group.id")
+    testUnsupportedConfig("kafka.auto.offset.reset")
     testUnsupportedConfig("kafka.enable.auto.commit")
     testUnsupportedConfig("kafka.interceptor.classes")
     testUnsupportedConfig("kafka.key.deserializer")
@@ -230,8 +230,8 @@ class KafkaSourceSuite extends KafkaSourceTest {
     val reader = spark
       .readStream
       .format("kafka")
+      .option("startingOffset", s"latest")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.auto.offset.reset", s"latest")
       .option("kafka.metadata.max.age.ms", "1")
     options.foreach { case (k, v) => reader.option(k, v) }
     val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
@@ -266,8 +266,8 @@ class KafkaSourceSuite extends KafkaSourceTest {
     val reader = spark.readStream
     reader
       .format(classOf[KafkaSourceProvider].getCanonicalName.stripSuffix("$"))
+      .option("startingOffset", s"earliest")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.auto.offset.reset", s"earliest")
       .option("kafka.metadata.max.age.ms", "1")
     options.foreach { case (k, v) => reader.option(k, v) }
     val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]

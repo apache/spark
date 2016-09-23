@@ -43,42 +43,46 @@ private[kafka010] case class CachedKafkaConsumer private(
     c
   }
 
-  // Timeout for polls to the consumer can be small as the data is expected to be present in Kafka
-  private val pollTimeoutMs = 1000
+  /**
+   * Timeout for polls to the consumer. Since the data should be already available, the poll
+   * should get the data immediately, and the timeout value should not matter as long as it is
+   * generous and does not cause timeout when there are not issues.
+   */
+  private val pollTimeoutMs = 60 * 1000
 
-  // Iterator to the already fetch data
-  protected var buffer = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
-  protected var nextOffset = -2L
+  /** Iterator to the already fetch data */
+  protected var fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
+  protected var nextOffsetInFetchedData = -2L
 
   /**
    * Get the record for the given offset, waiting up to timeout ms if IO is necessary.
    * Sequential forward access will use buffers, but random access will be horribly inefficient.
    */
   def get(offset: Long): ConsumerRecord[Array[Byte], Array[Byte]] = {
-    logDebug(s"Get $topicPartition nextOffset $nextOffset requested $offset")
-    if (offset != nextOffset) {
+    logDebug(s"Get $topicPartition nextOffset $nextOffsetInFetchedData requested $offset")
+    if (offset != nextOffsetInFetchedData) {
       logInfo(s"Initial fetch for $topicPartition $offset")
       seek(offset)
       poll()
     }
 
-    if (!buffer.hasNext()) { poll() }
-    assert(buffer.hasNext(),
+    if (!fetchedData.hasNext()) { poll() }
+    assert(fetchedData.hasNext(),
       s"Failed to get records for $topicPartition $offset after polling for $pollTimeoutMs")
-    var record = buffer.next()
+    var record = fetchedData.next()
 
     if (record.offset != offset) {
       logInfo(s"Buffer miss for $topicPartition $offset")
       seek(offset)
       poll()
-      assert(buffer.hasNext(),
+      assert(fetchedData.hasNext(),
         s"Failed to get records for $topicPartition $offset after polling for $pollTimeoutMs")
-      record = buffer.next()
+      record = fetchedData.next()
       assert(record.offset == offset,
         s"Got wrong record for $topicPartition even after seeking to offset $offset")
     }
 
-    nextOffset = offset + 1
+    nextOffsetInFetchedData = offset + 1
     record
   }
 
@@ -93,7 +97,7 @@ private[kafka010] case class CachedKafkaConsumer private(
     val p = consumer.poll(pollTimeoutMs)
     val r = p.records(topicPartition)
     logDebug(s"Polled ${p.partitions()}  ${r.size}")
-    buffer = r.iterator
+    fetchedData = r.iterator
   }
 }
 
