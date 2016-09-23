@@ -101,7 +101,7 @@ def _vector_size(v):
         return len(v)
     elif type(v) in (array.array, list, tuple, xrange):
         return len(v)
-    elif type(v) == np.ndarray:
+    elif isinstance(v, np.ndarray):
         if v.ndim == 1 or (v.ndim == 2 and v.shape[1] == 1):
             return len(v)
         else:
@@ -325,7 +325,7 @@ class DenseVector(Vector):
             ...
         AssertionError: dimension mismatch
         """
-        if type(other) == np.ndarray:
+        if isinstance(other, np.ndarray):
             if other.ndim > 1:
                 assert len(self) == other.shape[0], "dimension mismatch"
             return np.dot(self.array, other)
@@ -492,7 +492,7 @@ class SparseVector(Vector):
         assert 1 <= len(args) <= 2, "must pass either 2 or 3 arguments"
         if len(args) == 1:
             pairs = args[0]
-            if type(pairs) == dict:
+            if isinstance(pairs, dict):
                 pairs = pairs.items()
             pairs = sorted(pairs)
             self.indices = np.array([p[0] for p in pairs], dtype=np.int32)
