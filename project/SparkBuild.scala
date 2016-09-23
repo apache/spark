@@ -234,7 +234,7 @@ object SparkBuild extends PomBuild {
     }
   )
 
-  lazy val sharedSettings = versionWithGit ++ // sparkGenjavadocSettings ++
+  lazy val sharedSettings = versionWithGit ++ sparkGenjavadocSettings ++
       (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
     exportJars in Compile := true,
     exportJars in Test := false,
@@ -403,8 +403,8 @@ object SparkBuild extends PomBuild {
   /* Package pyspark artifacts in a separate zip file for YARN. */
   enable(PySparkAssembly.settings)(assembly)
 
-//  /* Enable unidoc only for the root spark project */
-//  enable(Unidoc.settings)(spark)
+  /* Enable unidoc only for the root spark project */
+  enable(Unidoc.settings)(spark)
 
   /* Catalyst ANTLR generation settings */
   enable(Catalyst.settings)(catalyst)
