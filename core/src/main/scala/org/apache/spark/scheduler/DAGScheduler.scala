@@ -1235,7 +1235,7 @@ class DAGScheduler(
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
-        var abortStage = false
+        var abortedStage = false
 
         if (failedStage.latestInfo.attemptId != task.stageAttemptId) {
           logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
@@ -1262,7 +1262,7 @@ class DAGScheduler(
               s"has failed the maximum allowable number of " +
               s"times: ${Stage.MAX_CONSECUTIVE_FETCH_FAILURES}. " +
               s"Most recent failure reason: ${failureMessage}", None)
-            abortStage = true
+            abortedStage = true
           } else if (failedStages.isEmpty) {
             // Don't schedule an event to resubmit failed stages if failed isn't empty, because
             // in that case the event will already have been scheduled.
@@ -1273,7 +1273,7 @@ class DAGScheduler(
               override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
             }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
           }
-          if (!abortStage) {
+          if (!abortedStage) {
             failedStages += failedStage
             failedStages += mapStage
           }

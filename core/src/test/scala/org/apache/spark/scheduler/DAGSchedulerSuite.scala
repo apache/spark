@@ -34,8 +34,8 @@ import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util._
 
@@ -2121,7 +2121,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
           rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
         rdd1.map { x =>
               if (x._1 == 1) {
-                throw new FetchFailedException(BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
+                throw new FetchFailedException(
+                  BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
               }
               x._1
         }.count()
@@ -2138,7 +2139,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
           rdd2.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
         rdd2.map { x =>
           if (x._1 == 1) {
-            throw new FetchFailedException(BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
+            throw new FetchFailedException(
+              BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
           }
           x._1
         }.count()
