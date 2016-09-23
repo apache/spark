@@ -231,17 +231,21 @@ setCheckpointDir <- function(sc, dirName) {
 #' filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
 #' use spark.getSparkFiles(fileName) to find its download location.
 #'
+#' A directory can be given if the recursive option is set to true.
+#' Currently directories are only supported for Hadoop-supported filesystems.
+#'
 #' @rdname spark.addFile
 #' @param path The path of the file to be added
+#' @param recursive Recursive or not if the path is directory. Default is FALSE.
 #' @export
 #' @examples
 #'\dontrun{
 #' spark.addFile("~/myfile")
 #'}
 #' @note spark.addFile since 2.1.0
-spark.addFile <- function(path) {
+spark.addFile <- function(path, recursive = FALSE) {
   sc <- getSparkContext()
-  invisible(callJMethod(sc, "addFile", suppressWarnings(normalizePath(path))))
+  invisible(callJMethod(sc, "addFile", suppressWarnings(normalizePath(path)), recursive))
 }
 
 #' Get the root directory that contains files added through spark.addFile.
