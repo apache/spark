@@ -242,7 +242,8 @@ object SparkBuild extends PomBuild {
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
     incOptions := incOptions.value.withNameHashing(true),
-//    unidocGenjavadocVersion := "0.10",
+    unidocGenjavadocVersion := "0.10",
+
     git.useGitDescribe := true,
     useJGit,
     version := {
