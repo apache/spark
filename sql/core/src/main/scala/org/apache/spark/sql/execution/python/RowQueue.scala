@@ -100,11 +100,10 @@ private[python] abstract class InMemoryRowQueue(val page: MemoryBlock, numFields
  * reader has begun reading from the queue.
  */
 private[python] case class DiskRowQueue(file: File, fields: Int) extends RowQueue {
-  private var fout = new FileOutputStream(file.toString)
-  private var out = new DataOutputStream(new BufferedOutputStream(fout))
+  private var out = new DataOutputStream(
+    new BufferedOutputStream(new FileOutputStream(file.toString)))
   private var unreadBytes = 0L
 
-  private var fin: FileInputStream = _
   private var in: DataInputStream = _
   private val resultRow = new UnsafeRow(fields)
 
@@ -123,11 +122,7 @@ private[python] case class DiskRowQueue(file: File, fields: Int) extends RowQueu
     if (out != null) {
       out.close()
       out = null
-      fout.close()
-      fout = null
-
-      fin = new FileInputStream(file.toString)
-      in = new DataInputStream(new BufferedInputStream(fin))
+      in = new DataInputStream(new BufferedInputStream(new FileInputStream(file.toString)))
     }
 
     if (unreadBytes > 0) {
@@ -143,10 +138,10 @@ private[python] case class DiskRowQueue(file: File, fields: Int) extends RowQueu
   }
 
   def close(): Unit = synchronized {
-    Closeables.close(fout, true)
-    fout = null
-    Closeables.close(fin, true)
-    fin = null
+    Closeables.close(out, true)
+    out = null
+    Closeables.close(in, true)
+    in = null
     if (file.exists()) {
       file.delete()
     }
@@ -184,9 +179,8 @@ private[python] case class HybridRowQueue(
     synchronized {
       // poll out all the buffers and add them back in the same order to make sure that the rows
       // are in correct order.
-      val iter = queues.iterator()
       val newQueues = new java.util.LinkedList[RowQueue]()
-      while (iter.hasNext) {
+      while (!queues.isEmpty) {
         val queue = queues.remove()
         val newQueue = if (!queues.isEmpty && queue.isInstanceOf[InMemoryRowQueue]) {
           val diskQueue = createDiskQueue()
