@@ -784,6 +784,9 @@ object MimaExcludes {
       // SPARK-17096: Improve exception string reported through the StreamingQueryListener
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryListener#QueryTerminated.stackTrace"),
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryListener#QueryTerminated.this")
+    ) ++ Seq(
+      // SPARK-16240: ML persistence backward compatibility for LDA
+      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.clustering.LDA$")
     )
   }
 
