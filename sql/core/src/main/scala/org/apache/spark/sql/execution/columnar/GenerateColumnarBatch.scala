@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, CodeGenerator, CodegenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel

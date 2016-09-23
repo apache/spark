@@ -158,6 +158,8 @@ class AggregateBenchmark extends BenchmarkBase {
       f()
     }
 
+    benchmark.run()
+
     /*
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
