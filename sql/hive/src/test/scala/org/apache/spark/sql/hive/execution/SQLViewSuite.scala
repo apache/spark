@@ -57,6 +57,56 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("Issue exceptions for ALTER VIEW on the temporary view") {
+    val viewName = "testView"
+    withTempView(viewName) {
+      spark.range(10).createTempView(viewName)
+      assertNoSuchTable(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
+      assertNoSuchTable(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
+    }
+  }
+
+  test("Issue exceptions for ALTER TABLE on the temporary view") {
+    val viewName = "testView"
+    withTempView(viewName) {
+      spark.range(10).createTempView(viewName)
+      assertNoSuchTable(s"ALTER TABLE $viewName SET SERDE 'whatever'")
+      assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
+      assertNoSuchTable(s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')")
+      assertNoSuchTable(s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'")
+      assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'")
+      assertNoSuchTable(s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
+      assertNoSuchTable(s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')")
+      assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
+      assertNoSuchTable(s"ALTER TABLE $viewName RECOVER PARTITIONS")
+    }
+  }
+
+  test("Issue exceptions for other table DDL on the temporary view") {
+    val viewName = "testView"
+    withTempView(viewName) {
+      spark.range(10).createTempView(viewName)
+
+      val e = intercept[AnalysisException] {
+        sql(s"INSERT INTO TABLE $viewName SELECT 1")
+      }.getMessage
+      assert(e.contains("Inserting into an RDD-based table is not allowed"))
+
+      val testData = hiveContext.getHiveFile("data/files/employee.dat").getCanonicalPath
+      assertNoSuchTable(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE $viewName""")
+      assertNoSuchTable(s"TRUNCATE TABLE $viewName")
+      assertNoSuchTable(s"SHOW CREATE TABLE $viewName")
+      assertNoSuchTable(s"SHOW PARTITIONS $viewName")
+      assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+    }
+  }
+
+  private def assertNoSuchTable(query: String): Unit = {
+    intercept[NoSuchTableException] {
+      sql(query)
+    }
+  }
+
   test("error handling: fail if the view sql itself is invalid") {
     // A table that does not exist
     intercept[AnalysisException] {
@@ -177,13 +227,8 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("should not allow ALTER VIEW AS when the view does not exist") {
-    intercept[NoSuchTableException](
-      sql("ALTER VIEW testView AS SELECT 1, 2")
-    )
-
-    intercept[NoSuchTableException](
-      sql("ALTER VIEW default.testView AS SELECT 1, 2")
-    )
+    assertNoSuchTable("ALTER VIEW testView AS SELECT 1, 2")
+    assertNoSuchTable("ALTER VIEW default.testView AS SELECT 1, 2")
   }
 
   test("ALTER VIEW AS should try to alter temp view first if view name has no database part") {
