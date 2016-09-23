@@ -353,7 +353,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         AddTextFileData("a\nb", src, tmp),
         CheckAnswer("a", "b"),
 
-        // SLeeps longer than 5ms (maxFileAge)
+        // Sleeps longer than 5ms (maxFileAge)
         // Unfortunately since a lot of file system does not have modification time granularity
         // finer grained than 1 sec, we need to use 1 sec here.
         AssertOnQuery { _ => Thread.sleep(1000); true },
@@ -893,6 +893,52 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
               List("keep2", "keep3"))
             assert(fileSource.getBatch(Some(LongOffset(1)), LongOffset(2)).as[String].collect() ===
               List("keep3"))
+            true
+          }
+        )
+      }
+    }
+  }
+
+  test("purge aged file entry in FileStreamSourceLog") {
+    withTempDirs { case (src, tmp) =>
+      withSQLConf(
+        SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2"
+      ) {
+        val fileStream = createFileStream(format = "text", path = src.getCanonicalPath,
+          options = Map("maxFileAge" -> "5ms"))
+        val filtered = fileStream.filter($"value" contains "keep")
+
+        def metadataLog(execution: StreamExecution): FileStreamSourceLog = {
+          val _sources = PrivateMethod[Seq[Source]]('sources)
+          val _metadataLog = PrivateMethod[FileStreamSourceLog]('metadataLog)
+          val fileSource = (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
+          fileSource invokePrivate _metadataLog()
+        }
+
+        testStream(filtered)(
+          AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
+          AssertOnQuery { _ => Thread.sleep(1000); true },
+          CheckAnswer("keep2", "keep3"),
+          AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
+          AssertOnQuery { _ => Thread.sleep(1000); true },
+          CheckAnswer("keep2", "keep3", "keep5", "keep6"),
+          AssertOnQuery { e =>
+            val compactedFileEntries = metadataLog(e).get(1L)
+            assert(compactedFileEntries.isDefined)
+            assert(compactedFileEntries.get.map(_.batchId).sorted === Array(0L, 1L))
+            true
+          },
+          AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
+          AssertOnQuery { _ => Thread.sleep(1000); true },
+          CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9"),
+          AddTextFileData("drop10\nkeep11", src, tmp),
+          AssertOnQuery { _ => Thread.sleep(1000); true },
+          CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9", "keep11"),
+          AssertOnQuery { e =>
+            val compactedFileEntries = metadataLog(e).get(3L)
+            assert(compactedFileEntries.isDefined)
+            assert(compactedFileEntries.get.map(_.batchId).sorted === Array(2L, 3L))
             true
           }
         )
