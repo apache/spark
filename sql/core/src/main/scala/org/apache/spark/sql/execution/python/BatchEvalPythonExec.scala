@@ -42,7 +42,7 @@ import org.apache.spark.util.{CompletionIterator, Utils}
  *
  * For each row we send to Python, we also put it in a queue. For each output row from Python,
  * we drain the queue to find the original input row. Note that if the Python process is way too
- * slow, this could lead to the queue growing unbounded and eventually run out of memory.
+ * slow, this could lead to the queue growing unbounded and spill into disk when run out of memory.
  */
 case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], child: SparkPlan)
   extends SparkPlan {
