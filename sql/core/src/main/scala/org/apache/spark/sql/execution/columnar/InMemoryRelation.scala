@@ -92,10 +92,7 @@ case class InMemoryRelation(
    * If false, store the input rows using [[CachedBatchBytes]].
    */
   private[columnar] val useColumnarBatches: Boolean = {
-    val enabled = child.sqlContext.conf.getConf(SQLConf.CACHE_CODEGEN)
-    // Fallback to storing the rows as bytes if the schema has non-primitive types
-    val supported = output.forall { a => GenerateColumnarBatch.isSupported(a.dataType) }
-    enabled && supported
+    child.sqlContext.conf.getConf(SQLConf.CACHE_CODEGEN)
   }
 
   override protected def innerChildren: Seq[SparkPlan] = Seq(child)
@@ -117,7 +114,7 @@ case class InMemoryRelation(
   /**
    * Batch the input rows into [[CachedBatch]]es.
    */
-  private def buildColumnBuffers(): RDD[CachedBatch] = {
+  private def buildColumnBuffers: RDD[CachedBatch] = {
     val buffers =
       if (useColumnarBatches) {
         buildColumnarBatches()
@@ -189,16 +186,21 @@ case class InMemoryRelation(
    * Batch the input rows using [[ColumnarBatch]]es.
    *
    * Compared with [[buildColumnBytes]], this provides a faster implementation of memory
-   * scan because both the read path and the write path are generated. This only supports
-   * basic primitive types and does not compress data, however.
+   * scan because both the read path and the write path are generated.
+   * However, this does not compress data for now
    */
   private def buildColumnarBatches(): RDD[CachedColumnarBatch] = {
     val schema = StructType.fromAttributes(child.output)
     child.execute().mapPartitionsInternal { rows =>
-      new GenerateColumnarBatch(schema, batchSize).generate(rows).map { b =>
-        CachedColumnarBatch(b)
-      }
+      new GenerateColumnarBatch(schema, batchSize, storageLevel)
+        .generate(rows).map { columnarBatch => CachedColumnarBatch(columnarBatch) }
     }.persist(storageLevel)
+  }
+
+  // If the cached column buffers were not passed in, we calculate them in the constructor.
+  // As in Spark, the actual work of caching is lazy.
+  if (_cachedColumnBuffers == null) {
+    _cachedColumnBuffers = buildColumnBuffers
   }
 
   def recache(): Unit = {
@@ -206,7 +208,7 @@ case class InMemoryRelation(
       _cachedColumnBuffers.unpersist()
       _cachedColumnBuffers = null
     }
-    _cachedColumnBuffers = buildColumnBuffers()
+    _cachedColumnBuffers = buildColumnBuffers
   }
 
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
@@ -232,7 +234,7 @@ case class InMemoryRelation(
    */
   def cachedColumnBuffers: RDD[CachedBatch] = {
     if (_cachedColumnBuffers == null) {
-      _cachedColumnBuffers = buildColumnBuffers()
+      _cachedColumnBuffers = buildColumnBuffers
     }
     _cachedColumnBuffers
   }

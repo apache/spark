@@ -34,6 +34,8 @@ case class InMemoryTableScanExec(
     @transient relation: InMemoryRelation)
   extends LeafExecNode with ColumnarBatchScan {
 
+  override val columnIndexes = attributes.map(a => relation.output.indexOf(a)).toArray
+
   override val supportCodegen: Boolean = relation.useColumnarBatches
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -52,7 +54,8 @@ case class InMemoryTableScanExec(
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   override def output: Seq[Attribute] = attributes
 
@@ -134,7 +137,6 @@ case class InMemoryTableScanExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     assert(!relation.useColumnarBatches)
-    assert(relation.cachedColumnBuffers != null)
     val numOutputRows = longMetric("numOutputRows")
 
     if (enableAccumulators) {
@@ -147,6 +149,7 @@ case class InMemoryTableScanExec(
     val schema = relation.partitionStatistics.schema
     val schemaIndex = schema.zipWithIndex
     val relOutput: AttributeSeq = relation.output
+    assert(relation.cachedColumnBuffers != null)
     val buffers = relation.cachedColumnBuffers.asInstanceOf[RDD[CachedBatchBytes]]
 
     buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>

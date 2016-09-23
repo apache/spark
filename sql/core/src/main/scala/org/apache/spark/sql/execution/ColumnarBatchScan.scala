@@ -33,6 +33,8 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
   val inMemoryTableScan: InMemoryTableScanExec = null
 
+  val columnIndexes: Array[Int] = null
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
@@ -89,7 +91,8 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val colVars = output.indices.map(i => ctx.freshName("colInstance" + i))
     val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
       ctx.addMutableState(columnVectorClz, name, s"$name = null;")
-      s"$name = $batch.column($i);"
+      val index = if (columnIndexes == null) i else columnIndexes(i)
+      s"$name = $batch.column($index);"
     }
 
     val nextBatch = ctx.freshName("nextBatch")

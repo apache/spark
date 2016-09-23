@@ -112,6 +112,112 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       tesNonPrimitiveType(false)
   }
 
+  def cachePrimitiveTest(data: DataFrame, dataType: String) {
+    data.createOrReplaceTempView(s"testData$dataType")
+    val useColumnBatches = true
+    withSQLConf(SQLConf.CACHE_CODEGEN.key -> useColumnBatches.toString) {
+      Seq(MEMORY_ONLY).map { storageLevel =>
+        val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
+        val inMemoryRelation = InMemoryRelation(useCompression = false, 5, storageLevel, plan, None)
+
+        assert(inMemoryRelation.useColumnarBatches == useColumnBatches)
+        assert(inMemoryRelation.cachedColumnBuffers.getStorageLevel == storageLevel)
+        inMemoryRelation.cachedColumnBuffers.collect().head match {
+          case _: CachedColumnarBatch => assert(useColumnBatches)
+          case _: CachedBatchBytes => assert(!useColumnBatches)
+          case other => fail(s"Unexpected cached batch type: ${other.getClass.getName}")
+        }
+        checkAnswer(inMemoryRelation, data.collect().toSeq)
+      }
+    }
+  }
+
+  test("all data type w && w/o nullability") {
+    // all primitives
+    Seq(true, false).map { nullability =>
+      val dataTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType,
+        FloatType, DoubleType)
+      val schema = StructType(dataTypes.zipWithIndex.map { case (dataType, index) =>
+        StructField(s"col$index", dataType, nullability)
+      })
+      val rdd = spark.sparkContext.parallelize((1 to 10).map(i => Row(
+        if (nullability && i % 3 == 0) null else if (i % 2 == 0) true else false,
+        if (nullability && i % 3 == 0) null else i.toByte,
+        if (nullability && i % 3 == 0) null else i.toShort,
+        if (nullability && i % 3 == 0) null else i.toInt,
+        if (nullability && i % 3 == 0) null else i.toLong,
+        if (nullability && i % 3 == 0) null else (i + 0.25).toFloat,
+        if (nullability && i % 3 == 0) null else (i + 0.75).toDouble
+      )))
+      cachePrimitiveTest(spark.createDataFrame(rdd, schema), "primitives")
+    }
+
+    val schemaNull = StructType(Seq(StructField(s"col", NullType, true)))
+    val rddNull = spark.sparkContext.parallelize((1 to 10).map(i => Row(null)))
+    cachePrimitiveTest(spark.createDataFrame(rddNull, schemaNull), "Null")
+
+    Seq(true, false).map { nullability =>
+      val schema = StructType(Seq(StructField(s"col0", DateType, nullability),
+        StructField(s"col1", TimestampType, nullability)))
+      val rdd = spark.sparkContext.parallelize((1 to 10).map(i => Row(
+        if (nullability && i % 3 == 0) null else new Date(i),
+        if (nullability && i % 3 == 0) null else new Timestamp(i * 1000000L)
+      )))
+      cachePrimitiveTest(spark.createDataFrame(rdd, schema), "DateTimestamp")
+    }
+
+    Seq(true, false).map { nullability =>
+      val schema = StructType(Seq(StructField(s"col", StringType, nullability)))
+      val rdd = spark.sparkContext.parallelize((1 to 10).map(i => Row(
+        if (nullability && i % 3 == 0) null else s"str${i}: test cache.")))
+      cachePrimitiveTest(spark.createDataFrame(rdd, schema), "String")
+    }
+
+    Seq(true, false).map { nullability =>
+      val schema = StructType(Seq(StructField(s"col0", DecimalType(25, 5), nullability),
+        StructField(s"col1", DecimalType(6, 5), nullability)))
+      val rdd = spark.sparkContext.parallelize((1 to 10).map(i => Row(
+        if (nullability && i % 3 == 0) null else BigDecimal(Long.MaxValue.toString + ".12345"),
+        if (nullability && i % 3 == 0) null
+          else new java.math.BigDecimal(s"${i % 9 + 1}" + ".23456")
+      )))
+      cachePrimitiveTest(spark.createDataFrame(rdd, schema), "Decimal")
+    }
+
+    Seq(true, false).map { nullability =>
+      val schema = StructType(Seq(StructField(s"col", ArrayType(IntegerType), nullability)))
+      val rdd = spark.sparkContext.parallelize((1 to 10).map(i => Row(
+        if (nullability && i % 3 == 0) null else (i * 100 to i * 100 + i).toArray)))
+      cachePrimitiveTest(spark.createDataFrame(rdd, schema), "Array")
+    }
+
+    Seq(true, false).map { nullability =>
+      val schema = StructType(
+        Seq(StructField(s"col", ArrayType(ArrayType(IntegerType)), nullability)))
+      val rdd = spark.sparkContext.parallelize((1 to 10).map(i => Row(
+        if (nullability && i % 3 == 0) null
+          else Array(Array(i, i + 1), Array(i * 100 + 1, i * 100, i * 100 + 2)))))
+      cachePrimitiveTest(spark.createDataFrame(rdd, schema), "ArrayArray")
+    }
+
+    Seq(true, false).map { nullability =>
+      val schema = StructType(
+        Seq(StructField(s"col", MapType(StringType, IntegerType), nullability)))
+      val rdd = spark.sparkContext.parallelize((1 to 10).map(i => Row(
+        if (nullability && i % 3 == 0) null else (i to i + i).map(j => s"key$j" -> j).toMap)))
+      cachePrimitiveTest(spark.createDataFrame(rdd, schema), "Map")
+    }
+
+    Seq(true, false).map { nullability =>
+      val struct = StructType(StructField("f1", FloatType, false) ::
+        StructField("f2", ArrayType(BooleanType), true) :: Nil)
+      val schema = StructType(Seq(StructField(s"col", struct, nullability)))
+      val rdd = spark.sparkContext.parallelize((1 to 10).map(i => Row(
+        if (nullability && i % 3 == 0) null else Row((i + 0.25).toFloat, Seq(true, false, null)))))
+      cachePrimitiveTest(spark.createDataFrame(rdd, schema), "Struct")
+    }
+  }
+
   test("simple columnar query") {
     val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
@@ -318,6 +424,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val length2 = 8117
     val columnTypes2 = List.fill(length2)(IntegerType)
     val columnarIterator2 = GenerateColumnAccessor.generate(columnTypes2)
+
+    /* TODO: test GenerateColumnarBatch().generate() with many columns */
   }
 
   test("SPARK-17549: cached table size should be correctly calculated") {
@@ -420,11 +528,11 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
         storageLevel = MEMORY_ONLY,
         child = sparkPlan,
         tableName = None)
-      assert(inMemoryRelation.useColumnarBatches == useColumnBatches && !useComplexSchema)
+      assert(inMemoryRelation.useColumnarBatches == useColumnBatches)
       assert(inMemoryRelation.cachedColumnBuffers.getStorageLevel == MEMORY_ONLY)
       inMemoryRelation.cachedColumnBuffers.collect().head match {
-        case _: CachedColumnarBatch => assert(useColumnBatches && !useComplexSchema)
-        case _: CachedBatchBytes => assert(!useColumnBatches || useComplexSchema)
+        case _: CachedColumnarBatch => assert(useColumnBatches)
+        case _: CachedBatchBytes => assert(!useColumnBatches)
         case other => fail(s"Unexpected cached batch type: ${other.getClass.getName}")
       }
     }

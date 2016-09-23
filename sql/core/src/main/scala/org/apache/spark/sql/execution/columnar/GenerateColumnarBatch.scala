@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter}
-import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, CodeGenerator, CodegenContext}
 import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -36,7 +36,8 @@ abstract class ColumnarBatchIterator extends Iterator[ColumnarBatch]
  */
 class GenerateColumnarBatch(
     schema: StructType,
-    batchSize: Int)
+    batchSize: Int,
+    storageLevel: StorageLevel)
   extends CodeGenerator[Iterator[InternalRow], Iterator[ColumnarBatch]] {
 
   protected def canonicalize(in: Iterator[InternalRow]): Iterator[InternalRow] = in
@@ -58,19 +59,21 @@ class GenerateColumnarBatch(
     val schemaVar = ctx.addReferenceObj("schema", schema, classOf[StructType].getName)
     val maxNumBytes = ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE
     // Code to populate column vectors with the values of the input rows
-    val populateColumnVectorsCode = schema.fields.zipWithIndex.map { case (field, i) =>
-      val typeName = GenerateColumnarBatch.typeToName(field.dataType)
-      val put = "put" + typeName.capitalize
-      val get = "get" + typeName.capitalize
-      s"""
-      $batchVar.column($i).$put($rowNumVar, row.$get($i));
-      $numBytesVar += ${field.dataType.defaultSize};
-      """.trim
+    val colVars = schema.fields.indices.map(i => ctx.freshName("colInstance" + i))
+    val columnInstanceCode = colVars.zipWithIndex.map { case (name, i) =>
+      s"ColumnVector $name = $batchVar.column($i);"
     }.mkString("\n")
+
+    val populateColumnVectorsCode = (schema.fields zip colVars).zipWithIndex.map {
+      case ((field, colVar), i) =>
+      GenerateColumnarBatch.putColumnCode(ctx, field.dataType, field.nullable,
+        colVar, "row", rowNumVar, i, numBytesVar)
+    }.mkString("")
     val code = s"""
       import org.apache.spark.memory.MemoryMode;
       import org.apache.spark.sql.catalyst.InternalRow;
       import org.apache.spark.sql.execution.vectorized.ColumnarBatch;
+      import org.apache.spark.sql.execution.vectorized.ColumnVector;
 
       public GeneratedColumnarBatchIterator generate(Object[] references) {
         return new GeneratedColumnarBatchIterator(references);
@@ -91,7 +94,8 @@ class GenerateColumnarBatch(
         @Override
         public ColumnarBatch next() {
           ColumnarBatch $batchVar =
-            ColumnarBatch.allocate($schemaVar, MemoryMode.ON_HEAP, $batchSize);
+            ColumnarBatch.allocate($schemaVar, MemoryMode.ON_HEAP_UNSAFE, $batchSize);
+          $columnInstanceCode
           int $rowNumVar = 0;
           long $numBytesVar = 0;
           while ($rowIterVar.hasNext() && $rowNumVar < $batchSize && $numBytesVar < $maxNumBytes) {
@@ -115,20 +119,74 @@ class GenerateColumnarBatch(
 
 private[columnar] object GenerateColumnarBatch {
 
-  private val typeToName = Map[DataType, String](
-      BooleanType -> "boolean",
-      ByteType -> "byte",
-      ShortType -> "short",
-      IntegerType -> "int",
-      LongType -> "long",
-      FloatType -> "float",
-      DoubleType -> "double")
+  private val typeToName = Map[AbstractDataType, String](
+    BooleanType -> "boolean",
+    ByteType -> "byte",
+    ShortType -> "short",
+    IntegerType -> "int",
+    LongType -> "long",
+    FloatType -> "float",
+    DoubleType -> "double",
+    DateType -> "int",
+    TimestampType -> "long",
+    StringType -> "UTF8String",
+    BinaryType -> "Binary"
+  )
 
-  /**
-   * Whether [[ColumnarBatch]]-based caching is supported for the given data type
-   */
-  def isSupported(dataType: DataType): Boolean = {
-    typeToName.contains(dataType)
+  def putColumnCode(ctx: CodegenContext, dt: DataType, nullable: Boolean, colVar: String,
+      rowVar: String, rowNumVar: String, colNum: Int, numBytesVar: String) : String = {
+    val body = dt match {
+      case t if ctx.isPrimitiveType(dt) =>
+        val typeName = GenerateColumnarBatch.typeToName(dt)
+        val put = "put" + typeName.capitalize
+        val get = "get" + typeName.capitalize
+        s"""
+         |$colVar.$put($rowNumVar, $rowVar.$get($colNum));
+         |$numBytesVar += ${dt.defaultSize};
+       """.stripMargin
+      case StringType | BinaryType =>
+        val typeName = GenerateColumnarBatch.typeToName(dt)
+        val put = "put" + typeName.capitalize
+        val get = "get" + typeName.capitalize
+        s"""$numBytesVar += $colVar.$put($rowNumVar, $rowVar.$get($colNum));"""
+      case NullType =>
+        return s"""
+        |if ($rowVar.isNullAt($colNum)) {
+        |  $colVar.putNull($rowNumVar);
+        |} else {
+        |  $colVar.putNotNull($rowNumVar);
+        |}
+        |$numBytesVar += 1;
+       """.stripMargin
+      case dt: DecimalType =>
+        val precision = dt.precision
+        val scale = dt.scale
+        s"""
+         $numBytesVar += $colVar.putDecimal($rowNumVar,
+           $rowVar.getDecimal($colNum, $precision, $scale), $precision);
+       """.stripMargin
+      case array: ArrayType =>
+        s"""$numBytesVar += $colVar.putArray($rowNumVar, $rowVar.getArray($colNum));"""
+      case t: MapType =>
+        s"""$numBytesVar += $colVar.putMap($rowNumVar, $rowVar.getMap($colNum));"""
+      case struct: StructType =>
+        s"""
+         $numBytesVar += $colVar.putStruct($rowNumVar,
+           $rowVar.getStruct($colNum, ${struct.length}));
+       """.stripMargin
+      case _ =>
+        throw new UnsupportedOperationException("Unsupported data type " + dt.simpleString);
+    }
+    if (nullable) {
+      s"""
+       |if ($rowVar.isNullAt($colNum)) {
+       |  $colVar.putNull($rowNumVar);
+       |} else {
+       |  $body
+       |}
+      """.stripMargin
+    } else {
+      body
+    }
   }
-
 }
