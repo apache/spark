@@ -32,7 +32,8 @@ import org.apache.spark.sql.internal.SQLConf
 class FileStreamSourceLog(
     metadataLogVersion: String,
     sparkSession: SparkSession,
-    path: String)
+    path: String,
+    maxFileAge: Long)
   extends CompactibleFileStreamLog[FileEntry](metadataLogVersion, sparkSession, path) {
 
   import CompactibleFileStreamLog._
@@ -50,6 +51,9 @@ class FileStreamSourceLog(
   protected override val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSourceLogDeletion
 
   private implicit val formats = Serialization.formats(NoTypeHints)
+
+  // Timestamp to track the latest file entry been added to log.
+  private var latestAddTimestamp = -1L
 
   // A fixed size log entry cache to cache the file entries belong to the compaction batch. It is
   // used to avoid scanning the compacted log file to retrieve it's own batch data.
@@ -69,7 +73,8 @@ class FileStreamSourceLog(
   }
 
   def compactLogs(logs: Seq[FileEntry]): Seq[FileEntry] = {
-    logs
+    val purgeTime = latestAddTimestamp - maxFileAge
+    logs.filter(_.timestamp > purgeTime)
   }
 
   override def add(batchId: Long, logs: Array[FileEntry]): Boolean = {
@@ -77,6 +82,13 @@ class FileStreamSourceLog(
       if (isCompactionBatch(batchId, compactInterval)) {
         fileEntryCache.put(batchId, logs)
       }
+
+      logs.foreach { entry =>
+        if (entry.timestamp > latestAddTimestamp) {
+          latestAddTimestamp = entry.timestamp
+        }
+      }
+
       true
     } else {
       false

@@ -47,8 +47,8 @@ class FileStreamSource(
     fs.makeQualified(new Path(path))  // can contains glob patterns
   }
 
-  private val metadataLog =
-    new FileStreamSourceLog(FileStreamSourceLog.VERSION, sparkSession, metadataPath)
+  private val metadataLog = new FileStreamSourceLog(FileStreamSourceLog.VERSION, sparkSession,
+    metadataPath, sourceOptions.maxFileAgeMs)
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   /** Maximum number of new files to be considered in each batch */
@@ -58,9 +58,7 @@ class FileStreamSource(
   // Visible for testing and debugging in production.
   val seenFiles = new SeenFilesMap(sourceOptions.maxFileAgeMs)
 
-  metadataLog.allFiles().foreach { entry =>
-    seenFiles.add(entry)
-  }
+  metadataLog.allFiles().foreach { entry => seenFiles.add(entry) }
   seenFiles.purge()
 
   logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, maxFileAge = ${sourceOptions.maxFileAgeMs}")

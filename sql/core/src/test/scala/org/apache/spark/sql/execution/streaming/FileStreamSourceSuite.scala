@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.File
 import java.net.URI
+import java.util.concurrent.TimeUnit
 
 import scala.util.Random
 
@@ -90,8 +91,8 @@ class FileStreamSourceSuite extends SparkFunSuite with SharedSQLContext {
         classOf[ExistsThrowsExceptionFileSystem].getName)
       // add the metadata entries as a pre-req
       val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
-      val metadataLog =
-        new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath)
+      val metadataLog = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark,
+        dir.getAbsolutePath, TimeUnit.DAYS.toMillis(7))
       assert(metadataLog.add(0, Array(FileEntry(s"$scheme:///file1", 100L, 0))))
 
       val newSource = new FileStreamSource(spark, s"$scheme:///", "parquet", StructType(Nil),
