@@ -17,10 +17,12 @@
 
 package org.apache.spark.mllib.feature
 
+import java.io.DataInputStream
 import java.lang.{Iterable => JavaIterable}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s.DefaultFormats
@@ -697,5 +699,63 @@ object Word2VecModel extends Loader[Word2VecModel] {
         s"($loadedClassName, $loadedVersion).  Supported:\n" +
         s"  ($classNameV1_0, 1.0)")
     }
+  }
+
+  /**
+   * Load Google word2vec model
+   *
+   * @see [[https://code.google.com/p/word2vec/]]
+   * @param sc SparkContext object
+   * @param file Google word2vec model file
+   * @return a Word2VecModel
+   */
+  def loadGoogleModel(sc: SparkContext, file: String): Word2VecModel = {
+
+    // ASCII values for common delimiter characters.
+    val SPACE = 32
+    val LF = 10
+
+    // Read a string from the data input stream.
+    def readToken(dis: DataInputStream, delimiters: Set[Int] = Set(SPACE, LF)): String = {
+      val bytes = new ArrayBuffer[Byte]()
+      val sb = new StringBuilder()
+      var byte = dis.readByte()
+      while (!delimiters.contains(byte)) {
+        bytes.append(byte)
+        byte = dis.readByte()
+      }
+      sb.append(new String(bytes.toArray[Byte])).toString()
+    }
+
+    // Read a float from the data input stream.
+    def readFloat(dis: DataInputStream): Float = {
+      java.lang.Float.intBitsToFloat(Integer.reverseBytes(dis.readInt()))
+    }
+
+    // Read a model file.
+    val pds = sc.binaryFiles(file).first()._2
+    val dis = new DataInputStream(pds.open())
+
+    val vocab = new mutable.HashMap[String, Array[Float]]()
+
+    // Read header info.
+    val numWords = readToken(dis).toInt
+    val vecSize = readToken(dis).toInt
+
+    val vector = new Array[Float](vecSize)
+    for (_ <- 0 until numWords) {
+      // Read the word.
+      val word = readToken(dis)
+      // Read the vector.
+      for (i <- 0 until vecSize) vector(i) = readFloat(dis)
+      // Store the normalized vector representation.
+      val normFactor = math.sqrt(vector.foldLeft(0.0) { (sum, x) => sum + (x * x) }).toFloat
+      vocab.put(word, vector.map(_ / normFactor))
+
+      dis.read()
+    }
+
+    dis.close()
+    new Word2VecModel(vocab.toMap)
   }
 }
