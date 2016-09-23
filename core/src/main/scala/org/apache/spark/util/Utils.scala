@@ -709,9 +709,7 @@ private[spark] object Utils extends Logging {
           uri.toURL
         } catch {
           case e: MalformedURLException =>
-            val msg = s"URI (${uri.toString}) is not a valid URL."
-            logError(msg)
-            val ex = new MalformedURLException(msg)
+            val ex = new MalformedURLException(s"URI (${uri.toString}) is not a valid URL.")
             ex.initCause(e)
             throw ex
         }
