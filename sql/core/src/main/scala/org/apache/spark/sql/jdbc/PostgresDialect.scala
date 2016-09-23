@@ -85,6 +85,10 @@ private object PostgresDialect extends JdbcDialect {
     s"SELECT 1 FROM $table LIMIT 1"
   }
 
+  override def getSchemaQuery(table: String): String = {
+    s"SELECT * FROM $table LIMIT 1"
+  }
+
   override def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
     super.beforeFetch(connection, properties)
 
