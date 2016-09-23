@@ -164,12 +164,31 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
 
     // Try to analyze a temp table
     sql("""SELECT * FROM src""").createOrReplaceTempView("tempTable")
-    val err = intercept[AnalysisException] {
+    intercept[AnalysisException] {
       sql("ANALYZE TABLE tempTable COMPUTE STATISTICS")
     }
-    assert(err.message.contains("ANALYZE TABLE is not supported"))
     spark.sessionState.catalog.dropTable(
       TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
+  }
+
+  test("analyzing views is not supported") {
+    def assertAnalyzeUnsupported(analyzeCommand: String): Unit = {
+      val err = intercept[AnalysisException] {
+        sql(analyzeCommand)
+      }
+      assert(err.message.contains("ANALYZE TABLE is not supported"))
+    }
+
+    val tableName = "tbl"
+    withTable(tableName) {
+      spark.range(10).write.saveAsTable(tableName)
+      val viewName = "view"
+      withView(viewName) {
+        sql(s"CREATE VIEW $viewName AS SELECT * FROM $tableName")
+        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+      }
+    }
   }
 
   private def checkTableStats(

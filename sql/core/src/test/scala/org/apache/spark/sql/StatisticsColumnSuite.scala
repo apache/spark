@@ -57,17 +57,6 @@ class StatisticsColumnSuite extends StatisticsTest {
     }
   }
 
-  test("analyzing columns in temporary tables is not supported") {
-    val viewName = "tbl"
-    withTempView(viewName) {
-      spark.range(10).createOrReplaceTempView(viewName)
-      val err = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
-      }
-      assert(err.message.contains("ANALYZE TABLE is not supported"))
-    }
-  }
-
   test("analyzing columns of non-atomic types is not supported") {
     val tableName = "tbl"
     withTable(tableName) {

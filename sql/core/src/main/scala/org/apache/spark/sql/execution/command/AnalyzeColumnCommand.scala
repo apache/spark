@@ -40,7 +40,9 @@ case class AnalyzeColumnCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
-    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
+    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
+    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdentWithDB))
 
     relation match {
       case catalogRel: CatalogRelation =>
@@ -62,10 +64,6 @@ case class AnalyzeColumnCommand(
         rowCount = Some(rowCount),
         colStats = columnStats ++ catalogTable.stats.map(_.colStats).getOrElse(Map()))
       sessionState.catalog.alterTable(catalogTable.copy(stats = Some(statistics)))
-      // We need to add database info to the table identifier so that we will not refresh the temp
-      // table with the same table name.
-      val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-      val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
       // Refresh the cached data source table in the catalog.
       sessionState.catalog.refreshTable(tableIdentWithDB)
     }
