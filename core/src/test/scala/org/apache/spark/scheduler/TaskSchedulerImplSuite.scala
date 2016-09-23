@@ -160,17 +160,19 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("Scheduler keeps packing the assignment to the same worker") {
     val taskScheduler = setupScheduler(("spark.task.assigner", classOf[PackedAssigner].getName))
-    val workerOffers = Seq(new WorkerOffer("executor0", "host0", 2),
-      new WorkerOffer("executor1", "host1", 2))
+    val workerOffers = Seq(new WorkerOffer("executor0", "host0", 4),
+      new WorkerOffer("executor1", "host1", 4))
     val selectedExecutorIds = {
-      val taskSet = FakeTask.createTaskSet(2)
+      val taskSet = FakeTask.createTaskSet(4)
       taskScheduler.submitTasks(taskSet)
       val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
-      assert(2 === taskDescriptions.length)
+      assert(4 === taskDescriptions.length)
       taskDescriptions.map(_.executorId)
     }
+
     val count = selectedExecutorIds.count(_ == workerOffers(0).executorId)
-    assert(count == 2)
+    printf(s"result $count")
+    assert(count == 4)
     assert(!failedTaskSet)
   }
 

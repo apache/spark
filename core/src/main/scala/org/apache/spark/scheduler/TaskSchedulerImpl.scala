@@ -63,6 +63,7 @@ private[spark] class TaskSchedulerImpl(
   lazy val taskAssigner: TaskAssigner = {
     val className = conf.get("spark.task.assigner", DEFAULT_TASK_ASSIGNER)
     try {
+      logInfo(s"""constructing assigner as $className""")
       val ctor = Utils.classForName(className).getConstructor(classOf[SparkConf])
       ctor.newInstance(conf).asInstanceOf[TaskAssigner]
     } catch {
@@ -283,7 +284,6 @@ private[spark] class TaskSchedulerImpl(
             launchedTask = true
             assigned = true
           }
-
         } catch {
           case e: TaskNotSerializableException =>
             logError(s"Resource offer failed, task set ${taskSet.name} was not serializable")
