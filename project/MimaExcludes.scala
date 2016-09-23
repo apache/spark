@@ -823,6 +823,10 @@ object MimaExcludes {
     ) ++ Seq(
       // [SPARK-17365][Core] Remove/Kill multiple executors together to reduce RPC call time
       ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.SparkContext")
+    ) ++ Seq(
+      // [SPARK-12221] Add CPU time to metrics
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetrics.this"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.this")
     )
   }
 
