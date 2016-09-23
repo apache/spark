@@ -29,12 +29,9 @@ import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.SharedSQLContext
 
 
-class KafkaSourceSuite extends StreamTest with SharedSQLContext {
+abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 
-  import testImplicits._
-
-  private val topicId = new AtomicInteger(0)
-  private var testUtils: KafkaTestUtils = _
+  protected var testUtils: KafkaTestUtils = _
 
   override val streamingTimeout = 30.seconds
 
@@ -50,216 +47,6 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
       testUtils = null
       super.afterAll()
     }
-  }
-
-  test("subscribing topic by name from latest offsets") {
-    val topic = newTopic()
-    testFromLatestOffsets(topic, "subscribe" -> topic)
-  }
-
-  test("subscribing topic by name from earliest offsets") {
-    val topic = newTopic()
-    testFromEarliestOffsets(topic, "subscribe" -> topic)
-  }
-
-  test("subscribing topic by pattern from latest offsets") {
-    val topicPrefix = newTopic()
-    val topic = topicPrefix + "-suffix"
-    testFromLatestOffsets(topic, "subscribePattern" -> s"$topicPrefix-.*")
-  }
-
-  test("subscribing topic by pattern from earliest offsets") {
-    val topicPrefix = newTopic()
-    val topic = topicPrefix + "-suffix"
-    testFromEarliestOffsets(topic, "subscribePattern" -> s"$topicPrefix-.*")
-  }
-
-  test("stress test with multiple topics and partitions") {
-    val topicId = new AtomicInteger(1)
-
-    def newStressTopic: String = s"stress${topicId.getAndIncrement()}"
-
-    @volatile var topics = (1 to 5).map(_ => newStressTopic).toSet
-
-    @volatile var partitionRange = (1, 5)
-
-    def newPartitionRange: (Int, Int) = (partitionRange._1 + 5, partitionRange._2 + 5)
-
-    def randomPartitions: Int = {
-      Random.nextInt(partitionRange._2 + 1 - partitionRange._1) + partitionRange._1
-    }
-
-    topics.foreach { topic =>
-      testUtils.createTopic(topic, partitions = randomPartitions)
-      testUtils.sendMessages(topic, (101 to 105).map { _.toString }.toArray)
-    }
-
-      // Create Kafka source that reads from latest offset
-    val kafka =
-      spark.readStream
-        .format(classOf[KafkaSourceProvider].getCanonicalName.stripSuffix("$"))
-        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-        .option("kafka.group.id", s"group-stress-test")
-        .option("kafka.metadata.max.age.ms", "1")
-        .option("subscribePattern", "stress.*")
-        .load()
-        .select("key", "value")
-        .as[(Array[Byte], Array[Byte])]
-
-    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
-
-    runStressTest(
-      mapped,
-      d => {
-        Random.nextInt(5) match {
-          case 0 =>
-            partitionRange = newPartitionRange
-            val addPartitions = topics.toSeq.map(_ => randomPartitions)
-            AddKafkaData(topics, d: _*)(
-              ensureDataInMultiplePartition = false, addPartitions = Some(addPartitions))
-          case 1 =>
-            topics = topics + newStressTopic
-            partitionRange = newPartitionRange
-            val addPartitions = topics.toSeq.map(_ => randomPartitions)
-            AddKafkaData(topics, d: _*)(
-              ensureDataInMultiplePartition = false, addPartitions = Some(addPartitions))
-          case _ =>
-            AddKafkaData(topics, d: _*)(ensureDataInMultiplePartition = false)
-        }
-      },
-      iterations = 50)
-  }
-
-  test("bad source options") {
-    def testBadOptions(options: (String, String)*)(expectedMsgs: String*): Unit = {
-      val ex = intercept[IllegalArgumentException] {
-        val reader = spark
-          .readStream
-          .format("kafka")
-        options.foreach { case (k, v) => reader.option(k, v) }
-        reader.load()
-      }
-      expectedMsgs.foreach { m =>
-        assert(ex.getMessage.toLowerCase.contains(m.toLowerCase))
-      }
-    }
-
-    // No strategy specified
-    testBadOptions()("options must be specified", "subscribe", "subscribePattern")
-
-    // Multiple strategies specified
-    testBadOptions("subscribe" -> "t", "subscribePattern" -> "t.*")(
-      "only one", "options can be specified")
-
-    testBadOptions("subscribe" -> "")("no topics to subscribe")
-    testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
-  }
-
-  test("users will delete topics") {
-    val topicPrefix = newTopic()
-    val topic = topicPrefix + "-seems"
-    val topic2 = topicPrefix + "-bad"
-    testUtils.createTopic(topic, partitions = 5)
-    testUtils.sendMessages(topic, Array("-1"))
-    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
-
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.group.id", s"group-$topic")
-      .option("kafka.auto.offset.reset", s"latest")
-      .option("kafka.metadata.max.age.ms", "1")
-      .option("subscribePattern", s"$topicPrefix-.*")
-
-    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
-    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
-
-    testStream(mapped)(
-      AddKafkaData(Set(topic), 1, 2, 3),
-      CheckAnswer(2, 3, 4),
-      Assert {
-        testUtils.deleteTopic(topic, 5)
-        testUtils.createTopic(topic2, partitions = 5)
-        true
-      },
-      AddKafkaData(Set(topic2), 4, 5, 6),
-      CheckAnswer(2, 3, 4, 5, 6, 7)
-    )
-  }
-
-  private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
-
-  private def testFromLatestOffsets(topic: String, options: (String, String)*): Unit = {
-    testUtils.createTopic(topic, partitions = 5)
-    testUtils.sendMessages(topic, Array("-1"))
-    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
-
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.group.id", s"group-$topic")
-      .option("kafka.auto.offset.reset", s"latest")
-      .option("kafka.metadata.max.age.ms", "1")
-    options.foreach { case (k, v) => reader.option(k, v) }
-    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
-    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
-
-    testStream(mapped)(
-      AddKafkaData(Set(topic), 1, 2, 3),
-      CheckAnswer(2, 3, 4),
-      StopStream,
-      StartStream(),
-      CheckAnswer(2, 3, 4), // Should get the data back on recovery
-      StopStream,
-      AddKafkaData(Set(topic), 4, 5, 6), // Add data when stream is stopped
-      StartStream(),
-      CheckAnswer(2, 3, 4, 5, 6, 7), // Should get the added data
-      AddKafkaData(Set(topic), 7, 8),
-      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9),
-      AssertOnQuery("Add partitions") { query: StreamExecution =>
-        testUtils.addPartitions(topic, 10)
-        true
-      },
-      AddKafkaData(Set(topic), 9, 10, 11, 12, 13, 14, 15, 16),
-      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
-    )
-  }
-
-  private def testFromEarliestOffsets(topic: String, options: (String, String)*): Unit = {
-    testUtils.createTopic(topic, partitions = 5)
-    testUtils.sendMessages(topic, (1 to 3).map { _.toString }.toArray)
-    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
-
-    val reader = spark.readStream
-    reader
-      .format(classOf[KafkaSourceProvider].getCanonicalName.stripSuffix("$"))
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.group.id", s"group-$topic")
-      .option("kafka.auto.offset.reset", s"earliest")
-      .option("kafka.metadata.max.age.ms", "1")
-    options.foreach { case (k, v) => reader.option(k, v) }
-    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
-    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
-
-    testStream(mapped)(
-      AddKafkaData(Set(topic), 4, 5, 6), // Add data when stream is stopped
-      CheckAnswer(2, 3, 4, 5, 6, 7),
-      StopStream,
-      StartStream(),
-      CheckAnswer(2, 3, 4, 5, 6, 7),
-      StopStream,
-      AddKafkaData(Set(topic), 7, 8),
-      StartStream(),
-      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9),
-      AssertOnQuery("Add partitions") { query: StreamExecution =>
-        testUtils.addPartitions(topic, 10)
-        true
-      },
-      AddKafkaData(Set(topic), 9, 10, 11, 12, 13, 14, 15, 16),
-      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
-    )
   }
 
   /**
@@ -319,5 +106,251 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
       logInfo(s"Added data, expected offset $offset")
       (kafkaSource, offset)
     }
+  }
+}
+
+
+class KafkaSourceSuite extends KafkaSourceTest {
+
+  import testImplicits._
+
+  private val topicId = new AtomicInteger(0)
+
+  test("subscribing topic by name from latest offsets") {
+    val topic = newTopic()
+    testFromLatestOffsets(topic, "subscribe" -> topic)
+  }
+
+  test("subscribing topic by name from earliest offsets") {
+    val topic = newTopic()
+    testFromEarliestOffsets(topic, "subscribe" -> topic)
+  }
+
+  test("subscribing topic by pattern from latest offsets") {
+    val topicPrefix = newTopic()
+    val topic = topicPrefix + "-suffix"
+    testFromLatestOffsets(topic, "subscribePattern" -> s"$topicPrefix-.*")
+  }
+
+  test("subscribing topic by pattern from earliest offsets") {
+    val topicPrefix = newTopic()
+    val topic = topicPrefix + "-suffix"
+    testFromEarliestOffsets(topic, "subscribePattern" -> s"$topicPrefix-.*")
+  }
+
+  test("subscribing topic by pattern with topic deletions") {
+    val topicPrefix = newTopic()
+    val topic = topicPrefix + "-seems"
+    val topic2 = topicPrefix + "-bad"
+    testUtils.createTopic(topic, partitions = 5)
+    testUtils.sendMessages(topic, Array("-1"))
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.auto.offset.reset", s"latest")
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribePattern", s"$topicPrefix-.*")
+
+    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
+    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
+
+    testStream(mapped)(
+      AddKafkaData(Set(topic), 1, 2, 3),
+      CheckAnswer(2, 3, 4),
+      Assert {
+        testUtils.deleteTopic(topic, 5)
+        testUtils.createTopic(topic2, partitions = 5)
+        true
+      },
+      AddKafkaData(Set(topic2), 4, 5, 6),
+      CheckAnswer(2, 3, 4, 5, 6, 7)
+    )
+  }
+
+  test("bad source options") {
+    def testBadOptions(options: (String, String)*)(expectedMsgs: String*): Unit = {
+      val ex = intercept[IllegalArgumentException] {
+        val reader = spark
+          .readStream
+          .format("kafka")
+        options.foreach { case (k, v) => reader.option(k, v) }
+        reader.load()
+      }
+      expectedMsgs.foreach { m =>
+        assert(ex.getMessage.toLowerCase.contains(m.toLowerCase))
+      }
+    }
+
+    // No strategy specified
+    testBadOptions()("options must be specified", "subscribe", "subscribePattern")
+
+    // Multiple strategies specified
+    testBadOptions("subscribe" -> "t", "subscribePattern" -> "t.*")(
+      "only one", "options can be specified")
+
+    testBadOptions("subscribe" -> "")("no topics to subscribe")
+    testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
+  }
+
+  test("unsupported kafka configs") {
+    def testUnsupportedConfig(key: String, value: String = "someValue"): Unit = {
+      val ex = intercept[IllegalArgumentException] {
+        val reader = spark
+          .readStream
+          .format("kafka")
+          .option("subscribe", "topic")
+          .option("kafka.bootstrap.servers", "somehost")
+          .option(s"$key", value)
+        reader.load()
+      }
+      assert(ex.getMessage.toLowerCase.contains("not supported"))
+    }
+
+    testUnsupportedConfig("kafka.group.id")
+    testUnsupportedConfig("kafka.enable.auto.commit")
+    testUnsupportedConfig("kafka.interceptor.classes")
+    testUnsupportedConfig("kafka.key.deserializer")
+    testUnsupportedConfig("kafka.value.deserializer")
+
+    // only earliest and latest is supported
+    testUnsupportedConfig("kafka.auto.offset.reset", "none")
+    testUnsupportedConfig("kafka.auto.offset.reset", "someValue")
+  }
+
+  private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
+
+  private def testFromLatestOffsets(topic: String, options: (String, String)*): Unit = {
+    testUtils.createTopic(topic, partitions = 5)
+    testUtils.sendMessages(topic, Array("-1"))
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.auto.offset.reset", s"latest")
+      .option("kafka.metadata.max.age.ms", "1")
+    options.foreach { case (k, v) => reader.option(k, v) }
+    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
+    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
+
+    testStream(mapped)(
+      AddKafkaData(Set(topic), 1, 2, 3),
+      CheckAnswer(2, 3, 4),
+      StopStream,
+      StartStream(),
+      CheckAnswer(2, 3, 4), // Should get the data back on recovery
+      StopStream,
+      AddKafkaData(Set(topic), 4, 5, 6), // Add data when stream is stopped
+      StartStream(),
+      CheckAnswer(2, 3, 4, 5, 6, 7), // Should get the added data
+      AddKafkaData(Set(topic), 7, 8),
+      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9),
+      AssertOnQuery("Add partitions") { query: StreamExecution =>
+        testUtils.addPartitions(topic, 10)
+        true
+      },
+      AddKafkaData(Set(topic), 9, 10, 11, 12, 13, 14, 15, 16),
+      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
+    )
+  }
+
+  private def testFromEarliestOffsets(topic: String, options: (String, String)*): Unit = {
+    testUtils.createTopic(topic, partitions = 5)
+    testUtils.sendMessages(topic, (1 to 3).map { _.toString }.toArray)
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    val reader = spark.readStream
+    reader
+      .format(classOf[KafkaSourceProvider].getCanonicalName.stripSuffix("$"))
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.auto.offset.reset", s"earliest")
+      .option("kafka.metadata.max.age.ms", "1")
+    options.foreach { case (k, v) => reader.option(k, v) }
+    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
+    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
+
+    testStream(mapped)(
+      AddKafkaData(Set(topic), 4, 5, 6), // Add data when stream is stopped
+      CheckAnswer(2, 3, 4, 5, 6, 7),
+      StopStream,
+      StartStream(),
+      CheckAnswer(2, 3, 4, 5, 6, 7),
+      StopStream,
+      AddKafkaData(Set(topic), 7, 8),
+      StartStream(),
+      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9),
+      AssertOnQuery("Add partitions") { query: StreamExecution =>
+        testUtils.addPartitions(topic, 10)
+        true
+      },
+      AddKafkaData(Set(topic), 9, 10, 11, 12, 13, 14, 15, 16),
+      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
+    )
+  }
+}
+
+
+class KafkaSourceStressSuite extends KafkaSourceTest {
+
+  import testImplicits._
+
+  val topicId = new AtomicInteger(1)
+
+  @volatile var topics = (1 to 5).map(_ => newStressTopic).toSet
+
+  @volatile var partitionRange = (1, 5)
+
+
+  test("stress test with multiple topics and partitions") {
+    topics.foreach { topic =>
+      testUtils.createTopic(topic, partitions = randomPartitions)
+      testUtils.sendMessages(topic, (101 to 105).map { _.toString }.toArray)
+    }
+
+    // Create Kafka source that reads from latest offset
+    val kafka =
+      spark.readStream
+        .format(classOf[KafkaSourceProvider].getCanonicalName.stripSuffix("$"))
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.metadata.max.age.ms", "1")
+        .option("subscribePattern", "stress.*")
+        .load()
+        .select("key", "value")
+        .as[(Array[Byte], Array[Byte])]
+
+    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
+
+    runStressTest(
+      mapped,
+      d => {
+        Random.nextInt(5) match {
+          case 0 =>
+            partitionRange = newPartitionRange
+            val addPartitions = topics.toSeq.map(_ => randomPartitions)
+            AddKafkaData(topics, d: _*)(
+              ensureDataInMultiplePartition = false, addPartitions = Some(addPartitions))
+          case 1 =>
+            topics = topics + newStressTopic
+            partitionRange = newPartitionRange
+            val addPartitions = topics.toSeq.map(_ => randomPartitions)
+            AddKafkaData(topics, d: _*)(
+              ensureDataInMultiplePartition = false, addPartitions = Some(addPartitions))
+          case _ =>
+            AddKafkaData(topics, d: _*)(ensureDataInMultiplePartition = false)
+        }
+      },
+      iterations = 50)
+  }
+
+  def newStressTopic: String = s"stress${topicId.getAndIncrement()}"
+
+  def newPartitionRange: (Int, Int) = (partitionRange._1 + 5, partitionRange._2 + 5)
+
+  def randomPartitions: Int = {
+    Random.nextInt(partitionRange._2 + 1 - partitionRange._1) + partitionRange._1
   }
 }
