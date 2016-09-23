@@ -26,7 +26,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, GlobalTempViewManager, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, GlobalTempViewManager, InMemoryCatalog}
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
@@ -37,16 +37,17 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  */
 private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
-  val globalTempDB = sparkContext.conf.get(
-    SessionCatalog.GLOBAL_TEMP_DB_CONF_KEY, SessionCatalog.DEFAULT_GLOBAL_TEMP_DB)
-
-  val globalTempViews = {
+  val globalTempViewManager = {
+    // System preserved database should not exists in metastore. However it's hard to guarantee it
+    // for every session, because case-sensitivity differs. Here we always lowercase it to make our
+    // life easier.
+    val globalTempDB = sparkContext.conf.get(GLOBAL_TEMP_DATABASE).toLowerCase
     if (externalCatalog.databaseExists(globalTempDB)) {
       throw new SparkException(
         s"$globalTempDB is a system preserved database, please rename your existing database " +
           "to resolve the name conflict and launch your Spark application again.")
     }
-    new GlobalTempViewManager
+    new GlobalTempViewManager(globalTempDB)
   }
 
   /**

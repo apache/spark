@@ -41,8 +41,7 @@ import org.apache.spark.util.Utils
 
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
-    globalTempDB: String,
-    globalTempViews: GlobalTempViewManager,
+    globalTempViewManager: GlobalTempViewManager,
     sparkSession: SparkSession,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
@@ -50,8 +49,7 @@ private[sql] class HiveSessionCatalog(
     hadoopConf: Configuration)
   extends SessionCatalog(
     externalCatalog,
-    globalTempDB,
-    globalTempViews,
+    globalTempViewManager,
     functionResourceLoader,
     functionRegistry,
     conf,

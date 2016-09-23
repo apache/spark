@@ -92,7 +92,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listTables(dbName: String): Dataset[Table] = {
-    val tables = sessionCatalog.listTables(dbName).map { case (tableIdent, isTemp) =>
+    val tables = sessionCatalog.listTables(dbName).map { tableIdent =>
+      val isTemp = sessionCatalog.isTemporaryTable(tableIdent)
       val metadata = if (isTemp) None else Some(sessionCatalog.getTableMetadata(tableIdent))
       new Table(
         name = tableIdent.identifier,
@@ -295,7 +296,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @param viewName the name of the view to be dropped.
    * @group ddl_ops
-   * @since 2.0.1
+   * @since 2.1.0
    */
   override def dropGlobalTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getGlobalTempView(viewName).exists { viewDef =>

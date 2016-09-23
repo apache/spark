@@ -40,6 +40,43 @@ case class CreateTable(
   override def innerChildren: Seq[QueryPlan[_]] = query.toSeq
 }
 
+/**
+ * Create or replace a local/global temporary view with given data source.
+ */
+case class CreateTempViewUsing(
+    tableIdent: TableIdentifier,
+    userSpecifiedSchema: Option[StructType],
+    replace: Boolean,
+    global: Boolean,
+    provider: String,
+    options: Map[String, String]) extends RunnableCommand {
+
+  if (tableIdent.database.isDefined) {
+    throw new AnalysisException(
+      s"Temporary view '$tableIdent' should not have specified a database")
+  }
+
+  def run(sparkSession: SparkSession): Seq[Row] = {
+    val dataSource = DataSource(
+      sparkSession,
+      userSpecifiedSchema = userSpecifiedSchema,
+      className = provider,
+      options = options)
+
+    val catalog = sparkSession.sessionState.catalog
+    val viewDefinition = Dataset.ofRows(
+      sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan
+
+    if (global) {
+      catalog.createGlobalTempView(tableIdent.table, viewDefinition, replace)
+    } else {
+      catalog.createTempView(tableIdent.table, viewDefinition, replace)
+    }
+
+    Seq.empty[Row]
+  }
+}
+
 case class RefreshTable(tableIdent: TableIdentifier)
   extends RunnableCommand {
 

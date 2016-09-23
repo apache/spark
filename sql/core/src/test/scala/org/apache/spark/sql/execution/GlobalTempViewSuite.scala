@@ -28,7 +28,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    globalTempDB = spark.sharedState.globalTempDB
+    globalTempDB = spark.sharedState.globalTempViewManager.database
   }
 
   private var globalTempDB: String = _
@@ -102,6 +102,22 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
     } finally {
       spark.catalog.dropTempView("v1")
       spark.catalog.dropGlobalTempView("v2")
+    }
+  }
+
+  test("should lookup global temp view if and only if global temp db is specified") {
+    try {
+      sql("CREATE GLOBAL TEMP VIEW same_name AS SELECT 3, 4")
+      sql("CREATE TEMP VIEW same_name AS SELECT 1, 2")
+
+      checkAnswer(sql("SELECT * FROM same_name"), Row(1, 2))
+
+      // we never lookup global temp views if database is not specified in table name
+      spark.catalog.dropTempView("same_name")
+      intercept[NoSuchTableException](sql("SELECT * FROM same_name"))
+
+      // Use qualified name to lookup a global temp view.
+      checkAnswer(sql(s"SELECT * FROM $globalTempDB.same_name"), Row(3, 4))
     }
   }
 }

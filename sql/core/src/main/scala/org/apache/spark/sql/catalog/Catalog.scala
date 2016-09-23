@@ -181,6 +181,10 @@ abstract class Catalog {
    * Drops the local temporary view with the given view name in the catalog.
    * If the view has been cached before, then it will also be uncached.
    *
+   * Local temporary view is session-scoped. Its lifetime is the lifetime of the session that
+   * created it, i.e. it will be automatically dropped when the session terminates. It's not
+   * tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
+   *
    * @param viewName the name of the view to be dropped.
    * @since 2.0.0
    */
@@ -190,8 +194,13 @@ abstract class Catalog {
    * Drops the global temporary view with the given view name in the catalog.
    * If the view has been cached before, then it will also be uncached.
    *
+   * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark application,
+   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
+   * preserved database `_global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM _global_temp.view1`.
+   *
    * @param viewName the name of the view to be dropped.
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def dropGlobalTempView(viewName: String): Boolean
 

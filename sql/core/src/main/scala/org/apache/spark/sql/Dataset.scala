@@ -2436,6 +2436,10 @@ class Dataset[T] private[sql](
    * Creates a local temporary view using the given name. The lifetime of this
    * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
    *
+   * Local temporary view is session-scoped. Its lifetime is the lifetime of the session that
+   * created it, i.e. it will be automatically dropped when the session terminates. It's not
+   * tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
+   *
    * @throws AnalysisException if the view name already exists
    *
    * @group basic
@@ -2463,10 +2467,15 @@ class Dataset[T] private[sql](
    * Creates a global temporary view using the given name. The lifetime of this
    * temporary view is tied to this Spark application.
    *
+   * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark application,
+   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
+   * preserved database `_global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM _global_temp.view1`.
+   *
    * @throws TempTableAlreadyExistsException if the view name already exists
    *
    * @group basic
-   * @since 2.0.1
+   * @since 2.1.0
    */
   @throws[AnalysisException]
   def createGlobalTempView(viewName: String): Unit = withPlan {

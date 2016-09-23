@@ -1267,7 +1267,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       }
 
       val viewType = if (ctx.TEMPORARY == null) {
-        PermanentView
+        PersistedView
       } else if (ctx.GLOBAL != null) {
         GlobalTempView
       } else {

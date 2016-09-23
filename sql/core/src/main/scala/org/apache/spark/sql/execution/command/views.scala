@@ -51,14 +51,14 @@ object LocalTempView extends ViewType
 object GlobalTempView extends ViewType
 
 /**
- * PermanentView means cross-session permanent views. Permanent views stay until they are
+ * PersistedView means cross-session persisted views. Persisted views stay until they are
  * explicitly dropped by user command. It's always tied to a database, default to the current
  * database if not specified.
  *
- * Note that, Existing permanent view with the same name are not visible to the current session
+ * Note that, Existing persisted view with the same name are not visible to the current session
  * while the local temporary view exists, unless the view name is qualified by database.
  */
-object PermanentView extends ViewType
+object PersistedView extends ViewType
 
 
 /**
@@ -95,7 +95,7 @@ case class CreateViewCommand(
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
 
-  if (viewType == PermanentView) {
+  if (viewType == PersistedView) {
     require(originalText.isDefined, "'originalText' must be provided to create permanent view")
   }
 
@@ -200,45 +200,6 @@ case class CreateViewCommand(
     )
   }
 }
-
-
-/**
- * Create or replace a local/global temporary view with given data source.
- */
-case class CreateTempViewUsing(
-    tableIdent: TableIdentifier,
-    userSpecifiedSchema: Option[StructType],
-    replace: Boolean,
-    global: Boolean,
-    provider: String,
-    options: Map[String, String]) extends RunnableCommand {
-
-  if (tableIdent.database.isDefined) {
-    throw new AnalysisException(
-      s"Temporary view '$tableIdent' should not have specified a database")
-  }
-
-  def run(sparkSession: SparkSession): Seq[Row] = {
-    val dataSource = DataSource(
-      sparkSession,
-      userSpecifiedSchema = userSpecifiedSchema,
-      className = provider,
-      options = options)
-
-    val catalog = sparkSession.sessionState.catalog
-    val viewDefinition = Dataset.ofRows(
-      sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan
-
-    if (global) {
-      catalog.createGlobalTempView(tableIdent.table, viewDefinition, replace)
-    } else {
-      catalog.createTempView(tableIdent.table, viewDefinition, replace)
-    }
-
-    Seq.empty[Row]
-  }
-}
-
 
 /**
  * Alter a view with given query plan. If the view name contains database prefix, this command will
