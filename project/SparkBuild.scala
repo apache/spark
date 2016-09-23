@@ -23,8 +23,6 @@ import scala.util.Properties
 import scala.collection.JavaConverters._
 import scala.collection.mutable.Stack
 
-import bintray.BintrayKeys
-import bintray.BintrayPlugin._
 import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
@@ -236,7 +234,7 @@ object SparkBuild extends PomBuild {
     }
   )
 
-  lazy val sharedSettings = bintraySettings ++ versionWithGit ++ sparkGenjavadocSettings ++
+  lazy val sharedSettings = versionWithGit ++ // sparkGenjavadocSettings ++
       (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
     exportJars in Compile := true,
     exportJars in Test := false,
@@ -244,8 +242,7 @@ object SparkBuild extends PomBuild {
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
     incOptions := incOptions.value.withNameHashing(true),
-    publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.10",
+//    unidocGenjavadocVersion := "0.10",
     git.useGitDescribe := true,
     useJGit,
     version := {
@@ -263,13 +260,9 @@ object SparkBuild extends PomBuild {
         commitVersion
       )) get
     },
-    BintrayKeys.bintrayCredentialsFile := new File(".credentials"),
-    licenses += ("Apache 2.0", url("https://www.apache.org/licenses/LICENSE-2.0")),
-    BintrayKeys.bintrayOrganization := Some("palantir"),
-    BintrayKeys.bintrayRepository := "releases",
-    BintrayKeys.bintrayVcsUrl := Some("https://github.com/palantir/parquet-mr"),
-    BintrayKeys.bintrayReleaseOnPublish := true,
-    concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
+    credentials += Credentials(new File(".credentials")),
+    licenses += ("Apache-2.0", url("https://www.apache.org/licenses/LICENSE-2.0")),
+    publishTo := Some("Bintray API Realm" at s"https://api.bintray.com/content/palantir/releases/spark/${version.value}"),
 
     // Override SBT's default resolvers:
     resolvers := Seq(
@@ -282,10 +275,10 @@ object SparkBuild extends PomBuild {
     publishLocalConfiguration in MavenCompile <<= (packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
       (arts, _, level) => new PublishConfiguration(None, "dotM2", arts, Seq(), level)
     },
+    publishMavenStyle := true,
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn,
-
     javacOptions in (Compile, doc) ++= {
       val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
       var major = versionParts(0).toInt
@@ -409,8 +402,8 @@ object SparkBuild extends PomBuild {
   /* Package pyspark artifacts in a separate zip file for YARN. */
   enable(PySparkAssembly.settings)(assembly)
 
-  /* Enable unidoc only for the root spark project */
-  enable(Unidoc.settings)(spark)
+//  /* Enable unidoc only for the root spark project */
+//  enable(Unidoc.settings)(spark)
 
   /* Catalyst ANTLR generation settings */
   enable(Catalyst.settings)(catalyst)
