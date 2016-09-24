@@ -107,6 +107,13 @@ private[kafka010] case class KafkaSource(
     } else {
       Map.empty[TopicPartition, Long]
     }
+    logInfo(s"Partitions added: $newPartitionOffsets")
+    newPartitionOffsets.filter(_._2 != 0).foreach { case (p, o) =>
+      logWarning(s"Added partition $p starts from $o instead of 0, some data may have been missed")
+    }
+
+    val deletedPartitions = fromPartitionOffsets.keySet.diff(untilPartitionOffsets.keySet)
+    logWarning(s"Partitions removed: $deletedPartitions, some data may have been missed")
 
     // Sort the partitions and current list of executors to consistently assign each partition
     // to the executor. This allows cached KafkaConsumers in the executors to be re-used to
@@ -118,6 +125,9 @@ private[kafka010] case class KafkaSource(
           (r.topic, r.partition))
       }
     }
+
+    // Use the until partitions to calculate offset ranges to ignore partitions that have
+    // been deleted
     val sortedTopicPartitions = untilPartitionOffsets.keySet.toSeq.sorted(topicPartitionOrdering)
     logDebug("Sorted topicPartitions: " + sortedTopicPartitions.mkString(", "))
 
@@ -125,12 +135,13 @@ private[kafka010] case class KafkaSource(
     val numExecutors = sortedExecutors.length
     logDebug("Sorted executors: " + sortedExecutors.mkString(", "))
 
+    // Calculate offset ranges
     val offsetRanges = sortedTopicPartitions.map { tp =>
       val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
         newPartitionOffsets.getOrElse(tp, {
-          // This should not happen since newPartitionOffsets contains all paritions not in
+          // This should not happen since newPartitionOffsets contains all partitions not in
           // fromPartitionOffsets
-          throw new IllegalStateException(s"$tp doesn't have a offset")
+          throw new IllegalStateException(s"$tp doesn't have a from offset")
         })
       }
       val untilOffset = untilPartitionOffsets(tp)
@@ -180,7 +191,7 @@ private[kafka010] case class KafkaSource(
     }
     logTrace("Getting positions")
     val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
-    logInfo(s"Got partition offsets: $partitionOffsets")
+    logDebug(s"Got offsets for partition : $partitionOffsets")
     partitionOffsets
   }
 
@@ -199,18 +210,22 @@ private[kafka010] case class KafkaSource(
     // Get the earliest offset of each partition
     consumer.seekToBeginning(newPartitions.asJava)
     val partitionToOffsets = newPartitions.map(p => p -> consumer.position(p)).toMap
-    logInfo(s"Got offsets for new partitions: $partitionToOffsets")
+    logDebug(s"Got offsets for new partitions: $partitionToOffsets")
     partitionToOffsets
   }
 
-  /** Helper function that does multiple retries on the a body of code that returns offsets */
+  /**
+   * Helper function that does multiple retries on the a body of code that returns offsets.
+   * Retries are needed to handle transient failures. For e.g. race conditions between getting
+   * assignment and getting position while topics/partitions are deleted can cause NPEs.
+   */
   private def withRetries(
       body: => Map[TopicPartition, Long]): Map[TopicPartition, Long] = synchronized {
 
     var result: Option[Map[TopicPartition, Long]] = None
     var attempt = 1
     var lastException: Exception = null
-    while (result.isEmpty && attempt < MAX_OFFSET_FETCH_ATTEMPTS) {
+    while (result.isEmpty && attempt <= MAX_OFFSET_FETCH_ATTEMPTS) {
       try {
         result = Some(body)
       } catch {
@@ -218,10 +233,11 @@ private[kafka010] case class KafkaSource(
           lastException = e
           logWarning(s"Error in attempt $attempt getting Kafka offsets: ", e)
           attempt += 1
+          Thread.sleep(OFFSET_FETCH_ATTEMPT_INTERVAL_MS)
       }
     }
     if (result.isEmpty) {
-      assert(attempt >= MAX_OFFSET_FETCH_ATTEMPTS)
+      assert(attempt > MAX_OFFSET_FETCH_ATTEMPTS)
       assert(lastException != null)
       throw lastException
     }
@@ -231,10 +247,12 @@ private[kafka010] case class KafkaSource(
   private def positiveMod(a: Long, b: Int): Int = ((a % b).toInt + b) % b
 }
 
+
 /** Companion object for the [[KafkaSource]]. */
 private[kafka010] object KafkaSource {
 
   val MAX_OFFSET_FETCH_ATTEMPTS = 3
+  val OFFSET_FETCH_ATTEMPT_INTERVAL_MS = 10
 
   def kafkaSchema: StructType = StructType(Seq(
     StructField("checksum", LongType),
@@ -296,7 +314,11 @@ private[kafka010] object KafkaSource {
 
 /** An [[Offset]] for the [[KafkaSource]]. */
 private[kafka010]
-case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) extends Offset
+case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) extends Offset {
+  override def toString(): String = {
+    partitionToOffsets.toSeq.sortBy(_._1.toString).mkString("[", ", ", "]")
+  }
+}
 
 /** Companion object of the [[KafkaSourceOffset]] */
 private[kafka010] object KafkaSourceOffset {

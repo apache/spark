@@ -35,7 +35,7 @@ private[kafka010] case class CachedKafkaConsumer private(
     topicPartition: TopicPartition,
     kafkaParams: ju.Map[String, Object]) extends Logging {
 
-  protected val consumer = {
+  private val consumer = {
     val c = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
     val tps = new ju.ArrayList[TopicPartition]()
     tps.add(topicPartition)
@@ -51,8 +51,8 @@ private[kafka010] case class CachedKafkaConsumer private(
   private val pollTimeoutMs = 60 * 1000
 
   /** Iterator to the already fetch data */
-  protected var fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
-  protected var nextOffsetInFetchedData = -2L
+  private var fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
+  private var nextOffsetInFetchedData = -2L
 
   /**
    * Get the record for the given offset, waiting up to timeout ms if IO is necessary.
@@ -86,7 +86,7 @@ private[kafka010] case class CachedKafkaConsumer private(
     record
   }
 
-  def close(): Unit = consumer.close()
+  private def close(): Unit = consumer.close()
 
   private def seek(offset: Long): Unit = {
     logDebug(s"Seeking to $topicPartition $offset")
