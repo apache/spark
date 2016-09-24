@@ -129,11 +129,17 @@ class CodegenContext {
    *
    * They will be kept as member variables in generated classes like `SpecificProjection`.
    */
-  val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
-    mutable.ArrayBuffer.empty[(String, String, String)]
+  private var mutableStates: mutable.ArrayBuffer[(String, String, String, Boolean)] =
+    mutable.ArrayBuffer.empty[(String, String, String, Boolean)]
 
-  def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
-    mutableStates += ((javaType, variableName, initCode))
+  def addMutableState(javaType: String, variableName: String,
+                      initCode: String, isWholeStageResultVar: Boolean = false): Unit = {
+    if (isWholeStageResultVar) {
+      mutableStates = mutableStates.filterNot(state => (state._1 == javaType) && state._4)
+      mutableStates += ((javaType, variableName, initCode, isWholeStageResultVar))
+    } else {
+      mutableStates += ((javaType, variableName, initCode, isWholeStageResultVar))
+    }
   }
 
   /**
@@ -155,7 +161,7 @@ class CodegenContext {
   def declareMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    mutableStates.distinct.map { case (javaType, variableName, _) =>
+    mutableStates.distinct.map { case (javaType, variableName, _, _) =>
       s"private $javaType $variableName;"
     }.mkString("\n")
   }

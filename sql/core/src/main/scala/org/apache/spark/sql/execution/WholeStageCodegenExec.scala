@@ -133,7 +133,7 @@ trait CodegenSupport extends SparkPlan {
         // generate the code to create a UnsafeRow
         ctx.INPUT_ROW = row
         ctx.currentVars = outputVars
-        val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
+        val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false, true)
         val code = s"""
           |$evaluateInputs
           |${ev.code.trim}
@@ -431,7 +431,7 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
 
   private def supportCodegen(e: Expression): Boolean = e match {
     case e: LeafExpression => true
-    // CodegenFallback requires the input to be an InternalRow
+    // CodegenFallback requires the input to be an InterRownal
     case e: CodegenFallback => false
     case _ => true
   }

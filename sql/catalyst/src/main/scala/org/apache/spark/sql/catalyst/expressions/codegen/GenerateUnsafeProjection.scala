@@ -71,11 +71,12 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       inputs: Seq[ExprCode],
       inputTypes: Seq[DataType],
       bufferHolder: String,
-      isTopLevel: Boolean = false): String = {
+      isTopLevel: Boolean = false,
+      isResult: Boolean = false): String = {
     val rowWriterClass = classOf[UnsafeRowWriter].getName
     val rowWriter = ctx.freshName("rowWriter")
     ctx.addMutableState(rowWriterClass, rowWriter,
-      s"this.$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});")
+      s"this.$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});", isResult)
 
     val resetWriter = if (isTopLevel) {
       // For top level row writer, it always writes to the beginning of the global buffer holder,
@@ -293,9 +294,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   }
 
   def createCode(
-      ctx: CodegenContext,
-      expressions: Seq[Expression],
-      useSubexprElimination: Boolean = false): ExprCode = {
+                  ctx: CodegenContext,
+                  expressions: Seq[Expression],
+                  useSubexprElimination: Boolean = false,
+                  isWholeStageResultVar: Boolean = false): ExprCode = {
     val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
     val exprTypes = expressions.map(_.dataType)
 
@@ -306,12 +308,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }
 
     val result = ctx.freshName("result")
-    ctx.addMutableState("UnsafeRow", result, s"$result = new UnsafeRow(${expressions.length});")
+    ctx.addMutableState("UnsafeRow", result,
+      s"$result = new UnsafeRow(${expressions.length});", isWholeStageResultVar)
 
     val holder = ctx.freshName("holder")
     val holderClass = classOf[BufferHolder].getName
     ctx.addMutableState(holderClass, holder,
-      s"this.$holder = new $holderClass($result, ${numVarLenFields * 32});")
+      s"this.$holder = new $holderClass($result, ${numVarLenFields * 32});", isWholeStageResultVar)
 
     val resetBufferHolder = if (numVarLenFields == 0) {
       ""
@@ -328,7 +331,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
     val writeExpressions =
-      writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, holder, isTopLevel = true)
+      writeExpressionsToBuffer(ctx, ctx.INPUT_ROW,
+        exprEvals, exprTypes, holder, isTopLevel = true, isWholeStageResultVar)
 
     val code =
       s"""
