@@ -2622,21 +2622,21 @@ setMethod("except",
 #' }
 #' @note write.df since 1.4.0
 setMethod("write.df",
-          signature(df = "SparkDataFrame", path = "character"),
-          function(df, path, source = NULL, mode = "error", ...) {
+          signature(df = "SparkDataFrame"),
+          function(df, path = NULL, source = NULL, mode = "error", ...) {
             if (is.null(source)) {
               source <- getDefaultSqlSource()
             }
             jmode <- convertToJSaveMode(mode)
             options <- varargsToEnv(...)
             if (!is.null(path)) {
-                options[["path"]] <- path
+              options[["path"]] <- path
             }
             write <- callJMethod(df@sdf, "write")
             write <- callJMethod(write, "format", source)
             write <- callJMethod(write, "mode", jmode)
             write <- callJMethod(write, "options", options)
-            write <- callJMethod(write, "save", path)
+            write <- callJMethod(write, "save")
           })
 
 #' @rdname write.df
