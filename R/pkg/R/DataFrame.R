@@ -2608,7 +2608,7 @@ setMethod("except",
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
-#' @aliases write.df,SparkDataFrame,character-method
+#' @aliases write.df,SparkDataFrame-method
 #' @rdname write.df
 #' @name write.df
 #' @export
