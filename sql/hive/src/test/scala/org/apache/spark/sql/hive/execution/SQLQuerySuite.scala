@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
@@ -338,6 +338,52 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         "Function: udtf_count_temp",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
         "Usage: N/A")
+    }
+  }
+
+  test("describe partition") {
+    withTable("partitioned_table") {
+      sql("CREATE TABLE partitioned_table (a STRING, b INT) PARTITIONED BY (c STRING, d STRING)")
+      sql("ALTER TABLE partitioned_table ADD PARTITION (c='Us', d=1)")
+
+      checkKeywordsExist(sql("DESC partitioned_table PARTITION (c='Us', d=1)"),
+        "# Partition Information",
+        "# col_name")
+
+      checkKeywordsExist(sql("DESC EXTENDED partitioned_table PARTITION (c='Us', d=1)"),
+        "# Partition Information",
+        "# col_name",
+        "Detailed Partition Information CatalogPartition(",
+        "Partition Values: [Us, 1]",
+        "Storage(Location:",
+        "Partition Parameters")
+
+      checkKeywordsExist(sql("DESC FORMATTED partitioned_table PARTITION (c='Us', d=1)"),
+        "# Partition Information",
+        "# col_name",
+        "# Detailed Partition Information",
+        "Partition Value:",
+        "Database:",
+        "Table:",
+        "Create Time:",
+        "Location:",
+        "Partition Parameters:",
+        "# Storage Information")
+
+      val m = intercept[NoSuchPartitionException] {
+        sql("DESC partitioned_table PARTITION (c='Us', d=2)")
+      }.getMessage()
+      assert(m.contains("Partition not found in table"))
+
+      val m2 = intercept[AnalysisException] {
+        sql("DESC partitioned_table PARTITION (c='Us')")
+      }.getMessage()
+      assert(m2.contains("Partition spec is invalid"))
+
+      val m3 = intercept[ParseException] {
+        sql("DESC partitioned_table PARTITION (c='Us', d)")
+      }.getMessage()
+      assert(m3.contains("Unsupported SQL statement"))
     }
   }
 
