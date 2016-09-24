@@ -150,23 +150,17 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
           OldLabeledPoint(label, OldVectors.fromML(features))
       }
     val selector = new feature.ChiSqSelector()
-    $(selectorType) match {
-      case OldChiSqSelector.KBest =>
-        selector.setNumTopFeatures($(numTopFeatures))
-      case OldChiSqSelector.Percentile =>
-        selector.setPercentile($(percentile))
-      case OldChiSqSelector.FPR =>
-        selector.setAlpha($(alpha))
-      case errorType =>
-        throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
-    }
+      .setSelectorType($(selectorType))
+      .setNumTopFeatures($(numTopFeatures))
+      .setPercentile($(percentile))
+      .setAlpha($(alpha))
     val model = selector.fit(input)
     copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
   }
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    val otherPairs = OldChiSqSelector.supportedTypeAndParamPairs.filter(_._1 == $(selectorType))
+    val otherPairs = OldChiSqSelector.supportedTypeAndParamPairs.filter(_._1 != $(selectorType))
     otherPairs.foreach { case (_, paramName: String) =>
       if (isSet(getParam(paramName))) {
         logWarning(s"Param $paramName will take no effect when selector type = ${$(selectorType)}.")
