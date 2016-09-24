@@ -29,7 +29,6 @@ case class OfferState(workOffer: WorkerOffer, var cores: Int) {
 }
 
 abstract class TaskAssigner(conf: SparkConf) {
-
   var offer: Seq[OfferState] = _
   val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
 
@@ -62,20 +61,20 @@ abstract class TaskAssigner(conf: SparkConf) {
 }
 
 class RoundRobinAssigner(conf: SparkConf) extends TaskAssigner(conf) {
+  var i = 0
   override def construct(workOffer: Seq[WorkerOffer]): Unit = {
     offer = Random.shuffle(workOffer.map(o => OfferState(o, o.cores)))
   }
-  var i = 0
-  def init(): Unit = {
+  override def init(): Unit = {
     i = 0
   }
-  def hasNext: Boolean = {
+  override def hasNext: Boolean = {
     i < offer.size
   }
-  def getNext(): OfferState = {
+  override def getNext(): OfferState = {
     offer(i)
   }
-  def taskAssigned(assigned: Boolean): Unit = {
+  override def taskAssigned(assigned: Boolean): Unit = {
     i += 1
   }
   override def reset: Unit = {
@@ -97,15 +96,15 @@ class BalancedAssigner(conf: SparkConf) extends TaskAssigner(conf) {
     maxHeap = new PriorityQueue[OfferState]()
     offer.filter(_.cores >= CPUS_PER_TASK).foreach(maxHeap.enqueue(_))
   }
-  def hasNext: Boolean = {
+  override def hasNext: Boolean = {
     maxHeap.size > 0
   }
-  def getNext(): OfferState = {
+  override def getNext(): OfferState = {
     current = maxHeap.dequeue()
     current
   }
 
-  def taskAssigned(assigned: Boolean): Unit = {
+  override def taskAssigned(assigned: Boolean): Unit = {
     if (current.cores >= CPUS_PER_TASK && assigned) {
       maxHeap.enqueue(current)
     }
@@ -122,16 +121,17 @@ class PackedAssigner(conf: SparkConf) extends TaskAssigner(conf) {
   var sorted: Seq[OfferState] = _
   var i = 0
   var current: OfferState = _
-  def init(): Unit = {
+
+  override def init(): Unit = {
     i = 0
     sorted = offer.filter(_.cores >= CPUS_PER_TASK).sortBy(_.cores)
   }
 
-  def hasNext: Boolean = {
+  override def hasNext: Boolean = {
     i < sorted.size
   }
 
-  def getNext(): OfferState = {
+  override def getNext(): OfferState = {
     current = sorted(i)
     current
   }
