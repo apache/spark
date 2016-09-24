@@ -121,7 +121,6 @@ class CacheBenchmark extends BenchmarkBase {
 
     // All of these are codegen = T hashmap = T
     sparkSession.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
-    sparkSession.conf.set(SQLConf.VECTORIZED_AGG_MAP_MAX_COLUMNS.key, "1024")
 
     // Benchmark cases:
     //   (1) No caching
