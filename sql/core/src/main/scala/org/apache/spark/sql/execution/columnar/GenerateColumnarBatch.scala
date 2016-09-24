@@ -86,10 +86,10 @@ class GenerateColumnarBatch(
           case BinaryType => (classOf[BinaryColumnStats].getName, "()")
           case dt: DecimalType =>
             (classOf[DecimalColumnStats].getName, s"(${dt.precision}, ${dt.scale})")
-          case dt => (classOf[ObjectColumnStats].getName, s"(${dt})")
+          case dt => (classOf[OtherColumnStats].getName, "()")
         }
       s"$columnStatsCls $varName = new $columnStatsCls$arg;"
-    }.mkString("")
+    }.mkString("\n")
     val collectedStatistics = colStatVars.map(name =>
       s"$name.collectedStats()[0], $name.collectedStats()[1], " +
         s"$name.collectedStats()[2], $name.collectedStats()[3], $name.collectedStats()[4]"
@@ -140,7 +140,6 @@ class GenerateColumnarBatch(
           }
           $batchVar.setNumRows($rowNumVar);
 
-          // return $batchVar;
           return ${classOf[CachedColumnarBatch].getName}.apply($batchVar,
            new GenericInternalRow($collectedStatistics));
         }
@@ -187,10 +186,14 @@ private[columnar] object GenerateColumnarBatch {
        """.stripMargin
       case StringType | BinaryType =>
         val typeName = GenerateColumnarBatch.typeToName(dt)
+        val typeDeclName = dt match {
+          case StringType => "UTF8String"
+          case BinaryType => "byte[]"
+        }
         val put = "put" + typeName.capitalize
         val get = "get" + typeName.capitalize
         s"""
-         |$typeName val = $rowVar.$get($colNum);
+         |$typeDeclName val = $rowVar.$get($colNum);
          |int size = $colVar.$put($rowNumVar, val);
          |$numBytesVar += size;
          |$colStatVar.gatherValueStats(val, size);
@@ -203,22 +206,37 @@ private[columnar] object GenerateColumnarBatch {
         |  $colVar.putNotNull($rowNumVar);
         |}
         |$numBytesVar += 1;
+        |$colStatVar.gatherValueStats(null, 1);
        """.stripMargin
       case dt: DecimalType =>
         val precision = dt.precision
         val scale = dt.scale
         s"""
-         $numBytesVar += $colVar.putDecimal($rowNumVar,
-           $rowVar.getDecimal($colNum, $precision, $scale), $precision);
+         |Decimal val = $rowVar.getDecimal($colNum, $precision, $scale);
+         |int size = $colVar.putDecimal($rowNumVar, val, $precision);
+         |$numBytesVar += size;
+         |$colStatVar.gatherValueStats(val, size);
        """.stripMargin
       case array: ArrayType =>
-        s"""$numBytesVar += $colVar.putArray($rowNumVar, $rowVar.getArray($colNum));"""
+        s"""
+         |ArrayData val = $rowVar.getArray($colNum);
+         |int size = $colVar.putArray($rowNumVar, val);
+         |$numBytesVar += size;
+         |$colStatVar.gatherValueStats(val, size);
+       """.stripMargin
       case t: MapType =>
-        s"""$numBytesVar += $colVar.putMap($rowNumVar, $rowVar.getMap($colNum));"""
+        s"""
+         |MapData val = $rowVar.getMap($colNum);
+         |int size = $colVar.putMap($rowNumVar, val);
+         |$numBytesVar += size;
+         |$colStatVar.gatherValueStats(val, size);
+       """.stripMargin
       case struct: StructType =>
         s"""
-         $numBytesVar += $colVar.putStruct($rowNumVar,
-           $rowVar.getStruct($colNum, ${struct.length}));
+         |InternalRow val = $rowVar.getStruct($colNum, ${struct.length});
+         |int size = $colVar.putStruct($rowNumVar,val);
+         |$numBytesVar += size;
+         |$colStatVar.gatherValueStats(val, size);
        """.stripMargin
       case _ =>
         throw new UnsupportedOperationException("Unsupported data type " + dt.simpleString);

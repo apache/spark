@@ -292,7 +292,7 @@ private[columnar] class StringColumnStats extends ColumnStats {
   def gatherValueStats(value: UTF8String, size: Int): Unit = {
     if (upper == null || value.compareTo(upper) > 0) upper = value.clone()
     if (lower == null || value.compareTo(lower) < 0) lower = value.clone()
-    sizeInBytes += size
+    sizeInBytes += (size + 4)
     count += 1
   }
 
@@ -311,7 +311,7 @@ private[columnar] class BinaryColumnStats extends ColumnStats {
   }
 
   def gatherValueStats(value: Array[Byte], size: Int): Unit = {
-    sizeInBytes += size
+    sizeInBytes += (size + 4)
     count += 1
   }
 
@@ -338,11 +338,10 @@ private[columnar] class DecimalColumnStats(precision: Int, scale: Int) extends C
     }
   }
 
-  def gatherValueStats(value: Decimal): Unit = {
+  def gatherValueStats(value: Decimal, size: Int): Unit = {
     if (upper == null || value.compareTo(upper) > 0) upper = value
     if (lower == null || value.compareTo(lower) < 0) lower = value
-    // TODO: this is not right for DecimalType with precision > 18
-    sizeInBytes += 8
+    sizeInBytes += size
     count += 1
   }
 
@@ -362,6 +361,15 @@ private[columnar] class ObjectColumnStats(dataType: DataType) extends ColumnStat
     }
   }
 
+  override def collectedStatistics: GenericInternalRow =
+    new GenericInternalRow(Array[Any](null, null, nullCount, count, sizeInBytes))
+}
+
+private[columnar] class OtherColumnStats() extends ColumnStats {
+  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
+    throw new UnsupportedOperationException()
+  }
+
   def gatherValueStats(value: Object, size: Int): Unit = {
     sizeInBytes += size
     count += 1
@@ -369,6 +377,7 @@ private[columnar] class ObjectColumnStats(dataType: DataType) extends ColumnStat
 
   def collectedStats: Array[Any] = Array[Any](null, null, nullCount, count, sizeInBytes)
 
-  override def collectedStatistics: GenericInternalRow =
-    new GenericInternalRow(Array[Any](null, null, nullCount, count, sizeInBytes))
+  override def collectedStatistics: GenericInternalRow = {
+    throw new UnsupportedOperationException()
+  }
 }
