@@ -21,9 +21,8 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-// $example off:schema_merging$
-
 import java.util.Properties;
+// $example off:schema_merging$
 
 // $example on:basic_parquet_example$
 import org.apache.spark.api.java.JavaRDD;
