@@ -55,7 +55,7 @@ private[columnar] case class CachedBatchBytes(
 /**
  * A cached batch of rows stored as a [[ColumnarBatch]].
  */
-private[columnar] case class CachedColumnarBatch(columnarBatch: ColumnarBatch)
+private[columnar] case class CachedColumnarBatch(columnarBatch: ColumnarBatch, stats: InternalRow)
   extends CachedBatch
 
 
@@ -192,8 +192,10 @@ case class InMemoryRelation(
   private def buildColumnarBatches(): RDD[CachedColumnarBatch] = {
     val schema = StructType.fromAttributes(child.output)
     child.execute().mapPartitionsInternal { rows =>
-      new GenerateColumnarBatch(schema, batchSize, storageLevel)
-        .generate(rows).map { columnarBatch => CachedColumnarBatch(columnarBatch) }
+      new GenerateColumnarBatch(schema, batchSize, storageLevel).generate(rows).map {
+        cachedColumnarBatch => batchStats.add(cachedColumnarBatch.stats)
+        cachedColumnarBatch
+      }
     }.persist(storageLevel)
   }
 

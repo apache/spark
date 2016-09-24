@@ -36,16 +36,42 @@ case class InMemoryTableScanExec(
 
   override val columnIndexes = attributes.map(a => relation.output.indexOf(a)).toArray
 
+  override val inMemoryTableScan = this
+
   override val supportCodegen: Boolean = relation.useColumnarBatches
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     if (relation.useColumnarBatches) {
+      val schema = relation.partitionStatistics.schema
+      val schemaIndex = schema.zipWithIndex
+      val buffers = relation.cachedColumnBuffers.asInstanceOf[RDD[CachedColumnarBatch]]
+      val prunedBuffers = if (inMemoryPartitionPruningEnabled) {
+        buffers.mapPartitionsInternal { cachedColumnarBatchIterator =>
+          val partitionFilter = newPredicate(
+            partitionFilters.reduceOption(And).getOrElse(Literal(true)), schema)
+
+          // Do partition batch pruning if enabled
+          cachedColumnarBatchIterator.filter { cachedColumnarBatch =>
+            if (!partitionFilter(cachedColumnarBatch.stats)) {
+              def statsString: String = schemaIndex.map {
+                case (a, i) =>
+                  val value = cachedColumnarBatch.stats.get(i, a.dataType)
+                  s"${a.name}: $value"
+              }.mkString(", ")
+              logInfo(s"Skipping partition based on stats $statsString")
+              false
+            } else {
+              true
+            }
+          }
+        }
+      } else {
+        buffers
+      }
+
       // HACK ALERT: This is actually an RDD[CachedColumnarBatch].
       // We're taking advantage of Scala's type erasure here to pass these batches along.
-      Seq(relation.cachedColumnBuffers
-        .asInstanceOf[RDD[CachedColumnarBatch]]
-        .map(_.columnarBatch)
-        .asInstanceOf[RDD[InternalRow]])
+      Seq(prunedBuffers.map(_.columnarBatch).asInstanceOf[RDD[InternalRow]])
     } else {
       Seq()
     }
