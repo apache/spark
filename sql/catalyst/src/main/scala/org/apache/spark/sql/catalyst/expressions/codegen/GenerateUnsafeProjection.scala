@@ -72,11 +72,12 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       inputTypes: Seq[DataType],
       bufferHolder: String,
       isTopLevel: Boolean = false,
-      isResult: Boolean = false): String = {
+      isWholeStageResultVar: Boolean = false): String = {
     val rowWriterClass = classOf[UnsafeRowWriter].getName
     val rowWriter = ctx.freshName("rowWriter")
     ctx.addMutableState(rowWriterClass, rowWriter,
-      s"this.$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});", isResult)
+      s"this.$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});",
+      isWholeStageResultVar)
 
     val resetWriter = if (isTopLevel) {
       // For top level row writer, it always writes to the beginning of the global buffer holder,
@@ -294,10 +295,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   }
 
   def createCode(
-                  ctx: CodegenContext,
-                  expressions: Seq[Expression],
-                  useSubexprElimination: Boolean = false,
-                  isWholeStageResultVar: Boolean = false): ExprCode = {
+      ctx: CodegenContext,
+      expressions: Seq[Expression],
+      useSubexprElimination: Boolean = false,
+      isWholeStageResultVar: Boolean = false): ExprCode = {
     val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
     val exprTypes = expressions.map(_.dataType)
 

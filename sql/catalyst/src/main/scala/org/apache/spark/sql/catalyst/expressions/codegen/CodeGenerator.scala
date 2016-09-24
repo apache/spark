@@ -116,8 +116,10 @@ class CodegenContext {
 
   /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
-   * 3-tuple: java type, variable name, code to init it.
-   * As an example, ("int", "count", "count = 0;") will produce code:
+   * 4-tuple: java type, variable name, code to init it, flag marked if it can be replaced.
+   * If a state is a WholeStageCodegen result variable, the flag will be true to mark it as
+   * substitutable for the following generated one.
+   * As an example, ("int", "count", "count = 0;", false) will produce code:
    * {{{
    *   private int count;
    * }}}
@@ -133,7 +135,7 @@ class CodegenContext {
     mutable.ArrayBuffer.empty[(String, String, String, Boolean)]
 
   def addMutableState(javaType: String, variableName: String,
-                      initCode: String, isWholeStageResultVar: Boolean = false): Unit = {
+      initCode: String, isWholeStageResultVar: Boolean = false): Unit = {
     if (isWholeStageResultVar) {
       mutableStates = mutableStates.filterNot(state => (state._1 == javaType) && state._4)
       mutableStates += ((javaType, variableName, initCode, isWholeStageResultVar))
