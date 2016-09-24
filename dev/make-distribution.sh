@@ -151,7 +151,7 @@ export MAVEN_OPTS="${MAVEN_OPTS:--Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCac
 # Store the command as an array because $MVN variable might have spaces in it.
 # Normal quoting tricks don't work.
 # See: http://mywiki.wooledge.org/BashFAQ/050
-BUILD_COMMAND=("$SBT" assembly examples/package network-yarn/assembly $@)
+BUILD_COMMAND=("$SBT" assembly/package examples/package network-yarn/assembly $@)
 
 # Actually build the jar
 echo -e "\nBuilding with..."
