@@ -2544,6 +2544,15 @@ test_that("Spark version from SparkSession", {
   expect_equal(ver, version)
 })
 
+test_that("Call DataFrameWriter.save() API in Java without path", {
+  df <- read.df(jsonPath, "json")
+  # This tests if the exception is thrown from Spark side not from SparkR side.
+  # It makes sure that we can omit path argument in write.df API and then it calls
+  # DataFrameWriter.save() without path.
+  expect_error(write.df(df, source = "csv"),
+               "java.lang.IllegalArgumentException: 'path' is not specified")
+})
+
 unlink(parquetPath)
 unlink(orcPath)
 unlink(jsonPath)
