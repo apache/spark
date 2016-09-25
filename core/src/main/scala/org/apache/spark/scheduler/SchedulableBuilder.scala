@@ -22,8 +22,11 @@ import java.util.{NoSuchElementException, Properties}
 
 import scala.xml.XML
 
+import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
 
 /**
@@ -102,35 +105,52 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     for (poolNode <- (xml \\ POOLS_PROPERTY)) {
 
       val poolName = (poolNode \ POOL_NAME_PROPERTY).text
-      var schedulingMode = DEFAULT_SCHEDULING_MODE
-      var minShare = DEFAULT_MINIMUM_SHARE
-      var weight = DEFAULT_WEIGHT
 
       val xmlSchedulingMode = (poolNode \ SCHEDULING_MODE_PROPERTY).text
-      if (xmlSchedulingMode != "") {
-        try {
-          schedulingMode = SchedulingMode.withName(xmlSchedulingMode)
-        } catch {
-          case e: NoSuchElementException =>
-            logWarning(s"Unsupported schedulingMode: $xmlSchedulingMode, " +
-              s"using the default schedulingMode: $schedulingMode")
-        }
-      }
+      val schedulingMode = getSchedulingModeValue(xmlSchedulingMode, DEFAULT_SCHEDULING_MODE)
 
       val xmlMinShare = (poolNode \ MINIMUM_SHARES_PROPERTY).text
-      if (xmlMinShare != "") {
-        minShare = xmlMinShare.toInt
-      }
+      val minShare = getIntValue(MINIMUM_SHARES_PROPERTY, xmlMinShare, DEFAULT_MINIMUM_SHARE)
 
       val xmlWeight = (poolNode \ WEIGHT_PROPERTY).text
-      if (xmlWeight != "") {
-        weight = xmlWeight.toInt
-      }
+      val weight = getIntValue(WEIGHT_PROPERTY, xmlWeight, DEFAULT_WEIGHT)
 
-      val pool = new Pool(poolName, schedulingMode, minShare, weight)
-      rootPool.addSchedulable(pool)
+      rootPool.addSchedulable(new Pool(poolName, schedulingMode, minShare, weight))
+
       logInfo("Created pool %s, schedulingMode: %s, minShare: %d, weight: %d".format(
         poolName, schedulingMode, minShare, weight))
+    }
+  }
+
+  private def getSchedulingModeValue(data: String, defaultValue: SchedulingMode): SchedulingMode = {
+    if (StringUtils.isNotBlank(data)
+      && checkType(SchedulingMode.withName(data.toUpperCase))
+      && SchedulingMode.withName(data.toUpperCase) != SchedulingMode.NONE) {
+      SchedulingMode.withName(data.toUpperCase)
+    } else {
+      logWarning(s"Unsupported schedulingMode: $data, using the default schedulingMode: " +
+        s"$defaultValue")
+      defaultValue
+    }
+  }
+
+  private def getIntValue(propertyName: String, data: String, defaultValue: Int): Int = {
+    if (StringUtils.isNotBlank(data) && checkType(data.toInt)) {
+      data.toInt
+    } else {
+      logWarning(s"$propertyName is blank or invalid: $data, using the default $propertyName: " +
+        s"$defaultValue")
+      defaultValue
+    }
+  }
+
+  private def checkType(fun: => Any): Boolean = {
+    try {
+      fun
+      true
+    } catch {
+      case e: NumberFormatException => false
+      case e: NoSuchElementException => false
     }
   }
 
