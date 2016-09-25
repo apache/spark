@@ -244,6 +244,15 @@ private[spark] object BLAS extends Serializable {
   }
 
   /**
+   * y += alpha * A * x
+   *
+   * @param A The upper triangular part of A in a [[DenseVector]] (column major)
+   */
+  def dspmv(n: Int, alpha: Double, A: DenseVector, x: DenseVector, y: DenseVector): Unit = {
+    f2jBLAS.dspmv("U", n, alpha, A.values, x.values, 1, 1.0, y.values, 1)
+  }
+
+  /**
    * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
    * @param U the upper triangular part of the matrix packed in an array (column major)

@@ -81,8 +81,8 @@ private[ml] class IterativelyReweightedLeastSquares(
       }
 
       // Estimate new model
-      model = new WeightedLeastSquares(fitIntercept, regParam, standardizeFeatures = false,
-        standardizeLabel = false).fit(newInstances)
+      model = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
+        standardizeFeatures = false, standardizeLabel = false).fit(newInstances)
 
       // Check convergence
       val oldCoefficients = oldModel.coefficients

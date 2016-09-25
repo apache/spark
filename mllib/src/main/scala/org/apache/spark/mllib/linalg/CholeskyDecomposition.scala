@@ -20,6 +20,8 @@ package org.apache.spark.mllib.linalg
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
 import org.netlib.util.intW
 
+import org.apache.spark.ml.optim.SingularMatrixException
+
 /**
  * Compute Cholesky decomposition.
  */
@@ -60,7 +62,7 @@ private[spark] object CholeskyDecomposition {
       case code if code < 0 =>
         throw new IllegalStateException(s"LAPACK.$method returned $code; arg ${-code} is illegal")
       case code if code > 0 =>
-        throw new IllegalArgumentException(
+        throw new SingularMatrixException (
           s"LAPACK.$method returned $code because A is not positive definite. Is A derived from " +
           "a singular matrix (e.g. collinear column values)?")
       case _ => // do nothing
