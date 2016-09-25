@@ -34,7 +34,8 @@ case class InMemoryTableScanExec(
     @transient relation: InMemoryRelation)
   extends LeafExecNode with ColumnarBatchScan {
 
-  override val columnIndexes = attributes.map(a => relation.output.indexOf(a)).toArray
+  override val columnIndexes =
+    attributes.map(a => relation.output.map(o => o.exprId).indexOf(a.exprId)).toArray
 
   override val inMemoryTableScan = this
 
