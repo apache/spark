@@ -36,6 +36,7 @@ import org.apache.spark.sql.functions.lit
 
 class LogisticRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   @transient var smallBinaryDataset: Dataset[_] = _

@@ -35,6 +35,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
 class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   abstract class MyModel extends Model[MyModel]

@@ -26,6 +26,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 
 class IsotonicRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   private def generateIsotonicInput(labels: Seq[Double]): DataFrame = {

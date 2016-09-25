@@ -28,6 +28,7 @@ import org.apache.spark.sql.types.{DoubleType, StringType, StructField, StructTy
 
 class StringIndexerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   test("params") {

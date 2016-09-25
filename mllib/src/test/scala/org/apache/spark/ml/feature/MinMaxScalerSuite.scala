@@ -24,6 +24,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
 class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   test("MinMaxScaler fit basic case") {

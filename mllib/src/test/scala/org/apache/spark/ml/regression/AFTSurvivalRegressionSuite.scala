@@ -30,6 +30,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 
 class AFTSurvivalRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   @transient var datasetUnivariate: DataFrame = _

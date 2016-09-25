@@ -25,6 +25,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class BinaryClassificationEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   test("params") {

@@ -31,6 +31,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 
 class LinearRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   private val seed: Int = 42

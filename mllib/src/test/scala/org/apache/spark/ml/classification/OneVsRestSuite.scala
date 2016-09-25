@@ -36,6 +36,7 @@ import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.Metadata
 
 class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   @transient var dataset: Dataset[_] = _

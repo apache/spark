@@ -26,6 +26,7 @@ import org.apache.spark.mllib.util.TestingUtils._
 
 class RegressionEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   test("params") {

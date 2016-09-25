@@ -32,6 +32,7 @@ import org.apache.spark.sql.{Dataset, Row}
 
 class MultilayerPerceptronClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   @transient var dataset: Dataset[_] = _

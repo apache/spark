@@ -36,6 +36,7 @@ import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.util.Utils
 
 class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
+
   import testImplicits._
 
   test("epsilon computation") {

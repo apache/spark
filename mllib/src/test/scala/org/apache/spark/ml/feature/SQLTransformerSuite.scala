@@ -25,6 +25,7 @@ import org.apache.spark.sql.types.{LongType, StructField, StructType}
 
 class SQLTransformerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   test("params") {

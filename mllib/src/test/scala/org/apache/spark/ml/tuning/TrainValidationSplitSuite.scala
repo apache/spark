@@ -33,6 +33,7 @@ import org.apache.spark.sql.types.StructType
 
 class TrainValidationSplitSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   test("train validation with logistic regression") {

@@ -26,6 +26,7 @@ import org.apache.spark.sql.Row
 
 class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest {
+
   import testImplicits._
 
   test("params") {

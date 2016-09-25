@@ -28,6 +28,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.Utils
 
 class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   test("params") {

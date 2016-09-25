@@ -33,7 +33,6 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest with Logging {
 
   import testImplicits._
-
   import VectorIndexerSuite.FeatureData
 
   // identical, of length 3

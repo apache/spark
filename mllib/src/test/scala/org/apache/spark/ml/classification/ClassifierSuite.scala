@@ -28,6 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 
 class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
+
   import testImplicits._
 
   private def getTestData(labels: Seq[Double]): DataFrame = {

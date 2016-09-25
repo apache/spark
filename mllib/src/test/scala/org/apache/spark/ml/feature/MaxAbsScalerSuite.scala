@@ -33,7 +33,7 @@ class MaxAbsScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
       Vectors.sparse(3, Array(0, 2), Array(-2, -100)),
       Vectors.sparse(3, Array(0), Array(-1.5)))
 
-    val expected: Seq[Vector] = Array(
+    val expected: Array[Vector] = Array(
       Vectors.dense(0.5, 0, 1),
       Vectors.dense(1, 0, 0),
       Vectors.sparse(3, Array(0, 2), Array(-1, -1)),

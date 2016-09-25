@@ -34,6 +34,7 @@ import org.apache.spark.sql.functions._
 
 class GeneralizedLinearRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   private val seed: Int = 42

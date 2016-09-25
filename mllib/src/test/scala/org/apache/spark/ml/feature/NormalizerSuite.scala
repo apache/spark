@@ -26,6 +26,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 
 
 class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   @transient var data: Array[Vector] = _

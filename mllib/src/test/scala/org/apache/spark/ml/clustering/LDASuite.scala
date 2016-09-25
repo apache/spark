@@ -61,6 +61,7 @@ object LDASuite {
 
 
 class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   val k: Int = 5

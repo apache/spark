@@ -31,6 +31,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
  * Test suite for [[GradientBoostedTrees]].
  */
 class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
+
   import testImplicits._
 
   test("runWithValidation stops early and performs better on a validation dataset") {

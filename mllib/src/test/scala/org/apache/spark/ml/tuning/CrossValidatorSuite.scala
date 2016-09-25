@@ -34,6 +34,7 @@ import org.apache.spark.sql.types.StructType
 
 class CrossValidatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import testImplicits._
 
   @transient var dataset: Dataset[_] = _
