@@ -43,9 +43,8 @@ class RegressionEvaluatorSuite
      * data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1))
      *   .saveAsTextFile("path")
      */
-    val dataset = sc.parallelize(
-      LinearDataGenerator.generateLinearInput(
-        6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2)
+    val dataset = LinearDataGenerator.generateLinearInput(
+      6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1)
       .map(_.asML).toDF()
 
     /**

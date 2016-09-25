@@ -87,11 +87,13 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
     checkPair(densePoints1Seq, sparsePoints1Seq)
     checkPair(densePoints2Seq, sparsePoints2Seq)
 
-    densePoints1 = sc.parallelize(densePoints1Seq, 2).map(FeatureData).toDF()
-    sparsePoints1 = sc.parallelize(sparsePoints1Seq, 2).map(FeatureData).toDF()
+    densePoints1 = densePoints1Seq.map(FeatureData).toDF()
+    sparsePoints1 = sparsePoints1Seq.map(FeatureData).toDF()
+    // TODO: If we directly use `toDF` without parallelize, the test in
+    // "Throws error when given RDDs with different size vectors" is failed for an unknown reason.
     densePoints2 = sc.parallelize(densePoints2Seq, 2).map(FeatureData).toDF()
-    sparsePoints2 = sc.parallelize(sparsePoints2Seq, 2).map(FeatureData).toDF()
-    badPoints = sc.parallelize(badPointsSeq, 2).map(FeatureData).toDF()
+    sparsePoints2 = sparsePoints2Seq.map(FeatureData).toDF()
+    badPoints = badPointsSeq.map(FeatureData).toDF()
   }
 
   private def getIndexer: VectorIndexer =
@@ -104,7 +106,7 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("Cannot fit an empty DataFrame") {
-    val rdd = sc.parallelize(Array.empty[Vector], 2).map(FeatureData).toDF()
+    val rdd = Array.empty[Vector].map(FeatureData).toSeq.toDF()
     val vectorIndexer = getIndexer
     intercept[IllegalArgumentException] {
       vectorIndexer.fit(rdd)

@@ -39,7 +39,7 @@ class StringIndexerSuite
   }
 
   test("StringIndexer") {
-    val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
+    val data = Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c"))
     val df = data.toDF("id", "label")
     val indexer = new StringIndexer()
       .setInputCol("label")
@@ -62,8 +62,8 @@ class StringIndexerSuite
   }
 
   test("StringIndexerUnseen") {
-    val data = sc.parallelize(Seq((0, "a"), (1, "b"), (4, "b")), 2)
-    val data2 = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c")), 2)
+    val data = Seq((0, "a"), (1, "b"), (4, "b"))
+    val data2 = Seq((0, "a"), (1, "b"), (2, "c"))
     val df = data.toDF("id", "label")
     val df2 = data2.toDF("id", "label")
     val indexer = new StringIndexer()
@@ -93,7 +93,7 @@ class StringIndexerSuite
   }
 
   test("StringIndexer with a numeric input column") {
-    val data = sc.parallelize(Seq((0, 100), (1, 200), (2, 300), (3, 100), (4, 100), (5, 300)), 2)
+    val data = Seq((0, 100), (1, 200), (2, 300), (3, 100), (4, 100), (5, 300))
     val df = data.toDF("id", "label")
     val indexer = new StringIndexer()
       .setInputCol("label")
@@ -186,7 +186,7 @@ class StringIndexerSuite
   }
 
   test("StringIndexer, IndexToString are inverses") {
-    val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
+    val data = Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c"))
     val df = data.toDF("id", "label")
     val indexer = new StringIndexer()
       .setInputCol("label")
@@ -219,7 +219,7 @@ class StringIndexerSuite
   }
 
   test("StringIndexer metadata") {
-    val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
+    val data = Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c"))
     val df = data.toDF("id", "label")
     val indexer = new StringIndexer()
       .setInputCol("label")

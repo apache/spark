@@ -53,20 +53,20 @@ class GeneralizedLinearRegressionSuite
 
     import GeneralizedLinearRegressionSuite._
 
-    datasetGaussianIdentity = sc.parallelize(generateGeneralizedLinearRegressionInput(
+    datasetGaussianIdentity = generateGeneralizedLinearRegressionInput(
       intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
-      family = "gaussian", link = "identity"), 2).toDF()
+      family = "gaussian", link = "identity").toDF()
 
-    datasetGaussianLog = sc.parallelize(generateGeneralizedLinearRegressionInput(
+    datasetGaussianLog = generateGeneralizedLinearRegressionInput(
       intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
-      family = "gaussian", link = "log"), 2).toDF()
+      family = "gaussian", link = "log").toDF()
 
-    datasetGaussianInverse = sc.parallelize(generateGeneralizedLinearRegressionInput(
+    datasetGaussianInverse = generateGeneralizedLinearRegressionInput(
       intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
-      family = "gaussian", link = "inverse"), 2).toDF()
+      family = "gaussian", link = "inverse").toDF()
 
     datasetBinomial = {
       val nPoints = 10000
@@ -78,38 +78,38 @@ class GeneralizedLinearRegressionSuite
         generateMultinomialLogisticInput(coefficients, xMean, xVariance,
           addIntercept = true, nPoints, seed)
 
-      sc.parallelize(testData, 2).toDF()
+      testData.toDF()
     }
 
-    datasetPoissonLog = sc.parallelize(generateGeneralizedLinearRegressionInput(
+    datasetPoissonLog = generateGeneralizedLinearRegressionInput(
       intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
-      family = "poisson", link = "log"), 2).toDF()
+      family = "poisson", link = "log").toDF()
 
-    datasetPoissonIdentity = sc.parallelize(generateGeneralizedLinearRegressionInput(
+    datasetPoissonIdentity = generateGeneralizedLinearRegressionInput(
       intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
-      family = "poisson", link = "identity"), 2).toDF()
+      family = "poisson", link = "identity").toDF()
 
-    datasetPoissonSqrt = sc.parallelize(generateGeneralizedLinearRegressionInput(
+    datasetPoissonSqrt = generateGeneralizedLinearRegressionInput(
       intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
-      family = "poisson", link = "sqrt"), 2).toDF()
+      family = "poisson", link = "sqrt").toDF()
 
-    datasetGammaInverse = sc.parallelize(generateGeneralizedLinearRegressionInput(
+    datasetGammaInverse = generateGeneralizedLinearRegressionInput(
       intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
-      family = "gamma", link = "inverse"), 2).toDF()
+      family = "gamma", link = "inverse").toDF()
 
-    datasetGammaIdentity = sc.parallelize(generateGeneralizedLinearRegressionInput(
+    datasetGammaIdentity = generateGeneralizedLinearRegressionInput(
       intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
-      family = "gamma", link = "identity"), 2).toDF()
+      family = "gamma", link = "identity").toDF()
 
-    datasetGammaLog = sc.parallelize(generateGeneralizedLinearRegressionInput(
+    datasetGammaLog = generateGeneralizedLinearRegressionInput(
       intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
-      family = "gamma", link = "log"), 2).toDF()
+      family = "gamma", link = "log").toDF()
   }
 
   /**
@@ -532,12 +532,12 @@ class GeneralizedLinearRegressionSuite
        w <- c(1, 2, 3, 4)
        df <- as.data.frame(cbind(A, b))
      */
-    val datasetWithWeight = sc.parallelize(Seq(
+    val datasetWithWeight = Seq(
       Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
       Instance(19.0, 2.0, Vectors.dense(1.0, 7.0)),
       Instance(23.0, 3.0, Vectors.dense(2.0, 11.0)),
       Instance(29.0, 4.0, Vectors.dense(3.0, 13.0))
-    ), 2).toDF()
+    ).toDF()
     /*
        R code:
 
@@ -660,12 +660,12 @@ class GeneralizedLinearRegressionSuite
        w <- c(1, 2, 3, 4)
        df <- as.data.frame(cbind(A, b))
      */
-    val datasetWithWeight = sc.parallelize(Seq(
+    val datasetWithWeight = Seq(
       Instance(1.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
       Instance(0.0, 2.0, Vectors.dense(1.0, 2.0)),
       Instance(1.0, 3.0, Vectors.dense(2.0, 1.0)),
       Instance(0.0, 4.0, Vectors.dense(3.0, 3.0))
-    ), 2).toDF()
+    ).toDF()
     /*
        R code:
 
@@ -774,12 +774,12 @@ class GeneralizedLinearRegressionSuite
        w <- c(1, 2, 3, 4)
        df <- as.data.frame(cbind(A, b))
      */
-    val datasetWithWeight = sc.parallelize(Seq(
+    val datasetWithWeight = Seq(
       Instance(2.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
       Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
       Instance(3.0, 3.0, Vectors.dense(2.0, 11.0)),
       Instance(9.0, 4.0, Vectors.dense(3.0, 13.0))
-    ), 2).toDF()
+    ).toDF()
     /*
        R code:
 
@@ -891,12 +891,12 @@ class GeneralizedLinearRegressionSuite
        w <- c(1, 2, 3, 4)
        df <- as.data.frame(cbind(A, b))
      */
-    val datasetWithWeight = sc.parallelize(Seq(
+    val datasetWithWeight = Seq(
       Instance(2.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
       Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
       Instance(3.0, 3.0, Vectors.dense(2.0, 11.0)),
       Instance(9.0, 4.0, Vectors.dense(3.0, 13.0))
-    ), 2).toDF()
+    ).toDF()
     /*
        R code:
 

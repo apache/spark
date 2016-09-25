@@ -62,7 +62,7 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       Vectors.sparse(3, Seq())
     )
 
-    dataFrame = sc.parallelize(data, 2).map(NormalizerSuite.FeatureData).toDF()
+    dataFrame = data.map(NormalizerSuite.FeatureData).toSeq.toDF()
     normalizer = new Normalizer()
       .setInputCol("features")
       .setOutputCol("normalized_features")

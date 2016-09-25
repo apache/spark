@@ -115,9 +115,9 @@ class MultilayerPerceptronClassifierSuite
     val xMean = Array(5.843, 3.057, 3.758, 1.199)
     val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
     // the input seed is somewhat magic, to make this test pass
-    val rdd = sc.parallelize(generateMultinomialLogisticInput(
-      coefficients, xMean, xVariance, true, nPoints, 1), 2)
-    val dataFrame = rdd.toDF("label", "features")
+    val data = generateMultinomialLogisticInput(
+      coefficients, xMean, xVariance, true, nPoints, 1).toDS()
+    val dataFrame = data.toDF("label", "features")
     val numClasses = 3
     val numIterations = 100
     val layers = Array[Int](4, 5, 4, numClasses)
@@ -138,9 +138,9 @@ class MultilayerPerceptronClassifierSuite
       .setNumClasses(numClasses)
     lr.optimizer.setRegParam(0.0)
       .setNumIterations(numIterations)
-    val lrModel = lr.run(rdd.map(OldLabeledPoint.fromML))
+    val lrModel = lr.run(data.rdd.map(OldLabeledPoint.fromML))
     val lrPredictionAndLabels =
-      lrModel.predict(rdd.map(p => OldVectors.fromML(p.features))).zip(rdd.map(_.label))
+      lrModel.predict(data.rdd.map(p => OldVectors.fromML(p.features))).zip(data.rdd.map(_.label))
     // MLP's predictions should not differ a lot from LR's.
     val lrMetrics = new MulticlassMetrics(lrPredictionAndLabels)
     val mlpMetrics = new MulticlassMetrics(mlpPredictionAndLabels)

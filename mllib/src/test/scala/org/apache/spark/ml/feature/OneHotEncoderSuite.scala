@@ -32,7 +32,7 @@ class OneHotEncoderSuite
   import testImplicits._
 
   def stringIndexed(): DataFrame = {
-    val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
+    val data = Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c"))
     val df = data.toDF("id", "label")
     val indexer = new StringIndexer()
       .setInputCol("label")
