@@ -1046,12 +1046,12 @@ class GeneralizedLinearRegressionSuite
       [1] 12.92681
       [1] 13.32836
      */
-    val dataset = spark.createDataFrame(Seq(
+    val dataset = Seq(
       LabeledPoint(1, Vectors.dense(5, 0)),
       LabeledPoint(0, Vectors.dense(2, 1)),
       LabeledPoint(1, Vectors.dense(1, 2)),
       LabeledPoint(0, Vectors.dense(3, 3))
-    ))
+    ).toDF()
     val expected = Seq(12.88188, 12.92681, 13.32836)
 
     var idx = 0

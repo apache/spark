@@ -39,7 +39,7 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
       Vectors.sparse(3, Array(0, 2), Array(5, 5)),
       Vectors.sparse(3, Array(0), Array(-2.5)))
 
-    val df = spark.createDataFrame(data.zip(expected)).toDF("features", "expected")
+    val df = data.zip(expected).toSeq.toDF("features", "expected")
     val scaler = new MinMaxScaler()
       .setInputCol("features")
       .setOutputCol("scaled")
@@ -104,7 +104,7 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
       Vectors.dense(-1.0, Double.NaN, -5.0, -5.0),
       Vectors.dense(5.0, 0.0, 5.0, Double.NaN))
 
-    val df = spark.createDataFrame(data.zip(expected)).toDF("features", "expected")
+    val df = data.zip(expected).toSeq.toDF("features", "expected")
     val scaler = new MinMaxScaler()
       .setInputCol("features")
       .setOutputCol("scaled")
