@@ -429,6 +429,10 @@ case class DescribeTableCommand(
           describeFormattedTableInfo(metadata, result)
         }
       } else {
+        if (DDLUtils.isDatasourceTable(metadata)) {
+          throw new AnalysisException(
+            s"DESC PARTITION is not allowed on a datasource table: ${table.identifier}")
+        }
         val partition = catalog.getPartition(table, partitionSpec)
         if (isExtended) {
           describeExtendedDetailPartitionInfo(table, metadata, partition, result)

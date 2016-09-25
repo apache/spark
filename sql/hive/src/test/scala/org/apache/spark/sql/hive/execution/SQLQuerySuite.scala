@@ -384,6 +384,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("DESC partitioned_table PARTITION (c='Us', d)")
       }.getMessage()
       assert(m3.contains("Unsupported SQL statement"))
+
+      spark
+        .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
+        .partitionBy("d")
+        .saveAsTable("datasource_table")
+      val m4 = intercept[AnalysisException] {
+        sql("DESC datasource_table PARTITION (d=2)")
+      }.getMessage()
+      assert(m4.contains("DESC PARTITION is not allowed on a datasource table"))
     }
   }
 
