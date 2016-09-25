@@ -67,29 +67,34 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                          HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
     """
     Logistic regression.
-    This class supports binary and multinomial classification.
+    This class supports multinomial logistic (softmax) and binomial logistic regression.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
-    >>> df = sc.parallelize([
+    >>> bdf = sc.parallelize([
     ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
     ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], []))]).toDF()
-    >>> lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
-    >>> model = lr.fit(df)
-    >>> model.coefficients
+    >>> blor = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
+    >>> blorModel = blor.fit(bdf)
+    >>> blorModel.coefficients
     DenseVector([5.5...])
-    >>> model.intercept
+    >>> blorModel.intercept
     -2.68...
-    >>> lrm = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight",
+    >>> mdf = sc.parallelize([
+    ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
+    ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], [])),
+    ...     Row(label=2.0, weight=2.0, features=Vectors.dense(3.0))]).toDF()
+    >>> mlor = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight",
     ...     family="multinomial")
-    >>> modelm = lrm.fit(df)
-    >>> print(modelm.coefficientMatrix)
-    DenseMatrix([[-3.2...],
-                 [ 3.2...]])
-    >>> modelm.interceptVector
-    DenseVector([1.4..., -1.4...])
+    >>> mlorModel = mlor.fit(mdf)
+    >>> print(mlorModel.coefficientMatrix)
+    DenseMatrix([[-2.3...],
+                 [ 0.2...],
+                 [ 2.1... ]])
+    >>> mlorModel.interceptVector
+    DenseVector([2.0..., 0.8..., -2.8...])
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
-    >>> result = model.transform(test0).head()
+    >>> result = blorModel.transform(test0).head()
     >>> result.prediction
     0.0
     >>> result.probability
@@ -97,23 +102,23 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> result.rawPrediction
     DenseVector([8.22..., -8.22...])
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
-    >>> model.transform(test1).head().prediction
+    >>> blorModel.transform(test1).head().prediction
     1.0
-    >>> lr.setParams("vector")
+    >>> blor.setParams("vector")
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
     >>> lr_path = temp_path + "/lr"
-    >>> lr.save(lr_path)
+    >>> blor.save(lr_path)
     >>> lr2 = LogisticRegression.load(lr_path)
     >>> lr2.getMaxIter()
     5
     >>> model_path = temp_path + "/lr_model"
-    >>> model.save(model_path)
+    >>> blorModel.save(model_path)
     >>> model2 = LogisticRegressionModel.load(model_path)
-    >>> model.coefficients[0] == model2.coefficients[0]
+    >>> blorModel.coefficients[0] == model2.coefficients[0]
     True
-    >>> model.intercept == model2.intercept
+    >>> blorModel.intercept == model2.intercept
     True
 
     .. versionadded:: 1.3.0
@@ -271,7 +276,8 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
     @since("2.0.0")
     def coefficients(self):
         """
-        Model coefficients.
+        Model coefficients of binomial logistic regression.
+        An exception is thrown in the case of multinomial logistic regression.
         """
         return self._call_java("coefficients")
 
@@ -279,7 +285,8 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
     @since("1.4.0")
     def intercept(self):
         """
-        Model intercept.
+        Model intercept of binomial logistic regression.
+        An exception is thrown in the case of multinomial logistic regression.
         """
         return self._call_java("intercept")
 
