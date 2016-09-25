@@ -266,7 +266,7 @@ object SparkBuild extends PomBuild {
       DefaultMavenRepository,
       Resolver.mavenLocal,
       Resolver.bintrayRepo("palantir", "releases"),
-      Resolver.url("Bintray API Realm", url("https://api.bintray.com/maven/palantir/releases/spark"))(Patterns("[organisation]/[module]/[revision]/[artifact].[ext]")),
+      Resolver.url("Bintray API Realm", url("https://api.bintray.com/maven/palantir/releases/spark"))(Patterns("[organisation]/[module]/[revision]/[artifact]-[revision].[ext]")),
       Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
     ),
     externalResolvers := resolvers.value,
