@@ -100,16 +100,16 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
             // Nothing
           } else if ($isNullA) {
             return ${
-        order.nullOrdering match {
-          case NullsFirst => "-1"
-          case NullsLast => "1"
-        }};
+              order.nullOrdering match {
+                case NullsFirst => "-1"
+                case NullsLast => "1"
+              }};
           } else if ($isNullB) {
             return ${
-        order.nullOrdering match {
-          case NullsFirst => "1"
-          case NullsLast => "-1"
-        }};
+              order.nullOrdering match {
+                case NullsFirst => "1"
+                case NullsLast => "-1"
+              }};
           } else {
             int comp = ${ctx.genComp(order.child.dataType, primitiveA, primitiveB)};
             if (comp != 0) {
