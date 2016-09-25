@@ -180,7 +180,8 @@ test_that("add and get file to be downloaded with Spark job on every node", {
   unlink(path)
 
   # Test add directory recursively.
-  path <- tempdir()
+  path <- paste0(tempdir(), "/", "recursive_dir")
+  dir.create(path)
   dir_name <- basename(path)
   path1 <- paste0(path, "/", "hello.txt")
   file.create(path1)

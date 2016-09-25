@@ -236,7 +236,7 @@ setCheckpointDir <- function(sc, dirName) {
 #'
 #' @rdname spark.addFile
 #' @param path The path of the file to be added
-#' @param recursive Recursive or not if the path is directory. Default is FALSE.
+#' @param recursive Whether to add files recursively from the path. Default is FALSE.
 #' @export
 #' @examples
 #'\dontrun{
