@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.FileNotFoundException
+
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
@@ -137,7 +139,15 @@ object ListingFileCatalog extends Logging {
     paths.flatMap { path =>
       logTrace(s"Listing $path")
       val fs = path.getFileSystem(hadoopConf)
-      listLeafFiles0(fs, fs.getFileStatus(path), filter)
+
+      // [SPARK-17599] Prevent ListingFileCatalog from failing if path doesn't exist
+      val status: Option[FileStatus] = try Option(fs.getFileStatus(path)) catch {
+        case _: FileNotFoundException =>
+          logWarning(s"The directory $path was not found. Was it deleted very recently?")
+          None
+      }
+
+      status.map(listLeafFiles0(fs, _, filter)).getOrElse(Seq.empty)
     }
   }
 
