@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.FileNotFoundException
-
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.{FileStatus, LocatedFileStatus, Path}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.SerializableConfiguration
 
 
 /**
@@ -82,67 +83,14 @@ class ListingFileCatalog(
    * This is publicly visible for testing.
    */
   def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
-    if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession)
-    } else {
-      // Right now, the number of paths is less than the value of
-      // parallelPartitionDiscoveryThreshold. So, we will list file statues at the driver.
-      // If there is any child that has more files than the threshold, we will use parallel
-      // listing.
-
-      // Dummy jobconf to get to the pathFilter defined in configuration
-      val jobConf = new JobConf(hadoopConf, this.getClass)
-      val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-
-      val statuses: Seq[FileStatus] = paths.flatMap { path =>
-        val fs = path.getFileSystem(hadoopConf)
-        logTrace(s"Listing $path on driver")
-
-        val childStatuses = {
-          try {
-            val stats = fs.listStatus(path)
-            if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
-          } catch {
-            case _: FileNotFoundException =>
-              logWarning(s"The directory $path was not found. Was it deleted very recently?")
-              Array.empty[FileStatus]
-          }
-        }
-
-        childStatuses.map {
-          case f: LocatedFileStatus => f
-
-          // NOTE:
-          //
-          // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
-          //   operations, calling `getFileBlockLocations` does no harm here since these file system
-          //   implementations don't actually issue RPC for this method.
-          //
-          // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
-          //   be a big deal since we always use to `listLeafFilesInParallel` when the number of
-          //   paths exceeds threshold.
-          case f =>
-            if (f.isDirectory ) {
-              // If f is a directory, we do not need to call getFileBlockLocations (SPARK-14959).
-              f
-            } else {
-              HadoopFsRelation.createLocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
-            }
-        }
-      }.filterNot { status =>
-        val name = status.getPath.getName
-        HadoopFsRelation.shouldFilterOut(name)
-      }
-
-      val (dirs, files) = statuses.partition(_.isDirectory)
-
-      // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
-      if (dirs.isEmpty) {
-        mutable.LinkedHashSet(files: _*)
+    val files =
+      if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
+        ListingFileCatalog.listLeafFilesInParallel(paths, hadoopConf, sparkSession)
       } else {
-        mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath))
+        ListingFileCatalog.listLeafFilesInSerial(paths, hadoopConf)
       }
-    }
+
+    mutable.LinkedHashSet(files: _*)
   }
 
   override def equals(other: Any): Boolean = other match {
@@ -151,4 +99,161 @@ class ListingFileCatalog(
   }
 
   override def hashCode(): Int = paths.toSet.hashCode()
+}
+
+
+object ListingFileCatalog extends Logging {
+
+  // `FileStatus` is Writable but not serializable.  What make it worse, somehow it doesn't play
+  // well with `SerializableWritable`.  So there seems to be no way to serialize a `FileStatus`.
+  // Here we use `SerializableFileStatus` to extract key components of a `FileStatus` to serialize
+  // it from executor side and reconstruct it on driver side.
+  private case class SerializableBlockLocation(
+      names: Array[String],
+      hosts: Array[String],
+      offset: Long,
+      length: Long)
+
+  private case class SerializableFileStatus(
+      path: String,
+      length: Long,
+      isDir: Boolean,
+      blockReplication: Short,
+      blockSize: Long,
+      modificationTime: Long,
+      accessTime: Long,
+      blockLocations: Array[SerializableBlockLocation])
+
+  /**
+   * List a collection of path recursively.
+   */
+  private def listLeafFilesInSerial(
+      paths: Seq[Path],
+      hadoopConf: Configuration): Seq[FileStatus] = {
+    // Dummy jobconf to get to the pathFilter defined in configuration
+    val jobConf = new JobConf(hadoopConf, this.getClass)
+    val filter = FileInputFormat.getInputPathFilter(jobConf)
+
+    paths.flatMap { path =>
+      logTrace(s"Listing $path")
+      val fs = path.getFileSystem(hadoopConf)
+      listLeafFiles0(fs, fs.getFileStatus(path), filter)
+    }
+  }
+
+  /**
+   * List a collection of path recursively in parallel (using Spark executors).
+   * Each task launched will use [[listLeafFilesInSerial]] to list.
+   */
+  private def listLeafFilesInParallel(
+      paths: Seq[Path],
+      hadoopConf: Configuration,
+      sparkSession: SparkSession): Seq[FileStatus] = {
+    assert(paths.size >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold)
+    logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
+
+    val sparkContext = sparkSession.sparkContext
+    val serializableConfiguration = new SerializableConfiguration(hadoopConf)
+    val serializedPaths = paths.map(_.toString)
+
+    // Set the number of parallelism to prevent following file listing from generating many tasks
+    // in case of large #defaultParallelism.
+    val numParallelism = Math.min(paths.size, 10000)
+
+    val statuses = sparkContext
+      .parallelize(serializedPaths, numParallelism)
+      .mapPartitions { paths =>
+        val hadoopConf = serializableConfiguration.value
+        listLeafFilesInSerial(paths.map(new Path(_)).toSeq, hadoopConf).iterator
+      }.map { status =>
+        // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
+        val blockLocations = status match {
+          case f: LocatedFileStatus =>
+            f.getBlockLocations.map { loc =>
+              SerializableBlockLocation(
+                loc.getNames,
+                loc.getHosts,
+                loc.getOffset,
+                loc.getLength)
+            }
+
+          case _ =>
+            Array.empty[SerializableBlockLocation]
+        }
+
+        SerializableFileStatus(
+          status.getPath.toString,
+          status.getLen,
+          status.isDirectory,
+          status.getReplication,
+          status.getBlockSize,
+          status.getModificationTime,
+          status.getAccessTime,
+          blockLocations)
+      }.collect()
+
+    // Turn SerializableFileStatus back to Status
+    statuses.map { f =>
+      val blockLocations = f.blockLocations.map { loc =>
+        new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
+      }
+      new LocatedFileStatus(
+        new FileStatus(
+          f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime, new Path(f.path)),
+        blockLocations)
+    }
+  }
+
+  /**
+   * List a single path, provided as a FileStatus, in serial.
+   */
+  private def listLeafFiles0(
+      fs: FileSystem, status: FileStatus, filter: PathFilter): Seq[FileStatus] = {
+    logTrace(s"Listing ${status.getPath}")
+    val name = status.getPath.getName.toLowerCase
+    if (shouldFilterOut(name)) {
+      Seq.empty[FileStatus]
+    } else {
+      val statuses = {
+        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
+        val stats = files ++ dirs.flatMap(dir => listLeafFiles0(fs, dir, filter))
+        if (filter != null) stats.filter(f => filter.accept(f.getPath)) else stats
+      }
+      // statuses do not have any dirs.
+      statuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
+        case f: LocatedFileStatus =>
+          f
+
+        // NOTE:
+        //
+        // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
+        //   operations, calling `getFileBlockLocations` does no harm here since these file system
+        //   implementations don't actually issue RPC for this method.
+        //
+        // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
+        //   be a big deal since we always use to `listLeafFilesInParallel` when the number of
+        //   paths exceeds threshold.
+        case f =>
+          // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),
+          // which is very slow on some file system (RawLocalFileSystem, which is launch a
+          // subprocess and parse the stdout).
+          val locations = fs.getFileBlockLocations(f, 0, f.getLen)
+          val lfs = new LocatedFileStatus(f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
+            f.getModificationTime, 0, null, null, null, null, f.getPath, locations)
+          if (f.isSymlink) {
+            lfs.setSymlink(f.getSymlink)
+          }
+          lfs
+      }
+    }
+  }
+
+  /** Checks if we should filter out this path name. */
+  def shouldFilterOut(pathName: String): Boolean = {
+    // We filter everything that starts with _ and ., except _common_metadata and _metadata
+    // because Parquet needs to find those metadata files from leaf files returned by this method.
+    // We should refactor this logic to not mix metadata files with data files.
+    ((pathName.startsWith("_") && !pathName.contains("=")) || pathName.startsWith(".")) &&
+      !pathName.startsWith("_common_metadata") && !pathName.startsWith("_metadata")
+  }
 }
