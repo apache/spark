@@ -76,12 +76,13 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("values")
       .setBucketLength(4.0)
 
-    val (precision, recall) = LSHTest.checkApproxNearestNeighbors(rp, df, key, 10)
+    val (precision, recall) = LSHTest.checkApproxNearestNeighbors(rp, df, key, 10,
+      singleProbing = true)
     assert(precision >= 0.7)
     assert(recall >= 0.7)
   }
 
-  test("approxNearestNeighbors for small bucket and large k") {
+  test("approxNearestNeighbors with multiple probing") {
     val data = {
       for (i <- -10 until 10; j <- -10 until 10) yield Vectors.dense(i.toDouble, j.toDouble)
     }
@@ -94,7 +95,8 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("values")
       .setBucketLength(1.0)
 
-    val (precision, recall) = LSHTest.checkApproxNearestNeighbors(rp, df, key, 100)
+    val (precision, recall) = LSHTest.checkApproxNearestNeighbors(rp, df, key, 100,
+      singleProbing = false)
     assert(precision >= 0.7)
     assert(recall >= 0.7)
   }

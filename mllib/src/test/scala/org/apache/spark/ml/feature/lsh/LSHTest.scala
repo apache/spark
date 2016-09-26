@@ -78,7 +78,8 @@ private[ml] object LSHTest {
    * @return A tuple of two doubles, representing precision and recall rate
    */
   def checkApproxNearestNeighbors[KeyType, T <: LSHModel[KeyType, T]]
-  (lsh: LSH[KeyType, T], dataset: Dataset[_], key: KeyType, k: Int): (Double, Double) = {
+  (lsh: LSH[KeyType, T], dataset: Dataset[_], key: KeyType, k: Int,
+   singleProbing: Boolean): (Double, Double) = {
     val model = lsh.fit(dataset)
 
     // Compute expected
@@ -86,7 +87,7 @@ private[ml] object LSHTest {
     val expected = dataset.sort(distUDF(col(model.getInputCol))).limit(k)
 
     // Compute actual
-    val actual = model.approxNearestNeighbors(dataset, key, k)
+    val actual = model.approxNearestNeighbors(dataset, key, k, singleProbing)
 
     // Compute precision and recall
     val correctCount = expected.join(actual, model.getInputCol).count().toDouble

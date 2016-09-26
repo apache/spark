@@ -123,14 +123,21 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
   /**
    * Given a large dataset and an item, approximately find at most k items which have the closest
    * distance to the item.
+   *
+   * This method has implemented two way of fetching k nearest neighbors:
+   *    Single Probing: Fast, return at most k elements (Probing only one buckets)
+   *    Multiple Probing: Slow, return exact k elements (Probing multiple buckets close to the key)
+   *
    * @param dataset the dataset to look for the key
    * @param key The key to hash for the item
    * @param k The maximum number of items closest to the key
+   * @param singleProbing True for using Single Probing; false for multiple probing
    * @param distCol The column to store the distance between pairs
    * @return A dataset containing at most k items closest to the key. A distCol is added to show
    *         the distance between each record and the key.
    */
   def approxNearestNeighbors(dataset: Dataset[_], key: KeyType, k: Int = 1,
+                             singleProbing: Boolean = true,
                              distCol: String = "distance"): Dataset[_] = {
     assert(k > 0, "The number of nearest neighbors cannot be less than 1")
     // Get Hash Value of the key v
@@ -141,13 +148,17 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
     val hashDistUDF = udf((x: Vector) => hashDistance(x, keyHash), DataTypes.DoubleType)
     val hashDistCol = hashDistUDF(col($(outputCol)))
 
-    // Compute threshold to get exact k elements.
-    val modelDatasetSortedByHash = modelDataset.sort(hashDistCol).limit(k)
-    val thresholdDataset = modelDatasetSortedByHash.select(max(hashDistCol))
-    val hashThreshold = thresholdDataset.collect()(0)(0).asInstanceOf[Double]
+    val modelSubset = if (singleProbing) {
+      modelDataset.filter(hashDistCol === 0.0)
+    } else {
+      // Compute threshold to get exact k elements.
+      val modelDatasetSortedByHash = modelDataset.sort(hashDistCol).limit(k)
+      val thresholdDataset = modelDatasetSortedByHash.select(max(hashDistCol))
+      val hashThreshold = thresholdDataset.collect()(0)(0).asInstanceOf[Double]
 
-    // Filter the dataset where the hash value is less than the threshold.
-    val modelSubset = modelDataset.filter(hashDistCol <= hashThreshold)
+      // Filter the dataset where the hash value is less than the threshold.
+      modelDataset.filter(hashDistCol <= hashThreshold)
+    }
 
     // Get the top k nearest neighbor by their distance to the key
     val keyDistUDF = udf((x: KeyType) => keyDistance(x, key), DataTypes.DoubleType)
