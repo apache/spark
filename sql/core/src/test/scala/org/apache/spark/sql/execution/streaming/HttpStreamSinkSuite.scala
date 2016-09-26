@@ -1,11 +1,8 @@
 package org.apache.spark.sql.execution.streaming
 
-import java.util
+import spark.{Response, Request, Route, Spark}
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.types.{StructField, StructType, StringType}
-import spark.{Route, Spark, Request, Response}
-import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.SharedSQLContext
 import org.scalatest.BeforeAndAfter
