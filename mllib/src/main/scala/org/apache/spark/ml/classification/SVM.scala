@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import breeze.linalg.{DenseVector => BDV}
-import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
+import breeze.optimize.{CachedDiffFunction, DiffFunction, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 import scala.collection.mutable
 
@@ -39,11 +39,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.types.DoubleType
-import org.apache.spark.util.VersionUtils
 
 /** Params for SVM. */
-private[ml] trait SVMParams extends ProbabilisticClassifierParams
-  with HasSeed with HasStepSize with HasRegParam with HasMaxIter
+private[ml] trait SVMParams extends PredictorParams with HasRegParam with HasMaxIter
   with HasFitIntercept with HasTol with HasStandardization with HasWeightCol with HasThreshold
   with HasAggregationDepth {
 
@@ -51,7 +49,8 @@ private[ml] trait SVMParams extends ProbabilisticClassifierParams
 
 /**
  * :: Experimental ::
- * SVM with Hinge and OWLQN
+ * SVM with Hinge and OWLQN.
+ * Currently only Binary classification is supported.
  */
 @Since("2.1.0")
 @Experimental
@@ -93,14 +92,6 @@ class SVM @Since("2.1.0") (
   @Since("2.1.0")
   def setTol(value: Double): this.type = set(tol, value)
   setDefault(tol -> 1E-6)
-
-  /**
-   * Set the seed for weights initialization if weights are not set
-   *
-   * @group setParam
-   */
-  @Since("2.1.0")
-  def setSeed(value: Long): this.type = set(seed, value)
 
   @Since("2.1.0")
   override def copy(extra: ParamMap): SVM = defaultCopy(extra)
@@ -159,12 +150,6 @@ class SVM @Since("2.1.0") (
           s"less than the number of unique labels ${histogram.length}.")
         n
       case None => histogram.length
-    }
-
-    if (isDefined(thresholds)) {
-      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
-        ".train() called with non-matching numClasses and thresholds.length." +
-        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
     instr.logNumClasses(numClasses)
