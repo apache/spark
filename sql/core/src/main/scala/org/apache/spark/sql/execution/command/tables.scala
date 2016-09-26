@@ -433,7 +433,7 @@ case class DescribeTableCommand(
           describeFormattedTableInfo(metadata, result)
         }
       } else {
-        describeDetailPartitionInfo(catalog, metadata, result)
+        describeDetailedPartitionInfo(catalog, metadata, result)
       }
     }
 
@@ -507,7 +507,7 @@ case class DescribeTableCommand(
     }
   }
 
-  private def describeDetailPartitionInfo(
+  private def describeDetailedPartitionInfo(
       catalog: SessionCatalog,
       metadata: CatalogTable,
       result: ArrayBuffer[Row]): Unit = {
@@ -521,14 +521,14 @@ case class DescribeTableCommand(
     }
     val partition = catalog.getPartition(table, partitionSpec)
     if (isExtended) {
-      describeExtendedDetailPartitionInfo(table, metadata, partition, result)
+      describeExtendedDetailedPartitionInfo(table, metadata, partition, result)
     } else if (isFormatted) {
-      describeFormattedDetailPartitionInfo(table, metadata, partition, result)
+      describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
       describeStorageInfo(metadata, result)
     }
   }
 
-  private def describeExtendedDetailPartitionInfo(
+  private def describeExtendedDetailedPartitionInfo(
       tableIdentifier: TableIdentifier,
       table: CatalogTable,
       partition: CatalogTablePartition,
@@ -537,7 +537,7 @@ case class DescribeTableCommand(
     append(buffer, "Detailed Partition Information " + partition.toString, "", "")
   }
 
-  private def describeFormattedDetailPartitionInfo(
+  private def describeFormattedDetailedPartitionInfo(
       tableIdentifier: TableIdentifier,
       table: CatalogTable,
       partition: CatalogTablePartition,
