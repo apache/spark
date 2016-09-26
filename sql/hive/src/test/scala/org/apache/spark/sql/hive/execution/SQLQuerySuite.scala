@@ -136,6 +136,18 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-17517: broadcast join with duplicated build side keys") {
+    val df = Seq((1, 1), (1, 2)).toDF("key", "value")
+    df.createOrReplaceTempView("kent")
+    val query =
+      sql("select t1.key, t1.value, t2.key, t2.value from kent t1 join kent t2 on t1.key = t2.key")
+    checkAnswer(query,
+      Row(1, 1, 1, 1) ::
+      Row(1, 1, 1, 2) ::
+      Row(1, 2, 1, 1) ::
+      Row(1, 2, 1, 2) :: Nil)
+  }
+
   test("SPARK-6851: Self-joined converted parquet tables") {
     val orders = Seq(
       Order(1, "Atlas", "MTB", 234, "2015-01-07", "John D", "Pacifica", "CA", 20151),
