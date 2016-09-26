@@ -27,10 +27,12 @@ class JDBCOptions(
   // ------------------------------------------------------------
   // Required parameters
   // ------------------------------------------------------------
+  require(parameters.isDefinedAt("url"), "Option 'url' is required.")
+  require(parameters.isDefinedAt("dbtable"), "Option 'dbtable' is required.")
   // a JDBC URL
-  val url = parameters.getOrElse("url", sys.error("Option 'url' not specified"))
+  val url = parameters("url")
   // name of table
-  val table = parameters.getOrElse("dbtable", sys.error("Option 'dbtable' not specified"))
+  val table = parameters("dbtable")
 
   // ------------------------------------------------------------
   // Optional parameter list
@@ -43,6 +45,11 @@ class JDBCOptions(
   val upperBound = parameters.getOrElse("upperBound", null)
   // the number of partitions
   val numPartitions = parameters.getOrElse("numPartitions", null)
+
+  require(partitionColumn == null ||
+    (lowerBound != null && upperBound != null && numPartitions != null),
+    "If 'partitionColumn' is specified then 'lowerBound', 'upperBound'," +
+      " and 'numPartitions' are required.")
 
   // ------------------------------------------------------------
   // The options for DataFrameWriter

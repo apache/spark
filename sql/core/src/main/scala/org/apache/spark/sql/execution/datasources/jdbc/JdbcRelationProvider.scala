@@ -19,37 +19,102 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.util.Properties
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, RelationProvider}
+import scala.collection.JavaConverters.mapAsJavaMapConverter
 
-class JdbcRelationProvider extends RelationProvider with DataSourceRegister {
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
+
+class JdbcRelationProvider extends CreatableRelationProvider
+  with RelationProvider with DataSourceRegister {
 
   override def shortName(): String = "jdbc"
 
-  /** Returns a new base relation with the given parameters. */
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     val jdbcOptions = new JDBCOptions(parameters)
-    if (jdbcOptions.partitionColumn != null
-      && (jdbcOptions.lowerBound == null
-        || jdbcOptions.upperBound == null
-        || jdbcOptions.numPartitions == null)) {
-      sys.error("Partitioning incompletely specified")
-    }
+    val partitionColumn = jdbcOptions.partitionColumn
+    val lowerBound = jdbcOptions.lowerBound
+    val upperBound = jdbcOptions.upperBound
+    val numPartitions = jdbcOptions.numPartitions
 
-    val partitionInfo = if (jdbcOptions.partitionColumn == null) {
+    val partitionInfo = if (partitionColumn == null) {
       null
     } else {
       JDBCPartitioningInfo(
-        jdbcOptions.partitionColumn,
-        jdbcOptions.lowerBound.toLong,
-        jdbcOptions.upperBound.toLong,
-        jdbcOptions.numPartitions.toInt)
+        partitionColumn, lowerBound.toLong, upperBound.toLong, numPartitions.toInt)
     }
     val parts = JDBCRelation.columnPartition(partitionInfo)
     val properties = new Properties() // Additional properties that we will pass to getConnection
     parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
     JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties)(sqlContext.sparkSession)
+  }
+
+  /*
+   * The following structure applies to this code:
+   *                 |    tableExists            |          !tableExists
+   *------------------------------------------------------------------------------------
+   * Ignore          | BaseRelation              | CreateTable, saveTable, BaseRelation
+   * ErrorIfExists   | ERROR                     | CreateTable, saveTable, BaseRelation
+   * Overwrite*      | (DropTable, CreateTable,) | CreateTable, saveTable, BaseRelation
+   *                 | saveTable, BaseRelation   |
+   * Append          | saveTable, BaseRelation   | CreateTable, saveTable, BaseRelation
+   *
+   * *Overwrite & tableExists with truncate, will not drop & create, but instead truncate
+   */
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    val jdbcOptions = new JDBCOptions(parameters)
+    val url = jdbcOptions.url
+    val table = jdbcOptions.table
+
+    val props = new Properties()
+    props.putAll(parameters.asJava)
+    val conn = JdbcUtils.createConnectionFactory(url, props)()
+
+    try {
+      val tableExists = JdbcUtils.tableExists(conn, url, table)
+
+      val (doCreate, doSave) = (mode, tableExists) match {
+        case (SaveMode.Ignore, true) => (false, false)
+        case (SaveMode.ErrorIfExists, true) => throw new AnalysisException(
+          s"Table or view '$table' already exists, and SaveMode is set to ErrorIfExists.")
+        case (SaveMode.Overwrite, true) =>
+          if (jdbcOptions.isTruncate && JdbcUtils.isCascadingTruncateTable(url) == Some(false)) {
+            JdbcUtils.truncateTable(conn, table)
+            (false, true)
+          } else {
+            JdbcUtils.dropTable(conn, table)
+            (true, true)
+          }
+        case (SaveMode.Append, true) => (false, true)
+        case (_, true) => throw new IllegalArgumentException(s"Unexpected SaveMode, '$mode'," +
+          " for handling existing tables.")
+        case (_, false) => (true, true)
+      }
+
+      if (doCreate) {
+        val schema = JdbcUtils.schemaString(data, url)
+        // To allow certain options to append when create a new table, which can be
+        // table_options or partition_options.
+        // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+        val createtblOptions = jdbcOptions.createTableOptions
+        val sql = s"CREATE TABLE $table ($schema) $createtblOptions"
+        val statement = conn.createStatement
+        try {
+          statement.executeUpdate(sql)
+        } finally {
+          statement.close()
+        }
+      }
+      if (doSave) JdbcUtils.saveTable(data, url, table, props)
+    } finally {
+      conn.close()
+    }
+
+    createRelation(sqlContext, parameters)
   }
 }
