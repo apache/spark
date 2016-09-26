@@ -433,6 +433,10 @@ case class DescribeTableCommand(
           describeFormattedTableInfo(metadata, result)
         }
       } else {
+        if (metadata.tableType == CatalogTableType.VIEW) {
+          throw new AnalysisException(
+            s"DESC PARTITION is not allowed on a view: ${table.identifier}")
+        }
         if (DDLUtils.isDatasourceTable(metadata)) {
           throw new AnalysisException(
             s"DESC PARTITION is not allowed on a datasource table: ${table.identifier}")
@@ -536,9 +540,6 @@ case class DescribeTableCommand(
     append(buffer, "Partition Value:", s"[${partition.spec.values.mkString(", ")}]", "")
     append(buffer, "Database:", table.database, "")
     append(buffer, "Table:", tableIdentifier.table, "")
-    append(buffer, "Create Time:", "UNKNOWN", "")
-    append(buffer, "Last Access Time:", "UNKNOWN", "")
-    append(buffer, "Protect Mode:", "None", "")
     append(buffer, "Location:", partition.storage.locationUri.getOrElse(""), "")
     append(buffer, "Partition Parameters:", "", "")
     partition.parameters.foreach { case (key, value) =>

@@ -365,7 +365,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         "Partition Value:",
         "Database:",
         "Table:",
-        "Create Time:",
         "Location:",
         "Partition Parameters:",
         "# Storage Information")
@@ -396,9 +395,17 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
       val m5 = intercept[AnalysisException] {
         spark.range(10).select('id as 'a, 'id as 'b).createTempView("view1")
-        sql("DESC view1 PARTITION (c='Us', d=1)").show()
+        sql("DESC view1 PARTITION (c='Us', d=1)")
       }.getMessage()
       assert(m5.contains("DESC PARTITION is not allowed on a temporary view"))
+
+      withView("permanent_view") {
+        val m = intercept[AnalysisException] {
+          sql("CREATE VIEW permanent_view AS SELECT * FROM partitioned_table")
+          sql("DESC permanent_view PARTITION (c='Us', d=1)")
+        }.getMessage()
+        assert(m.contains("DESC PARTITION is not allowed on a view"))
+      }
     }
   }
 
