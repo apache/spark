@@ -139,6 +139,4 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
       }
     }
   }
-
-
 }

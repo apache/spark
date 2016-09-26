@@ -648,7 +648,6 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     assertDataStructuresEmpty(noFailure = false)
   }
 
-
   def testNoBlacklist(name: String)(body: => Unit): Unit = {
     // in these simple tests, we only have one executor, so it doens't make sense to turn on the
     // blacklist.  Just an artifact of this simple test-framework still kinda acting like local-mode
