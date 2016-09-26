@@ -2628,7 +2628,8 @@ setMethod("write.df",
               stop("path should be charactor, null or omitted.")
             }
             if (!is.character(source) && !is.null(source)) {
-              stop("source should be charactor, null or omitted. It is 'parquet' by default.")
+              stop("source should be character, null or omitted. It is the datasource specified ",
+                   "in 'spark.sql.sources.default' configuration by default.")
             }
             if (!is.character(mode)) {
               stop("mode should be charactor or omitted. It is 'error' by default.")

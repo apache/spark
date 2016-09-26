@@ -2553,7 +2553,8 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
 
   # Arguments checking in R side.
   expect_error(write.df(df, "data.tmp", source = c(1, 2)),
-               "source should be charactor, null or omitted. It is 'parquet' by default.")
+               paste("source should be character, null or omitted. It is the datasource specified",
+                     "in 'spark.sql.sources.default' configuration by default."))
   expect_error(write.df(df, path = c(3)),
                "path should be charactor, null or omitted.")
   expect_error(write.df(df, mode = TRUE),
@@ -2572,7 +2573,8 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
   expect_error(read.df(path = c(3)),
                "path should be charactor, null or omitted.")
   expect_error(read.df(jsonPath, source = c(1, 2)),
-               "source should be charactor, null or omitted. It is 'parquet' by default.")
+               paste("source should be character, null or omitted. It is the datasource specified",
+                     "in 'spark.sql.sources.default' configuration by default."))
 })
 
 unlink(parquetPath)
