@@ -743,8 +743,12 @@ setMethod("toJSON",
 #' @note write.json since 1.6.0
 setMethod("write.json",
           signature(x = "SparkDataFrame", path = "character"),
-          function(x, path) {
+          function(x, path, mode = "error", ...) {
+            options <- varargsToStrEnv(...)
+            jmode <- convertToJSaveMode(mode)
             write <- callJMethod(x@sdf, "write")
+            write <- callJMethod(write, "options", options)
+            write <- callJMethod(write, "mode", jmode)
             invisible(callJMethod(write, "json", path))
           })
 
@@ -771,8 +775,12 @@ setMethod("write.json",
 #' @note write.orc since 2.0.0
 setMethod("write.orc",
           signature(x = "SparkDataFrame", path = "character"),
-          function(x, path) {
+          function(x, path, mode = "error", ...) {
+            options <- varargsToStrEnv(...)
+            jmode <- convertToJSaveMode(mode)
             write <- callJMethod(x@sdf, "write")
+            write <- callJMethod(write, "options", options)
+            write <- callJMethod(write, "mode", jmode)
             invisible(callJMethod(write, "orc", path))
           })
 
@@ -800,8 +808,12 @@ setMethod("write.orc",
 #' @note write.parquet since 1.6.0
 setMethod("write.parquet",
           signature(x = "SparkDataFrame", path = "character"),
-          function(x, path) {
+          function(x, path, mode = "error", ...) {
+            options <- varargsToStrEnv(...)
+            jmode <- convertToJSaveMode(mode)
             write <- callJMethod(x@sdf, "write")
+            write <- callJMethod(write, "options", options)
+            write <- callJMethod(write, "mode", jmode)
             invisible(callJMethod(write, "parquet", path))
           })
 
@@ -841,8 +853,12 @@ setMethod("saveAsParquetFile",
 #' @note write.text since 2.0.0
 setMethod("write.text",
           signature(x = "SparkDataFrame", path = "character"),
-          function(x, path) {
+          function(x, path, mode = "error", ...) {
+            options <- varargsToStrEnv(...)
+            jmode <- convertToJSaveMode(mode)
             write <- callJMethod(x@sdf, "write")
+            write <- callJMethod(write, "options", options)
+            write <- callJMethod(write, "mode", jmode)
             invisible(callJMethod(write, "text", path))
           })
 

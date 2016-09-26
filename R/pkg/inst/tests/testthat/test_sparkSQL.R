@@ -514,6 +514,19 @@ test_that("read/write json files", {
   unlink(jsonPath3)
 })
 
+test_that("read/write json files - compression option", {
+  df <- read.df(jsonPath, "json")
+
+  jsonPath <- tempfile(pattern = "jsonPath", fileext = ".json")
+  write.json(df, jsonPath, compression = "gzip")
+  jsonDF <- read.json(jsonPath)
+  expect_is(jsonDF, "SparkDataFrame")
+  expect_equal(count(jsonDF), count(df))
+  expect_true(length(list.files(jsonPath, pattern = ".gz")) > 0)
+
+  unlink(jsonPath)
+})
+
 test_that("jsonRDD() on a RDD with json string", {
   sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   rdd <- parallelize(sc, mockLines)
@@ -1803,6 +1816,21 @@ test_that("read/write ORC files", {
   unsetHiveContext()
 })
 
+test_that("read/write ORC files - compression option", {
+  setHiveContext(sc)
+  df <- read.df(jsonPath, "json")
+
+  orcPath2 <- tempfile(pattern = "orcPath2", fileext = ".orc")
+  write.orc(df, orcPath2, compression = "ZLIB")
+  orcDF <- read.orc(orcPath2)
+  expect_is(orcDF, "SparkDataFrame")
+  expect_equal(count(orcDF), count(df))
+  expect_true(length(list.files(orcPath, pattern = ".zlib.orc")) > 0)
+
+  unlink(orcPath2)
+  unsetHiveContext()
+})
+
 test_that("read/write Parquet files", {
   df <- read.df(jsonPath, "json")
   # Test write.df and read.df
@@ -1834,6 +1862,23 @@ test_that("read/write Parquet files", {
   unlink(parquetPath4)
 })
 
+test_that("read/write Parquet files - compression option/mode", {
+  df <- read.df(jsonPath, "json")
+  tempPath <- tempfile(pattern = "tempPath", fileext = ".parquet")
+
+  # Test write.df and read.df
+  write.parquet(df, tempPath, compression = "GZIP")
+  df2 <- read.parquet(tempPath)
+  expect_is(df2, "SparkDataFrame")
+  expect_equal(count(df2), 3)
+  expect_true(length(list.files(tempPath, pattern = ".gz.parquet")) > 0)
+
+  write.parquet(df, tempPath, mode = "overwrite")
+  df3 <- read.parquet(tempPath)
+  expect_is(df3, "SparkDataFrame")
+  expect_equal(count(df3), 3)
+})
+
 test_that("read/write text files", {
   # Test write.df and read.df
   df <- read.df(jsonPath, "text")
@@ -1853,6 +1898,19 @@ test_that("read/write text files", {
 
   unlink(textPath)
   unlink(textPath2)
+})
+
+test_that("read/write text files - compression option", {
+  df <- read.df(jsonPath, "text")
+
+  textPath <- tempfile(pattern = "textPath", fileext = ".txt")
+  write.text(df, textPath, compression = "GZIP")
+  textDF <- read.text(textPath)
+  expect_is(textDF, "SparkDataFrame")
+  expect_equal(count(textDF), count(df))
+  expect_true(length(list.files(textPath, pattern = ".gz")) > 0)
+
+  unlink(textPath)
 })
 
 test_that("describe() and summarize() on a DataFrame", {
