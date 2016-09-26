@@ -1438,7 +1438,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.authenticate.sasl.encryption.aes.enabled</code></td>
   <td>false</td>
   <td>
-    Enable AES cipher as SASL authentication encrypt backend, when SASL authentication
+    Enable AES cipher as SASL authentication encryption backend, when SASL authentication
     is enabled.
   </td>
 </tr>

@@ -40,10 +40,13 @@ import org.slf4j.LoggerFactory;
  * AES cipher for encryption and decryption.
  */
 public class SparkAesCipher {
+  public final static String AES_CBC_NOPADDING = "AES/CBC/NoPadding";
+  public final static String AES_CTR_NOPADDING = "AES/CTR/NoPadding";
+  public final static String AES_CTR_PKCS5Padding = "AES/CTR/PKCS5Padding";
   private static final Logger logger = LoggerFactory.getLogger(SparkAesCipher.class);
   private static final byte[] EMPTY_BYTE_ARRAY = new byte[0];
   public final static String supportedTransformation[] = {
-    "AES/CBC/NoPadding", "AES/CTR/NoPadding"
+    AES_CBC_NOPADDING, AES_CTR_NOPADDING, AES_CTR_PKCS5Padding
   };
 
   private final CryptoCipher encryptor;
@@ -104,9 +107,9 @@ public class SparkAesCipher {
 
     // Padding based on cipher
     byte[] padding;
-    if ("AES/CBC/NoPadding".equals(encryptor.getAlgorithm())) {
+    if (AES_CBC_NOPADDING.equals(encryptor.getAlgorithm())) {
       int bs = encryptor.getBlockSize();
-      int pad = bs - (len + 10) % bs;
+      int pad = bs - (len + Integrity.HMAC_SIZE) % bs;
       padding = new byte[pad];
       for (int i = 0; i < pad; i ++) {
         padding[i] = (byte) pad;
@@ -115,19 +118,26 @@ public class SparkAesCipher {
       padding = EMPTY_BYTE_ARRAY;
     }
 
-    // Encrypt
-    byte[] encrypted = new byte[len + 10 + padding.length + 4];
+    // Input contains {msg, pad, HMAC(Key, {SeqNum, msg}[0..9])}
+    byte[] toBeEncrypted = new byte[len + Integrity.HMAC_SIZE + padding.length];
+    System.arraycopy(data, offset, toBeEncrypted, 0, len);
+    System.arraycopy(padding, 0, toBeEncrypted, len, padding.length);
+    System.arraycopy(mac, 0, toBeEncrypted, len+padding.length, Integrity.HMAC_SIZE);
+
+    // Output contains {msg, pad, HMAC(Key, {SeqNum, msg}[0..9]),SeqNum}
+    byte[] encrypted = new byte[len + Integrity.HMAC_SIZE +
+      padding.length + Integrity.SEQ_NUM_SIZE];
+
     try {
-      int n = encryptor.update(data, offset, len, encrypted, 0);
-      n += encryptor.update(padding, 0, padding.length, encrypted, n);
-      encryptor.update(mac, 0, 10, encrypted, n);
+      encryptor.update(toBeEncrypted, 0, toBeEncrypted.length, encrypted, 0);
     } catch (ShortBufferException sbe) {
       // This should not happen
       throw new SaslException("Error happens during encrypt data", sbe);
     }
 
     // Append seqNum used for mac
-    System.arraycopy(integrity.getSeqNum(), 0, encrypted, encrypted.length - 4, 4);
+    System.arraycopy(integrity.getSeqNum(), 0,
+      encrypted, toBeEncrypted.length, Integrity.SEQ_NUM_SIZE);
 
     return encrypted;
   }
@@ -143,50 +153,51 @@ public class SparkAesCipher {
    */
   public byte[] unwrap(byte[] data, int offset, int len) throws SaslException {
     // Get plaintext and seqNum
-    byte[] decrypted = new byte[len - 4];
-    byte[] peerSeqNum = new byte[4];
+    byte[] decrypted = new byte[len - Integrity.SEQ_NUM_SIZE];
+    byte[] peerSeqNum = new byte[Integrity.SEQ_NUM_SIZE];
+    System.arraycopy(data, offset + decrypted.length, peerSeqNum, 0, Integrity.SEQ_NUM_SIZE);
+
+    // Decrypt
     try {
-      decryptor.update(data, offset, len - 4, decrypted, 0);
+      decryptor.update(data, offset, len - Integrity.SEQ_NUM_SIZE, decrypted, 0);
     } catch (ShortBufferException sbe) {
       throw new SaslException("Error happens during decrypt data", sbe);
     }
-    System.arraycopy(data, offset + decrypted.length, peerSeqNum, 0, 4);
 
-    // Get msg and mac
-    byte[] msg = new byte[decrypted.length - 10];
-    byte[] mac = new byte[10];
-
-    System.arraycopy(decrypted, msg.length, mac, 0, 10);
-    System.arraycopy(decrypted, 0, msg, 0, msg.length);
+    // Get mac
+    byte[] mac = new byte[Integrity.HMAC_SIZE];
+    System.arraycopy(decrypted, decrypted.length - Integrity.HMAC_SIZE,
+      mac, 0, Integrity.HMAC_SIZE);
 
     // Modify msg length if padding
-    int msgLength = msg.length;
-    if ("AES/CBC/NoPadding".equals(decryptor.getAlgorithm())) {
-      msgLength -= (int) msg[msgLength - 1];
+    int origMsgLen = decrypted.length - Integrity.HMAC_SIZE;
+    int realMsgLen = origMsgLen;
+    if (AES_CBC_NOPADDING.equals(decryptor.getAlgorithm())) {
+      realMsgLen -= (int) decrypted[origMsgLen - 1];
     }
 
     // Check mac integrity and msg sequence
-    if (!integrity.compareHMAC(mac, peerSeqNum, msg, 0, msgLength)) {
+    if (!integrity.compareHMAC(mac, peerSeqNum, decrypted, 0, realMsgLen)) {
       throw new SaslException("Unmatched MAC");
     }
+
+    // Check SeqNum
     if (!integrity.comparePeerSeqNum(peerSeqNum)) {
       throw new SaslException("Out of order sequencing of messages. Got: " + integrity.byteToInt
         (peerSeqNum) + " Expected: " + integrity.peerSeqNum);
     }
+
     integrity.incPeerSeqNum();
 
-    // Return msg considering padding
-    if (msgLength == msg.length) {
-      return msg;
-    } else {
-      return Arrays.copyOf(msg, msgLength);
-    }
+    return Arrays.copyOf(decrypted, realMsgLen);
   }
 
   /**
    * Helper class for providing integrity protection.
    */
   private static class Integrity {
+    public static final byte SEQ_NUM_SIZE = 4;
+    public static final byte HMAC_SIZE = 10;
     private int mySeqNum = 0;
     private int peerSeqNum = 0;
     private byte[] seqNum = new byte[4];
@@ -228,9 +239,9 @@ public class SparkAesCipher {
 
     private byte[] calculateHMAC(byte[] key, byte[] seqNum, byte[] msg, int start,
         int len) throws SaslException {
-      byte[] seqAndMsg = new byte[4+len];
-      System.arraycopy(seqNum, 0, seqAndMsg, 0, 4);
-      System.arraycopy(msg, start, seqAndMsg, 4, len);
+      byte[] seqAndMsg = new byte[SEQ_NUM_SIZE + len];
+      System.arraycopy(seqNum, 0, seqAndMsg, 0, SEQ_NUM_SIZE);
+      System.arraycopy(msg, start, seqAndMsg, SEQ_NUM_SIZE, len);
 
       try {
         SecretKey keyKi = new SecretKeySpec(key, "HmacMD5");
@@ -240,8 +251,8 @@ public class SparkAesCipher {
         byte[] hMAC_MD5 = m.doFinal();
 
         /* First 10 bytes of HMAC_MD5 digest */
-        byte macBuffer[] = new byte[10];
-        System.arraycopy(hMAC_MD5, 0, macBuffer, 0, 10);
+        byte macBuffer[] = new byte[HMAC_SIZE];
+        System.arraycopy(hMAC_MD5, 0, macBuffer, 0, HMAC_SIZE);
 
         return macBuffer;
       } catch (InvalidKeyException e) {
