@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.types.DataType
+import org.apache.commons.codec.binary.Base64
+
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.types._
 
 /**
  * Estimates of various statistics.  The default estimation logic simply lazily multiplies the
@@ -40,7 +44,7 @@ import org.apache.spark.sql.types.DataType
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
-    colStats: Map[String, ColumnStats] = Map.empty,
+    colStats: Map[String, ColumnStat] = Map.empty,
     isBroadcastable: Boolean = false) {
 
   override def toString: String = "Statistics(" + simpleString + ")"
@@ -49,7 +53,6 @@ case class Statistics(
   def simpleString: String = {
     Seq(s"sizeInBytes=$sizeInBytes",
       if (rowCount.isDefined) s"rowCount=${rowCount.get}" else "",
-      if (colStats.nonEmpty) s"colStats=$colStats" else "",
       s"isBroadcastable=$isBroadcastable"
     ).filter(_.nonEmpty).mkString(", ")
   }
@@ -57,51 +60,55 @@ case class Statistics(
 
 /**
  * Statistics for a column.
- * @param ndv Number of distinct values of the column.
  */
-case class ColumnStats(
-    dataType: DataType,
-    numNulls: Long,
-    max: Option[Any] = None,
-    min: Option[Any] = None,
-    ndv: Option[Long] = None,
-    avgColLen: Option[Double] = None,
-    maxColLen: Option[Long] = None,
-    numTrues: Option[Long] = None,
-    numFalses: Option[Long] = None) {
+case class ColumnStat(dataType: DataType, statRow: InternalRow) {
 
-  override def toString: String = "ColumnStats(" + simpleString + ")"
+  def forNumeric[T <: AtomicType](dataType: T): NumericColumnStat[T] = {
+    NumericColumnStat(statRow, dataType)
+  }
+  def forString: StringColumnStat = StringColumnStat(statRow)
+  def forBinary: BinaryColumnStat = BinaryColumnStat(statRow)
+  def forBoolean: BooleanColumnStat = BooleanColumnStat(statRow)
 
-  def simpleString: String = {
-    Seq(s"numNulls=$numNulls",
-      if (max.isDefined) s"max=${max.get}" else "",
-      if (min.isDefined) s"min=${min.get}" else "",
-      if (ndv.isDefined) s"ndv=${ndv.get}" else "",
-      if (avgColLen.isDefined) s"avgColLen=${avgColLen.get}" else "",
-      if (maxColLen.isDefined) s"maxColLen=${maxColLen.get}" else "",
-      if (numTrues.isDefined) s"numTrues=${numTrues.get}" else "",
-      if (numFalses.isDefined) s"numFalses=${numFalses.get}" else ""
-    ).filter(_.nonEmpty).mkString(", ")
+  override def toString: String = {
+    // use Base64 for encoding
+    Base64.encodeBase64String(statRow.asInstanceOf[UnsafeRow].getBytes)
   }
 }
 
-object ColumnStats {
-  def apply(str: String, dataType: DataType): ColumnStats = {
-    val suffix = ",\\s|\\)"
-    ColumnStats(
-      dataType = dataType,
-      numNulls = findItem(source = str, prefix = "numNulls=", suffix = suffix).map(_.toLong).get,
-      max = findItem(source = str, prefix = "max=", suffix = suffix),
-      min = findItem(source = str, prefix = "min=", suffix = suffix),
-      ndv = findItem(source = str, prefix = "ndv=", suffix = suffix).map(_.toLong),
-      avgColLen = findItem(source = str, prefix = "avgColLen=", suffix = suffix).map(_.toDouble),
-      maxColLen = findItem(source = str, prefix = "maxColLen=", suffix = suffix).map(_.toLong),
-      numTrues = findItem(source = str, prefix = "numTrues=", suffix = suffix).map(_.toLong),
-      numFalses = findItem(source = str, prefix = "numFalses=", suffix = suffix).map(_.toLong))
+object ColumnStat {
+  def apply(dataType: DataType, str: String): ColumnStat = {
+    // use Base64 for decoding
+    ColumnStat(dataType, InternalRow(Base64.decodeBase64(str)))
   }
+}
 
-  private def findItem(source: String, prefix: String, suffix: String): Option[String] = {
-    val pattern = s"(?<=$prefix)(.+?)(?=$suffix)".r
-    pattern.findFirstIn(source)
-  }
+case class NumericColumnStat[T <: AtomicType](statRow: InternalRow, dataType: T) {
+  // The indices here must be consistent with `ColumnStatStruct.numericColumnStat`.
+  val numNulls: Long = statRow.getLong(0)
+  val max: T#InternalType = statRow.get(1, dataType).asInstanceOf[T#InternalType]
+  val min: T#InternalType = statRow.get(2, dataType).asInstanceOf[T#InternalType]
+  val ndv: Long = statRow.getLong(3)
+}
+
+case class StringColumnStat(statRow: InternalRow) {
+  // The indices here must be consistent with `ColumnStatStruct.stringColumnStat`.
+  val numNulls: Long = statRow.getLong(0)
+  val avgColLen: Double = statRow.getDouble(1)
+  val maxColLen: Long = statRow.getLong(2)
+  val ndv: Long = statRow.getLong(3)
+}
+
+case class BinaryColumnStat(statRow: InternalRow) {
+  // The indices here must be consistent with `ColumnStatStruct.binaryColumnStat`.
+  val numNulls: Long = statRow.getLong(0)
+  val avgColLen: Double = statRow.getDouble(1)
+  val maxColLen: Long = statRow.getLong(2)
+}
+
+case class BooleanColumnStat(statRow: InternalRow) {
+  // The indices here must be consistent with `ColumnStatStruct.booleanColumnStat`.
+  val numNulls: Long = statRow.getLong(0)
+  val numTrues: Long = statRow.getLong(1)
+  val numFalses: Long = statRow.getLong(2)
 }

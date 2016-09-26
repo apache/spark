@@ -32,7 +32,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStats, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.client.HiveClient
@@ -403,8 +403,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       if (stats.rowCount.isDefined) {
         statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
       }
-      stats.colStats.foreach { case (colName, colStats) =>
-        statsProperties += (STATISTICS_BASIC_COL_STATS_PREFIX + colName) -> colStats.toString
+      stats.colStats.foreach { case (colName, colStat) =>
+        statsProperties += (STATISTICS_BASIC_COL_STATS_PREFIX + colName) -> colStat.toString
       }
       tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties)
     } else {
@@ -480,9 +480,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val colStatsProps = catalogTable.properties
         .filterKeys(_.startsWith(STATISTICS_BASIC_COL_STATS_PREFIX))
         .map { case (k, v) => (k.replace(STATISTICS_BASIC_COL_STATS_PREFIX, ""), v) }
-      val colStats: Map[String, ColumnStats] = catalogTable.schema.collect {
+      val colStats: Map[String, ColumnStat] = catalogTable.schema.collect {
         case field if colStatsProps.contains(field.name) =>
-          (field.name, ColumnStats(colStatsProps(field.name), field.dataType))
+          (field.name, ColumnStat(field.dataType, colStatsProps(field.name)))
       }.toMap
       catalogTable.copy(
         properties = removeStatsProperties(catalogTable),

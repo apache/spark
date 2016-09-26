@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ColumnStats, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ColumnStat, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.types._
 
@@ -73,7 +73,7 @@ case class AnalyzeColumnCommand(
 
   def computeColStats(
       sparkSession: SparkSession,
-      relation: LogicalPlan): (Long, Map[String, ColumnStats]) = {
+      relation: LogicalPlan): (Long, Map[String, ColumnStat]) = {
 
     // check correctness of column names
     val attributesToAnalyze = mutable.MutableList[Attribute]()
@@ -95,7 +95,7 @@ case class AnalyzeColumnCommand(
     // The layout of each struct follows the layout of the ColumnStats.
     val ndvMaxErr = sparkSession.sessionState.conf.ndvMaxError
     val expressions = Count(Literal(1)).toAggregateExpression() +:
-      attributesToAnalyze.map(ColumnStatsStruct(_, ndvMaxErr))
+      attributesToAnalyze.map(ColumnStatStruct(_, ndvMaxErr))
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
     val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation))
       .queryExecution.toRdd.collect().head
@@ -103,88 +103,76 @@ case class AnalyzeColumnCommand(
     // unwrap the result
     val rowCount = statsRow.getLong(0)
     val columnStats = attributesToAnalyze.zipWithIndex.map { case (expr, i) =>
-      (expr.name, ColumnStatsStruct.unwrapStruct(statsRow, i + 1, expr, rowCount))
+      (expr.name, ColumnStatStruct.unwrapStruct(statsRow, i + 1, expr, ndvMaxErr, rowCount))
     }.toMap
     (rowCount, columnStats)
   }
 }
 
-object ColumnStatsStruct {
+object ColumnStatStruct {
   val zero = Literal(0, LongType)
   val one = Literal(1, LongType)
-  val nullLong = Literal(null, LongType)
-  val nullDouble = Literal(null, DoubleType)
-  val nullString = Literal(null, StringType)
-  val nullBinary = Literal(null, BinaryType)
-  val nullBoolean = Literal(null, BooleanType)
-  // The number of different kinds of column-level statistics.
-  val statsNumber = 8
 
-  def apply(e: NamedExpression, relativeSD: Double): CreateStruct = {
-    // Use aggregate functions to compute statistics we need:
-    // - number of nulls: Sum(If(IsNull(e), one, zero));
-    // - maximum value: Max(e);
-    // - minimum value: Min(e);
-    // - ndv (number of distinct values): HyperLogLogPlusPlus(e, relativeSD);
-    // - average length of values: Average(Length(e));
-    // - maximum length of values: Max(Length(e));
-    // - number of true values: Sum(If(e, one, zero));
-    // - number of false values: Sum(If(Not(e), one, zero));
-    // - If we don't need some statistic for the data type, use null literal.
-    // Note that: the order of each sequence must be as follows:
-    // numNulls, max, min, ndv, avgColLen, maxColLen, numTrues, numFalses
-    var statistics = e.dataType match {
-      case _: NumericType | TimestampType | DateType =>
-        Seq(Max(e), Min(e), HyperLogLogPlusPlus(e, relativeSD), nullDouble, nullLong, nullLong,
-          nullLong)
-      case StringType =>
-        Seq(nullString, nullString, HyperLogLogPlusPlus(e, relativeSD), Average(Length(e)),
-          Max(Length(e)), nullLong, nullLong)
-      case BinaryType =>
-        Seq(nullBinary, nullBinary, nullLong, Average(Length(e)), Max(Length(e)), nullLong,
-          nullLong)
-      case BooleanType =>
-        Seq(nullBoolean, nullBoolean, nullLong, nullDouble, nullLong, Sum(If(e, one, zero)),
-          Sum(If(Not(e), one, zero)))
-      case otherType =>
-        throw new AnalysisException("Analyzing columns is not supported for column " +
-          s"${e.name} of data type: ${e.dataType}.")
-    }
-    statistics = if (e.nullable) {
-      Sum(If(IsNull(e), one, zero)) +: statistics
-    } else {
-      zero +: statistics
-    }
-    assert(statistics.length == statsNumber)
-    CreateStruct(statistics.map {
+  def numNulls(e: Expression): Expression = if (e.nullable) Sum(If(IsNull(e), one, zero)) else zero
+  def max(e: Expression): Expression = Max(e)
+  def min(e: Expression): Expression = Min(e)
+  def ndv(e: Expression, relativeSD: Double): Expression = HyperLogLogPlusPlus(e, relativeSD)
+  def avgLength(e: Expression): Expression = Average(Length(e))
+  def maxLength(e: Expression): Expression = Max(Length(e))
+  def numTrues(e: Expression): Expression = Sum(If(e, one, zero))
+  def numFalses(e: Expression): Expression = Sum(If(Not(e), one, zero))
+
+  def getStruct(exprs: Seq[Expression]): CreateStruct = {
+    CreateStruct(exprs.map {
       case af: AggregateFunction => af.toAggregateExpression()
       case e: Expression => e
     })
   }
 
-  def unwrapStruct(row: InternalRow, offset: Int, e: Expression, rowCount: Long): ColumnStats = {
-    val struct = row.getStruct(offset, statsNumber)
-    ColumnStats(
-      dataType = e.dataType,
-      numNulls = struct.getLong(0),
-      max = getField(struct, 1, e.dataType),
-      min = getField(struct, 2, e.dataType),
-      ndv = getLongField(struct, 3).map(math.min(_, rowCount)),
-      avgColLen = getDoubleField(struct, 4),
-      maxColLen = getLongField(struct, 5),
-      numTrues = getLongField(struct, 6),
-      numFalses = getLongField(struct, 7))
+  def numericColumnStat(e: Expression, relativeSD: Double): Seq[Expression] = {
+    Seq(numNulls(e), max(e), min(e), ndv(e, relativeSD))
   }
 
-  private def getField(struct: InternalRow, index: Int, dataType: DataType): Option[Any] = {
-    if (struct.isNullAt(index)) None else Some(struct.get(index, dataType))
+  def stringColumnStat(e: Expression, relativeSD: Double): Seq[Expression] = {
+    Seq(numNulls(e), avgLength(e), maxLength(e), ndv(e, relativeSD))
   }
 
-  private def getLongField(struct: InternalRow, index: Int): Option[Long] = {
-    if (struct.isNullAt(index)) None else Some(struct.getLong(index))
+  def binaryColumnStat(e: Expression): Seq[Expression] = {
+    Seq(numNulls(e), avgLength(e), maxLength(e))
   }
 
-  private def getDoubleField(struct: InternalRow, index: Int): Option[Double] = {
-    if (struct.isNullAt(index)) None else Some(struct.getDouble(index))
+  def booleanColumnStat(e: Expression): Seq[Expression] = {
+    Seq(numNulls(e), numTrues(e), numFalses(e))
+  }
+
+  def apply(e: Attribute, relativeSD: Double): CreateStruct = e.dataType match {
+    // Use aggregate functions to compute statistics we need.
+    case _: NumericType | TimestampType | DateType => getStruct(numericColumnStat(e, relativeSD))
+    case StringType => getStruct(stringColumnStat(e, relativeSD))
+    case BinaryType => getStruct(binaryColumnStat(e))
+    case BooleanType => getStruct(booleanColumnStat(e))
+    case otherType =>
+      throw new AnalysisException("Analyzing columns is not supported for column " +
+        s"${e.name} of data type: ${e.dataType}.")
+  }
+
+  def unwrapStruct(
+      row: InternalRow,
+      offset: Int,
+      e: Expression,
+      relativeSD: Double,
+      rowCount: Long): ColumnStat = {
+    val numFields = e.dataType match {
+      case _: NumericType | TimestampType | DateType => numericColumnStat(e, relativeSD).length
+      case StringType => stringColumnStat(e, relativeSD).length
+      case BinaryType => binaryColumnStat(e).length
+      case BooleanType => booleanColumnStat(e).length
+    }
+    val struct = row.getStruct(offset, numFields)
+    if (numFields >= 3 && !struct.isNullAt(3)) {
+      // ndv should not be larger than number of rows
+      if (struct.getLong(3) > rowCount) struct.asInstanceOf[UnsafeRow].setLong(3, rowCount)
+    }
+    ColumnStat(e.dataType, struct)
   }
 }

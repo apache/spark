@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStats, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
 import org.apache.spark.sql.execution.command.AnalyzeColumnCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.test.SharedSQLContext
@@ -28,7 +28,7 @@ trait StatisticsTest extends QueryTest with SharedSQLContext {
 
   def checkColStats(
       df: DataFrame,
-      expectedColStatsSeq: Seq[(String, ColumnStats)]): Unit = {
+      expectedColStatsSeq: Seq[(String, ColumnStat)]): Unit = {
     val table = "tbl"
     withTable(table) {
       df.write.format("json").saveAsTable(table)
@@ -39,46 +39,62 @@ trait StatisticsTest extends QueryTest with SharedSQLContext {
         AnalyzeColumnCommand(tableIdent, columns).computeColStats(spark, relation)._2
       expectedColStatsSeq.foreach { expected =>
         assert(columnStats.contains(expected._1))
-        checkColStats(colStats = columnStats(expected._1), expectedColStats = expected._2)
+        checkColStat(colStat = columnStats(expected._1), expectedColStat = expected._2)
       }
     }
   }
 
-  def checkColStats(colStats: ColumnStats, expectedColStats: ColumnStats): Unit = {
-    assert(colStats.dataType == expectedColStats.dataType)
-    assert(colStats.numNulls == expectedColStats.numNulls)
-    colStats.dataType match {
-      case _: IntegralType | DateType | TimestampType =>
-        assert(colStats.max.map(_.toString.toLong) == expectedColStats.max.map(_.toString.toLong))
-        assert(colStats.min.map(_.toString.toLong) == expectedColStats.min.map(_.toString.toLong))
-      case _: FractionalType =>
-        assert(colStats.max.map(_.toString.toDouble) == expectedColStats
-          .max.map(_.toString.toDouble))
-        assert(colStats.min.map(_.toString.toDouble) == expectedColStats
-          .min.map(_.toString.toDouble))
-      case _ =>
-        // other types don't have max and min stats
-        assert(colStats.max.isEmpty)
-        assert(colStats.min.isEmpty)
+  def checkColStat(colStat: ColumnStat, expectedColStat: ColumnStat): Unit = {
+    assert(colStat.dataType == expectedColStat.dataType)
+    colStat.dataType match {
+      case StringType =>
+        val cs = colStat.forString
+        val expectedCS = expectedColStat.forString
+        assert(cs.numNulls == expectedCS.numNulls)
+        assert(cs.avgColLen == expectedCS.avgColLen)
+        assert(cs.maxColLen == expectedCS.maxColLen)
+        checkNdv(ndv = cs.ndv, expectedNdv = expectedCS.ndv)
+      case BinaryType =>
+        val cs = colStat.forBinary
+        val expectedCS = expectedColStat.forBinary
+        assert(cs.numNulls == expectedCS.numNulls)
+        assert(cs.avgColLen == expectedCS.avgColLen)
+        assert(cs.maxColLen == expectedCS.maxColLen)
+      case BooleanType =>
+        val cs = colStat.forBoolean
+        val expectedCS = expectedColStat.forBoolean
+        assert(cs.numNulls == expectedCS.numNulls)
+        assert(cs.numTrues == expectedCS.numTrues)
+        assert(cs.numFalses == expectedCS.numFalses)
+      case atomicType: AtomicType =>
+        checkNumericColStats(
+          dataType = atomicType, colStat = colStat, expectedColStat = expectedColStat)
     }
-    colStats.dataType match {
-      case BinaryType | BooleanType => assert(colStats.ndv.isEmpty)
-      case _ =>
-        // ndv is an approximate value, so we make sure we have the value, and it should be
-        // within 3*SD's of the given rsd.
-        assert(colStats.ndv.get >= 0)
-        if (expectedColStats.ndv.get == 0) {
-          assert(colStats.ndv.get == 0)
-        } else if (expectedColStats.ndv.get > 0) {
-          val rsd = spark.sessionState.conf.ndvMaxError
-          val error = math.abs((colStats.ndv.get / expectedColStats.ndv.get.toDouble) - 1.0d)
-          assert(error <= rsd * 3.0d, "Error should be within 3 std. errors.")
-        }
+  }
+
+  private def checkNumericColStats(
+      dataType: AtomicType,
+      colStat: ColumnStat,
+      expectedColStat: ColumnStat): Unit = {
+    val cs = colStat.forNumeric(dataType)
+    val expectedCS = expectedColStat.forNumeric(dataType)
+    assert(cs.numNulls == expectedCS.numNulls)
+    assert(cs.max == expectedCS.max)
+    assert(cs.min == expectedCS.min)
+    checkNdv(ndv = cs.ndv, expectedNdv = expectedCS.ndv)
+  }
+
+  private def checkNdv(ndv: Long, expectedNdv: Long): Unit = {
+    // ndv is an approximate value, so we make sure we have the value, and it should be
+    // within 3*SD's of the given rsd.
+    if (expectedNdv == 0) {
+      assert(ndv == 0)
+    } else if (expectedNdv > 0) {
+      assert(ndv > 0)
+      val rsd = spark.sessionState.conf.ndvMaxError
+      val error = math.abs((ndv / expectedNdv.toDouble) - 1.0d)
+      assert(error <= rsd * 3.0d, "Error should be within 3 std. errors.")
     }
-    assert(colStats.avgColLen == expectedColStats.avgColLen)
-    assert(colStats.maxColLen == expectedColStats.maxColLen)
-    assert(colStats.numTrues == expectedColStats.numTrues)
-    assert(colStats.numFalses == expectedColStats.numFalses)
   }
 
   def checkTableStats(tableName: String, expectedRowCount: Option[Int]): Option[Statistics] = {

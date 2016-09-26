@@ -90,8 +90,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * Create an [[AnalyzeTableCommand]] command or an [[AnalyzeColumnCommand]] command.
    * Example SQL for analyzing table :
    * {{{
-   *   ANALYZE TABLE table COMPUTE STATISTICS NOSCAN;
-   *   ANALYZE TABLE table COMPUTE STATISTICS;
+   *   ANALYZE TABLE table COMPUTE STATISTICS [NOSCAN];
    * }}}
    * Example SQL for analyzing columns :
    * {{{
