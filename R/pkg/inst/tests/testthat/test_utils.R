@@ -166,6 +166,13 @@ test_that("convertToJSaveMode", {
     'mode should be one of "append", "overwrite", "error", "ignore"') #nolint
 })
 
+test_that("captureJVMException", {
+  expect_error(tryCatch(callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getSQLDataType",
+                                    "unknown"),
+                        error = captureJVMException),
+               "Invalid type unknown")
+})
+
 test_that("hashCode", {
   expect_error(hashCode("bc53d3605e8a5b7de1e8e271c2317645"), NA)
 })
