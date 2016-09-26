@@ -103,9 +103,13 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
    * Transforms the input dataset.
    */
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
-    val transformUDF = udf(hashFunction, new VectorUDT)
-    dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
+    if (!dataset.columns.contains($(outputCol))) {
+      transformSchema(dataset.schema, logging = true)
+      val transformUDF = udf(hashFunction, new VectorUDT)
+      dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
+    } else {
+      dataset.toDF()
+    }
   }
 
   /**
