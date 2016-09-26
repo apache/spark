@@ -76,11 +76,6 @@
       <artifactId>guava</artifactId>
       <scope>compile</scope>
     </dependency>
-    <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-crypto</artifactId>
-      <version>${commons-crypto.version}</version>
-    </dependency>
 
     <!-- Test dependencies -->
     <dependency>
