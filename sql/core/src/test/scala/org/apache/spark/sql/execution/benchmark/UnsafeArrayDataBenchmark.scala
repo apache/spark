@@ -93,7 +93,7 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
   }
 
   def writeUnsafeArray(iters: Int): Unit = {
-    val count = 1024 * 1024 * 16
+    val count = 1024 * 1024 * 2
     val rand = new Random(42)
 
     var intTotalLength: Int = 0
