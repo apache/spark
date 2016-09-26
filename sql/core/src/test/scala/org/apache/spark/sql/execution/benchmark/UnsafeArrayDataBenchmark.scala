@@ -82,13 +82,12 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Double")(readDoubleArray)
     benchmark.run
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.10.4
-    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
-
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
     Read UnsafeArrayData:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Int                                            279 /  294        600.4           1.7       1.0X
-    Double                                         296 /  303        567.0           1.8       0.9X
+    Int                                            252 /  260        666.1           1.5       1.0X
+    Double                                         281 /  292        597.7           1.7       0.9X
     */
   }
 
@@ -127,13 +126,12 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Double")(writeDoubleArray)
     benchmark.run
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.10.4
-    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
-
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
     Write UnsafeArrayData:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Int                                            135 /  180        154.9           6.5       1.0X
-    Double                                         195 /  300        107.8           9.3       0.7X
+    Int                                            196 /  249        107.0           9.3       1.0X
+    Double                                         227 /  367         92.3          10.8       0.9X
     */
   }
 
@@ -174,13 +172,12 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Double")(readDoubleArray)
     benchmark.run
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.10.4
-    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
-
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
     Get primitive array from UnsafeArrayData: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)  Relative
     ------------------------------------------------------------------------------------------------
-    Int                                             80 /  151        783.4           1.3       1.0X
-    Double                                         208 /  366        302.8           3.3       0.4X
+    Int                                            151 /  198        415.8           2.4       1.0X
+    Double                                         214 /  394        293.6           3.4       0.7X
     */
   }
 
@@ -217,13 +214,12 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Double")(createDoubleArray)
     benchmark.run
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.10.4
-    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
-
-    Create UnsafeArrayData from primitive array: Best/Avg Time(ms)  Rate(M/s)  Per Row(ns)  Relative
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Create UnsafeArrayData from primitive array: Best/Avg Time(ms) Rate(M/s)   Per Row(ns)  Relative
     ------------------------------------------------------------------------------------------------
-    Int                                             68 /  144        920.4           1.1       1.0X
-    Double                                         240 /  302        261.7           3.8       0.3X
+    Int                                            206 /  211        306.0           3.3       1.0X
+    Double                                         232 /  406        271.6           3.7       0.9X
     */
   }
 
