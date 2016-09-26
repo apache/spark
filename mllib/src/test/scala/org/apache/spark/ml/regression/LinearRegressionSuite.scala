@@ -39,6 +39,7 @@ class LinearRegressionSuite
   @transient var datasetWithWeight: DataFrame = _
   @transient var datasetWithWeightConstantLabel: DataFrame = _
   @transient var datasetWithWeightZeroLabel: DataFrame = _
+  @transient var datasetWithWeightConstantFeatures: DataFrame = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -103,6 +104,21 @@ class LinearRegressionSuite
         Instance(0.0, 2.0, Vectors.dense(1.0, 7.0)),
         Instance(0.0, 3.0, Vectors.dense(2.0, 11.0)),
         Instance(0.0, 4.0, Vectors.dense(3.0, 13.0))
+      ), 2))
+
+    /*
+       R code:
+       A <- matrix(c(0, 1, 2, 3, 9, 9, 9, 9, 5, 7, 11, 13, 6, 6, 6, 6), 4, 4)
+       b <- c(17, 19, 23, 29)
+       w <- c(1, 2, 3, 4)
+       df.const.feature <- as.data.frame(cbind(A, b))
+     */
+    datasetWithWeightConstantFeatures = sqlContext.createDataFrame(
+      sc.parallelize(Seq(
+        Instance(17.0, 1.0, Vectors.dense(0.0, 9.0, 5.0, 6.0)),
+        Instance(19.0, 2.0, Vectors.dense(1.0, 9.0, 7.0, 6.0)),
+        Instance(23.0, 3.0, Vectors.dense(2.0, 9.0, 11.0, 6.0)),
+        Instance(29.0, 4.0, Vectors.dense(3.0, 9.0, 13.0, 6.0))
       ), 2))
   }
 
@@ -635,6 +651,36 @@ class LinearRegressionSuite
         assert((datasetWithWeightZeroLabel.schema.fieldNames.toSet + model2.getPredictionCol)
           .subsetOf(model2.summary.predictions.schema.fieldNames.toSet))
 
+        idx += 1
+      }
+    }
+  }
+
+  test("linear regression model with constant features") {
+    /*
+      R code:
+      for (intercept in c(TRUE, FALSE)) {
+        model <- glmnet(A, b, weights=w, intercept=intercept, lambda=0, alpha=0,
+                        thresh=1E-20)
+        print(as.vector(coef(model)))
+      }
+      [1] 18.08  6.08  0.00 -0.60  0.00
+      [1]  0.000000 -3.727121  0.000000  3.009983  0.000000
+     */
+    val expected = Seq(
+      Vectors.dense(18.08, 6.08, 0.0, -0.60, 0.0),
+      Vectors.dense(0.0, -3.727121, 0.0, 3.009983, 0.0))
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
+      var idx = 0
+      for (fitIntercept <- Seq(true, false)) {
+        val model = new LinearRegression()
+          .setFitIntercept(fitIntercept)
+          .setWeightCol("weight")
+          .setSolver(solver)
+          .fit(datasetWithWeightConstantFeatures)
+        val actual = Vectors.dense(model.intercept, model.coefficients(0),
+          model.coefficients(1), model.coefficients(2), model.coefficients(3))
+        assert(actual ~== expected(idx) absTol 1e-4)
         idx += 1
       }
     }
