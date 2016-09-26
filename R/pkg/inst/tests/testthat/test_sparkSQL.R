@@ -2561,7 +2561,6 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
 })
 
 test_that("Call DataFrameWriter.load() API in Java without path and check argument types", {
-  df <- read.df(jsonPath, "json")
   # This tests if the exception is thrown from JVM not from SparkR side.
   # It makes sure that we can omit path argument in read.df API and then it calls
   # DataFrameWriter.load() without path.
