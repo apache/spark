@@ -109,4 +109,11 @@ private[history] abstract class ApplicationHistoryProvider {
   @throws(classOf[SparkException])
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
 
+  /**
+    * Returns an ApplicationHistoryInfo for the appId
+    *
+    * @return ApplicationHistoryInfo of one appId if exists
+    */
+  def getApplicationInfo(appId: String): Option[ApplicationHistoryInfo]
+
 }

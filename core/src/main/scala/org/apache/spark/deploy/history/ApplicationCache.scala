@@ -279,7 +279,8 @@ private[history] class ApplicationCache(
     time(metrics.loadTimer) {
       operations.getAppUI(appId, attemptId) match {
         case Some(LoadedAppUI(ui, updateState)) =>
-          val completed = ui.getApplicationInfoList.exists(_.attempts.last.completed)
+          val completed = ui.getApplicationInfo(appId)
+            .map(_.attempts.last.completed).getOrElse(false)
           if (completed) {
             // completed spark UIs are attached directly
             operations.attachSparkUI(appId, attemptId, ui, completed)

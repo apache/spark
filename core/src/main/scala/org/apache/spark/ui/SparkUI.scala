@@ -126,6 +126,10 @@ private[spark] class SparkUI private (
       ))
     ))
   }
+
+  def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
+    throw new UnsupportedOperationException()
+  }
 }
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
