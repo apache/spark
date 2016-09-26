@@ -28,10 +28,6 @@ import org.apache.spark.util.Clock
  * (task, executor) / (task, nodes) pairs, and also completely blacklisting executors and nodes
  * for the entire taskset.
  *
- * It also must store sufficient information in task failures for application level blacklisting,
- * which is handled by [[BlacklistTracker]].  Note that BlacklistTracker does not know anything
- * about task failures until a taskset completes successfully.
- *
  * THREADING:  As a helper to [[TaskSetManager]], this class is designed to only be called from code
  * with a lock on the TaskScheduler (e.g. its event handlers). It should not be called from other
  * threads.
@@ -46,9 +42,7 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
   private val TIMEOUT_MILLIS = BlacklistTracker.getBlacklistTimeout(conf)
 
   /**
-   * A map from each executor to the task failures on that executor.  This is used for blacklisting
-   * within this taskset, and it is also relayed onto [[BlacklistTracker]] for app-level
-   * blacklisting if this taskset completes successfully.
+   * A map from each executor to the task failures on that executor.
    */
   val execToFailures: HashMap[String, ExecutorFailuresInTaskSet] = new HashMap()
 
@@ -63,8 +57,8 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
 
   /**
    * Return true if this executor is blacklisted for the given task.  This does *not*
-   * need to return true if the executor is blacklisted for the entire stage, or blacklisted
-   * altogether.  That is to keep this method as fast as possible in the inner-loop of the
+   * need to return true if the executor is blacklisted for the entire stage.
+   * That is to keep this method as fast as possible in the inner-loop of the
    * scheduler, where those filters will have already been applied.
    */
   def isExecutorBlacklistedForTask(
@@ -88,7 +82,7 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
 
   /**
    * Return true if this executor is blacklisted for the given stage.  Completely ignores whether
-   * the executor is blacklisted overall (or anything to do with the node the executor is on).  That
+   * anything to do with the node the executor is on.  That
    * is to keep this method as fast as possible in the inner-loop of the scheduler, where those
    * filters will already have been applied.
    */

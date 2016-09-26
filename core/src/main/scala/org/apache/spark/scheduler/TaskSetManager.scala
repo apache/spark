@@ -51,7 +51,6 @@ private[spark] class TaskSetManager(
     val sched: TaskSchedulerImpl,
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
-    val blacklistTracker: Option[BlacklistTracker] = None,
     val clock: Clock = new SystemClock()) extends Schedulable with Logging {
 
   private val conf = sched.sc.conf
@@ -86,7 +85,11 @@ private[spark] class TaskSetManager(
   var calculatedTasks = 0
 
   val taskSetBlacklistOpt: Option[TaskSetBlacklist] = {
-    blacklistTracker.map { _ => new TaskSetBlacklist(conf, stageId, clock) }
+    if (BlacklistTracker.isBlacklistEnabled(conf)) {
+      Some(new TaskSetBlacklist(conf, stageId, clock))
+    } else {
+      None
+    }
   }
 
   val runningTasksSet = new HashSet[Long]
@@ -485,10 +488,6 @@ private[spark] class TaskSetManager(
   private def maybeFinishTaskSet() {
     if (isZombie && runningTasks == 0) {
       sched.taskSetFinished(this)
-      if (tasksSuccessful == numTasks) {
-        blacklistTracker.foreach(_.updateBlacklistForSuccessfulTaskSet(taskSet.stageId,
-          taskSet.stageAttemptId, taskSetBlacklistOpt.get.execToFailures))
-      }
     }
   }
 
@@ -590,8 +589,7 @@ private[spark] class TaskSetManager(
    */
   private[scheduler] def abortIfCompletelyBlacklisted(
       hostToExecutors: HashMap[String, HashSet[String]]): Unit = {
-    blacklistTracker.foreach { appBlacklist =>
-      val taskSetBlacklist = taskSetBlacklistOpt.get
+    taskSetBlacklistOpt.foreach { taskSetBlacklist =>
         // If no executors have registered yet, don't abort the stage, just wait.  We probably
         // got here because a task set was added before the executors registered.
       if (hostToExecutors.nonEmpty) {
@@ -618,7 +616,7 @@ private[spark] class TaskSetManager(
           // when that unschedulable task is the last task remaining.
           val blacklistedEverywhere = hostToExecutors.forall { case (host, execs) =>
             // Check if the task can run on the node
-            val nodeBlacklisted = appBlacklist.isNodeBlacklisted(host) ||
+            val nodeBlacklisted =
               taskSetBlacklist.isNodeBlacklistedForTaskSet(host) ||
               taskSetBlacklist.isNodeBlacklistedForTask(host, indexInTaskSet)
             if (nodeBlacklisted) {
@@ -626,7 +624,6 @@ private[spark] class TaskSetManager(
             } else {
               // Check if the task can run on any of the executors
               execs.forall { exec =>
-                appBlacklist.isExecutorBlacklisted(exec) ||
                   taskSetBlacklist.isExecutorBlacklistedForTaskSet(exec) ||
                   taskSetBlacklist.isExecutorBlacklistedForTask(exec, indexInTaskSet)
               }

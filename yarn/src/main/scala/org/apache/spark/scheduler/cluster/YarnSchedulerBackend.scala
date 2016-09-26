@@ -126,11 +126,8 @@ private[spark] abstract class YarnSchedulerBackend(
    * This includes executors already pending or running.
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
-    val nodeBlacklist: Set[String] = scheduler.nodeBlacklist()
-    val filteredHostToLocalTaskCount = hostToLocalTaskCount.filterKeys(!nodeBlacklist.contains(_))
     yarnSchedulerEndpointRef.ask[Boolean](
-      RequestExecutors(requestedTotal, localityAwareTasks, filteredHostToLocalTaskCount,
-        nodeBlacklist))
+      RequestExecutors(requestedTotal, localityAwareTasks, hostToLocalTaskCount))
   }
 
   /**
