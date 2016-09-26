@@ -106,16 +106,14 @@ class ListingFileCatalog(
 
 object ListingFileCatalog extends Logging {
 
-  // `FileStatus` is Writable but not serializable.  What make it worse, somehow it doesn't play
-  // well with `SerializableWritable`.  So there seems to be no way to serialize a `FileStatus`.
-  // Here we use `SerializableFileStatus` to extract key components of a `FileStatus` to serialize
-  // it from executor side and reconstruct it on driver side.
+  /** A serializable variant of HDFS's BlockLocation. */
   private case class SerializableBlockLocation(
       names: Array[String],
       hosts: Array[String],
       offset: Long,
       length: Long)
 
+  /** A serializable variant of HDFS's FileStatus. */
   private case class SerializableFileStatus(
       path: String,
       length: Long,
@@ -137,17 +135,8 @@ object ListingFileCatalog extends Logging {
     val filter = FileInputFormat.getInputPathFilter(jobConf)
 
     paths.flatMap { path =>
-      logTrace(s"Listing $path")
       val fs = path.getFileSystem(hadoopConf)
-
-      // [SPARK-17599] Prevent ListingFileCatalog from failing if path doesn't exist
-      val status: Option[FileStatus] = try Option(fs.getFileStatus(path)) catch {
-        case _: FileNotFoundException =>
-          logWarning(s"The directory $path was not found. Was it deleted very recently?")
-          None
-      }
-
-      status.map(listLeafFiles0(fs, _, filter)).getOrElse(Seq.empty)
+      listLeafFiles0(fs, path, filter)
     }
   }
 
@@ -218,19 +207,28 @@ object ListingFileCatalog extends Logging {
    * List a single path, provided as a FileStatus, in serial.
    */
   private def listLeafFiles0(
-      fs: FileSystem, status: FileStatus, filter: PathFilter): Seq[FileStatus] = {
-    logTrace(s"Listing ${status.getPath}")
-    val name = status.getPath.getName.toLowerCase
+      fs: FileSystem, path: Path, filter: PathFilter): Seq[FileStatus] = {
+    logTrace(s"Listing $path")
+    val name = path.getName.toLowerCase
     if (shouldFilterOut(name)) {
       Seq.empty[FileStatus]
     } else {
-      val statuses = {
-        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
-        val stats = files ++ dirs.flatMap(dir => listLeafFiles0(fs, dir, filter))
+      // [SPARK-17599] Prevent ListingFileCatalog from failing if path doesn't exist
+      // Note that statuses only include FileStatus for the files and dirs directly under path,
+      // and does not include anything else recursively.
+      val statuses = try fs.listStatus(path) catch {
+        case _: FileNotFoundException =>
+          logWarning(s"The directory $path was not found. Was it deleted very recently?")
+          Array.empty[FileStatus]
+      }
+
+      val allLeafStatuses = {
+        val (dirs, files) = statuses.partition(_.isDirectory)
+        val stats = files ++ dirs.flatMap(dir => listLeafFiles0(fs, dir.getPath, filter))
         if (filter != null) stats.filter(f => filter.accept(f.getPath)) else stats
       }
-      // statuses do not have any dirs.
-      statuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
+
+      allLeafStatuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
         case f: LocatedFileStatus =>
           f
 
