@@ -1825,7 +1825,7 @@ test_that("read/write ORC files - compression option", {
   orcDF <- read.orc(orcPath2)
   expect_is(orcDF, "SparkDataFrame")
   expect_equal(count(orcDF), count(df))
-  expect_true(length(list.files(orcPath, pattern = ".zlib.orc")) > 0)
+  expect_true(length(list.files(orcPath2, pattern = ".zlib.orc")) > 0)
 
   unlink(orcPath2)
   unsetHiveContext()
