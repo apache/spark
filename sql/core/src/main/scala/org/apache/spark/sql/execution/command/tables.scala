@@ -415,6 +415,10 @@ case class DescribeTableCommand(
     val catalog = sparkSession.sessionState.catalog
 
     if (catalog.isTemporaryTable(table)) {
+      if (partitionSpec.nonEmpty) {
+        throw new AnalysisException(
+          s"DESC PARTITION is not allowed on a temporary view: ${table.identifier}")
+      }
       describeSchema(catalog.lookupRelation(table).schema, result)
     } else {
       val metadata = catalog.getTableMetadata(table)

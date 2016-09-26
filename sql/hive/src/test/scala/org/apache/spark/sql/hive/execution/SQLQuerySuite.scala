@@ -342,7 +342,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("describe partition") {
-    withTable("partitioned_table") {
+    withTable("partitioned_table", "datasource_table") {
       sql("CREATE TABLE partitioned_table (a STRING, b INT) PARTITIONED BY (c STRING, d STRING)")
       sql("ALTER TABLE partitioned_table ADD PARTITION (c='Us', d=1)")
 
@@ -393,6 +393,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("DESC datasource_table PARTITION (d=2)")
       }.getMessage()
       assert(m4.contains("DESC PARTITION is not allowed on a datasource table"))
+
+      val m5 = intercept[AnalysisException] {
+        spark.range(10).select('id as 'a, 'id as 'b).createTempView("view1")
+        sql("DESC view1 PARTITION (c='Us', d=1)").show()
+      }.getMessage()
+      assert(m5.contains("DESC PARTITION is not allowed on a temporary view"))
     }
   }
 
