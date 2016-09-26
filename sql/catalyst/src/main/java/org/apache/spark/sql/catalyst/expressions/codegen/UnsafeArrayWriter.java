@@ -83,10 +83,10 @@ public class UnsafeArrayWriter {
     return startingOffset + headerInBytes + ordinal * elementSize;
   }
 
-  public void setOffsetAndSize(int ordinal, long currentCursor, long size) {
+  public void setOffsetAndSize(int ordinal, long currentCursor, int size) {
     assertIndexIsValid(ordinal);
     final long relativeOffset = currentCursor - startingOffset;
-    final long offsetAndSize = (relativeOffset << 32) | size;
+    final long offsetAndSize = (relativeOffset << 32) | (long)size;
 
     write(ordinal, offsetAndSize);
   }
@@ -199,7 +199,7 @@ public class UnsafeArrayWriter {
         // Write the bytes to the variable length portion.
         Platform.copyMemory(
           bytes, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, numBytes);
-        setOffsetAndSize(ordinal, holder.cursor, (long)numBytes);
+        setOffsetAndSize(ordinal, holder.cursor, numBytes);
 
         // move the cursor forward with 8-bytes boundary
         holder.cursor += roundedSize;
@@ -221,7 +221,7 @@ public class UnsafeArrayWriter {
     // Write the bytes to the variable length portion.
     input.writeToMemory(holder.buffer, holder.cursor);
 
-    setOffsetAndSize(ordinal, holder.cursor, (long)numBytes);
+    setOffsetAndSize(ordinal, holder.cursor, numBytes);
 
     // move the cursor forward.
     holder.cursor += roundedSize;
@@ -240,7 +240,7 @@ public class UnsafeArrayWriter {
     Platform.copyMemory(
       input, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, numBytes);
 
-    setOffsetAndSize(ordinal, holder.cursor, (long)numBytes);
+    setOffsetAndSize(ordinal, holder.cursor, numBytes);
 
     // move the cursor forward.
     holder.cursor += roundedSize;
@@ -254,7 +254,7 @@ public class UnsafeArrayWriter {
     Platform.putLong(holder.buffer, holder.cursor, input.months);
     Platform.putLong(holder.buffer, holder.cursor + 8, input.microseconds);
 
-    setOffsetAndSize(ordinal, holder.cursor, (long)16);
+    setOffsetAndSize(ordinal, holder.cursor, 16);
 
     // move the cursor forward.
     holder.cursor += 16;
