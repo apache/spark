@@ -370,25 +370,3 @@ private[scheduler] object BlacklistTracker extends Logging {
 }
 
 private final case class BlacklistedExecutor(node: String, expiryTime: Long)
-
-/** Failures for one executor, within one taskset */
-private[scheduler] final class ExecutorFailuresInTaskSet(val node: String) {
-  /**
-   * Mapping from index of the tasks in the taskset, to the number of times it has failed on this
-   * executor and the last time it failed.
-   */
-  val taskToFailureCountAndExpiryTime = HashMap[Int, (Int, Long)]()
-  def updateWithFailure(taskIndex: Int, failureExpiryTime: Long): Unit = {
-    val (prevFailureCount, prevFailureExpiryTime) =
-      taskToFailureCountAndExpiryTime.getOrElse(taskIndex, (0, -1L))
-    assert(failureExpiryTime >= prevFailureExpiryTime)
-    taskToFailureCountAndExpiryTime(taskIndex) = (prevFailureCount + 1, failureExpiryTime)
-  }
-  def numUniqueTasksWithFailures: Int = taskToFailureCountAndExpiryTime.size
-
-  override def toString(): String = {
-    s"numUniqueTasksWithFailures = $numUniqueTasksWithFailures; " +
-      s"tasksToFailureCount = $taskToFailureCountAndExpiryTime"
-  }
-}
-

@@ -22,18 +22,20 @@ import scala.collection.mutable.HashMap
  * Small helper for tracking failed tasks for blacklisting purposes.  Info on all failures for one
  * task set, within one task set.
  */
-private[scheduler] final class ExecutorFailuresInTaskSet(val node: String) {
+class ExecutorFailuresInTaskSet(val node: String) {
   /**
    * Mapping from index of the tasks in the taskset, to the number of times it has failed on this
    * executor and the last time it failed.
    */
   val taskToFailureCountAndExpiryTime = HashMap[Int, (Int, Long)]()
+
   def updateWithFailure(taskIndex: Int, failureExpiryTime: Long): Unit = {
     val (prevFailureCount, prevFailureExpiryTime) =
       taskToFailureCountAndExpiryTime.getOrElse(taskIndex, (0, -1L))
     assert(failureExpiryTime >= prevFailureExpiryTime)
     taskToFailureCountAndExpiryTime(taskIndex) = (prevFailureCount + 1, failureExpiryTime)
   }
+
   def numUniqueTasksWithFailures: Int = taskToFailureCountAndExpiryTime.size
 
   override def toString(): String = {
