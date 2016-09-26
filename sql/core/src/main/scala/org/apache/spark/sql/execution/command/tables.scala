@@ -433,21 +433,7 @@ case class DescribeTableCommand(
           describeFormattedTableInfo(metadata, result)
         }
       } else {
-        if (metadata.tableType == CatalogTableType.VIEW) {
-          throw new AnalysisException(
-            s"DESC PARTITION is not allowed on a view: ${table.identifier}")
-        }
-        if (DDLUtils.isDatasourceTable(metadata)) {
-          throw new AnalysisException(
-            s"DESC PARTITION is not allowed on a datasource table: ${table.identifier}")
-        }
-        val partition = catalog.getPartition(table, partitionSpec)
-        if (isExtended) {
-          describeExtendedDetailPartitionInfo(table, metadata, partition, result)
-        } else if (isFormatted) {
-          describeFormattedDetailPartitionInfo(table, metadata, partition, result)
-          describeStorageInfo(metadata, result)
-        }
+        describeDetailPartitionInfo(catalog, metadata, result)
       }
     }
 
@@ -518,6 +504,27 @@ case class DescribeTableCommand(
         append(buffer, "Sort Columns:", sortColumnNames.mkString("[", ", ", "]"), "")
 
       case _ =>
+    }
+  }
+
+  private def describeDetailPartitionInfo(
+      catalog: SessionCatalog,
+      metadata: CatalogTable,
+      result: ArrayBuffer[Row]): Unit = {
+    if (metadata.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException(
+        s"DESC PARTITION is not allowed on a view: ${table.identifier}")
+    }
+    if (DDLUtils.isDatasourceTable(metadata)) {
+      throw new AnalysisException(
+        s"DESC PARTITION is not allowed on a datasource table: ${table.identifier}")
+    }
+    val partition = catalog.getPartition(table, partitionSpec)
+    if (isExtended) {
+      describeExtendedDetailPartitionInfo(table, metadata, partition, result)
+    } else if (isFormatted) {
+      describeFormattedDetailPartitionInfo(table, metadata, partition, result)
+      describeStorageInfo(metadata, result)
     }
   }
 

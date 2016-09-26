@@ -342,7 +342,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("describe partition") {
-    withTable("partitioned_table", "datasource_table") {
+    withTable("partitioned_table") {
       sql("CREATE TABLE partitioned_table (a STRING, b INT) PARTITIONED BY (c STRING, d STRING)")
       sql("ALTER TABLE partitioned_table ADD PARTITION (c='Us', d=1)")
 
@@ -368,6 +368,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         "Location:",
         "Partition Parameters:",
         "# Storage Information")
+    }
+  }
+
+  test("describe partition - error handling") {
+    withTable("partitioned_table", "datasource_table") {
+      sql("CREATE TABLE partitioned_table (a STRING, b INT) PARTITIONED BY (c STRING, d STRING)")
+      sql("ALTER TABLE partitioned_table ADD PARTITION (c='Us', d=1)")
 
       val m = intercept[NoSuchPartitionException] {
         sql("DESC partitioned_table PARTITION (c='Us', d=2)")
