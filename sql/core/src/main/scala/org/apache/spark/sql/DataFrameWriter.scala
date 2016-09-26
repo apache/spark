@@ -424,7 +424,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     this.extraOptions = this.extraOptions ++ (connectionProperties.asScala)
     // explicit url and dbtable should override all
     this.extraOptions += ("url" -> url, "dbtable" -> table)
-    format("jdbc").save
+    format("jdbc").save()
   }
 
   /**

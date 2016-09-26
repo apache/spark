@@ -216,7 +216,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     df.write.format("jdbc")
     .options(Map("url" -> url, "dbtable" -> "TEST.SAVETEST"))
-    .save
+    .save()
 
     assert(2 === sqlContext.read.jdbc(url, "TEST.SAVETEST", new Properties).count)
     assert(

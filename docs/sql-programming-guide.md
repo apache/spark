@@ -1096,7 +1096,7 @@ the Data Sources API. The following options are supported:
 
 {% highlight sql %}
 
-CREATE TEMPORARY TABLE jdbcTable
+CREATE TEMPORARY VIEW jdbcTable
 USING org.apache.spark.sql.jdbc
 OPTIONS (
   url "jdbc:postgresql:dbserver",
