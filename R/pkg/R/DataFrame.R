@@ -2624,6 +2624,15 @@ setMethod("except",
 setMethod("write.df",
           signature(df = "SparkDataFrame"),
           function(df, path = NULL, source = NULL, mode = "error", ...) {
+            if (!is.character(path) && !is.null(path)) {
+              stop("path should be charactor, null or omitted.")
+            }
+            if (!is.character(source) && !is.null(source)) {
+              stop("source should be charactor, null or omitted. It is 'parquet' by default.")
+            }
+            if (!is.character(mode)) {
+              stop("mode should be charactor or omitted. It is 'error' by default.")
+            }
             if (is.null(source)) {
               source <- getDefaultSqlSource()
             }
@@ -2636,7 +2645,7 @@ setMethod("write.df",
             write <- callJMethod(write, "format", source)
             write <- callJMethod(write, "mode", jmode)
             write <- callJMethod(write, "options", options)
-            write <- callJMethod(write, "save")
+            write <- tryCatch(callJMethod(write, "save"), error = captureJVMException)
           })
 
 #' @rdname write.df

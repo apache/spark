@@ -698,6 +698,21 @@ isSparkRShell <- function() {
   grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
 }
 
+captureJVMException <- function(e) {
+  stacktrace <- as.character(e)
+  if (any(grep("java.lang.IllegalArgumentException: ", stacktrace))) {
+    msg <- strsplit(stacktrace, "java.lang.IllegalArgumentException: ", fixed = TRUE)[[1]][2]
+    first <- strsplit(msg, "\r?\n\tat")[[1]][1]
+    stop(first)
+  } else if (any(grep("org.apache.spark.sql.AnalysisException: ", stacktrace))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.AnalysisException: ", fixed = TRUE)[[1]][2]
+    first <- strsplit(msg, "\r?\n\tat")[[1]][1]
+    stop(first)
+  } else {
+    stop(stacktrace)
+  }
+}
+
 # rbind a list of rows with raw (binary) columns
 #
 # @param inputData a list of rows, with each row a list

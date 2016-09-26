@@ -2544,13 +2544,36 @@ test_that("Spark version from SparkSession", {
   expect_equal(ver, version)
 })
 
-test_that("Call DataFrameWriter.save() API in Java without path", {
+test_that("Call DataFrameWriter.save() API in Java without path and check argument types", {
   df <- read.df(jsonPath, "json")
-  # This tests if the exception is thrown from Spark side not from SparkR side.
+  # This tests if the exception is thrown from JVM not from SparkR side.
   # It makes sure that we can omit path argument in write.df API and then it calls
   # DataFrameWriter.save() without path.
-  expect_error(write.df(df, source = "csv"),
-               "java.lang.IllegalArgumentException: 'path' is not specified")
+  expect_error(write.df(df, source = "csv"), "'path' is not specified")
+
+  # Arguments checking in R side.
+  expect_error(write.df(df, "data.tmp", source = c(1, 2)),
+               "source should be charactor, null or omitted. It is 'parquet' by default.")
+  expect_error(write.df(df, path = c(3)),
+               "path should be charactor, null or omitted.")
+  expect_error(write.df(df, mode = TRUE),
+               "mode should be charactor or omitted. It is 'error' by default.")
+})
+
+test_that("Call DataFrameWriter.load() API in Java without path and check argument types", {
+  df <- read.df(jsonPath, "json")
+  # This tests if the exception is thrown from JVM not from SparkR side.
+  # It makes sure that we can omit path argument in read.df API and then it calls
+  # DataFrameWriter.load() without path.
+  expect_error(read.df(source = "json"),
+               "Unable to infer schema for JSON at . It must be specified manually")
+  expect_error(read.df("arbitrary_path"), "Path does not exist:")
+
+  # Arguments checking in R side.
+  expect_error(read.df(path = c(3)),
+               "path should be charactor, null or omitted.")
+  expect_error(read.df(jsonPath, source = c(1, 2)),
+               "source should be charactor, null or omitted. It is 'parquet' by default.")
 })
 
 unlink(parquetPath)

@@ -771,6 +771,12 @@ dropTempView <- function(viewName) {
 #' @method read.df default
 #' @note read.df since 1.4.0
 read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.strings = "NA", ...) {
+  if (!is.character(path) && !is.null(path)) {
+    stop("path should be charactor, null or omitted.")
+  }
+  if (!is.character(source) && !is.null(source)) {
+    stop("source should be charactor, null or omitted. It is 'parquet' by default.")
+  }
   sparkSession <- getSparkSession()
   options <- varargsToEnv(...)
   if (!is.null(path)) {
@@ -784,16 +790,20 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.string
   }
   if (!is.null(schema)) {
     stopifnot(class(schema) == "structType")
-    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession, source,
-                       schema$jobj, options)
+    sdf <- tryCatch({
+      callJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession, source,
+                  schema$jobj, options)
+    }, error = captureJVMException)
   } else {
-    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
-                       "loadDF", sparkSession, source, options)
+    sdf <- tryCatch({
+      callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                  "loadDF", sparkSession, source, options)
+    }, error = captureJVMException)
   }
   dataFrame(sdf)
 }
 
-read.df <- function(x, ...) {
+read.df <- function(x = NULL, ...) {
   dispatchFunc("read.df(path = NULL, source = NULL, schema = NULL, ...)", x, ...)
 }
 
@@ -805,7 +815,7 @@ loadDF.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
   read.df(path, source, schema, ...)
 }
 
-loadDF <- function(x, ...) {
+loadDF <- function(x = NULL, ...) {
   dispatchFunc("loadDF(path = NULL, source = NULL, schema = NULL, ...)", x, ...)
 }
 
