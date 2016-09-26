@@ -2638,7 +2638,7 @@ setMethod("write.df",
               source <- getDefaultSqlSource()
             }
             jmode <- convertToJSaveMode(mode)
-            options <- varargsToEnv(...)
+            options <- varargsToStrEnv(...)
             if (!is.null(path)) {
               options[["path"]] <- path
             }
@@ -2701,7 +2701,7 @@ setMethod("saveAsTable",
               source <- getDefaultSqlSource()
             }
             jmode <- convertToJSaveMode(mode)
-            options <- varargsToEnv(...)
+            options <- varargsToStrEnv(...)
 
             write <- callJMethod(df@sdf, "write")
             write <- callJMethod(write, "format", source)

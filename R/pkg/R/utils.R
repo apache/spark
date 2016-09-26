@@ -334,6 +334,22 @@ varargsToEnv <- function(...) {
   env
 }
 
+# Utility function to capture the varargs into environment object but all values are converted
+# into string.
+varargsToStrEnv <- function(...) {
+  env <- varargsToEnv(...)
+  for (name in names(env)) {
+    if (is.logical(env[[name]])) {
+      env[[name]] <-  tolower(as.character(env[[name]]))
+    } else if (is.null(env[[name]])) {
+      env[[name]] <-  env[[name]]
+    } else {
+      env[[name]] <-  as.character(env[[name]])
+    }
+  }
+  env
+}
+
 getStorageLevel <- function(newLevel = c("DISK_ONLY",
                                          "DISK_ONLY_2",
                                          "MEMORY_AND_DISK",

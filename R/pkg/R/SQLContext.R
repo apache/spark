@@ -779,7 +779,7 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.string
          "in 'spark.sql.sources.default' configuration by default.")
   }
   sparkSession <- getSparkSession()
-  options <- varargsToEnv(...)
+  options <- varargsToStrEnv(...)
   if (!is.null(path)) {
     options[["path"]] <- path
   }
@@ -842,7 +842,7 @@ loadDF <- function(x = NULL, ...) {
 #' @note createExternalTable since 1.4.0
 createExternalTable.default <- function(tableName, path = NULL, source = NULL, ...) {
   sparkSession <- getSparkSession()
-  options <- varargsToEnv(...)
+  options <- varargsToStrEnv(...)
   if (!is.null(path)) {
     options[["path"]] <- path
   }
