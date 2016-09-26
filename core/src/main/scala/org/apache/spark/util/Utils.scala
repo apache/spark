@@ -698,6 +698,26 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Validate that a given URI is actually a valid URL as well.
+   * @param uri The URI to validate
+   */
+  @throws[MalformedURLException]("when the URI is an invalid URL")
+  def validateURL(uri: URI): Unit = {
+    Option(uri.getScheme).getOrElse("file") match {
+      case "http" | "https" | "ftp" =>
+        try {
+          uri.toURL
+        } catch {
+          case e: MalformedURLException =>
+            val ex = new MalformedURLException(s"URI (${uri.toString}) is not a valid URL.")
+            ex.initCause(e)
+            throw ex
+        }
+      case _ => // will not be turned into a URL anyway
+    }
+  }
+
+  /**
    * Get the path of a temporary directory.  Spark's local directories can be configured through
    * multiple settings, which are used with the following precedence:
    *
