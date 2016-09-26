@@ -337,9 +337,10 @@ varargsToEnv <- function(...) {
 # Utility function to capture the varargs into environment object but all values are converted
 # into string.
 varargsToStrEnv <- function(...) {
-  env <- varargsToEnv(...)
-  for (name in names(env)) {
-    value <- env[[name]]
+  pairs <- list(...)
+  env <- new.env()
+  for (name in names(pairs)) {
+    value <- pairs[[name]]
     if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
       stop("value[", value, "] in key[", name, "] is not convertable to string.")
     }
