@@ -21,19 +21,17 @@ import java.{util => ju}
 
 import scala.collection.JavaConverters._
 
-import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer}
 import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.serialization.ByteArrayDeserializer
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSource._
-import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.types._
-import org.apache.spark.SparkContext
 
 /**
  * A [[Source]] that uses Kafka's own [[KafkaConsumer]] API to reads data from Kafka. The design
@@ -59,7 +57,7 @@ import org.apache.spark.SparkContext
  *    start reading from. This used to create the first batch.
  *
  *   - `getOffset()` uses the KafkaConsumer to query the latest available offsets, which are
- *   returned as a [[KafkaSourceOffset]].
+ *     returned as a [[KafkaSourceOffset]].
  *
  *   - `getBatch()` returns a DF that reads from the 'start offset' until the 'end offset' in
  *     for each partition. The end offset is excluded to be consistent with the semantics of
@@ -77,25 +75,23 @@ private[kafka010] case class KafkaSource(
     sourceOptions: Map[String, String])
   extends Source with Logging {
 
-  @transient private val consumer = consumerStrategy.createConsumer()
-  @transient private val sc = sqlContext.sparkContext
-  @transient private val initialPartitionOffsets = fetchPartitionOffsets(seekToLatest = false)
-  logInfo(s"Initial offsets: " + initialPartitionOffsets)
+  private val consumer = consumerStrategy.createConsumer()
+  private val sc = sqlContext.sparkContext
+  private val initialPartitionOffsets = fetchPartitionOffsets(seekToLatest = false)
+  logInfo(s"Initial offsets: $initialPartitionOffsets")
 
   override def schema: StructType = KafkaSource.kafkaSchema
 
   /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = {
     val offset = KafkaSourceOffset(fetchPartitionOffsets(seekToLatest = true))
-    logDebug(s"GetOffset: $offset")
+    logInfo(s"GetOffset: $offset")
     Some(offset)
   }
 
-  /**
-   * Returns the data that is between the offsets [`start`, `end`), i.e. end is exclusive.
-   */
+  /** Returns the data that is between the offsets [`start`, `end`), i.e. end is exclusive. */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-    logDebug(s"GetBatch called with start = $start, end = $end")
+    logInfo(s"GetBatch called with start = $start, end = $end")
     val untilPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(end)
     val fromPartitionOffsets = start match {
       case Some(prevBatchEndOffset) =>
@@ -104,12 +100,20 @@ private[kafka010] case class KafkaSource(
         initialPartitionOffsets
     }
 
+    // Find the new partitions, and get their earliest offsets
     val newPartitions = untilPartitionOffsets.keySet.diff(fromPartitionOffsets.keySet)
     val newPartitionOffsets = if (newPartitions.nonEmpty) {
       fetchNewPartitionEarliestOffsets(newPartitions.toSeq)
     } else {
       Map.empty[TopicPartition, Long]
     }
+    logInfo(s"Partitions added: $newPartitionOffsets")
+    newPartitionOffsets.filter(_._2 != 0).foreach { case (p, o) =>
+      logWarning(s"Added partition $p starts from $o instead of 0, some data may have been missed")
+    }
+
+    val deletedPartitions = fromPartitionOffsets.keySet.diff(untilPartitionOffsets.keySet)
+    logWarning(s"Partitions removed: $deletedPartitions, some data may have been missed")
 
     // Sort the partitions and current list of executors to consistently assign each partition
     // to the executor. This allows cached KafkaConsumers in the executors to be re-used to
@@ -121,33 +125,41 @@ private[kafka010] case class KafkaSource(
           (r.topic, r.partition))
       }
     }
+
+    // Use the until partitions to calculate offset ranges to ignore partitions that have
+    // been deleted
     val sortedTopicPartitions = untilPartitionOffsets.keySet.toSeq.sorted(topicPartitionOrdering)
+    logDebug("Sorted topicPartitions: " + sortedTopicPartitions.mkString(", "))
+
     val sortedExecutors = getSortedExecutorList(sc)
-    val numExecutors = sortedExecutors.size
+    val numExecutors = sortedExecutors.length
     logDebug("Sorted executors: " + sortedExecutors.mkString(", "))
+
+    // Calculate offset ranges
     val offsetRanges = sortedTopicPartitions.map { tp =>
       val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
         newPartitionOffsets.getOrElse(tp, {
-          // This should not happen since newPartitionOffsets contains all paritions not in
+          // This should not happen since newPartitionOffsets contains all partitions not in
           // fromPartitionOffsets
-          throw new IllegalStateException(s"$tp doesn't have a offset")
+          throw new IllegalStateException(s"$tp doesn't have a from offset")
         })
       }
       val untilOffset = untilPartitionOffsets(tp)
       val preferredLoc = if (numExecutors > 0) {
         Some(sortedExecutors(positiveMod(tp.hashCode, numExecutors)))
       } else None
-      KafkaSourceRDD.OffsetRange(tp, fromOffset, untilOffset, preferredLoc)
+      KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
     }.toArray
 
     // Create a RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
-      sc, executorKafkaParams, offsetRanges, sourceOptions).map { cr =>
+      sc, executorKafkaParams, offsetRanges).map { cr =>
         Row(cr.checksum, cr.key, cr.offset, cr.partition, cr.serializedKeySize,
           cr.serializedValueSize, cr.timestamp, cr.timestampType.id, cr.topic, cr.value)
     }
 
-    logInfo("GetBatch: " + offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))
+    logInfo("GetBatch generating RDD of offset range: " +
+      offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))
     sqlContext.createDataFrame(rdd, schema)
   }
 
@@ -158,44 +170,89 @@ private[kafka010] case class KafkaSource(
 
   override def toString(): String = s"KafkaSource[$consumerStrategy]"
 
-  private def fetchPartitionOffsets(seekToLatest: Boolean): Map[TopicPartition, Long] = {
-    synchronized {
-      logTrace("\tPolling")
-      consumer.poll(0)
-      val partitions = consumer.assignment()
-      consumer.pause(partitions)
-      logDebug(s"\tPartitioned assigned to consumer: $partitions")
-      if (seekToLatest) {
-        consumer.seekToEnd(partitions)
-        logDebug("\tSeeked to the end")
-      }
-      logTrace("Getting positions")
-      val partitionToOffsets = partitions.asScala.map(p => p -> consumer.position(p))
-      logDebug(s"Got positions $partitionToOffsets")
-      partitionToOffsets.toMap
+  /**
+   * Fetch the offset of a partition, either the latest offsets or the current offsets in the
+   * KafkaConsumer.
+   */
+  private def fetchPartitionOffsets(
+      seekToLatest: Boolean): Map[TopicPartition, Long] = withRetries {
+
+    // Poll to get the latest assigned partitions
+    logTrace("\tPolling")
+    consumer.poll(0)
+    val partitions = consumer.assignment()
+    consumer.pause(partitions)
+    logDebug(s"\tPartitioned assigned to consumer: $partitions")
+
+    // Get the current or latest offset of each partition
+    if (seekToLatest) {
+      consumer.seekToEnd(partitions)
+      logDebug("\tSeeked to the end")
     }
+    logTrace("Getting positions")
+    val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
+    logDebug(s"Got offsets for partition : $partitionOffsets")
+    partitionOffsets
   }
 
+  /** Fetch the earliest offsets for newly discovered partitions */
   private def fetchNewPartitionEarliestOffsets(
-      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = {
-    synchronized {
-      consumer.poll(0)
-      val partitions = consumer.assignment()
-      logDebug(s"\tPartitioned assigned to consumer: $partitions")
-      require(newPartitions.forall(tp => partitions.contains(tp)),
-        s"$partitions doesn't contain all new paritions: $newPartitions")
-      consumer.seekToBeginning(newPartitions.asJava)
-      val partitionToOffsets = newPartitions.map(p => p -> consumer.position(p))
-      logDebug(s"Got earliest positions $partitionToOffsets")
-      partitionToOffsets.toMap
+      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = withRetries {
+
+    // Poll to get the latest assigned partitions
+    logTrace("\tPolling")
+    consumer.poll(0)
+    val partitions = consumer.assignment()
+    logDebug(s"\tPartitioned assigned to consumer: $partitions")
+    require(newPartitions.forall(tp => partitions.contains(tp)),
+      s"$partitions doesn't contain all new paritions: $newPartitions")
+
+    // Get the earliest offset of each partition
+    consumer.seekToBeginning(newPartitions.asJava)
+    val partitionToOffsets = newPartitions.map(p => p -> consumer.position(p)).toMap
+    logDebug(s"Got offsets for new partitions: $partitionToOffsets")
+    partitionToOffsets
+  }
+
+  /**
+   * Helper function that does multiple retries on the a body of code that returns offsets.
+   * Retries are needed to handle transient failures. For e.g. race conditions between getting
+   * assignment and getting position while topics/partitions are deleted can cause NPEs.
+   */
+  private def withRetries(
+      body: => Map[TopicPartition, Long]): Map[TopicPartition, Long] = synchronized {
+
+    var result: Option[Map[TopicPartition, Long]] = None
+    var attempt = 1
+    var lastException: Exception = null
+    while (result.isEmpty && attempt <= MAX_OFFSET_FETCH_ATTEMPTS) {
+      try {
+        result = Some(body)
+      } catch {
+        case e: Exception =>
+          lastException = e
+          logWarning(s"Error in attempt $attempt getting Kafka offsets: ", e)
+          attempt += 1
+          Thread.sleep(OFFSET_FETCH_ATTEMPT_INTERVAL_MS)
+      }
     }
+    if (result.isEmpty) {
+      assert(attempt > MAX_OFFSET_FETCH_ATTEMPTS)
+      assert(lastException != null)
+      throw lastException
+    }
+    result.get
   }
 
   private def positiveMod(a: Long, b: Int): Int = ((a % b).toInt + b) % b
 }
 
+
 /** Companion object for the [[KafkaSource]]. */
 private[kafka010] object KafkaSource {
+
+  val MAX_OFFSET_FETCH_ATTEMPTS = 3
+  val OFFSET_FETCH_ATTEMPT_INTERVAL_MS = 10
 
   def kafkaSchema: StructType = StructType(Seq(
     StructField("checksum", LongType),
@@ -258,41 +315,6 @@ private[kafka010] object KafkaSource {
 /** An [[Offset]] for the [[KafkaSource]]. */
 private[kafka010]
 case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) extends Offset {
-  /**
-   * Returns a negative integer, zero, or a positive integer as this object is less than, equal to,
-   * or greater than the specified object.
-   */
-  override def compareTo(other: Offset): Int = other match {
-    case KafkaSourceOffset(otherOffsets) =>
-      val allTopicAndPartitions = (this.partitionToOffsets.keySet ++ otherOffsets.keySet).toSeq
-
-      val comparisons = allTopicAndPartitions.map { tp =>
-        (this.partitionToOffsets.get(tp), otherOffsets.get(tp)) match {
-          case (Some(a), Some(b)) =>
-            if (a < b) {
-              -1
-            } else if (a > b) {
-              1
-            } else {
-              0
-            }
-          case (None, _) => -1
-          case (_, None) => 1
-        }
-      }
-      val nonZeroSigns = comparisons.filter { _ != 0 }.toSet
-      nonZeroSigns.size match {
-        case 0 => 0 // if both empty or only 0s
-        case 1 => nonZeroSigns.head // if there are only (0s and 1s) or (0s and -1s)
-        case _ => // there are both 1s and -1s
-          throw new IllegalArgumentException(
-            s"Invalid comparison between non-linear histories: $this <=> $other")
-      }
-
-    case _ =>
-      throw new IllegalArgumentException(s"Cannot compare $this <=> $other")
-  }
-
   override def toString(): String = {
     partitionToOffsets.toSeq.sortBy(_._1.toString).mkString("[", ", ", "]")
   }
@@ -320,155 +342,3 @@ private[kafka010] object KafkaSourceOffset {
 }
 
 
-/**
- * The provider class for the [[KafkaSource]]. This provider is designed such that it throws
- * IllegalArgumentException when the Kafka Dataset is created, so that it can catch
- * missing options even before the query is started.
- */
-private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
-  with DataSourceRegister with Logging {
-  private val strategyOptionNames = Set("subscribe", "subscribepattern")
-
-  /** Class to conveniently update Kafka config params, while logging the changes */
-  private case class ConfigUpdater(module: String, kafkaParams: Map[String, String]) {
-    private val map = new ju.HashMap[String, Object](kafkaParams.asJava)
-    def set(key: String, value: Object): this.type = {
-      map.put(key, value)
-      logInfo(s"$module: Set $key to $value, earlier value: ${kafkaParams.get(key).getOrElse("")}")
-      this
-    }
-
-    def setIfUnset(key: String, value: Object): ConfigUpdater = {
-      if (!map.containsKey(key)) {
-        map.put(key, value)
-        logInfo(s"$module: Set $key to $value")
-      }
-      this
-    }
-
-    def build(): ju.Map[String, Object] = map
-  }
-
-  /**
-   * Returns the name and schema of the source. In addition, it also verifies whether the options
-   * are correct and sufficient to create the [[KafkaSource]] when the query is started.
-   */
-  override def sourceSchema(
-      sqlContext: SQLContext,
-      schema: Option[StructType],
-      providerName: String,
-      parameters: Map[String, String]): (String, StructType) = {
-    validateOptions(parameters)
-    ("kafka", KafkaSource.kafkaSchema)
-  }
-
-  override def createSource(
-      sqlContext: SQLContext,
-      metadataPath: String,
-      schema: Option[StructType],
-      providerName: String,
-      parameters: Map[String, String]): Source = {
-    validateOptions(parameters)
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
-    val specifiedKafkaParams =
-      parameters
-        .keySet
-        .filter(_.toLowerCase.startsWith("kafka."))
-        .map { k => k.drop(6).toString -> parameters(k) }
-        .toMap
-
-    val deserClassName = classOf[ByteArrayDeserializer].getName
-
-    val kafkaParamsForStrategy =
-      ConfigUpdater("source", specifiedKafkaParams)
-        .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
-        .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
-        .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
-        .build()
-
-    val kafkaParamsForExecutors =
-      ConfigUpdater("source", specifiedKafkaParams)
-        .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
-        .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
-
-        // So that consumers in executors never throw NoOffsetForPartitionException
-        .set(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
-
-        // So that consumers in executors do not mess with user-specified group id
-        .set(ConsumerConfig.GROUP_ID_CONFIG,
-          "spark-executor-" + specifiedKafkaParams(ConsumerConfig.GROUP_ID_CONFIG))
-
-        // So that consumers in executors no keep committing offsets unnecessaribly
-        .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
-
-        // If buffer config is not set, it to reasonable value to work around
-        // buffer issues (see KAFKA-3135)
-        .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
-        .build()
-
-    val strategy = caseInsensitiveParams.find(x => strategyOptionNames.contains(x._1)).get match {
-      case ("subscribe", value) =>
-        SubscribeStrategy(
-          value.split(",").map(_.trim()).filter(_.nonEmpty),
-          kafkaParamsForStrategy)
-      case ("subscribepattern", value) =>
-        SubscribePatternStrategy(
-          value.trim(),
-          kafkaParamsForStrategy)
-      case _ =>
-        // Should never reach here as we are already matching on
-        // matched strategy names
-        throw new IllegalArgumentException("Unknown option")
-    }
-
-    new KafkaSource(sqlContext, strategy, kafkaParamsForExecutors, parameters)
-  }
-
-  private def validateOptions(parameters: Map[String, String]): Unit = {
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
-    val specifiedStrategies =
-      caseInsensitiveParams.filter { case(k, _) => strategyOptionNames.contains(k) }.toSeq
-    if (specifiedStrategies.isEmpty) {
-      throw new IllegalArgumentException(
-        "One of the following options must be specified for Kafka source: "
-          + strategyOptionNames.mkString(", ") + ". See docs for more details.")
-    } else if (specifiedStrategies.size > 1) {
-      throw new IllegalArgumentException(
-        "Only one of the following options can be specified for Kafka source: "
-          + strategyOptionNames.mkString(", ") + ". See docs for more details.")
-    }
-
-    val strategy = caseInsensitiveParams.find(x => strategyOptionNames.contains(x._1)).get match {
-      case ("subscribe", value) =>
-        val topics = value.split(",").map(_.trim).filter(_.nonEmpty)
-        if (topics.isEmpty) {
-          throw new IllegalArgumentException(
-            "No topics to subscribe to as specified value for option " +
-              s"'subscribe' is '$value'")
-        }
-      case ("subscribepattern", value) =>
-        val pattern = caseInsensitiveParams("subscribepattern").trim()
-        if (pattern.isEmpty) {
-          throw new IllegalArgumentException(
-            "Pattern to subscribe is empty as specified value for option " +
-              s"'subscribePattern' is '$value'")
-        }
-      case _ =>
-        // Should never reach here as we are already matching on
-        // matched strategy names
-        throw new IllegalArgumentException("Unknown option")
-    }
-
-    if (!caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG}")) {
-      throw new IllegalArgumentException(
-        "Option 'kafka.bootstrap.servers' must be specified for configuring Kafka consumer")
-    }
-
-    if (!caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
-      throw new IllegalArgumentException(
-        "Option 'kafka.group.id' must be specified for configuring Kafka consumer")
-    }
-  }
-
-  override def shortName(): String = "kafka"
-}

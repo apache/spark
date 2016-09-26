@@ -36,12 +36,4 @@ class KafkaSourceOffsetSuite extends OffsetSuite {
   compare(
     one = KafkaSourceOffset(("t", 0, 1L)),
     two = KafkaSourceOffset(("t", 0, 2L), ("t", 1, 1L)))
-
-  compareInvalid(
-    one = KafkaSourceOffset(("t", 1, 1L)),
-    two = KafkaSourceOffset(("t", 0, 2L)))
-
-  compareInvalid(
-    one = KafkaSourceOffset(("t", 0, 1L)),
-    two = KafkaSourceOffset(("T", 0, 2L)))
 }
