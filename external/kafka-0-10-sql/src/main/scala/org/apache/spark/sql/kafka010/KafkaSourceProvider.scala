@@ -260,5 +260,4 @@ private[kafka010] object KafkaSourceProvider {
   private val STRATEGY_OPTION_KEYS = Set("subscribe", "subscribepattern")
   private val STARTING_OFFSET_OPTION_KEY = "startingoffset"
   private val STARTING_OFFSET_OPTION_VALUES = Set("earliest", "latest")
-
 }
