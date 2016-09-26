@@ -339,12 +339,16 @@ varargsToEnv <- function(...) {
 varargsToStrEnv <- function(...) {
   env <- varargsToEnv(...)
   for (name in names(env)) {
-    if (is.logical(env[[name]])) {
-      env[[name]] <- tolower(as.character(env[[name]]))
-    } else if (is.null(env[[name]])) {
-      env[[name]] <- env[[name]]
+    value <- env[[name]]
+    if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
+      stop("value[", value, "] in key[", name, "] is not convertable to string.")
+    }
+    if (is.logical(value)) {
+      env[[name]] <- tolower(as.character(value))
+    } else if (is.null(value)) {
+      env[[name]] <- value
     } else {
-      env[[name]] <- as.character(env[[name]])
+      env[[name]] <- as.character(value)
     }
   }
   env
