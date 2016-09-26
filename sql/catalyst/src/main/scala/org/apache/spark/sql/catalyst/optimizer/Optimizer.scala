@@ -579,8 +579,13 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
  * Combines all adjacent [[Union]] operators into a single [[Union]].
  */
 object CombineUnions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Unions(children) => Union(children)
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case Unions(children, isDistinct) =>
+      if (isDistinct) {
+        Distinct(Union(children))
+      } else {
+        Union(children)
+      }
   }
 }
 
