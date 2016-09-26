@@ -427,11 +427,6 @@ private[hive] class HiveClientImpl(
   }
 
   override def alterTable(tableName: String, table: CatalogTable): Unit = withHiveState {
-    // Not allowed to switch the table type
-    if (table.properties.contains("EXTERNAL")) {
-      throw new AnalysisException(
-        "EXTERNAL is a preserved property key. Users are not allowed to set or change it")
-    }
     val hiveTable = toHiveTable(table)
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"${table.database}.$tableName"

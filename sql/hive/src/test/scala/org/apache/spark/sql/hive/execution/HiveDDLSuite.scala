@@ -325,8 +325,8 @@ class HiveDDLSuite
       val message = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('EXTERNAL' = 'TRUE')")
       }.getMessage
-      assert(message.contains(
-        "EXTERNAL is a preserved property key. Users are not allowed to set or change it"))
+      assert(message.contains("Operation not allowed: ALTER TABLE SET TBLPROPERTIES is not " +
+        "allowed to change the preserved property key: 'EXTERNAL'"))
       // The table type is not changed to external
       assert(
         catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
