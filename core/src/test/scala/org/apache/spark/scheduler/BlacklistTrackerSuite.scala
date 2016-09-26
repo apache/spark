@@ -69,9 +69,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     scheduler
   }
 
-  def createTaskSetManager(numTasks: Int, stageId: Int = 0): TaskSetManager = {
-    val taskSet = FakeTask.createTaskSet(numTasks, stageId = stageId, stageAttemptId = 0)
-    new TaskSetManager(scheduler, taskSet, 4, Some(blacklist), clock)
+  def createTaskSetBlacklist(stageId: Int = 0): TaskSetBlacklist = {
+    new TaskSetBlacklist(conf, stageId, clock)
   }
 
   def configureBlacklistAndScheduler(confs: (String, String)*): Unit = {
@@ -97,13 +96,13 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     val failuresTillBlacklisted = conf.get(config.MAX_FAILURES_PER_EXEC)
     var failuresSoFar = 0
     (0 until failuresTillBlacklisted * 10).foreach { stage =>
-      val tsm = createTaskSetManager(numTasks = 1, stageId = stage)
+      val taskSetBlacklist = createTaskSetBlacklist(stage)
       if (stage % 2 == 0) {
         // fail every other task
-        tsm.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
+        taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
         failuresSoFar += 1
       }
-      blacklist.updateBlacklistForSuccessfulTaskSet(stage, 0, tsm.execToFailures)
+      blacklist.updateBlacklistForSuccessfulTaskSet(stage, 0, taskSetBlacklist.execToFailures)
       assert(failuresSoFar == stage / 2 + 1)
       if (failuresSoFar < failuresTillBlacklisted) {
         assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set())
@@ -119,8 +118,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     configureBlacklistAndScheduler()
     // for 4 different stages, executor 1 fails a task, and then the taskSet fails.
     (0 until 4).foreach { stage =>
-      val tsm = createTaskSetManager(numTasks = 1)
-      tsm.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
+      val taskSetBlacklist = createTaskSetBlacklist(stage)
+      taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
     }
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set())
   }
@@ -131,16 +130,16 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       // but if the taskset fails, we don't blacklist the executor after the stage.
       configureBlacklistAndScheduler()
       val stageId = 1 + (if (succeedTaskSet) 1 else 0)
-      val tsm = createTaskSetManager(numTasks = 4, stageId = stageId)
+      val taskSetBlacklist = createTaskSetBlacklist(stageId)
       (0 until 4).foreach { index =>
-        tsm.updateBlacklistForFailedTask("hostA", exec = "1", index = index)
+        taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = index)
       }
-      assert(tsm.isExecutorBlacklistedForTaskSet("1"))
+      assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
       assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set())
       if (succeedTaskSet) {
         // the task set succeeded elsewhere, so we count those failures against our executor,
         // and blacklist it across stages
-        blacklist.updateBlacklistForSuccessfulTaskSet(stageId, 0, tsm.execToFailures)
+        blacklist.updateBlacklistForSuccessfulTaskSet(stageId, 0, taskSetBlacklist.execToFailures)
         assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1"))
       } else {
         // the task set failed, so we don't count these failures against the executor for other
@@ -152,20 +151,20 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
   test("blacklisted executors and nodes get recovered with time") {
     configureBlacklistAndScheduler()
-    val tsm0 = createTaskSetManager(numTasks = 4, stageId = 0)
+    val taskSetBlacklist0 = createTaskSetBlacklist(stageId = 0)
     (0 until 4).foreach { partition =>
-      tsm0.updateBlacklistForFailedTask("hostA", exec = "1", index = partition)
+      taskSetBlacklist0.updateBlacklistForFailedTask("hostA", exec = "1", index = partition)
     }
-    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, tsm0.execToFailures)
+    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist0.execToFailures)
     assert(blacklist.nodeBlacklist() === Set())
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set())
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1"))
 
-    val tsm1 = createTaskSetManager(numTasks = 4, stageId = 1)
+    val taskSetBlacklist1 = createTaskSetBlacklist(stageId = 1)
     (0 until 4).foreach { partition =>
-      tsm1.updateBlacklistForFailedTask("hostA", exec = "2", index = partition)
+      taskSetBlacklist1.updateBlacklistForFailedTask("hostA", exec = "2", index = partition)
     }
-    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, tsm1.execToFailures)
+    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist1.execToFailures)
     assert(blacklist.nodeBlacklist() === Set("hostA"))
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set("hostA"))
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1", "2"))
@@ -177,9 +176,9 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set())
 
     // fail one more task, but executor isn't put back into blacklist since count reset to 0
-    val tsm2 = createTaskSetManager(numTasks = 4, stageId = 2)
-    tsm2.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
-    blacklist.updateBlacklistForSuccessfulTaskSet(2, 0, tsm2.execToFailures)
+    val taskSetBlacklist2 = createTaskSetBlacklist(stageId = 2)
+    taskSetBlacklist2.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
+    blacklist.updateBlacklistForSuccessfulTaskSet(2, 0, taskSetBlacklist2.execToFailures)
     assert(blacklist.nodeBlacklist() === Set())
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set())
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set())
@@ -189,24 +188,24 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // The blacklist should still work if an executor is killed completely.  We should still
     // be able to blacklist the entire node.
     configureBlacklistAndScheduler()
-    val tsm0 = createTaskSetManager(numTasks = 4, stageId = 0)
+    val taskSetBlacklist0 = createTaskSetBlacklist(stageId = 0)
     // Lets say that executor 1 dies completely.  We get a task failure for the last task, but
     // the taskset then finishes successfully (elsewhere).
     (0 until 4).foreach { partition =>
-      tsm0.updateBlacklistForFailedTask("hostA", exec = "1", index = partition)
+      taskSetBlacklist0.updateBlacklistForFailedTask("hostA", exec = "1", index = partition)
     }
     blacklist.handleRemovedExecutor("1")
-    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, tsm0.execToFailures)
+    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist0.execToFailures)
     assert(blacklist.isExecutorBlacklisted("1"))
     clock.advance(blacklist.BLACKLIST_TIMEOUT_MILLIS / 2)
 
     // Now another executor gets spun up on that host, but it also dies.
-    val tsm1 = createTaskSetManager(numTasks = 4, stageId = 1)
+    val taskSetBlacklist1 = createTaskSetBlacklist(stageId = 1)
     (0 until 4).foreach { partition =>
-      tsm1.updateBlacklistForFailedTask("hostA", exec = "2", index = partition)
+      taskSetBlacklist1.updateBlacklistForFailedTask("hostA", exec = "2", index = partition)
     }
     blacklist.handleRemovedExecutor("2")
-    blacklist.updateBlacklistForSuccessfulTaskSet(1, 0, tsm1.execToFailures)
+    blacklist.updateBlacklistForSuccessfulTaskSet(1, 0, taskSetBlacklist1.execToFailures)
     // We've now had two bad executors on the hostA, so we should blacklist the entire node.
     assert(blacklist.isExecutorBlacklisted("1"))
     assert(blacklist.isExecutorBlacklisted("2"))
@@ -231,9 +230,9 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     configureBlacklistAndScheduler()
     var stageId = 0
     def failOneTaskInTaskSet(exec: String): Unit = {
-      val tsm = createTaskSetManager(numTasks = 1, stageId = stageId)
-      tsm.updateBlacklistForFailedTask("host-" + exec, exec, 0)
-      blacklist.updateBlacklistForSuccessfulTaskSet(stageId, 0, tsm.execToFailures)
+      val taskSetBlacklist = createTaskSetBlacklist(stageId = stageId)
+      taskSetBlacklist.updateBlacklistForFailedTask("host-" + exec, exec, 0)
+      blacklist.updateBlacklistForSuccessfulTaskSet(stageId, 0, taskSetBlacklist.execToFailures)
       stageId += 1
     }
     failOneTaskInTaskSet(exec = "1")
@@ -306,41 +305,41 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       config.MAX_FAILURES_PER_EXEC_STAGE.key -> "2",
       config.MAX_FAILED_EXEC_PER_NODE_STAGE.key -> "3"
     )
-    val tsm = createTaskSetManager(numTasks = 5, stageId = 0)
+    val taskSetBlacklist = createTaskSetBlacklist(stageId = 0)
     // fail a task twice on hostA, exec:1
-    tsm.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
-    tsm.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
-    assert(tsm.isExecutorBlacklistedForTask("1", 0))
-    assert(!tsm.isNodeBlacklistedForTask("hostA", 0))
-    assert(!tsm.isExecutorBlacklistedForTaskSet("1"))
-    assert(!tsm.isNodeBlacklistedForTaskSet("hostA"))
+    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
+    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
+    assert(taskSetBlacklist.isExecutorBlacklistedForTask("1", 0))
+    assert(!taskSetBlacklist.isNodeBlacklistedForTask("hostA", 0))
+    assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
+    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
     // fail the same task once more on hostA, exec:2
-    tsm.updateBlacklistForFailedTask("hostA", exec = "2", index = 0)
-    assert(tsm.isNodeBlacklistedForTask("hostA", 0))
-    assert(!tsm.isExecutorBlacklistedForTaskSet("2"))
-    assert(!tsm.isNodeBlacklistedForTaskSet("hostA"))
+    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "2", index = 0)
+    assert(taskSetBlacklist.isNodeBlacklistedForTask("hostA", 0))
+    assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("2"))
+    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
     // fail another task on hostA, exec:1.  Now that executor has failures on two different tasks,
     // so its blacklisted
-    tsm.updateBlacklistForFailedTask("hostA", exec = "1", index = 1)
-    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, tsm.execToFailures)
-    assert(tsm.isExecutorBlacklistedForTaskSet("1"))
-    assert(!tsm.isNodeBlacklistedForTaskSet("hostA"))
+    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 1)
+    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist.execToFailures)
+    assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
+    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
     // fail a third task on hostA, exec:2, so that exec is blacklisted for the whole task set
-    tsm.updateBlacklistForFailedTask("hostA", exec = "2", index = 2)
-    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, tsm.execToFailures)
-    assert(tsm.isExecutorBlacklistedForTaskSet("2"))
-    assert(!tsm.isNodeBlacklistedForTaskSet("hostA"))
+    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "2", index = 2)
+    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist.execToFailures)
+    assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("2"))
+    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
     // fail a fourth & fifth task on hostA, exec:3.  Now we've got three executors that are
     // blacklisted for the taskset, so blacklist the whole node.
-    tsm.updateBlacklistForFailedTask("hostA", exec = "3", index = 3)
-    tsm.updateBlacklistForFailedTask("hostA", exec = "3", index = 4)
-    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, tsm.execToFailures)
-    assert(tsm.isExecutorBlacklistedForTaskSet("3"))
-    assert(tsm.isNodeBlacklistedForTaskSet("hostA"))
+    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "3", index = 3)
+    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "3", index = 4)
+    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist.execToFailures)
+    assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("3"))
+    assert(taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
   }
 
   test("only blacklist nodes for the application when all the blacklisted executors are all on " +
@@ -348,17 +347,17 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // we blacklist executors on two different hosts -- make sure that doesn't lead to any
     // node blacklisting
     configureBlacklistAndScheduler()
-    val tsm0 = createTaskSetManager(numTasks = 4, stageId = 0)
-    tsm0.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
-    tsm0.updateBlacklistForFailedTask("hostA", exec = "1", index = 1)
-    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, tsm0.execToFailures)
+    val taskSetBlacklist0 = createTaskSetBlacklist(stageId = 0)
+    taskSetBlacklist0.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
+    taskSetBlacklist0.updateBlacklistForFailedTask("hostA", exec = "1", index = 1)
+    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist0.execToFailures)
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1"))
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set())
 
-    val tsm1 = createTaskSetManager(numTasks = 4, stageId = 1)
-    tsm1.updateBlacklistForFailedTask("hostB", exec = "2", index = 0)
-    tsm1.updateBlacklistForFailedTask("hostB", exec = "2", index = 1)
-    blacklist.updateBlacklistForSuccessfulTaskSet(1, 0, tsm1.execToFailures)
+    val taskSetBlacklist1 = createTaskSetBlacklist(stageId = 1)
+    taskSetBlacklist1.updateBlacklistForFailedTask("hostB", exec = "2", index = 0)
+    taskSetBlacklist1.updateBlacklistForFailedTask("hostB", exec = "2", index = 1)
+    blacklist.updateBlacklistForSuccessfulTaskSet(1, 0, taskSetBlacklist1.execToFailures)
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1", "2"))
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set())
   }
@@ -368,16 +367,16 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // we blacklist executors on two different hosts within one taskSet -- make sure that doesn't
     // lead to any node blacklisting
     configureBlacklistAndScheduler()
-    val tsm = createTaskSetManager(numTasks = 4, stageId = 0)
-    tsm.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
-    tsm.updateBlacklistForFailedTask("hostA", exec = "1", index = 1)
-    assertEquivalentToSet(tsm.isExecutorBlacklistedForTaskSet(_), Set("1"))
-    assertEquivalentToSet(tsm.isNodeBlacklistedForTaskSet(_), Set())
+    val taskSetBlacklist = createTaskSetBlacklist(stageId = 0)
+    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
+    taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 1)
+    assertEquivalentToSet(taskSetBlacklist.isExecutorBlacklistedForTaskSet(_), Set("1"))
+    assertEquivalentToSet(taskSetBlacklist.isNodeBlacklistedForTaskSet(_), Set())
 
-    tsm.updateBlacklistForFailedTask("hostB", exec = "2", index = 0)
-    tsm.updateBlacklistForFailedTask("hostB", exec = "2", index = 1)
-    assertEquivalentToSet(tsm.isExecutorBlacklistedForTaskSet(_), Set("1", "2"))
-    assertEquivalentToSet(tsm.isNodeBlacklistedForTaskSet(_), Set())
+    taskSetBlacklist.updateBlacklistForFailedTask("hostB", exec = "2", index = 0)
+    taskSetBlacklist.updateBlacklistForFailedTask("hostB", exec = "2", index = 1)
+    assertEquivalentToSet(taskSetBlacklist.isExecutorBlacklistedForTaskSet(_), Set("1", "2"))
+    assertEquivalentToSet(taskSetBlacklist.isNodeBlacklistedForTaskSet(_), Set())
   }
 
   test("blacklist still respects legacy configs") {
