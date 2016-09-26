@@ -2439,7 +2439,6 @@ private[spark] object Utils extends Logging {
  * @param stageAttemptId attempt id of the stage this task belongs to
  * @param taskId task id
  * @param taskAttemptNumber task attempt id
- * @since 2.0.1
  */
 private[spark] class CallerContext(
    from: String,
@@ -2451,17 +2450,17 @@ private[spark] class CallerContext(
    taskId: Option[Long] = None,
    taskAttemptNumber: Option[Int] = None) extends Logging {
 
-   val AppId = if (appId.isDefined) s"_${appId.get}" else ""
-   val AppAttemptId = if (appAttemptId.isDefined) s"_${appAttemptId.get}" else ""
-   val JobId = if (jobId.isDefined) s"_JId_${jobId.get}" else ""
-   val StageId = if (stageId.isDefined) s"_SId_${stageId.get}" else ""
-   val StageAttemptId = if (stageAttemptId.isDefined) s"_${stageAttemptId.get}" else ""
-   val TaskId = if (taskId.isDefined) s"_TId_${taskId.get}" else ""
-   val TaskAttemptNumber =
+   val appIdStr = if (appId.isDefined) s"_${appId.get}" else ""
+   val appAttemptIdStr = if (appAttemptId.isDefined) s"_${appAttemptId.get}" else ""
+   val jobIdStr = if (jobId.isDefined) s"_JId_${jobId.get}" else ""
+   val stageIdStr = if (stageId.isDefined) s"_SId_${stageId.get}" else ""
+   val stageAttemptIdStr = if (stageAttemptId.isDefined) s"_${stageAttemptId.get}" else ""
+   val taskIdStr = if (taskId.isDefined) s"_TId_${taskId.get}" else ""
+   val taskAttemptNumberStr =
      if (taskAttemptNumber.isDefined) s"_${taskAttemptNumber.get}" else ""
 
-   val context = "SPARK_" + from + AppId + AppAttemptId +
-     JobId + StageId + StageAttemptId + TaskId + TaskAttemptNumber
+   val context = "SPARK_" + from + appIdStr + appAttemptIdStr +
+     jobIdStr + stageIdStr + stageAttemptIdStr + taskIdStr + taskAttemptNumberStr
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
