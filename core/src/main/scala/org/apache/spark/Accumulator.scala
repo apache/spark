@@ -105,6 +105,8 @@ object AccumulatorParam {
   implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
     def addInPlace(t1: Float, t2: Float): Float = t1 + t2
     def zero(initialValue: Float): Float = 0f
+    def zero_0(initialValue: Float): Float = 0f
+    
   }
 
   // Note: when merging values, this param just adopts the newer value. This is used only
