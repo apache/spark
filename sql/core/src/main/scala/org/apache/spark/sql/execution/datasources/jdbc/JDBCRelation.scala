@@ -38,6 +38,9 @@ private[sql] case class JDBCPartitioningInfo(
     numPartitions: Int)
 
 private[sql] object JDBCRelation extends Logging {
+
+  import scala.collection.JavaConverters._
+
   /**
    * Given a partitioning schematic (a column of integral type, a number of
    * partitions, and upper and lower bounds on the column's value), generate
@@ -99,6 +102,16 @@ private[sql] object JDBCRelation extends Logging {
     }
     ans.toArray
   }
+
+  def getEffectiveProperties(
+      connectionProperties: Properties,
+      extraOptions: scala.collection.Map[String, String] = Map()): Properties = {
+    val props = new Properties()
+    props.putAll(extraOptions.asJava)
+    // connectionProperties should override settings in extraOptions
+    props.putAll(connectionProperties)
+    props
+  }
 }
 
 private[sql] case class JDBCRelation(
@@ -127,7 +140,7 @@ private[sql] case class JDBCRelation(
       sparkSession.sparkContext,
       schema,
       url,
-      properties,
+      JDBCRelation.getEffectiveProperties(properties),
       table,
       requiredColumns,
       filters,

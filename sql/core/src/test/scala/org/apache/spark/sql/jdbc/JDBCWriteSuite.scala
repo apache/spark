@@ -208,4 +208,12 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).count())
     assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
   }
+
+  test("SPARK-10625: JDBC write should allow driver to insert unserializable into properties") {
+    UnserializableDriverHelper.replaceDriverDuring {
+      sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
+      assert(2 === sqlContext.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
+      assert(2 === sqlContext.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+    }
+  }
 }

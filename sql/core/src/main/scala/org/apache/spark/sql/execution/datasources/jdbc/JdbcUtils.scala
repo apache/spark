@@ -71,7 +71,7 @@ object JdbcUtils extends Logging {
         throw new IllegalStateException(
           s"Did not find registered driver with class $driverClass")
       }
-      driver.connect(url, properties)
+      driver.connect(url, JDBCRelation.getEffectiveProperties(properties))
     }
   }
 
