@@ -260,10 +260,10 @@ abstract class LSH[KeyType, T <: LSHModel[KeyType, T]] extends Estimator[T] with
    * Validate and create a new instance of concrete LSHModel. Because different LSHModel may have
    * different initial setting, developer needs to define how their LSHModel is created instead of
    * using reflection in this abstract class.
-   * @param inputDim the input dimension of input dataset
+   * @param dataset The input dataset of LSH fit
    * @return A new LSHModel instance without any params
    */
-  protected[this] def createRawLSHModel(inputDim: Int): T
+  protected[this] def createRawLSHModel(dataset: Dataset[_]): T
 
   override def copy(extra: ParamMap): Estimator[T] = defaultCopy(extra)
 
@@ -271,8 +271,7 @@ abstract class LSH[KeyType, T <: LSHModel[KeyType, T]] extends Estimator[T] with
    * Fits a model to the input data.
    */
   override def fit(dataset: Dataset[_]): T = {
-    val inputDim = dataset.select(col($(inputCol))).head().get(0).asInstanceOf[Vector].size
-    val model = createRawLSHModel(inputDim).setParent(this)
+    val model = createRawLSHModel(dataset).setParent(this)
     copyValues(model)
   }
 

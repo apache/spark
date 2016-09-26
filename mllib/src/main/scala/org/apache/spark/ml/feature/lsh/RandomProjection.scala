@@ -24,6 +24,8 @@ import breeze.linalg.normalize
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.param.{DoubleParam, Params, ParamValidators}
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.functions._
 
 /**
  * Params for [[RandomProjection]].
@@ -79,8 +81,8 @@ class RandomProjection(override val uid: String) extends LSH[Vector, RandomProje
   /** @group setParam */
   def setBucketLength(value: Double): this.type = set(bucketLength, value)
 
-  override protected[this] def createRawLSHModel(inputDim: Int): RandomProjectionModel = {
-    this.inputDim = inputDim
+  override protected[this] def createRawLSHModel(dataset: Dataset[_]): RandomProjectionModel = {
+    this.inputDim = dataset.select(col($(inputCol))).head().get(0).asInstanceOf[Vector].size
     new RandomProjectionModel(uid, randUnitVectors)
   }
 }
