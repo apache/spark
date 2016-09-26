@@ -233,6 +233,7 @@ setCheckpointDir <- function(sc, dirName) {
 #'
 #' A directory can be given if the recursive option is set to true.
 #' Currently directories are only supported for Hadoop-supported filesystems.
+#' Refer Hadoop-supported filesystems at \url{https://wiki.apache.org/hadoop/HCFS}.
 #'
 #' @rdname spark.addFile
 #' @param path The path of the file to be added
