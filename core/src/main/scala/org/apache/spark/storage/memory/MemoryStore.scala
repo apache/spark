@@ -271,7 +271,7 @@ private[spark] class MemoryStore(
           blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
         Right(size)
       } else {
-        assert(currentUnrollMemoryForThisTask >= currentUnrollMemoryForThisTask,
+        assert(currentUnrollMemoryForThisTask >= unrollMemoryUsedByThisBlock,
           "released too much unroll memory")
         Left(new PartiallyUnrolledIterator(
           this,
