@@ -22,6 +22,8 @@ libraryDependencies += "org.ow2.asm"  % "asm-commons" % "5.0.3"
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.7.11")
 
+addSbtPlugin("org.scoverage" % "sbt-scoverage" % "1.4.0")
+
 // Spark uses a custom fork of the sbt-pom-reader plugin which contains a patch to fix issues
 // related to test-jar dependencies (https://github.com/sbt/sbt-pom-reader/pull/14). The source for
 // this fork is published at https://github.com/JoshRosen/sbt-pom-reader/tree/v1.0.0-spark

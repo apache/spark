@@ -812,6 +812,7 @@ object TestSettings {
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
+    coverageEnabled := true,
     // Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
     // launched by the tests have access to the correct test-time classpath.
     envVars in Test ++= Map(
