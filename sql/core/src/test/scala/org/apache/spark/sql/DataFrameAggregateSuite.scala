@@ -493,4 +493,12 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(1.5)),
         Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(1.5))))
   }
+
+  test("SPARK-17616: distinct aggregate combined with a non-partial aggregate") {
+    val df = Seq((1, 3, "a"), (1, 2, "b"), (3, 4, "c"), (3, 4, "c"), (3, 5, "d"))
+      .toDF("x", "y", "z")
+    checkAnswer(
+      df.groupBy($"x").agg(countDistinct($"y"), sort_array(collect_list($"z"))),
+      Seq(Row(1, 2, Seq("a", "b")), Row(3, 2, Seq("c", "c", "d"))))
+  }
 }
