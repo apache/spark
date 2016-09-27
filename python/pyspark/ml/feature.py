@@ -2602,34 +2602,39 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
                        typeConverter=TypeConverters.toFloat)
 
     alphaFPR = Param(Params._dummy(), "alphaFPR", "The highest p-value for features to be kept.",
-                  typeConverter=TypeConverters.toFloat)
+                     typeConverter=TypeConverters.toFloat)
 
-    alphaFDR = Param(Params._dummy(), "alphaFDR", "The highest uncorrected p-value for features to be kept.",
-                  typeConverter=TypeConverters.toFloat)
+    alphaFDR = Param(Params._dummy(), "alphaFDR", "The highest uncorrected p-value for " +
+                     "features to be kept.", typeConverter=TypeConverters.toFloat)
 
-    alphaFWE = Param(Params._dummy(), "alphaFWE", "The highest uncorrected p-value for features to be kept.",
-                  typeConverter=TypeConverters.toFloat)
+    alphaFWE = Param(Params._dummy(), "alphaFWE", "The highest uncorrected p-value for " +
+                     "features to be kept.", typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None,
-                 labelCol="label", selectorType="kbest", percentile=0.1, alphaFPR=0.05, alphaFDR=0.05, alphaFWE=0.05):
+                 labelCol="label", selectorType="kbest", percentile=0.1, alphaFPR=0.05,
+                 alphaFDR=0.05, alphaFWE=0.05):
         """
         __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                 labelCol="label", selectorType="kbest", percentile=0.1, alphaFPR=0.05, alphaFDR=0.05, alphaFWE=0.05)
+                 labelCol="label", selectorType="kbest", percentile=0.1, alphaFPR=0.05, \
+                 alphaFDR=0.05, alphaFWE=0.05)
         """
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
-        self._setDefault(numTopFeatures=50, selectorType="kbest", percentile=0.1, alphaFPR=0.05, alphaFDR=0.05, alphaFWE=0.05)
+        self._setDefault(numTopFeatures=50, selectorType="kbest", percentile=0.1, alphaFPR=0.05,
+                         alphaFDR=0.05, alphaFWE=0.05)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
     def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
-                  labelCol="labels", selectorType="kbest", percentile=0.1, alphaFPR=0.05, alphaFDR=0.05, alphaFWE=0.05):
+                  labelCol="labels", selectorType="kbest", percentile=0.1, alphaFPR=0.05,
+                  alphaFDR=0.05, alphaFWE=0.05):
         """
         setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                  labelCol="labels", selectorType="kbest", percentile=0.1, alphaFPR=0.05, alphaFDR=0.05, alphaFWE=0.05)
+                  labelCol="labels", selectorType="kbest", percentile=0.1, alphaFPR=0.05, \
+                  alphaFDR=0.05, alphaFWE=0.05)
         Sets params for this ChiSqSelector.
         """
         kwargs = self.setParams._input_kwargs
