@@ -183,10 +183,10 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (tableName.database.exists(catalog.databaseExists) && catalog.tableExists(tableName)) {
+    if (tableName.database.forall(catalog.databaseExists) && catalog.tableExists(tableName)) {
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
       // issue an exception.
-      catalog.getTableMetadata(tableName) match {
+      catalog.getTableMetadata(tableName).tableType match {
         case CatalogTableType.VIEW if !isView =>
           throw new AnalysisException(
             "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
