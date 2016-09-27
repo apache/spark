@@ -116,16 +116,22 @@ object ColumnStatStruct {
   def numNulls(e: Expression): Expression = if (e.nullable) Sum(If(IsNull(e), one, zero)) else zero
   def max(e: Expression): Expression = Max(e)
   def min(e: Expression): Expression = Min(e)
-  def ndv(e: Expression, relativeSD: Double): Expression = HyperLogLogPlusPlus(e, relativeSD)
+  def ndv(e: Expression, relativeSD: Double): Expression = {
+    val approxNdv = HyperLogLogPlusPlus(e, relativeSD)
+    // the approximate ndv should not be larger than the number of rows
+    If(LessThanOrEqual(approxNdv, Count(one)), approxNdv, Count(one))
+  }
   def avgLength(e: Expression): Expression = Average(Length(e))
   def maxLength(e: Expression): Expression = Max(Length(e))
   def numTrues(e: Expression): Expression = Sum(If(e, one, zero))
   def numFalses(e: Expression): Expression = Sum(If(Not(e), one, zero))
 
   def getStruct(exprs: Seq[Expression]): CreateStruct = {
-    CreateStruct(exprs.map {
-      case af: AggregateFunction => af.toAggregateExpression()
-      case e: Expression => e
+    CreateStruct(exprs.map { expr: Expression =>
+      expr.transformUp {
+        case af: AggregateFunction => af.toAggregateExpression()
+        case e: Expression => e
+      }
     })
   }
 
@@ -169,11 +175,6 @@ object ColumnStatStruct {
       case BooleanType => booleanColumnStat(e).length
     }
     val struct = row.getStruct(offset, numFields)
-    // NumericType, TimestampType, DateType and StringType have ndv and its index is 3.
-    if (numFields >= 4 && !struct.isNullAt(3)) {
-      // ndv should not be larger than number of rows
-      if (struct.getLong(3) > rowCount) struct.asInstanceOf[UnsafeRow].setLong(3, rowCount)
-    }
     ColumnStat(e.dataType, struct)
   }
 }
