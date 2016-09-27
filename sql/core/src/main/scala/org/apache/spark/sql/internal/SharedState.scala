@@ -37,51 +37,6 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  */
 private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
-  val globalTempViewManager = {
-    // System preserved database should not exists in metastore. However it's hard to guarantee it
-    // for every session, because case-sensitivity differs. Here we always lowercase it to make our
-    // life easier.
-    val globalTempDB = sparkContext.conf.get(GLOBAL_TEMP_DATABASE).toLowerCase
-    if (externalCatalog.databaseExists(globalTempDB)) {
-      throw new SparkException(
-        s"$globalTempDB is a system preserved database, please rename your existing database " +
-          "to resolve the name conflict and launch your Spark application again.")
-    }
-    new GlobalTempViewManager(globalTempDB)
-  }
-
-  /**
-   * Class for caching query results reused in future executions.
-   */
-  val cacheManager: CacheManager = new CacheManager
-
-  /**
-   * A listener for SQL-specific [[org.apache.spark.scheduler.SparkListenerEvent]]s.
-   */
-  val listener: SQLListener = createListenerAndUI(sparkContext)
-
-  {
-    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
-    if (configFile != null) {
-      sparkContext.hadoopConfiguration.addResource(configFile)
-    }
-  }
-
-  /**
-   * A catalog that interacts with external systems.
-   */
-  lazy val externalCatalog: ExternalCatalog =
-    SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
-      SharedState.externalCatalogClassName(sparkContext.conf),
-      sparkContext.conf,
-      sparkContext.hadoopConfiguration)
-
-  /**
-   * A classloader used to load all user-added jar.
-   */
-  val jarClassLoader = new NonClosableMutableURLClassLoader(
-    org.apache.spark.util.Utils.getContextOrSparkClassLoader)
-
   {
     // Set the Hive metastore warehouse path to the one we use
     val tempConf = new SQLConf
@@ -105,6 +60,54 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
     logInfo(s"Warehouse path is '${tempConf.warehousePath}'.")
   }
+
+  /**
+   * Class for caching query results reused in future executions.
+   */
+  val cacheManager: CacheManager = new CacheManager
+
+  /**
+   * A listener for SQL-specific [[org.apache.spark.scheduler.SparkListenerEvent]]s.
+   */
+  val listener: SQLListener = createListenerAndUI(sparkContext)
+
+  {
+    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    if (configFile != null) {
+      sparkContext.hadoopConfiguration.addResource(configFile)
+    }
+  }
+
+  /**
+   * A catalog that interacts with external systems.
+   */
+  val externalCatalog: ExternalCatalog =
+    SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
+      SharedState.externalCatalogClassName(sparkContext.conf),
+      sparkContext.conf,
+      sparkContext.hadoopConfiguration)
+
+  /**
+   * A manager for global temporary views.
+   */
+  val globalTempViewManager = {
+    // System preserved database should not exists in metastore. However it's hard to guarantee it
+    // for every session, because case-sensitivity differs. Here we always lowercase it to make our
+    // life easier.
+    val globalTempDB = sparkContext.conf.get(GLOBAL_TEMP_DATABASE).toLowerCase
+    if (externalCatalog.databaseExists(globalTempDB)) {
+      throw new SparkException(
+        s"$globalTempDB is a system preserved database, please rename your existing database " +
+          "to resolve the name conflict and launch your Spark application again.")
+    }
+    new GlobalTempViewManager(globalTempDB)
+  }
+
+  /**
+   * A classloader used to load all user-added jar.
+   */
+  val jarClassLoader = new NonClosableMutableURLClassLoader(
+    org.apache.spark.util.Utils.getContextOrSparkClassLoader)
 
   /**
    * Create a SQLListener then add it into SparkContext, and create a SQLTab if there is SparkUI.
