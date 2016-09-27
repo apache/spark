@@ -57,7 +57,7 @@ class ListingFileCatalog(
    * Job.
    */
   private lazy val excludeFiles: Set[String] = parameters
-    .getOrElse("excludeFiles", ".*._COPYING_,.*_temporary").split(",").toSet
+    .getOrElse("excludeFiles", ".*._COPYING_,_temporary").split(",").toSet
 
   private def isExcludedFile(path: Path): Boolean = {
     excludeFiles.map(path.getName.matches).fold(false)(_ || _)
