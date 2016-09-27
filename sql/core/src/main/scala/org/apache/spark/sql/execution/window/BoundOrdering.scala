@@ -33,10 +33,10 @@ private[window] abstract class BoundOrdering {
  */
 private[window] final case class RowBoundOrdering(offset: Int) extends BoundOrdering {
   override def compare(
-    inputRow: InternalRow,
-    inputIndex: Int,
-    outputRow: InternalRow,
-    outputIndex: Int): Int =
+      inputRow: InternalRow,
+      inputIndex: Int,
+      outputRow: InternalRow,
+      outputIndex: Int): Int =
     inputIndex - (outputIndex + offset)
 }
 
@@ -50,9 +50,9 @@ private[window] final case class RangeBoundOrdering(
   extends BoundOrdering {
 
   override def compare(
-    inputRow: InternalRow,
-    inputIndex: Int,
-    outputRow: InternalRow,
-    outputIndex: Int): Int =
+      inputRow: InternalRow,
+      inputIndex: Int,
+      outputRow: InternalRow,
+      outputIndex: Int): Int =
     ordering.compare(current(inputRow), bound(outputRow))
 }
