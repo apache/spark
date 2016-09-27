@@ -169,7 +169,8 @@ object ColumnStatStruct {
       case BooleanType => booleanColumnStat(e).length
     }
     val struct = row.getStruct(offset, numFields)
-    if (numFields >= 3 && !struct.isNullAt(3)) {
+    // NumericType, TimestampType, DateType and StringType have ndv and its index is 3.
+    if (numFields >= 4 && !struct.isNullAt(3)) {
       // ndv should not be larger than number of rows
       if (struct.getLong(3) > rowCount) struct.asInstanceOf[UnsafeRow].setLong(3, rowCount)
     }
