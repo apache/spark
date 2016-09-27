@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
+import org.scalatest.BeforeAndAfter
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming._
@@ -50,28 +51,28 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
   }
 
   /**
-   * Add data to Kafka. If any topic in `topics` does not exist, it will be created automatically.
+   * Add data to Kafka.
    *
-   * `addPartitions` is the new partition numbers of the topics. The caller should make sure using
-   * a bigger partition number. Otherwise, it will throw an exception.
+   * `topicAction` can be used to run actions for each topic before inserting data.
    */
   case class AddKafkaData(topics: Set[String], data: Int*)
     (implicit ensureDataInMultiplePartition: Boolean = false,
-      addPartitions: Option[Seq[Int]] = None) extends AddData {
+      concurrent: Boolean = false,
+      message: String = "",
+      topicAction: (String, Option[Int]) => Unit = (_, _) => {}) extends AddData {
 
     override def addData(query: Option[StreamExecution]): (Source, Offset) = {
-      val allTopics = testUtils.getAllTopics().toSet
-      if (addPartitions.nonEmpty) {
-        require(topics.size == addPartitions.get.size,
-          s"$addPartitions should have the same size of $topics")
-        topics.zip(addPartitions.get).foreach { case (topic, partitions) =>
-          if (allTopics.contains(topic)) {
-            testUtils.addPartitions(topic, partitions)
-          } else {
-            testUtils.createTopic(topic, partitions)
-          }
-        }
+      val existingTopics = testUtils.getAllTopicsAndPartitionSize().toMap
+      val newTopics = topics.diff(existingTopics.keySet)
+      for (newTopic <- newTopics) {
+        topicAction(newTopic, None)
       }
+      for (existingTopicPartitions <- existingTopics) {
+        topicAction(existingTopicPartitions._1, Some(existingTopicPartitions._2))
+      }
+
+      // Read all topics again in case some topics are delete.
+      val allTopics = testUtils.getAllTopicsAndPartitionSize().toMap.keys
       require(
         query.nonEmpty,
         "Cannot add data when there is no query for finding the active kafka source")
@@ -106,6 +107,9 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
       logInfo(s"Added data, expected offset $offset")
       (kafkaSource, offset)
     }
+
+    override def toString: String =
+      s"AddKafkaData(topics = $topics, data = $data, message = $message)"
   }
 }
 
@@ -115,6 +119,26 @@ class KafkaSourceSuite extends KafkaSourceTest {
   import testImplicits._
 
   private val topicId = new AtomicInteger(0)
+
+  test("cannot stop Kafka stream") {
+    val topic = newTopic()
+    testUtils.createTopic(newTopic(), partitions = 5)
+    testUtils.sendMessages(topic, (101 to 105).map { _.toString }.toArray)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribePattern", s"topic-.*")
+
+    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
+    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
+
+    testStream(mapped)(
+      StopStream
+    )
+  }
 
   test("subscribing topic by name from latest offsets") {
     val topic = newTopic()
@@ -160,7 +184,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
       AddKafkaData(Set(topic), 1, 2, 3),
       CheckAnswer(2, 3, 4),
       Assert {
-        testUtils.deleteTopic(topic, 5)
+        testUtils.deleteTopic(topic)
         testUtils.createTopic(topic2, partitions = 5)
         true
       },
@@ -294,20 +318,29 @@ class KafkaSourceSuite extends KafkaSourceTest {
 }
 
 
-class KafkaSourceStressSuite extends KafkaSourceTest {
+class KafkaSourceStressSuite extends KafkaSourceTest with BeforeAndAfter {
 
   import testImplicits._
 
   val topicId = new AtomicInteger(1)
 
-  @volatile var topics = (1 to 5).map(_ => newStressTopic).toSet
+  @volatile var topics: Seq[String] = (1 to 5).map(_ => newStressTopic)
 
-  @volatile var partitionRange = (1, 5)
+  def newStressTopic: String = s"stress${topicId.getAndIncrement()}"
 
+  private def nextInt(start: Int, end: Int): Int = {
+    start + Random.nextInt(start + end - 1)
+  }
 
-  test("stress test with multiple topics and partitions") {
+  after {
+    for (topic <- testUtils.getAllTopicsAndPartitionSize().toMap.keys) {
+      testUtils.deleteTopic(topic)
+    }
+  }
+
+  private def stressTest(checkAnswer: Boolean): Unit = {
     topics.foreach { topic =>
-      testUtils.createTopic(topic, partitions = randomPartitions)
+      testUtils.createTopic(topic, partitions = nextInt(1, 6))
       testUtils.sendMessages(topic, (101 to 105).map { _.toString }.toArray)
     }
 
@@ -326,31 +359,48 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
 
     runStressTest(
       mapped,
-      d => {
+      (d, running) => {
         Random.nextInt(5) match {
-          case 0 =>
-            partitionRange = newPartitionRange
-            val addPartitions = topics.toSeq.map(_ => randomPartitions)
-            AddKafkaData(topics, d: _*)(
-              ensureDataInMultiplePartition = false, addPartitions = Some(addPartitions))
-          case 1 =>
-            topics = topics + newStressTopic
-            partitionRange = newPartitionRange
-            val addPartitions = topics.toSeq.map(_ => randomPartitions)
-            AddKafkaData(topics, d: _*)(
-              ensureDataInMultiplePartition = false, addPartitions = Some(addPartitions))
-          case _ =>
-            AddKafkaData(topics, d: _*)(ensureDataInMultiplePartition = false)
+          case 0 => // Add a new topic
+            topics = topics ++ Seq(newStressTopic)
+            AddKafkaData(topics.toSet, d: _*)(message = s"Add topic $newStressTopic",
+              topicAction = (topic, partition) => {
+                if (partition.isEmpty) {
+                  testUtils.createTopic(topic, partitions = nextInt(1, 6))
+                }
+              })
+          case 1 if !checkAnswer || running =>
+            // Only delete a topic when the query is running. Otherwise, we may lost data and
+            // cannot check the correctness.
+            val deletedTopic = topics(Random.nextInt(topics.size))
+            if (deletedTopic != topics.head) {
+              topics = topics.filterNot(_ == deletedTopic)
+            }
+            AddKafkaData(topics.toSet, d: _*)(message = s"Delete topic $deletedTopic",
+              topicAction = (topic, partition) => {
+                // Never remove the first topic to make sure we have at least one topic
+                if (topic == deletedTopic && deletedTopic != topics.head) {
+                  testUtils.deleteTopic(deletedTopic)
+                }
+              })
+          case 2 => // Add new partitions
+            AddKafkaData(topics.toSet, d: _*)(message = "Add partitiosn",
+              topicAction = (topic, partition) => {
+                testUtils.addPartitions(topic, partition.get + nextInt(1, 6))
+              })
+          case _ => // Just add new data
+            AddKafkaData(topics.toSet, d: _*)
         }
       },
+      checkAnswer = checkAnswer,
       iterations = 50)
   }
 
-  def newStressTopic: String = s"stress${topicId.getAndIncrement()}"
+  test("stress test with multiple topics and partitions") {
+    stressTest(checkAnswer = true)
+  }
 
-  def newPartitionRange: (Int, Int) = (partitionRange._1 + 5, partitionRange._2 + 5)
-
-  def randomPartitions: Int = {
-    Random.nextInt(partitionRange._2 + 1 - partitionRange._1) + partitionRange._1
+  test("don't crash when adding and deleting partitions concurrently") {
+    stressTest(checkAnswer = false)
   }
 }

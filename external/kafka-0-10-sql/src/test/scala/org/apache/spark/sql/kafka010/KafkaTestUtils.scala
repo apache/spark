@@ -163,8 +163,8 @@ class KafkaTestUtils extends Logging {
     }
   }
 
-  def getAllTopics(): Seq[String] = {
-    zkUtils.getAllTopics()
+  def getAllTopicsAndPartitionSize(): Seq[(String, Int)] = {
+    zkUtils.getPartitionsForTopics(zkUtils.getAllTopics()).mapValues(_.size).toSeq
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
@@ -173,7 +173,8 @@ class KafkaTestUtils extends Logging {
   }
 
   /** Delete a Kafka topic and wait until it is propagated to the whole cluster */
-  def deleteTopic(topic: String, partitions: Int): Unit = {
+  def deleteTopic(topic: String): Unit = {
+    val partitions = zkUtils.getPartitionsForTopics(Seq(topic))(topic).size
     AdminUtils.deleteTopic(zkUtils, topic)
     verifyTopicDeletion(zkUtils, topic, partitions, List(this.server))
   }

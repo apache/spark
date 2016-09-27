@@ -50,11 +50,11 @@ import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
  *
  * {{{
  *  val inputData = MemoryStream[Int]
-    val mapped = inputData.toDS().map(_ + 1)
-
-    testStream(mapped)(
-      AddData(inputData, 1, 2, 3),
-      CheckAnswer(2, 3, 4))
+ * val mapped = inputData.toDS().map(_ + 1)
+ **
+ *testStream(mapped)(
+ *AddData(inputData, 1, 2, 3),
+ *CheckAnswer(2, 3, 4))
  * }}}
  *
  * Note that while we do sleep to allow the other thread to progress without spinning,
@@ -469,29 +469,52 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     }
   }
 
+
   /**
    * Creates a stress test that randomly starts/stops/adds data/checks the result.
    *
-   * @param ds a dataframe that executes + 1 on a stream of integers, returning the result.
-   * @param addData and add data action that adds the given numbers to the stream, encoding them
+   * @param ds a dataframe that executes + 1 on a stream of integers, returning the result
+   * @param addData an add data action that adds the given numbers to the stream, encoding them
    *                as needed
+   * @param iterations the iteration number
+   */
+  def runStressTest(
+    ds: Dataset[Int],
+    addData: Seq[Int] => StreamAction,
+    iterations: Int = 100): Unit = {
+    runStressTest(ds, (data, running) => addData(data), true, iterations)
+  }
+
+  /**
+   * Creates a stress test that randomly starts/stops/adds data/checks the result.
+   *
+   * @param ds a dataframe that executes + 1 on a stream of integers, returning the result
+   * @param addData an add data action that adds the given numbers to the stream, encoding them
+   *                as needed
+   * @param checkAnswer should add `CheckAnswer` to the test.
+   * @param iterations the iteration number
    */
   def runStressTest(
       ds: Dataset[Int],
-      addData: Seq[Int] => StreamAction,
-      iterations: Int = 100): Unit = {
+      addData: (Seq[Int], Boolean) => StreamAction,
+      checkAnswer: Boolean,
+      iterations: Int): Unit = {
     implicit val intEncoder = ExpressionEncoder[Int]()
     var dataPos = 0
     var running = true
     val actions = new ArrayBuffer[StreamAction]()
 
-    def addCheck() = { actions += CheckAnswer(1 to dataPos: _*) }
+    def addCheck() = {
+      if (checkAnswer) {
+        actions += CheckAnswer(1 to dataPos: _*)
+      }
+    }
 
     def addRandomData() = {
       val numItems = Random.nextInt(10)
       val data = dataPos until (dataPos + numItems)
       dataPos += numItems
-      actions += addData(data)
+      actions += addData(data, running)
     }
 
     (1 to iterations).foreach { i =>

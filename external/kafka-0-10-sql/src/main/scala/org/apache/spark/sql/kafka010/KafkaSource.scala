@@ -20,6 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer}
 import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
@@ -67,6 +68,9 @@ import org.apache.spark.sql.types._
  *     data from Kafka topic + partition is consistently read by the same executors across
  *     batches, and cached KafkaConsumers in the executors can be reused efficiently. See the
  *     docs on [[KafkaSourceRDD]] for more details.
+ *
+ * Zero data lost is not guaranteed when topics are deleted. If zero data lost is critical, the user
+ * must make sure all messages in a topic have been processed when deleting a topic.
  */
 private[kafka010] case class KafkaSource(
     sqlContext: SQLContext,
@@ -85,7 +89,7 @@ private[kafka010] case class KafkaSource(
   /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = {
     val offset = KafkaSourceOffset(fetchPartitionOffsets(seekToLatest = true))
-    logInfo(s"GetOffset: $offset")
+    logDebug(s"GetOffset: ${offset.partitionToOffsets.toSeq.map(_.toString).sorted}")
     Some(offset)
   }
 
@@ -106,6 +110,11 @@ private[kafka010] case class KafkaSource(
       fetchNewPartitionEarliestOffsets(newPartitions.toSeq)
     } else {
       Map.empty[TopicPartition, Long]
+    }
+    if (newPartitionOffsets.keySet != newPartitions) {
+      // We cannot get from offsets for some partitions. It means they got deleted.
+      val deletedPartitions = newPartitions.diff(newPartitionOffsets.keySet)
+      logWarning(s"Partitions removed: ${deletedPartitions}, some data may have been missed")
     }
     logInfo(s"Partitions added: $newPartitionOffsets")
     newPartitionOffsets.filter(_._2 != 0).foreach { case (p, o) =>
@@ -128,7 +137,9 @@ private[kafka010] case class KafkaSource(
 
     // Use the until partitions to calculate offset ranges to ignore partitions that have
     // been deleted
-    val sortedTopicPartitions = untilPartitionOffsets.keySet.toSeq.sorted(topicPartitionOrdering)
+    val sortedTopicPartitions = untilPartitionOffsets.keySet.filter { tp =>
+      newPartitionOffsets.contains(tp) || fromPartitionOffsets.contains(tp)
+    }.toSeq.sorted(topicPartitionOrdering)
     logDebug("Sorted topicPartitions: " + sortedTopicPartitions.mkString(", "))
 
     val sortedExecutors = getSortedExecutorList(sc)
@@ -149,6 +160,14 @@ private[kafka010] case class KafkaSource(
         Some(sortedExecutors(positiveMod(tp.hashCode, numExecutors)))
       } else None
       KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
+    }.filter { range =>
+      if (range.untilOffset < range.fromOffset) {
+        logWarning(s"Partition ${range.topicPartition} was deleted and then added, " +
+          "some data may have been missed")
+        false
+      } else {
+        true
+      }
     }.toArray
 
     // Create a RDD that reads from Kafka and get the (key, value) pair as byte arrays.
@@ -175,7 +194,7 @@ private[kafka010] case class KafkaSource(
    * KafkaConsumer.
    */
   private def fetchPartitionOffsets(
-      seekToLatest: Boolean): Map[TopicPartition, Long] = withRetries {
+      seekToLatest: Boolean): Map[TopicPartition, Long] = {
 
     // Poll to get the latest assigned partitions
     logTrace("\tPolling")
@@ -197,19 +216,21 @@ private[kafka010] case class KafkaSource(
 
   /** Fetch the earliest offsets for newly discovered partitions */
   private def fetchNewPartitionEarliestOffsets(
-      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = withRetries {
+      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = {
 
     // Poll to get the latest assigned partitions
     logTrace("\tPolling")
     consumer.poll(0)
     val partitions = consumer.assignment()
     logDebug(s"\tPartitioned assigned to consumer: $partitions")
-    require(newPartitions.forall(tp => partitions.contains(tp)),
-      s"$partitions doesn't contain all new paritions: $newPartitions")
 
     // Get the earliest offset of each partition
-    consumer.seekToBeginning(newPartitions.asJava)
-    val partitionToOffsets = newPartitions.map(p => p -> consumer.position(p)).toMap
+    consumer.seekToBeginning(partitions)
+    val partitionToOffsets = newPartitions.filter { p =>
+      // When deleting topics happen at the same time, some partitions may not be in `partitions`.
+      // So we need to ignore them
+      partitions.contains(p)
+    }.map(p => p -> consumer.position(p)).toMap
     logDebug(s"Got offsets for new partitions: $partitionToOffsets")
     partitionToOffsets
   }
@@ -224,13 +245,14 @@ private[kafka010] case class KafkaSource(
 
     var result: Option[Map[TopicPartition, Long]] = None
     var attempt = 1
-    var lastException: Exception = null
+    var lastException: Throwable = null
     while (result.isEmpty && attempt <= MAX_OFFSET_FETCH_ATTEMPTS) {
       try {
         result = Some(body)
       } catch {
-        case e: Exception =>
+        case NonFatal(e) =>
           lastException = e
+          e.printStackTrace()
           logWarning(s"Error in attempt $attempt getting Kafka offsets: ", e)
           attempt += 1
           Thread.sleep(OFFSET_FETCH_ATTEMPT_INTERVAL_MS)
