@@ -181,7 +181,7 @@ class SessionCatalog(
 
   def databaseExists(db: String): Boolean = {
     val dbName = formatDatabaseName(db)
-    dbName == globalTempViewManager.database || externalCatalog.databaseExists(dbName)
+    externalCatalog.databaseExists(dbName)
   }
 
   def listDatabases(): Seq[String] = {
@@ -288,7 +288,6 @@ class SessionCatalog(
    */
   def getTableMetadataOption(name: TableIdentifier): Option[CatalogTable] = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
-    if (db == globalTempViewManager.database) return None
     val table = formatTableName(name.table)
     requireDbExists(db)
     externalCatalog.getTableOption(db, table)

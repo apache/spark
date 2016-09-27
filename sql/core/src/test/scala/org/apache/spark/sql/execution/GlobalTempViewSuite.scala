@@ -114,7 +114,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
 
       // we never lookup global temp views if database is not specified in table name
       spark.catalog.dropTempView("same_name")
-      intercept[NoSuchTableException](sql("SELECT * FROM same_name"))
+      intercept[AnalysisException](sql("SELECT * FROM same_name"))
 
       // Use qualified name to lookup a global temp view.
       checkAnswer(sql(s"SELECT * FROM $globalTempDB.same_name"), Row(3, 4))
