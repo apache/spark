@@ -51,9 +51,6 @@ class JdbcRelationProvider extends CreatableRelationProvider
     JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties)(sqlContext.sparkSession)
   }
 
-  /**
-   * Saves the content of the [[DataFrame]] to an external database table.
-   */
   override def createRelation(
       sqlContext: SQLContext,
       mode: SaveMode,
