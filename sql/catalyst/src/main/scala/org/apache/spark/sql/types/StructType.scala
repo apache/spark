@@ -384,6 +384,15 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     StructType(newFields)
   }
 
+  private[sql] def cleanNullableAndMetadata: StructType = {
+    val newFields = fields.map {
+      case StructField(name, dataType, nullable, _) =>
+        StructField(name, dataType.asNullable, nullable = true)
+    }
+
+    StructType(newFields)
+  }
+
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || fields.exists(field => field.dataType.existsRecursively(f))
   }

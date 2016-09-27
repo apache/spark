@@ -243,7 +243,6 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     }
   }
 
-  // TODO: do we really need to rename?
   def castAndRenameChildOutput(
       insert: InsertIntoTable,
       expectedOutput: Seq[Attribute]): InsertIntoTable = {
@@ -252,6 +251,8 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
         if (expected.dataType.sameType(actual.dataType) && expected.name == actual.name) {
           actual
         } else {
+          // Renaming is needed for handling the INSERT statement like
+          // INSERT INTO TABLE tab1 SELECT 1, 2
           Alias(Cast(actual, expected.dataType), expected.name)()
         }
     }

@@ -185,6 +185,23 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     )
   }
 
+  test("INSERT INTO TABLE with Comment in columns") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      sql(
+        s"""
+           |CREATE TABLE $tabName(col1 int COMMENT 'a', col2 int)
+           |USING parquet
+         """.stripMargin)
+      sql(s"INSERT INTO TABLE $tabName SELECT 1, 2")
+
+      checkAnswer(
+        sql(s"SELECT col1, col2 FROM $tabName"),
+        Row(1, 2) :: Nil
+      )
+    }
+  }
+
   test("it is not allowed to write to a table while querying it.") {
     val message = intercept[AnalysisException] {
       sql(
