@@ -210,7 +210,7 @@ private[window] final class SlidingWindowFunctionFrame(
  * ... (No Frame Definition)
  * ... BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
  *
- * Its results are  the same for each and every row in the partition. This class can be seen as a
+ * Its results are the same for each and every row in the partition. This class can be seen as a
  * special case of a sliding window, but is optimized for the unbound case.
  *
  * @param target to write results to.

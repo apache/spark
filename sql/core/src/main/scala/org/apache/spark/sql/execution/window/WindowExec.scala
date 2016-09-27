@@ -266,8 +266,7 @@ case class WindowExec(
    * @param expressions unbound ordered function expressions.
    * @return the final resulting projection.
    */
-  private[this] def createResultProjection(
-      expressions: Seq[Expression]): UnsafeProjection = {
+  private[this] def createResultProjection(expressions: Seq[Expression]): UnsafeProjection = {
     val references = expressions.zipWithIndex.map{ case (e, i) =>
       // Results of window expressions will be on the right side of child's output
       BoundReference(child.output.size + i, e.dataType, e.nullable)
