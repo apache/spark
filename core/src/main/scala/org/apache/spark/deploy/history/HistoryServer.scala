@@ -185,18 +185,8 @@ class HistoryServer(
     * @return List of known applications with a limit.
     */
   def getApplicationInfoList(limit: Int): Iterator[ApplicationInfo] = {
-    val list =
-      if (limit <= 0) {
-        getApplicationList
-      } else {
-        getApplicationList.take(limit)
-      }
-
-    list.iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
-  }
-
-  def getApplicationInfoList: Iterator[ApplicationInfo] = {
-    getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+    getApplicationList.take(limit).iterator
+      .map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
 
   override def writeEventLogs(

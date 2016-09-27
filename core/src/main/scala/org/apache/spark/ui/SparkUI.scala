@@ -107,29 +107,28 @@ private[spark] class SparkUI private (
     if (appId == this.appId) Some(this) else None
   }
 
-  def getApplicationInfoList: Iterator[ApplicationInfo] = {
-    Iterator(new ApplicationInfo(
-      id = appId,
-      name = appName,
-      coresGranted = None,
-      maxCores = None,
-      coresPerExecutor = None,
-      memoryPerExecutorMB = None,
-      attempts = Seq(new ApplicationAttemptInfo(
-        attemptId = None,
-        startTime = new Date(startTime),
-        endTime = new Date(-1),
-        duration = 0,
-        lastUpdated = new Date(startTime),
-        sparkUser = "",
-        completed = false
-      ))
-    ))
-  }
-
-  // SparkUI only has one application info, just ignore the input limit
   def getApplicationInfoList(limit: Int): Iterator[ApplicationInfo] = {
-    getApplicationInfoList
+    if (limit > 0) {
+      Iterator(new ApplicationInfo(
+        id = appId,
+        name = appName,
+        coresGranted = None,
+        maxCores = None,
+        coresPerExecutor = None,
+        memoryPerExecutorMB = None,
+        attempts = Seq(new ApplicationAttemptInfo(
+          attemptId = None,
+          startTime = new Date(startTime),
+          endTime = new Date(-1),
+          duration = 0,
+          lastUpdated = new Date(startTime),
+          sparkUser = "",
+          completed = false
+        ))
+      ))
+    } else {
+      Iterator()
+    }
   }
 }
 

@@ -32,13 +32,8 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
       @DefaultValue("3000-01-01") @QueryParam("maxDate") maxDate: SimpleDateParam,
       @QueryParam("limit") limit: Integer)
   : Iterator[ApplicationInfo] = {
-    val allApps = {
-      if (limit != null) {
-        uiRoot.getApplicationInfoList(limit)
-      } else {
-        uiRoot.getApplicationInfoList
-      }
-    }
+    val numApps: Int = if (limit != null) limit else Integer.MAX_VALUE
+    val allApps = uiRoot.getApplicationInfoList(numApps)
 
     val adjStatus = {
       if (status.isEmpty) {
@@ -49,7 +44,7 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
     }
     val includeCompleted = adjStatus.contains(ApplicationStatus.COMPLETED)
     val includeRunning = adjStatus.contains(ApplicationStatus.RUNNING)
-    val appList = allApps.filter { app =>
+    allApps.filter { app =>
       val anyRunning = app.attempts.exists(!_.completed)
       // if any attempt is still running, we consider the app to also still be running
       val statusOk = (!anyRunning && includeCompleted) ||
@@ -61,8 +56,6 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
       }
       statusOk && dateOk
     }
-
-    appList
   }
 }
 

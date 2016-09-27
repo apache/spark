@@ -221,8 +221,7 @@ private[spark] object ApiRootResource {
  */
 private[spark] trait UIRoot {
   def getSparkUI(appKey: String): Option[SparkUI]
-  def getApplicationInfoList: Iterator[ApplicationInfo]
-  def getApplicationInfoList(limit: Int): Iterator[ApplicationInfo]
+  def getApplicationInfoList(limit: Int = Integer.MAX_VALUE): Iterator[ApplicationInfo]
 
   /**
    * Write the event logs for the given app to the [[ZipOutputStream]] instance. If attemptId is
