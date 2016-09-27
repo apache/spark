@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.Clock
 
 /**
- * Handles balcklisting executors and nodes within a taskset.  This includes blacklisting specific
+ * Handles blacklisting executors and nodes within a taskset.  This includes blacklisting specific
  * (task, executor) / (task, nodes) pairs, and also completely blacklisting executors and nodes
  * for the entire taskset.
  *
@@ -95,9 +95,9 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
   }
 
   private[scheduler] def updateBlacklistForFailedTask(
-    host: String,
-    exec: String,
-    index: Int): Unit = {
+      host: String,
+      exec: String,
+      index: Int): Unit = {
     val execFailures = execToFailures.getOrElseUpdate(exec, new ExecutorFailuresInTaskSet(host))
     execFailures.updateWithFailure(index, clock.getTimeMillis() + TIMEOUT_MILLIS)
 
