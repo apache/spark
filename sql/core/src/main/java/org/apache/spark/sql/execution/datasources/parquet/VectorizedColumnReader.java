@@ -539,7 +539,7 @@ public class VectorizedColumnReader {
     this.defColumn = new VectorizedRleValuesReader(bitWidth);
     this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumn);
     this.defColumn.initFromBuffer(
-        this.pageValueCount, page.getDefinitionLevels().toByteArray());
+        this.pageValueCount, page.getDefinitionLevels().toByteBuffer());
     try {
       initDataReader(page.getDataEncoding(), page.getData().toByteArray(), 0);
     } catch (IOException e) {
