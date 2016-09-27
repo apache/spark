@@ -312,7 +312,7 @@ class ChiSqSelector(object):
     .. versionadded:: 1.4.0
     """
     def __init__(self, numTopFeatures=50, selectorType="kbest", percentile=0.1, alphaFPR=0.05,
-		 alphaFDR=0.05, alphaFWE=0.05):
+                 alphaFDR=0.05, alphaFWE=0.05):
         self.numTopFeatures = numTopFeatures
         self.selectorType = selectorType
         self.percentile = percentile
