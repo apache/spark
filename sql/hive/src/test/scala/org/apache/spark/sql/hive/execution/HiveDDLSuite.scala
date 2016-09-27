@@ -148,40 +148,48 @@ class HiveDDLSuite
     }
   }
 
-  test("create table and view with unicode columns and comment") {
+  test("create Hive-serde table and view with unicode columns and comment") {
     val catalog = spark.sessionState.catalog
     val tabName = "tab1"
     val viewName = "view1"
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
-    val colName = "列1"
-    val comment = "风吹"
+    val colName1 = "和"
+    val colName2 = "尼"
+    val comment = "庙"
     // scalastyle:on
     withTable(tabName) {
       // non ascii characters are not allowed in the source code, so we disable the scalastyle.
-      sql(s"CREATE TABLE $tabName(`$colName` int COMMENT '$comment') COMMENT '$comment'")
-      sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1")
+      sql(s"""
+             |CREATE TABLE $tabName(`$colName1` int COMMENT '$comment')
+             |COMMENT '$comment'
+             |PARTITIONED BY (`$colName2` int)
+           """.stripMargin)
+      sql(s"INSERT OVERWRITE TABLE $tabName partition (`$colName2`=2) SELECT 1")
       withView(viewName) {
         sql(
           s"""
-             |CREATE VIEW $viewName(`$colName` COMMENT '$comment')
+             |CREATE VIEW $viewName(`$colName1` COMMENT '$comment', `$colName2`)
              |COMMENT '$comment'
-             |AS SELECT `$colName` FROM $tabName
+             |AS SELECT `$colName1`, `$colName2` FROM $tabName
            """.stripMargin)
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
         val viewMetadata = catalog.getTableMetadata(TableIdentifier(viewName, Some("default")))
         assert(tableMetadata.comment == Option(comment))
         assert(viewMetadata.comment == Option(comment))
 
-        assert(tableMetadata.schema.fields.length == 1 && viewMetadata.schema.fields.length == 1)
-        val columnInTable = tableMetadata.schema.fields.head
-        val columnInView = viewMetadata.schema.fields.head
-        assert(columnInTable.name == colName && columnInView.name == colName)
-        assert(columnInTable.getComment() == Option(comment))
-        assert(columnInView.getComment() == Option(comment))
+        assert(tableMetadata.schema.fields.length == 2 && viewMetadata.schema.fields.length == 2)
+        val column1InTable = tableMetadata.schema.fields.head
+        val column1InView = viewMetadata.schema.fields.head
+        assert(column1InTable.name == colName1 && column1InView.name == colName1)
+        assert(column1InTable.getComment() == Option(comment))
+        assert(column1InView.getComment() == Option(comment))
 
-        checkAnswer(sql(s"SELECT `$colName` FROM $tabName"), Row(1) :: Nil)
-        checkAnswer(sql(s"SELECT `$colName` FROM $viewName"), Row(1) :: Nil)
+        assert(tableMetadata.schema.fields(1).name == colName2 &&
+          viewMetadata.schema.fields(1).name == colName2)
+
+        checkAnswer(sql(s"SELECT `$colName1`, `$colName2` FROM $tabName"), Row(1, 2) :: Nil)
+        checkAnswer(sql(s"SELECT `$colName1`, `$colName2` FROM $viewName"), Row(1, 2) :: Nil)
       }
     }
   }
