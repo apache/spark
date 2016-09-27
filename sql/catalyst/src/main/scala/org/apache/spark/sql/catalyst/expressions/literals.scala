@@ -25,6 +25,7 @@ import javax.xml.bind.DatatypeConverter
 
 import org.json4s.JsonAST._
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -52,11 +53,49 @@ object Literal {
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
+    case a: Array[_] =>
+      val elementType = componentTypeToDataType(a.getClass.getComponentType())
+      val dataType = ArrayType(elementType)
+      val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+      Literal(convert(a), dataType)
     case i: CalendarInterval => Literal(i, CalendarIntervalType)
     case null => Literal(null, NullType)
     case v: Literal => v
     case _ =>
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
+  }
+
+  private def componentTypeToDataType(clz: Class[_]): DataType = clz match {
+    // primitive type
+    case c: Class[_] if c == java.lang.Short.TYPE => ShortType
+    case c: Class[_] if c == java.lang.Integer.TYPE => IntegerType
+    case c: Class[_] if c == java.lang.Long.TYPE => LongType
+    case c: Class[_] if c == java.lang.Double.TYPE => DoubleType
+    case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
+    case c: Class[_] if c == java.lang.Float.TYPE => FloatType
+    case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
+
+    // java class
+    case c: Class[_] if c == classOf[java.lang.String] => StringType
+    case c: Class[_] if c == classOf[java.sql.Date] => DateType
+    case c: Class[_] if c == classOf[java.sql.Timestamp] => TimestampType
+    case c: Class[_] if c == classOf[java.math.BigDecimal] => DecimalType.SYSTEM_DEFAULT
+    case c: Class[_] if c == classOf[Array[Byte]] => BinaryType
+    case c: Class[_] if c == classOf[java.lang.Short] => ShortType
+    case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
+    case c: Class[_] if c == classOf[java.lang.Long] => LongType
+    case c: Class[_] if c == classOf[java.lang.Double] => DoubleType
+    case c: Class[_] if c == classOf[java.lang.Byte] => ByteType
+    case c: Class[_] if c == classOf[java.lang.Float] => FloatType
+    case c: Class[_] if c == classOf[java.lang.Boolean] => BooleanType
+
+    // scala class
+    case c: Class[_] if c == classOf[scala.math.BigInt] => DecimalType.SYSTEM_DEFAULT
+    case c: Class[_] if c == classOf[scala.math.BigDecimal] => DecimalType.SYSTEM_DEFAULT
+
+    case c: Class[_] if c.isArray => ArrayType(componentTypeToDataType(c.getComponentType))
+
+    case c => throw new AnalysisException(s"Unsupported component type $c in arrays")
   }
 
   /**
