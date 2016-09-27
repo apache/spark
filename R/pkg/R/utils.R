@@ -342,7 +342,8 @@ varargsToStrEnv <- function(...) {
   for (name in names(pairs)) {
     value <- pairs[[name]]
     if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
-      stop("value[", value, "] in key[", name, "] is not convertable to string.")
+      stop(paste0("Unsupported type for ", name, " : ", class(value),
+           ". Supported types are logical, numeric, character and null."))
     }
     if (is.logical(value)) {
       env[[name]] <- tolower(as.character(value))

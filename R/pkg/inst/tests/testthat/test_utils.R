@@ -221,7 +221,9 @@ test_that("varargsToStrEnv", {
   strenv <- varargsToStrEnv(a = 1, b = 1.1, c = TRUE, d = "abcd")
   env <- varargsToEnv(a = "1", b = "1.1", c = "true", d = "abcd")
   expect_equal(strenv, env)
-  expect_error(varargsToStrEnv(a = list(1, "a")))
+  expect_error(varargsToStrEnv(a = list(1, "a")),
+               paste0("Unsupported type for a : list. Supported types are logical, ",
+                      "numeric, character and null."))
 })
 
 sparkR.session.stop()

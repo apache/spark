@@ -328,6 +328,7 @@ setMethod("toDF", signature(x = "RDD"),
 #' It goes through the entire dataset once to determine the schema.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
+#' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.json
 #' @export
@@ -407,6 +408,7 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 #' Loads an ORC file, returning the result as a SparkDataFrame.
 #'
 #' @param path Path of file to read.
+#' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.orc
 #' @export
@@ -428,6 +430,7 @@ read.orc <- function(path, ...) {
 #' Loads a Parquet file, returning the result as a SparkDataFrame.
 #'
 #' @param path path of file to read. A vector of multiple paths is allowed.
+#' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.parquet
 #' @export
@@ -473,6 +476,7 @@ parquetFile <- function(x, ...) {
 #' Each line in the text file is a new row in the resulting SparkDataFrame.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
+#' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.text
 #' @export
