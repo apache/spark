@@ -22,3 +22,6 @@ DESC t PARTITION (c='Us');
 
 -- ParseException: PARTITION specification is incomplete
 DESC t PARTITION (c='Us', d);
+
+-- DROP TEST TABLE
+DROP TABLE t;
