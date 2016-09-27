@@ -214,8 +214,21 @@ private[parquet] class ParquetRowConverter(
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
 
     catalystType match {
-      case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
+      case BooleanType | IntegerType | FloatType | DoubleType | BinaryType =>
         new ParquetPrimitiveConverter(updater)
+
+      /**
+        * When reading a hive table of parquet files with schema evolution from
+        * Int to Long and if hive metastore has Long as its type while parquet files
+        * have Int, SparkSQL need to figure out the actual type in the parquet
+        * files. Otherwise, it will result in java.lang.ClassCastException:
+        * [[MutableLong]] cannot be cast to [[MutableInt]].
+        */
+      case LongType =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addInt(value: Int): Unit =
+            updater.setLong(value.asInstanceOf[Long])
+        }
 
       case ByteType =>
         new ParquetPrimitiveConverter(updater) {
