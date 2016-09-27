@@ -32,7 +32,14 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
       @DefaultValue("3000-01-01") @QueryParam("maxDate") maxDate: SimpleDateParam,
       @QueryParam("limit") limit: Integer)
   : Iterator[ApplicationInfo] = {
-    val allApps = uiRoot.getApplicationInfoList
+    val allApps = {
+      if (limit != null) {
+        uiRoot.getApplicationInfoList(limit)
+      } else {
+        uiRoot.getApplicationInfoList
+      }
+    }
+
     val adjStatus = {
       if (status.isEmpty) {
         Arrays.asList(ApplicationStatus.values(): _*)
@@ -54,11 +61,8 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
       }
       statusOk && dateOk
     }
-    if (limit != null) {
-      appList.take(limit)
-    } else {
-      appList
-    }
+
+    appList
   }
 }
 

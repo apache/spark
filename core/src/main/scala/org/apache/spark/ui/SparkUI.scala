@@ -126,6 +126,11 @@ private[spark] class SparkUI private (
       ))
     ))
   }
+
+  // SparkUI only has one application info, just ignore the input limit
+  def getApplicationInfoList(limit: Int): Iterator[ApplicationInfo] = {
+    getApplicationInfoList
+  }
 }
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)

@@ -178,6 +178,23 @@ class HistoryServer(
     provider.getListing()
   }
 
+  /**
+    * Returns a list of available applications, in descending order according to their end time.
+    *
+    * @param limit the number of applications to return
+    * @return List of known applications with a limit.
+    */
+  def getApplicationInfoList(limit: Int): Iterator[ApplicationInfo] = {
+    val list =
+      if (limit <= 0) {
+        getApplicationList
+      } else {
+        getApplicationList.take(limit)
+      }
+
+    list.iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+  }
+
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
