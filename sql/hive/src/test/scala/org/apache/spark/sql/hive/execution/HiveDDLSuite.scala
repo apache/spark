@@ -506,6 +506,25 @@ class HiveDDLSuite
     }
   }
 
+  test("desc formatted table for permanent view") {
+    withTable("tbl") {
+      withView("view1") {
+        sql("CREATE TABLE tbl(a int)")
+        sql("CREATE VIEW view1 AS SELECT * FROM tbl")
+        assert(sql("DESC FORMATTED view1").collect().containsSlice(
+          Seq(
+            Row("# View Information", "", ""),
+            Row("View Original Text:", "SELECT * FROM tbl", ""),
+            Row("View Expanded Text:",
+              "SELECT `gen_attr_0` AS `a` FROM (SELECT `gen_attr_0` FROM " +
+              "(SELECT `a` AS `gen_attr_0` FROM `default`.`tbl`) AS gen_subquery_0) AS tbl",
+              "")
+          )
+        ))
+      }
+    }
+  }
+
   test("desc table for data source table using Hive Metastore") {
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
     val tabName = "tab1"
