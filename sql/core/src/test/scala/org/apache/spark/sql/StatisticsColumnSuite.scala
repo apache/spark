@@ -118,14 +118,12 @@ class StatisticsColumnSuite extends StatisticsTest {
     val df = data.toDF("c1", "c2", "c3", "c4")
     val nonNullValues = getNonNullValues[Int](values)
     val expectedColStatsSeq = df.schema.map { f =>
-      val colStat = ColumnStat(
-        dataType = f.dataType,
-        statRow = InternalRow(
-          values.count(_.isEmpty).toLong,
-          nonNullValues.max,
-          nonNullValues.min,
-          nonNullValues.distinct.length.toLong))
-      (f.name, colStat)
+      val colStat = ColumnStat(InternalRow(
+        values.count(_.isEmpty).toLong,
+        nonNullValues.max,
+        nonNullValues.min,
+        nonNullValues.distinct.length.toLong))
+      (f, colStat)
     }
     checkColStats(df, expectedColStatsSeq)
   }
@@ -145,15 +143,15 @@ class StatisticsColumnSuite extends StatisticsTest {
     val expectedColStatsSeq = df.schema.map { f =>
       val colStat = f.dataType match {
         case floatType: FloatType =>
-          ColumnStat(floatType, InternalRow(numNulls, nonNullValues.max.toFloat,
-            nonNullValues.min.toFloat, ndv))
+          ColumnStat(InternalRow(numNulls, nonNullValues.max.toFloat, nonNullValues.min.toFloat,
+            ndv))
         case doubleType: DoubleType =>
-          ColumnStat(doubleType, InternalRow(numNulls, nonNullValues.max.toDouble,
-            nonNullValues.min.toDouble, ndv))
+          ColumnStat(InternalRow(numNulls, nonNullValues.max.toDouble, nonNullValues.min.toDouble,
+            ndv))
         case decimalType: DecimalType =>
-          ColumnStat(decimalType, InternalRow(numNulls, nonNullValues.max, nonNullValues.min, ndv))
+          ColumnStat(InternalRow(numNulls, nonNullValues.max, nonNullValues.min, ndv))
       }
-      (f.name, colStat)
+      (f, colStat)
     }
     checkColStats(df, expectedColStatsSeq)
   }
@@ -163,14 +161,12 @@ class StatisticsColumnSuite extends StatisticsTest {
     val df = values.toDF("c1")
     val nonNullValues = getNonNullValues[String](values)
     val expectedColStatsSeq = df.schema.map { f =>
-      val colStat = ColumnStat(
-        dataType = f.dataType,
-        statRow = InternalRow(
-          values.count(_.isEmpty).toLong,
-          nonNullValues.map(_.length).sum / nonNullValues.length.toDouble,
-          nonNullValues.map(_.length).max.toLong,
-          nonNullValues.distinct.length.toLong))
-      (f.name, colStat)
+      val colStat = ColumnStat(InternalRow(
+        values.count(_.isEmpty).toLong,
+        nonNullValues.map(_.length).sum / nonNullValues.length.toDouble,
+        nonNullValues.map(_.length).max.toLong,
+        nonNullValues.distinct.length.toLong))
+      (f, colStat)
     }
     checkColStats(df, expectedColStatsSeq)
   }
@@ -180,13 +176,11 @@ class StatisticsColumnSuite extends StatisticsTest {
     val df = values.toDF("c1")
     val nonNullValues = getNonNullValues[Array[Byte]](values)
     val expectedColStatsSeq = df.schema.map { f =>
-      val colStat = ColumnStat(
-        dataType = f.dataType,
-        statRow = InternalRow(
-          values.count(_.isEmpty).toLong,
-          nonNullValues.map(_.length).sum / nonNullValues.length.toDouble,
-          nonNullValues.map(_.length).max.toLong))
-      (f.name, colStat)
+      val colStat = ColumnStat(InternalRow(
+        values.count(_.isEmpty).toLong,
+        nonNullValues.map(_.length).sum / nonNullValues.length.toDouble,
+        nonNullValues.map(_.length).max.toLong))
+      (f, colStat)
     }
     checkColStats(df, expectedColStatsSeq)
   }
@@ -196,13 +190,11 @@ class StatisticsColumnSuite extends StatisticsTest {
     val df = values.toDF("c1")
     val nonNullValues = getNonNullValues[Boolean](values)
     val expectedColStatsSeq = df.schema.map { f =>
-      val colStat = ColumnStat(
-        dataType = f.dataType,
-        statRow = InternalRow(
-          values.count(_.isEmpty).toLong,
-          nonNullValues.count(_.equals(true)).toLong,
-          nonNullValues.count(_.equals(false)).toLong))
-      (f.name, colStat)
+      val colStat = ColumnStat(InternalRow(
+        values.count(_.isEmpty).toLong,
+        nonNullValues.count(_.equals(true)).toLong,
+        nonNullValues.count(_.equals(false)).toLong))
+      (f, colStat)
     }
     checkColStats(df, expectedColStatsSeq)
   }
@@ -212,15 +204,13 @@ class StatisticsColumnSuite extends StatisticsTest {
     val df = values.toDF("c1")
     val nonNullValues = getNonNullValues[Date](values)
     val expectedColStatsSeq = df.schema.map { f =>
-      val colStat = ColumnStat(
-        dataType = f.dataType,
-        statRow = InternalRow(
-          values.count(_.isEmpty).toLong,
-          // Internally, DateType is represented as the number of days from 1970-01-01.
-          nonNullValues.map(DateTimeUtils.fromJavaDate).max,
-          nonNullValues.map(DateTimeUtils.fromJavaDate).min,
-          nonNullValues.distinct.length.toLong))
-      (f.name, colStat)
+      val colStat = ColumnStat(InternalRow(
+        values.count(_.isEmpty).toLong,
+        // Internally, DateType is represented as the number of days from 1970-01-01.
+        nonNullValues.map(DateTimeUtils.fromJavaDate).max,
+        nonNullValues.map(DateTimeUtils.fromJavaDate).min,
+        nonNullValues.distinct.length.toLong))
+      (f, colStat)
     }
     checkColStats(df, expectedColStatsSeq)
   }
@@ -232,15 +222,13 @@ class StatisticsColumnSuite extends StatisticsTest {
     val df = values.toDF("c1")
     val nonNullValues = getNonNullValues[Timestamp](values)
     val expectedColStatsSeq = df.schema.map { f =>
-      val colStat = ColumnStat(
-        dataType = f.dataType,
-        statRow = InternalRow(
-          values.count(_.isEmpty).toLong,
-          // Internally, TimestampType is represented as the number of days from 1970-01-01
-          nonNullValues.map(DateTimeUtils.fromJavaTimestamp).max,
-          nonNullValues.map(DateTimeUtils.fromJavaTimestamp).min,
-          nonNullValues.distinct.length.toLong))
-      (f.name, colStat)
+      val colStat = ColumnStat(InternalRow(
+        values.count(_.isEmpty).toLong,
+        // Internally, TimestampType is represented as the number of days from 1970-01-01
+        nonNullValues.map(DateTimeUtils.fromJavaTimestamp).max,
+        nonNullValues.map(DateTimeUtils.fromJavaTimestamp).min,
+        nonNullValues.distinct.length.toLong))
+      (f, colStat)
     }
     checkColStats(df, expectedColStatsSeq)
   }
@@ -252,10 +240,7 @@ class StatisticsColumnSuite extends StatisticsTest {
     }
     val df = data.toDF("c1", "c2")
     val expectedColStatsSeq = df.schema.map { f =>
-      val colStat = ColumnStat(
-        dataType = f.dataType,
-        statRow = InternalRow(values.count(_.isEmpty).toLong, null, null, 0L))
-      (f.name, colStat)
+      (f, ColumnStat(InternalRow(values.count(_.isEmpty).toLong, null, null, 0L)))
     }
     checkColStats(df, expectedColStatsSeq)
   }
@@ -278,46 +263,30 @@ class StatisticsColumnSuite extends StatisticsTest {
     val expectedColStatsSeq = df.schema.map { f =>
       val colStat = f.dataType match {
         case IntegerType =>
-          ColumnStat(
-            dataType = f.dataType,
-            statRow = InternalRow(0L, intSeq.max, intSeq.min, intSeq.distinct.length.toLong))
+          ColumnStat(InternalRow(0L, intSeq.max, intSeq.min, intSeq.distinct.length.toLong))
         case DoubleType =>
-          ColumnStat(
-            dataType = f.dataType,
-            statRow = InternalRow(0L, doubleSeq.max, doubleSeq.min,
+          ColumnStat(InternalRow(0L, doubleSeq.max, doubleSeq.min,
               doubleSeq.distinct.length.toLong))
         case StringType =>
-          ColumnStat(
-            dataType = f.dataType,
-            statRow = InternalRow(0L, stringSeq.map(_.length).sum / stringSeq.length.toDouble,
+          ColumnStat(InternalRow(0L, stringSeq.map(_.length).sum / stringSeq.length.toDouble,
                 stringSeq.map(_.length).max.toLong, stringSeq.distinct.length.toLong))
         case BinaryType =>
-          ColumnStat(
-            dataType = f.dataType,
-            statRow = InternalRow(0L, binarySeq.map(_.length).sum / binarySeq.length.toDouble,
+          ColumnStat(InternalRow(0L, binarySeq.map(_.length).sum / binarySeq.length.toDouble,
                 binarySeq.map(_.length).max.toLong))
         case BooleanType =>
-          ColumnStat(
-            dataType = f.dataType,
-            statRow = InternalRow(0L, booleanSeq.count(_.equals(true)).toLong,
+          ColumnStat(InternalRow(0L, booleanSeq.count(_.equals(true)).toLong,
               booleanSeq.count(_.equals(false)).toLong))
         case DateType =>
-          ColumnStat(
-            dataType = f.dataType,
-            statRow = InternalRow(0L, dateSeq.map(DateTimeUtils.fromJavaDate).max,
+          ColumnStat(InternalRow(0L, dateSeq.map(DateTimeUtils.fromJavaDate).max,
                 dateSeq.map(DateTimeUtils.fromJavaDate).min, dateSeq.distinct.length.toLong))
         case TimestampType =>
-          ColumnStat(
-            dataType = f.dataType,
-            statRow = InternalRow(0L, timestampSeq.map(DateTimeUtils.fromJavaTimestamp).max,
+          ColumnStat(InternalRow(0L, timestampSeq.map(DateTimeUtils.fromJavaTimestamp).max,
                 timestampSeq.map(DateTimeUtils.fromJavaTimestamp).min,
                 timestampSeq.distinct.length.toLong))
         case LongType =>
-          ColumnStat(
-            dataType = f.dataType,
-            statRow = InternalRow(0L, longSeq.max, longSeq.min, longSeq.distinct.length.toLong))
+          ColumnStat(InternalRow(0L, longSeq.max, longSeq.min, longSeq.distinct.length.toLong))
       }
-      (f.name, colStat)
+      (f, colStat)
     }
     checkColStats(df, expectedColStatsSeq)
   }
@@ -342,9 +311,8 @@ class StatisticsColumnSuite extends StatisticsTest {
         checkTableStats(tableName = table, expectedRowCount = Some(values.length * 2))
 
       val colStat = fetchedStats.get.colStats("c1")
-      checkColStat(colStat = colStat, expectedColStat = ColumnStat(
-        dataType = IntegerType,
-        statRow = InternalRow.fromSeq(
+      checkColStat(dataType = IntegerType, colStat = colStat, expectedColStat =
+        ColumnStat(InternalRow.fromSeq(
           Seq(0L, values.max, values.min, values.distinct.length.toLong))))
     }
   }
@@ -356,18 +324,19 @@ class StatisticsColumnSuite extends StatisticsTest {
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c1")
       val fetchedStats1 = checkTableStats(tableName = table, expectedRowCount = Some(0))
       assert(fetchedStats1.get.colStats.size == 1)
-      val expected1 = ColumnStat(
-        dataType = IntegerType, statRow = InternalRow(0L, null, null, 0L))
-      checkColStat(colStat = fetchedStats1.get.colStats("c1"), expectedColStat = expected1)
+      val expected1 = ColumnStat(InternalRow(0L, null, null, 0L))
+      checkColStat(dataType = IntegerType, colStat = fetchedStats1.get.colStats("c1"),
+        expectedColStat = expected1)
 
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c2")
       val fetchedStats2 = checkTableStats(tableName = table, expectedRowCount = Some(0))
       // column c1 is kept in the stats
       assert(fetchedStats2.get.colStats.size == 2)
-      checkColStat(colStat = fetchedStats2.get.colStats("c1"), expectedColStat = expected1)
-      val expected2 = ColumnStat(
-        dataType = LongType, statRow = InternalRow(0L, null, null, 0L))
-      checkColStat(colStat = fetchedStats2.get.colStats("c2"), expectedColStat = expected2)
+      checkColStat(dataType = IntegerType, colStat = fetchedStats2.get.colStats("c1"),
+        expectedColStat = expected1)
+      val expected2 = ColumnStat(InternalRow(0L, null, null, 0L))
+      checkColStat(dataType = LongType, colStat = fetchedStats2.get.colStats("c2"),
+        expectedColStat = expected2)
     }
   }
 }

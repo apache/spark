@@ -28,7 +28,7 @@ trait StatisticsTest extends QueryTest with SharedSQLContext {
 
   def checkColStats(
       df: DataFrame,
-      expectedColStatsSeq: Seq[(String, ColumnStat)]): Unit = {
+      expectedColStatsSeq: Seq[(StructField, ColumnStat)]): Unit = {
     val table = "tbl"
     withTable(table) {
       df.write.format("json").saveAsTable(table)
@@ -36,17 +36,19 @@ trait StatisticsTest extends QueryTest with SharedSQLContext {
       val tableIdent = TableIdentifier(table, Some("default"))
       val relation = spark.sessionState.catalog.lookupRelation(tableIdent)
       val columnStats =
-        AnalyzeColumnCommand(tableIdent, columns).computeColStats(spark, relation)._2
+        AnalyzeColumnCommand(tableIdent, columns.map(_.name)).computeColStats(spark, relation)._2
       expectedColStatsSeq.foreach { expected =>
-        assert(columnStats.contains(expected._1))
-        checkColStat(colStat = columnStats(expected._1), expectedColStat = expected._2)
+        assert(columnStats.contains(expected._1.name))
+        checkColStat(
+          dataType = expected._1.dataType,
+          colStat = columnStats(expected._1.name),
+          expectedColStat = expected._2)
       }
     }
   }
 
-  def checkColStat(colStat: ColumnStat, expectedColStat: ColumnStat): Unit = {
-    assert(colStat.dataType == expectedColStat.dataType)
-    colStat.dataType match {
+  def checkColStat(dataType: DataType, colStat: ColumnStat, expectedColStat: ColumnStat): Unit = {
+    dataType match {
       case StringType =>
         val cs = colStat.forString
         val expectedCS = expectedColStat.forString

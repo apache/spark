@@ -404,7 +404,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
       }
       stats.colStats.foreach { case (colName, colStat) =>
-        statsProperties += (STATISTICS_BASIC_COL_STATS_PREFIX + colName) -> colStat.toString
+        statsProperties += (STATISTICS_COL_STATS_PREFIX + colName) -> colStat.toString
       }
       tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties)
     } else {
@@ -478,11 +478,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // construct Spark's statistics from information in Hive metastore
     if (catalogTable.properties.filterKeys(_.startsWith(STATISTICS_PREFIX)).nonEmpty) {
       val colStatsProps = catalogTable.properties
-        .filterKeys(_.startsWith(STATISTICS_BASIC_COL_STATS_PREFIX))
-        .map { case (k, v) => (k.replace(STATISTICS_BASIC_COL_STATS_PREFIX, ""), v) }
+        .filterKeys(_.startsWith(STATISTICS_COL_STATS_PREFIX))
+        .map { case (k, v) => (k.drop(STATISTICS_COL_STATS_PREFIX.length), v) }
       val colStats: Map[String, ColumnStat] = catalogTable.schema.collect {
         case field if colStatsProps.contains(field.name) =>
-          (field.name, ColumnStat(field.dataType, colStatsProps(field.name)))
+          (field.name, ColumnStat(colStatsProps(field.name)))
       }.toMap
       catalogTable.copy(
         properties = removeStatsProperties(catalogTable),
@@ -701,7 +701,7 @@ object HiveExternalCatalog {
   val STATISTICS_PREFIX = "spark.sql.statistics."
   val STATISTICS_TOTAL_SIZE = STATISTICS_PREFIX + "totalSize"
   val STATISTICS_NUM_ROWS = STATISTICS_PREFIX + "numRows"
-  val STATISTICS_BASIC_COL_STATS_PREFIX = STATISTICS_PREFIX + "colStats."
+  val STATISTICS_COL_STATS_PREFIX = STATISTICS_PREFIX + "colStats."
 
   def removeStatsProperties(metadata: CatalogTable): Map[String, String] = {
     metadata.properties.filterNot { case (key, _) => key.startsWith(STATISTICS_PREFIX) }

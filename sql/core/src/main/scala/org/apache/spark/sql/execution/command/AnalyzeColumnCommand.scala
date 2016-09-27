@@ -31,8 +31,8 @@ import org.apache.spark.sql.types._
 
 
 /**
- * Analyzes the given columns of the given table in the current database to generate statistics,
- * which will be used in query optimizations.
+ * Analyzes the given columns of the given table to generate statistics, which will be used in
+ * query optimizations.
  */
 case class AnalyzeColumnCommand(
     tableIdent: TableIdentifier,
@@ -77,11 +77,9 @@ case class AnalyzeColumnCommand(
 
     // check correctness of column names
     val attributesToAnalyze = mutable.MutableList[Attribute]()
-    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val resolver = sparkSession.sessionState.conf.resolver
     columnNames.foreach { col =>
-      val exprOption = relation.output.find { attr =>
-        if (caseSensitive) attr.name == col else attr.name.equalsIgnoreCase(col)
-      }
+      val exprOption = relation.output.find(attr => resolver(attr.name, col))
       val expr = exprOption.getOrElse(throw new AnalysisException(s"Invalid column name: $col."))
       // do deduplication
       if (!attributesToAnalyze.contains(expr)) {
@@ -117,9 +115,8 @@ object ColumnStatStruct {
   def max(e: Expression): Expression = Max(e)
   def min(e: Expression): Expression = Min(e)
   def ndv(e: Expression, relativeSD: Double): Expression = {
-    val approxNdv = HyperLogLogPlusPlus(e, relativeSD)
-    // the approximate ndv should not be larger than the number of rows
-    If(LessThanOrEqual(approxNdv, Count(one)), approxNdv, Count(one))
+    // the approximate ndv should never be larger than the number of rows
+    Least(Seq(HyperLogLogPlusPlus(e, relativeSD), Count(one)))
   }
   def avgLength(e: Expression): Expression = Average(Length(e))
   def maxLength(e: Expression): Expression = Max(Length(e))
@@ -130,7 +127,6 @@ object ColumnStatStruct {
     CreateStruct(exprs.map { expr: Expression =>
       expr.transformUp {
         case af: AggregateFunction => af.toAggregateExpression()
-        case e: Expression => e
       }
     })
   }
@@ -174,7 +170,6 @@ object ColumnStatStruct {
       case BinaryType => binaryColumnStat(e).length
       case BooleanType => booleanColumnStat(e).length
     }
-    val struct = row.getStruct(offset, numFields)
-    ColumnStat(e.dataType, struct)
+    ColumnStat(row.getStruct(offset, numFields))
   }
 }

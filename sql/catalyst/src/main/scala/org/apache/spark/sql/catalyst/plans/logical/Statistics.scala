@@ -61,7 +61,7 @@ case class Statistics(
 /**
  * Statistics for a column.
  */
-case class ColumnStat(dataType: DataType, statRow: InternalRow) {
+case class ColumnStat(statRow: InternalRow) {
 
   def forNumeric[T <: AtomicType](dataType: T): NumericColumnStat[T] = {
     NumericColumnStat(statRow, dataType)
@@ -77,9 +77,9 @@ case class ColumnStat(dataType: DataType, statRow: InternalRow) {
 }
 
 object ColumnStat {
-  def apply(dataType: DataType, str: String): ColumnStat = {
+  def apply(str: String): ColumnStat = {
     // use Base64 for decoding
-    ColumnStat(dataType, InternalRow(Base64.decodeBase64(str)))
+    ColumnStat(InternalRow(Base64.decodeBase64(str)))
   }
 }
 

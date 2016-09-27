@@ -32,8 +32,7 @@ import org.apache.spark.sql.internal.SessionState
 
 
 /**
- * Analyzes the given table in the current database to generate statistics, which will be
- * used in query optimizations.
+ * Analyzes the given table to generate statistics, which will be used in query optimizations.
  */
 case class AnalyzeTableCommand(
     tableIdent: TableIdentifier,
