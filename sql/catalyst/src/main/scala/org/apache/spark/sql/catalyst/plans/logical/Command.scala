@@ -25,6 +25,5 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
  * eagerly executed.
  */
 trait Command extends LeafNode {
-  final override def children: Seq[LogicalPlan] = Seq.empty
   override def output: Seq[Attribute] = Seq.empty
 }
