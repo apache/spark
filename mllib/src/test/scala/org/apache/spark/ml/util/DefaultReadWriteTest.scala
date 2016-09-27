@@ -25,8 +25,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.Dataset
 
 trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
 
@@ -40,7 +39,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    * @tparam T ML instance type
    * @return  Instance loaded from file
    */
-  def testDefaultReadWrite[T <: Params with MLWritable, M <: Model[M]](
+  def testDefaultReadWrite[T <: Params with MLWritable](
       instance: T,
       testParams: Boolean = true): T = {
     val uid = instance.uid
@@ -133,6 +132,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     }
     val model = estimator.fit(dataset)
 
+    // TODO: Change the test function if the type of initialModel isn't the same with type M.
     val testFunctions = if (testParams.contains("initialModel")) {
       Map(("initialModel", checkModelData.asInstanceOf[(Any, Any) => Unit]))
     } else {
@@ -149,16 +149,6 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
 
     checkModelData(model, model2)
   }
-}
-
-class MyModel extends Model[MyModel] {
-  override val uid: String = Identifiable.randomUID("MyModel")
-
-  override def transform(dataset: Dataset[_]): DataFrame = dataset.asInstanceOf[DataFrame]
-
-  override def transformSchema(schema: StructType): StructType = schema
-
-  override def copy(extra: ParamMap): MyModel = this
 }
 
 class MyParams(override val uid: String) extends Params with MLWritable {

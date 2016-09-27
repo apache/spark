@@ -176,17 +176,6 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
 
 object KMeansSuite {
 
-  class MockModel(override val uid: String) extends Model[MockModel] {
-
-    def this() = this(Identifiable.randomUID("mockModel"))
-
-    override def copy(extra: ParamMap): MockModel = throw new NotImplementedError()
-
-    override def transform(dataset: Dataset[_]): DataFrame = throw new NotImplementedError()
-
-    override def transformSchema(schema: StructType): StructType = throw new NotImplementedError()
-  }
-
   def generateKMeansData(spark: SparkSession, rows: Int, dim: Int, k: Int): DataFrame = {
     val sc = spark.sparkContext
     val rdd = sc.parallelize(1 to rows).map(i => Vectors.dense(Array.fill(dim)((i % k).toDouble)))
