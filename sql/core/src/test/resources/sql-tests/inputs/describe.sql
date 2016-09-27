@@ -20,5 +20,5 @@ DESC t PARTITION (c='Us', d=2);
 -- AnalysisException: Partition spec is invalid
 DESC t PARTITION (c='Us');
 
--- ParseException: Unsupported SQL statement
+-- ParseException: PARTITION specification is incomplete
 DESC t PARTITION (c='Us', d);

@@ -283,12 +283,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     } else {
       val partitionSpec = if (ctx.partitionSpec != null) {
         // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
-        val (valid, nonValid) = visitPartitionSpec(ctx.partitionSpec).partition(_._2.isDefined)
-        if (nonValid.nonEmpty) {
-          // For non-valid specification for `DESC` command, this raises a ParseException.
-          return null
-        } else {
-          valid.map(x => (x._1, x._2.get))
+        visitPartitionSpec(ctx.partitionSpec).map {
+          case (key, Some(value)) => key -> value
+          case (key, _) =>
+            throw new ParseException(s"PARTITION specification is incomplete: `$key`", ctx)
         }
       } else {
         Map.empty[String, String]

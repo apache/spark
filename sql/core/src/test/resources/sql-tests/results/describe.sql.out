@@ -75,6 +75,8 @@ struct<>
 -- !query 6 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Unsupported SQL statement
+PARTITION specification is incomplete: `d`(line 1, pos 0)
+
 == SQL ==
 DESC t PARTITION (c='Us', d)
+^^^

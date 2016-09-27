@@ -389,7 +389,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       val m3 = intercept[ParseException] {
         sql("DESC partitioned_table PARTITION (c='Us', d)")
       }.getMessage()
-      assert(m3.contains("Unsupported SQL statement"))
+      assert(m3.contains("PARTITION specification is incomplete: `d`"))
 
       spark
         .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
