@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.MapData
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 

@@ -134,13 +134,13 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("unsupported types (map and struct) in literals") {
-    def checkUnsupportedTypeInLiteral(v: Any) = {
+    def checkUnsupportedTypeInLiteral(v: Any): Unit = {
       val errMsgMap = intercept[RuntimeException] {
         Literal(v)
       }
       assert(errMsgMap.getMessage.startsWith("Unsupported literal type"))
     }
-    checkUnsupportedTypeInLiteral(Map("key1" -> 1, "key2" ->2))
+    checkUnsupportedTypeInLiteral(Map("key1" -> 1, "key2" -> 2))
     checkUnsupportedTypeInLiteral(("mike", 29, 1.0))
   }
 }
