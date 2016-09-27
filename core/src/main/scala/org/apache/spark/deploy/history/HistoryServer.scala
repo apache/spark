@@ -21,6 +21,7 @@ import java.util.NoSuchElementException
 import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
+import scala.collection.IterableView
 import scala.util.control.NonFatal
 
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
@@ -178,15 +179,12 @@ class HistoryServer(
     provider.getListing()
   }
 
-  /**
-    * Returns a list of available applications, in descending order according to their end time.
-    *
-    * @param limit the number of applications to return
-    * @return List of known applications with a limit.
-    */
-  def getApplicationInfoList(limit: Int): Iterator[ApplicationInfo] = {
-    getApplicationList.take(limit).iterator
-      .map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+  def getApplicationInfoList: Iterator[ApplicationInfo] = {
+    getApplicationList.iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+  }
+
+  def getApplicationInfoListView: IterableView[ApplicationInfo, Iterable[_]] = {
+    getApplicationList.view.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
 
   override def writeEventLogs(

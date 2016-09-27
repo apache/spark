@@ -19,13 +19,13 @@ package org.apache.spark.ui
 
 import java.util.{Date, ServiceLoader}
 
+import scala.collection.IterableView
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
-import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo,
-  UIRoot}
+import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo, UIRoot}
 import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.{EnvironmentListener, EnvironmentTab}
@@ -107,28 +107,28 @@ private[spark] class SparkUI private (
     if (appId == this.appId) Some(this) else None
   }
 
-  def getApplicationInfoList(limit: Int): Iterator[ApplicationInfo] = {
-    if (limit > 0) {
-      Iterator(new ApplicationInfo(
-        id = appId,
-        name = appName,
-        coresGranted = None,
-        maxCores = None,
-        coresPerExecutor = None,
-        memoryPerExecutorMB = None,
-        attempts = Seq(new ApplicationAttemptInfo(
-          attemptId = None,
-          startTime = new Date(startTime),
-          endTime = new Date(-1),
-          duration = 0,
-          lastUpdated = new Date(startTime),
-          sparkUser = "",
-          completed = false
-        ))
+  def getApplicationInfoList: Iterator[ApplicationInfo] = {
+    Iterator(new ApplicationInfo(
+      id = appId,
+      name = appName,
+      coresGranted = None,
+      maxCores = None,
+      coresPerExecutor = None,
+      memoryPerExecutorMB = None,
+      attempts = Seq(new ApplicationAttemptInfo(
+        attemptId = None,
+        startTime = new Date(startTime),
+        endTime = new Date(-1),
+        duration = 0,
+        lastUpdated = new Date(startTime),
+        sparkUser = "",
+        completed = false
       ))
-    } else {
-      Iterator()
-    }
+    ))
+  }
+
+  def getApplicationInfoListView: IterableView[ApplicationInfo, Iterable[_]] = {
+    getApplicationInfoList.toList.view
   }
 }
 

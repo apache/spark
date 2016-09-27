@@ -33,7 +33,7 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
       @QueryParam("limit") limit: Integer)
   : Iterator[ApplicationInfo] = {
     val numApps: Int = if (limit != null) limit else Integer.MAX_VALUE
-    val allApps = uiRoot.getApplicationInfoList(numApps)
+    val allApps = uiRoot.getApplicationInfoListView
 
     val adjStatus = {
       if (status.isEmpty) {
@@ -55,7 +55,7 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
           attempt.startTime.getTime <= maxDate.timestamp
       }
       statusOk && dateOk
-    }
+    }.take(numApps).force.iterator
   }
 }
 
