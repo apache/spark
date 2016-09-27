@@ -445,14 +445,20 @@ private[parquet] class ParquetSchemaConverter(
         //     repeated <element-type> array;
         //   }
         // }
-        ConversionPatterns.listType(
-          repetition,
-          field.name,
-          Types
+
+        // This should not use `listOfElements` here because this new method checks if the
+        // element name is `element` in the `GroupType` and throws an exception if not.
+        // As mentioned above, Spark prior to 1.4.x writes `ArrayType` as `LIST` but with
+        // `array` as its element name as below. Therefore, we build manually
+        // the correct group type here via the builder. (See SPARK-16777)
+        Types
+          .buildGroup(repetition).as(LIST)
+          .addField(Types
             .buildGroup(REPEATED)
-            // "array_element" is the name chosen by parquet-hive (1.7.0 and prior version)
+            // "array" is the name chosen by parquet-hive (1.7.0 and prior version)
             .addField(convertField(StructField("array", elementType, nullable)))
             .named("bag"))
+          .named(field.name)
 
       // Spark 1.4.x and prior versions convert ArrayType with non-nullable elements into a 2-level
       // LIST structure.  This behavior mimics parquet-avro (1.6.0rc3).  Note that this case is
@@ -461,11 +467,13 @@ private[parquet] class ParquetSchemaConverter(
         // <list-repetition> group <name> (LIST) {
         //   repeated <element-type> element;
         // }
-        ConversionPatterns.listType(
-          repetition,
-          field.name,
+
+        // Here too, we should not use `listOfElements`. (See SPARK-16777)
+        Types
+          .buildGroup(repetition).as(LIST)
           // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
-          convertField(StructField("array", elementType, nullable), REPEATED))
+          .addField(convertField(StructField("array", elementType, nullable), REPEATED))
+          .named(field.name)
 
       // Spark 1.4.x and prior versions convert MapType into a 3-level group annotated by
       // MAP_KEY_VALUE.  This is covered by `convertGroupField(field: GroupType): DataType`.
