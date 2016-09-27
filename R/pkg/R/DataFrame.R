@@ -57,7 +57,7 @@ setMethod("initialize", "SparkDataFrame", function(.Object, sdf, isCached) {
 
 #' Set options/mode and then return the write object
 #' @noRd
-setWriteOptions <- function(write, path = NULL, mode = 'error', ...) {
+setWriteOptions <- function(write, path = NULL, mode = "error", ...) {
     options <- varargsToStrEnv(...)
     if (!is.null(path)) {
       options[["path"]] <- path
