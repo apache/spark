@@ -27,6 +27,8 @@ import org.apache.parquet.io.api.Binary;
 
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
 
+import java.nio.ByteBuffer;
+
 /**
  * A values reader for Parquet's run-length encoded data. This is based off of the version in
  * parquet-mr with these changes:
@@ -49,7 +51,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   // Encoded data.
-  private byte[] in;
+  private ByteBuffer in;
   private int end;
   private int offset;
 
@@ -81,7 +83,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
-  public void initFromPage(int valueCount, byte[] page, int start) {
+  public void initFromPage(int valueCount, ByteBuffer page, int start) {
     this.offset = start;
     this.in = page;
     if (fixedWidth) {
@@ -90,8 +92,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
         this.end = this.offset + length;
       }
     } else {
-      this.end = page.length;
-      if (this.end != this.offset) init(page[this.offset++] & 255);
+      this.end = page.limit();
+      if (this.end != this.offset) init(page.get(this.offset++) & 255);
     }
     if (bitWidth == 0) {
       // 0 bit width, treat this as an RLE run of valueCount number of 0's.
@@ -105,10 +107,10 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   // Initialize the reader from a buffer. This is used for the V2 page encoding where the
   // definition are in its own buffer.
-  public void initFromBuffer(int valueCount, byte[] data) {
+  public void initFromBuffer(int valueCount, ByteBuffer data) {
     this.offset = 0;
     this.in = data;
-    this.end = data.length;
+    this.end = data.limit();
     if (bitWidth == 0) {
       // 0 bit width, treat this as an RLE run of valueCount number of 0's.
       this.mode = MODE.RLE;
@@ -527,7 +529,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
     int shift = 0;
     int b;
     do {
-      b = in[offset++] & 255;
+      b = in.get(offset++) & 255;
       value |= (b & 0x7F) << shift;
       shift += 7;
     } while ((b & 0x80) != 0);
@@ -538,10 +540,10 @@ public final class VectorizedRleValuesReader extends ValuesReader
    * Reads the next 4 byte little endian int.
    */
   private int readIntLittleEndian() {
-    int ch4 = in[offset] & 255;
-    int ch3 = in[offset + 1] & 255;
-    int ch2 = in[offset + 2] & 255;
-    int ch1 = in[offset + 3] & 255;
+    int ch4 = in.get(offset) & 255;
+    int ch3 = in.get(offset + 1) & 255;
+    int ch2 = in.get(offset + 2) & 255;
+    int ch1 = in.get(offset + 3) & 255;
     offset += 4;
     return ((ch1 << 24) + (ch2 << 16) + (ch3 << 8) + (ch4 << 0));
   }
@@ -554,17 +556,17 @@ public final class VectorizedRleValuesReader extends ValuesReader
       case 0:
         return 0;
       case 1:
-        return in[offset++] & 255;
+        return in.get(offset++) & 255;
       case 2: {
-        int ch2 = in[offset] & 255;
-        int ch1 = in[offset + 1] & 255;
+        int ch2 = in.get(offset) & 255;
+        int ch1 = in.get(offset + 1) & 255;
         offset += 2;
         return (ch1 << 8) + ch2;
       }
       case 3: {
-        int ch3 = in[offset] & 255;
-        int ch2 = in[offset + 1] & 255;
-        int ch1 = in[offset + 2] & 255;
+        int ch3 = in.get(offset) & 255;
+        int ch2 = in.get(offset + 1) & 255;
+        int ch1 = in.get(offset + 2) & 255;
         offset += 3;
         return (ch1 << 16) + (ch2 << 8) + (ch3 << 0);
       }
