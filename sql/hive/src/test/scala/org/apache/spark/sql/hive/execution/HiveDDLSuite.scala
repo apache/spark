@@ -148,6 +148,44 @@ class HiveDDLSuite
     }
   }
 
+  test("create table and view with unicode columns and comment") {
+    val catalog = spark.sessionState.catalog
+    val tabName = "tab1"
+    val viewName = "view1"
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    val colName = "列1"
+    val comment = "风吹"
+    // scalastyle:on
+    withTable(tabName) {
+      // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+      sql(s"CREATE TABLE $tabName(`$colName` int COMMENT '$comment') COMMENT '$comment'")
+      sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1")
+      withView(viewName) {
+        sql(
+          s"""
+             |CREATE VIEW $viewName(`$colName` COMMENT '$comment')
+             |COMMENT '$comment'
+             |AS SELECT `$colName` FROM $tabName
+           """.stripMargin)
+        val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+        val viewMetadata = catalog.getTableMetadata(TableIdentifier(viewName, Some("default")))
+        assert(tableMetadata.comment == Option(comment))
+        assert(viewMetadata.comment == Option(comment))
+
+        assert(tableMetadata.schema.fields.length == 1 && viewMetadata.schema.fields.length == 1)
+        val columnInTable = tableMetadata.schema.fields.head
+        val columnInView = viewMetadata.schema.fields.head
+        assert(columnInTable.name == colName && columnInView.name == colName)
+        assert(columnInTable.getComment() == Option(comment))
+        assert(columnInView.getComment() == Option(comment))
+
+        checkAnswer(sql(s"SELECT `$colName` FROM $tabName"), Row(1) :: Nil)
+        checkAnswer(sql(s"SELECT `$colName` FROM $viewName"), Row(1) :: Nil)
+      }
+    }
+  }
+
   test("create table: partition column names exist in table definition") {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int) PARTITIONED BY (a string)")
