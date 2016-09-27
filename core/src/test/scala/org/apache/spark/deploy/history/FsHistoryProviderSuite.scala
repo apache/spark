@@ -17,8 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{BufferedOutputStream, ByteArrayInputStream, ByteArrayOutputStream, File,
-  FileOutputStream, OutputStreamWriter}
+import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
@@ -391,6 +390,30 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       }
     } finally {
       provider.stop()
+    }
+  }
+
+  test("ignore hidden files") {
+    // FsHistoryProvider should ignore hidden files.  (It even writes out a hidden file itself
+    // that should be ignored).  Note that this test really *should* also check that no errors are
+    // logged, but that part has to be manual for now.
+    val hiddenFile = new File(testDir, ".garbage")
+    val out = new PrintWriter(hiddenFile)
+    // scalastyle:off println
+    out.println("GARBAGE")
+    // scalastyle:on println
+    out.close()
+
+    val newAppComplete = newLogFile("new1", None, inProgress = false)
+    writeFile(newAppComplete, true, None,
+      SparkListenerApplicationStart(newAppComplete.getName(), Some("new-app-complete"), 1L, "test",
+        None),
+      SparkListenerApplicationEnd(5L)
+    )
+
+    val provider = new FsHistoryProvider(createTestConf())
+    updateAndCheck(provider) { list =>
+      list.size should be (1)
     }
   }
 
