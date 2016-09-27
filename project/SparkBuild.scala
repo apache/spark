@@ -27,6 +27,7 @@ import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
+import scoverage.ScoverageSbtPlugin.ScoverageKeys._
 import com.simplytyped.Antlr4Plugin._
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
