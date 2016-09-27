@@ -286,7 +286,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
           o.getSlaveId.getValue,
           o.getHostname,
           cpus)
-      }
+      }.toIndexedSeq
 
       val slaveIdToOffer = usableOffers.map(o => o.getSlaveId.getValue -> o).toMap
       val slaveIdToWorkerOffer = workerOffers.map(o => o.executorId -> o).toMap
