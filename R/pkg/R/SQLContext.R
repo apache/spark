@@ -438,8 +438,8 @@ read.orc <- function(path, ...) {
 #' @method read.parquet default
 #' @note read.parquet since 1.6.0
 read.parquet.default <- function(path, ...) {
-  options <- varargsToStrEnv(...)
   sparkSession <- getSparkSession()
+  options <- varargsToStrEnv(...)
   # Allow the user to have a more flexible definiton of the Parquet file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
