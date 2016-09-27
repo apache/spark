@@ -462,6 +462,8 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     }
 
     describeStorageInfo(table, buffer)
+
+    if (table.tableType == CatalogTableType.VIEW) describeViewInfo(table, buffer)
   }
 
   private def describeStorageInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
@@ -477,6 +479,13 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     metadata.storage.properties.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
     }
+  }
+
+  private def describeViewInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    append(buffer, "", "", "")
+    append(buffer, "# View Information", "", "")
+    append(buffer, "View Original Text:", metadata.viewOriginalText.getOrElse(""), "")
+    append(buffer, "View Expanded Text:", metadata.viewText.getOrElse(""), "")
   }
 
   private def describeBucketingInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
