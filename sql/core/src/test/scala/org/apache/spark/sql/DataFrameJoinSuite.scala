@@ -248,4 +248,13 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     val ab = a.join(b, Seq("a"), "fullouter")
     checkAnswer(ab.join(c, "a"), Row(3, null, 4, 1) :: Nil)
   }
+
+  test("SPARK-17685: WholeStageCodegenExec throws IndexOutOfBoundsException") {
+    val df = Seq((1, 1, "1"), (2, 2, "3")).toDF("int", "int2", "str")
+    val df2 = Seq((1, 1, "1"), (2, 3, "5")).toDF("int", "int2", "str")
+    val limit = 1310721
+    val innerJoin = df.limit(limit).join(df2.limit(limit), Seq("int", "int2"), "inner")
+      .agg(count($"int"))
+    checkAnswer(innerJoin, Row(1) :: Nil)
+  }
 }

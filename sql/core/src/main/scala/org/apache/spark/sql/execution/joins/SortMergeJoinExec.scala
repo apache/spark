@@ -332,6 +332,7 @@ case class SortMergeJoinExec(
       keys: Seq[Expression],
       input: Seq[Attribute]): Seq[ExprCode] = {
     ctx.INPUT_ROW = row
+    ctx.currentVars = null
     keys.map(BindReferences.bindReference(_, input).genCode(ctx))
   }
 
