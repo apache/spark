@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, NoOp}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 /**
@@ -58,12 +59,18 @@ case class WindowSpecDefinition(
         }
       }
 
-      (frame.frameType, frame.frameStart, frame.frameEnd) match {
-        case (RangeFrame, vp: ValuePreceding, _) => checkValueBasedBoundaryForRangeFrame()
-        case (RangeFrame, vf: ValueFollowing, _) => checkValueBasedBoundaryForRangeFrame()
-        case (RangeFrame, _, vp: ValuePreceding) => checkValueBasedBoundaryForRangeFrame()
-        case (RangeFrame, _, vf: ValueFollowing) => checkValueBasedBoundaryForRangeFrame()
-        case (_, _, _) => None
+      (frame.frameType, frame.frameStart, frame.frameEnd, frame.excludeType) match {
+        case (RangeFrame, vp: ValuePreceding, _, _) => checkValueBasedBoundaryForRangeFrame()
+        case (RangeFrame, vf: ValueFollowing, _, _) => checkValueBasedBoundaryForRangeFrame()
+        case (RangeFrame, _, vp: ValuePreceding, _) => checkValueBasedBoundaryForRangeFrame()
+        case (RangeFrame, _, vf: ValueFollowing, _) => checkValueBasedBoundaryForRangeFrame()
+        case (_, _, _, ExcludeGroup) if orderSpec.length == 0 =>
+          // calculating GROUP or TIES needs orderby expression value
+          Some("EXCLUDE GROUP clause requires an ordered window frame.")
+        case (_, _, _, ExcludeTies) if orderSpec.length == 0 =>
+          // calculating GROUP or TIES needs orderby expression value
+          Some("EXCLUDE TIES clause requires an ordered window frame.")
+        case (_, _, _, _) => None
       }
     }
   }
@@ -226,7 +233,8 @@ case object UnspecifiedFrame extends WindowFrame
 case class SpecifiedWindowFrame(
     frameType: FrameType,
     frameStart: FrameBoundary,
-    frameEnd: FrameBoundary) extends WindowFrame {
+    frameEnd: FrameBoundary,
+    excludeType: ExcludeType = ExcludeNoOthers) extends WindowFrame {
 
   /** If this WindowFrame is valid or not. */
   def validate: Option[String] = (frameType, frameStart, frameEnd) match {
@@ -248,8 +256,8 @@ case class SpecifiedWindowFrame(
   }
 
   override def toString: String = frameType match {
-    case RowFrame => s"ROWS BETWEEN $frameStart AND $frameEnd"
-    case RangeFrame => s"RANGE BETWEEN $frameStart AND $frameEnd"
+    case RowFrame => s"ROWS BETWEEN $frameStart AND $frameEnd EXCLUDE $excludeType"
+    case RangeFrame => s"RANGE BETWEEN $frameStart AND $frameEnd EXCLUDE $excludeType"
   }
 }
 
@@ -262,17 +270,53 @@ object SpecifiedWindowFrame {
    */
   def defaultWindowFrame(
       hasOrderSpecification: Boolean,
-      acceptWindowFrame: Boolean): SpecifiedWindowFrame = {
+      acceptWindowFrame: Boolean,
+      excludeType: ExcludeType = ExcludeNoOthers): SpecifiedWindowFrame = {
     if (hasOrderSpecification && acceptWindowFrame) {
       // If order spec is defined and the window function supports user specified window frames,
       // the default frame is RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.
-      SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
+      SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow, excludeType)
     } else {
       // Otherwise, the default frame is
       // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING.
-      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing, excludeType)
     }
   }
+}
+
+/**
+ * The trait used to represent an Exclude type .
+ */
+sealed trait ExcludeType
+
+/**
+ * Represents the type of Excluding Current Row
+ */
+case object ExcludeCurrentRow extends ExcludeType {
+  override def toString: String = "CURRENT ROW"
+}
+
+/**
+ * Specifies excluding the current row and all rows that are tied with it.
+ * Ties occur when there is a match on the order-by column or columns
+ */
+case object ExcludeGroup extends ExcludeType {
+  override def toString: String = "GROUP"
+}
+
+/**
+ * Specifies excluding all rows that are tied with the current row (peer rows),
+ * but retaining the current row.
+ */
+case object ExcludeTies extends ExcludeType {
+  override def toString: String = "TIES"
+}
+
+/**
+ * Specifies not excluding any rows. This value is the default if you specify no exclusion.
+ */
+case object ExcludeNoOthers extends ExcludeType {
+  override def toString: String = "NO OTHERS"
 }
 
 case class UnresolvedWindowExpression(

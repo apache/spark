@@ -97,6 +97,25 @@ class WindowSpec private[sql](
   }
 
   /**
+   * Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive). And specifies
+   * potential exclude type.
+   *
+   * Both `start` and `end` are relative positions from the current row. For example, "0" means
+   * "current row", while "-1" means the row before the current row, and "5" means the fifth row
+   * after the current row.
+   *
+   * @param start boundary start, inclusive.
+   *              The frame is unbounded if this is the minimum long value.
+   * @param end boundary end, inclusive.
+   *            The frame is unbounded if this is the maximum long value.
+   * @param exclude possible values: CURRENT ROW, GROUP, TIES, NO OTHERS
+   * @since 2.0.0
+   */
+  def rowsBetweenExclude(start: Long, end: Long, exclude: String = ""): WindowSpec = {
+    between(RowFrame, start, end, exclude)
+  }
+
+  /**
    * Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
    *
    * Both `start` and `end` are relative from the current row. For example, "0" means "current row",
@@ -113,7 +132,25 @@ class WindowSpec private[sql](
     between(RangeFrame, start, end)
   }
 
-  private def between(typ: FrameType, start: Long, end: Long): WindowSpec = {
+  /**
+   * Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive). And specifies
+   * potential exclude type
+   *
+   * Both `start` and `end` are relative from the current row. For example, "0" means "current row",
+   * while "-1" means one off before the current row, and "5" means the five off after the
+   * current row.
+   *
+   * @param start boundary start, inclusive.
+   *              The frame is unbounded if this is the minimum long value.
+   * @param end boundary end, inclusive.
+   *            The frame is unbounded if this is the maximum long value.
+   * @since 1.4.0
+   */
+  def rangeBetweenExclude(start: Long, end: Long, exclude: String = ""): WindowSpec = {
+    between(RangeFrame, start, end, exclude)
+  }
+
+  private def between(typ: FrameType, start: Long, end: Long, exclude: String = ""): WindowSpec = {
     val boundaryStart = start match {
       case 0 => CurrentRow
       case Long.MinValue => UnboundedPreceding
@@ -128,10 +165,17 @@ class WindowSpec private[sql](
       case x if x > 0 => ValueFollowing(end.toInt)
     }
 
+    val excludeType = exclude.toUpperCase match {
+      case "CURRENT ROW" => ExcludeCurrentRow
+      case "GROUP" => ExcludeGroup
+      case "TIES" => ExcludeTies
+      case _ => ExcludeNoOthers
+    }
+
     new WindowSpec(
       partitionSpec,
       orderSpec,
-      SpecifiedWindowFrame(typ, boundaryStart, boundaryEnd))
+      SpecifiedWindowFrame(typ, boundaryStart, boundaryEnd, excludeType))
   }
 
   /**

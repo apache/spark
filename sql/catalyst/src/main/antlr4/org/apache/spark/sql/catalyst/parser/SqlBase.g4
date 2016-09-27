@@ -619,16 +619,27 @@ windowSpec
     ;
 
 windowFrame
-    : frameType=RANGE start=frameBound
-    | frameType=ROWS start=frameBound
-    | frameType=RANGE BETWEEN start=frameBound AND end=frameBound
-    | frameType=ROWS BETWEEN start=frameBound AND end=frameBound
+    : frameType=RANGE start=frameBound (exclude=excludeClause)?
+    | frameType=ROWS start=frameBound (exclude=excludeClause)?
+    | frameType=RANGE BETWEEN start=frameBound AND end=frameBound (exclude=excludeClause)?
+    | frameType=ROWS BETWEEN start=frameBound AND end=frameBound (exclude=excludeClause)?
     ;
 
 frameBound
     : UNBOUNDED boundType=(PRECEDING | FOLLOWING)
     | boundType=CURRENT ROW
     | expression boundType=(PRECEDING | FOLLOWING)
+    ;
+
+excludeClause
+    : EXCLUDE excludeType=CURRENT ROW
+    | EXCLUDE excludeType=GROUP
+    | EXCLUDE excludeType=TIES
+    | EXCLUDE excludeType=NO OTHERS
+    ;
+
+explainOption
+    : LOGICAL | FORMATTED | EXTENDED | CODEGEN
     ;
 
 qualifiedName
@@ -664,7 +675,7 @@ number
 
 nonReserved
     : SHOW | TABLES | COLUMNS | COLUMN | PARTITIONS | FUNCTIONS | DATABASES
-    | ADD
+    | ADD  | EXCLUDE | TIES | OTHERS
     | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | LAST | FIRST
     | MAP | ARRAY | STRUCT
     | LATERAL | WINDOW | REDUCE | TRANSFORM | USING | SERDE | SERDEPROPERTIES | RECORDREADER
@@ -757,6 +768,9 @@ CURRENT: 'CURRENT';
 FIRST: 'FIRST';
 LAST: 'LAST';
 ROW: 'ROW';
+EXCLUDE: 'EXCLUDE';
+TIES: 'TIES';
+OTHERS: 'OTHERS';
 WITH: 'WITH';
 VALUES: 'VALUES';
 CREATE: 'CREATE';

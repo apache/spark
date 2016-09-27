@@ -1070,10 +1070,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         case SqlBaseParser.ROWS => RowFrame
       }
 
+      val excludeSpec = Option(frame.exclude).map { excludeClause =>
+        excludeClause.excludeType.getType match {
+          case SqlBaseParser.CURRENT => ExcludeCurrentRow
+          case SqlBaseParser.GROUP => ExcludeGroup
+          case SqlBaseParser.TIES => ExcludeTies
+          case SqlBaseParser.NO => ExcludeNoOthers
+        }
+      }
+
       SpecifiedWindowFrame(
         frameType,
         visitFrameBound(frame.start),
-        Option(frame.end).map(visitFrameBound).getOrElse(CurrentRow))
+        Option(frame.end).map(visitFrameBound).getOrElse(CurrentRow),
+        excludeSpec.getOrElse(ExcludeNoOthers))
     }
 
     WindowSpecDefinition(

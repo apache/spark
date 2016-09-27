@@ -772,6 +772,51 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       "window_with_the_same_window_with_agg_functions")
   }
 
+  test("window with exclude clause") {
+    val sql_exclude =
+      """SELECT key, value, MAX(value) OVER (PARTITION BY key % 5
+        |ORDER BY key FRAME_TYPE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE EXCLUDE_TYPE
+        |) AS MAX FROM parquet_t1 GROUP BY key, value
+      """.stripMargin
+
+    checkSQL(
+      sql_exclude.replace("FRAME_TYPE", "RANGE").replace("EXCLUDE_TYPE", "CURRENT ROW"),
+      "window_with_exclude_clause_range_current_row"
+    )
+    checkSQL(
+      sql_exclude.replace("FRAME_TYPE", "RANGE").replace("EXCLUDE_TYPE", "GROUP"),
+      "window_with_exclude_clause_range_group"
+    )
+    checkSQL(
+      sql_exclude.replace("FRAME_TYPE", "RANGE").replace("EXCLUDE_TYPE", "TIES"),
+      "window_with_exclude_clause_range_group_ties"
+    )
+    checkSQL(
+      sql_exclude.replace("FRAME_TYPE", "ROWS").replace("EXCLUDE_TYPE", "CURRENT ROW"),
+      "window_with_exclude_clause_rows_current_row"
+    )
+    checkSQL(
+      sql_exclude.replace("FRAME_TYPE", "ROWS").replace("EXCLUDE_TYPE", "GROUP"),
+      "window_with_exclude_clause_rows_group"
+    )
+    checkSQL(
+      sql_exclude.replace("FRAME_TYPE", "ROWS").replace("EXCLUDE_TYPE", "TIES"),
+      "window_with_exclude_clause_rows_ties"
+    )
+  }
+
+  test("window with exclude clause - no order by ") {
+    checkSQL(
+      """
+        |SELECT key, value,
+        |MAX(value) OVER (PARTITION BY key % 5
+        |range between unbounded preceding and current row exclude current row) AS max
+        |FROM parquet_t1 GROUP BY key, value
+      """.stripMargin,
+      "window_with_exclude_clause_no_order_by"
+    )
+  }
+
   test("window with the same window specification with aggregate") {
     checkSQL(
       """
