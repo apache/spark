@@ -16,12 +16,14 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import java.io.Serializable;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.util.Arrays;
+import java.io.*;
 
+import org.apache.commons.io.IOUtils;
+import org.apache.spark.SparkConf;
+import org.apache.spark.io.CompressionCodec;
+import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 
@@ -36,13 +38,18 @@ public final class OnHeapUnsafeColumnVector extends ColumnVector implements Seri
 
   // This is faster than a boolean array and we optimize this over memory footprint.
   private byte[] nulls;
+  private byte[] compressedNulls;
 
   // Array for all types
   private byte[] data;
+  private byte[] compressedData;
 
   // Only set if type is Array.
   private int[] arrayLengths;
   private int[] arrayOffsets;
+
+  private boolean compressed;
+  private transient CompressionCodec codec = null;
 
   OnHeapUnsafeColumnVector() { }
 
@@ -65,18 +72,98 @@ public final class OnHeapUnsafeColumnVector extends ColumnVector implements Seri
   public void close() {
   }
 
+  public void compress(SparkConf conf) {
+    if (compressed) return;
+    if (codec == null) {
+      String codecName = conf.get(SQLConf.CACHE_COMPRESSION_CODEC());
+      codec = CompressionCodec$.MODULE$.createCodec(conf, codecName);
+    }
+    ByteArrayOutputStream bos;
+    OutputStream out;
+
+    if (data != null) {
+      bos = new ByteArrayOutputStream();
+      out = codec.compressedOutputStream(bos);
+      try {
+        try {
+          out.write(data);
+        } finally {
+          out.close();
+        }
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+      if (bos.size() < data.length) {
+        compressedData = bos.toByteArray();
+        data = null;
+      }
+    }
+
+    if (nulls != null) {
+      bos = new ByteArrayOutputStream();
+      out = codec.compressedOutputStream(bos);
+      try {
+        try {
+          out.write(nulls);
+        } finally {
+          out.close();
+        }
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+      if (bos.size() < nulls.length) {
+        compressedNulls = bos.toByteArray();
+        nulls = null;
+      }
+    }
+    compressed = (compressedData != null) || (compressedNulls != null);
+  }
+
+  public void decompress(SparkConf conf) throws IOException {
+    if (!compressed) return;
+    if (codec == null) {
+      String codecName = conf.get(SQLConf.CACHE_COMPRESSION_CODEC());
+      codec = CompressionCodec$.MODULE$.createCodec(conf, codecName);
+    }
+    ByteArrayInputStream bis;
+    InputStream in;
+
+    if (compressedData != null) {
+      bis = new ByteArrayInputStream(compressedData);
+      in = codec.compressedInputStream(bis);
+      try {
+        data = IOUtils.toByteArray(in);
+      } finally {
+        in.close();
+       }
+      compressedData = null;
+    }
+
+    if (compressedNulls != null) {
+      bis = new ByteArrayInputStream(compressedNulls);
+      in = codec.compressedInputStream(bis);
+      try {
+        nulls = IOUtils.toByteArray(in);
+      } finally {
+        in.close();
+      }
+      compressedNulls = null;
+    }
+    compressed = false;
+  }
+
   //
   // APIs dealing with nulls
   //
 
   @Override
   public void putNotNull(int rowId) {
-    nulls[rowId] = (byte)0;
+    Platform.putByte(nulls, Platform.BYTE_ARRAY_OFFSET + rowId, (byte)0);
   }
 
   @Override
   public void putNull(int rowId) {
-    nulls[rowId] = (byte)1;
+    Platform.putByte(nulls, Platform.BYTE_ARRAY_OFFSET + rowId, (byte)1);
     ++numNulls;
     anyNullsSet = true;
   }
@@ -93,7 +180,7 @@ public final class OnHeapUnsafeColumnVector extends ColumnVector implements Seri
 
   @Override
   public boolean isNullAt(int rowId) {
-    return nulls[rowId] == 1;
+    return Platform.getByte(nulls, Platform.BYTE_ARRAY_OFFSET + rowId) == 1;
   }
 
   //
@@ -129,7 +216,7 @@ public final class OnHeapUnsafeColumnVector extends ColumnVector implements Seri
   @Override
   public void putBytes(int rowId, int count, byte value) {
     for (int i = 0; i < count; ++i) {
-      data[i + rowId] = value;
+      Platform.putByte(data, Platform.BYTE_ARRAY_OFFSET + rowId + i, value);
     }
   }
 

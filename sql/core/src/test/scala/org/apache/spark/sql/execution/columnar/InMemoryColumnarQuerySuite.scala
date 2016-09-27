@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, GenericInternalRow}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
@@ -116,7 +116,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     data.createOrReplaceTempView(s"testData$dataType")
     val useColumnBatches = true
     withSQLConf(SQLConf.CACHE_CODEGEN.key -> useColumnBatches.toString) {
-      Seq(MEMORY_ONLY).map { storageLevel =>
+      Seq(MEMORY_ONLY, MEMORY_ONLY_SER).map { storageLevel =>
         val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
         val inMemoryRelation = InMemoryRelation(useCompression = false, 5, storageLevel, plan, None)
 
@@ -424,8 +424,15 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val length2 = 8117
     val columnTypes2 = List.fill(length2)(IntegerType)
     val columnarIterator2 = GenerateColumnAccessor.generate(columnTypes2)
+  }
 
-    /* TODO: test GenerateColumnarBatch().generate() with many columns */
+  test("GenerateColumnarBatch.generate() with many columns") {
+    val length1 = 9000
+    val schema = StructType((1 to length1).map { case i =>
+      StructField(s"col$i", IntegerType, true)
+    })
+    val cachedBatch1 = new GenerateColumnarBatch(schema, 10000, MEMORY_ONLY, sparkConf).
+      generate(Iterator.single(new GenericInternalRow((1 to length1).toArray[Any])))
   }
 
   test("SPARK-17549: cached table size should be correctly calculated") {
@@ -441,6 +448,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     assert(cached.batchStats.value === expectedAnswer.size * INT.defaultSize)
   }
 
+<<<<<<< d3dd78fee6464d6c97485a00cda984d3ed67c07e
   test("access primitive-type columns in CachedBatch without whole stage codegen") {
     // whole stage codegen is not applied to a row with more than WHOLESTAGE_MAX_NUM_FIELDS fields
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "2") {
@@ -500,12 +508,12 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("InMemoryRelation builds the correct buffers") {
+  test("InMemoryRelation builds the correct buffers with simple schemas") {
     testColumnBatches(useColumnBatches = true, useComplexSchema = false)
     testColumnBatches(useColumnBatches = false, useComplexSchema = false)
   }
 
-  test("InMemoryRelation falls back on non-codegen path with complex schemas") {
+  test("InMemoryRelation builds the correct buffers with complex schemas") {
     testColumnBatches(useColumnBatches = true, useComplexSchema = true)
     testColumnBatches(useColumnBatches = false, useComplexSchema = true)
   }

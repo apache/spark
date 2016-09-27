@@ -170,11 +170,12 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector, OnHeapUnsafeColumnVector}
 import org.apache.spark.sql.types.DataType
 
 
@@ -252,6 +253,13 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val batch = ctx.freshName("batch")
     ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
 
+    val generateDecompress = if (inMemoryTableScan != null) true else false
+    val confVar = if (!generateDecompress) null else {
+      val conf = inMemoryTableScan.sparkContext.conf
+      ctx.addReferenceObj("conf", conf, classOf[SparkConf].getName)
+    }
+    val onHeapUnsafeColumnVectorCls = classOf[OnHeapUnsafeColumnVector].getName
+
     val columnVectorClz = "org.apache.spark.sql.execution.vectorized.ColumnVector"
     val idx = ctx.freshName("batchIdx")
     ctx.addMutableState("int", idx, s"$idx = 0;")
@@ -259,7 +267,9 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
       ctx.addMutableState(columnVectorClz, name, s"$name = null;")
       val index = if (columnIndexes == null) i else columnIndexes(i)
-      s"$name = $batch.column($index);"
+      val decompress = if (!generateDecompress) ""
+        else s" (($onHeapUnsafeColumnVectorCls)$name).decompress($confVar);"
+      s"$name = $batch.column($index);$decompress"
     }
 
     val nextBatch = ctx.freshName("nextBatch")
