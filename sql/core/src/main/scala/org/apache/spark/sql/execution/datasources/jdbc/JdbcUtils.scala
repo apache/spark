@@ -697,4 +697,27 @@ object JdbcUtils extends Logging {
       getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect, isolationLevel)
     )
   }
+
+  /**
+   * Creates a table according to the schema and JDBC options.
+   */
+  def createTable(
+      df: DataFrame,
+      url: String,
+      table: String,
+      createTableOptions: String,
+      conn: Connection): Unit = {
+    val schema = JdbcUtils.schemaString(df, url)
+    // Create the table if the table didn't exist.
+    // To allow certain options to append when create a new table, which can be
+    // table_options or partition_options.
+    // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+    val sql = s"CREATE TABLE $table ($schema) $createTableOptions"
+    val statement = conn.createStatement
+    try {
+      statement.executeUpdate(sql)
+    } finally {
+      statement.close()
+    }
+  }
 }
