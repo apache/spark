@@ -580,6 +580,10 @@ def main():
     # run the test suites
     run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
 
+    if build_tool == "sbt":
+        exec_sbt(["coverageReport"])
+        exec_sbt(["coverageAggregate"])
+
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
         run_python_tests(modules_with_python_tests, opts.parallelism)
