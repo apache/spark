@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
@@ -2106,18 +2107,37 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(scheduler.getShuffleDependencies(rddE) === Set(shuffleDepA, shuffleDepC))
   }
 
-  test("The failed stage never resubmitted due to abort stage in another thread") {
+  test("After one stage is aborted for too many failed attempts, subsequent stages" +
+    "still behave correctly on fetch failures") {
+    def fetchFailJob: Unit = {
+      val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
+      val shuffleHandle =
+        rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
+      rdd1.map {
+        case (x, _) if (x == 1) =>
+          throw new FetchFailedException(
+            BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
+        case (x, _) => x
+      }.count()
+    }
+
+    def successJob: Unit = {
+      object FailThisAttempt {
+        val _fail = new AtomicBoolean(true)
+      }
+      val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
+      val shuffleHandle =
+        rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
+      rdd1.map {
+        case (x, _) if (x == 1) && FailThisAttempt._fail.getAndSet(false) =>
+          throw new FetchFailedException(
+            BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
+      }
+    }
+
     failAfter(60.seconds) {
       val e = intercept[SparkException] {
-        val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
-        val shuffleHandle =
-          rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
-        rdd1.map {
-          case (x, _) if (x == 1) =>
-            throw new FetchFailedException(
-              BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
-          case (x, _) => x
-        }.count()
+        fetchFailJob
       }
       assert(e.getMessage.contains("org.apache.spark.shuffle.FetchFailedException"))
     }
@@ -2126,17 +2146,17 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     // the fix for SPARK-17644
     failAfter(60.seconds) {
       val e = intercept[SparkException] {
-        val rdd2 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
-        val shuffleHandle =
-          rdd2.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
-        rdd2.map {
-          case (x, _) if (x == 1) =>
-            throw new FetchFailedException(
-              BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
-          case (x, _) => x
-        }.count()
+        fetchFailJob
       }
       assert(e.getMessage.contains("org.apache.spark.shuffle.FetchFailedException"))
+    }
+
+    failAfter(60.seconds) {
+      try {
+        successJob
+      } catch {
+        case e: Throwable => fail("this job should success")
+      }
     }
   }
 
