@@ -289,7 +289,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
  * A logical plan node with no children.
  */
 abstract class LeafNode extends LogicalPlan {
-  override def children: Seq[LogicalPlan] = Nil
+  override final def children: Seq[LogicalPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
 }
 
@@ -299,7 +299,7 @@ abstract class LeafNode extends LogicalPlan {
 abstract class UnaryNode extends LogicalPlan {
   def child: LogicalPlan
 
-  override def children: Seq[LogicalPlan] = child :: Nil
+  override final def children: Seq[LogicalPlan] = child :: Nil
 
   /**
    * Generates an additional set of aliased constraints by replacing the original constraint
@@ -343,5 +343,5 @@ abstract class BinaryNode extends LogicalPlan {
   def left: LogicalPlan
   def right: LogicalPlan
 
-  override def children: Seq[LogicalPlan] = Seq(left, right)
+  override final def children: Seq[LogicalPlan] = Seq(left, right)
 }

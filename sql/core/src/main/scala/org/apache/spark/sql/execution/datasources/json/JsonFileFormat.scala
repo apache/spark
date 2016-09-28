@@ -27,6 +27,7 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -104,7 +105,9 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
     (file: PartitionedFile) => {
-      val lines = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map(_.toString)
+      val linesReader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+      val lines = linesReader.map(_.toString)
       val parser = new JacksonParser(requiredSchema, columnNameOfCorruptRecord, parsedOptions)
       lines.flatMap(parser.parse)
     }

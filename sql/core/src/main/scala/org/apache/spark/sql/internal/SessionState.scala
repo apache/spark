@@ -111,7 +111,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val analyzer: Analyzer = {
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
-        PreprocessDDL(conf) ::
+        AnalyzeCreateTable(sparkSession) ::
         PreprocessTableInsertion(conf) ::
         new FindDataSourceTable(sparkSession) ::
         DataSourceAnalysis(conf) ::
@@ -192,7 +192,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
    * Right now, it only supports catalog tables and it only updates the size of a catalog table
    * in the external catalog.
    */
-  def analyze(tableName: String): Unit = {
-    AnalyzeTableCommand(tableName).run(sparkSession)
+  def analyze(tableName: String, noscan: Boolean = true): Unit = {
+    AnalyzeTableCommand(tableName, noscan).run(sparkSession)
   }
 }

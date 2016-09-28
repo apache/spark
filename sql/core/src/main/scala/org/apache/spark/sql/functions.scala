@@ -109,7 +109,6 @@ object functions {
   /**
    * Returns a sort expression based on ascending order of the column.
    * {{{
-   *   // Sort by dept in ascending order, and then age in descending order.
    *   df.sort(asc("dept"), desc("age"))
    * }}}
    *
@@ -119,9 +118,32 @@ object functions {
   def asc(columnName: String): Column = Column(columnName).asc
 
   /**
+   * Returns a sort expression based on ascending order of the column,
+   * and null values return before non-null values.
+   * {{{
+   *   df.sort(asc_nulls_last("dept"), desc("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 2.1.0
+   */
+  def asc_nulls_first(columnName: String): Column = Column(columnName).asc_nulls_first
+
+  /**
+   * Returns a sort expression based on ascending order of the column,
+   * and null values appear after non-null values.
+   * {{{
+   *   df.sort(asc_nulls_last("dept"), desc("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 2.1.0
+   */
+  def asc_nulls_last(columnName: String): Column = Column(columnName).asc_nulls_last
+
+  /**
    * Returns a sort expression based on the descending order of the column.
    * {{{
-   *   // Sort by dept in ascending order, and then age in descending order.
    *   df.sort(asc("dept"), desc("age"))
    * }}}
    *
@@ -129,6 +151,31 @@ object functions {
    * @since 1.3.0
    */
   def desc(columnName: String): Column = Column(columnName).desc
+
+  /**
+   * Returns a sort expression based on the descending order of the column,
+   * and null values appear before non-null values.
+   * {{{
+   *   df.sort(asc("dept"), desc_nulls_first("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 2.1.0
+   */
+  def desc_nulls_first(columnName: String): Column = Column(columnName).desc_nulls_first
+
+  /**
+   * Returns a sort expression based on the descending order of the column,
+   * and null values appear after non-null values.
+   * {{{
+   *   df.sort(asc("dept"), desc_nulls_last("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 2.1.0
+   */
+  def desc_nulls_last(columnName: String): Column = Column(columnName).desc_nulls_last
+
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Aggregate functions
@@ -2606,12 +2653,15 @@ object functions {
    *                   The time column must be of TimestampType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
-   *                       valid duration identifiers.
+   *                       valid duration identifiers. Note that the duration is a fixed length of
+   *                       time, and does not vary over time according to a calendar. For example,
+   *                       `1 day` always means 86,400,000 milliseconds, not a calendar day.
    * @param slideDuration A string specifying the sliding interval of the window, e.g. `1 minute`.
    *                      A new window will be generated every `slideDuration`. Must be less than
    *                      or equal to the `windowDuration`. Check
    *                      [[org.apache.spark.unsafe.types.CalendarInterval]] for valid duration
-   *                      identifiers.
+   *                      identifiers. This duration is likewise absolute, and does not vary
+    *                     according to a calendar.
    * @param startTime The offset with respect to 1970-01-01 00:00:00 UTC with which to start
    *                  window intervals. For example, in order to have hourly tumbling windows that
    *                  start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
@@ -2660,11 +2710,15 @@ object functions {
    *                   The time column must be of TimestampType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
-   *                       valid duration identifiers.
+   *                       valid duration identifiers. Note that the duration is a fixed length of
+   *                       time, and does not vary over time according to a calendar. For example,
+   *                       `1 day` always means 86,400,000 milliseconds, not a calendar day.
    * @param slideDuration A string specifying the sliding interval of the window, e.g. `1 minute`.
    *                      A new window will be generated every `slideDuration`. Must be less than
    *                      or equal to the `windowDuration`. Check
-   *                      [[org.apache.spark.unsafe.types.CalendarInterval]] for valid duration.
+   *                      [[org.apache.spark.unsafe.types.CalendarInterval]] for valid duration
+   *                      identifiers. This duration is likewise absolute, and does not vary
+   *                     according to a calendar.
    *
    * @group datetime_funcs
    * @since 2.0.0

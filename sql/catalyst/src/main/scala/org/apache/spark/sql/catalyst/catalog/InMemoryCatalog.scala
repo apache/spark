@@ -63,18 +63,6 @@ class InMemoryCatalog(
     catalog(db).tables(table).partitions.contains(spec)
   }
 
-  private def requireFunctionExists(db: String, funcName: String): Unit = {
-    if (!functionExists(db, funcName)) {
-      throw new NoSuchFunctionException(db = db, func = funcName)
-    }
-  }
-
-  private def requireFunctionNotExists(db: String, funcName: String): Unit = {
-    if (functionExists(db, funcName)) {
-      throw new FunctionAlreadyExistsException(db = db, func = funcName)
-    }
-  }
-
   private def requireTableExists(db: String, table: String): Unit = {
     if (!tableExists(db, table)) {
       throw new NoSuchTableException(db = db, table = table)
@@ -317,9 +305,19 @@ class InMemoryCatalog(
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit = {
+      inheritTableSpecs: Boolean): Unit = {
     throw new UnsupportedOperationException("loadPartition is not implemented.")
+  }
+
+  override def loadDynamicPartitions(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      replace: Boolean,
+      numDP: Int,
+      holdDDLTime: Boolean): Unit = {
+    throw new UnsupportedOperationException("loadDynamicPartitions is not implemented.")
   }
 
   // --------------------------------------------------------------------------
@@ -456,6 +454,17 @@ class InMemoryCatalog(
     catalog(db).tables(table).partitions(spec)
   }
 
+  override def getPartitionOption(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec): Option[CatalogTablePartition] = synchronized {
+    if (!partitionExists(db, table, spec)) {
+      None
+    } else {
+      Option(catalog(db).tables(table).partitions(spec))
+    }
+  }
+
   override def listPartitions(
       db: String,
       table: String,
@@ -474,11 +483,8 @@ class InMemoryCatalog(
 
   override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
     requireDbExists(db)
-    if (functionExists(db, func.identifier.funcName)) {
-      throw new FunctionAlreadyExistsException(db = db, func = func.identifier.funcName)
-    } else {
-      catalog(db).functions.put(func.identifier.funcName, func)
-    }
+    requireFunctionNotExists(db, func.identifier.funcName)
+    catalog(db).functions.put(func.identifier.funcName, func)
   }
 
   override def dropFunction(db: String, funcName: String): Unit = synchronized {

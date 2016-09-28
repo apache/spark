@@ -930,7 +930,7 @@ JavaPairDStream<String, Integer> cleanedDStream = wordCounts.transform(
 <div data-lang="python" markdown="1">
 
 {% highlight python %}
-spamInfoRDD = sc.pickleFile(...) # RDD containing spam information
+spamInfoRDD = sc.pickleFile(...)  # RDD containing spam information
 
 # join data stream with spam information to do data cleaning
 cleanedDStream = wordCounts.transform(lambda rdd: rdd.join(spamInfoRDD).filter(...))
@@ -1495,16 +1495,15 @@ See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_
 </div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
-
 def getWordBlacklist(sparkContext):
-    if ('wordBlacklist' not in globals()):
-        globals()['wordBlacklist'] = sparkContext.broadcast(["a", "b", "c"])
-    return globals()['wordBlacklist']
+    if ("wordBlacklist" not in globals()):
+        globals()["wordBlacklist"] = sparkContext.broadcast(["a", "b", "c"])
+    return globals()["wordBlacklist"]
 
 def getDroppedWordsCounter(sparkContext):
-    if ('droppedWordsCounter' not in globals()):
-        globals()['droppedWordsCounter'] = sparkContext.accumulator(0)
-    return globals()['droppedWordsCounter']
+    if ("droppedWordsCounter" not in globals()):
+        globals()["droppedWordsCounter"] = sparkContext.accumulator(0)
+    return globals()["droppedWordsCounter"]
 
 def echo(time, rdd):
     # Get or register the blacklist Broadcast
@@ -1626,12 +1625,12 @@ See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_
 
 # Lazily instantiated global instance of SparkSession
 def getSparkSessionInstance(sparkConf):
-    if ('sparkSessionSingletonInstance' not in globals()):
-        globals()['sparkSessionSingletonInstance'] = SparkSession\
-            .builder\
-            .config(conf=sparkConf)\
+    if ("sparkSessionSingletonInstance" not in globals()):
+        globals()["sparkSessionSingletonInstance"] = SparkSession \
+            .builder \
+            .config(conf=sparkConf) \
             .getOrCreate()
-    return globals()['sparkSessionSingletonInstance']
+    return globals()["sparkSessionSingletonInstance"]
 
 ...
 
@@ -1829,11 +1828,11 @@ This behavior is made simple by using `StreamingContext.getOrCreate`. This is us
 {% highlight python %}
 # Function to create and setup a new StreamingContext
 def functionToCreateContext():
-    sc = SparkContext(...)   # new context
-    ssc = new StreamingContext(...)
-    lines = ssc.socketTextStream(...) # create DStreams
+    sc = SparkContext(...)  # new context
+    ssc = StreamingContext(...)
+    lines = ssc.socketTextStream(...)  # create DStreams
     ...
-    ssc.checkpoint(checkpointDirectory)   # set checkpoint directory
+    ssc.checkpoint(checkpointDirectory)  # set checkpoint directory
     return ssc
 
 # Get StreamingContext from checkpoint data or create a new one
@@ -2073,7 +2072,7 @@ unifiedStream.pprint()
 </div>
 </div>
 
-Another parameter that should be considered is the receiver's blocking interval,
+Another parameter that should be considered is the receiver's block interval,
 which is determined by the [configuration parameter](configuration.html#spark-streaming)
 `spark.streaming.blockInterval`. For most receivers, the received data is coalesced together into
 blocks of data before storing inside Spark's memory. The number of blocks in each batch
@@ -2383,7 +2382,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     - [Kafka Integration Guide](streaming-kafka-integration.html)
     - [Kinesis Integration Guide](streaming-kinesis-integration.html)
     - [Custom Receiver Guide](streaming-custom-receivers.html)
-* Third-party DStream data sources can be found in [Spark Packages](https://spark-packages.org/)
+* Third-party DStream data sources can be found in [Third Party Projects](https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects)
 * API documentation
   - Scala docs
     * [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) and

@@ -43,6 +43,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       // drop all databases, tables and functions after each test
       spark.sessionState.catalog.reset()
     } finally {
+      val path = System.getProperty("user.dir") + "/spark-warehouse"
+      Utils.deleteRecursively(new File(path))
       super.afterEach()
     }
   }
@@ -371,6 +373,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("CREATE TABLE tbl(a int, a string) USING json")
     }
     assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val e2 = intercept[AnalysisException] {
+        sql("CREATE TABLE tbl(a int, A string) USING json")
+      }
+      assert(e2.message == "Found duplicate column(s) in table definition of `tbl`: a")
+    }
   }
 
   test("create table - partition column names not in table definition") {
@@ -657,7 +666,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     createDatabase(catalog, "dby")
     createTable(catalog, tableIdent1)
     assert(catalog.listTables("dbx") == Seq(tableIdent1))
-    sql("ALTER TABLE dbx.tab1 RENAME TO dbx.tab2")
+    sql("ALTER TABLE dbx.tab1 RENAME TO tab2")
     assert(catalog.listTables("dbx") == Seq(tableIdent2))
     catalog.setCurrentDatabase("dbx")
     // rename without explicitly specifying database
@@ -665,11 +674,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(catalog.listTables("dbx") == Seq(tableIdent1))
     // table to rename does not exist
     intercept[AnalysisException] {
-      sql("ALTER TABLE dbx.does_not_exist RENAME TO dbx.tab2")
-    }
-    // destination database is different
-    intercept[AnalysisException] {
-      sql("ALTER TABLE dbx.tab1 RENAME TO dby.tab2")
+      sql("ALTER TABLE dbx.does_not_exist RENAME TO tab2")
     }
   }
 
@@ -691,28 +696,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(spark.table("teachers").collect().toSeq == df.collect().toSeq)
   }
 
-  test("rename temporary table - destination table with database name") {
-    withTempView("tab1") {
-      sql(
-        """
-          |CREATE TEMPORARY TABLE tab1
-          |USING org.apache.spark.sql.sources.DDLScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10',
-          |  Table 'test1'
-          |)
-        """.stripMargin)
-
-      val e = intercept[AnalysisException] {
-        sql("ALTER TABLE tab1 RENAME TO default.tab2")
-      }
-      assert(e.getMessage.contains(
-        "RENAME TEMPORARY TABLE from '`tab1`' to '`default`.`tab2`': " +
-          "cannot specify database name 'default' in the destination table"))
-
-      val catalog = spark.sessionState.catalog
-      assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
+  test("rename temporary table") {
+    withTempView("tab1", "tab2") {
+      spark.range(10).createOrReplaceTempView("tab1")
+      sql("ALTER TABLE tab1 RENAME TO tab2")
+      checkAnswer(spark.table("tab2"), spark.range(10).toDF())
+      intercept[NoSuchTableException] { spark.table("tab1") }
+      sql("ALTER VIEW tab2 RENAME TO tab1")
+      checkAnswer(spark.table("tab1"), spark.range(10).toDF())
+      intercept[NoSuchTableException] { spark.table("tab2") }
     }
   }
 
@@ -744,7 +736,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         sql("ALTER TABLE tab1 RENAME TO tab2")
       }
       assert(e.getMessage.contains(
-        "RENAME TEMPORARY TABLE from '`tab1`' to '`tab2`': destination table already exists"))
+        "RENAME TEMPORARY TABLE from '`tab1`' to 'tab2': destination table already exists"))
 
       val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("tab1"), TableIdentifier("tab2")))
@@ -824,13 +816,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("alter table: recover partitions (sequential)") {
-    withSQLConf("spark.rdd.parallelListingThreshold" -> "1") {
+    withSQLConf("spark.rdd.parallelListingThreshold" -> "10") {
       testRecoverPartitions()
     }
   }
 
   test("alter table: recover partition (parallel)") {
-    withSQLConf("spark.rdd.parallelListingThreshold" -> "10") {
+    withSQLConf("spark.rdd.parallelListingThreshold" -> "1") {
       testRecoverPartitions()
     }
   }
@@ -853,7 +845,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
     // valid
     fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
+    fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "a.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "_SUCCESS"))  // file
     fs.mkdirs(new Path(new Path(root, "A=2"), "B=6"))
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), "b.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), "c.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), ".hiddenFile"))  // file
+    fs.mkdirs(new Path(new Path(root, "A=2/B=6"), "_temporary"))
+
     // invalid
     fs.mkdirs(new Path(new Path(root, "a"), "b"))  // bad name
     fs.mkdirs(new Path(new Path(root, "b=1"), "a=1"))  // wrong order
@@ -867,6 +866,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("ALTER TABLE tab1 RECOVER PARTITIONS")
       assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
         Set(part1, part2))
+      assert(catalog.getPartition(tableIdent, part1).parameters("numFiles") == "1")
+      assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")
     } finally {
       fs.delete(root, true)
     }
@@ -891,6 +892,43 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   test("alter table: rename partition") {
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createPartitionedTable(tableIdent, isDatasourceTable = false)
+    sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='q') RENAME TO PARTITION (a='100', b='p')")
+    sql("ALTER TABLE dbx.tab1 PARTITION (a='2', b='c') RENAME TO PARTITION (a='20', b='c')")
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(Map("a" -> "100", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
+    // rename without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    sql("ALTER TABLE tab1 PARTITION (a='100', b='p') RENAME TO PARTITION (a='10', b='p')")
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(Map("a" -> "10", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
+    // table to alter does not exist
+    intercept[NoSuchTableException] {
+      sql("ALTER TABLE does_not_exist PARTITION (c='3') RENAME TO PARTITION (c='333')")
+    }
+    // partition to rename does not exist
+    intercept[NoSuchPartitionException] {
+      sql("ALTER TABLE tab1 PARTITION (a='not_found', b='1') RENAME TO PARTITION (a='1', b='2')")
+    }
+  }
+
+  test("alter table: rename partition (datasource table)") {
+    createPartitionedTable(TableIdentifier("tab1", Some("dbx")), isDatasourceTable = true)
+    val e = intercept[AnalysisException] {
+      sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='q') RENAME TO PARTITION (a='100', b='p')")
+    }.getMessage
+    assert(e.contains(
+      "ALTER TABLE RENAME PARTITION is not allowed for tables defined using the datasource API"))
+    // table to alter does not exist
+    intercept[NoSuchTableException] {
+      sql("ALTER TABLE does_not_exist PARTITION (c='3') RENAME TO PARTITION (c='333')")
+    }
+  }
+
+  private def createPartitionedTable(
+      tableIdent: TableIdentifier,
+      isDatasourceTable: Boolean): Unit = {
+    val catalog = spark.sessionState.catalog
     val part1 = Map("a" -> "1", "b" -> "q")
     val part2 = Map("a" -> "2", "b" -> "c")
     val part3 = Map("a" -> "3", "b" -> "p")
@@ -901,22 +939,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     createTablePartition(catalog, part3, tableIdent)
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
       Set(part1, part2, part3))
-    sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='q') RENAME TO PARTITION (a='100', b='p')")
-    sql("ALTER TABLE dbx.tab1 PARTITION (a='2', b='c') RENAME TO PARTITION (a='200', b='c')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(Map("a" -> "100", "b" -> "p"), Map("a" -> "200", "b" -> "c"), part3))
-    // rename without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 PARTITION (a='100', b='p') RENAME TO PARTITION (a='10', b='p')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(Map("a" -> "10", "b" -> "p"), Map("a" -> "200", "b" -> "c"), part3))
-    // table to alter does not exist
-    intercept[NoSuchTableException] {
-      sql("ALTER TABLE does_not_exist PARTITION (c='3') RENAME TO PARTITION (c='333')")
-    }
-    // partition to rename does not exist
-    intercept[NoSuchPartitionException] {
-      sql("ALTER TABLE tab1 PARTITION (a='not_found', b='1') RENAME TO PARTITION (a='1', b='2')")
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
     }
   }
 
@@ -1266,7 +1290,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
     // table to alter does not exist
     intercept[AnalysisException] {
-      sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
+      sql("ALTER TABLE does_not_exist PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
     }
   }
 
@@ -1622,7 +1646,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
     sql(s"CREATE EXTERNAL TABLE my_ext_tab LOCATION '$path'")
     sql(s"CREATE VIEW my_view AS SELECT 1")
-    assertUnsupported("TRUNCATE TABLE my_temp_tab")
+    intercept[NoSuchTableException] {
+      sql("TRUNCATE TABLE my_temp_tab")
+    }
     assertUnsupported("TRUNCATE TABLE my_ext_tab")
     assertUnsupported("TRUNCATE TABLE my_view")
   }

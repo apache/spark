@@ -26,16 +26,17 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkException, SparkFiles}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.SparkFiles
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SQLTestUtils
 
 case class TestData(a: Int, b: String)
 
@@ -43,13 +44,15 @@ case class TestData(a: Int, b: String)
  * A set of test cases expressed in Hive QL that are not covered by the tests
  * included in the hive distribution.
  */
-class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
+class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAndAfter {
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
 
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
+
+  def spark: SparkSession = sparkSession
 
   override def beforeAll() {
     super.beforeAll()
@@ -317,10 +320,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   createQueryTest("trivial join ON clause",
     "SELECT * FROM src a JOIN src b ON a.key = b.key")
-
-  createQueryTest("small.cartesian",
-    "SELECT a.key, b.key FROM (SELECT key FROM src WHERE key < 1) a JOIN " +
-      "(SELECT key FROM src WHERE key = 2) b")
 
   createQueryTest("length.udf",
     "SELECT length(\"test\") FROM src LIMIT 1")
@@ -1202,6 +1201,27 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("CREATE TEMPORARY MACRO SIGMOID (x DOUBLE) 1.0 / (1.0 + EXP(-x))")
     }
     assertUnsupportedFeature { sql("DROP TEMPORARY MACRO SIGMOID") }
+  }
+
+  test("dynamic partitioning is allowed when hive.exec.dynamic.partition.mode is nonstrict") {
+    val modeConfKey = "hive.exec.dynamic.partition.mode"
+    withTable("with_parts") {
+      sql("CREATE TABLE with_parts(key INT) PARTITIONED BY (p INT)")
+
+      withSQLConf(modeConfKey -> "nonstrict") {
+        sql("INSERT OVERWRITE TABLE with_parts partition(p) select 1, 2")
+        assert(spark.table("with_parts").filter($"p" === 2).collect().head == Row(1, 2))
+      }
+
+      val originalValue = spark.sparkContext.hadoopConfiguration.get(modeConfKey, "nonstrict")
+      try {
+        spark.sparkContext.hadoopConfiguration.set(modeConfKey, "nonstrict")
+        sql("INSERT OVERWRITE TABLE with_parts partition(p) select 3, 4")
+        assert(spark.table("with_parts").filter($"p" === 4).collect().head == Row(3, 4))
+      } finally {
+        spark.sparkContext.hadoopConfiguration.set(modeConfKey, originalValue)
+      }
+    }
   }
 }
 

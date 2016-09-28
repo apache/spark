@@ -713,7 +713,7 @@ object SparseMatrix {
       "The expected number of nonzeros cannot be greater than Int.MaxValue.")
     val nnz = math.ceil(expected).toInt
     if (density == 0.0) {
-      new SparseMatrix(numRows, numCols, new Array[Int](numCols + 1), Array[Int](), Array[Double]())
+      new SparseMatrix(numRows, numCols, new Array[Int](numCols + 1), Array.empty, Array.empty)
     } else if (density == 1.0) {
       val colPtrs = Array.tabulate(numCols + 1)(j => j * numRows)
       val rowIndices = Array.tabulate(size.toInt)(idx => idx % numRows)
@@ -846,16 +846,8 @@ object Matrices {
       case dm: BDM[Double] =>
         new DenseMatrix(dm.rows, dm.cols, dm.data, dm.isTranspose)
       case sm: BSM[Double] =>
-        // Spark-11507. work around breeze issue 479.
-        val mat = if (sm.colPtrs.last != sm.data.length) {
-          val matCopy = sm.copy
-          matCopy.compact()
-          matCopy
-        } else {
-          sm
-        }
         // There is no isTranspose flag for sparse matrices in Breeze
-        new SparseMatrix(mat.rows, mat.cols, mat.colPtrs, mat.rowIndices, mat.data)
+        new SparseMatrix(sm.rows, sm.cols, sm.colPtrs, sm.rowIndices, sm.data)
       case _ =>
         throw new UnsupportedOperationException(
           s"Do not support conversion from type ${breeze.getClass.getName}.")
@@ -961,7 +953,7 @@ object Matrices {
   @Since("2.0.0")
   def horzcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array[Double]())
+      return new DenseMatrix(0, 0, Array.empty)
     } else if (matrices.length == 1) {
       return matrices(0)
     }
@@ -999,7 +991,7 @@ object Matrices {
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
               if (v != 0.0) {
-                data.append((i, j + startCol, v))
+                data += Tuple3(i, j + startCol, v)
               }
             }
             startCol += nCols
@@ -1020,7 +1012,7 @@ object Matrices {
   @Since("2.0.0")
   def vertcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array[Double]())
+      return new DenseMatrix(0, 0, Array.empty)
     } else if (matrices.length == 1) {
       return matrices(0)
     }
@@ -1069,7 +1061,7 @@ object Matrices {
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
               if (v != 0.0) {
-                data.append((i + startRow, j, v))
+                data += Tuple3(i + startRow, j, v)
               }
             }
             startRow += nRows

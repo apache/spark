@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
+import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException}
 
 
 /**
@@ -35,6 +35,18 @@ abstract class ExternalCatalog {
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
       throw new NoSuchDatabaseException(db)
+    }
+  }
+
+  protected def requireFunctionExists(db: String, funcName: String): Unit = {
+    if (!functionExists(db, funcName)) {
+      throw new NoSuchFunctionException(db = db, func = funcName)
+    }
+  }
+
+  protected def requireFunctionNotExists(db: String, funcName: String): Unit = {
+    if (functionExists(db, funcName)) {
+      throw new FunctionAlreadyExistsException(db = db, func = funcName)
     }
   }
 
@@ -109,8 +121,16 @@ abstract class ExternalCatalog {
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit
+      inheritTableSpecs: Boolean): Unit
+
+  def loadDynamicPartitions(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      replace: Boolean,
+      numDP: Int,
+      holdDDLTime: Boolean): Unit
 
   // --------------------------------------------------------------------------
   // Partitions
@@ -152,6 +172,14 @@ abstract class ExternalCatalog {
       parts: Seq[CatalogTablePartition]): Unit
 
   def getPartition(db: String, table: String, spec: TablePartitionSpec): CatalogTablePartition
+
+  /**
+   * Returns the specified partition or None if it does not exist.
+   */
+  def getPartitionOption(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec): Option[CatalogTablePartition]
 
   /**
    * List the metadata of all partitions that belong to the specified table, assuming it exists.

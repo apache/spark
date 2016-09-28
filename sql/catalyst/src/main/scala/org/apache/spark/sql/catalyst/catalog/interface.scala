@@ -22,7 +22,7 @@ import java.util.Date
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.StructType
 
@@ -81,10 +81,12 @@ object CatalogStorageFormat {
  *
  * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
+ * @param parameters some parameters for the partition, for example, stats.
  */
 case class CatalogTablePartition(
     spec: CatalogTypes.TablePartitionSpec,
-    storage: CatalogStorageFormat)
+    storage: CatalogStorageFormat,
+    parameters: Map[String, String] = Map.empty)
 
 
 /**
@@ -128,6 +130,7 @@ case class CatalogTable(
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
     properties: Map[String, String] = Map.empty,
+    stats: Option[Statistics] = None,
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None,
     comment: Option[String] = None,
@@ -153,9 +156,9 @@ case class CatalogTable(
       outputFormat: Option[String] = storage.outputFormat,
       compressed: Boolean = false,
       serde: Option[String] = storage.serde,
-      serdeProperties: Map[String, String] = storage.properties): CatalogTable = {
+      properties: Map[String, String] = storage.properties): CatalogTable = {
     copy(storage = CatalogStorageFormat(
-      locationUri, inputFormat, outputFormat, serde, compressed, serdeProperties))
+      locationUri, inputFormat, outputFormat, serde, compressed, properties))
   }
 
   override def toString: String = {
@@ -188,6 +191,7 @@ case class CatalogTable(
         viewText.map("View: " + _).getOrElse(""),
         comment.map("Comment: " + _).getOrElse(""),
         if (properties.nonEmpty) s"Properties: $tableProperties" else "",
+        if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",
         s"$storage")
 
     output.filter(_.nonEmpty).mkString("CatalogTable(\n\t", "\n\t", ")")

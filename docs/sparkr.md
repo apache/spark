@@ -63,6 +63,21 @@ The following Spark driver properties can be set in `sparkConfig` with `sparkR.s
 <table class="table">
   <tr><th>Property Name</th><th>Property group</th><th><code>spark-submit</code> equivalent</th></tr>
   <tr>
+    <td><code>spark.master</code></td>
+    <td>Application Properties</td>
+    <td><code>--master</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.yarn.keytab</code></td>
+    <td>Application Properties</td>
+    <td><code>--keytab</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.yarn.principal</code></td>
+    <td>Application Properties</td>
+    <td><code>--principal</code></td>
+  </tr>
+  <tr>
     <td><code>spark.driver.memory</code></td>
     <td>Application Properties</td>
     <td><code>--driver-memory</code></td>
@@ -110,7 +125,8 @@ head(df)
 
 SparkR supports operating on a variety of data sources through the `SparkDataFrame` interface. This section describes the general methods for loading and saving data using Data Sources. You can check the Spark SQL programming guide for more [specific options](sql-programming-guide.html#manually-specifying-options) that are available for the built-in data sources.
 
-The general method for creating SparkDataFrames from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active SparkSession will be used automatically. SparkR supports reading JSON, CSV and Parquet files natively and through [Spark Packages](http://spark-packages.org/) you can find data source connectors for popular file formats like [Avro](http://spark-packages.org/package/databricks/spark-avro). These packages can either be added by
+The general method for creating SparkDataFrames from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active SparkSession will be used automatically.
+SparkR supports reading JSON, CSV and Parquet files natively, and through packages available from sources like [Third Party Projects](https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects), you can find data source connectors for popular file formats like Avro. These packages can either be added by
 specifying `--packages` with `spark-submit` or `sparkR` commands, or if initializing SparkSession with `sparkPackages` parameter when in an interactive R shell or from RStudio.
 
 <div data-lang="r" markdown="1">
