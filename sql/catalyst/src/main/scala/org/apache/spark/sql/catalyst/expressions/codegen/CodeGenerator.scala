@@ -164,7 +164,7 @@ class CodegenContext {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
     val initCodes = mutableStates.distinct.map(_._3)
-    splitExpressions(initCodes, "init", ("Object[]", "references") :: Nil)
+    splitExpressions(initCodes, "init", Nil)
   }
 
   /**
