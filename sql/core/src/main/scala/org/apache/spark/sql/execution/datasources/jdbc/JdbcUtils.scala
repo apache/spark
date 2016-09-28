@@ -693,7 +693,7 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Creates a table according to the schema and JDBC options.
+   * Creates a table according to the given schema.
    */
   def createTable(
       df: DataFrame,
