@@ -141,7 +141,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     val provider = new FsHistoryProvider(createTestConf())
     updateAndCheck(provider) { list =>
-      list.size should be (1)
+      list.size should be (if (System.getProperty("user.name").equals("root")) 2 else 1)
     }
   }
 
