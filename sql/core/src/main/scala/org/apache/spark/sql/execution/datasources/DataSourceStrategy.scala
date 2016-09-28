@@ -340,6 +340,8 @@ object DataSourceStrategy extends Strategy with Logging {
     // `Filter`s or cannot be handled by `relation`.
     val filterCondition = unhandledPredicates.reduceLeftOption(expressions.And)
 
+    // These metadata values make scan plans uniquely identifiable for equality checking.
+    // TODO(ekl) using strings for equality checking is brittle
     val metadata: Map[String, String] = {
       val pairs = ArrayBuffer.empty[(String, String)]
 
@@ -350,6 +352,8 @@ object DataSourceStrategy extends Strategy with Logging {
         }
         pairs += ("PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
       }
+      pairs += ("ReadSchema" ->
+        StructType.fromAttributes(projects.map(_.toAttribute)).catalogString)
       pairs.toMap
     }
 
