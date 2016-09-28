@@ -490,31 +490,31 @@ class Analyzer(
       right.collect {
         // Handle base relations that might appear more than once.
         case oldVersion: MultiInstanceRelation
-            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           val newVersion = oldVersion.newInstance()
           (oldVersion, newVersion)
 
         case oldVersion: SerializeFromObject
-            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           (oldVersion, oldVersion.copy(serializer = oldVersion.serializer.map(_.newInstance())))
 
         // Handle projects that create conflicting aliases.
         case oldVersion @ Project(projectList, _)
-            if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
+          if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
           (oldVersion, oldVersion.copy(projectList = newAliases(projectList)))
 
         case oldVersion @ Aggregate(_, aggregateExpressions, _)
-            if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
+          if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
           (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
 
         case oldVersion: Generate
-            if oldVersion.generatedSet.intersect(conflictingAttributes).nonEmpty =>
+          if oldVersion.generatedSet.intersect(conflictingAttributes).nonEmpty =>
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
           (oldVersion, oldVersion.copy(generatorOutput = newOutput))
 
         case oldVersion @ Window(windowExpressions, _, _, child)
-            if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
-              .nonEmpty =>
+          if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
+            .nonEmpty =>
           (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
       }
         // Only handle first case, others will be fixed on the next pass.
@@ -698,9 +698,7 @@ class Analyzer(
     lazy val name = UnresolvedAttribute(nameParts).name
     planToSearchFrom.findByBreadthFirst(_.planId == targetPlanId) match {
       case Some(foundPlan) =>
-        foundPlan.resolve(nameParts, resolver).getOrElse {
-          failAnalysis(s"Could not find $name in ${foundPlan.output.mkString(", ")}")
-        }
+        foundPlan.resolve(nameParts, resolver).get
       case None =>
         failAnalysis(s"Could not find $name in any logical plan.")
     }
