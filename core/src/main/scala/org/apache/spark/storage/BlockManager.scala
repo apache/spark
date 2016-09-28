@@ -28,10 +28,7 @@ import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs._
-
 import org.apache.spark._
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
@@ -77,8 +74,6 @@ private[spark] class BlockManager(
 
   private[spark] val externalShuffleServiceEnabled =
     conf.getBoolean("spark.shuffle.service.enabled", false)
-
-  private[spark] var hdfsDir: Option[Path] = None
 
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.
@@ -166,9 +161,6 @@ private[spark] class BlockManager(
    * service if configured.
    */
   def initialize(appId: String): Unit = {
-    val dir = conf.get("spark.hdfs.dir", s"/tmp/spark/${appId}_blocks")
-    hdfsDir = Option(new Path(dir))
-
     blockTransferService.init(this)
     shuffleClient.init(appId)
 
@@ -205,111 +197,6 @@ private[spark] class BlockManager(
 
     logInfo(s"Initialized BlockManager: $blockManagerId")
   }
-
-  def persistBroadcast(id: BlockId, block: ByteBuffer): Unit = {
-    hdfsDir.foreach { dirPath =>
-      val blockFile = id.toString
-      val filePath = new Path(dirPath, blockFile)
-      var fs: FileSystem = null
-      try {
-        fs = filePath.getFileSystem(SparkHadoopUtil.get.conf)
-        if (fs.exists(filePath)) {
-          logWarning(s"File(${filePath.getName})already exists.")
-        }
-      } catch {
-        case e: IOException =>
-          logWarning("Error when list files in doing persistBroadcast", e)
-          return
-      }
-      var shouldDeleteFile: Boolean = false
-      var outStream: FSDataOutputStream = null
-      try {
-        outStream = fs.create(filePath)
-        outStream.write(block.array())
-        outStream.hflush()
-        logInfo(s"Store block: $blockFile into underlying fs.")
-      } catch {
-        case e: IOException =>
-          logWarning("Error when backing broadcast to hdfs and try to clean the file", e)
-          shouldDeleteFile = true
-      } finally {
-        if (null != outStream) {
-          try {
-            outStream.close()
-          } catch {
-            case e: Throwable =>
-              logWarning("Can't close the output stream.", e)
-          }
-        }
-        if (shouldDeleteFile) {
-          try {
-            fs.delete(filePath, true)
-          } catch {
-            case e: Exception =>
-              logWarning(s"Failed to clean the broadcast file{$blockFile}.", e)
-          }
-        }
-      }
-    }
-  }
-
-  def cleanBroadcastPieces(id: Long): Unit = {
-    hdfsDir.foreach { dirPath =>
-      val fileFilter = new PathFilter {
-        override def accept(pathname: Path): Boolean = {
-          pathname.getName.startsWith(s"broadcast_${id}_piece")
-        }
-      }
-      try {
-        val fs = dirPath.getFileSystem(SparkHadoopUtil.get.conf)
-        val files = fs.listStatus(dirPath, fileFilter).map(_.getPath)
-        for (file <- files) {
-          if (fs.exists(file)) {
-            fs.delete(file, true)
-            logInfo(s"Underlying fs file: ${file.getName} has been clean.")
-          }
-        }
-      } catch {
-        case e: IOException =>
-          logWarning(s"Failed to clean the broadcast file{${dirPath.toString}} in cleaning.", e)
-      }
-    }
-  }
-
-  def getHdfsBytes(id: BlockId): Option[ChunkedByteBuffer] = {
-    var inputStream: FSDataInputStream = null
-    try {
-      hdfsDir.map { dirPath =>
-        val blockFile = id.toString
-        val filePath = new Path(dirPath, blockFile)
-        val fs = filePath.getFileSystem(SparkHadoopUtil.get.conf)
-        (filePath, fs)
-      }.filter { case(path, fs) =>
-        fs.exists(path)
-      }.map { case (filePath, fs) =>
-        inputStream = fs.open(filePath)
-        val status = fs.getFileStatus(filePath)
-        val buffer = new Array[Byte](status.getLen.toInt)
-        inputStream.readFully(0, buffer)
-        logInfo(s"Got bytes from underling fs file: ${filePath.getName}.")
-        new ChunkedByteBuffer(ByteBuffer.wrap(buffer))
-      }
-    } catch {
-      case e: Exception =>
-        logError("Error in read the broadCast value from underlying fs ", e)
-        None
-    } finally {
-      if (null != inputStream) {
-        try {
-          inputStream.close()
-        } catch {
-          case e: Throwable =>
-            logWarning("Can't close the input stream.", e)
-        }
-      }
-    }
-  }
-
 
   private def registerWithExternalShuffleServer() {
     logInfo("Registering executor with local external shuffle service.")
@@ -861,6 +748,27 @@ private[spark] class BlockManager(
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
     new DiskBlockObjectWriter(file, serializerManager, serializerInstance, bufferSize,
       syncWrites, writeMetrics, blockId)
+  }
+
+  /**
+   *  Persist a broadcast piece of serialized bytes to the hdfs.
+   */
+  def persistBroadcastPiece(id: BlockId, block: ByteBuffer): Unit = {
+    diskBlockManager.persistBroadcastPiece(id, block)
+  }
+
+  /**
+   * Get broadcast block from the hdfs, as serialized bytes.
+   */
+  def getBroadcastPiece(id: BlockId): Option[ChunkedByteBuffer] = {
+    diskBlockManager.getBroadcastPiece(id)
+  }
+
+  /**
+   * Clean hdfs files for executor broadcast.
+   */
+  def cleanBroadcastPieces(id: Long): Unit = {
+    diskBlockManager.cleanBroadcastPieces(id)
   }
 
   /**

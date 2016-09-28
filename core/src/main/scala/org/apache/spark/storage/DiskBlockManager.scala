@@ -18,12 +18,17 @@
 package org.apache.spark.storage
 
 import java.io.{File, IOException}
+import java.nio.ByteBuffer
 import java.util.UUID
 
+import org.apache.hadoop.fs._
+
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -44,6 +49,9 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     logError("Failed to create any local dir.")
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
+  private[spark] lazy val hdfsDir =
+    Option(new Path(conf.get("spark.hdfs.dir", s"/tmp/spark/${conf.getAppId}_blocks")))
+
   // The content of subDirs is immutable but the content of subDirs(i) is mutable. And the content
   // of subDirs(i) is protected by the lock of subDirs(i)
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
@@ -136,6 +144,111 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
         case e: IOException =>
           logError(s"Failed to create local dir in $rootDir. Ignoring this directory.", e)
           None
+      }
+    }
+  }
+
+
+  def persistBroadcastPiece(id: BlockId, block: ByteBuffer): Unit = {
+    hdfsDir.foreach { dirPath =>
+      val blockFile = id.toString
+      val filePath = new Path(dirPath, blockFile)
+      var fs: FileSystem = null
+      try {
+        fs = filePath.getFileSystem(SparkHadoopUtil.get.conf)
+        if (fs.exists(filePath)) {
+          logWarning(s"File(${filePath.getName})already exists.")
+        }
+      } catch {
+        case e: IOException =>
+          logWarning("Error when list files in doing persistBroadcast", e)
+          return
+      }
+      var shouldDeleteFile: Boolean = false
+      var outStream: FSDataOutputStream = null
+      try {
+        outStream = fs.create(filePath)
+        outStream.write(block.array())
+        outStream.hflush()
+        logInfo(s"Store block: $blockFile into underlying fs.")
+      } catch {
+        case e: IOException =>
+          logWarning("Error when backing broadcast to hdfs and try to clean the file", e)
+          shouldDeleteFile = true
+      } finally {
+        if (null != outStream) {
+          try {
+            outStream.close()
+          } catch {
+            case e: Throwable =>
+              logWarning("Can't close the output stream.", e)
+          }
+        }
+        if (shouldDeleteFile) {
+          try {
+            fs.delete(filePath, true)
+          } catch {
+            case e: Exception =>
+              logWarning(s"Failed to clean the broadcast file{$blockFile}.", e)
+          }
+        }
+      }
+    }
+  }
+
+  def cleanBroadcastPieces(id: Long): Unit = {
+    hdfsDir.foreach { dirPath =>
+      val fileFilter = new PathFilter {
+        override def accept(pathname: Path): Boolean = {
+          pathname.getName.startsWith(s"broadcast_${id}_piece")
+        }
+      }
+      try {
+        val fs = dirPath.getFileSystem(SparkHadoopUtil.get.conf)
+        val files = fs.listStatus(dirPath, fileFilter).map(_.getPath)
+        for (file <- files) {
+          if (fs.exists(file)) {
+            fs.delete(file, true)
+            logInfo(s"Underlying fs file: ${file.getName} has been clean.")
+          }
+        }
+      } catch {
+        case e: IOException =>
+          logWarning(s"Failed to clean the broadcast file{${dirPath.toString}} in cleaning.", e)
+      }
+    }
+  }
+
+  def getBroadcastPiece(id: BlockId): Option[ChunkedByteBuffer] = {
+    var inputStream: FSDataInputStream = null
+    try {
+      hdfsDir.map { dirPath =>
+        val blockFile = id.toString
+        val filePath = new Path(dirPath, blockFile)
+        val fs = filePath.getFileSystem(SparkHadoopUtil.get.conf)
+        (filePath, fs)
+      }.filter { case(path, fs) =>
+        fs.exists(path)
+      }.map { case (filePath, fs) =>
+        inputStream = fs.open(filePath)
+        val status = fs.getFileStatus(filePath)
+        val buffer = new Array[Byte](status.getLen.toInt)
+        inputStream.readFully(0, buffer)
+        logInfo(s"Got bytes from underling fs file: ${filePath.getName}.")
+        new ChunkedByteBuffer(ByteBuffer.wrap(buffer))
+      }
+    } catch {
+      case e: Exception =>
+        logError("Error in read the broadCast value from underlying fs ", e)
+        None
+    } finally {
+      if (null != inputStream) {
+        try {
+          inputStream.close()
+        } catch {
+          case e: Throwable =>
+            logWarning("Can't close the input stream.", e)
+        }
       }
     }
   }
