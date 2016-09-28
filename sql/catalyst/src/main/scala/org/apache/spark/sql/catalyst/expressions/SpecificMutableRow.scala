@@ -225,10 +225,9 @@ final class SpecificMutableRow(val values: Array[MutableValue])
     val newValues = new Array[Any](values.length)
     var i = 0
     while (i < values.length) {
-      newValues(i) = values(i).boxed
+      newValues(i) = InternalRow.copyValue(values(i).boxed)
       i += 1
     }
-
     new GenericInternalRow(newValues)
   }
 

@@ -122,4 +122,23 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     assert(unsafe1 === unsafe3)
     assert(unsafe1.getStruct(1, 7) === unsafe3.getStruct(1, 7))
   }
+
+  test("MutableProjection should not cache content from the input row") {
+    val mutableProj = GenerateMutableProjection.generate(
+      Seq(BoundReference(0, new StructType().add("i", IntegerType), true)))
+    val mutableRow = new GenericMutableRow(1)
+    mutableProj.target(mutableRow)
+
+    val unsafeProj = GenerateUnsafeProjection.generate(
+      Seq(BoundReference(0, new StructType().add("i", IntegerType), true)))
+    val unsafeRow = unsafeProj.apply(InternalRow(InternalRow(1)))
+
+    mutableProj.apply(unsafeRow)
+    assert(mutableRow.getStruct(0, 1).getInt(0) == 1)
+
+    // Even if the input row of the mutable projection has been changed, the target mutable row
+    // should keep same.
+    unsafeProj.apply(InternalRow(InternalRow(2)))
+    assert(mutableRow.getStruct(0, 1).getInt(0) == 1)
+  }
 }

@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An abstract class for row used internal in Spark SQL, which only contain the columns as
@@ -73,4 +75,21 @@ object InternalRow {
 
   /** Returns an empty [[InternalRow]]. */
   val empty = apply()
+
+  /**
+   * Copies the given value if it's string/struct/array/map type.
+   */
+  def copyValue(value: Any): Any = {
+    if (value.isInstanceOf[UTF8String]) {
+      value.asInstanceOf[UTF8String].clone()
+    } else if (value.isInstanceOf[InternalRow]) {
+      value.asInstanceOf[InternalRow].copy()
+    } else if (value.isInstanceOf[ArrayData]) {
+      value.asInstanceOf[ArrayData].copy()
+    } else if (value.isInstanceOf[MapData]) {
+      value.asInstanceOf[MapData].copy()
+    } else {
+      value
+    }
+  }
 }

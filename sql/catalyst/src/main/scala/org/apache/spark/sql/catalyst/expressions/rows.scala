@@ -230,7 +230,15 @@ class GenericInternalRow(val values: Array[Any]) extends BaseGenericInternalRow 
 
   override def numFields: Int = values.length
 
-  override def copy(): GenericInternalRow = this
+  override def copy(): GenericInternalRow = {
+    val newValues = new Array[Any](values.length)
+    var i = 0
+    while (i < values.length) {
+      newValues(i) = InternalRow.copyValue(values(i))
+      i += 1
+    }
+    new GenericInternalRow(newValues)
+  }
 }
 
 class GenericMutableRow(values: Array[Any]) extends MutableRow with BaseGenericInternalRow {
@@ -249,5 +257,13 @@ class GenericMutableRow(values: Array[Any]) extends MutableRow with BaseGenericI
 
   override def update(i: Int, value: Any): Unit = { values(i) = value }
 
-  override def copy(): InternalRow = new GenericInternalRow(values.clone())
+  override def copy(): InternalRow = {
+    val newValues = new Array[Any](values.length)
+    var i = 0
+    while (i < values.length) {
+      newValues(i) = InternalRow.copyValue(values(i))
+      i += 1
+    }
+    new GenericInternalRow(newValues)
+  }
 }
