@@ -59,21 +59,20 @@ private[spark] class BroadcastManager(
     broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement())
   }
 
-  // Called from executor to create broadcast with specified id
-  def newBroadcast[T: ClassTag](
+  // Called from executor to upload broadcast data to blockmanager.
+  def uploadBroadcast[T: ClassTag](
       value_ : T,
-      isLocal: Boolean,
       id: Long
-     ): Broadcast[T] = {
-    broadcastFactory.newBroadcast[T](value_, isLocal, id)
+     ): Int = {
+    broadcastFactory.uploadBroadcast[T](value_, id)
   }
 
   // Called from driver to create broadcast with specified id
   def newExecutorBroadcast[T: ClassTag](
       value_ : T,
-      isLocal: Boolean,
-      id: Long): Broadcast[T] = {
-    broadcastFactory.newExecutorBroadcast[T](value_, isLocal, id)
+      id: Long,
+      nBlocks: Int): Broadcast[T] = {
+    broadcastFactory.newExecutorBroadcast[T](value_, id, nBlocks)
   }
 
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {

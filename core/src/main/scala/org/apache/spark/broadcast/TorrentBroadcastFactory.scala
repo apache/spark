@@ -31,14 +31,18 @@ private[spark] class TorrentBroadcastFactory extends BroadcastFactory {
   override def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) { }
 
   override def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean, id: Long): Broadcast[T] = {
-    new TorrentBroadcast[T](value_, id, false)
+    new TorrentBroadcast[T](value_, id)
   }
 
   override def newExecutorBroadcast[T: ClassTag](
       value: T,
-      isLocal: Boolean,
-      id: Long): Broadcast[T] = {
-    new TorrentBroadcast[T](value, id, true)
+      id: Long,
+      nBlocks: Int): Broadcast[T] = {
+    new TorrentBroadcast[T](value, id, true, Option(nBlocks))
+  }
+
+  override def uploadBroadcast[T: ClassTag](value_ : T, id: Long): Int = {
+    new TorrentBroadcast[T](value_, id).getNumBlocks
   }
 
   override def stop() { }

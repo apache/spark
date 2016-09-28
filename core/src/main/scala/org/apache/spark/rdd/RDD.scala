@@ -947,23 +947,22 @@ abstract class RDD[T: ClassTag](
     val bc = if (partitions.size > 0) {
       val id = sc.env.broadcastManager.newBroadcastId
 
-      // create broadcast from driver, do not write blocks in driver when construct.
-      val res = SparkEnv.get.broadcastManager.newExecutorBroadcast(
-        transFunc.transform(Array.empty[T]), false, id)
-
-      val numBlocks = coalesce(1).mapPartitions { iter =>
-        // write blocks in executor.
-        val bc = SparkEnv.get.broadcastManager.newBroadcast(
-          transFunc.transform(iter.toArray), false, id)
-        val numBlocks = bc.asInstanceOf[TorrentBroadcast[U]].getNumBlocks()
+      // first: write blocks to block manager from executor.
+      val nBlocks = coalesce(1).mapPartitions { iter =>
+        val numBlocks =
+          SparkEnv.get.broadcastManager.uploadBroadcast(transFunc.transform(iter.toArray), id)
         Seq(numBlocks).iterator
       }.collect().head
-      // set num blocks in driver side
-      res.asInstanceOf[TorrentBroadcast[U]].setNumBlocks(numBlocks)
+
+      // then: create broadcast from driver, this will not write blocks
+      val res = SparkEnv.get.broadcastManager.newExecutorBroadcast(
+        transFunc.transform(Array.empty[T]), id, nBlocks)
+
       val callSite = sc.getCallSite
       logInfo("Created executor side broadcast " + res.id + " from " + callSite.shortForm)
       res
     } else {
+      // Rdd may have 0 partitions, for this case use driver broadcast.
       val res = SparkEnv.get.broadcastManager.newBroadcast(
         transFunc.transform(Array.empty[T]), sc.isLocal)
       val callSite = sc.getCallSite

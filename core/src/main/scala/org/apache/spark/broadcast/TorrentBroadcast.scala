@@ -53,8 +53,14 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  *
  * @param obj object to broadcast
  * @param id A unique identifier for the broadcast variable.
- */
-private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, isExecutorSide: Boolean)
+ * @param isExecutorSide A identifier for executor broadcast variable.
+ * @param nBlocks how many blocks for executor broadcast.
+  */
+private[spark] class TorrentBroadcast[T: ClassTag](
+    obj: T,
+    id: Long,
+    isExecutorSide: Boolean = false,
+    nBlocks: Option[Int] = None)
   extends Broadcast[T](id) with Logging with Serializable {
 
   /**
@@ -84,14 +90,10 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, isExecutorS
 
   private val broadcastId = BroadcastBlockId(id)
 
-  def setNumBlocks(n: Int): Unit = {
-    numBlocks = n
-  }
-
-  def getNumBlocks(): Int = numBlocks
+  def getNumBlocks: Int = numBlocks
 
   /** Total number of blocks this broadcast variable contains. */
-  private var numBlocks: Int = if (!isExecutorSide) writeBlocks(obj) else -1
+  private var numBlocks: Int = if (!isExecutorSide) writeBlocks(obj) else nBlocks.getOrElse(-1)
 
   /** Whether to generate checksum for blocks or not. */
   private var checksumEnabled: Boolean = false

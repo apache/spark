@@ -166,7 +166,7 @@ private[spark] class BlockManager(
    * service if configured.
    */
   def initialize(appId: String): Unit = {
-    val dir = conf.get("spark.hdfs.dir", "/tmp/spark/" + appId)
+    val dir = conf.get("spark.hdfs.dir", s"/tmp/spark/${appId}_blocks")
     hdfsDir = Option(new Path(dir))
 
     blockTransferService.init(this)
