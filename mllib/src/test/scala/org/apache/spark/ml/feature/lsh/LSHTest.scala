@@ -42,8 +42,11 @@ private[ml] object LSHTest {
    * @tparam T The class type of lsh
    * @return A tuple of two doubles, representing the false positive and false negative rate
    */
-  def checkLSHProperty[T <: LSHModel[T]]
-  (dataset: Dataset[_], lsh: LSH[T], dist1: Double, dist2: Double): (Double, Double) = {
+  def calculateLSHProperty[T <: LSHModel[T]](
+      dataset: Dataset[_],
+      lsh: LSH[T],
+      dist1: Double,
+      dist2: Double): (Double, Double) = {
     val model = lsh.fit(dataset)
     val inputCol = model.getInputCol
     val outputCol = model.getOutputCol
@@ -67,7 +70,7 @@ private[ml] object LSHTest {
   }
 
   /**
-   * Check and compute the precision and recall of approximate nearest neighbors
+   * Compute the precision and recall of approximate nearest neighbors
    * @param lsh The lsh instance
    * @param dataset the dataset to look for the key
    * @param key The key to hash for the item
@@ -75,9 +78,12 @@ private[ml] object LSHTest {
    * @tparam T The class type of lsh
    * @return A tuple of two doubles, representing precision and recall rate
    */
-  def checkApproxNearestNeighbors[T <: LSHModel[T]]
-  (lsh: LSH[T], dataset: Dataset[_], key: Vector, k: Int,
-   singleProbing: Boolean): (Double, Double) = {
+  def calculateApproxNearestNeighbors[T <: LSHModel[T]](
+      lsh: LSH[T],
+      dataset: Dataset[_],
+      key: Vector,
+      k: Int,
+      singleProbing: Boolean): (Double, Double) = {
     val model = lsh.fit(dataset)
 
     // Compute expected
@@ -93,7 +99,7 @@ private[ml] object LSHTest {
   }
 
   /**
-   * Check and compute the precision and recall of approximate similarity join
+   * Compute the precision and recall of approximate similarity join
    * @param lsh The lsh instance
    * @param datasetA One of the datasets to join
    * @param datasetB Another dataset to join
@@ -101,9 +107,11 @@ private[ml] object LSHTest {
    * @tparam T The class type of lsh
    * @return A tuple of two doubles, representing precision and recall rate
    */
-  def checkApproxSimilarityJoin[T <: LSHModel[T]]
-  (lsh: LSH[T], datasetA: Dataset[_], datasetB: Dataset[_],
-   threshold: Double): (Double, Double) = {
+  def calculateApproxSimilarityJoin[T <: LSHModel[T]](
+      lsh: LSH[T],
+      datasetA: Dataset[_],
+      datasetB: Dataset[_],
+      threshold: Double): (Double, Double) = {
     val model = lsh.fit(datasetA)
     val inputCol = model.getInputCol
 

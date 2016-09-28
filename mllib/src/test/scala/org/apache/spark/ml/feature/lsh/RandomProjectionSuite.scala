@@ -38,7 +38,7 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("values")
       .setBucketLength(1.0)
 
-    val (falsePositive, falseNegative) = LSHTest.checkLSHProperty(df, rp, 8.0, 2.0)
+    val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(df, rp, 8.0, 2.0)
     assert(falsePositive < 0.1)
     assert(falseNegative < 0.1)
   }
@@ -58,7 +58,7 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("values")
       .setBucketLength(2.5)
 
-    val (falsePositive, falseNegative) = LSHTest.checkLSHProperty(df, rp, 3.0, 2.0)
+    val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(df, rp, 3.0, 2.0)
     assert(falsePositive < 0.1)
     assert(falseNegative < 0.1)
   }
@@ -76,7 +76,7 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("values")
       .setBucketLength(4.0)
 
-    val (precision, recall) = LSHTest.checkApproxNearestNeighbors(rp, df, key, 10,
+    val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(rp, df, key, 10,
       singleProbing = true)
     assert(precision >= 0.7)
     assert(recall >= 0.7)
@@ -95,7 +95,7 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("values")
       .setBucketLength(1.0)
 
-    val (precision, recall) = LSHTest.checkApproxNearestNeighbors(rp, df, key, 100,
+    val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(rp, df, key, 100,
       singleProbing = false)
     assert(precision >= 0.7)
     assert(recall >= 0.7)
@@ -118,7 +118,7 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("values")
       .setBucketLength(4.0)
 
-    val (precision, recall) = LSHTest.checkApproxSimilarityJoin(rp, dfA, dfB, 1.0)
+    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(rp, dfA, dfB, 1.0)
     assert(precision == 1.0)
     assert(recall >= 0.9)
   }
@@ -135,7 +135,7 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("values")
       .setBucketLength(4.0)
 
-    val (precision, recall) = LSHTest.checkApproxSimilarityJoin(rp, df, df, 3.0)
+    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(rp, df, df, 3.0)
     assert(precision == 1.0)
     assert(recall >= 0.7)
   }
