@@ -34,7 +34,7 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
       @DefaultValue("3000-01-01") @QueryParam("maxDate") maxDate: SimpleDateParam,
       @QueryParam("limit") limit: Integer)
   : Iterator[ApplicationInfo] = {
-    val numApps = Option(limit.toInt).getOrElse(Integer.MAX_VALUE)
+    val numApps = Option(limit).getOrElse(Integer.MAX_VALUE).asInstanceOf[Int]
     val appsIter = uiRoot.asInstanceOf[HistoryServer].getApplicationList().iterator
 
     val adjStatus = {
