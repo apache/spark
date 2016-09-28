@@ -84,7 +84,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext with Private
     }
   }
 
-  case class AddTextHDFSFileData(content: String, src: Path, tmp: File, conf: Configuration)
+  case class AddTextHDFSFileData(content: String, src: Path, tmp: File, fs: FileSystem)
     extends AddFileData {
 
     override def addData(source: FileStreamSource): Unit = {
@@ -92,7 +92,6 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext with Private
       val finalFile = new File(tempFile.getName)
       require(stringToFile(tempFile, content).renameTo(finalFile))
       // Set up files on hdfs
-      val fs = FileSystem.get(conf)
       val hdfsFilePath = src
       if(!fs.exists(src)) {
         fs.mkdirs(src)
@@ -163,6 +162,28 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext with Private
     } finally {
       Utils.deleteRecursively(src)
       Utils.deleteRecursively(tmp)
+    }
+  }
+
+  protected def withHDFSMinicluster(body: (File, File, FileSystem) => Unit): Unit = {
+    withTempDirs { case (src, tmp) =>
+        // Create a mini dfs cluster.
+        import java.util.UUID
+        System.clearProperty(MiniDFSCluster.PROP_TEST_BUILD_DATA)
+        val conf = new HdfsConfiguration()
+        conf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, tmp.getAbsolutePath)
+        val miniDFSClusterBuilder = new MiniDFSCluster.Builder(conf)
+        val cluster = miniDFSClusterBuilder.clusterId("testFileStream" + UUID.randomUUID()
+          .toString.take(10)).build()
+        val fs: DistributedFileSystem = cluster.getFileSystem
+        val hdfsHomeDirectory: Path = fs.getHomeDirectory
+        fs.mkdirs(hdfsHomeDirectory)
+        cluster.waitClusterUp()
+      try {
+        body(src, tmp, fs)
+      } finally {
+        cluster.shutdown()
+      }
     }
   }
 
@@ -366,29 +387,20 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   test("read from text files using hdfs") {
-    withTempDirs { case (_src, tmp) =>
-      // Create a mini dfs cluster.
-      System.clearProperty(MiniDFSCluster.PROP_TEST_BUILD_DATA)
-      val conf = new HdfsConfiguration()
-      conf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, tmp.getAbsolutePath)
-      val cluster = new MiniDFSCluster.Builder(conf).build()
-      val hdfsHomeDirectory: Path = cluster.getFileSystem.getHomeDirectory
-      cluster.getFileSystem.mkdirs(hdfsHomeDirectory)
-      cluster.waitClusterUp()
-      val textStream = createFileStream("text", hdfsHomeDirectory.toString)
+    withHDFSMinicluster { case (_src, tmp, fs) =>
+      val src = fs.getHomeDirectory
+      val textStream = createFileStream("text", src.toString)
       val filtered = textStream.filter($"value" contains "keep")
-      val src = hdfsHomeDirectory
       testStream(filtered)(
-        AddTextHDFSFileData("drop1\nkeep2\nkeep3", src, tmp, conf),
+        AddTextHDFSFileData("drop1\nkeep2\nkeep3", src, tmp, fs),
         CheckAnswer("keep2", "keep3"),
         StopStream,
-        AddTextHDFSFileData("drop4\nkeep5\nkeep6", src, tmp, conf),
+        AddTextHDFSFileData("drop4\nkeep5\nkeep6", src, tmp, fs),
         StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
-        AddTextHDFSFileData("drop7\nkeep8\nkeep9", src, tmp, conf),
+        AddTextHDFSFileData("drop7\nkeep8\nkeep9", src, tmp, fs),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
       )
-        cluster.shutdown()
     }
   }
 
@@ -589,17 +601,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   // =============== file stream globbing tests ================
   test("read new files in nested directories with globbing using hdfs") {
-    withTempDirs { case (dir, tmp) =>
-      // Create a mini dfs cluster.
-      System.clearProperty(MiniDFSCluster.PROP_TEST_BUILD_DATA)
-      val conf = new HdfsConfiguration()
-      conf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, tmp.getAbsolutePath)
-      val miniDFSClusterBuilder = new MiniDFSCluster.Builder(conf)
-      val cluster = miniDFSClusterBuilder.clusterId("testGlob").build()
-      val fs: DistributedFileSystem = cluster.getFileSystem
-      val hdfsHomeDirectory: Path = fs.getHomeDirectory
-      fs.mkdirs(hdfsHomeDirectory)
-      cluster.waitClusterUp()
+    withHDFSMinicluster { case (dir, tmp, fs) =>
+      val hdfsHomeDirectory = fs.getHomeDirectory
       // src/*/* should consider all the files and directories that matches that glob.
       // So any files that matches the glob as well as any files in directories that matches
       // this glob should be read.
@@ -614,31 +617,30 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
       testStream(filtered) (
         // Create new dir/subdir and write to it, should read
-        AddTextHDFSFileData("drop1\nkeep2", subDir, tmp, conf),
+        AddTextHDFSFileData("drop1\nkeep2", subDir, tmp, fs),
         CheckAnswer("keep2"),
 
         // Add files to dir/subdir, should read
-        AddTextHDFSFileData("keep3", subDir, tmp, conf),
+        AddTextHDFSFileData("keep3", subDir, tmp, fs),
         CheckAnswer("keep2", "keep3"),
 
         // Create new dir/subdir/subsubdir and write to it, should read
-        AddTextHDFSFileData("keep4", subSubDir, tmp, conf),
+        AddTextHDFSFileData("keep4", subSubDir, tmp, fs),
         CheckAnswer("keep2", "keep3", "keep4"),
 
         // Add files to dir/subdir/subsubdir, should read
-        AddTextHDFSFileData("keep5", subSubDir, tmp, conf),
+        AddTextHDFSFileData("keep5", subSubDir, tmp, fs),
         CheckAnswer("keep2", "keep3", "keep4", "keep5"),
 
         // 1. Add file to src dir, should not read as globbing src/*/* does not capture files in
         //    dir, only captures files in dir/subdir/
         // 2. Add files to dir/subDir/subsubdir/subsubsubdir, should not read as src/*/* should
         //    not capture those files
-        AddTextHDFSFileData("keep6", hdfsHomeDirectory, tmp, conf),
-        AddTextHDFSFileData("keep7", subSubSubDir, tmp, conf),
-        AddTextHDFSFileData("keep8", subDir, tmp, conf), // needed to make query detect new data
+        AddTextHDFSFileData("keep6", hdfsHomeDirectory, tmp, fs),
+        AddTextHDFSFileData("keep7", subSubSubDir, tmp, fs),
+        AddTextHDFSFileData("keep8", subDir, tmp, fs), // needed to make query detect new data
         CheckAnswer("keep2", "keep3", "keep4", "keep5", "keep8")
       )
-        cluster.shutdown()
     }
   }
 
