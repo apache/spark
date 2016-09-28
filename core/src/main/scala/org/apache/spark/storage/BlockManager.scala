@@ -28,7 +28,10 @@ import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.fs.{PathFilter, Path, FileSystem}
+
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
@@ -74,6 +77,20 @@ private[spark] class BlockManager(
 
   private[spark] val externalShuffleServiceEnabled =
     conf.getBoolean("spark.shuffle.service.enabled", false)
+
+  private[spark] var hdfsDir: Option[Path] = None
+
+  /**
+    * Set the current working dir from the outside param.
+    * Note: this will have a ambiguous problem if we check the dir with test case:
+    * `run Spark in yarn-client mode` and `run Python application in yarn-client mode` and
+    * `run Python application in yarn-cluster mode` and `external shuffle service`.
+    *
+    * @param dir only in yarn-mode, dir will be well defined and must be the staging dir.
+    */
+  private[spark] def initializeCurrentDir(dir: String): Unit = {
+
+  }
 
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.
@@ -161,6 +178,9 @@ private[spark] class BlockManager(
    * service if configured.
    */
   def initialize(appId: String): Unit = {
+    val dir = conf.get("spark.hdfs.dir", "/tmp/spark/" + appId)
+    hdfsDir = Option(new Path(dir))
+
     blockTransferService.init(this)
     shuffleClient.init(appId)
 
@@ -197,6 +217,89 @@ private[spark] class BlockManager(
 
     logInfo(s"Initialized BlockManager: $blockManagerId")
   }
+
+  def persistBroadcast(id: BlockId, block: ByteBuffer): Unit = {
+    hdfsDir.foreach { dirPath =>
+      val blockFile = id.toString
+      val filePath = new Path(dirPath, blockFile)
+      var fs: FileSystem = null
+      try {
+        fs = filePath.getFileSystem(SparkHadoopUtil.get.conf)
+        if (fs.exists(filePath)) {
+          logWarning(s"File(${filePath.getName})already exists.")
+        }
+      } catch {
+        case e: IOException =>
+          logWarning("Error when list files in doing persistBroadcast", e)
+          return
+      }
+      try {
+        val outStream = fs.create(filePath)
+        outStream.write(block.array())
+        outStream.hflush()
+        outStream.close()
+        logInfo(s"Store block: $blockFile into underlying fs.")
+      } catch {
+        case e: IOException =>
+          logWarning("Error when writing file into file system and try to clean the file", e)
+          try {
+            fs.delete(filePath, true)
+          } catch {
+            case e: Exception =>
+              logWarning(s"Failed to clean the broadcast file{$blockFile}.", e)
+          }
+      }
+    }
+  }
+
+  def cleanBroadcastPieces(id: Long): Unit = {
+    hdfsDir.foreach { dirPath =>
+      val fileFilter = new PathFilter {
+        override def accept(pathname: Path): Boolean = {
+          pathname.getName.startsWith(s"broadcast_${id}_piece")
+        }
+      }
+      try {
+        val fs = dirPath.getFileSystem(SparkHadoopUtil.get.conf)
+        val files = fs.listStatus(dirPath, fileFilter).map(_.getPath)
+        for (file <- files) {
+          if (fs.exists(file)) {
+            fs.delete(file, true)
+            logInfo(s"Underlying fs file: ${file.getName} has been clean.")
+          }
+        }
+      } catch {
+        case e: IOException =>
+          logWarning(s"Failed to clean the broadcast file{${dirPath.toString}} in cleaning.", e)
+      }
+    }
+  }
+
+  def getHdfsBytes(id: BlockId): Option[ChunkedByteBuffer] = {
+    try {
+      hdfsDir.map { dirPath =>
+        val blockFile = id.toString
+        val filePath = new Path(dirPath, blockFile)
+        val fs = filePath.getFileSystem(SparkHadoopUtil.get.conf)
+        (filePath, fs)
+      }.filter { case(path, fs) =>
+        fs.exists(path)
+      }.map { case (filePath, fs) =>
+        val inputStream = fs.open(filePath)
+        val status = fs.getFileStatus(filePath)
+        val buffer = new Array[Byte](status.getLen.toInt)
+        inputStream.readFully(0, buffer)
+        inputStream.close()
+        logInfo(s"Got bytes from underling fs file: ${filePath.getName}.")
+        new ChunkedByteBuffer(ByteBuffer.wrap(buffer))
+      }
+    } catch {
+      case e: Exception =>
+        logError("Error in read the broadCast value from underlying fs ", e)
+        None
+    }
+  }
+
 
   private def registerWithExternalShuffleServer() {
     logInfo("Registering executor with local external shuffle service.")

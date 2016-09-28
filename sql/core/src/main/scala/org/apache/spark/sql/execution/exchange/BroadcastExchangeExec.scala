@@ -38,13 +38,18 @@ import org.apache.spark.util.ThreadUtils
  */
 case class BroadcastExchangeExec(
     mode: BroadcastMode,
-    child: SparkPlan) extends Exchange {
+    child: SparkPlan,
+    conf: SQLConf) extends Exchange {
+
+  private def executorBroadcast: Boolean = conf.executorBroadcastEnabled
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"),
     "buildTime" -> SQLMetrics.createMetric(sparkContext, "time to build (ms)"),
-    "broadcastTime" -> SQLMetrics.createMetric(sparkContext, "time to broadcast (ms)"))
+    "broadcastTime" -> SQLMetrics.createMetric(sparkContext, "time to broadcast (ms)"),
+    "collect_build_broadcastTime" -> SQLMetrics.createMetric(sparkContext,
+      "time to collect, build and broadcast (ms) in executor broadcast"))
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
@@ -73,29 +78,40 @@ case class BroadcastExchangeExec(
       // with the correct execution.
       SQLExecution.withExecutionId(sparkContext, executionId) {
         try {
-          val beforeCollect = System.nanoTime()
-          // Note that we use .executeCollect() because we don't want to convert data to Scala types
-          val input: Array[InternalRow] = child.executeCollect()
-          if (input.length >= 512000000) {
-            throw new SparkException(
-              s"Cannot broadcast the table with more than 512 millions rows: ${input.length} rows")
+          val broadcasted = if (executorBroadcast) {
+            val before = System.nanoTime()
+            val res =
+              child.execute().mapPartitions { iter =>
+                iter.map(_.copy())
+              }.broadcast(mode)
+            longMetric("collect_build_broadcastTime") += (System.nanoTime() - before) / 1000000
+            res
+          } else {
+            val beforeCollect = System.nanoTime()
+            // Note that we use .executeCollect() because we don't want to
+            // convert data to Scala types
+            val input: Array[InternalRow] = child.executeCollect()
+            if (input.length >= 512000000) {
+              throw new SparkException(
+                s"Cannot broadcast the table with more than" +
+                  s"512 millions rows: ${input.length} rows")
+            }
+            val beforeBuild = System.nanoTime()
+            longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
+            val dataSize = input.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
+            longMetric("dataSize") += dataSize
+            if (dataSize >= (8L << 30)) {
+              throw new SparkException(
+                s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
+            }
+            // Construct and broadcast the relation.
+            val relation = mode.transform(input)
+            val beforeBroadcast = System.nanoTime()
+            longMetric("buildTime") += (beforeBroadcast - beforeBuild) / 1000000
+            val res = sparkContext.broadcast(relation)
+            longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
+            res
           }
-          val beforeBuild = System.nanoTime()
-          longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
-          val dataSize = input.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
-          longMetric("dataSize") += dataSize
-          if (dataSize >= (8L << 30)) {
-            throw new SparkException(
-              s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
-          }
-
-          // Construct and broadcast the relation.
-          val relation = mode.transform(input)
-          val beforeBroadcast = System.nanoTime()
-          longMetric("buildTime") += (beforeBroadcast - beforeBuild) / 1000000
-
-          val broadcasted = sparkContext.broadcast(relation)
-          longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
 
           // There are some cases we don't care about the metrics and call `SparkPlan.doExecute`
           // directly without setting an execution id. We should be tolerant to it.

@@ -40,6 +40,17 @@ private[spark] trait BroadcastFactory {
    */
   def newBroadcast[T: ClassTag](value: T, isLocal: Boolean, id: Long): Broadcast[T]
 
+  /**
+   * create a new broadcast variable with a specified id. The different of the origin interface
+   * is that there is a new param `isExecutorSide` to tell the BroadCast it is a executor-side
+   * broadcast and should consider recovery when get block data failed.
+   */
+  def newBroadcast[T: ClassTag](
+      value: T,
+      isLocal: Boolean,
+      id: Long,
+      isExecutorSide: Boolean): Broadcast[T]
+
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit
 
   def stop(): Unit

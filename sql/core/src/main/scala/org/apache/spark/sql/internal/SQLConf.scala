@@ -154,6 +154,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val EXECUTOR_BROADCAST_N_ENABLED = SQLConfigBuilder("spark.sql.executorBroadcast.enabled")
+    .doc("When true, broadcast join use executor side broadcast.")
+    .booleanConf
+    .createWithDefault(true)
+
   val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
     SQLConfigBuilder("spark.sql.adaptive.minNumPostShufflePartitions")
       .internal()
@@ -726,6 +731,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def executorBroadcastEnabled: Boolean = getConf(EXECUTOR_BROADCAST_N_ENABLED)
 
   def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
