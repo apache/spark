@@ -48,7 +48,7 @@ object JdbcUtils extends Logging {
    * @param properties JDBC connection properties.
    */
   def createConnectionFactory(url: String, properties: Properties): () => Connection = {
-    val userSpecifiedDriverClass = Option(properties.getProperty("driver"))
+    val userSpecifiedDriverClass = Option(properties.getProperty(JDBCOptions.JDBC_DRIVER_CLASS))
     userSpecifiedDriverClass.foreach(DriverRegistry.register)
     // Performing this part of the logic on the driver guards against the corner-case where the
     // driver returned for a URL is different on the driver and executors due to classpath

@@ -68,4 +68,5 @@ object JDBCOptions {
   val JDBC_BATCH_FETCH_SIZE = "fetchsize"
   val JDBC_BATCH_INSERT_SIZE = "batchsize"
   val JDBC_TXN_ISOLATION_LEVEL = "isolationLevel"
+  val JDBC_DRIVER_CLASS = "driver"
 }
