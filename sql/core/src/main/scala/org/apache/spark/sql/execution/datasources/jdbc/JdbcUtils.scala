@@ -41,12 +41,6 @@ import org.apache.spark.util.NextIterator
  * Util functions for JDBC tables.
  */
 object JdbcUtils extends Logging {
-
-  // the property names are case sensitive
-  val JDBC_BATCH_FETCH_SIZE = "fetchsize"
-  val JDBC_BATCH_INSERT_SIZE = "batchsize"
-  val JDBC_TXN_ISOLATION_LEVEL = "isolationLevel"
-
   /**
    * Returns a factory for creating connections to the given JDBC URL.
    *
@@ -552,7 +546,7 @@ object JdbcUtils extends Logging {
       isolationLevel: Int): Iterator[Byte] = {
     require(batchSize >= 1,
       s"Invalid value `${batchSize.toString}` for parameter " +
-      s"`${JdbcUtils.JDBC_BATCH_INSERT_SIZE}`. The minimum value is 1.")
+      s"`${JDBCOptions.JDBC_BATCH_INSERT_SIZE}`. The minimum value is 1.")
 
     val conn = getConnection()
     var committed = false
@@ -684,9 +678,9 @@ object JdbcUtils extends Logging {
 
     val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(url, properties)
-    val batchSize = properties.getProperty(JDBC_BATCH_INSERT_SIZE, "1000").toInt
+    val batchSize = properties.getProperty(JDBCOptions.JDBC_BATCH_INSERT_SIZE, "1000").toInt
     val isolationLevel =
-      properties.getProperty(JDBC_TXN_ISOLATION_LEVEL, "READ_UNCOMMITTED") match {
+      properties.getProperty(JDBCOptions.JDBC_TXN_ISOLATION_LEVEL, "READ_UNCOMMITTED") match {
         case "NONE" => Connection.TRANSACTION_NONE
         case "READ_UNCOMMITTED" => Connection.TRANSACTION_READ_UNCOMMITTED
         case "READ_COMMITTED" => Connection.TRANSACTION_READ_COMMITTED

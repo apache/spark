@@ -61,3 +61,11 @@ class JDBCOptions(
   // TODO: to reuse the existing partition parameters for those partition specific options
   val createTableOptions = parameters.getOrElse("createTableOptions", "")
 }
+
+object JDBCOptions {
+  // TODO: Theses property names are used in `JdbcUtils`, `PostgresDialect` and `JDBCRDD`. It'd be
+  // great if those options are managed in single place in the future.
+  val JDBC_BATCH_FETCH_SIZE = "fetchsize"
+  val JDBC_BATCH_INSERT_SIZE = "batchsize"
+  val JDBC_TXN_ISOLATION_LEVEL = "isolationLevel"
+}
