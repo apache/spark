@@ -21,7 +21,7 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 
@@ -84,18 +84,14 @@ class JdbcRelationProvider extends CreatableRelationProvider
             saveTable(df, url, table, props)
 
           case SaveMode.ErrorIfExists =>
-            sys.error(s"Table $table already exists.")
+            throw new AnalysisException(
+              s"Table or view '$table' already exists, and SaveMode is set to ErrorIfExists.")
 
           case SaveMode.Ignore => // Just ignore this case.
         }
       } else {
-        mode match {
-          case SaveMode.Overwrite | SaveMode.Append | SaveMode.ErrorIfExists =>
-            createTable(df, url, table, createTableOptions, conn)
-            saveTable(df, url, table, props)
-
-          case SaveMode.Ignore => // Just ignore this case.
-        }
+        createTable(df, url, table, createTableOptions, conn)
+        saveTable(df, url, table, props)
       }
     } finally {
       conn.close()
