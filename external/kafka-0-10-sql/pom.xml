@@ -31,7 +31,7 @@
     <sbt.project.name>sql-kafka-0-10</sbt.project.name>
   </properties>
   <packaging>jar</packaging>
-  <name>Spark Integration for Kafka 0.10</name>
+  <name>Kafka 0.10 Source for Structured Streaming</name>
   <url>http://spark.apache.org/</url>
 
   <dependencies>

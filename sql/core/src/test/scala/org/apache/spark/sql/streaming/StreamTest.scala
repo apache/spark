@@ -50,11 +50,11 @@ import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
  *
  * {{{
  *  val inputData = MemoryStream[Int]
- * val mapped = inputData.toDS().map(_ + 1)
- **
- *testStream(mapped)(
- *AddData(inputData, 1, 2, 3),
- *CheckAnswer(2, 3, 4))
+ *  val mapped = inputData.toDS().map(_ + 1)
+ *
+ *  testStream(mapped)(
+ *    AddData(inputData, 1, 2, 3),
+ *    CheckAnswer(2, 3, 4))
  * }}}
  *
  * Note that while we do sleep to allow the other thread to progress without spinning,
@@ -503,6 +503,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     var dataPos = 0
     var running = true
     val actions = new ArrayBuffer[StreamAction]()
+    actions += AssertOnQuery { q =>
+      q.processAllAvailable()
+      true
+    }
 
     def addCheck() = {
       if (checkAnswer) {

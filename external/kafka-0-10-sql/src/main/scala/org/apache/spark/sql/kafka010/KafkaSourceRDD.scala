@@ -129,32 +129,11 @@ private[kafka010] class KafkaSourceRDD(
       logDebug(s"Creating iterator for $range")
 
       new Iterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
-
-        private var prefetch: ConsumerRecord[Array[Byte], Array[Byte]] = _
-
-        private def fetchNext(): ConsumerRecord[Array[Byte], Array[Byte]] = {
-          try {
-            val r = consumer.get(requestOffset)
-            requestOffset += 1
-            r
-          } catch {
-            case e: OffsetOutOfRangeException =>
-              logWarning(s"${range.topicPartition} was deleted, some data may have been missed")
-              null
-          }
-        }
-
-        override def hasNext(): Boolean = {
-          if (prefetch == null && requestOffset < range.untilOffset) {
-            prefetch = fetchNext()
-          }
-          prefetch != null
-        }
-
+        override def hasNext(): Boolean = requestOffset < range.untilOffset
         override def next(): ConsumerRecord[Array[Byte], Array[Byte]] = {
           assert(hasNext(), "Can't call next() once untilOffset has been reached")
-          val r = prefetch
-          prefetch = null
+          val r = consumer.get(requestOffset)
+          requestOffset += 1
           r
         }
       }

@@ -93,7 +93,7 @@ private[spark] class UninterruptibleThread(name: String) extends Thread(name) {
    * Tests whether `interrupt()` has been called.
    */
   override def isInterrupted: Boolean = {
-    super.isInterrupted || uninterruptibleLock.synchronized { shouldInterruptThread }
+    super.isInterrupted
   }
 
   /**

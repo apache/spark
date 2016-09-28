@@ -116,7 +116,7 @@ class StreamExecution(
    * [[HDFSMetadataLog]]. See SPARK-14131 for more details.
    */
   val microBatchThread =
-    new UninterruptibleThread(s"stream execution thread for $name") {
+    new StreamExecutionThread(s"stream execution thread for $name") {
       override def run(): Unit = {
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
         // thread to this micro batch thread
@@ -530,3 +530,8 @@ object StreamExecution {
 
   def nextId: Long = _nextId.getAndIncrement()
 }
+
+/**
+ * A special thread to run the stream query.
+ */
+abstract class StreamExecutionThread(name: String) extends UninterruptibleThread(name)

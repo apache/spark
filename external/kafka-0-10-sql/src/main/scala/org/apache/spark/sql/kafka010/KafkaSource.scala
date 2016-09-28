@@ -33,6 +33,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSource._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.UninterruptibleThread
 
 /**
  * A [[Source]] that uses Kafka's own [[KafkaConsumer]] API to reads data from Kafka. The design
@@ -71,23 +72,41 @@ import org.apache.spark.sql.types._
  *
  * Zero data lost is not guaranteed when topics are deleted. If zero data lost is critical, the user
  * must make sure all messages in a topic have been processed when deleting a topic.
+ *
+ * There is a known issue caused by KAFKA-1894: the query using KafkaSource maybe cannot be stopped.
+ * To avoid this issue, you should make sure stopping the query before stopping the Kafka brokers
+ * and not use wrong broker addresses.
  */
 private[kafka010] case class KafkaSource(
     sqlContext: SQLContext,
     consumerStrategy: ConsumerStrategy,
     executorKafkaParams: ju.Map[String, Object],
-    sourceOptions: Map[String, String])
+    sourceOptions: Map[String, String],
+    autoOffsetResetValue: String)
   extends Source with Logging {
 
-  private val consumer = consumerStrategy.createConsumer()
   private val sc = sqlContext.sparkContext
-  private val initialPartitionOffsets = fetchPartitionOffsets(seekToLatest = false)
-  logInfo(s"Initial offsets: $initialPartitionOffsets")
+
+  /**
+   * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
+   * offsets and never commits them.
+   */
+  private val consumer = consumerStrategy.createConsumer()
+
+  /** Lazy set initialPartitionOffsets to only call `KafkaConsumer.poll` in StreamExecutionThread */
+  private lazy val initialPartitionOffsets = {
+    val offsets = fetchPartitionOffsets(seekToLatest = false)
+    logInfo(s"Initial offsets: $offsets")
+    offsets
+  }
 
   override def schema: StructType = KafkaSource.kafkaSchema
 
   /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = {
+    // Make sure initialPartitionOffsets is set
+    initialPartitionOffsets
+
     val offset = KafkaSourceOffset(fetchPartitionOffsets(seekToLatest = true))
     logDebug(s"GetOffset: ${offset.partitionToOffsets.toSeq.map(_.toString).sorted}")
     Some(offset)
@@ -95,6 +114,9 @@ private[kafka010] case class KafkaSource(
 
   /** Returns the data that is between the offsets [`start`, `end`), i.e. end is exclusive. */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+    // Make sure initialPartitionOffsets is set
+    initialPartitionOffsets
+
     logInfo(s"GetBatch called with start = $start, end = $end")
     val untilPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(end)
     val fromPartitionOffsets = start match {
@@ -157,7 +179,7 @@ private[kafka010] case class KafkaSource(
       }
       val untilOffset = untilPartitionOffsets(tp)
       val preferredLoc = if (numExecutors > 0) {
-        Some(sortedExecutors(positiveMod(tp.hashCode, numExecutors)))
+        Some(sortedExecutors(floorMod(tp.hashCode, numExecutors)))
       } else None
       KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
     }.filter { range =>
@@ -173,8 +195,7 @@ private[kafka010] case class KafkaSource(
     // Create a RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
       sc, executorKafkaParams, offsetRanges).map { cr =>
-        Row(cr.checksum, cr.key, cr.offset, cr.partition, cr.serializedKeySize,
-          cr.serializedValueSize, cr.timestamp, cr.timestampType.id, cr.topic, cr.value)
+      Row(cr.key, cr.value, cr.topic, cr.partition, cr.offset, cr.timestamp, cr.timestampType.id)
     }
 
     logInfo("GetBatch generating RDD of offset range: " +
@@ -194,10 +215,11 @@ private[kafka010] case class KafkaSource(
    * KafkaConsumer.
    */
   private def fetchPartitionOffsets(
-      seekToLatest: Boolean): Map[TopicPartition, Long] = {
-
+      seekToLatest: Boolean): Map[TopicPartition, Long] = withRetries {
     // Poll to get the latest assigned partitions
     logTrace("\tPolling")
+    // Make sure `KafkaConsumer.poll` won't be interrupted (KAFKA-1894)
+    assert(Thread.currentThread().isInstanceOf[StreamExecutionThread])
     consumer.poll(0)
     val partitions = consumer.assignment()
     consumer.pause(partitions)
@@ -216,10 +238,11 @@ private[kafka010] case class KafkaSource(
 
   /** Fetch the earliest offsets for newly discovered partitions */
   private def fetchNewPartitionEarliestOffsets(
-      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = {
-
+      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = withRetries {
     // Poll to get the latest assigned partitions
     logTrace("\tPolling")
+    // Make sure `KafkaConsumer.poll` won't be interrupted (KAFKA-1894)
+    assert(Thread.currentThread().isInstanceOf[StreamExecutionThread])
     consumer.poll(0)
     val partitions = consumer.assignment()
     logDebug(s"\tPartitioned assigned to consumer: $partitions")
@@ -239,34 +262,54 @@ private[kafka010] case class KafkaSource(
    * Helper function that does multiple retries on the a body of code that returns offsets.
    * Retries are needed to handle transient failures. For e.g. race conditions between getting
    * assignment and getting position while topics/partitions are deleted can cause NPEs.
+   *
+   * This method also makes sure `body` won't be interrupted to workaround a potential issue in
+   * `KafkaConsumer.poll`. (KAFKA-1894)
    */
-  private def withRetries(
-      body: => Map[TopicPartition, Long]): Map[TopicPartition, Long] = synchronized {
-
-    var result: Option[Map[TopicPartition, Long]] = None
-    var attempt = 1
-    var lastException: Throwable = null
-    while (result.isEmpty && attempt <= MAX_OFFSET_FETCH_ATTEMPTS) {
-      try {
-        result = Some(body)
-      } catch {
-        case NonFatal(e) =>
-          lastException = e
-          e.printStackTrace()
-          logWarning(s"Error in attempt $attempt getting Kafka offsets: ", e)
-          attempt += 1
-          Thread.sleep(OFFSET_FETCH_ATTEMPT_INTERVAL_MS)
+  private def withRetries(body: => Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
+    synchronized {
+      var result: Option[Map[TopicPartition, Long]] = None
+      var attempt = 1
+      var lastException: Throwable = null
+      while (result.isEmpty && attempt <= MAX_OFFSET_FETCH_ATTEMPTS
+        && !Thread.currentThread().isInterrupted) {
+        Thread.currentThread match {
+          case ut: UninterruptibleThread =>
+            // "KafkaConsumer.poll" may hang forever if the thread is interrupted (E.g., the query
+            // is stopped)(KAFKA-1894). Hence, we just make sure we don't interrupt it.
+            //
+            // If the broker addresses are wrong, or Kafka cluster is down, "KafkaConsumer.poll" may
+            // hang forever as well. This cannot be resolved in KafkaSource until Kafka fixes the
+            // issue.
+            ut.runUninterruptibly {
+              try {
+                result = Some(body)
+              } catch {
+                case NonFatal(e) =>
+                  lastException = e
+                  logWarning(s"Error in attempt $attempt getting Kafka offsets: ", e)
+                  attempt += 1
+                  Thread.sleep(OFFSET_FETCH_ATTEMPT_INTERVAL_MS)
+              }
+            }
+          case _ =>
+            throw new IllegalStateException(
+              "Kafka APIs must be executed on a o.a.spark.util.UninterruptibleThread")
+        }
       }
+      if (Thread.interrupted()) {
+        throw new InterruptedException()
+      }
+      if (result.isEmpty) {
+        assert(attempt > MAX_OFFSET_FETCH_ATTEMPTS)
+        assert(lastException != null)
+        throw lastException
+      }
+      result.get
     }
-    if (result.isEmpty) {
-      assert(attempt > MAX_OFFSET_FETCH_ATTEMPTS)
-      assert(lastException != null)
-      throw lastException
-    }
-    result.get
   }
 
-  private def positiveMod(a: Long, b: Int): Int = ((a % b).toInt + b) % b
+  private def floorMod(a: Long, b: Int): Int = ((a % b).toInt + b) % b
 }
 
 
@@ -277,16 +320,13 @@ private[kafka010] object KafkaSource {
   val OFFSET_FETCH_ATTEMPT_INTERVAL_MS = 10
 
   def kafkaSchema: StructType = StructType(Seq(
-    StructField("checksum", LongType),
     StructField("key", BinaryType),
-    StructField("offset", LongType),
-    StructField("partition", IntegerType),
-    StructField("serializedKeySize", IntegerType),
-    StructField("serializedValueSize", IntegerType),
-    StructField("timestamp", LongType),
-    StructField("timestampType", IntegerType),
+    StructField("value", BinaryType),
     StructField("topic", StringType),
-    StructField("value", BinaryType)
+    StructField("partition", IntegerType),
+    StructField("offset", LongType),
+    StructField("timestamp", LongType),
+    StructField("timestampType", IntegerType)
   ))
 
   sealed trait ConsumerStrategy {
@@ -298,7 +338,6 @@ private[kafka010] object KafkaSource {
     override def createConsumer(): Consumer[Array[Byte], Array[Byte]] = {
       val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
       consumer.subscribe(topics.asJava)
-      consumer.poll(0)
       consumer
     }
 
@@ -313,54 +352,21 @@ private[kafka010] object KafkaSource {
       consumer.subscribe(
         ju.regex.Pattern.compile(topicPattern),
         new NoOpConsumerRebalanceListener())
-      consumer.poll(0)
       consumer
     }
 
     override def toString: String = s"SubscribePattern[$topicPattern]"
   }
 
-  def getSortedExecutorList(sc: SparkContext): Array[String] = {
-    def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
-      if (a.host == b.host) { a.executorId > b.executorId } else { a.host > b.host }
-    }
-
+  private def getSortedExecutorList(sc: SparkContext): Array[String] = {
     val bm = sc.env.blockManager
     bm.master.getPeers(bm.blockManagerId).toArray
       .map(x => ExecutorCacheTaskLocation(x.host, x.executorId))
       .sortWith(compare)
       .map(_.toString)
   }
-}
 
-
-/** An [[Offset]] for the [[KafkaSource]]. */
-private[kafka010]
-case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) extends Offset {
-  override def toString(): String = {
-    partitionToOffsets.toSeq.sortBy(_._1.toString).mkString("[", ", ", "]")
+  private def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
+    if (a.host == b.host) { a.executorId > b.executorId } else { a.host > b.host }
   }
 }
-
-/** Companion object of the [[KafkaSourceOffset]] */
-private[kafka010] object KafkaSourceOffset {
-
-  def getPartitionOffsets(offset: Offset): Map[TopicPartition, Long] = {
-    offset match {
-      case o: KafkaSourceOffset => o.partitionToOffsets
-      case _ =>
-        throw new IllegalArgumentException(
-          s"Invalid conversion from offset of ${offset.getClass} to KafkaSourceOffset")
-    }
-  }
-
-  /**
-   * Returns [[KafkaSourceOffset]] from a variable sequence of (topic, partitionId, offset)
-   * tuples.
-   */
-  def apply(offsetTuples: (String, Int, Long)*): KafkaSourceOffset = {
-    KafkaSourceOffset(offsetTuples.map { case(t, p, o) => (new TopicPartition(t, p), o) }.toMap)
-  }
-}
-
-

@@ -62,6 +62,10 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
       topicAction: (String, Option[Int]) => Unit = (_, _) => {}) extends AddData {
 
     override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+      if (query.get.isActive) {
+        query.get.processAllAvailable()
+      }
+
       val existingTopics = testUtils.getAllTopicsAndPartitionSize().toMap
       val newTopics = topics.diff(existingTopics.keySet)
       for (newTopic <- newTopics) {
@@ -181,6 +185,10 @@ class KafkaSourceSuite extends KafkaSourceTest {
     val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
 
     testStream(mapped)(
+      AssertOnQuery { q =>
+        q.processAllAvailable()
+        true
+      },
       AddKafkaData(Set(topic), 1, 2, 3),
       CheckAnswer(2, 3, 4),
       Assert {
@@ -262,6 +270,12 @@ class KafkaSourceSuite extends KafkaSourceTest {
     val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
 
     testStream(mapped)(
+      AssertOnQuery { q =>
+        // Because KafkaSource's initialPartitionOffsets is set lazily, we need to make sure
+        // its "getOffset" is called before pushing any data.
+        q.processAllAvailable()
+        true
+      },
       AddKafkaData(Set(topic), 1, 2, 3),
       CheckAnswer(2, 3, 4),
       StopStream,

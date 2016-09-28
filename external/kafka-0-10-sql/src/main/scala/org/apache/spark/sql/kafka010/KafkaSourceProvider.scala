@@ -50,6 +50,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): (String, StructType) = {
+    require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
     validateOptions(parameters)
     ("kafka", KafkaSource.kafkaSchema)
   }
@@ -133,7 +134,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
         throw new IllegalArgumentException("Unknown option")
     }
 
-    new KafkaSource(sqlContext, strategy, kafkaParamsForExecutors, parameters)
+    new KafkaSource(sqlContext, strategy, kafkaParamsForExecutors, parameters, autoOffsetResetValue)
   }
 
   private def validateOptions(parameters: Map[String, String]): Unit = {
