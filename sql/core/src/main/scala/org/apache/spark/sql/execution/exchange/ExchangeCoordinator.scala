@@ -21,6 +21,7 @@ import java.util.{HashMap => JHashMap, Map => JMap}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.{MapOutputStatistics, ShuffleDependency, SimpleFutureAction}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -186,9 +187,9 @@ class ExchangeCoordinator(
 
       i += 1
     }
-
     partitionStartIndices.toArray
   }
+
 
   /**
     * the skew algorithm , given last stage map output statitsics,  partitionStartIndices
@@ -220,13 +221,12 @@ class ExchangeCoordinator(
     * @param partitionStartIndices provided by estimatePartitionStartIndices function
     * @return return Array of 2-item tuples, the first item in the tuple is mean how many
     * partition should generate by SkewShuffleRowRDD, if the value is -1, then use ShuffledRowRDD
-    * second item is a array of (isSkew, partittion index, gen partition num)
+    * second item is a array of (isSkew, partition index, gen partition num)
     * isSkew is -1 mean's no skew. 1 my side is skew. SkewShuffleRowRDD should generate many
     * partition by gen partition num,a partition only read a pre-state partition one block
     * isSkew is 2 mean's other side data skew , so SkewShuffleRowRDD should generate many some
     * partition .
     */
-
   def skewPartitionIdx(
     mapOutputStatistics: Array[MapOutputStatistics],
     prePartitionNum: Array[Int],
