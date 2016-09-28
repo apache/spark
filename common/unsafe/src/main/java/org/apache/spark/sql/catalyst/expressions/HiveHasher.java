@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.hash;
+package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.unsafe.Platform;
 
@@ -24,38 +24,21 @@ import org.apache.spark.unsafe.Platform;
  * org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils#hashcode()
  */
 public class HiveHasher {
-  private final long seed;
-
-  public HiveHasher() {
-    this.seed = 0;
-  }
 
   @Override
   public String toString() {
-    return "HiveHasher";
+    return HiveHasher.class.getSimpleName();
   }
 
-  public int hashInt(int input) {
-    return hashInt(input, seed);
-  }
-
-  public int hashLong(long input) {
-    return hashLong(input, seed);
-  }
-
-  public int hashUnsafeBytes(Object base, long offset, int lengthInBytes) {
-    return hashUnsafeBytes(base, offset, lengthInBytes, seed);
-  }
-
-  public static int hashInt(int input, long seed) {
+  public static int hashInt(int input) {
     return input;
   }
 
-  public static int hashLong(long input, long seed) {
+  public static int hashLong(long input) {
     return (int) ((input >>> 32) ^ input);
   }
 
-  public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes, long seed) {
+  public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes) {
     assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
     int result = 0;
     for (int i = 0; i < lengthInBytes; i++) {

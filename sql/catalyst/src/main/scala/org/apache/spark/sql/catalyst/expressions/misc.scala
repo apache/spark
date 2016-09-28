@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.hash.{HiveHasher, Murmur3_x86_32}
+import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.unsafe.Platform
 
@@ -276,51 +276,52 @@ abstract class HashExpression[E] extends Expression {
     }
   }
 
-  protected def genHashInt(i: String, hasher: String, result: String): String =
-    s"$result = $hasher.hashInt($i, $result);"
+  protected def genHashInt(i: String, result: String): String =
+    s"$result = $hasherClassName.hashInt($i, $result);"
 
-  protected def genHashLong(l: String, hasher: String, result: String): String =
-    s"$result = $hasher.hashLong($l, $result);"
+  protected def genHashLong(l: String, result: String): String =
+    s"$result = $hasherClassName.hashLong($l, $result);"
 
-  protected def genHashBytes(b: String, hasher: String, result: String): String =
-    s"$result = $hasher.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length, $result);"
+  protected def genHashBytes(b: String, result: String): String = {
+    val offset = "Platform.BYTE_ARRAY_OFFSET"
+    s"$result = $hasherClassName.hashUnsafeBytes($b, $offset, $b.length, $result);"
+  }
 
-  protected def genHashBoolean(input: String, hasher: String, result: String): String =
-    genHashInt(s"$input ? 1 : 0", hasher, result)
+  protected def genHashBoolean(input: String, result: String): String =
+    genHashInt(s"$input ? 1 : 0", result)
 
-  protected def genHashFloat(input: String, hasher: String, result: String): String =
-    genHashInt(s"Float.floatToIntBits($input)", hasher, result)
+  protected def genHashFloat(input: String, result: String): String =
+    genHashInt(s"Float.floatToIntBits($input)", result)
 
-  protected def genHashDouble(input: String, hasher: String, result: String): String =
-    genHashLong(s"Double.doubleToLongBits($input)", hasher, result)
+  protected def genHashDouble(input: String, result: String): String =
+    genHashLong(s"Double.doubleToLongBits($input)", result)
 
   protected def genHashDecimal(
       ctx: CodegenContext,
       d: DecimalType,
       input: String,
-      hasher: String,
       result: String): String = {
     if (d.precision <= Decimal.MAX_LONG_DIGITS) {
-      genHashLong(s"$input.toUnscaledLong()", hasher, result)
+      genHashLong(s"$input.toUnscaledLong()", result)
     } else {
       val bytes = ctx.freshName("bytes")
       s"""
             final byte[] $bytes = $input.toJavaBigDecimal().unscaledValue().toByteArray();
-            ${genHashBytes(bytes, hasher, result)}
+            ${genHashBytes(bytes, result)}
           """
     }
   }
 
-  protected def genHashCalendarInterval(input: String, hasher: String, result: String): String = {
-    val microsecondsHash = s"$hasher.hashLong($input.microseconds, $result)"
-    s"$result = $hasher.hashInt($input.months, $microsecondsHash);"
+  protected def genHashCalendarInterval(input: String, result: String): String = {
+    val microsecondsHash = s"$hasherClassName.hashLong($input.microseconds, $result)"
+    s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
   }
 
-  protected def genHashString(input: String, hasher: String, result: String): String = {
+  protected def genHashString(input: String, result: String): String = {
     val baseObject = s"$input.getBaseObject()"
     val baseOffset = s"$input.getBaseOffset()"
     val numBytes = s"$input.numBytes()"
-    s"$result = $hasher.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
+    s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
   }
 
   protected def genHashForMap(
@@ -368,31 +369,33 @@ abstract class HashExpression[E] extends Expression {
   }
 
   @tailrec
-  private def computeHash(
+  private def computeHashWithTailRec(
       input: String,
       dataType: DataType,
       result: String,
-      ctx: CodegenContext): String = {
-    val hasher = hasherClassName
-
-    dataType match {
-      case NullType => ""
-      case BooleanType => genHashBoolean(input, hasher, result)
-      case ByteType | ShortType | IntegerType | DateType => genHashInt(input, hasher, result)
-      case LongType | TimestampType => genHashLong(input, hasher, result)
-      case FloatType => genHashFloat(input, hasher, result)
-      case DoubleType => genHashDouble(input, hasher, result)
-      case d: DecimalType => genHashDecimal(ctx, d, input, hasher, result)
-      case CalendarIntervalType => genHashCalendarInterval(input, hasher, result)
-      case BinaryType => genHashBytes(input, hasher, result)
-      case StringType => genHashString(input, hasher, result)
-      case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
-      case MapType(kt, vt, valueContainsNull) =>
-        genHashForMap(ctx, input, result, kt, vt, valueContainsNull)
-      case StructType(fields) => genHashForStruct(ctx, input, result, fields)
-      case udt: UserDefinedType[_] => computeHash(input, udt.sqlType, result, ctx)
-    }
+      ctx: CodegenContext): String = dataType match {
+    case NullType => ""
+    case BooleanType => genHashBoolean(input, result)
+    case ByteType | ShortType | IntegerType | DateType => genHashInt(input, result)
+    case LongType | TimestampType => genHashLong(input, result)
+    case FloatType => genHashFloat(input, result)
+    case DoubleType => genHashDouble(input, result)
+    case d: DecimalType => genHashDecimal(ctx, d, input, result)
+    case CalendarIntervalType => genHashCalendarInterval(input, result)
+    case BinaryType => genHashBytes(input, result)
+    case StringType => genHashString(input, result)
+    case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
+    case MapType(kt, vt, valueContainsNull) =>
+      genHashForMap(ctx, input, result, kt, vt, valueContainsNull)
+    case StructType(fields) => genHashForStruct(ctx, input, result, fields)
+    case udt: UserDefinedType[_] => computeHashWithTailRec(input, udt.sqlType, result, ctx)
   }
+
+  protected def computeHash(
+      input: String,
+      dataType: DataType,
+      result: String,
+      ctx: CodegenContext): String = computeHashWithTailRec(input, dataType, result, ctx)
 
   protected def hasherClassName: String
 }
@@ -653,33 +656,6 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       $childrenHash""")
   }
 
-  @tailrec
-  private def computeHash(
-      input: String,
-      dataType: DataType,
-      result: String,
-      ctx: CodegenContext): String = {
-    val hasher = hasherClassName
-
-    dataType match {
-      case NullType => ""
-      case BooleanType => genHashBoolean(input, hasher, result)
-      case ByteType | ShortType | IntegerType | DateType => genHashInt(input, hasher, result)
-      case LongType | TimestampType => genHashLong(input, hasher, result)
-      case FloatType => genHashFloat(input, hasher, result)
-      case DoubleType => genHashDouble(input, hasher, result)
-      case d: DecimalType => genHashDecimal(ctx, d, input, hasher, result)
-      case CalendarIntervalType => genHashCalendarInterval(input, hasher, result)
-      case BinaryType => genHashBytes(input, hasher, result)
-      case StringType => genHashString(input, hasher, result)
-      case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
-      case MapType(kt, vt, valueContainsNull) =>
-        genHashForMap(ctx, input, result, kt, vt, valueContainsNull)
-      case StructType(fields) => genHashForStruct(ctx, input, result, fields)
-      case udt: UserDefinedType[_] => computeHash(input, udt.sqlType, result, ctx)
-    }
-  }
-
   override def eval(input: InternalRow): Int = {
     var hash = seed
     var i = 0
@@ -691,14 +667,28 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
     hash
   }
 
-  override protected def genHashInt(i: String, hasher: String, result: String): String =
-    s"$result = $hasher.hashInt($i, 0);"
+  override protected def genHashInt(i: String, result: String): String =
+    s"$result = $hasherClassName.hashInt($i);"
 
-  override protected def genHashLong(l: String, hasher: String, result: String): String =
-    s"$result = $hasher.hashLong($l, 0);"
+  override protected def genHashLong(l: String, result: String): String =
+    s"$result = $hasherClassName.hashLong($l);"
 
-  override protected def genHashBytes(b: String, hasher: String, result: String): String =
-    s"$result = $hasher.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length, 0);"
+  override protected def genHashBytes(b: String, result: String): String =
+    s"$result = $hasherClassName.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length);"
+
+  override protected def genHashCalendarInterval(input: String, result: String): String = {
+    s"""
+        $result = (31 * $hasherClassName.hashInt($input.months)) +
+          $hasherClassName.hashLong($input.microseconds);"
+     """
+  }
+
+  override protected def genHashString(input: String, result: String): String = {
+    val baseObject = s"$input.getBaseObject()"
+    val baseOffset = s"$input.getBaseOffset()"
+    val numBytes = s"$input.numBytes()"
+    s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes);"
+  }
 
   override protected def genHashForArray(
       ctx: CodegenContext,
@@ -772,15 +762,15 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
 object HiveHashFunction extends InterpretedHashFunction {
   override protected def hashInt(i: Int, seed: Long): Long = {
-    HiveHasher.hashInt(i, seed)
+    HiveHasher.hashInt(i)
   }
 
   override protected def hashLong(l: Long, seed: Long): Long = {
-    HiveHasher.hashLong(l, seed)
+    HiveHasher.hashLong(l)
   }
 
   override protected def hashUnsafeBytes(base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
-    HiveHasher.hashUnsafeBytes(base, offset, len, seed)
+    HiveHasher.hashUnsafeBytes(base, offset, len)
   }
 
   override def hash(value: Any, dataType: DataType, seed: Long): Long = {
@@ -791,9 +781,13 @@ object HiveHashFunction extends InterpretedHashFunction {
           case udt: UserDefinedType[_] => udt.sqlType.asInstanceOf[ArrayType].elementType
           case ArrayType(et, _) => et
         }
-        var result: Int = 0
-        for (i <- 0 until array.numElements()) {
+
+        var result = 0
+        var i = 0
+        val length = array.numElements()
+        while (i < length) {
           result = (31 * result) + hash(array.get(i, elementType), elementType, 0).toInt
+          i += 1
         }
         result
 
@@ -806,9 +800,13 @@ object HiveHashFunction extends InterpretedHashFunction {
         }
         val keys = map.keyArray()
         val values = map.valueArray()
-        var result: Int = 0
-        for (i <- 0 until map.numElements()) {
+
+        var result = 0
+        var i = 0
+        val length = map.numElements()
+        while (i < length) {
           result += hash(keys.get(i, kt), kt, 0).toInt ^ hash(values.get(i, vt), vt, 0).toInt
+          i += 1
         }
         result
 
@@ -820,8 +818,11 @@ object HiveHashFunction extends InterpretedHashFunction {
         }
 
         var result = 0
-        for (i <- 0 until struct.numFields) {
+        var i = 0
+        val length = struct.numFields
+        while (i < length) {
           result = (31 * result) + hash(struct.get(i, types(i)), types(i), seed + 1).toInt
+          i += 1
         }
         result
 

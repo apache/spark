@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.hash;
+package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -34,17 +34,17 @@ public class HiveHasherSuite {
   public void testKnownIntegerInputs() {
     int[] inputs = {0, Integer.MIN_VALUE, Integer.MAX_VALUE, 593689054, -189366624};
     for (int input : inputs) {
-      Assert.assertEquals(input, hasher.hashInt(input));
+      Assert.assertEquals(input, HiveHasher.hashInt(input));
     }
   }
 
   @Test
   public void testKnownLongInputs() {
-    Assert.assertEquals(0, hasher.hashLong(0L));
-    Assert.assertEquals(41, hasher.hashLong(-42L));
-    Assert.assertEquals(42, hasher.hashLong(42L));
-    Assert.assertEquals(-2147483648, hasher.hashLong(Long.MIN_VALUE));
-    Assert.assertEquals(-2147483648, hasher.hashLong(Long.MAX_VALUE));
+    Assert.assertEquals(0, HiveHasher.hashLong(0L));
+    Assert.assertEquals(41, HiveHasher.hashLong(-42L));
+    Assert.assertEquals(42, HiveHasher.hashLong(42L));
+    Assert.assertEquals(-2147483648, HiveHasher.hashLong(Long.MIN_VALUE));
+    Assert.assertEquals(-2147483648, HiveHasher.hashLong(Long.MAX_VALUE));
   }
 
   @Test
@@ -54,7 +54,7 @@ public class HiveHasherSuite {
 
     for (int i = 0; i < inputs.length; i++) {
       UTF8String s = UTF8String.fromString("val_" + inputs[i]);
-      int hash = hasher.hashUnsafeBytes(s.getBaseObject(), s.getBaseOffset(), s.numBytes());
+      int hash = HiveHasher.hashUnsafeBytes(s.getBaseObject(), s.getBaseOffset(), s.numBytes());
       Assert.assertEquals(expected[i], ((31 * inputs[i]) + hash));
     }
   }
@@ -69,10 +69,10 @@ public class HiveHasherSuite {
     for (int i = 0; i < size; i++) {
       int vint = rand.nextInt();
       long lint = rand.nextLong();
-      Assert.assertEquals(hasher.hashInt(vint), hasher.hashInt(vint));
-      Assert.assertEquals(hasher.hashLong(lint), hasher.hashLong(lint));
+      Assert.assertEquals(HiveHasher.hashInt(vint), HiveHasher.hashInt(vint));
+      Assert.assertEquals(HiveHasher.hashLong(lint), HiveHasher.hashLong(lint));
 
-      hashcodes.add(hasher.hashLong(lint));
+      hashcodes.add(HiveHasher.hashLong(lint));
     }
 
     // A very loose bound.
@@ -92,10 +92,10 @@ public class HiveHasherSuite {
       rand.nextBytes(bytes);
 
       Assert.assertEquals(
-          hasher.hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
-          hasher.hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
+          HiveHasher.hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
+          HiveHasher.hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
 
-      hashcodes.add(hasher.hashUnsafeBytes(
+      hashcodes.add(HiveHasher.hashUnsafeBytes(
           bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
     }
 
@@ -115,10 +115,10 @@ public class HiveHasherSuite {
       System.arraycopy(strBytes, 0, paddedBytes, 0, strBytes.length);
 
       Assert.assertEquals(
-          hasher.hashUnsafeBytes(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
-          hasher.hashUnsafeBytes(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
+          HiveHasher.hashUnsafeBytes(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
+          HiveHasher.hashUnsafeBytes(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
 
-      hashcodes.add(hasher.hashUnsafeBytes(
+      hashcodes.add(HiveHasher.hashUnsafeBytes(
           paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
     }
 

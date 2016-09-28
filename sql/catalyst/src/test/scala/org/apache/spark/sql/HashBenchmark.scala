@@ -76,29 +76,43 @@ object HashBenchmark {
       }
     }
 
+    val getHiveHashCode = UnsafeProjection.create(new HiveHash(attrs) :: Nil, attrs)
+    benchmark.addCase("codegen HiveHash version") { _: Int =>
+      for (_ <- 0L until iters) {
+        var sum = 0
+        var i = 0
+        while (i < numRows) {
+          sum += getHiveHashCode(rows(i)).getInt(0)
+          i += 1
+        }
+      }
+    }
+
     benchmark.run()
   }
 
   def main(args: Array[String]): Unit = {
     val singleInt = new StructType().add("i", IntegerType)
     /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash For single ints:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    interpreted version                      1006 / 1011        133.4           7.5       1.0X
-    codegen version                          1835 / 1839         73.1          13.7       0.5X
-    codegen version 64-bit                   1627 / 1628         82.5          12.1       0.6X
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Hash For single ints:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    interpreted version                           3012 / 3168        178.2           5.6       1.0X
+    codegen version                               6204 / 6509         86.5          11.6       0.5X
+    codegen version 64-bit                        5666 / 5741         94.7          10.6       0.5X
+    codegen HiveHash version                      4666 / 4691        115.1           8.7       0.6X
      */
     test("single ints", singleInt, 1 << 15, 1 << 14)
 
     val singleLong = new StructType().add("i", LongType)
     /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash For single longs:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    interpreted version                      1196 / 1209        112.2           8.9       1.0X
-    codegen version                          2178 / 2181         61.6          16.2       0.5X
-    codegen version 64-bit                   1752 / 1753         76.6          13.1       0.7X
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Hash For single longs:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    interpreted version                           3610 / 3634        148.7           6.7       1.0X
+    codegen version                               7302 / 7325         73.5          13.6       0.5X
+    codegen version 64-bit                        7193 / 7226         74.6          13.4       0.5X
+    codegen HiveHash version                      4769 / 5446        112.6           8.9       0.8X
      */
     test("single longs", singleLong, 1 << 15, 1 << 14)
 
@@ -118,13 +132,14 @@ object HashBenchmark {
       .add("date", DateType)
       .add("timestamp", TimestampType)
     /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash For normal:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    interpreted version                      2713 / 2715          0.8        1293.5       1.0X
-    codegen version                          2015 / 2018          1.0         960.9       1.3X
-    codegen version 64-bit                    735 /  738          2.9         350.7       3.7X
-     */
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Hash For normal:                         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    interpreted version                           2934 / 2944          0.7        1399.2       1.0X
+    codegen version                               3513 / 3559          0.6        1675.2       0.8X
+    codegen version 64-bit                        1063 / 1181          2.0         506.7       2.8X
+    codegen HiveHash version                      5183 / 5367          0.4        2471.6       0.6X
+    */
     test("normal", normal, 1 << 10, 1 << 11)
 
     val arrayOfInt = ArrayType(IntegerType)
@@ -132,13 +147,14 @@ object HashBenchmark {
       .add("array", arrayOfInt)
       .add("arrayOfArray", ArrayType(arrayOfInt))
     /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash For array:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    interpreted version                      1498 / 1499          0.1       11432.1       1.0X
-    codegen version                          2642 / 2643          0.0       20158.4       0.6X
-    codegen version 64-bit                   2421 / 2424          0.1       18472.5       0.6X
-     */
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Hash For array:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    interpreted version                           2697 / 2705          0.0       20573.9       1.0X
+    codegen version                               4630 / 4650          0.0       35325.8       0.6X
+    codegen version 64-bit                        4398 / 4697          0.0       33556.4       0.6X
+    codegen HiveHash version                      2385 / 2606          0.1       18197.4       1.1X
+    */
     test("array", array, 1 << 8, 1 << 9)
 
     val mapOfInt = MapType(IntegerType, IntegerType)
@@ -146,13 +162,14 @@ object HashBenchmark {
       .add("map", mapOfInt)
       .add("mapOfMap", MapType(IntegerType, mapOfInt))
     /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash For map:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    interpreted version                      1612 / 1618          0.0      393553.4       1.0X
-    codegen version                           149 /  150          0.0       36381.2      10.8X
-    codegen version 64-bit                    144 /  145          0.0       35122.1      11.2X
-     */
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Hash For map:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    interpreted version                              0 /    0         78.6          12.7       1.0X
+    codegen version                                239 /  251          0.0       58310.4       0.0X
+    codegen version 64-bit                         212 /  231          0.0       51649.1       0.0X
+    codegen HiveHash version                        80 /   88          0.1       19531.8       0.0X
+    */
     test("map", map, 1 << 6, 1 << 6)
   }
 }
