@@ -32,8 +32,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.shuffle.MetadataFetchFailedException
+import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, LongAccumulator, Utils}
 
@@ -2107,9 +2106,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(scheduler.getShuffleDependencies(rddE) === Set(shuffleDepA, shuffleDepC))
   }
 
-  test("After one stage is aborted for too many failed attempts, subsequent stages" +
+  test("SPARK-17644: After one stage is aborted for too many failed attempts, subsequent stages" +
     "still behave correctly on fetch failures") {
-    def fetchFailJob: Unit = {
+    // Runs a job that always encounters a fetch failure, so should eventually be aborted
+    def runJobWithPersistentFetchFailure: Unit = {
       val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
       val shuffleHandle =
         rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
@@ -2121,7 +2121,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       }.count()
     }
 
-    def successJob: Unit = {
+    // Runs a job that encounters a single fetch failure but succeeds on the second attempt
+    def runJobWithTemporaryFetchFailure: Unit = {
       object FailThisAttempt {
         val _fail = new AtomicBoolean(true)
       }
@@ -2135,27 +2136,27 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       }
     }
 
-    failAfter(60.seconds) {
+    failAfter(10.seconds) {
       val e = intercept[SparkException] {
-        fetchFailJob
+        runJobWithPersistentFetchFailure
       }
       assert(e.getMessage.contains("org.apache.spark.shuffle.FetchFailedException"))
     }
 
-    // The following job that fails due to fetching failure will hang without
-    // the fix for SPARK-17644
-    failAfter(60.seconds) {
+    // Run a second job that will fail due to a fetch failure.
+    // This job will hang without the fix for SPARK-17644.
+    failAfter(10.seconds) {
       val e = intercept[SparkException] {
-        fetchFailJob
+        runJobWithPersistentFetchFailure
       }
       assert(e.getMessage.contains("org.apache.spark.shuffle.FetchFailedException"))
     }
 
-    failAfter(60.seconds) {
+    failAfter(10.seconds) {
       try {
-        successJob
+        runJobWithTemporaryFetchFailure
       } catch {
-        case e: Throwable => fail("this job should success")
+        case e: Throwable => fail("A job with one fetch failure should eventually succeed")
       }
     }
   }
