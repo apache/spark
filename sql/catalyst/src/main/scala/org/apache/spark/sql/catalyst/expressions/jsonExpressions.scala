@@ -20,15 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import java.io.{ByteArrayOutputStream, StringWriter}
 
 import scala.util.parsing.combinator.RegexParsers
-
 import com.fasterxml.jackson.core._
-
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions, SparkSQLJsonProcessingException}
+import org.apache.spark.sql.catalyst.json.{JSONOptions, JacksonParser, SparkSQLJsonProcessingException}
 import org.apache.spark.sql.catalyst.util.ParseModes
-import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -473,7 +471,7 @@ case class JsonTuple(children: Seq[Expression])
  * Converts an json input string to a [[StructType]] with the specified schema.
  */
 case class JsonToStruct(schema: StructType, options: Map[String, String], child: Expression)
-  extends Expression with CodegenFallback {
+  extends Expression with CodegenFallback with ExpectsInputTypes {
   override def nullable: Boolean = true
 
   @transient
@@ -491,4 +489,6 @@ case class JsonToStruct(schema: StructType, options: Map[String, String], child:
       case _: SparkSQLJsonProcessingException => null
     }
   }
+
+  override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 }

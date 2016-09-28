@@ -1705,6 +1705,7 @@ def json_tuple(col, *fields):
     jc = sc._jvm.functions.json_tuple(_to_java_column(col), _to_seq(sc, fields))
     return Column(jc)
 
+
 @since(2.1)
 def from_json(col, schema, options={}):
     """
@@ -1726,7 +1727,6 @@ def from_json(col, schema, options={}):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.from_json(_to_java_column(col), schema.json(), options)
     return Column(jc)
-
 
 
 @since(1.5)
