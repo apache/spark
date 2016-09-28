@@ -75,19 +75,23 @@ class JdbcRelationProvider extends CreatableRelationProvider
               truncateTable(conn, table)
               saveTable(df, url, table, props)
             } else {
-              // Otherwise, do not truncate but just drop.
+              // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, table)
               createTable(df, url, table, createTableOptions, conn)
               saveTable(df, url, table, props)
             }
+
           case SaveMode.Append =>
             saveTable(df, url, table, props)
 
           case SaveMode.ErrorIfExists =>
             throw new AnalysisException(
-              s"Table or view '$table' already exists, and SaveMode is set to ErrorIfExists.")
+              s"Table or view '$table' already exists. SaveMode: ErrorIfExists.")
 
-          case SaveMode.Ignore => // Just ignore this case.
+          case SaveMode.Ignore =>
+            // With `SaveMode.Ignore` mode, if table already exists, the save operation is expected
+            // to not save the contents of the DataFrame and to not change the existing data.
+            // Therefore, it is okay to do nothing here and then just return the relation below.
         }
       } else {
         createTable(df, url, table, createTableOptions, conn)
