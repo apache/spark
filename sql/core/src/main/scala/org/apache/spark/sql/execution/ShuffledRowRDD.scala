@@ -121,7 +121,8 @@ class ShuffledRowRDD(
 
   private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
 
-  private[this] val partitionStartIndices: Array[Int] = specifiedPartitionStartIndices match {
+  private[this]
+  val partitionStartIndices: Array[Int] = specifiedPartitionStartIndices match {
     case Some(indices) => indices
     case None =>
       // When specifiedPartitionStartIndices is not defined, every post-shuffle partition
@@ -165,7 +166,8 @@ class ShuffledRowRDD(
         dependency.shuffleHandle,
         shuffledRowPartition.startPreShufflePartitionIndex,
         shuffledRowPartition.endPreShufflePartitionIndex,
-        context)
+        context,
+        -1)
     reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
   }
 

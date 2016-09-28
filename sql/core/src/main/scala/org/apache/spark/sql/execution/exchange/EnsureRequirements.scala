@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -36,6 +37,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   private def targetPostShuffleInputSize: Long = conf.targetPostShuffleInputSize
 
   private def adaptiveExecutionEnabled: Boolean = conf.adaptiveExecutionEnabled
+
+  private def adaptiveSkewSizethreshold: Long = conf.adaptiveSkewJoinThresholdSize
 
   private def minNumPostShufflePartitions: Option[Int] = {
     val minNumPostShufflePartitions = conf.minNumPostShufflePartitions
@@ -62,7 +65,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
    */
   private def withExchangeCoordinator(
       children: Seq[SparkPlan],
-      requiredChildDistributions: Seq[Distribution]): Seq[SparkPlan] = {
+      requiredChildDistributions: Seq[Distribution],
+      isJoin: Boolean = false): Seq[SparkPlan] = {
     val supportsCoordinator =
       if (children.exists(_.isInstanceOf[ShuffleExchange])) {
         // Right now, ExchangeCoordinator only support HashPartitionings.
@@ -92,7 +96,9 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
           new ExchangeCoordinator(
             children.length,
             targetPostShuffleInputSize,
-            minNumPostShufflePartitions)
+            minNumPostShufflePartitions,
+            adaptiveSkewSizethreshold,
+            isJoin)
         children.zip(requiredChildDistributions).map {
           case (e: ShuffleExchange, _) =>
             // This child is an Exchange, we need to add the coordinator.
@@ -230,7 +236,10 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     // at here for now.
     // Once we finish https://issues.apache.org/jira/browse/SPARK-10665,
     // we can first add Exchanges and then add coordinator once we have a DAG of query fragments.
-    children = withExchangeCoordinator(children, requiredChildDistributions)
+
+    children = withExchangeCoordinator(children,
+      requiredChildDistributions,
+      operator.isInstanceOf[SortMergeJoinExec] || operator.isInstanceOf[ShuffledHashJoinExec])
 
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
     children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>

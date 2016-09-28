@@ -57,6 +57,213 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(estimatedPartitionStartIndices === expectedPartitionStartIndices)
   }
 
+  private def checkSkewPartition(
+      coordinator: ExchangeCoordinator,
+      bytesByPartitionIdArray: Array[Array[Long]],
+      preStageNum: Array[Int],
+      expectedSkewPartitionIndices: Array[(Int, Array[(Int, Int, Int)])]): Unit = {
+    val mapOutputStatistics = bytesByPartitionIdArray.zipWithIndex.map {
+      case (bytesByPartitionId, index) =>
+        new MapOutputStatistics(index, bytesByPartitionId)
+    }
+    val estimatedPartitionStartIndices =
+      coordinator.estimatePartitionStartIndices(mapOutputStatistics)
+    val skewPartitionIndices =
+      coordinator.skewPartitionIdx(mapOutputStatistics,
+        preStageNum,
+        Some(estimatedPartitionStartIndices))
+    // scalastyle:off println println(...)
+    println("-------estimatedPartitionStartIndices---------")
+    estimatedPartitionStartIndices.foreach(println)
+    println(estimatedPartitionStartIndices)
+    println("----------------------")
+    skewPartitionIndices.foreach(m => {println(m._1);m._2.foreach(println)})
+    assert(skewPartitionIndices.length === 2)
+    assert(skewPartitionIndices(0)._1 === expectedSkewPartitionIndices(0)._1)
+    assert(skewPartitionIndices(1)._1 === expectedSkewPartitionIndices(1)._1)
+    assert(skewPartitionIndices(0)._2 === expectedSkewPartitionIndices(0)._2)
+    assert(skewPartitionIndices(1)._2 === expectedSkewPartitionIndices(1)._2)
+  }
+
+  test("test skewPartitionIdx ") {
+    val coordinator = new ExchangeCoordinator(2, 100L, None, 500L, true)
+
+    {
+      // All bytes per partition are 0.
+      val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
+      val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
+      val expectedPartitionStartIndices =
+        Array[(Int, Array[(Int, Int, Int)])]((0, Array((-1, 0, 0))), (0, Array((-1, 0, 0))))
+      checkSkewPartition(
+        coordinator,
+        Array(bytesByPartitionId1, bytesByPartitionId2),
+        Array[Int](5, 5),
+        expectedPartitionStartIndices)
+    }
+
+    {
+      // one partition skew
+      val bytesByPartitionId1 = Array[Long](10, 5009, 10, 1, 1)
+      val bytesByPartitionId2 = Array[Long](1, 2, 3, 4, 5)
+      val expectedPartitionStartIndices =
+        Array[(Int, Array[(Int, Int, Int)])](
+          (4, Array(
+            (-1, 0, 1),
+            (1, 1, 2),
+            (-1, 2, 1)
+          )),
+          (4, Array(
+            (-1, 0, 1),
+            (2, 1, 2),
+            (-1, 2, 1)
+          )))
+      checkSkewPartition(
+        coordinator,
+        Array(bytesByPartitionId1, bytesByPartitionId2),
+        Array[Int](2, 3),
+        expectedPartitionStartIndices)
+    }
+    {
+      // two partition skew
+      val bytesByPartitionId1 = Array[Long](10, 5009, 600, 1, 1)
+      val bytesByPartitionId2 = Array[Long](1, 2, 3, 4, 5)
+      val expectedPartitionStartIndices =
+        Array[(Int, Array[(Int, Int, Int)])](
+          (6, Array(
+            (-1, 0, 1),
+            (1, 1, 2),
+            (1, 2, 2),
+            (-1, 3, 1)
+          )),
+          (6, Array(
+            (-1, 0, 1),
+            (2, 1, 2),
+            (2, 2, 2),
+            (-1, 3, 1)
+          )))
+      checkSkewPartition(
+        coordinator,
+        Array(bytesByPartitionId1, bytesByPartitionId2),
+        Array[Int](2, 3),
+        expectedPartitionStartIndices)
+    }
+
+    {
+      // 2 side partition is more than skewthreadhold
+      val bytesByPartitionId1 = Array[Long](10, 5009, 2, 1, 1)
+      val bytesByPartitionId2 = Array[Long](1, 4000, 3, 4, 5)
+      val expectedPartitionStartIndices =
+        Array[(Int, Array[(Int, Int, Int)])](
+          (4, Array(
+            (-1, 0, 1),
+            (1, 1, 2),
+            (-1, 2, 1)
+          )),
+          (4, Array(
+            (-1, 0, 1),
+            (2, 1, 2),
+            (-1, 2, 1)
+          )))
+      checkSkewPartition(
+        coordinator,
+        Array(bytesByPartitionId1, bytesByPartitionId2),
+        Array[Int](2, 3),
+        expectedPartitionStartIndices)
+    }
+    {
+      // 2 side partition have skew partition
+      val bytesByPartitionId1 = Array[Long](10, 5009, 2, 1, 1)
+      val bytesByPartitionId2 = Array[Long](1, 2, 3, 5009, 5)
+      val expectedPartitionStartIndices =
+        Array[(Int, Array[(Int, Int, Int)])](
+          (8, Array(
+            (-1, 0, 1),
+            (1, 1, 2),
+            (-1, 2, 1),
+            (2, 3, 3),
+            (-1, 4, 1)
+          )),
+          (8, Array(
+            (-1, 0, 1),
+            (2, 1, 2),
+            (-1, 2, 1),
+            (1, 3, 3),
+            (-1, 4, 1)
+          )))
+      checkSkewPartition(
+        coordinator,
+        Array(bytesByPartitionId1, bytesByPartitionId2),
+        Array[Int](2, 3),
+        expectedPartitionStartIndices)
+    }
+    {
+      // 2 side partition have skew partition
+      val bytesByPartitionId1 = Array[Long](5009, 1, 2, 1, 1)
+      val bytesByPartitionId2 = Array[Long](1, 2, 3, 4, 5)
+      val expectedPartitionStartIndices =
+        Array[(Int, Array[(Int, Int, Int)])](
+          (3, Array(
+            (1, 0, 2),
+            (-1, 1, 1)
+          )),
+          (3, Array(
+            (2, 0, 2),
+            (-1, 1, 1)
+          )))
+      checkSkewPartition(
+        coordinator,
+        Array(bytesByPartitionId1, bytesByPartitionId2),
+        Array[Int](2, 3),
+        expectedPartitionStartIndices)
+    }
+    {
+      // 2 side partition have skew partition
+      val bytesByPartitionId1 = Array[Long](5009, 1, 5009, 1, 1)
+      val bytesByPartitionId2 = Array[Long](1, 2, 3, 4, 5)
+      val expectedPartitionStartIndices =
+        Array[(Int, Array[(Int, Int, Int)])](
+          (6, Array(
+            (1, 0, 2),
+            (-1, 1, 1),
+            (1, 2, 2),
+            (-1, 3, 1)
+          )),
+          (6, Array(
+            (2, 0, 2),
+            (-1, 1, 1),
+            (2, 2, 2),
+            (-1, 3, 1)
+          )))
+      checkSkewPartition(
+        coordinator,
+        Array(bytesByPartitionId1, bytesByPartitionId2),
+        Array[Int](2, 3),
+        expectedPartitionStartIndices)
+    }
+    {
+      // 2 side partition have skew partition
+      val bytesByPartitionId1 = Array[Long](5009, 1, 2, 1, 1)
+      val bytesByPartitionId2 = Array[Long](1, 2, 3, 4, 5009)
+      val expectedPartitionStartIndices =
+        Array[(Int, Array[(Int, Int, Int)])](
+          (6, Array(
+            (1, 0, 2),
+            (-1, 1, 1),
+            (2, 4, 3)
+          )),
+          (6, Array(
+            (2, 0, 2),
+            (-1, 1, 1),
+            (1, 4, 3)
+          )))
+      checkSkewPartition(
+        coordinator,
+        Array(bytesByPartitionId1, bytesByPartitionId2),
+        Array[Int](2, 3),
+        expectedPartitionStartIndices)
+    }
+  }
+
   test("test estimatePartitionStartIndices - 1 Exchange") {
     val coordinator = new ExchangeCoordinator(1, 100L)
 
@@ -479,5 +686,38 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 
       withSparkSession(test, 6144, minNumPostShufflePartitions)
     }
+  }
+  // skew data run test
+  test(s"test skew join") {
+    val test = { spark: SparkSession =>
+      spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_SKEW_JOIN.key, 300)
+      import spark.implicits._
+       val df1 = spark.sparkContext.makeRDD(1 to 10).
+         map(i => {
+           ((if (i < 5) 9999 else if (i == 8) 8888 else 500 + i), "b" + i, "fuck")
+         }).
+         toDF("sid", "sname", "fuck")
+      val df2 = spark.sparkContext.makeRDD(1 to 10).map(i => {
+        ((if (i == 5) 9999 else if (i < 5) 8888 else i), "a" + i, "TMD")
+      }).toDF("rid", "rname", "tmd")
+      val join = df1.join(df2, $"sid"===$"rid")
+      assert(join.collect().length === 8)
+    }
+    withSparkSession(test, 30, Some(3))
+  }
+  test(s"test skew join 2") {
+    val test = { spark: SparkSession =>
+      spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_SKEW_JOIN.key, 500)
+      import spark.implicits._
+      val df1 = spark.sparkContext.makeRDD(1 to 1000).map(i => {
+        ((if (i < 100) 9999 else 500 + i), "b" + i, "fuck")
+      }).toDF("sid", "sname", "fuck")
+      val df2 = spark.sparkContext.makeRDD(1 to 1000).map(i => {
+        ((if (i < 50) 9999 else if (i < 500) 555 else i), "a" + i, "TMD")
+      }).toDF("rid", "rname", "tmd")
+      val join = df1.join(df2, $"sid"===$"rid")
+      assert(join.collect().length === 5252)
+    }
+    withSparkSession(test, 300, Some(3))
   }
 }

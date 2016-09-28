@@ -154,6 +154,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ADAPTIVE_EXECUTION_SKEW_JOIN =
+    SQLConfigBuilder("spark.sql.adaptive.skewjoin.threshold")
+    .doc("when skew data grant than threshold size,then use skewjoin")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefault(256 * 1024 * 1024)
+
   val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
     SQLConfigBuilder("spark.sql.adaptive.minNumPostShufflePartitions")
       .internal()
@@ -719,6 +725,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def adaptiveSkewJoinThresholdSize: Long =
+    getConf(ADAPTIVE_EXECUTION_SKEW_JOIN)
 
   def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
