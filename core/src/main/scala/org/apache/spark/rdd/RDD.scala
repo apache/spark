@@ -946,9 +946,10 @@ abstract class RDD[T: ClassTag](
   def broadcast[U: ClassTag](transFunc: TransFunc[T, U]): Broadcast[U] = withScope {
     val bc = if (partitions.size > 0) {
       val id = sc.env.broadcastManager.newBroadcastId
-      // create broadcast from driver, do not write blocks in driver.
-      val res = SparkEnv.get.broadcastManager.newBroadcast(
-        transFunc.transform(Array.empty[T]), false, id, true)
+
+      // create broadcast from driver, do not write blocks in driver when construct.
+      val res = SparkEnv.get.broadcastManager.newExecutorBroadcast(
+        transFunc.transform(Array.empty[T]), false, id)
 
       val numBlocks = coalesce(1).mapPartitions { iter =>
         // write blocks in executor.

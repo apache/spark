@@ -69,12 +69,11 @@ private[spark] class BroadcastManager(
   }
 
   // Called from driver to create broadcast with specified id
-  def newBroadcast[T: ClassTag](
+  def newExecutorBroadcast[T: ClassTag](
       value_ : T,
       isLocal: Boolean,
-      id: Long,
-      isExecutorSide: Boolean): Broadcast[T] = {
-    broadcastFactory.newBroadcast[T](value_, isLocal, id, isExecutorSide)
+      id: Long): Broadcast[T] = {
+    broadcastFactory.newExecutorBroadcast[T](value_, isLocal, id)
   }
 
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
@@ -83,9 +82,9 @@ private[spark] class BroadcastManager(
 }
 
 /**
- * Marker trait to identify the shape in which tuples are broadcasted. This is used for executor-side
- * broadcast, typical examples of this are identity (tuples remain unchanged) or hashed (tuples are
- * converted into some hash index).
+ * Marker trait to identify the shape in which tuples are broadcasted. This is used for
+ * executor-side broadcast, typical examples of this are identity (tuples remain unchanged)
+ * or hashed (tuples are converted into some hash index).
  */
 trait TransFunc[T, U] extends Serializable {
   def transform(rows: Array[T]): U

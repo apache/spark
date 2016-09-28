@@ -22,14 +22,15 @@ import java.io.{File, IOException, ObjectInputStream, ObjectOutputStream}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.reflect.ClassTag
+
 import com.esotericsoftware.kryo.KryoException
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.{FileSplit, TextInputFormat}
+
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.TransFunc
 import org.apache.spark.rdd.RDDSuiteUtils._
-import org.apache.spark.storage.BroadcastBlockId
 import org.apache.spark.util.Utils
 
 class RDDSuite extends SparkFunSuite with SharedSparkContext {

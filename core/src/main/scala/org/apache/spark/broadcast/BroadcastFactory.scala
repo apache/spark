@@ -45,11 +45,10 @@ private[spark] trait BroadcastFactory {
    * is that there is a new param `isExecutorSide` to tell the BroadCast it is a executor-side
    * broadcast and should consider recovery when get block data failed.
    */
-  def newBroadcast[T: ClassTag](
+  def newExecutorBroadcast[T: ClassTag](
       value: T,
       isLocal: Boolean,
-      id: Long,
-      isExecutorSide: Boolean): Broadcast[T]
+      id: Long): Broadcast[T]
 
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit
 

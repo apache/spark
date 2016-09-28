@@ -140,7 +140,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, isExecutorS
       val pieceId = BroadcastBlockId(id, "piece" + i)
       blockManager.persistBroadcast(pieceId, block)
       val bytes = new ChunkedByteBuffer(block.duplicate())
-      if (!blockManager.putBytes[T](pieceId, bytes, MEMORY_AND_DISK_SER, tellMaster = true)) {
+      if (!blockManager.putBytes(pieceId, bytes, MEMORY_AND_DISK_SER, tellMaster = true)) {
         throw new SparkException(s"Failed to store $pieceId of $broadcastId in local BlockManager")
       }
     }
@@ -176,7 +176,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, isExecutorS
               }
               // We found the block from remote executors/driver's BlockManager, so put the block
               // in this executor's BlockManager.
-              if (!bm.putBytes[T](
+              if (!bm.putBytes(
                 pieceId, b, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)) {
                 throw new SparkException(
                   s"Failed to store $pieceId of $broadcastId in local BlockManager")
@@ -234,7 +234,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, isExecutorS
           val blocks = readBlocks().flatMap(_.getChunks())
           logInfo("Reading broadcast variable " + id + " took" + Utils.getUsedTimeMs(startTimeMs))
 
-          val res = TorrentBroadcast.unBlockifyObject[T](
+          val obj = TorrentBroadcast.unBlockifyObject[T](
             blocks, SparkEnv.get.serializer, compressionCodec)
           // Store the merged copy in BlockManager so other tasks on this executor don't
           // need to re-fetch it.
@@ -242,7 +242,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, isExecutorS
           if (!blockManager.putSingle(broadcastId, obj, storageLevel, tellMaster = false)) {
             throw new SparkException(s"Failed to store $broadcastId in BlockManager")
           }
-          res
+          obj
       }
     }
   }

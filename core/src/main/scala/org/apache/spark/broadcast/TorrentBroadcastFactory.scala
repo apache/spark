@@ -34,12 +34,11 @@ private[spark] class TorrentBroadcastFactory extends BroadcastFactory {
     new TorrentBroadcast[T](value_, id, false)
   }
 
-  override def newBroadcast[T: ClassTag](
+  override def newExecutorBroadcast[T: ClassTag](
       value: T,
       isLocal: Boolean,
-      id: Long,
-      isExecutorSide: Boolean): Broadcast[T] = {
-    new TorrentBroadcast[T](value, id, isExecutorSide)
+      id: Long): Broadcast[T] = {
+    new TorrentBroadcast[T](value, id, true)
   }
 
   override def stop() { }

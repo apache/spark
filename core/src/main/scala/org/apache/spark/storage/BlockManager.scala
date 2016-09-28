@@ -28,7 +28,7 @@ import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{PathFilter, Path, FileSystem}
+import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -79,18 +79,6 @@ private[spark] class BlockManager(
     conf.getBoolean("spark.shuffle.service.enabled", false)
 
   private[spark] var hdfsDir: Option[Path] = None
-
-  /**
-    * Set the current working dir from the outside param.
-    * Note: this will have a ambiguous problem if we check the dir with test case:
-    * `run Spark in yarn-client mode` and `run Python application in yarn-client mode` and
-    * `run Python application in yarn-cluster mode` and `external shuffle service`.
-    *
-    * @param dir only in yarn-mode, dir will be well defined and must be the staging dir.
-    */
-  private[spark] def initializeCurrentDir(dir: String): Unit = {
-
-  }
 
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.

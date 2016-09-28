@@ -49,7 +49,7 @@ case class BroadcastExchangeExec(
     "buildTime" -> SQLMetrics.createMetric(sparkContext, "time to build (ms)"),
     "broadcastTime" -> SQLMetrics.createMetric(sparkContext, "time to broadcast (ms)"),
     "collect_build_broadcastTime" -> SQLMetrics.createMetric(sparkContext,
-      "time to collect, build and broadcast (ms) in executor broadcast"))
+      "time to collect, build and broadcast (ms)"))
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
