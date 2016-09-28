@@ -791,4 +791,12 @@ class JDBCSuite extends SparkFunSuite
     val schema = JdbcUtils.schemaString(df, "jdbc:mysql://localhost:3306/temp")
     assert(schema.contains("`order` TEXT"))
   }
+
+  test("SPARK-17673: Exchange reuse respects differences in output schema") {
+    val df = sql("SELECT * FROM inttypes WHERE a IS NOT NULL")
+    val df1 = df.groupBy("a").agg("c" -> "min")
+    val df2 = df.groupBy("a").agg("d" -> "min")
+    val res = df1.union(df2)
+    assert(res.distinct().count() == 2)  // would be 1 if the exchange was incorrectly reused
+  }
 }
