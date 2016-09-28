@@ -81,7 +81,6 @@
       <artifactId>commons-crypto</artifactId>
     </dependency>
 
-
     <!-- Test dependencies -->
     <dependency>
       <groupId>log4j</groupId>
