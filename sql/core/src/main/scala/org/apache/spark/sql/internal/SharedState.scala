@@ -37,7 +37,14 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  */
 private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
+  // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
+  // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
   {
+    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    if (configFile != null) {
+      sparkContext.hadoopConfiguration.addResource(configFile)
+    }
+
     // Set the Hive metastore warehouse path to the one we use
     val tempConf = new SQLConf
     sparkContext.conf.getAll.foreach { case (k, v) => tempConf.setConfString(k, v) }
@@ -70,13 +77,6 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    * A listener for SQL-specific [[org.apache.spark.scheduler.SparkListenerEvent]]s.
    */
   val listener: SQLListener = createListenerAndUI(sparkContext)
-
-  {
-    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
-    if (configFile != null) {
-      sparkContext.hadoopConfiguration.addResource(configFile)
-    }
-  }
 
   /**
    * A catalog that interacts with external systems.
