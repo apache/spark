@@ -293,7 +293,7 @@ case class Join(
 
   override protected def validConstraints: Set[Expression] = {
     joinType match {
-      case Inner if condition.isDefined =>
+      case _: InnerLike if condition.isDefined =>
         left.constraints
           .union(right.constraints)
           .union(splitConjunctivePredicates(condition.get).toSet)
@@ -302,7 +302,7 @@ case class Join(
           .union(splitConjunctivePredicates(condition.get).toSet)
       case j: ExistenceJoin =>
         left.constraints
-      case Inner =>
+      case _: InnerLike =>
         left.constraints.union(right.constraints)
       case LeftExistence(_) =>
         left.constraints

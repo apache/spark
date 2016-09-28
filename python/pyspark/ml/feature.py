@@ -1155,6 +1155,11 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
 
     `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
     categorical features. The number of bins can be set using the :py:attr:`numBuckets` parameter.
+    It is possible that the number of buckets used will be less than this value, for example, if
+    there are too few distinct values of the input to create enough distinct quantiles. Note also
+    that NaN values are handled specially and placed into their own bucket. For example, if 4
+    buckets are used, then non-NaN data will be put into buckets(0-3), but NaNs will be counted in
+    a special bucket(4).
     The bin ranges are chosen using an approximate algorithm (see the documentation for
     :py:meth:`~.DataFrameStatFunctions.approxQuantile` for a detailed description).
     The precision of the approximation can be controlled with the
@@ -2581,39 +2586,68 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     .. versionadded:: 2.0.0
     """
 
+    selectorType = Param(Params._dummy(), "selectorType",
+                         "The selector type of the ChisqSelector. " +
+                         "Supported options: kbest (default), percentile and fpr.",
+                         typeConverter=TypeConverters.toString)
+
     numTopFeatures = \
         Param(Params._dummy(), "numTopFeatures",
               "Number of features that selector will select, ordered by statistics value " +
               "descending. If the number of features is < numTopFeatures, then this will select " +
               "all features.", typeConverter=TypeConverters.toInt)
 
+    percentile = Param(Params._dummy(), "percentile", "Percentile of features that selector " +
+                       "will select, ordered by statistics value descending.",
+                       typeConverter=TypeConverters.toFloat)
+
+    alpha = Param(Params._dummy(), "alpha", "The highest p-value for features to be kept.",
+                  typeConverter=TypeConverters.toFloat)
+
     @keyword_only
-    def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, labelCol="label"):
+    def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None,
+                 labelCol="label", selectorType="kbest", percentile=0.1, alpha=0.05):
         """
-        __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, labelCol="label")
+        __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
+                 labelCol="label", selectorType="kbest", percentile=0.1, alpha=0.05)
         """
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
-        self._setDefault(numTopFeatures=50)
+        self._setDefault(numTopFeatures=50, selectorType="kbest", percentile=0.1, alpha=0.05)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
     def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
-                  labelCol="labels"):
+                  labelCol="labels", selectorType="kbest", percentile=0.1, alpha=0.05):
         """
-        setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,\
-                  labelCol="labels")
+        setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
+                  labelCol="labels", selectorType="kbest", percentile=0.1, alpha=0.05)
         Sets params for this ChiSqSelector.
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("2.1.0")
+    def setSelectorType(self, value):
+        """
+        Sets the value of :py:attr:`selectorType`.
+        """
+        return self._set(selectorType=value)
+
+    @since("2.1.0")
+    def getSelectorType(self):
+        """
+        Gets the value of selectorType or its default value.
+        """
+        return self.getOrDefault(self.selectorType)
+
     @since("2.0.0")
     def setNumTopFeatures(self, value):
         """
         Sets the value of :py:attr:`numTopFeatures`.
+        Only applicable when selectorType = "kbest".
         """
         return self._set(numTopFeatures=value)
 
@@ -2623,6 +2657,36 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         Gets the value of numTopFeatures or its default value.
         """
         return self.getOrDefault(self.numTopFeatures)
+
+    @since("2.1.0")
+    def setPercentile(self, value):
+        """
+        Sets the value of :py:attr:`percentile`.
+        Only applicable when selectorType = "percentile".
+        """
+        return self._set(percentile=value)
+
+    @since("2.1.0")
+    def getPercentile(self):
+        """
+        Gets the value of percentile or its default value.
+        """
+        return self.getOrDefault(self.percentile)
+
+    @since("2.1.0")
+    def setAlpha(self, value):
+        """
+        Sets the value of :py:attr:`alpha`.
+        Only applicable when selectorType = "fpr".
+        """
+        return self._set(alpha=value)
+
+    @since("2.1.0")
+    def getAlpha(self):
+        """
+        Gets the value of alpha or its default value.
+        """
+        return self.getOrDefault(self.alpha)
 
     def _create_model(self, java_model):
         return ChiSqSelectorModel(java_model)

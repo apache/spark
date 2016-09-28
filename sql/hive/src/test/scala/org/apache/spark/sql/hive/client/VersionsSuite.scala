@@ -337,12 +337,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
       client.loadPartition(
         emptyDir,
-        "default.src_part",
+        "default",
+        "src_part",
         partSpec,
         replace = false,
         holdDDLTime = false,
-        inheritTableSpecs = false,
-        isSkewedStoreAsSubdir = false)
+        inheritTableSpecs = false)
     }
 
     test(s"$version: loadDynamicPartitions") {
@@ -352,12 +352,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
       client.loadDynamicPartitions(
         emptyDir,
-        "default.src_part",
+        "default",
+        "src_part",
         partSpec,
         replace = false,
         numDP = 1,
-        false,
-        false)
+        holdDDLTime = false)
     }
 
     test(s"$version: renamePartitions") {

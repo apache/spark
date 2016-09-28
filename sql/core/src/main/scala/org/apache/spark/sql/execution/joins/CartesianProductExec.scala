@@ -91,15 +91,6 @@ case class CartesianProductExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  protected override def doPrepare(): Unit = {
-    if (!sqlContext.conf.crossJoinEnabled) {
-      throw new AnalysisException("Cartesian joins could be prohibitively expensive and are " +
-        "disabled by default. To explicitly enable them, please set " +
-        s"${SQLConf.CROSS_JOINS_ENABLED.key} = true")
-    }
-    super.doPrepare()
-  }
-
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
