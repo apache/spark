@@ -65,7 +65,12 @@ object Literal {
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
   }
 
-  private def componentTypeToDataType(clz: Class[_]): DataType = clz match {
+  /**
+   * Returns the Spark SQL DataType for a given class object. Since this type needs to be resolved
+   * in runtime, we use match-case idioms for class objects here. However, there are similar
+   * functions in other files (e.g., HiveInspectors), so these functions need to merged into one.
+   */
+  private[this] def componentTypeToDataType(clz: Class[_]): DataType = clz match {
     // primitive type
     case c: Class[_] if c == java.lang.Short.TYPE => ShortType
     case c: Class[_] if c == java.lang.Integer.TYPE => IntegerType
