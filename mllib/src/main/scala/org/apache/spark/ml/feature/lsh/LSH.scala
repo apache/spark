@@ -142,10 +142,10 @@ abstract class LSHModel[T <: LSHModel[T]] private[ml]
     assert(k > 0, "The number of nearest neighbors cannot be less than 1")
     // Get Hash Value of the key v
     val keyHash = hashFunction(key)
-    val modelDataset = if (!dataset.columns.contains($(outputCol))) {
+    val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
         transform(dataset)
       } else {
-        dataset
+        dataset.toDF()
       }
 
     // In the origin dataset, find the hash value u that is closest to v
@@ -187,10 +187,10 @@ abstract class LSHModel[T <: LSHModel[T]] private[ml]
     }
     val vectorToMap: UserDefinedFunction = udf((x: Vector) => x.asBreeze.iterator.toMap,
       MapType(DataTypes.IntegerType, DataTypes.DoubleType))
-    val modelDataset = if (!dataset.columns.contains($(outputCol))) {
+    val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
       transform(dataset)
     } else {
-      dataset
+      dataset.toDF()
     }
     modelDataset.select(col("*"), explode(vectorToMap(col($(outputCol)))).as(explodeCols))
   }
