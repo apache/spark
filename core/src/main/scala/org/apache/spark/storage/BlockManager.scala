@@ -28,7 +28,7 @@ import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs._
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -221,21 +221,34 @@ private[spark] class BlockManager(
           logWarning("Error when list files in doing persistBroadcast", e)
           return
       }
+      var shouldDeleteFile: Boolean = false
+      var outStream: FSDataOutputStream = null
       try {
-        val outStream = fs.create(filePath)
+        outStream = fs.create(filePath)
         outStream.write(block.array())
         outStream.hflush()
-        outStream.close()
         logInfo(s"Store block: $blockFile into underlying fs.")
       } catch {
         case e: IOException =>
-          logWarning("Error when writing file into file system and try to clean the file", e)
+          logWarning("Error when backing broadcast to hdfs and try to clean the file", e)
+          shouldDeleteFile = true
+      } finally {
+        if (null != outStream) {
+          try {
+            outStream.close()
+          } catch {
+            case e: Throwable =>
+              logWarning("Can't close the output stream.", e)
+          }
+        }
+        if (shouldDeleteFile) {
           try {
             fs.delete(filePath, true)
           } catch {
             case e: Exception =>
               logWarning(s"Failed to clean the broadcast file{$blockFile}.", e)
           }
+        }
       }
     }
   }
@@ -264,6 +277,7 @@ private[spark] class BlockManager(
   }
 
   def getHdfsBytes(id: BlockId): Option[ChunkedByteBuffer] = {
+    var inputStream: FSDataInputStream = null
     try {
       hdfsDir.map { dirPath =>
         val blockFile = id.toString
@@ -273,11 +287,10 @@ private[spark] class BlockManager(
       }.filter { case(path, fs) =>
         fs.exists(path)
       }.map { case (filePath, fs) =>
-        val inputStream = fs.open(filePath)
+        inputStream = fs.open(filePath)
         val status = fs.getFileStatus(filePath)
         val buffer = new Array[Byte](status.getLen.toInt)
         inputStream.readFully(0, buffer)
-        inputStream.close()
         logInfo(s"Got bytes from underling fs file: ${filePath.getName}.")
         new ChunkedByteBuffer(ByteBuffer.wrap(buffer))
       }
@@ -285,6 +298,15 @@ private[spark] class BlockManager(
       case e: Exception =>
         logError("Error in read the broadCast value from underlying fs ", e)
         None
+    } finally {
+      if (null != inputStream) {
+        try {
+          inputStream.close()
+        } catch {
+          case e: Throwable =>
+            logWarning("Can't close the input stream.", e)
+        }
+      }
     }
   }
 

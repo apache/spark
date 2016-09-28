@@ -55,12 +55,12 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     val output = plan.output
     assert(plan sameResult plan)
 
-    val exchange1 = BroadcastExchangeExec(IdentityBroadcastMode, plan)
+    val exchange1 = BroadcastExchangeExec(IdentityBroadcastMode, plan, spark.sessionState.conf)
     val hashMode = HashedRelationBroadcastMode(output)
-    val exchange2 = BroadcastExchangeExec(hashMode, plan)
+    val exchange2 = BroadcastExchangeExec(hashMode, plan, spark.sessionState.conf)
     val hashMode2 =
       HashedRelationBroadcastMode(Alias(output.head, "id2")() :: Nil)
-    val exchange3 = BroadcastExchangeExec(hashMode2, plan)
+    val exchange3 = BroadcastExchangeExec(hashMode2, plan, spark.sessionState.conf)
     val exchange4 = ReusedExchangeExec(output, exchange3)
 
     assert(exchange1 sameResult exchange1)
