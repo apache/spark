@@ -364,7 +364,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
     val ctx = newCodeGenContext()
     val eval = createCode(ctx, expressions, subexpressionEliminationEnabled)
-    val allInitializations = ctx.initMutableStates()
 
     val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
@@ -375,12 +374,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
         private Object[] references;
         ${ctx.declareMutableStates()}
-        ${ctx.declareAddedFunctions()}
 
         public SpecificUnsafeProjection(Object[] references) {
           this.references = references;
-          $allInitializations
+          ${ctx.initMutableStates()}
         }
+
+        ${ctx.declareAddedFunctions()}
 
         // Scala.Function1 need this
         public java.lang.Object apply(java.lang.Object row) {
