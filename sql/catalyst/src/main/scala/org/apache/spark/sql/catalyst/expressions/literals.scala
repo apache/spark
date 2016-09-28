@@ -17,8 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.lang.{Boolean => jBoolean, Byte => jByte, Double => jDouble, Float => jFloat, Integer => jInteger, Long => jLong, Short => jShort}
-import java.math.{BigDecimal => jBigDecimal}
+import java.lang.{Boolean => JavaBoolean}
+import java.lang.{Byte => JavaByte}
+import java.lang.{Double => JavaDouble}
+import java.lang.{Float => JavaFloat}
+import java.lang.{Integer => JavaInteger}
+import java.lang.{Long => JavaLong}
+import java.lang.{Short => JavaShort}
+import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util
@@ -51,7 +57,7 @@ object Literal {
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal => Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale))
-    case d: jBigDecimal =>
+    case d: JavaBigDecimal =>
       Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
@@ -76,26 +82,26 @@ object Literal {
    */
   private[this] def componentTypeToDataType(clz: Class[_]): DataType = clz match {
     // primitive types
-    case c: Class[_] if c == jShort.TYPE => ShortType
-    case c: Class[_] if c == jInteger.TYPE => IntegerType
-    case c: Class[_] if c == jLong.TYPE => LongType
-    case c: Class[_] if c == jDouble.TYPE => DoubleType
-    case c: Class[_] if c == jByte.TYPE => ByteType
-    case c: Class[_] if c == jFloat.TYPE => FloatType
-    case c: Class[_] if c == jBoolean.TYPE => BooleanType
+    case c: Class[_] if c == JavaShort.TYPE => ShortType
+    case c: Class[_] if c == JavaInteger.TYPE => IntegerType
+    case c: Class[_] if c == JavaLong.TYPE => LongType
+    case c: Class[_] if c == JavaDouble.TYPE => DoubleType
+    case c: Class[_] if c == JavaByte.TYPE => ByteType
+    case c: Class[_] if c == JavaFloat.TYPE => FloatType
+    case c: Class[_] if c == JavaBoolean.TYPE => BooleanType
 
     // java classes
     case c: Class[_] if c == classOf[Date] => DateType
     case c: Class[_] if c == classOf[Timestamp] => TimestampType
-    case c: Class[_] if c == classOf[jBigDecimal] => DecimalType.SYSTEM_DEFAULT
+    case c: Class[_] if c == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case c: Class[_] if c == classOf[Array[Byte]] => BinaryType
-    case c: Class[_] if c == classOf[jShort] => ShortType
-    case c: Class[_] if c == classOf[jInteger] => IntegerType
-    case c: Class[_] if c == classOf[jLong] => LongType
-    case c: Class[_] if c == classOf[jDouble] => DoubleType
-    case c: Class[_] if c == classOf[jByte] => ByteType
-    case c: Class[_] if c == classOf[jFloat] => FloatType
-    case c: Class[_] if c == classOf[jBoolean] => BooleanType
+    case c: Class[_] if c == classOf[JavaShort] => ShortType
+    case c: Class[_] if c == classOf[JavaInteger] => IntegerType
+    case c: Class[_] if c == classOf[JavaLong] => LongType
+    case c: Class[_] if c == classOf[JavaDouble] => DoubleType
+    case c: Class[_] if c == classOf[JavaByte] => ByteType
+    case c: Class[_] if c == classOf[JavaFloat] => FloatType
+    case c: Class[_] if c == classOf[JavaBoolean] => BooleanType
 
     // other scala classes
     case c: Class[_] if c == classOf[String] => StringType
