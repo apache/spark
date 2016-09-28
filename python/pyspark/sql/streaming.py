@@ -315,9 +315,9 @@ class DataStreamReader(OptionUtils):
         :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema.
         :param options: all other string options
 
-        >>> json_sdf = spark.readStream.format("json")\
-                                       .schema(sdf_schema)\
-                                       .load(tempfile.mkdtemp())
+        >>> json_sdf = spark.readStream.format("json") \\
+        ...     .schema(sdf_schema) \\
+        ...     .load(tempfile.mkdtemp())
         >>> json_sdf.isStreaming
         True
         >>> json_sdf.schema == sdf_schema
