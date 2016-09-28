@@ -256,7 +256,7 @@ class StreamExecution(
         committedOffsets.foreach {
           case (src, checkptOffset) =>
             val srcOffset = src.lastCommittedOffset
-            if (srcOffset.isDefined && srcOffset.get > checkptOffset) {
+            if (srcOffset.isDefined && srcOffset.get != checkptOffset) {
               logWarning(s"Source $src lost offsets between $checkptOffset " +
                 s"and ${srcOffset.get} when resuming. Skipping ahead to ${srcOffset.get}.")
               offsetChanges += (src -> srcOffset.get)
@@ -270,7 +270,7 @@ class StreamExecution(
         constructNextBatch()
     }
   }
-
+  
   /**
    * Returns true if there is any new data available to be processed.
    */
