@@ -39,12 +39,11 @@ private[ml] object LSHTest {
    * @param lsh The lsh instance to perform the hashing
    * @param dist1 Distance threshold for false positive
    * @param dist2 Distance threshold for false negative
-   * @tparam KeyType The input key type of LSH
    * @tparam T The class type of lsh
    * @return A tuple of two doubles, representing the false positive and false negative rate
    */
-  def checkLSHProperty[KeyType, T <: LSHModel[KeyType, T]]
-  (dataset: Dataset[_], lsh: LSH[KeyType, T], dist1: Double, dist2: Double): (Double, Double) = {
+  def checkLSHProperty[T <: LSHModel[T]]
+  (dataset: Dataset[_], lsh: LSH[T], dist1: Double, dist2: Double): (Double, Double) = {
     val model = lsh.fit(dataset)
     val inputCol = model.getInputCol
     val outputCol = model.getOutputCol
@@ -52,7 +51,7 @@ private[ml] object LSHTest {
 
     // Perform a cross join and label each pair of same_bucket and distance
     val pairs = transformedData.as("a").crossJoin(transformedData.as("b"))
-    val distUDF = udf((x: KeyType, y: KeyType) => model.keyDistance(x, y), DataTypes.DoubleType)
+    val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y), DataTypes.DoubleType)
     val sameBucket = udf((x: Vector, y: Vector) => model.hashDistance(x, y) == 0.0,
       DataTypes.BooleanType)
     val result = pairs
@@ -73,17 +72,16 @@ private[ml] object LSHTest {
    * @param dataset the dataset to look for the key
    * @param key The key to hash for the item
    * @param k The maximum number of items closest to the key
-   * @tparam KeyType The input key type of LSH
    * @tparam T The class type of lsh
    * @return A tuple of two doubles, representing precision and recall rate
    */
-  def checkApproxNearestNeighbors[KeyType, T <: LSHModel[KeyType, T]]
-  (lsh: LSH[KeyType, T], dataset: Dataset[_], key: KeyType, k: Int,
+  def checkApproxNearestNeighbors[T <: LSHModel[T]]
+  (lsh: LSH[T], dataset: Dataset[_], key: Vector, k: Int,
    singleProbing: Boolean): (Double, Double) = {
     val model = lsh.fit(dataset)
 
     // Compute expected
-    val distUDF = udf((x: KeyType) => model.keyDistance(x, key), DataTypes.DoubleType)
+    val distUDF = udf((x: Vector) => model.keyDistance(x, key), DataTypes.DoubleType)
     val expected = dataset.sort(distUDF(col(model.getInputCol))).limit(k)
 
     // Compute actual
@@ -100,18 +98,17 @@ private[ml] object LSHTest {
    * @param datasetA One of the datasets to join
    * @param datasetB Another dataset to join
    * @param threshold The threshold for the distance of record pairs
-   * @tparam KeyType The input key type of LSH
    * @tparam T The class type of lsh
    * @return A tuple of two doubles, representing precision and recall rate
    */
-  def checkApproxSimilarityJoin[KeyType, T <: LSHModel[KeyType, T]]
-  (lsh: LSH[KeyType, T], datasetA: Dataset[_], datasetB: Dataset[_],
+  def checkApproxSimilarityJoin[T <: LSHModel[T]]
+  (lsh: LSH[T], datasetA: Dataset[_], datasetB: Dataset[_],
    threshold: Double): (Double, Double) = {
     val model = lsh.fit(datasetA)
     val inputCol = model.getInputCol
 
     // Compute expected
-    val distUDF = udf((x: KeyType, y: KeyType) => model.keyDistance(x, y), DataTypes.DoubleType)
+    val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y), DataTypes.DoubleType)
     val expected = datasetA.as("a").crossJoin(datasetB.as("b"))
       .filter(distUDF(col(s"a.$inputCol"), col(s"b.$inputCol")) < threshold)
 

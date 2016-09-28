@@ -24,8 +24,6 @@ import breeze.linalg.normalize
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.param.{DoubleParam, Params, ParamValidators}
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.functions._
 
 /**
  * Params for [[RandomProjection]].
@@ -38,7 +36,7 @@ private[ml] trait RandomProjectionParams extends Params {
 class RandomProjectionModel(
     override val uid: String,
     val randUnitVectors: Array[Vector])
-  extends LSHModel[Vector, RandomProjectionModel] with RandomProjectionParams {
+  extends LSHModel[RandomProjectionModel] with RandomProjectionParams {
 
   override protected[this] val hashFunction: (Vector) => Vector = {
     key: Vector => {
@@ -62,17 +60,8 @@ class RandomProjectionModel(
  * Wang, Jingdong et al. "Hashing for similarity search: A survey." arXiv preprint
  * arXiv:1408.2927 (2014).
  */
-class RandomProjection(override val uid: String) extends LSH[Vector, RandomProjectionModel]
+class RandomProjection(override val uid: String) extends LSH[RandomProjectionModel]
   with RandomProjectionParams {
-
-  private[this] var inputDim = -1
-
-  private[this] lazy val randUnitVectors: Array[Vector] = {
-    Array.fill($(outputDim)) {
-      val randArray = Array.fill(inputDim)(Random.nextGaussian())
-      Vectors.fromBreeze(normalize(breeze.linalg.Vector(randArray)))
-    }
-  }
 
   def this() = {
     this(Identifiable.randomUID("random projection"))
@@ -81,8 +70,13 @@ class RandomProjection(override val uid: String) extends LSH[Vector, RandomProje
   /** @group setParam */
   def setBucketLength(value: Double): this.type = set(bucketLength, value)
 
-  override protected[this] def createRawLSHModel(dataset: Dataset[_]): RandomProjectionModel = {
-    this.inputDim = dataset.select(col($(inputCol))).head().get(0).asInstanceOf[Vector].size
+  override protected[this] def createRawLSHModel(inputDim: Int): RandomProjectionModel = {
+    val randUnitVectors: Array[Vector] = {
+      Array.fill($(outputDim)) {
+        val randArray = Array.fill(inputDim)(Random.nextGaussian())
+        Vectors.fromBreeze(normalize(breeze.linalg.Vector(randArray)))
+      }
+    }
     new RandomProjectionModel(uid, randUnitVectors)
   }
 }

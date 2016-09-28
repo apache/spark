@@ -62,7 +62,7 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
 /**
  * Model produced by [[LSH]].
  */
-abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
+abstract class LSHModel[T <: LSHModel[T]] private[ml]
   extends Model[T] with LSHParams {
   override def copy(extra: ParamMap): T = defaultCopy(extra)
   /**
@@ -71,7 +71,7 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
    * The hash function of LSH, mapping a predefined KeyType to a Vector
    * @return The mapping of LSH function.
    */
-  protected[this] val hashFunction: KeyType => Vector
+  protected[this] val hashFunction: Vector => Vector
 
   /**
    * :: DeveloperApi ::
@@ -82,7 +82,7 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
    * @param y Another the point in the metric space
    * @return The distance between x and y in double
    */
-  protected[ml] def keyDistance(x: KeyType, y: KeyType): Double
+  protected[ml] def keyDistance(x: Vector, y: Vector): Double
 
   /**
    * :: DeveloperApi ::
@@ -140,7 +140,7 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
    * @return A dataset containing at most k items closest to the key. A distCol is added to show
    *         the distance between each record and the key.
    */
-  def approxNearestNeighbors(dataset: Dataset[_], key: KeyType, k: Int = 1,
+  def approxNearestNeighbors(dataset: Dataset[_], key: Vector, k: Int = 1,
                              singleProbing: Boolean = true,
                              distCol: String = "distance"): Dataset[_] = {
     assert(k > 0, "The number of nearest neighbors cannot be less than 1")
@@ -165,7 +165,7 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
     }
 
     // Get the top k nearest neighbor by their distance to the key
-    val keyDistUDF = udf((x: KeyType) => keyDistance(x, key), DataTypes.DoubleType)
+    val keyDistUDF = udf((x: Vector) => keyDistance(x, key), DataTypes.DoubleType)
     val modelSubsetWithDistCol = modelSubset.withColumn(distCol, keyDistUDF(col($(inputCol))))
     modelSubsetWithDistCol.sort(distCol).limit(k)
   }
@@ -233,7 +233,7 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
       .drop(explodeCols: _*)
 
     // Add a new column to store the distance of the two records.
-    val distUDF = udf((x: KeyType, y: KeyType) => keyDistance(x, y), DataTypes.DoubleType)
+    val distUDF = udf((x: Vector, y: Vector) => keyDistance(x, y), DataTypes.DoubleType)
     val joinedDatasetWithDist = joinedDataset.select(col("*"),
       distUDF(explodedA($(inputCol)), explodedB($(inputCol))).as(distCol)
     )
@@ -256,10 +256,9 @@ abstract class LSHModel[KeyType, T <: LSHModel[KeyType, T]] private[ml]
  * via hashing." VLDB 7 Sep. 1999: 518-529.
  * (2) Wang, Jingdong et al. "Hashing for similarity search: A survey." arXiv preprint
  * arXiv:1408.2927 (2014).
- * @tparam KeyType The input key type of LSH
  * @tparam T The class type of lsh
  */
-abstract class LSH[KeyType, T <: LSHModel[KeyType, T]] extends Estimator[T] with LSHParams {
+abstract class LSH[T <: LSHModel[T]] extends Estimator[T] with LSHParams {
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 
@@ -275,10 +274,10 @@ abstract class LSH[KeyType, T <: LSHModel[KeyType, T]] extends Estimator[T] with
    * Validate and create a new instance of concrete LSHModel. Because different LSHModel may have
    * different initial setting, developer needs to define how their LSHModel is created instead of
    * using reflection in this abstract class.
-   * @param dataset The input dataset of LSH fit
+   * @param inputDim The dimension of the input dataset
    * @return A new LSHModel instance without any params
    */
-  protected[this] def createRawLSHModel(dataset: Dataset[_]): T
+  protected[this] def createRawLSHModel(inputDim: Int): T
 
   override def copy(extra: ParamMap): Estimator[T] = defaultCopy(extra)
 
@@ -286,7 +285,8 @@ abstract class LSH[KeyType, T <: LSHModel[KeyType, T]] extends Estimator[T] with
    * Fits a model to the input data.
    */
   override def fit(dataset: Dataset[_]): T = {
-    val model = createRawLSHModel(dataset).setParent(this)
+    val inputDim = dataset.select(col($(inputCol))).head().get(0).asInstanceOf[Vector].size
+    val model = createRawLSHModel(inputDim).setParent(this)
     copyValues(model)
   }
 

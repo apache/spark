@@ -20,27 +20,15 @@ package org.apache.spark.ml.feature.lsh
 import scala.util.Random
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.param.{IntParam, Params, ParamValidators}
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.sql.Dataset
 
-/**
- * Params for [[MinHash]].
- */
-private[ml] trait MinHashModelParams extends Params {
-  protected[this] val prime = 2038074743
+class MinHashModel(override val uid: String, hashFunctions: Seq[Int => Long])
+  extends LSHModel[MinHashModel] {
 
-  val numIndex: IntParam = new IntParam(this, "numIndex", "the number of index",
-    ParamValidators.inRange(0, prime, lowerInclusive = false, upperInclusive = false))
-}
-
-class MinHashModel(override val uid: String, hashFunctions: Seq[Double => Double])
-  extends LSHModel[Seq[Double], MinHashModel] with MinHashModelParams {
-
-  override protected[this] val hashFunction: Seq[Double] => Vector = {
-    elems: Seq[Double] =>
+  override protected[this] val hashFunction: Vector => Vector = {
+    elems: Vector =>
       Vectors.dense(hashFunctions.map(
-        func => elems.map(func).min
+        func => elems.toSparse.indices.toList.map(func).min.toDouble
       ).toArray)
   }
 
@@ -54,41 +42,41 @@ class MinHashModel(override val uid: String, hashFunctions: Seq[Double => Double
    * @param y Another the point in the metric space
    * @return The distance between x and y in double
    */
-  override protected[ml] def keyDistance(x: Seq[Double], y: Seq[Double]): Double = {
-    val xSet = x.toSet
-    val ySet = y.toSet
+  override protected[ml] def keyDistance(x: Vector, y: Vector): Double = {
+    val xSet = x.toSparse.indices.toSet
+    val ySet = y.toSparse.indices.toSet
     1 - xSet.intersect(ySet).size.toDouble / xSet.union(ySet).size.toDouble
   }
 }
 
 /**
  * LSH class for Jaccard distance
+ * The input set should be represented in sparse vector form. For example,
+ *    Vectors.sparse(10, Array[(2, 1.0), (3, 1.0), (5, 1.0)])
+ * means there are 10 elements in the space. This set contains elem 2, elem 3 and elem 5
  * @param uid
  */
-class MinHash(override val uid: String) extends LSH[Seq[Double], MinHashModel]
-  with MinHashModelParams {
+class MinHash(override val uid: String) extends LSH[MinHashModel] {
+
+  protected[this] val prime = 2038074743
 
   private[this] lazy val randSeq: Seq[Int] = {
     Seq.fill($(outputDim))(1 + Random.nextInt(prime - 1)).take($(outputDim))
-  }
-
-  private[this] lazy val hashFunctions: Seq[Double => Double] = {
-    (0 until $(outputDim)).map {
-      i: Int => {
-        // Perfect Hash function, use 2n buckets to reduce collision.
-        elem: Double => (1 + elem) * randSeq(i).toLong % prime % ($(numIndex) * 2)
-      }
-    }
   }
 
   def this() = {
     this(Identifiable.randomUID("min hash"))
   }
 
-  override protected[this] def createRawLSHModel(dataset: Dataset[_]): MinHashModel = {
+  override protected[this] def createRawLSHModel(inputDim: Int): MinHashModel = {
+    val hashFunctions: Seq[Int => Long] = {
+      (0 until $(outputDim)).map {
+        i: Int => {
+          // Perfect Hash function, use 2n buckets to reduce collision.
+          elem: Int => (1 + elem) * randSeq(i).toLong % prime % (inputDim * 2)
+        }
+      }
+    }
     new MinHashModel(uid, hashFunctions)
   }
-
-  /** @group setParam */
-  def setNumIndex(value: Int): this.type = set(numIndex, value)
 }

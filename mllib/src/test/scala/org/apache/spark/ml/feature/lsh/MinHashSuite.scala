@@ -18,12 +18,13 @@
 package org.apache.spark.ml.feature.lsh
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("MinHash") {
     val data = {
-      for (i <- 0 to 95) yield (i until i + 5).map(_.toDouble).toArray
+      for (i <- 0 to 95) yield Vectors.sparse(100, (i until i + 5).map((_, 1.0)))
     }
     val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
 
@@ -31,7 +32,6 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputDim(1)
       .setInputCol("keys")
       .setOutputCol("values")
-      .setNumIndex(100)
 
     val (falsePositive, falseNegative) = LSHTest.checkLSHProperty(df, mh, 0.75, 0.5)
     assert(falsePositive < 0.1)
@@ -40,7 +40,7 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("approxNearestNeighbors for min hash") {
     val data = {
-      for (i <- 0 to 95) yield (i until i + 5).map(_.toDouble).toArray
+      for (i <- 0 to 95) yield Vectors.sparse(100, (i until i + 5).map((_, 1.0)))
     }
     val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
 
@@ -48,9 +48,9 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputDim(20)
       .setInputCol("keys")
       .setOutputCol("values")
-      .setNumIndex(100)
 
-    val key: Seq[Double] = (0 until 100).filter(_.toString.contains("1")).map(_.toDouble)
+    val key: Vector = Vectors.sparse(100,
+      (0 until 100).filter(_.toString.contains("1")).map((_, 1.0)))
 
     val (precision, recall) = LSHTest.checkApproxNearestNeighbors(mh, df, key, 20,
       singleProbing = true)
@@ -60,12 +60,12 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("approxSimilarityJoin for minhash on different dataset") {
     val dataA = {
-      for (i <- 0 to 20) yield (5 * i until 5 * i + 5).map(_.toDouble).toArray
+      for (i <- 0 until 20) yield Vectors.sparse(100, (5 * i until 5 * i + 5).map((_, 1.0)))
     }
     val dfA = spark.createDataFrame(dataA.map(Tuple1.apply)).toDF("keys")
 
     val dataB = {
-      for (i <- 0 to 30) yield (3 * i until 3 * i + 3).map(_.toDouble).toArray
+      for (i <- 0 until 30) yield Vectors.sparse(100, (3 * i until 3 * i + 3).map((_, 1.0)))
     }
     val dfB = spark.createDataFrame(dataB.map(Tuple1.apply)).toDF("keys")
 
@@ -73,7 +73,6 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputDim(20)
       .setInputCol("keys")
       .setOutputCol("values")
-      .setNumIndex(100)
 
     val (precision, recall) = LSHTest.checkApproxSimilarityJoin(mh, dfA, dfB, 0.5)
     assert(precision == 1.0)
