@@ -21,7 +21,6 @@ import java.util.NoSuchElementException
 import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import scala.collection.IterableView
 import scala.util.control.NonFatal
 
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}

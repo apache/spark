@@ -19,7 +19,6 @@ package org.apache.spark.ui
 
 import java.util.{Date, ServiceLoader}
 
-import scala.collection.IterableView
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}

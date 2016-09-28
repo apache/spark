@@ -21,8 +21,6 @@ import javax.servlet.ServletContext
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
 
-import scala.collection.IterableView
-
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.glassfish.jersey.server.ServerProperties
