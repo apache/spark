@@ -85,6 +85,27 @@ class CodegenContext {
   val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
 
   /**
+   * Add an object to `references`.
+   *
+   * Returns the code to access it.
+   */
+  def addReferenceObj(obj: Any): String = {
+    addReferenceObj(obj, null)
+  }
+
+  /**
+   * Add an object to `references`.
+   *
+   * Returns the code to access it.
+   */
+  def addReferenceObj(obj: Any, className: String): String = {
+    val idx = references.length
+    references += obj
+    val clsName = Option(className).getOrElse(obj.getClass.getName)
+    s"(($clsName) references[$idx])"
+  }
+
+  /**
    * Add an object to `references`, create a class member to access it.
    *
    * Returns the name of class member.
