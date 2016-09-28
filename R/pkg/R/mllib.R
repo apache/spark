@@ -696,6 +696,9 @@ setMethod("predict", signature(object = "KMeansModel"),
 setMethod("spark.mlp", signature(data = "SparkDataFrame"),
           function(data, layers, blockSize = 128, solver = "l-bfgs", maxIter = 100,
                    tol = 1E-6, stepSize = 0.03, seed = NULL) {
+            if (is.null(layers)) {
+              stop ("layers must be a integer vector with length > 1.")
+            }
             layers <- as.integer(na.omit(layers))
             if (length(layers) <= 1) {
               stop ("layers must be a integer vector with length > 1.")
