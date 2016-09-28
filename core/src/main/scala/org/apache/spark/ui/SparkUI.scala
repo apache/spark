@@ -126,10 +126,6 @@ private[spark] class SparkUI private (
       ))
     ))
   }
-
-  def getApplicationInfoListView: IterableView[ApplicationInfo, Iterable[_]] = {
-    getApplicationInfoList.toList.view
-  }
 }
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)

@@ -183,10 +183,6 @@ class HistoryServer(
     getApplicationList.iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
 
-  def getApplicationInfoListView: IterableView[ApplicationInfo, Iterable[_]] = {
-    getApplicationList.view.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
-  }
-
   override def writeEventLogs(
       appId: String,
       attemptId: Option[String],
