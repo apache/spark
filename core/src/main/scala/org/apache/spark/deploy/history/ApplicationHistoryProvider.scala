@@ -110,10 +110,10 @@ private[history] abstract class ApplicationHistoryProvider {
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
 
   /**
-    * Returns an ApplicationHistoryInfo for the appId
-    *
-    * @return ApplicationHistoryInfo of one appId if exists
-    */
+   * Returns an ApplicationHistoryInfo for the appId.
+   *
+   * @return ApplicationHistoryInfo of one appId if exists.
+   */
   def getApplicationInfo(appId: String): Option[ApplicationHistoryInfo]
 
 }
