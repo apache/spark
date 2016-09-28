@@ -517,6 +517,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       case (expectedDate, date) =>
         // As it truncates the hours, minutes and etc., we only check
         // if the dates (days, months and years) are the same via `toString()`.
+        println("Expected: "+expectedDate)
         assert(expectedDate.toString === date.toString)
     }
   }
@@ -553,7 +554,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     verifyCars(cars, withHeader = true, checkValues = false)
     val results = cars.collect()
-    assert(results(0).toSeq === Array(2012, "Tesla", "S", "null", "null"))
+    assert(results(0).toSeq === Array(2012, "Tesla", "S", null, null))
     assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
   }
 
