@@ -170,6 +170,15 @@ abstract class LSHModel[T <: LSHModel[T]] private[ml]
     modelSubsetWithDistCol.sort(distCol).limit(k)
   }
 
+  /**
+   * Overloaded method for approxNearestNeighbors. Use Single Probing as default way to search
+   * nearest neighbors and "distCol" as default distCol.
+   * @param dataset the dataset to look for the key
+   * @param key The key to hash for the item
+   * @param k The maximum number of items closest to the key
+   * @return A dataset containing at most k items closest to the key. A distCol is added to show
+   *         the distance between each record and the key.
+   */
   def approxNearestNeighbors(dataset: Dataset[_], key: Vector, k: Int): Dataset[_] = {
     approxNearestNeighbors(dataset, key, k, true, "distCol")
   }
@@ -253,6 +262,13 @@ abstract class LSHModel[T <: LSHModel[T]] private[ml]
     joinedDatasetWithDist.filter(col(distCol) < threshold).distinct()
   }
 
+  /**
+   * Overloaded method for approxSimilarityJoin. Use "distCol" as default distCol.
+   * @param datasetA One of the datasets to join
+   * @param datasetB Another dataset to join
+   * @param threshold The threshold for the distance of record pairs
+   * @return
+   */
   def approxSimilarityJoin(
       datasetA: Dataset[_],
       datasetB: Dataset[_],
