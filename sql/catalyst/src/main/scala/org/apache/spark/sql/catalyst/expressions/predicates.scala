@@ -88,7 +88,7 @@ trait PredicateHelper {
    * `false`.
    */
   protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
-    expr.references.subsetOf(plan.outputSet)
+    !expr.references.isEmpty && expr.references.subsetOf(plan.outputSet)
 }
 
 @ExpressionDescription(
