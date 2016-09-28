@@ -128,27 +128,7 @@ private[spark] class SparkUI private (
   }
 
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
-    if (appId == this.appId) {
-      Some(new ApplicationInfo(
-        id = appId,
-        name = appName,
-        coresGranted = None,
-        maxCores = None,
-        coresPerExecutor = None,
-        memoryPerExecutorMB = None,
-        attempts = Seq(new ApplicationAttemptInfo(
-          attemptId = None,
-          startTime = new Date(startTime),
-          endTime = new Date(-1),
-          duration = 0,
-          lastUpdated = new Date(startTime),
-          sparkUser = "",
-          completed = false
-        ))
-      ))
-    } else {
-      None
-    }
+    getApplicationInfoList.find(_.id == appId)
   }
 }
 
