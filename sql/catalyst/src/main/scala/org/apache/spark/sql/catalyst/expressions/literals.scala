@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.{Boolean => jBoolean, Byte => jByte, Double => jDouble, Float => jFloat, Integer => jInteger, Long => jLong, Short => jShort}
+import java.math.{BigDecimal => jBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util
 import java.util.Objects
 import javax.xml.bind.DatatypeConverter
+
+import scala.math.{BigDecimal, BigInt}
 
 import org.json4s.JsonAST._
 
@@ -47,7 +51,7 @@ object Literal {
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal => Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale))
-    case d: java.math.BigDecimal =>
+    case d: jBigDecimal =>
       Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
@@ -71,32 +75,33 @@ object Literal {
    * functions in other files (e.g., HiveInspectors), so these functions need to merged into one.
    */
   private[this] def componentTypeToDataType(clz: Class[_]): DataType = clz match {
-    // primitive type
-    case c: Class[_] if c == java.lang.Short.TYPE => ShortType
-    case c: Class[_] if c == java.lang.Integer.TYPE => IntegerType
-    case c: Class[_] if c == java.lang.Long.TYPE => LongType
-    case c: Class[_] if c == java.lang.Double.TYPE => DoubleType
-    case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
-    case c: Class[_] if c == java.lang.Float.TYPE => FloatType
-    case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
+    // primitive types
+    case c: Class[_] if c == jShort.TYPE => ShortType
+    case c: Class[_] if c == jInteger.TYPE => IntegerType
+    case c: Class[_] if c == jLong.TYPE => LongType
+    case c: Class[_] if c == jDouble.TYPE => DoubleType
+    case c: Class[_] if c == jByte.TYPE => ByteType
+    case c: Class[_] if c == jFloat.TYPE => FloatType
+    case c: Class[_] if c == jBoolean.TYPE => BooleanType
 
-    // java class
-    case c: Class[_] if c == classOf[java.lang.String] => StringType
-    case c: Class[_] if c == classOf[java.sql.Date] => DateType
-    case c: Class[_] if c == classOf[java.sql.Timestamp] => TimestampType
-    case c: Class[_] if c == classOf[java.math.BigDecimal] => DecimalType.SYSTEM_DEFAULT
+    // java classes
+    case c: Class[_] if c == classOf[Date] => DateType
+    case c: Class[_] if c == classOf[Timestamp] => TimestampType
+    case c: Class[_] if c == classOf[jBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case c: Class[_] if c == classOf[Array[Byte]] => BinaryType
-    case c: Class[_] if c == classOf[java.lang.Short] => ShortType
-    case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
-    case c: Class[_] if c == classOf[java.lang.Long] => LongType
-    case c: Class[_] if c == classOf[java.lang.Double] => DoubleType
-    case c: Class[_] if c == classOf[java.lang.Byte] => ByteType
-    case c: Class[_] if c == classOf[java.lang.Float] => FloatType
-    case c: Class[_] if c == classOf[java.lang.Boolean] => BooleanType
+    case c: Class[_] if c == classOf[jShort] => ShortType
+    case c: Class[_] if c == classOf[jInteger] => IntegerType
+    case c: Class[_] if c == classOf[jLong] => LongType
+    case c: Class[_] if c == classOf[jDouble] => DoubleType
+    case c: Class[_] if c == classOf[jByte] => ByteType
+    case c: Class[_] if c == classOf[jFloat] => FloatType
+    case c: Class[_] if c == classOf[jBoolean] => BooleanType
 
-    // scala class
-    case c: Class[_] if c == classOf[scala.math.BigInt] => DecimalType.SYSTEM_DEFAULT
-    case c: Class[_] if c == classOf[scala.math.BigDecimal] => DecimalType.SYSTEM_DEFAULT
+    // other scala classes
+    case c: Class[_] if c == classOf[String] => StringType
+    case c: Class[_] if c == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
+    case c: Class[_] if c == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
+    case c: Class[_] if c == classOf[CalendarInterval] => CalendarIntervalType
 
     case c: Class[_] if c.isArray => ArrayType(componentTypeToDataType(c.getComponentType))
 

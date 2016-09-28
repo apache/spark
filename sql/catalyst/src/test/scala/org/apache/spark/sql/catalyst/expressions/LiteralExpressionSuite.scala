@@ -125,12 +125,17 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("array") {
-    def toCatalyst(a: Array[_], elementType: DataType): Any = {
-      CatalystTypeConverters.createToCatalystConverter(ArrayType(elementType))(a)
+    def checkArrayLiteral(a: Array[_], elementType: DataType): Unit = {
+      val toCatalyst = (a: Array[_], elementType: DataType) => {
+        CatalystTypeConverters.createToCatalystConverter(ArrayType(elementType))(a)
+      }
+      checkEvaluation(Literal(a), toCatalyst(a, elementType))
     }
-    checkEvaluation(Literal(Array(1, 2, 3)), toCatalyst(Array(1, 2, 3), IntegerType))
-    checkEvaluation(Literal(Array("a", "b", "c")), toCatalyst(Array("a", "b", "c"), StringType))
-    checkEvaluation(Literal(Array(1.0, 4.0)), toCatalyst(Array(1.0, 4.0), DoubleType))
+    checkArrayLiteral(Array(1, 2, 3), IntegerType)
+    checkArrayLiteral(Array("a", "b", "c"), StringType)
+    checkArrayLiteral(Array(1.0, 4.0), DoubleType)
+    checkArrayLiteral(Array(CalendarInterval.MICROS_PER_DAY, CalendarInterval.MICROS_PER_HOUR),
+      CalendarIntervalType)
   }
 
   test("unsupported types (map and struct) in literals") {
