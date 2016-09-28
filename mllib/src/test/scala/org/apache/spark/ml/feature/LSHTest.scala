@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.feature.lsh
+package org.apache.spark.ml.feature
 
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.sql.Dataset

@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.feature.lsh
+package org.apache.spark.ml.feature
 
 import scala.util.Random
 
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{Vectors, Vector}
 import org.apache.spark.ml.util.Identifiable
 
 class MinHashModel(override val uid: String, hashFunctions: Seq[Int => Long])

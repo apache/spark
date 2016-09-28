@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.feature.lsh
+package org.apache.spark.ml.feature
 
-import breeze.numerics.{cos, sin}
+import breeze.numerics.{sin, cos}
 import breeze.numerics.constants.Pi
 
 import org.apache.spark.SparkFunSuite
