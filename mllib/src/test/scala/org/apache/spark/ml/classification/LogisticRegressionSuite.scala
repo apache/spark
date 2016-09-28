@@ -32,7 +32,8 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.types.LongType
 
 class LogisticRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -1774,6 +1775,23 @@ class LogisticRegressionSuite
     assert(summary.recallByThreshold.collect() === sameSummary.recallByThreshold.collect())
     assert(
       summary.precisionByThreshold.collect() === sameSummary.precisionByThreshold.collect())
+  }
+
+  test("evaluate with labels that are not doubles") {
+    // Evaluate a test set with Label that is a numeric type other than Double
+    val lr = new LogisticRegression()
+        .setMaxIter(10)
+        .setRegParam(1.0)
+        .setThreshold(0.6)
+    val model = lr.fit(smallBinaryDataset)
+
+    val summary = model.evaluate(smallBinaryDataset).asInstanceOf[BinaryLogisticRegressionSummary]
+
+    val longLabelData = smallBinaryDataset.select(col(model.getLabelCol).cast(LongType),
+      col(model.getFeaturesCol))
+    val longSummary = model.evaluate(longLabelData).asInstanceOf[BinaryLogisticRegressionSummary]
+
+    assert(summary.areaUnderROC === longSummary.areaUnderROC)
   }
 
   test("statistics on training data") {
