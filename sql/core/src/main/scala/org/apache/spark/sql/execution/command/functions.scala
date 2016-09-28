@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
  *    AS className [USING JAR\FILE 'uri' [, JAR|FILE 'uri']]
  * }}}
  */
-case class CreateFunction(
+case class CreateFunctionCommand(
     databaseName: Option[String],
     functionName: String,
     className: String,
@@ -81,7 +81,7 @@ case class CreateFunction(
  *   DESCRIBE FUNCTION [EXTENDED] upper;
  * }}}
  */
-case class DescribeFunction(
+case class DescribeFunctionCommand(
     functionName: FunctionIdentifier,
     isExtended: Boolean) extends RunnableCommand {
 
@@ -142,7 +142,7 @@ case class DescribeFunction(
  * ifExists: returns an error if the function doesn't exist, unless this is true.
  * isTemp: indicates if it is a temporary function.
  */
-case class DropFunction(
+case class DropFunctionCommand(
     databaseName: Option[String],
     functionName: String,
     ifExists: Boolean,
@@ -180,10 +180,13 @@ case class DropFunction(
  * For the pattern, '*' matches any sequence of characters (including no characters) and
  * '|' is for alternation.
  * For example, "show functions like 'yea*|windo*'" will return "window" and "year".
- *
- * TODO currently we are simply ignore the db
  */
-case class ShowFunctions(db: Option[String], pattern: Option[String]) extends RunnableCommand {
+case class ShowFunctionsCommand(
+    db: Option[String],
+    pattern: Option[String],
+    showUserFunctions: Boolean,
+    showSystemFunctions: Boolean) extends RunnableCommand {
+
   override val output: Seq[Attribute] = {
     val schema = StructType(StructField("function", StringType, nullable = false) :: Nil)
     schema.toAttributes
@@ -196,7 +199,10 @@ case class ShowFunctions(db: Option[String], pattern: Option[String]) extends Ru
     val functionNames =
       sparkSession.sessionState.catalog
         .listFunctions(dbName, pattern.getOrElse("*"))
-        .map(_.unquotedString)
+        .collect {
+          case (f, "USER") if showUserFunctions => f.unquotedString
+          case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
+        }
     // The session catalog caches some persistent functions in the FunctionRegistry
     // so there can be duplicates.
     functionNames.distinct.sorted.map(Row(_))

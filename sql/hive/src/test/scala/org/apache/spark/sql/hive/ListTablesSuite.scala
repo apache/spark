@@ -43,7 +43,7 @@ class ListTablesSuite extends QueryTest with TestHiveSingleton with BeforeAndAft
   override def afterAll(): Unit = {
     try {
       sessionState.catalog.dropTable(
-        TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = true)
+        TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = true, purge = false)
       sql("DROP TABLE IF EXISTS HiveListTablesSuiteTable")
       sql("DROP TABLE IF EXISTS ListTablesSuiteDB.HiveInDBListTablesSuiteTable")
       sql("DROP DATABASE IF EXISTS ListTablesSuiteDB")

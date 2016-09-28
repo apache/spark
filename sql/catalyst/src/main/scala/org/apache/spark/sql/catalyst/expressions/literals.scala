@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util
 import java.util.Objects
+import javax.xml.bind.DatatypeConverter
 
 import org.json4s.JsonAST._
 
@@ -163,26 +165,40 @@ object DecimalLiteral {
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal protected (value: Any, dataType: DataType)
-  extends LeafExpression with CodegenFallback {
+case class Literal (value: Any, dataType: DataType) extends LeafExpression with CodegenFallback {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
 
-  override def toString: String = if (value != null) value.toString else "null"
+  override def toString: String = value match {
+    case null => "null"
+    case binary: Array[Byte] => s"0x" + DatatypeConverter.printHexBinary(binary)
+    case other => other.toString
+  }
 
-  override def hashCode(): Int = 31 * (31 * Objects.hashCode(dataType)) + Objects.hashCode(value)
+  override def hashCode(): Int = {
+    val valueHashCode = value match {
+      case null => 0
+      case binary: Array[Byte] => util.Arrays.hashCode(binary)
+      case other => other.hashCode()
+    }
+    31 * Objects.hashCode(dataType) + valueHashCode
+  }
 
   override def equals(other: Any): Boolean = other match {
+    case o: Literal if !dataType.equals(o.dataType) => false
     case o: Literal =>
-      dataType.equals(o.dataType) &&
-        (value == null && null == o.value || value != null && value.equals(o.value))
+      (value, o.value) match {
+        case (null, null) => true
+        case (a: Array[Byte], b: Array[Byte]) => util.Arrays.equals(a, b)
+        case (a, b) => a != null && a.equals(b)
+      }
     case _ => false
   }
 
   override protected def jsonFields: List[JField] = {
     // Turns all kinds of literal values to string in json field, as the type info is hard to
-    // retain in json format, e.g. {"a": 123} can be a int, or double, or decimal, etc.
+    // retain in json format, e.g. {"a": 123} can be an int, or double, or decimal, etc.
     val jsonValue = (value, dataType) match {
       case (null, _) => JNull
       case (i: Int, DateType) => JString(DateTimeUtils.toJavaDate(i).toString)
@@ -246,17 +262,31 @@ case class Literal protected (value: Any, dataType: DataType)
     case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null => "NULL"
     case _ if value == null => s"CAST(NULL AS ${dataType.sql})"
     case (v: UTF8String, StringType) =>
-      // Escapes all backslashes and double quotes.
-      "\"" + v.toString.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+      // Escapes all backslashes and single quotes.
+      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
     case (v: Byte, ByteType) => v + "Y"
     case (v: Short, ShortType) => v + "S"
     case (v: Long, LongType) => v + "L"
     // Float type doesn't have a suffix
-    case (v: Float, FloatType) => s"CAST($v AS ${FloatType.sql})"
-    case (v: Double, DoubleType) => v + "D"
-    case (v: Decimal, t: DecimalType) => s"CAST($v AS ${t.sql})"
+    case (v: Float, FloatType) =>
+      val castedValue = v match {
+        case _ if v.isNaN => "'NaN'"
+        case Float.PositiveInfinity => "'Infinity'"
+        case Float.NegativeInfinity => "'-Infinity'"
+        case _ => v
+      }
+      s"CAST($castedValue AS ${FloatType.sql})"
+    case (v: Double, DoubleType) =>
+      v match {
+        case _ if v.isNaN => s"CAST('NaN' AS ${DoubleType.sql})"
+        case Double.PositiveInfinity => s"CAST('Infinity' AS ${DoubleType.sql})"
+        case Double.NegativeInfinity => s"CAST('-Infinity' AS ${DoubleType.sql})"
+        case _ => v + "D"
+      }
+    case (v: Decimal, t: DecimalType) => v + "BD"
     case (v: Int, DateType) => s"DATE '${DateTimeUtils.toJavaDate(v)}'"
     case (v: Long, TimestampType) => s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
+    case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
     case _ => value.toString
   }
 }

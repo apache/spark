@@ -43,7 +43,7 @@ object DatasetBenchmark {
       var res = rdd
       var i = 0
       while (i < numChains) {
-        res = rdd.map(func)
+        res = res.map(func)
         i += 1
       }
       res.foreach(_ => Unit)
@@ -53,7 +53,7 @@ object DatasetBenchmark {
       var res = df
       var i = 0
       while (i < numChains) {
-        res = res.select($"l" + 1 as "l")
+        res = res.select($"l" + 1 as "l", $"s")
         i += 1
       }
       res.queryExecution.toRdd.foreach(_ => Unit)
@@ -87,7 +87,7 @@ object DatasetBenchmark {
       var res = rdd
       var i = 0
       while (i < numChains) {
-        res = rdd.filter(funcs(i))
+        res = res.filter(funcs(i))
         i += 1
       }
       res.foreach(_ => Unit)
@@ -170,36 +170,36 @@ object DatasetBenchmark {
     val benchmark3 = aggregate(spark, numRows)
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11.4
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-    back-to-back map:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    RDD                                      1935 / 2105         51.7          19.3       1.0X
-    DataFrame                                 756 /  799        132.3           7.6       2.6X
-    Dataset                                  7359 / 7506         13.6          73.6       0.3X
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    back-to-back map:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    RDD                                           3448 / 3646         29.0          34.5       1.0X
+    DataFrame                                     2647 / 3116         37.8          26.5       1.3X
+    Dataset                                       4781 / 5155         20.9          47.8       0.7X
     */
     benchmark.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11.4
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-    back-to-back filter:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    RDD                                      1974 / 2036         50.6          19.7       1.0X
-    DataFrame                                 103 /  127        967.4           1.0      19.1X
-    Dataset                                  4343 / 4477         23.0          43.4       0.5X
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    back-to-back filter:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    RDD                                           1346 / 1618         74.3          13.5       1.0X
+    DataFrame                                       59 /   72       1695.4           0.6      22.8X
+    Dataset                                       2777 / 2805         36.0          27.8       0.5X
     */
     benchmark2.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11.4
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-    aggregate:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    RDD sum                                  2130 / 2166         46.9          21.3       1.0X
-    DataFrame sum                              92 /  128       1085.3           0.9      23.1X
-    Dataset sum using Aggregator             4111 / 4282         24.3          41.1       0.5X
-    Dataset complex Aggregator               8782 / 9036         11.4          87.8       0.2X
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    aggregate:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    RDD sum                                       1420 / 1523         70.4          14.2       1.0X
+    DataFrame sum                                   31 /   49       3214.3           0.3      45.6X
+    Dataset sum using Aggregator                  3216 / 3257         31.1          32.2       0.4X
+    Dataset complex Aggregator                    7948 / 8461         12.6          79.5       0.2X
     */
     benchmark3.run()
   }

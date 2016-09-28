@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql
 
-import scala.language.postfixOps
-
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.StringType
 
 
 object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
@@ -52,6 +51,16 @@ object ClassInputAgg extends Aggregator[AggData, Int, Int] {
 }
 
 
+object ClassBufferAggregator extends Aggregator[AggData, AggData, Int] {
+  override def zero: AggData = AggData(0, "")
+  override def reduce(b: AggData, a: AggData): AggData = AggData(b.a + a.a, "")
+  override def finish(reduction: AggData): Int = reduction.a
+  override def merge(b1: AggData, b2: AggData): AggData = AggData(b1.a + b2.a, "")
+  override def bufferEncoder: Encoder[AggData] = Encoders.product[AggData]
+  override def outputEncoder: Encoder[Int] = Encoders.scalaInt
+}
+
+
 object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
   override def zero: (Int, AggData) = 0 -> AggData(0, "0")
   override def reduce(b: (Int, AggData), a: AggData): (Int, AggData) = (b._1 + 1, a)
@@ -60,6 +69,16 @@ object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
     (b1._1 + b2._1, b1._2)
   override def bufferEncoder: Encoder[(Int, AggData)] = Encoders.product[(Int, AggData)]
   override def outputEncoder: Encoder[Int] = Encoders.scalaInt
+}
+
+
+object MapTypeBufferAgg extends Aggregator[Int, Map[Int, Int], Int] {
+  override def zero: Map[Int, Int] = Map.empty
+  override def reduce(b: Map[Int, Int], a: Int): Map[Int, Int] = b
+  override def finish(reduction: Map[Int, Int]): Int = 1
+  override def merge(b1: Map[Int, Int], b2: Map[Int, Int]): Map[Int, Int] = b1
+  override def bufferEncoder: Encoder[Map[Int, Int]] = ExpressionEncoder()
+  override def outputEncoder: Encoder[Int] = ExpressionEncoder()
 }
 
 
@@ -104,10 +123,22 @@ object RowAgg extends Aggregator[Row, Int, Int] {
   override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
 
+object NullResultAgg extends Aggregator[AggData, AggData, AggData] {
+  override def zero: AggData = AggData(0, "")
+  override def reduce(b: AggData, a: AggData): AggData = AggData(b.a + a.a, b.b + a.b)
+  override def finish(reduction: AggData): AggData = {
+    if (reduction.a % 2 == 0) null else reduction
+  }
+  override def merge(b1: AggData, b2: AggData): AggData = AggData(b1.a + b2.a, b1.b + b2.b)
+  override def bufferEncoder: Encoder[AggData] = Encoders.product[AggData]
+  override def outputEncoder: Encoder[AggData] = Encoders.product[AggData]
+}
+
 
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
-
   import testImplicits._
+
+  private implicit val ordering = Ordering.by((c: AggData) => c.a -> c.b)
 
   test("typed aggregation: TypedAggregator") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
@@ -173,6 +204,14 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       ("one", 1))
   }
 
+  test("Typed aggregation using aggregator") {
+    // based on Dataset complex Aggregator test of DatasetBenchmark
+    val ds = Seq(AggData(1, "x"), AggData(2, "y"), AggData(3, "z")).toDS()
+    checkDataset(
+      ds.select(ClassBufferAggregator.toColumn),
+      6)
+  }
+
   test("typed aggregation: complex input") {
     val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
 
@@ -185,7 +224,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       ds.select(expr("avg(a)").as[Double], ComplexBufferAgg.toColumn),
       (1.5, 2))
 
-    checkDataset(
+    checkDatasetUnorderly(
       ds.groupByKey(_.b).agg(ComplexBufferAgg.toColumn),
       ("one", 1), ("two", 1))
   }
@@ -239,5 +278,38 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
     val df2 = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
     checkAnswer(df2.agg(RowAgg.toColumn as "b").select("b"), Row(6) :: Nil)
+  }
+
+  test("spark-15114 shorter system generated alias names") {
+    val ds = Seq(1, 3, 2, 5).toDS()
+    assert(ds.select(typed.sum((i: Int) => i)).columns.head === "TypedSumDouble(int)")
+    val ds2 = ds.select(typed.sum((i: Int) => i), typed.avg((i: Int) => i))
+    assert(ds2.columns.head === "TypedSumDouble(int)")
+    assert(ds2.columns.last === "TypedAverage(int)")
+    val df = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
+    assert(df.groupBy($"j").agg(RowAgg.toColumn).columns.last ==
+      "RowAgg(org.apache.spark.sql.Row)")
+    assert(df.groupBy($"j").agg(RowAgg.toColumn as "agg1").columns.last == "agg1")
+  }
+
+  test("SPARK-15814 Aggregator can return null result") {
+    val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
+    checkDatasetUnorderly(
+      ds.groupByKey(_.a).agg(NullResultAgg.toColumn),
+      1 -> AggData(1, "one"), 2 -> null)
+  }
+
+  test("SPARK-16100: use Map as the buffer type of Aggregator") {
+    val ds = Seq(1, 2, 3).toDS()
+    checkDataset(ds.select(MapTypeBufferAgg.toColumn), 1)
+  }
+
+  test("SPARK-15204 improve nullability inference for Aggregator") {
+    val ds1 = Seq(1, 3, 2, 5).toDS()
+    assert(ds1.select(typed.sum((i: Int) => i)).schema.head.nullable === false)
+    val ds2 = Seq(AggData(1, "a"), AggData(2, "a")).toDS()
+    assert(ds2.select(SeqAgg.toColumn).schema.head.nullable === true)
+    val ds3 = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
+    assert(ds3.select(NameAgg.toColumn).schema.head.nullable === true)
   }
 }

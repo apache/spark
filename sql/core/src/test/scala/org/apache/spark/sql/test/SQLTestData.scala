@@ -30,7 +30,7 @@ private[sql] trait SQLTestData { self =>
 
   // Helper object to import SQL implicits without a concrete SQLContext
   private object internalImplicits extends SQLImplicits {
-    protected override def _sqlContext: SQLContext = self.spark.wrapped
+    protected override def _sqlContext: SQLContext = self.spark.sqlContext
   }
 
   import internalImplicits._

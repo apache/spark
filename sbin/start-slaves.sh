@@ -31,9 +31,9 @@ if [ "$SPARK_MASTER_PORT" = "" ]; then
   SPARK_MASTER_PORT=7077
 fi
 
-if [ "$SPARK_MASTER_IP" = "" ]; then
-  SPARK_MASTER_IP="`hostname`"
+if [ "$SPARK_MASTER_HOST" = "" ]; then
+  SPARK_MASTER_HOST="`hostname -f`"
 fi
 
 # Launch the slaves
-"${SPARK_HOME}/sbin/slaves.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/sbin/start-slave.sh" "spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT"
+"${SPARK_HOME}/sbin/slaves.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/sbin/start-slave.sh" "spark://$SPARK_MASTER_HOST:$SPARK_MASTER_PORT"

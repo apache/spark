@@ -17,50 +17,34 @@
 
 package org.apache.spark.ml.classification;
 
-import java.io.Serializable;
+import java.io.IOException;
 import java.util.List;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
 
-public class JavaLogisticRegressionSuite implements Serializable {
+public class JavaLogisticRegressionSuite extends SharedSparkSession {
 
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
   private transient Dataset<Row> dataset;
 
   private transient JavaRDD<LabeledPoint> datasetRDD;
   private double eps = 1e-5;
 
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaLogisticRegressionSuite")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-
+  @Override
+  public void setUp() throws IOException {
+    super.setUp();
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
     dataset = spark.createDataFrame(datasetRDD, LabeledPoint.class);
     dataset.createOrReplaceTempView("dataset");
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
   }
 
   @Test

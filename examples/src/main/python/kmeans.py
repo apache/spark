@@ -17,8 +17,8 @@
 
 """
 The K-means algorithm written from scratch against PySpark. In practice,
-one may prefer to use the KMeans algorithm in MLlib, as shown in
-examples/src/main/python/mllib/kmeans.py.
+one may prefer to use the KMeans algorithm in ML, as shown in
+examples/src/main/python/ml/kmeans_example.py.
 
 This example requires NumPy (http://www.numpy.org/).
 """
@@ -27,7 +27,7 @@ from __future__ import print_function
 import sys
 
 import numpy as np
-from pyspark import SparkContext
+from pyspark.sql import SparkSession
 
 
 def parseVector(line):
@@ -52,11 +52,15 @@ if __name__ == "__main__":
         exit(-1)
 
     print("""WARN: This is a naive implementation of KMeans Clustering and is given
-       as an example! Please refer to examples/src/main/python/mllib/kmeans.py for an example on
-       how to use MLlib's KMeans implementation.""", file=sys.stderr)
+       as an example! Please refer to examples/src/main/python/ml/kmeans_example.py for an
+       example on how to use ML's KMeans implementation.""", file=sys.stderr)
 
-    sc = SparkContext(appName="PythonKMeans")
-    lines = sc.textFile(sys.argv[1])
+    spark = SparkSession\
+        .builder\
+        .appName("PythonKMeans")\
+        .getOrCreate()
+
+    lines = spark.read.text(sys.argv[1]).rdd.map(lambda r: r[0])
     data = lines.map(parseVector).cache()
     K = int(sys.argv[2])
     convergeDist = float(sys.argv[3])
@@ -79,4 +83,4 @@ if __name__ == "__main__":
 
     print("Final centers: " + str(kPoints))
 
-    sc.stop()
+    spark.stop()

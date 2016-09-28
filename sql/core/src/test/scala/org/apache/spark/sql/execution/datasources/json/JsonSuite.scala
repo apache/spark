@@ -21,10 +21,7 @@ import java.io.{File, StringWriter}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
-import scala.collection.JavaConverters._
-
 import com.fasterxml.jackson.core.JsonFactory
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
@@ -64,9 +61,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         generator.flush()
       }
 
-      Utils.tryWithResource(factory.createParser(writer.toString)) { parser =>
-        parser.nextToken()
-        JacksonParser.convertRootField(factory, parser, dataType)
+      val dummyOption = new JSONOptions(Map.empty[String, String])
+      val dummySchema = StructType(Seq.empty)
+      val parser = new JacksonParser(dummySchema, "", dummyOption)
+
+      Utils.tryWithResource(factory.createParser(writer.toString)) { jsonParser =>
+        jsonParser.nextToken()
+        val converter = parser.makeRootConverter(dataType)
+        converter.apply(jsonParser)
       }
     }
 
@@ -99,15 +101,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       DateTimeUtils.fromJavaDate(Date.valueOf(strDate)), enforceCorrectType(strDate, DateType))
 
     val ISO8601Time1 = "1970-01-01T01:00:01.0Z"
+    val ISO8601Time2 = "1970-01-01T02:00:01-01:00"
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(3601000)),
         enforceCorrectType(ISO8601Time1, TimestampType))
-    checkTypePromotion(DateTimeUtils.millisToDays(3601000),
-      enforceCorrectType(ISO8601Time1, DateType))
-    val ISO8601Time2 = "1970-01-01T02:00:01-01:00"
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(10801000)),
         enforceCorrectType(ISO8601Time2, TimestampType))
-    checkTypePromotion(DateTimeUtils.millisToDays(10801000),
-      enforceCorrectType(ISO8601Time2, DateType))
+
+    val ISO8601Date = "1970-01-01"
+    checkTypePromotion(DateTimeUtils.millisToDays(32400000),
+      enforceCorrectType(ISO8601Date, DateType))
   }
 
   test("Get compatible type") {
@@ -446,13 +448,13 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
       sql("select num_str + 1.2 from jsonTable where num_str > 14"),
-      Row(BigDecimal("92233720368547758071.2"))
+      Row(92233720368547758071.2)
     )
 
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
       sql("select num_str + 1.2 from jsonTable where num_str >= 92233720368547758060"),
-      Row(new java.math.BigDecimal("92233720368547758071.2"))
+      Row(new java.math.BigDecimal("92233720368547758071.2").doubleValue)
     )
 
     // String and Boolean conflict: resolve the type as string.
@@ -847,7 +849,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     sql(
       s"""
-        |CREATE TEMPORARY TABLE jsonTableSQL
+        |CREATE TEMPORARY VIEW jsonTableSQL
         |USING org.apache.spark.sql.json
         |OPTIONS (
         |  path '$path'
@@ -1079,10 +1081,37 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(jsonDFTwo.schema === schemaTwo)
   }
 
-  test("Corrupt records: PERMISSIVE mode") {
+  test("Corrupt records: PERMISSIVE mode, without designated column for malformed records") {
+    withTempView("jsonTable") {
+      val schema = StructType(
+        StructField("a", StringType, true) ::
+          StructField("b", StringType, true) ::
+          StructField("c", StringType, true) :: Nil)
+
+      val jsonDF = spark.read.schema(schema).json(corruptRecords)
+      jsonDF.createOrReplaceTempView("jsonTable")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, b, c
+            |FROM jsonTable
+          """.stripMargin),
+        Seq(
+          // Corrupted records are replaced with null
+          Row(null, null, null),
+          Row(null, null, null),
+          Row(null, null, null),
+          Row("str_a_4", "str_b_4", "str_c_4"),
+          Row(null, null, null))
+      )
+    }
+  }
+
+  test("Corrupt records: PERMISSIVE mode, with designated column for malformed records") {
     // Test if we can query corrupt records.
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
-      withTempTable("jsonTable") {
+      withTempView("jsonTable") {
         val jsonDF = spark.read.json(corruptRecords)
         jsonDF.createOrReplaceTempView("jsonTable")
         val schema = StructType(
@@ -1320,7 +1349,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
-        className = classOf[DefaultSource].getCanonicalName,
+        className = classOf[JsonFileFormat].getCanonicalName,
         options = Map("path" -> path)).resolveRelation()
 
       val d2 = DataSource(
@@ -1328,7 +1357,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
-        className = classOf[DefaultSource].getCanonicalName,
+        className = classOf[JsonFileFormat].getCanonicalName,
         options = Map("path" -> path)).resolveRelation()
       assert(d1 === d2)
     })
@@ -1518,7 +1547,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("SPARK-12057 additional corrupt records do not throw exceptions") {
     // Test if we can query corrupt records.
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
-      withTempTable("jsonTable") {
+      withTempView("jsonTable") {
         val schema = StructType(
           StructField("_unparsed", StringType, true) ::
             StructField("dummy", StringType, true) :: Nil)
@@ -1635,7 +1664,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("Casting long as timestamp") {
-    withTempTable("jsonTable") {
+    withTempView("jsonTable") {
       val schema = (new StructType).add("ts", TimestampType)
       val jsonDF = spark.read.schema(schema).json(timestampAsLong)
 
@@ -1661,5 +1690,62 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val df = spark.read.json(rdd)
     assert(df.schema.size === 2)
     df.collect()
+  }
+
+  test("Write dates correctly with dateFormat option") {
+    val customSchema = new StructType(Array(StructField("date", DateType, true)))
+    withTempDir { dir =>
+      // With dateFormat option.
+      val datesWithFormatPath = s"${dir.getCanonicalPath}/datesWithFormat.json"
+      val datesWithFormat = spark.read
+        .schema(customSchema)
+        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .json(datesRecords)
+
+      datesWithFormat.write
+        .format("json")
+        .option("dateFormat", "yyyy/MM/dd")
+        .save(datesWithFormatPath)
+
+      // This will load back the dates as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
+      val stringDatesWithFormat = spark.read
+        .schema(stringSchema)
+        .json(datesWithFormatPath)
+      val expectedStringDatesWithFormat = Seq(
+        Row("2015/08/26"),
+        Row("2014/10/27"),
+        Row("2016/01/28"))
+
+      checkAnswer(stringDatesWithFormat, expectedStringDatesWithFormat)
+    }
+  }
+
+  test("Write timestamps correctly with dateFormat option") {
+    val customSchema = new StructType(Array(StructField("date", TimestampType, true)))
+    withTempDir { dir =>
+      // With dateFormat option.
+      val timestampsWithFormatPath = s"${dir.getCanonicalPath}/timestampsWithFormat.json"
+      val timestampsWithFormat = spark.read
+        .schema(customSchema)
+        .option("timestampFormat", "dd/MM/yyyy HH:mm")
+        .json(datesRecords)
+      timestampsWithFormat.write
+        .format("json")
+        .option("timestampFormat", "yyyy/MM/dd HH:mm")
+        .save(timestampsWithFormatPath)
+
+      // This will load back the timestamps as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
+      val stringTimestampsWithFormat = spark.read
+        .schema(stringSchema)
+        .json(timestampsWithFormatPath)
+      val expectedStringDatesWithFormat = Seq(
+        Row("2015/08/26 18:00"),
+        Row("2014/10/27 18:30"),
+        Row("2016/01/28 20:00"))
+
+      checkAnswer(stringTimestampsWithFormat, expectedStringDatesWithFormat)
+    }
   }
 }

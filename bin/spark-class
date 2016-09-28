@@ -68,7 +68,7 @@ fi
 # The exit code of the launcher is appended to the output, so the parent shell removes it from the
 # command array and checks the value to see if the launcher succeeded.
 build_command() {
-  "$RUNNER" -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@"
+  "$RUNNER" -Xmx128m -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@"
   printf "%d\0" $?
 }
 
@@ -80,6 +80,15 @@ done < <(build_command "$@")
 COUNT=${#CMD[@]}
 LAST=$((COUNT - 1))
 LAUNCHER_EXIT_CODE=${CMD[$LAST]}
+
+# Certain JVM failures result in errors being printed to stdout (instead of stderr), which causes
+# the code that parses the output of the launcher to get confused. In those cases, check if the
+# exit code is an integer, and if it's not, handle it as a special error case.
+if ! [[ $LAUNCHER_EXIT_CODE =~ ^[0-9]+$ ]]; then
+  echo "${CMD[@]}" | head -n-1 1>&2
+  exit 1
+fi
+
 if [ $LAUNCHER_EXIT_CODE != 0 ]; then
   exit $LAUNCHER_EXIT_CODE
 fi

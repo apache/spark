@@ -34,7 +34,7 @@ import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 
 /**
- *  A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
+ *  A stream of [[KafkaRDD]] where
  * each given Kafka topic/partition corresponds to an RDD partition.
  * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
  *  of messages
@@ -43,7 +43,7 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
  * and this DStream is not responsible for committing offsets,
  * so that you can control exactly-once semantics.
  * For an easy interface to Kafka-managed offsets,
- *  see {@link org.apache.spark.streaming.kafka.KafkaCluster}
+ *  see [[KafkaCluster]]
  * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
  * configuration parameters</a>.
  *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
@@ -132,7 +132,7 @@ class DirectKafkaInputDStream[
       if (retries <= 0) {
         throw new SparkException(err)
       } else {
-        log.error(err)
+        logError(err)
         Thread.sleep(kc.config.refreshLeaderBackoffMs)
         latestLeaderOffsets(retries - 1)
       }
@@ -194,7 +194,7 @@ class DirectKafkaInputDStream[
       data.asInstanceOf[mutable.HashMap[Time, Array[OffsetRange.OffsetRangeTuple]]]
     }
 
-    override def update(time: Time) {
+    override def update(time: Time): Unit = {
       batchForTime.clear()
       generatedRDDs.foreach { kv =>
         val a = kv._2.asInstanceOf[KafkaRDD[K, V, U, T, R]].offsetRanges.map(_.toTuple).toArray
@@ -202,9 +202,9 @@ class DirectKafkaInputDStream[
       }
     }
 
-    override def cleanup(time: Time) { }
+    override def cleanup(time: Time): Unit = { }
 
-    override def restore() {
+    override def restore(): Unit = {
       // this is assuming that the topics don't change during execution, which is true currently
       val topics = fromOffsets.keySet
       val leaders = KafkaCluster.checkErrors(kc.findLeaders(topics))

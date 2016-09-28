@@ -19,13 +19,14 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
-import org.apache.spark.sql.execution.BatchedDataSourceScanExec
-import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT}
+import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -53,7 +54,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       checkAnswer(spark.table("t"), (data ++ data).map(Row.fromTuple))
     }
     spark.sessionState.catalog.dropTable(
-      TableIdentifier("tmp"), ignoreIfNotExists = true)
+      TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("overwriting") {
@@ -64,7 +65,35 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       checkAnswer(spark.table("t"), data.map(Row.fromTuple))
     }
     spark.sessionState.catalog.dropTable(
-      TableIdentifier("tmp"), ignoreIfNotExists = true)
+      TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
+  }
+
+  test("SPARK-15678: not use cache on overwrite") {
+    withTempDir { dir =>
+      val path = dir.toString
+      spark.range(1000).write.mode("overwrite").parquet(path)
+      val df = spark.read.parquet(path).cache()
+      assert(df.count() == 1000)
+      spark.range(10).write.mode("overwrite").parquet(path)
+      assert(df.count() == 1000)
+      spark.catalog.refreshByPath(path)
+      assert(df.count() == 10)
+      assert(spark.read.parquet(path).count() == 10)
+    }
+  }
+
+  test("SPARK-15678: not use cache on append") {
+    withTempDir { dir =>
+      val path = dir.toString
+      spark.range(1000).write.mode("append").parquet(path)
+      val df = spark.read.parquet(path).cache()
+      assert(df.count() == 1000)
+      spark.range(10).write.mode("append").parquet(path)
+      assert(df.count() == 1000)
+      spark.catalog.refreshByPath(path)
+      assert(df.count() == 1010)
+      assert(spark.read.parquet(path).count() == 1010)
+    }
   }
 
   test("self-join") {
@@ -148,13 +177,18 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
 
-    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true") {
+    withSQLConf(
+      SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true",
+      ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true"
+    ) {
       testSchemaMerging(2)
     }
 
-    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false") {
+    withSQLConf(
+      SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false"
+    ) {
       testSchemaMerging(3)
     }
   }
@@ -540,7 +574,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   test("expand UDT in StructType") {
     val schema = new StructType().add("n", new NestedStructUDT, nullable = true)
     val expected = new StructType().add("n", new NestedStructUDT().sqlType, nullable = true)
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("expand UDT in ArrayType") {
@@ -558,7 +592,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         containsNull = false),
       nullable = true)
 
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("expand UDT in MapType") {
@@ -578,45 +612,102 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         valueContainsNull = false),
       nullable = true)
 
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
-  }
-
-  test("read/write wide table") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-
-      val df = spark.range(1000).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
-      df.write.mode(SaveMode.Overwrite).parquet(path)
-      checkAnswer(spark.read.parquet(path), df)
-    }
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("returning batch for wide table") {
-    withSQLConf("spark.sql.codegen.maxFields" -> "100") {
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        val df = spark.range(100).select(Seq.tabulate(110) {i => ('id + i).as(s"c$i")} : _*)
+        val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
         // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
         val df2 = spark.read.parquet(path)
-        assert(df2.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isEmpty,
-          "Should not return batch")
+        val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
+        assert(!fileScan2.asInstanceOf[FileSourceScanExec].supportsBatch)
         checkAnswer(df2, df)
 
         // return batch
-        val columns = Seq.tabulate(90) {i => s"c$i"}
+        val columns = Seq.tabulate(9) {i => s"c$i"}
         val df3 = df2.selectExpr(columns : _*)
-        assert(
-          df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isDefined,
-          "Should return batch")
+        val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
+        assert(fileScan3.asInstanceOf[FileSourceScanExec].supportsBatch)
         checkAnswer(df3, df.selectExpr(columns : _*))
+      }
+    }
+  }
+
+  test("SPARK-15719: disable writing summary files by default") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(3).write.parquet(path)
+
+      val fs = FileSystem.get(sparkContext.hadoopConfiguration)
+      val files = fs.listFiles(new Path(path), true)
+
+      while (files.hasNext) {
+        val file = files.next
+        assert(!file.getPath.getName.contains("_metadata"))
+      }
+    }
+  }
+
+  test("SPARK-15804: write out the metadata to parquet file") {
+    val df = Seq((1, "abc"), (2, "hello")).toDF("a", "b")
+    val md = new MetadataBuilder().putString("key", "value").build()
+    val dfWithmeta = df.select('a, 'b.as("b", md))
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      dfWithmeta.write.parquet(path)
+
+      readParquetFile(path) { df =>
+        assert(df.schema.last.metadata.getString("key") == "value")
+      }
+    }
+  }
+
+  test("SPARK-16344: array of struct with a single field named 'element'") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq(Tuple1(Array(SingleElement(42)))).toDF("f").write.parquet(path)
+
+      checkAnswer(
+        sqlContext.read.parquet(path),
+        Row(Array(Row(42)))
+      )
+    }
+  }
+
+  test("SPARK-16632: read Parquet int32 as ByteType and ShortType") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+
+        // When being written to Parquet, `TINYINT` and `SMALLINT` should be converted into
+        // `int32 (INT_8)` and `int32 (INT_16)` respectively. However, Hive doesn't add the `INT_8`
+        // and `INT_16` annotation properly (HIVE-14294). Thus, when reading files written by Hive
+        // using Spark with the vectorized Parquet reader enabled, we may hit error due to type
+        // mismatch.
+        //
+        // Here we are simulating Hive's behavior by writing a single `INT` field and then read it
+        // back as `TINYINT` and `SMALLINT` in Spark to verify this issue.
+        Seq(1).toDF("f").write.parquet(path)
+
+        val withByteField = new StructType().add("f", ByteType)
+        checkAnswer(spark.read.schema(withByteField).parquet(path), Row(1: Byte))
+
+        val withShortField = new StructType().add("f", ShortType)
+        checkAnswer(spark.read.schema(withShortField).parquet(path), Row(1: Short))
       }
     }
   }
 }
 
 object TestingUDT {
+  case class SingleElement(element: Long)
+
   @SQLUserDefinedType(udt = classOf[NestedStructUDT])
   case class NestedStruct(a: Integer, b: Long, c: Double)
 

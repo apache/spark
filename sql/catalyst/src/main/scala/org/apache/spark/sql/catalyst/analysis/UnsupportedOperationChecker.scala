@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, InternalOutputModes}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.streaming.OutputMode
 
 /**
  * Analyzes the presence of unsupported operations in a logical plan.
@@ -29,8 +30,7 @@ object UnsupportedOperationChecker {
   def checkForBatch(plan: LogicalPlan): Unit = {
     plan.foreachUp {
       case p if p.isStreaming =>
-        throwError(
-          "Queries with streaming sources must be executed with write.startStream()")(p)
+        throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
 
       case _ =>
     }
@@ -40,13 +40,48 @@ object UnsupportedOperationChecker {
 
     if (!plan.isStreaming) {
       throwError(
-        "Queries without streaming sources cannot be executed with write.startStream()")(plan)
+        "Queries without streaming sources cannot be executed with writeStream.start()")(plan)
     }
 
-    plan.foreachUp { implicit plan =>
+    // Disallow multiple streaming aggregations
+    val aggregates = plan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+
+    if (aggregates.size > 1) {
+      throwError(
+        "Multiple streaming aggregations are not supported with " +
+          "streaming DataFrames/Datasets")(plan)
+    }
+
+    // Disallow some output mode
+    outputMode match {
+      case InternalOutputModes.Append if aggregates.nonEmpty =>
+        throwError(
+          s"$outputMode output mode not supported when there are streaming aggregations on " +
+            s"streaming DataFrames/DataSets")(plan)
+
+      case InternalOutputModes.Complete | InternalOutputModes.Update if aggregates.isEmpty =>
+        throwError(
+          s"$outputMode output mode not supported when there are no streaming aggregations on " +
+            s"streaming DataFrames/Datasets")(plan)
+
+      case _ =>
+    }
+
+    /**
+     * Whether the subplan will contain complete data or incremental data in every incremental
+     * execution. Some operations may be allowed only when the child logical plan gives complete
+     * data.
+     */
+    def containsCompleteData(subplan: LogicalPlan): Boolean = {
+      val aggs = plan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+      // Either the subplan has no streaming source, or it has aggregation with Complete mode
+      !subplan.isStreaming || (aggs.nonEmpty && outputMode == InternalOutputModes.Complete)
+    }
+
+    plan.foreachUp { implicit subPlan =>
 
       // Operations that cannot exists anywhere in a streaming plan
-      plan match {
+      subPlan match {
 
         case _: Command =>
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
@@ -55,16 +90,11 @@ object UnsupportedOperationChecker {
         case _: InsertIntoTable =>
           throwError("InsertIntoTable is not supported with streaming DataFrames/Datasets")
 
-        case Aggregate(_, _, child) if child.isStreaming && outputMode == Append =>
-          throwError(
-            "Aggregations are not supported on streaming DataFrames/Datasets in " +
-              "Append output mode. Consider changing output mode to Update.")
-
         case Join(left, right, joinType, _) =>
 
           joinType match {
 
-            case Inner =>
+            case _: InnerLike =>
               if (left.isStreaming && right.isStreaming) {
                 throwError("Inner join between two streaming DataFrames/Datasets is not supported")
               }
@@ -109,11 +139,12 @@ object UnsupportedOperationChecker {
         case GroupingSets(_, _, child, _) if child.isStreaming =>
           throwError("GroupingSets is not supported on streaming DataFrames/Datasets")
 
-        case GlobalLimit(_, _) | LocalLimit(_, _) if plan.children.forall(_.isStreaming) =>
+        case GlobalLimit(_, _) | LocalLimit(_, _) if subPlan.children.forall(_.isStreaming) =>
           throwError("Limits are not supported on streaming DataFrames/Datasets")
 
-        case Sort(_, _, _) | SortPartitions(_, _) if plan.children.forall(_.isStreaming) =>
-          throwError("Sorting is not supported on streaming DataFrames/Datasets")
+        case Sort(_, _, _) | SortPartitions(_, _) if !containsCompleteData(subPlan) =>
+          throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on" +
+            "aggregated DataFrame/Dataset in Complete mode")
 
         case Sample(_, _, _, _, child) if child.isStreaming =>
           throwError("Sampling is not supported on streaming DataFrames/Datasets")
@@ -123,7 +154,7 @@ object UnsupportedOperationChecker {
 
         case ReturnAnswer(child) if child.isStreaming =>
           throwError("Cannot return immediate result on streaming DataFrames/Dataset. Queries " +
-            "with streaming DataFrames/Datasets must be executed with write.startStream().")
+            "with streaming DataFrames/Datasets must be executed with writeStream.start().")
 
         case _ =>
       }

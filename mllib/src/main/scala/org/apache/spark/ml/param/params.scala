@@ -28,9 +28,9 @@ import scala.collection.JavaConverters._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.linalg.JsonVectorConverter
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.util.Identifiable
 
 /**
@@ -510,11 +510,9 @@ class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[In
 }
 
 /**
- * :: Experimental ::
  * A param and its value.
  */
 @Since("1.2.0")
-@Experimental
 case class ParamPair[T] @Since("1.2.0") (
     @Since("1.2.0") param: Param[T],
     @Since("1.2.0") value: T) {
@@ -554,7 +552,7 @@ trait Params extends Identifiable with Serializable {
    *
    * This only needs to check for interactions between parameters.
    * Parameter value checks which do not depend on other parameters are handled by
-   * [[Param.validate()]].  This method does not handle input/output column parameters;
+   * `Param.validate()`. This method does not handle input/output column parameters;
    * those are checked during schema validation.
    * @deprecated Will be removed in 2.1.0. All the checks should be merged into transformSchema
    */
@@ -582,8 +580,7 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
-   * Explains all params of this instance.
-   * @see [[explainParam()]]
+   * Explains all params of this instance. See `explainParam()`.
    */
   def explainParams(): String = {
     params.map(explainParam).mkString("\n")
@@ -680,7 +677,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Sets default values for a list of params.
    *
-   * Note: Java developers should use the single-parameter [[setDefault()]].
+   * Note: Java developers should use the single-parameter `setDefault`.
    *       Annotating this with varargs can cause compilation failures due to a Scala compiler bug.
    *       See SPARK-9268.
    *
@@ -714,8 +711,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Creates a copy of this instance with the same UID and some extra params.
    * Subclasses should implement this method and set the return type properly.
-   *
-   * @see [[defaultCopy()]]
+   * See `defaultCopy()`.
    */
   def copy(extra: ParamMap): Params
 
@@ -732,7 +728,8 @@ trait Params extends Identifiable with Serializable {
   /**
    * Extracts the embedded default param values and user-supplied values, and then merges them with
    * extra values from input into a flat param map, where the latter value is used if there exist
-   * conflicts, i.e., with ordering: default param values < user-supplied values < extra.
+   * conflicts, i.e., with ordering:
+   * default param values less than user-supplied values less than extra.
    */
   final def extractParamMap(extra: ParamMap): ParamMap = {
     defaultParamMap ++ paramMap ++ extra
@@ -790,18 +787,16 @@ trait Params extends Identifiable with Serializable {
  * :: DeveloperApi ::
  * Java-friendly wrapper for [[Params]].
  * Java developers who need to extend [[Params]] should use this class instead.
- * If you need to extend a abstract class which already extends [[Params]], then that abstract
+ * If you need to extend an abstract class which already extends [[Params]], then that abstract
  * class should be Java-friendly as well.
  */
 @DeveloperApi
 abstract class JavaParams extends Params
 
 /**
- * :: Experimental ::
  * A param to value map.
  */
 @Since("1.2.0")
-@Experimental
 final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
   extends Serializable {
 
@@ -952,7 +947,6 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
 }
 
 @Since("1.2.0")
-@Experimental
 object ParamMap {
 
   /**

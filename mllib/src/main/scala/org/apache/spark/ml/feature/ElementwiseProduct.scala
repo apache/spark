@@ -17,38 +17,40 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.types.DataType
 
 /**
- * :: Experimental ::
  * Outputs the Hadamard product (i.e., the element-wise product) of each input vector with a
  * provided "weight" vector.  In other words, it scales each column of the dataset by a scalar
  * multiplier.
  */
-@Experimental
-class ElementwiseProduct(override val uid: String)
+@Since("1.4.0")
+class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, ElementwiseProduct] with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("elemProd"))
 
   /**
    * the vector to multiply with input vectors
    * @group param
    */
+  @Since("2.0.0")
   val scalingVec: Param[Vector] = new Param(this, "scalingVec", "vector for hadamard product")
 
   /** @group setParam */
+  @Since("2.0.0")
   def setScalingVec(value: Vector): this.type = set(scalingVec, value)
 
   /** @group getParam */
+  @Since("2.0.0")
   def getScalingVec: Vector = getOrDefault(scalingVec)
 
   override protected def createTransformFunc: Vector => Vector = {

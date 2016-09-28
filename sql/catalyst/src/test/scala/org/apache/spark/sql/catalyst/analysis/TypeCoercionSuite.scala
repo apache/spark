@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
 
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -186,6 +188,7 @@ class TypeCoercionSuite extends PlanTest {
     // TimestampType
     widenTest(NullType, TimestampType, Some(TimestampType))
     widenTest(TimestampType, TimestampType, Some(TimestampType))
+    widenTest(DateType, TimestampType, Some(TimestampType))
     widenTest(IntegerType, TimestampType, None)
     widenTest(StringType, TimestampType, None)
 
@@ -199,9 +202,20 @@ class TypeCoercionSuite extends PlanTest {
   }
 
   private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
+    ruleTest(Seq(rule), initial, transformed)
+  }
+
+  private def ruleTest(
+      rules: Seq[Rule[LogicalPlan]],
+      initial: Expression,
+      transformed: Expression): Unit = {
     val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
+    val analyzer = new RuleExecutor[LogicalPlan] {
+      override val batches = Seq(Batch("Resolution", FixedPoint(3), rules: _*))
+    }
+
     comparePlans(
-      rule(Project(Seq(Alias(initial, "a")()), testRelation)),
+      analyzer.execute(Project(Seq(Alias(initial, "a")()), testRelation)),
       Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 
@@ -270,6 +284,24 @@ class TypeCoercionSuite extends PlanTest {
         :: Cast(Literal(1), StringType)
         :: Cast(Literal("a"), StringType)
         :: Nil))
+
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      CreateArray(Literal.create(null, DecimalType(5, 3))
+        :: Literal(1)
+        :: Nil),
+      CreateArray(Literal.create(null, DecimalType(5, 3)).cast(DecimalType(13, 3))
+        :: Literal(1).cast(DecimalType(13, 3))
+        :: Nil))
+
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      CreateArray(Literal.create(null, DecimalType(5, 3))
+        :: Literal.create(null, DecimalType(22, 10))
+        :: Literal.create(null, DecimalType(38, 38))
+        :: Nil),
+      CreateArray(Literal.create(null, DecimalType(5, 3)).cast(DecimalType(38, 38))
+        :: Literal.create(null, DecimalType(22, 10)).cast(DecimalType(38, 38))
+        :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 38))
+        :: Nil))
   }
 
   test("CreateMap casts") {
@@ -285,6 +317,17 @@ class TypeCoercionSuite extends PlanTest {
         :: Cast(Literal.create(2.0, FloatType), FloatType)
         :: Literal("b")
         :: Nil))
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      CreateMap(Literal.create(null, DecimalType(5, 3))
+        :: Literal("a")
+        :: Literal.create(2.0, FloatType)
+        :: Literal("b")
+        :: Nil),
+      CreateMap(Literal.create(null, DecimalType(5, 3)).cast(DoubleType)
+        :: Literal("a")
+        :: Literal.create(2.0, FloatType).cast(DoubleType)
+        :: Literal("b")
+        :: Nil))
     // type coercion for map values
     ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateMap(Literal(1)
@@ -296,6 +339,17 @@ class TypeCoercionSuite extends PlanTest {
         :: Cast(Literal("a"), StringType)
         :: Literal(2)
         :: Cast(Literal(3.0), StringType)
+        :: Nil))
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      CreateMap(Literal(1)
+        :: Literal.create(null, DecimalType(38, 0))
+        :: Literal(2)
+        :: Literal.create(null, DecimalType(38, 38))
+        :: Nil),
+      CreateMap(Literal(1)
+        :: Literal.create(null, DecimalType(38, 0)).cast(DecimalType(38, 38))
+        :: Literal(2)
+        :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 38))
         :: Nil))
     // type coercion for both map keys and values
     ruleTest(TypeCoercion.FunctionArgumentConversion,
@@ -330,6 +384,33 @@ class TypeCoercionSuite extends PlanTest {
         operator(Cast(Literal(1L), DecimalType(22, 0))
           :: Cast(Literal(1), DecimalType(22, 0))
           :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
+          :: Nil))
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
+        operator(Literal(1.0)
+          :: Literal.create(null, DecimalType(10, 5))
+          :: Literal(1)
+          :: Nil),
+        operator(Literal(1.0).cast(DoubleType)
+          :: Literal.create(null, DecimalType(10, 5)).cast(DoubleType)
+          :: Literal(1).cast(DoubleType)
+          :: Nil))
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
+        operator(Literal.create(null, DecimalType(15, 0))
+          :: Literal.create(null, DecimalType(10, 5))
+          :: Literal(1)
+          :: Nil),
+        operator(Literal.create(null, DecimalType(15, 0)).cast(DecimalType(20, 5))
+          :: Literal.create(null, DecimalType(10, 5)).cast(DecimalType(20, 5))
+          :: Literal(1).cast(DecimalType(20, 5))
+          :: Nil))
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
+        operator(Literal.create(2L, LongType)
+          :: Literal(1)
+          :: Literal.create(null, DecimalType(10, 5))
+          :: Nil),
+        operator(Literal.create(2L, LongType).cast(DecimalType(25, 5))
+          :: Literal(1).cast(DecimalType(25, 5))
+          :: Literal.create(null, DecimalType(10, 5)).cast(DecimalType(25, 5))
           :: Nil))
     }
   }
@@ -629,6 +710,33 @@ class TypeCoercionSuite extends PlanTest {
       In(Cast(Literal("a"), StringType),
         Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
+  }
+
+  test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal " +
+    "in aggregation function like sum") {
+    val rules = Seq(FunctionArgumentConversion, Division)
+    // Casts Integer to Double
+    ruleTest(rules, sum(Divide(4, 3)), sum(Divide(Cast(4, DoubleType), Cast(3, DoubleType))))
+    // Left expression is Double, right expression is Int. Another rule ImplicitTypeCasts will
+    // cast the right expression to Double.
+    ruleTest(rules, sum(Divide(4.0, 3)), sum(Divide(4.0, 3)))
+    // Left expression is Int, right expression is Double
+    ruleTest(rules, sum(Divide(4, 3.0)), sum(Divide(Cast(4, DoubleType), Cast(3.0, DoubleType))))
+    // Casts Float to Double
+    ruleTest(
+      rules,
+      sum(Divide(4.0f, 3)),
+      sum(Divide(Cast(4.0f, DoubleType), Cast(3, DoubleType))))
+    // Left expression is Decimal, right expression is Int. Another rule DecimalPrecision will cast
+    // the right expression to Decimal.
+    ruleTest(rules, sum(Divide(Decimal(4.0), 3)), sum(Divide(Decimal(4.0), 3)))
+  }
+
+  test("SPARK-17117 null type coercion in divide") {
+    val rules = Seq(FunctionArgumentConversion, Division, ImplicitTypeCasts)
+    val nullLit = Literal.create(null, NullType)
+    ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
+    ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
   }
 }
 

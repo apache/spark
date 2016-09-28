@@ -38,7 +38,7 @@ private[ml] class IterativelyReweightedLeastSquaresModel(
 /**
  * Implements the method of iteratively reweighted least squares (IRLS) which is used to solve
  * certain optimization problems by an iterative method. In each step of the iterations, it
- * involves solving a weighted lease squares (WLS) problem by [[WeightedLeastSquares]].
+ * involves solving a weighted least squares (WLS) problem by [[WeightedLeastSquares]].
  * It can be used to find maximum likelihood estimates of a generalized linear model (GLM),
  * find M-estimator in robust regression and other optimization problems.
  *

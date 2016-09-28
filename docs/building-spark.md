@@ -16,11 +16,13 @@ Building Spark using Maven requires Maven 3.3.9 or newer and Java 7+.
 
 ### Setting up Maven's Memory Usage
 
-You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`. We recommend the following settings:
+You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`:
 
-    export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
+    export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
 
-If you don't run this, you may see errors like the following:
+When compiling with Java 7, you will need to add the additional option "-XX:MaxPermSize=512M" to MAVEN_OPTS.
+
+If you don't add these parameters to `MAVEN_OPTS`, you may see errors and warnings like the following:
 
     [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_BINARY_VERSION}}/classes...
     [ERROR] PermGen space -> [Help 1]
@@ -28,12 +30,18 @@ If you don't run this, you may see errors like the following:
     [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_BINARY_VERSION}}/classes...
     [ERROR] Java heap space -> [Help 1]
 
-You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
+    [INFO] Compiling 233 Scala sources and 41 Java sources to /Users/me/Development/spark/sql/core/target/scala-{site.SCALA_BINARY_VERSION}/classes...
+    OpenJDK 64-Bit Server VM warning: CodeCache is full. Compiler has been disabled.
+    OpenJDK 64-Bit Server VM warning: Try increasing the code cache size using -XX:ReservedCodeCacheSize=
+
+You can fix these problems by setting the `MAVEN_OPTS` variable as discussed before.
 
 **Note:**
 
-* For Java 8 and above this step is not required.
-* If using `build/mvn` with no `MAVEN_OPTS` set, the script will automate this for you.
+* If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options to the `MAVEN_OPTS` environment variable.
+* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.
+* You may see warnings like "ignoring option MaxPermSize=1g; support was removed in 8.0" when building or running tests with Java 8 and `build/mvn`. These warnings are harmless.
+    
 
 ### build/mvn
 
@@ -50,7 +58,7 @@ To create a Spark distribution like those distributed by the
 to be runnable, use `./dev/make-distribution.sh` in the project root directory. It can be configured
 with Maven profile settings and so on like the direct Maven build. Example:
 
-    ./dev/make-distribution.sh --name custom-spark --tgz -Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn
+    ./dev/make-distribution.sh --name custom-spark --tgz -Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pmesos -Pyarn
 
 For more information on usage, run `./dev/make-distribution.sh --help`
 
@@ -105,12 +113,16 @@ By default Spark will build with Hive 1.2.1 bindings.
 
 ## Packaging without Hadoop Dependencies for YARN
 
-The assembly directory produced by `mvn package` will, by default, include all of Spark's 
-dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this 
-causes multiple versions of these to appear on executor classpaths: the version packaged in 
+The assembly directory produced by `mvn package` will, by default, include all of Spark's
+dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this
+causes multiple versions of these to appear on executor classpaths: the version packaged in
 the Spark assembly and the version on each node, included with `yarn.application.classpath`.
-The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, 
+The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects,
 like ZooKeeper and Hadoop itself.
+
+## Building with Mesos support
+
+    ./build/mvn -Pmesos -DskipTests clean package
 
 ## Building for Scala 2.10
 To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` property:
@@ -263,17 +275,17 @@ The run-tests script also can be limited to a specific Python version or a speci
 
 ## Running R Tests
 
-To run the SparkR tests you will need to install the R package `testthat` 
-(run `install.packages(testthat)` from R shell).  You can run just the SparkR tests using 
+To run the SparkR tests you will need to install the R package `testthat`
+(run `install.packages(testthat)` from R shell).  You can run just the SparkR tests using
 the command:
 
     ./R/run-tests.sh
 
 ## Running Docker-based Integration Test Suites
 
-In order to run Docker integration tests, you have to install the `docker` engine on your box. 
-The instructions for installation can be found at [the Docker site](https://docs.docker.com/engine/installation/). 
-Once installed, the `docker` service needs to be started, if not already running. 
+In order to run Docker integration tests, you have to install the `docker` engine on your box.
+The instructions for installation can be found at [the Docker site](https://docs.docker.com/engine/installation/).
+Once installed, the `docker` service needs to be started, if not already running.
 On Linux, this can be done by `sudo service docker start`.
 
     ./build/mvn install -DskipTests

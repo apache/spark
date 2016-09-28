@@ -38,7 +38,7 @@ determineSparkSubmitBin <- function() {
   if (.Platform$OS.type == "unix") {
     sparkSubmitBinName <- "spark-submit"
   } else {
-    sparkSubmitBinName <- "spark-submit.cmd"
+    sparkSubmitBinName <- "spark-submit2.cmd"
   }
   sparkSubmitBinName
 }
@@ -69,5 +69,5 @@ launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
   }
   combinedArgs <- generateSparkSubmitArgs(args, sparkHome, jars, sparkSubmitOpts, packages)
   cat("Launching java with spark-submit command", sparkSubmitBin, combinedArgs, "\n")
-  invisible(system2(sparkSubmitBin, combinedArgs, wait = F))
+  invisible(launchScript(sparkSubmitBin, combinedArgs))
 }

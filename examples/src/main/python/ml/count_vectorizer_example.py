@@ -37,9 +37,11 @@ if __name__ == "__main__":
 
     # fit a CountVectorizerModel from the corpus.
     cv = CountVectorizer(inputCol="words", outputCol="features", vocabSize=3, minDF=2.0)
+
     model = cv.fit(df)
+
     result = model.transform(df)
-    result.show()
+    result.show(truncate=False)
     # $example off$
 
     spark.stop()

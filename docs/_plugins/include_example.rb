@@ -32,16 +32,34 @@ module Jekyll
       @code_dir = File.join(site.source, config_dir)
 
       clean_markup = @markup.strip
-      @file = File.join(@code_dir, clean_markup)
-      @lang = clean_markup.split('.').last
 
-      code = File.open(@file).read.encode("UTF-8")
+      parts = clean_markup.strip.split(' ')
+      if parts.length > 1 then
+        @snippet_label = ':' + parts[0]
+        snippet_file = parts[1]
+      else
+        @snippet_label = ''
+        snippet_file = parts[0]
+      end
+
+      @file = File.join(@code_dir, snippet_file)
+      @lang = snippet_file.split('.').last
+
+      begin
+        code = File.open(@file).read.encode("UTF-8")
+      rescue => e
+        # We need to explicitly exit on execptions here because Jekyll will silently swallow
+        # them, leading to silent build failures (see https://github.com/jekyll/jekyll/issues/5104)
+        puts(e)
+        puts(e.backtrace)
+        exit 1
+      end
       code = select_lines(code)
 
       rendered_code = Pygments.highlight(code, :lexer => @lang)
 
       hint = "<div><small>Find full example code at " \
-        "\"examples/src/main/#{clean_markup}\" in the Spark repo.</small></div>"
+        "\"examples/src/main/#{snippet_file}\" in the Spark repo.</small></div>"
 
       rendered_code + hint
     end
@@ -66,13 +84,13 @@ module Jekyll
       # Select the array of start labels from code.
       startIndices = lines
         .each_with_index
-        .select { |l, i| l.include? "$example on$" }
+        .select { |l, i| l.include? "$example on#{@snippet_label}$" }
         .map { |l, i| i }
 
       # Select the array of end labels from code.
       endIndices = lines
         .each_with_index
-        .select { |l, i| l.include? "$example off$" }
+        .select { |l, i| l.include? "$example off#{@snippet_label}$" }
         .map { |l, i| i }
 
       raise "Start indices amount is not equal to end indices amount, see #{@file}." \
@@ -92,7 +110,10 @@ module Jekyll
             if start == endline
         lastIndex = endline
         range = Range.new(start + 1, endline - 1)
-        result += trim_codeblock(lines[range]).join
+        trimmed = trim_codeblock(lines[range])
+        # Filter out possible example tags of overlapped labels.
+        taggs_filtered = trimmed.select { |l| !l.include? '$example ' }
+        result += taggs_filtered.join
         result += "\n"
       end
       result

@@ -288,7 +288,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(serializer.children.head.asInstanceOf[Literal].value === UTF8String.fromString("value"))
     assert(serializer.children.last.isInstanceOf[NewInstance])
     assert(serializer.children.last.asInstanceOf[NewInstance]
-      .cls.isInstanceOf[Class[org.apache.spark.sql.catalyst.util.GenericArrayData]])
+      .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
   }
 
   private val dataTypeForComplexData = dataTypeFor[ComplexData]

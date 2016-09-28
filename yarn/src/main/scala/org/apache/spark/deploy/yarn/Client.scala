@@ -17,8 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{ByteArrayInputStream, DataInputStream, File, FileOutputStream, IOException,
-  OutputStreamWriter}
+import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
 import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
@@ -35,7 +34,6 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
-import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -52,10 +50,11 @@ import org.apache.hadoop.yarn.util.Records
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CallerContext, Utils}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -122,6 +121,8 @@ private[spark] class Client(
   private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
     .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
 
+  private val credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
+
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
   }
@@ -160,6 +161,8 @@ private[spark] class Client(
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
       launcherBackend.setAppId(appId.toString)
 
+      new CallerContext("CLIENT", Option(appId.toString)).setCurrentContext()
+
       // Verify whether the cluster has enough resources for our AM
       verifyClusterResources(newAppResponse)
 
@@ -188,9 +191,8 @@ private[spark] class Client(
     try {
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
       val fs = stagingDirPath.getFileSystem(hadoopConf)
-      if (!preserveFiles && fs.exists(stagingDirPath)) {
-        logInfo("Deleting staging directory " + stagingDirPath)
-        fs.delete(stagingDirPath, true)
+      if (!preserveFiles && fs.delete(stagingDirPath, true)) {
+        logInfo(s"Deleted staging directory $stagingDirPath")
       }
     } catch {
       case ioe: IOException =>
@@ -269,6 +271,33 @@ private[spark] class Client(
         }
       case None =>
         appContext.setResource(capability)
+    }
+
+    sparkConf.get(ROLLED_LOG_INCLUDE_PATTERN).foreach { includePattern =>
+      try {
+        val logAggregationContext = Records.newRecord(
+          Utils.classForName("org.apache.hadoop.yarn.api.records.LogAggregationContext"))
+          .asInstanceOf[Object]
+
+        val setRolledLogsIncludePatternMethod =
+          logAggregationContext.getClass.getMethod("setRolledLogsIncludePattern", classOf[String])
+        setRolledLogsIncludePatternMethod.invoke(logAggregationContext, includePattern)
+
+        sparkConf.get(ROLLED_LOG_EXCLUDE_PATTERN).foreach { excludePattern =>
+          val setRolledLogsExcludePatternMethod =
+            logAggregationContext.getClass.getMethod("setRolledLogsExcludePattern", classOf[String])
+          setRolledLogsExcludePatternMethod.invoke(logAggregationContext, excludePattern)
+        }
+
+        val setLogAggregationContextMethod =
+          appContext.getClass.getMethod("setLogAggregationContext",
+            Utils.classForName("org.apache.hadoop.yarn.api.records.LogAggregationContext"))
+        setLogAggregationContextMethod.invoke(appContext, logAggregationContext)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Ignoring ${ROLLED_LOG_INCLUDE_PATTERN.key} because the version of YARN " +
+            s"does not support it", e)
+      }
     }
 
     appContext
@@ -363,8 +392,31 @@ private[spark] class Client(
     // Upload Spark and the application JAR to the remote file system if necessary,
     // and add them as local resources to the application master.
     val fs = destDir.getFileSystem(hadoopConf)
-    val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + destDir
-    YarnSparkHadoopUtil.get.obtainTokensForNamenodes(nns, hadoopConf, credentials)
+
+    // Merge credentials obtained from registered providers
+    val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(hadoopConf, credentials)
+
+    if (credentials != null) {
+      logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
+    }
+
+    // If we use principal and keytab to login, also credentials can be renewed some time
+    // after current time, we should pass the next renewal and updating time to credential
+    // renewer and updater.
+    if (loginFromKeytab && nearestTimeOfNextRenewal > System.currentTimeMillis() &&
+      nearestTimeOfNextRenewal != Long.MaxValue) {
+
+      // Valid renewal time is 75% of next renewal time, and the valid update time will be
+      // slightly later then renewal time (80% of next renewal time). This is to make sure
+      // credentials are renewed and updated before expired.
+      val currTime = System.currentTimeMillis()
+      val renewalTime = (nearestTimeOfNextRenewal - currTime) * 0.75 + currTime
+      val updateTime = (nearestTimeOfNextRenewal - currTime) * 0.8 + currTime
+
+      sparkConf.set(CREDENTIALS_RENEWAL_TIME, renewalTime.toLong)
+      sparkConf.set(CREDENTIALS_UPDATE_TIME, updateTime.toLong)
+    }
+
     // Used to keep track of URIs added to the distributed cache. If the same URI is added
     // multiple times, YARN will fail to launch containers for the app with an internal
     // error.
@@ -373,8 +425,6 @@ private[spark] class Client(
     // same name but different path files are added multiple time, YARN will fail to launch
     // containers for the app with an internal error.
     val distributedNames = new HashSet[String]
-    YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
-    YarnSparkHadoopUtil.get.obtainTokenForHBase(sparkConf, hadoopConf, credentials)
 
     val replication = sparkConf.get(STAGING_FILE_REPLICATION).map(_.toShort)
       .getOrElse(fs.getDefaultReplication(destDir))
@@ -591,10 +641,11 @@ private[spark] class Client(
     copyFileToRemote(destDir, localConfArchive, replication, force = true,
       destName = Some(LOCALIZED_CONF_ARCHIVE))
 
-    val (_, confLocalizedPath) = distribute(createConfArchive().toURI().getPath(),
-      resType = LocalResourceType.ARCHIVE,
-      destName = Some(LOCALIZED_CONF_DIR))
-    require(confLocalizedPath != null)
+    // Manually add the config archive to the cache manager so that the AM is launched with
+    // the proper files set up.
+    distCacheMgr.addResource(
+      remoteFs, hadoopConf, remoteConfArchivePath, localResources, LocalResourceType.ARCHIVE,
+      LOCALIZED_CONF_DIR, statCache, appMasterOnly = false)
 
     // Clear the cache-related entries from the configuration to avoid them polluting the
     // UI's environment page. This works for client mode; for cluster mode, this is handled
@@ -686,28 +737,6 @@ private[spark] class Client(
   }
 
   /**
-   * Get the renewal interval for tokens.
-   */
-  private def getTokenRenewalInterval(stagingDirPath: Path): Long = {
-    // We cannot use the tokens generated above since those have renewer yarn. Trying to renew
-    // those will fail with an access control issue. So create new tokens with the logged in
-    // user as renewer.
-    val creds = new Credentials()
-    val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + stagingDirPath
-    YarnSparkHadoopUtil.get.obtainTokensForNamenodes(
-      nns, hadoopConf, creds, sparkConf.get(PRINCIPAL))
-    val t = creds.getAllTokens.asScala
-      .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
-      .head
-    val newExpiration = t.renew(hadoopConf)
-    val identifier = new DelegationTokenIdentifier()
-    identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
-    val interval = newExpiration - identifier.getIssueDate
-    logInfo(s"Renewal Interval set to $interval")
-    interval
-  }
-
-  /**
    * Set up the environment for launching our ApplicationMaster container.
    */
   private def setupLaunchEnv(
@@ -723,8 +752,6 @@ private[spark] class Client(
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
       sparkConf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
       logInfo(s"Credentials file set to: $credentialsFile")
-      val renewalInterval = getTokenRenewalInterval(stagingDirPath)
-      sparkConf.set(TOKEN_RENEWAL_INTERVAL, renewalInterval)
     }
 
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*
@@ -800,8 +827,11 @@ private[spark] class Client(
         env("SPARK_JAVA_OPTS") = value
       }
       // propagate PYSPARK_DRIVER_PYTHON and PYSPARK_PYTHON to driver in cluster mode
-      sys.env.get("PYSPARK_DRIVER_PYTHON").foreach(env("PYSPARK_DRIVER_PYTHON") = _)
-      sys.env.get("PYSPARK_PYTHON").foreach(env("PYSPARK_PYTHON") = _)
+      Seq("PYSPARK_DRIVER_PYTHON", "PYSPARK_PYTHON").foreach { envname =>
+        if (!env.contains(envname)) {
+          sys.env.get(envname).foreach(env(envname) = _)
+        }
+      }
     }
 
     sys.env.get(ENV_DIST_CLASSPATH).foreach { dcp =>
@@ -975,8 +1005,11 @@ private[spark] class Client(
     val securityManager = new SecurityManager(sparkConf)
     amContainer.setApplicationACLs(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
+
+    if (sparkConf.get(IO_ENCRYPTION_ENABLED)) {
+      SecurityManager.initIOEncryptionKey(sparkConf, credentials)
+    }
     setupSecurityToken(amContainer)
-    UserGroupInformation.getCurrentUser().addCredentials(credentials)
 
     amContainer
   }
@@ -997,7 +1030,8 @@ private[spark] class Client(
       sparkConf.set(KEYTAB.key, keytabFileName)
       sparkConf.set(PRINCIPAL.key, principal)
     }
-    credentials = UserGroupInformation.getCurrentUser.getCredentials
+    // Defensive copy of the credentials
+    credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
   }
 
   /**
@@ -1049,7 +1083,14 @@ private[spark] class Client(
           case YarnApplicationState.RUNNING =>
             reportLauncherState(SparkAppHandle.State.RUNNING)
           case YarnApplicationState.FINISHED =>
-            reportLauncherState(SparkAppHandle.State.FINISHED)
+            report.getFinalApplicationStatus match {
+              case FinalApplicationStatus.FAILED =>
+                reportLauncherState(SparkAppHandle.State.FAILED)
+              case FinalApplicationStatus.KILLED =>
+                reportLauncherState(SparkAppHandle.State.KILLED)
+              case _ =>
+                reportLauncherState(SparkAppHandle.State.FINISHED)
+            }
           case YarnApplicationState.FAILED =>
             reportLauncherState(SparkAppHandle.State.FAILED)
           case YarnApplicationState.KILLED =>
@@ -1137,10 +1178,10 @@ private[spark] class Client(
         val pyLibPath = Seq(sys.env("SPARK_HOME"), "python", "lib").mkString(File.separator)
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
-          "pyspark.zip not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.10.1-src.zip")
+          s"$pyArchivesFile not found; cannot run pyspark application in YARN mode.")
+        val py4jFile = new File(pyLibPath, "py4j-0.10.3-src.zip")
         require(py4jFile.exists(),
-          "py4j-0.10.1-src.zip not found; cannot run pyspark application in YARN mode.")
+          s"$py4jFile not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
       }
   }

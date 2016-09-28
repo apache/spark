@@ -71,11 +71,14 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.conf.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
-    globs['sc'] = sc
-    globs['spark'] = SparkSession(sc)
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("sql.conf tests")\
+        .getOrCreate()
+    globs['sc'] = spark.sparkContext
+    globs['spark'] = spark
     (failure_count, test_count) = doctest.testmod(pyspark.sql.conf, globs=globs)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

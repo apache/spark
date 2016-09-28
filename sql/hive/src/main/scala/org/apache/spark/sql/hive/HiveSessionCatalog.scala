@@ -30,18 +30,17 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
-import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DecimalType, DoubleType}
 import org.apache.spark.util.Utils
 
 
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
-    client: HiveClient,
     sparkSession: SparkSession,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
@@ -54,11 +53,6 @@ private[sql] class HiveSessionCatalog(
     conf,
     hadoopConf) {
 
-  override def setCurrentDatabase(db: String): Unit = {
-    super.setCurrentDatabase(db)
-    client.setCurrentDatabase(db)
-  }
-
   override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
     val table = formatTableName(name.table)
     if (name.database.isDefined || !tempTables.contains(table)) {
@@ -67,10 +61,10 @@ private[sql] class HiveSessionCatalog(
       metastoreCatalog.lookupRelation(newName, alias)
     } else {
       val relation = tempTables(table)
-      val tableWithQualifiers = SubqueryAlias(table, relation)
+      val tableWithQualifiers = SubqueryAlias(table, relation, None)
       // If an alias was specified by the lookup, wrap the plan in a subquery so that
       // attributes are properly qualified with this alias.
-      alias.map(a => SubqueryAlias(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
+      alias.map(a => SubqueryAlias(a, tableWithQualifiers, None)).getOrElse(tableWithQualifiers)
     }
   }
 
@@ -86,15 +80,10 @@ private[sql] class HiveSessionCatalog(
 
   val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
   val OrcConversions: Rule[LogicalPlan] = metastoreCatalog.OrcConversions
-  val CreateTables: Rule[LogicalPlan] = metastoreCatalog.CreateTables
-  val PreInsertionCasts: Rule[LogicalPlan] = metastoreCatalog.PreInsertionCasts
 
   override def refreshTable(name: TableIdentifier): Unit = {
+    super.refreshTable(name)
     metastoreCatalog.refreshTable(name)
-  }
-
-  override def invalidateTable(name: TableIdentifier): Unit = {
-    metastoreCatalog.invalidateTable(name)
   }
 
   def invalidateCache(): Unit = {
@@ -163,18 +152,20 @@ private[sql] class HiveSessionCatalog(
     }
   }
 
-  // We have a list of Hive built-in functions that we do not support. So, we will check
-  // Hive's function registry and lazily load needed functions into our own function registry.
-  // Those Hive built-in functions are
-  // assert_true, collect_list, collect_set, compute_stats, context_ngrams, create_union,
-  // current_user ,elt, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
-  // histogram_numeric, in_file, index, inline, java_method, map_keys, map_values,
-  // matchpath, ngrams, noop, noopstreaming, noopwithmap, noopwithmapstreaming,
-  // parse_url, parse_url_tuple, percentile, percentile_approx, posexplode, reflect, reflect2,
-  // regexp, sentences, stack, std, str_to_map, windowingtablefunction, xpath, xpath_boolean,
-  // xpath_double, xpath_float, xpath_int, xpath_long, xpath_number,
-  // xpath_short, and xpath_string.
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
+    try {
+      lookupFunction0(name, children)
+    } catch {
+      case NonFatal(_) =>
+        // SPARK-16228 ExternalCatalog may recognize `double`-type only.
+        val newChildren = children.map { child =>
+          if (child.dataType.isInstanceOf[DecimalType]) Cast(child, DoubleType) else child
+        }
+        lookupFunction0(name, newChildren)
+    }
+  }
+
+  private def lookupFunction0(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     // TODO: Once lookupFunction accepts a FunctionIdentifier, we should refactor this method to
     // if (super.functionExists(name)) {
     //   super.lookupFunction(name, children)
@@ -197,10 +188,12 @@ private[sql] class HiveSessionCatalog(
           // built-in function.
           // Hive is case insensitive.
           val functionName = funcName.unquotedString.toLowerCase
-          // TODO: This may not really work for current_user because current_user is not evaluated
-          // with session info.
-          // We do not need to use executionHive at here because we only load
-          // Hive's builtin functions, which do not need current db.
+          if (!hiveFunctions.contains(functionName)) {
+            failFunctionLookup(funcName.unquotedString)
+          }
+
+          // TODO: Remove this fallback path once we implement the list of fallback functions
+          // defined below in hiveFunctions.
           val functionInfo = {
             try {
               Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
@@ -222,4 +215,18 @@ private[sql] class HiveSessionCatalog(
         }
     }
   }
+
+  /** List of functions we pass over to Hive. Note that over time this list should go to 0. */
+  // We have a list of Hive built-in functions that we do not support. So, we will check
+  // Hive's function registry and lazily load needed functions into our own function registry.
+  // List of functions we are explicitly not supporting are:
+  // compute_stats, context_ngrams, create_union,
+  // current_user, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
+  // in_file, index, matchpath, ngrams, noop, noopstreaming, noopwithmap,
+  // noopwithmapstreaming, parse_url_tuple, reflect2, windowingtablefunction.
+  private val hiveFunctions = Seq(
+    "hash",
+    "histogram_numeric",
+    "percentile"
+  )
 }

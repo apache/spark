@@ -35,6 +35,8 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
 class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import testImplicits._
+
   @transient var dataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
@@ -47,7 +49,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       Array(0.10, 0.10, 0.70, 0.10)  // label 2
     ).map(_.map(math.log))
 
-    dataset = spark.createDataFrame(generateNaiveBayesInput(pi, theta, 100, 42))
+    dataset = generateNaiveBayesInput(pi, theta, 100, 42).toDF()
   }
 
   def validatePrediction(predictionAndLabels: DataFrame): Unit = {
@@ -69,7 +71,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   }
 
   def expectedMultinomialProbabilities(model: NaiveBayesModel, feature: Vector): Vector = {
-    val logClassProbs: BV[Double] = model.pi.toBreeze + model.theta.multiply(feature).toBreeze
+    val logClassProbs: BV[Double] = model.pi.asBreeze + model.theta.multiply(feature).asBreeze
     val classProbs = logClassProbs.toArray.map(math.exp)
     val classProbsSum = classProbs.sum
     Vectors.dense(classProbs.map(_ / classProbsSum))
@@ -78,8 +80,8 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   def expectedBernoulliProbabilities(model: NaiveBayesModel, feature: Vector): Vector = {
     val negThetaMatrix = model.theta.map(v => math.log(1.0 - math.exp(v)))
     val negFeature = Vectors.dense(feature.toArray.map(v => 1.0 - v))
-    val piTheta: BV[Double] = model.pi.toBreeze + model.theta.multiply(feature).toBreeze
-    val logClassProbs: BV[Double] = piTheta + negThetaMatrix.multiply(negFeature).toBreeze
+    val piTheta: BV[Double] = model.pi.asBreeze + model.theta.multiply(feature).asBreeze
+    val logClassProbs: BV[Double] = piTheta + negThetaMatrix.multiply(negFeature).asBreeze
     val classProbs = logClassProbs.toArray.map(math.exp)
     val classProbsSum = classProbs.sum
     Vectors.dense(classProbs.map(_ / classProbsSum))
@@ -131,16 +133,16 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(3, 4, thetaArray.flatten, true)
 
-    val testDataset = spark.createDataFrame(generateNaiveBayesInput(
-      piArray, thetaArray, nPoints, 42, "multinomial"))
+    val testDataset =
+      generateNaiveBayesInput(piArray, thetaArray, nPoints, 42, "multinomial").toDF()
     val nb = new NaiveBayes().setSmoothing(1.0).setModelType("multinomial")
     val model = nb.fit(testDataset)
 
     validateModelFit(pi, theta, model)
     assert(model.hasParent)
 
-    val validationDataset = spark.createDataFrame(generateNaiveBayesInput(
-      piArray, thetaArray, nPoints, 17, "multinomial"))
+    val validationDataset =
+      generateNaiveBayesInput(piArray, thetaArray, nPoints, 17, "multinomial").toDF()
 
     val predictionAndLabels = model.transform(validationDataset).select("prediction", "label")
     validatePrediction(predictionAndLabels)
@@ -161,16 +163,16 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(3, 12, thetaArray.flatten, true)
 
-    val testDataset = spark.createDataFrame(generateNaiveBayesInput(
-      piArray, thetaArray, nPoints, 45, "bernoulli"))
+    val testDataset =
+      generateNaiveBayesInput(piArray, thetaArray, nPoints, 45, "bernoulli").toDF()
     val nb = new NaiveBayes().setSmoothing(1.0).setModelType("bernoulli")
     val model = nb.fit(testDataset)
 
     validateModelFit(pi, theta, model)
     assert(model.hasParent)
 
-    val validationDataset = spark.createDataFrame(generateNaiveBayesInput(
-      piArray, thetaArray, nPoints, 20, "bernoulli"))
+    val validationDataset =
+      generateNaiveBayesInput(piArray, thetaArray, nPoints, 20, "bernoulli").toDF()
 
     val predictionAndLabels = model.transform(validationDataset).select("prediction", "label")
     validatePrediction(predictionAndLabels)

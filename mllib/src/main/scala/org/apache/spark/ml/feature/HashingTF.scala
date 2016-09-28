@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param._
@@ -29,7 +29,6 @@ import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, StructType}
 
 /**
- * :: Experimental ::
  * Maps a sequence of terms to their term frequencies using the hashing trick.
  * Currently we use Austin Appleby's MurmurHash 3 algorithm (MurmurHash3_x86_32)
  * to calculate the hash code value for the term object.
@@ -37,16 +36,19 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  * it is advisable to use a power of two as the numFeatures parameter;
  * otherwise the features will not be mapped evenly to the columns.
  */
-@Experimental
-class HashingTF(override val uid: String)
+@Since("1.2.0")
+class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
+  @Since("1.2.0")
   def this() = this(Identifiable.randomUID("hashingTF"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
@@ -54,6 +56,7 @@ class HashingTF(override val uid: String)
    * (default = 2^18^)
    * @group param
    */
+  @Since("1.2.0")
   val numFeatures = new IntParam(this, "numFeatures", "number of features (> 0)",
     ParamValidators.gt(0))
 
@@ -64,6 +67,7 @@ class HashingTF(override val uid: String)
    * (default = false)
    * @group param
    */
+  @Since("2.0.0")
   val binary = new BooleanParam(this, "binary", "If true, all non zero counts are set to 1. " +
     "This is useful for discrete probabilistic models that model binary events rather " +
     "than integer counts")
@@ -71,15 +75,19 @@ class HashingTF(override val uid: String)
   setDefault(numFeatures -> (1 << 18), binary -> false)
 
   /** @group getParam */
+  @Since("1.2.0")
   def getNumFeatures: Int = $(numFeatures)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setNumFeatures(value: Int): this.type = set(numFeatures, value)
 
   /** @group getParam */
+  @Since("2.0.0")
   def getBinary: Boolean = $(binary)
 
   /** @group setParam */
+  @Since("2.0.0")
   def setBinary(value: Boolean): this.type = set(binary, value)
 
   @Since("2.0.0")
@@ -92,6 +100,7 @@ class HashingTF(override val uid: String)
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[ArrayType],
@@ -100,6 +109,7 @@ class HashingTF(override val uid: String)
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): HashingTF = defaultCopy(extra)
 }
 

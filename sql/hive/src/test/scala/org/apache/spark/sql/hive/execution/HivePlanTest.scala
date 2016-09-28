@@ -24,8 +24,8 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HivePlanTest extends QueryTest with TestHiveSingleton {
-  import hiveContext.sql
-  import hiveContext.implicits._
+  import spark.sql
+  import spark.implicits._
 
   test("udf constant folding") {
     Seq.empty[Tuple1[Int]].toDF("a").createOrReplaceTempView("t")

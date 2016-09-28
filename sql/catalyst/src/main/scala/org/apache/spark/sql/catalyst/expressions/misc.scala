@@ -175,11 +175,12 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val CRC32 = "java.util.zip.CRC32"
+    val checksum = ctx.freshName("checksum")
     nullSafeCodeGen(ctx, ev, value => {
       s"""
-        $CRC32 checksum = new $CRC32();
-        checksum.update($value, 0, $value.length);
-        ${ev.value} = checksum.getValue();
+        $CRC32 $checksum = new $CRC32();
+        $checksum.update($value, 0, $value.length);
+        ${ev.value} = $checksum.getValue();
       """
     })
   }
@@ -476,10 +477,13 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 
   protected override def nullSafeEval(input: Any): Any = input
 
+  private val outputPrefix = s"Result of ${child.simpleString} is "
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val outputPrefixField = ctx.addReferenceObj("outputPrefix", outputPrefix)
     nullSafeCodeGen(ctx, ev, c =>
       s"""
-         | System.err.println("Result of ${child.simpleString} is " + $c);
+         | System.err.println($outputPrefixField + $c);
          | ${ev.value} = $c;
        """.stripMargin)
   }
@@ -500,10 +504,12 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def prettyName: String = "assert_true"
 
+  private val errMsg = s"'${child.simpleString}' is not true!"
+
   override def eval(input: InternalRow) : Any = {
     val v = child.eval(input)
     if (v == null || java.lang.Boolean.FALSE.equals(v)) {
-      throw new RuntimeException(s"'${child.simpleString}' is not true!")
+      throw new RuntimeException(errMsg)
     } else {
       null
     }
@@ -511,9 +517,10 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
+    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     ExprCode(code = s"""${eval.code}
        |if (${eval.isNull} || !${eval.value}) {
-       |  throw new RuntimeException("'${child.simpleString}' is not true.");
+       |  throw new RuntimeException($errMsgField);
        |}""".stripMargin, isNull = "true", value = "null")
   }
 
@@ -553,7 +560,7 @@ object XxHash64Function extends InterpretedHashFunction {
 @ExpressionDescription(
   usage = "_FUNC_() - Returns the current database.",
   extended = "> SELECT _FUNC_()")
-private[sql] case class CurrentDatabase() extends LeafExpression with Unevaluable {
+case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def foldable: Boolean = true
   override def nullable: Boolean = false

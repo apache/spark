@@ -138,8 +138,8 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       case Row(w: String, sim: Double) => (w, sim)
     }.collect().unzip
 
-    assert(synonyms.toArray === Array("b", "c"))
-    expectedSimilarity.zip(similarity).map {
+    assert(synonyms === Array("b", "c"))
+    expectedSimilarity.zip(similarity).foreach {
       case (expected, actual) => assert(math.abs((expected - actual) / expected) < 1E-5)
     }
   }
@@ -191,6 +191,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setSeed(42L)
       .setStepSize(0.01)
       .setVectorSize(100)
+      .setMaxSentenceLength(500)
     testDefaultReadWrite(t)
   }
 
@@ -206,5 +207,26 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val newInstance = testDefaultReadWrite(instance)
     assert(newInstance.getVectors.collect() === instance.getVectors.collect())
   }
+
+  test("Word2Vec works with input that is non-nullable (NGram)") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val sentence = "a q s t q s t b b b s t m s t m q "
+    val docDF = sc.parallelize(Seq(sentence, sentence)).map(_.split(" ")).toDF("text")
+
+    val ngram = new NGram().setN(2).setInputCol("text").setOutputCol("ngrams")
+    val ngramDF = ngram.transform(docDF)
+
+    val model = new Word2Vec()
+      .setVectorSize(2)
+      .setInputCol("ngrams")
+      .setOutputCol("result")
+      .fit(ngramDF)
+
+    // Just test that this transformation succeeds
+    model.transform(ngramDF).collect()
+  }
+
 }
 

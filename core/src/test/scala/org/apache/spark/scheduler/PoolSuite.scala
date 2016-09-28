@@ -30,7 +30,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
     : TaskSetManager = {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
-      new FakeTask(i, Nil)
+      new FakeTask(stageId, i, Nil)
     }
     new TaskSetManager(taskScheduler, new TaskSet(tasks, stageId, 0, 0, null), 0)
   }

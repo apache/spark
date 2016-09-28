@@ -41,23 +41,27 @@ private[clustering] trait BisectingKMeansParams extends Params
   with HasMaxIter with HasFeaturesCol with HasSeed with HasPredictionCol {
 
   /**
-   * Set the number of clusters to create (k). Must be > 1. Default: 2.
+   * The desired number of leaf clusters. Must be > 1. Default: 4.
+   * The actual number could be smaller if there are no divisible leaf clusters.
    * @group param
    */
   @Since("2.0.0")
-  final val k = new IntParam(this, "k", "number of clusters to create", (x: Int) => x > 1)
+  final val k = new IntParam(this, "k", "The desired number of leaf clusters. " +
+    "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("2.0.0")
   def getK: Int = $(k)
 
-  /** @group expertParam */
+  /**
+   * The minimum number of points (if >= 1.0) or the minimum proportion
+   * of points (if < 1.0) of a divisible cluster (default: 1.0).
+   * @group expertParam
+   */
   @Since("2.0.0")
-  final val minDivisibleClusterSize = new DoubleParam(
-    this,
-    "minDivisibleClusterSize",
-    "the minimum number of points (if >= 1.0) or the minimum proportion",
-    (value: Double) => value > 0)
+  final val minDivisibleClusterSize = new DoubleParam(this, "minDivisibleClusterSize",
+    "The minimum number of points (if >= 1.0) or the minimum proportion " +
+      "of points (if < 1.0) of a divisible cluster.", ParamValidators.gt(0.0))
 
   /** @group expertGetParam */
   @Since("2.0.0")
@@ -78,7 +82,7 @@ private[clustering] trait BisectingKMeansParams extends Params
  * :: Experimental ::
  * Model fitted by BisectingKMeans.
  *
- * @param parentModel a model trained by spark.mllib.clustering.BisectingKMeans.
+ * @param parentModel a model trained by [[org.apache.spark.mllib.clustering.BisectingKMeans]].
  */
 @Since("2.0.0")
 @Experimental
@@ -95,6 +99,7 @@ class BisectingKMeansModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
@@ -218,6 +223,7 @@ class BisectingKMeans @Since("2.0.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = {
+    transformSchema(dataset.schema, logging = true)
     val rdd: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
