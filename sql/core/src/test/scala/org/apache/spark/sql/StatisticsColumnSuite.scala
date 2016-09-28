@@ -311,9 +311,12 @@ class StatisticsColumnSuite extends StatisticsTest {
         checkTableStats(tableName = table, expectedRowCount = Some(values.length * 2))
 
       val colStat = fetchedStats.get.colStats("c1")
-      checkColStat(dataType = IntegerType, colStat = colStat, expectedColStat =
-        ColumnStat(InternalRow.fromSeq(
-          Seq(0L, values.max, values.min, values.distinct.length.toLong))))
+      StatisticsTest.checkColStat(
+        dataType = IntegerType,
+        colStat = colStat,
+        expectedColStat = ColumnStat(InternalRow.fromSeq(
+          Seq(0L, values.max, values.min, values.distinct.length.toLong))),
+        rsd = spark.sessionState.conf.ndvMaxError)
     }
   }
 
@@ -325,18 +328,28 @@ class StatisticsColumnSuite extends StatisticsTest {
       val fetchedStats1 = checkTableStats(tableName = table, expectedRowCount = Some(0))
       assert(fetchedStats1.get.colStats.size == 1)
       val expected1 = ColumnStat(InternalRow(0L, null, null, 0L))
-      checkColStat(dataType = IntegerType, colStat = fetchedStats1.get.colStats("c1"),
-        expectedColStat = expected1)
+      val rsd = spark.sessionState.conf.ndvMaxError
+      StatisticsTest.checkColStat(
+        dataType = IntegerType,
+        colStat = fetchedStats1.get.colStats("c1"),
+        expectedColStat = expected1,
+        rsd = rsd)
 
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c2")
       val fetchedStats2 = checkTableStats(tableName = table, expectedRowCount = Some(0))
       // column c1 is kept in the stats
       assert(fetchedStats2.get.colStats.size == 2)
-      checkColStat(dataType = IntegerType, colStat = fetchedStats2.get.colStats("c1"),
-        expectedColStat = expected1)
+      StatisticsTest.checkColStat(
+        dataType = IntegerType,
+        colStat = fetchedStats2.get.colStats("c1"),
+        expectedColStat = expected1,
+        rsd = rsd)
       val expected2 = ColumnStat(InternalRow(0L, null, null, 0L))
-      checkColStat(dataType = LongType, colStat = fetchedStats2.get.colStats("c2"),
-        expectedColStat = expected2)
+      StatisticsTest.checkColStat(
+        dataType = LongType,
+        colStat = fetchedStats2.get.colStats("c2"),
+        expectedColStat = expected2,
+        rsd = rsd)
     }
   }
 }

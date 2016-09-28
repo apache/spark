@@ -21,16 +21,16 @@ import java.io.{File, PrintWriter}
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, StatisticsTest}
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
 import org.apache.spark.sql.execution.command.{AnalyzeTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
@@ -355,6 +355,53 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
         isDataSourceTable = true,
         hasSizeInBytes = true,
         expectedRowCounts = Some(10))
+    }
+  }
+
+  test("generate column-level statistics and load them from hive metastore") {
+    import testImplicits._
+
+    val intSeq = Seq(1, 2)
+    val stringSeq = Seq("a", "bb")
+    val booleanSeq = Seq(true, false)
+
+    val data = intSeq.indices.map { i =>
+      (intSeq(i), stringSeq(i), booleanSeq(i))
+    }
+    val tableName = "table"
+    withTable(tableName) {
+      val df = data.toDF("c1", "c2", "c3")
+      df.write.format("parquet").saveAsTable(tableName)
+      val expectedColStatsSeq = df.schema.map { f =>
+        val colStat = f.dataType match {
+          case IntegerType =>
+            ColumnStat(InternalRow(0L, intSeq.max, intSeq.min, intSeq.distinct.length.toLong))
+          case StringType =>
+            ColumnStat(InternalRow(0L, stringSeq.map(_.length).sum / stringSeq.length.toDouble,
+              stringSeq.map(_.length).max.toLong, stringSeq.distinct.length.toLong))
+          case BooleanType =>
+            ColumnStat(InternalRow(0L, booleanSeq.count(_.equals(true)).toLong,
+              booleanSeq.count(_.equals(false)).toLong))
+        }
+        (f, colStat)
+      }
+
+      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1, c2, c3")
+      val readback = spark.table(tableName)
+      val relations = readback.queryExecution.analyzed.collect { case rel: LogicalRelation =>
+        val columnStats = rel.catalogTable.get.stats.get.colStats
+        expectedColStatsSeq.foreach { expected =>
+          assert(columnStats.contains(expected._1.name))
+          val colStat = columnStats(expected._1.name)
+          StatisticsTest.checkColStat(
+            dataType = expected._1.dataType,
+            colStat = colStat,
+            expectedColStat = expected._2,
+            rsd = spark.sessionState.conf.ndvMaxError)
+        }
+        rel
+      }
+      assert(relations.size == 1)
     }
   }
 

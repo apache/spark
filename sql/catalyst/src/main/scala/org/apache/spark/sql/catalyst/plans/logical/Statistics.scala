@@ -77,9 +77,16 @@ case class ColumnStat(statRow: InternalRow) {
 }
 
 object ColumnStat {
-  def apply(str: String): ColumnStat = {
+  def apply(dataType: DataType, str: String): ColumnStat = {
     // use Base64 for decoding
-    ColumnStat(InternalRow(Base64.decodeBase64(str)))
+    val bytes = Base64.decodeBase64(str)
+    val numFields = dataType match {
+      case BinaryType | BooleanType => 3
+      case _ => 4
+    }
+    val unsafeRow = new UnsafeRow(numFields)
+    unsafeRow.pointTo(bytes, bytes.length)
+    ColumnStat(unsafeRow)
   }
 }
 

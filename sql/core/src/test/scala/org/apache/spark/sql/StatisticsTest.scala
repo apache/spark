@@ -39,15 +39,42 @@ trait StatisticsTest extends QueryTest with SharedSQLContext {
         AnalyzeColumnCommand(tableIdent, columns.map(_.name)).computeColStats(spark, relation)._2
       expectedColStatsSeq.foreach { expected =>
         assert(columnStats.contains(expected._1.name))
-        checkColStat(
+        val colStat = columnStats(expected._1.name)
+        StatisticsTest.checkColStat(
           dataType = expected._1.dataType,
-          colStat = columnStats(expected._1.name),
-          expectedColStat = expected._2)
+          colStat = colStat,
+          expectedColStat = expected._2,
+          rsd = spark.sessionState.conf.ndvMaxError)
+
+        // check if we get the same colStat after encoding and decoding
+        val encodedCS = colStat.toString
+        val decodedCS = ColumnStat(expected._1.dataType, encodedCS)
+        StatisticsTest.checkColStat(
+          dataType = expected._1.dataType,
+          colStat = decodedCS,
+          expectedColStat = expected._2,
+          rsd = spark.sessionState.conf.ndvMaxError)
       }
     }
   }
 
-  def checkColStat(dataType: DataType, colStat: ColumnStat, expectedColStat: ColumnStat): Unit = {
+  def checkTableStats(tableName: String, expectedRowCount: Option[Int]): Option[Statistics] = {
+    val df = spark.table(tableName)
+    val stats = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
+      assert(rel.catalogTable.get.stats.flatMap(_.rowCount) === expectedRowCount)
+      rel.catalogTable.get.stats
+    }
+    assert(stats.size == 1)
+    stats.head
+  }
+}
+
+object StatisticsTest {
+  def checkColStat(
+      dataType: DataType,
+      colStat: ColumnStat,
+      expectedColStat: ColumnStat,
+      rsd: Double): Unit = {
     dataType match {
       case StringType =>
         val cs = colStat.forString
@@ -55,7 +82,7 @@ trait StatisticsTest extends QueryTest with SharedSQLContext {
         assert(cs.numNulls == expectedCS.numNulls)
         assert(cs.avgColLen == expectedCS.avgColLen)
         assert(cs.maxColLen == expectedCS.maxColLen)
-        checkNdv(ndv = cs.ndv, expectedNdv = expectedCS.ndv)
+        checkNdv(ndv = cs.ndv, expectedNdv = expectedCS.ndv, rsd = rsd)
       case BinaryType =>
         val cs = colStat.forBinary
         val expectedCS = expectedColStat.forBinary
@@ -70,42 +97,32 @@ trait StatisticsTest extends QueryTest with SharedSQLContext {
         assert(cs.numFalses == expectedCS.numFalses)
       case atomicType: AtomicType =>
         checkNumericColStats(
-          dataType = atomicType, colStat = colStat, expectedColStat = expectedColStat)
+          dataType = atomicType, colStat = colStat, expectedColStat = expectedColStat, rsd = rsd)
     }
   }
 
   private def checkNumericColStats(
       dataType: AtomicType,
       colStat: ColumnStat,
-      expectedColStat: ColumnStat): Unit = {
+      expectedColStat: ColumnStat,
+      rsd: Double): Unit = {
     val cs = colStat.forNumeric(dataType)
     val expectedCS = expectedColStat.forNumeric(dataType)
     assert(cs.numNulls == expectedCS.numNulls)
     assert(cs.max == expectedCS.max)
     assert(cs.min == expectedCS.min)
-    checkNdv(ndv = cs.ndv, expectedNdv = expectedCS.ndv)
+    checkNdv(ndv = cs.ndv, expectedNdv = expectedCS.ndv, rsd = rsd)
   }
 
-  private def checkNdv(ndv: Long, expectedNdv: Long): Unit = {
+  private def checkNdv(ndv: Long, expectedNdv: Long, rsd: Double): Unit = {
     // ndv is an approximate value, so we make sure we have the value, and it should be
     // within 3*SD's of the given rsd.
     if (expectedNdv == 0) {
       assert(ndv == 0)
     } else if (expectedNdv > 0) {
       assert(ndv > 0)
-      val rsd = spark.sessionState.conf.ndvMaxError
       val error = math.abs((ndv / expectedNdv.toDouble) - 1.0d)
       assert(error <= rsd * 3.0d, "Error should be within 3 std. errors.")
     }
-  }
-
-  def checkTableStats(tableName: String, expectedRowCount: Option[Int]): Option[Statistics] = {
-    val df = spark.table(tableName)
-    val stats = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
-      assert(rel.catalogTable.get.stats.flatMap(_.rowCount) === expectedRowCount)
-      rel.catalogTable.get.stats
-    }
-    assert(stats.size == 1)
-    stats.head
   }
 }
