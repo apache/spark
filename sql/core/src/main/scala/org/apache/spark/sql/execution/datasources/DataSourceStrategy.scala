@@ -341,7 +341,7 @@ object DataSourceStrategy extends Strategy with Logging {
     val filterCondition = unhandledPredicates.reduceLeftOption(expressions.And)
 
     // These metadata values make scan plans uniquely identifiable for equality checking.
-    // TODO(ekl) using strings for equality checking is brittle
+    // TODO(SPARK-17701) using strings for equality checking is brittle
     val metadata: Map[String, String] = {
       val pairs = ArrayBuffer.empty[(String, String)]
 
