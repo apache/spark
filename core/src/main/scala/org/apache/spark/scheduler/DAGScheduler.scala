@@ -1263,18 +1263,20 @@ class DAGScheduler(
               s"has failed the maximum allowable number of " +
               s"times: ${Stage.MAX_CONSECUTIVE_FETCH_FAILURES}. " +
               s"Most recent failure reason: ${failureMessage}", None)
-          } else if (failedStages.isEmpty) {
-            // Don't schedule an event to resubmit failed stages if failed isn't empty, because
-            // in that case the event will already have been scheduled.
-            // TODO: Cancel running tasks in the stage
-            logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
-              s"$failedStage (${failedStage.name}) due to fetch failure")
-            messageScheduler.schedule(new Runnable {
-              override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-            }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+          } else {
+            if (failedStages.isEmpty) {
+              // Don't schedule an event to resubmit failed stages if failed isn't empty, because
+              // in that case the event will already have been scheduled.
+              // TODO: Cancel running tasks in the stage
+              logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
+                s"$failedStage (${failedStage.name}) due to fetch failure")
+              messageScheduler.schedule(new Runnable {
+                override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+              }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+            }
+            failedStages += failedStage
+            failedStages += mapStage
           }
-          failedStages += failedStage
-          failedStages += mapStage
           // Mark the map whose fetch failed as broken in the map stage
           if (mapId != -1) {
             mapStage.removeOutputLoc(mapId, bmAddress)
