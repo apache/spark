@@ -34,7 +34,7 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("values")
 
     val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(df, mh, 0.75, 0.5)
-    assert(falsePositive < 0.1)
+    assert(falsePositive < 0.3)
     assert(falseNegative < 0.1)
   }
 

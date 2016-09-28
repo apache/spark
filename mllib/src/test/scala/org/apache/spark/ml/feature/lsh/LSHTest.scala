@@ -91,7 +91,7 @@ private[ml] object LSHTest {
     val expected = dataset.sort(distUDF(col(model.getInputCol))).limit(k)
 
     // Compute actual
-    val actual = model.approxNearestNeighbors(dataset, key, k, singleProbing)
+    val actual = model.approxNearestNeighbors(dataset, key, k, singleProbing, "distCol")
 
     // Compute precision and recall
     val correctCount = expected.join(actual, model.getInputCol).count().toDouble
@@ -124,7 +124,7 @@ private[ml] object LSHTest {
     val actual = model.approxSimilarityJoin(datasetA, datasetB, threshold)
 
     // Compute precision and recall
-    val correctCount = actual.filter(col("distance") < threshold).count().toDouble
+    val correctCount = actual.filter(col("distCol") < threshold).count().toDouble
     (correctCount / actual.count(), correctCount / expected.count())
   }
 }
