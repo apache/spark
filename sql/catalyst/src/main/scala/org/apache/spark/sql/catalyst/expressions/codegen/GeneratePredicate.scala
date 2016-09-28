@@ -40,6 +40,8 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
   protected def create(predicate: Expression): ((InternalRow) => Boolean) = {
     val ctx = newCodeGenContext()
     val eval = predicate.genCode(ctx)
+    val allInitializations = ctx.initMutableStates()
+
     val codeBody = s"""
       public SpecificPredicate generate(Object[] references) {
         return new SpecificPredicate(references);
@@ -52,7 +54,7 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
 
         public SpecificPredicate(Object[] references) {
           this.references = references;
-          ${ctx.initMutableStates()}
+          $allInitializations
         }
 
         public boolean eval(InternalRow ${ctx.INPUT_ROW}) {

@@ -163,7 +163,8 @@ class CodegenContext {
   def initMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    mutableStates.distinct.map(_._3).mkString("\n")
+    val initCodes = mutableStates.distinct.map(_._3)
+    splitExpressions(initCodes, "init", ("Object[]", "references") :: Nil)
   }
 
   /**
@@ -589,6 +590,11 @@ class CodegenContext {
       // Cannot split these expressions because they are not created from a row object.
       return expressions.mkString("\n")
     }
+    splitExpressions(expressions, "apply", ("InternalRow", row) :: Nil)
+  }
+
+  private def splitExpressions(
+      expressions: Seq[String], funcName: String, arguments: Seq[(String, String)]): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
@@ -608,11 +614,11 @@ class CodegenContext {
       // inline execution if only one block
       blocks.head
     } else {
-      val apply = freshName("apply")
+      val func = freshName(funcName)
       val functions = blocks.zipWithIndex.map { case (body, i) =>
-        val name = s"${apply}_$i"
+        val name = s"${func}_$i"
         val code = s"""
-           |private void $name(InternalRow $row) {
+           |private void $name(${arguments.map { case (t, name) => s"$t $name" }.mkString(", ")}) {
            |  $body
            |}
          """.stripMargin
@@ -620,7 +626,7 @@ class CodegenContext {
         name
       }
 
-      functions.map(name => s"$name($row);").mkString("\n")
+      functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")});").mkString("\n")
     }
   }
 

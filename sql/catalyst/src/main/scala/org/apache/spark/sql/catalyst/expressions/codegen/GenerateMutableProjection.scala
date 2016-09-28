@@ -93,6 +93,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
 
     val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)
     val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
+    val allInitializations = ctx.initMutableStates()
 
     val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
@@ -109,7 +110,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
         public SpecificMutableProjection(Object[] references) {
           this.references = references;
           mutableRow = new $genericMutableRowType(${expressions.size});
-          ${ctx.initMutableStates()}
+          $allInitializations
         }
 
         public ${classOf[BaseMutableProjection].getName} target(MutableRow row) {

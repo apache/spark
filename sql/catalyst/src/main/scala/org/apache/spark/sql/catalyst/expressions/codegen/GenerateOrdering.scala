@@ -124,6 +124,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
   protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
     val ctx = newCodeGenContext()
     val comparisons = genComparisons(ctx, ordering)
+    val allInitializations = ctx.initMutableStates()
     val codeBody = s"""
       public SpecificOrdering generate(Object[] references) {
         return new SpecificOrdering(references);
@@ -137,7 +138,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
 
         public SpecificOrdering(Object[] references) {
           this.references = references;
-          ${ctx.initMutableStates()}
+          $allInitializations
         }
 
         public int compare(InternalRow a, InternalRow b) {
