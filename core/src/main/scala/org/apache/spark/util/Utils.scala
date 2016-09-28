@@ -27,6 +27,7 @@ import java.nio.file.Files
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.zip.GZIPInputStream
 import javax.net.ssl.HttpsURLConnection
 
 import scala.annotation.tailrec
@@ -1455,7 +1456,11 @@ private[spark] object Utils extends Logging {
     val effectiveEnd = math.min(length, end)
     val effectiveStart = math.max(0, start)
     val buff = new Array[Byte]((effectiveEnd-effectiveStart).toInt)
-    val stream = new FileInputStream(file)
+    val stream = if (path.endsWith(".gz")) {
+      new GZIPInputStream(new FileInputStream(file))
+    } else {
+      new FileInputStream(file)
+    }
 
     try {
       ByteStreams.skipFully(stream, effectiveStart)
