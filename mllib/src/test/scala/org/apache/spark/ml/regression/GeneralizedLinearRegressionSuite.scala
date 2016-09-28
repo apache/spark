@@ -31,6 +31,7 @@ import org.apache.spark.mllib.random._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.FloatType
 
 class GeneralizedLinearRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -1066,6 +1067,32 @@ class GeneralizedLinearRegressionSuite
       assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with regParam = $regParam.")
       idx += 1
     }
+  }
+
+  test("evaluate with labels that are not doubles") {
+    // Evaulate with a dataset that contains Labels not as doubles to verify correct casting
+    val datasetWithWeight = Seq(
+      Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(19.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(23.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(29.0, 4.0, Vectors.dense(3.0, 13.0))
+    ).toDF()
+
+    val trainer = new GeneralizedLinearRegression()
+        .setWeightCol("weight")
+    val model = trainer.fit(datasetWithWeight)
+
+    assert(model.hasSummary)
+    val summary = model.summary
+    assert(summary.isInstanceOf[GeneralizedLinearRegressionTrainingSummary])
+
+    val longLabelDataset = datasetWithWeight.select(col(model.getLabelCol).cast(FloatType),
+      col(model.getFeaturesCol), col(model.getWeightCol))
+    val evalSummary = model.evaluate(longLabelDataset)
+    // The calculations below involve pattern matching with Label as a double
+    assert(evalSummary.nullDeviance === summary.nullDeviance)
+    assert(evalSummary.deviance === summary.deviance)
+    assert(evalSummary.aic === summary.aic)
   }
 }
 
