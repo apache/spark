@@ -24,9 +24,9 @@ To build Spark and its example programs, run:
 
     build/mvn -DskipTests clean package
 
-(You do not need to do this if you downloaded a pre-built package.)
+(You do not need to do this if you have downloaded a pre-built package.)
 
-You can build Spark using more than one thread by using the -T option with Maven, see ["Parallel builds in Maven 3"](https://cwiki.apache.org/confluence/display/MAVEN/Parallel+builds+in+Maven+3).
+You can build Spark using more than one thread by using the -T option with Maven (see ["Parallel builds in Maven 3"](https://cwiki.apache.org/confluence/display/MAVEN/Parallel+builds+in+Maven+3)).
 More detailed documentation is available from the project site, at
 ["Building Spark"](http://spark.apache.org/docs/latest/building-spark.html).
 For developing Spark using an IDE, see [Eclipse](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-Eclipse)
@@ -44,7 +44,7 @@ Try the following command, which should return 1000:
 
 ## Interactive Python Shell
 
-Alternatively, if you prefer Python, you can use the Python shell:
+Alternatively, you can use the Python shell:
 
     ./bin/pyspark
 
@@ -55,18 +55,18 @@ And run the following command, which should also return 1000:
 ## Example Programs
 
 Spark also comes with several sample programs in the `examples` directory.
-To run one of them, use `./bin/run-example <class> [params]`. For example:
+To run one of them, use `./bin/run-example <class> [params]`. For instance:
 
     ./bin/run-example SparkPi
 
 will run the Pi example locally.
 
 You can set the MASTER environment variable when running examples to submit
-examples to a cluster. This can be a mesos:// or spark:// URL,
+them to a cluster. This can be a mesos:// or spark:// URL,
 "yarn" to run on YARN, and "local" to run
 locally with one thread, or "local[N]" to run locally with N threads. You
 can also use an abbreviated class name if the class is in the `examples`
-package. For instance:
+package, as follows:
 
     MASTER=spark://host:7077 ./bin/run-example SparkPi
 
@@ -79,7 +79,7 @@ can be run using:
 
     ./dev/run-tests
 
-Please see the guidance on how to
+Please see the guide on how to
 [run tests for a module, or individual tests](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools).
 
 ## A Note About Hadoop Versions
@@ -90,8 +90,8 @@ Hadoop, you must build Spark against the same version that your cluster runs.
 
 Please refer to the build documentation at
 ["Specifying the Hadoop Version"](http://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version)
-for detailed guidance on building for a particular distribution of Hadoop, including
-building for particular Hive and Hive Thriftserver distributions.
+for detailed instructions on building for a particular distribution of Hadoop, including
+building for specific Hive and Hive Thriftserver distributions.
 
 ## Configuration
 
