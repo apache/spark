@@ -50,6 +50,14 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
     }
   }
 
+  protected def makeSureGetOffsetCalled = AssertOnQuery { q =>
+    // Because KafkaSource's initialPartitionOffsets is set lazily, we need to make sure
+    // its "getOffset" is called before pushing any data. Otherwise, because of the race contion,
+    // we don't know which data should be fetched when `startingOffset` is latest.
+    q.processAllAvailable()
+    true
+  }
+
   /**
    * Add data to Kafka.
    *
@@ -63,6 +71,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 
     override def addData(query: Option[StreamExecution]): (Source, Offset) = {
       if (query.get.isActive) {
+        // Make sure no Spark job is running when deleting a topic
         query.get.processAllAvailable()
       }
 
@@ -185,10 +194,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
     val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
 
     testStream(mapped)(
-      AssertOnQuery { q =>
-        q.processAllAvailable()
-        true
-      },
+      makeSureGetOffsetCalled,
       AddKafkaData(Set(topic), 1, 2, 3),
       CheckAnswer(2, 3, 4),
       Assert {
@@ -270,12 +276,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
     val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
 
     testStream(mapped)(
-      AssertOnQuery { q =>
-        // Because KafkaSource's initialPartitionOffsets is set lazily, we need to make sure
-        // its "getOffset" is called before pushing any data.
-        q.processAllAvailable()
-        true
-      },
+      makeSureGetOffsetCalled,
       AddKafkaData(Set(topic), 1, 2, 3),
       CheckAnswer(2, 3, 4),
       StopStream,
@@ -352,7 +353,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest with BeforeAndAfter {
     }
   }
 
-  private def stressTest(checkAnswer: Boolean): Unit = {
+  test("stress test with multiple topics and partitions")  {
     topics.foreach { topic =>
       testUtils.createTopic(topic, partitions = nextInt(1, 6))
       testUtils.sendMessages(topic, (101 to 105).map { _.toString }.toArray)
@@ -373,6 +374,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest with BeforeAndAfter {
 
     runStressTest(
       mapped,
+      Seq(makeSureGetOffsetCalled),
       (d, running) => {
         Random.nextInt(5) match {
           case 0 => // Add a new topic
@@ -383,7 +385,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest with BeforeAndAfter {
                   testUtils.createTopic(topic, partitions = nextInt(1, 6))
                 }
               })
-          case 1 if !checkAnswer || running =>
+          case 1 if running =>
             // Only delete a topic when the query is running. Otherwise, we may lost data and
             // cannot check the correctness.
             val deletedTopic = topics(Random.nextInt(topics.size))
@@ -406,15 +408,6 @@ class KafkaSourceStressSuite extends KafkaSourceTest with BeforeAndAfter {
             AddKafkaData(topics.toSet, d: _*)
         }
       },
-      checkAnswer = checkAnswer,
       iterations = 50)
-  }
-
-  test("stress test with multiple topics and partitions") {
-    stressTest(checkAnswer = true)
-  }
-
-  test("don't crash when adding and deleting partitions concurrently") {
-    stressTest(checkAnswer = false)
   }
 }

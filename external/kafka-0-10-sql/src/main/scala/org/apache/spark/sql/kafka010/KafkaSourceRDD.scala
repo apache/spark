@@ -21,10 +21,11 @@ import java.{util => ju}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.kafka.clients.consumer.{ConsumerRecord, OffsetOutOfRangeException}
+import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -52,8 +53,7 @@ private[kafka010] case class KafkaSourceRDDPartition(
  * the [[KafkaSource]] can ensure the same executor always reads the same topic + partition
  * and cached KafkaConsuemrs (see [[CachedKafkaConsumer]] can be used read data efficiently.
  *
- * Note that this is a simplified version of the org.apache.spark.streaming.kafka010.KafkaRDD.
- *
+ * @param sc the [[SparkContext]]
  * @param executorKafkaParams Kafka configuration for creating KafkaConsumer on the executors
  * @param offsetRanges Offset ranges that define the Kafka data belonging to this RDD
  */
@@ -74,6 +74,11 @@ private[kafka010] class KafkaSourceRDD(
   }
 
   override def count(): Long = offsetRanges.map(_.size).sum
+
+  override def countApprox(timeout: Long, confidence: Double): PartialResult[BoundedDouble] = {
+    val c = count
+    new PartialResult(new BoundedDouble(c, 1.0, c, c), true)
+  }
 
   override def isEmpty(): Boolean = count == 0L
 

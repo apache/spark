@@ -482,37 +482,30 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     ds: Dataset[Int],
     addData: Seq[Int] => StreamAction,
     iterations: Int = 100): Unit = {
-    runStressTest(ds, (data, running) => addData(data), true, iterations)
+    runStressTest(ds, Seq.empty, (data, running) => addData(data), iterations)
   }
 
   /**
    * Creates a stress test that randomly starts/stops/adds data/checks the result.
    *
    * @param ds a dataframe that executes + 1 on a stream of integers, returning the result
+   * @param preparedActions actions need to run before starting the stress test.
    * @param addData an add data action that adds the given numbers to the stream, encoding them
    *                as needed
-   * @param checkAnswer should add `CheckAnswer` to the test.
    * @param iterations the iteration number
    */
   def runStressTest(
       ds: Dataset[Int],
+      preparedActions: Seq[StreamAction],
       addData: (Seq[Int], Boolean) => StreamAction,
-      checkAnswer: Boolean,
       iterations: Int): Unit = {
     implicit val intEncoder = ExpressionEncoder[Int]()
     var dataPos = 0
     var running = true
     val actions = new ArrayBuffer[StreamAction]()
-    actions += AssertOnQuery { q =>
-      q.processAllAvailable()
-      true
-    }
+    actions ++= preparedActions
 
-    def addCheck() = {
-      if (checkAnswer) {
-        actions += CheckAnswer(1 to dataPos: _*)
-      }
-    }
+    def addCheck() = { actions += CheckAnswer(1 to dataPos: _*) }
 
     def addRandomData() = {
       val numItems = Random.nextInt(10)

@@ -82,7 +82,7 @@ private[kafka010] case class KafkaSource(
     consumerStrategy: ConsumerStrategy,
     executorKafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String],
-    autoOffsetResetValue: String)
+    failOnCorruptMetadata: Boolean)
   extends Source with Logging {
 
   private val sc = sqlContext.sparkContext
@@ -93,9 +93,13 @@ private[kafka010] case class KafkaSource(
    */
   private val consumer = consumerStrategy.createConsumer()
 
-  /** Lazy set initialPartitionOffsets to only call `KafkaConsumer.poll` in StreamExecutionThread */
+  /**
+   * Lazy set initialPartitionOffsets to make sure only call `KafkaConsumer.poll` in
+   * StreamExecutionThread. Otherwise, interrupting a thread running `KafkaConsumer.poll` may hang
+   * forever (KAFKA-1894).
+   */
   private lazy val initialPartitionOffsets = {
-    val offsets = fetchPartitionOffsets(seekToLatest = false)
+    val offsets = fetchPartitionOffsets(seekToEnd = false)
     logInfo(s"Initial offsets: $offsets")
     offsets
   }
@@ -107,7 +111,7 @@ private[kafka010] case class KafkaSource(
     // Make sure initialPartitionOffsets is set
     initialPartitionOffsets
 
-    val offset = KafkaSourceOffset(fetchPartitionOffsets(seekToLatest = true))
+    val offset = KafkaSourceOffset(fetchPartitionOffsets(seekToEnd = true))
     logDebug(s"GetOffset: ${offset.partitionToOffsets.toSeq.map(_.toString).sorted}")
     Some(offset)
   }
@@ -136,30 +140,23 @@ private[kafka010] case class KafkaSource(
     if (newPartitionOffsets.keySet != newPartitions) {
       // We cannot get from offsets for some partitions. It means they got deleted.
       val deletedPartitions = newPartitions.diff(newPartitionOffsets.keySet)
-      logWarning(s"Partitions removed: ${deletedPartitions}, some data may have been missed")
+      reportCorruptMetadata(
+        s"Cannot find earliest offsets of ${deletedPartitions}. Some data may have been missed")
     }
     logInfo(s"Partitions added: $newPartitionOffsets")
     newPartitionOffsets.filter(_._2 != 0).foreach { case (p, o) =>
-      logWarning(s"Added partition $p starts from $o instead of 0, some data may have been missed")
+      reportCorruptMetadata(
+        s"Added partition $p starts from $o instead of 0. Some data may have been missed")
     }
 
     val deletedPartitions = fromPartitionOffsets.keySet.diff(untilPartitionOffsets.keySet)
-    logWarning(s"Partitions removed: $deletedPartitions, some data may have been missed")
-
-    // Sort the partitions and current list of executors to consistently assign each partition
-    // to the executor. This allows cached KafkaConsumers in the executors to be re-used to
-    // read the same partition in every batch.
-    val topicPartitionOrdering = new Ordering[TopicPartition] {
-      override def compare(l: TopicPartition, r: TopicPartition): Int = {
-        implicitly[Ordering[(String, Long)]].compare(
-          (l.topic, l.partition),
-          (r.topic, r.partition))
-      }
-    }
+    // TODO should this one ever throw an exception?
+    reportCorruptMetadata(s"$deletedPartitions are removed. Some data may have been missed")
 
     // Use the until partitions to calculate offset ranges to ignore partitions that have
     // been deleted
     val sortedTopicPartitions = untilPartitionOffsets.keySet.filter { tp =>
+      // Ignore partitions that we don't know the from offsets.
       newPartitionOffsets.contains(tp) || fromPartitionOffsets.contains(tp)
     }.toSeq.sorted(topicPartitionOrdering)
     logDebug("Sorted topicPartitions: " + sortedTopicPartitions.mkString(", "))
@@ -211,38 +208,38 @@ private[kafka010] case class KafkaSource(
   override def toString(): String = s"KafkaSource[$consumerStrategy]"
 
   /**
-   * Fetch the offset of a partition, either the latest offsets or the current offsets in the
-   * KafkaConsumer.
+   * Fetch the offset of a partition, either seek to the latest offsets or use the current offsets
+   * in the consumer.
    */
   private def fetchPartitionOffsets(
-      seekToLatest: Boolean): Map[TopicPartition, Long] = withRetries {
-    // Poll to get the latest assigned partitions
-    logTrace("\tPolling")
+      seekToEnd: Boolean): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
     // Make sure `KafkaConsumer.poll` won't be interrupted (KAFKA-1894)
     assert(Thread.currentThread().isInstanceOf[StreamExecutionThread])
+    // Poll to get the latest assigned partitions
     consumer.poll(0)
     val partitions = consumer.assignment()
     consumer.pause(partitions)
-    logDebug(s"\tPartitioned assigned to consumer: $partitions")
+    logDebug(s"Partitioned assigned to consumer: $partitions")
 
     // Get the current or latest offset of each partition
-    if (seekToLatest) {
+    if (seekToEnd) {
       consumer.seekToEnd(partitions)
-      logDebug("\tSeeked to the end")
+      logDebug("Seeked to the end")
     }
-    logTrace("Getting positions")
     val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
     logDebug(s"Got offsets for partition : $partitionOffsets")
     partitionOffsets
   }
 
-  /** Fetch the earliest offsets for newly discovered partitions */
+  /**
+   * Fetch the earliest offsets for newly discovered partitions. The return results may not contain
+   * some partitions if they are deleted.
+   */
   private def fetchNewPartitionEarliestOffsets(
-      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = withRetries {
-    // Poll to get the latest assigned partitions
-    logTrace("\tPolling")
+      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
     // Make sure `KafkaConsumer.poll` won't be interrupted (KAFKA-1894)
     assert(Thread.currentThread().isInstanceOf[StreamExecutionThread])
+    // Poll to get the latest assigned partitions
     consumer.poll(0)
     val partitions = consumer.assignment()
     logDebug(s"\tPartitioned assigned to consumer: $partitions")
@@ -266,7 +263,8 @@ private[kafka010] case class KafkaSource(
    * This method also makes sure `body` won't be interrupted to workaround a potential issue in
    * `KafkaConsumer.poll`. (KAFKA-1894)
    */
-  private def withRetries(body: => Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
+  private def withRetriesWithoutInterrupt(
+      body: => Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
     synchronized {
       var result: Option[Map[TopicPartition, Long]] = None
       var attempt = 1
@@ -309,7 +307,17 @@ private[kafka010] case class KafkaSource(
     }
   }
 
-  private def floorMod(a: Long, b: Int): Int = ((a % b).toInt + b) % b
+  /**
+   * If `failOnCorruptMetadata` is true, this method will throw an `IllegalStateException`.
+   * Otherwise, just log a warning.
+   */
+  private def reportCorruptMetadata(message: String): Unit = {
+    if (failOnCorruptMetadata) {
+      throw new IllegalStateException(message)
+    } else {
+      logWarning(message)
+    }
+  }
 }
 
 
@@ -369,4 +377,17 @@ private[kafka010] object KafkaSource {
   private def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
     if (a.host == b.host) { a.executorId > b.executorId } else { a.host > b.host }
   }
+
+  // Sort the partitions and current list of executors to consistently assign each partition
+  // to the executor. This allows cached KafkaConsumers in the executors to be re-used to
+  // read the same partition in every batch.
+  private val topicPartitionOrdering = new Ordering[TopicPartition] {
+    override def compare(l: TopicPartition, r: TopicPartition): Int = {
+      implicitly[Ordering[(String, Long)]].compare(
+        (l.topic, l.partition),
+        (r.topic, r.partition))
+    }
+  }
+
+  private def floorMod(a: Long, b: Int): Int = ((a % b).toInt + b) % b
 }

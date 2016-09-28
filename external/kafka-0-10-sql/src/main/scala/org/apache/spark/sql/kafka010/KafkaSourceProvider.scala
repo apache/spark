@@ -38,7 +38,8 @@ import org.apache.spark.sql.types.StructType
  * missing options even before the query is started.
  */
 private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
-    with DataSourceRegister with Logging {
+  with DataSourceRegister with Logging {
+
   import KafkaSourceProvider._
 
   /**
@@ -105,13 +106,13 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
         .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
         .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
 
-        // So that consumers in executors never throw NoOffsetForPartitionException
+        // Make sure executors do only what the driver tells them.
         .set(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
 
         // So that consumers in executors do not mess with any existing group id
         .set(ConsumerConfig.GROUP_ID_CONFIG, s"$uniqueGroupId-executor")
 
-        // So that consumers in executors does not commit offsets unnecessaribly
+        // So that consumers in executors does not commit offsets unnecessarily
         .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
 
         // If buffer config is not set, set it to reasonable value to work around
@@ -134,7 +135,15 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
         throw new IllegalArgumentException("Unknown option")
     }
 
-    new KafkaSource(sqlContext, strategy, kafkaParamsForExecutors, parameters, autoOffsetResetValue)
+    val failOnCorruptMetadata =
+      caseInsensitiveParams.getOrElse(FAIL_ON_CORRUPT_METADATA_OPTION_KEY, "false").toBoolean
+
+    new KafkaSource(
+      sqlContext,
+      strategy,
+      kafkaParamsForExecutors,
+      parameters,
+      failOnCorruptMetadata)
   }
 
   private def validateOptions(parameters: Map[String, String]): Unit = {
@@ -196,8 +205,12 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
         s"""
            |Kafka option '${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG}' is not supported.
            |Instead set the source option '$STARTING_OFFSET_OPTION_KEY' to 'earliest' or 'latest' to
-           |specify where to start. This will ensure that no data is missed when when new
-           |topics/partitions are dynamically subscribed. See the docs for more details.
+           |specify where to start. Structured Streaming manages which offsets are consumed
+           |internally, rather than rely on the kafka Consumer to do it. This will ensure that no
+           |data is missed when when new topics/partitions are dynamically subscribed. Note that
+           |'$STARTING_OFFSET_OPTION_KEY' only applies when a new Streaming query is started, and
+           |that resuming will always pick up from where the query left off. See the docs for more
+           |details.
          """.stripMargin)
     }
 
@@ -261,4 +274,5 @@ private[kafka010] object KafkaSourceProvider {
   private val STRATEGY_OPTION_KEYS = Set("subscribe", "subscribepattern")
   private val STARTING_OFFSET_OPTION_KEY = "startingoffset"
   private val STARTING_OFFSET_OPTION_VALUES = Set("earliest", "latest")
+  private val FAIL_ON_CORRUPT_METADATA_OPTION_KEY = "failoncorruptmetadata"
 }
