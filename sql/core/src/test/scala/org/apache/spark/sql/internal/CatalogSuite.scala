@@ -340,6 +340,124 @@ class CatalogSuite
     }
   }
 
+  test("find database") {
+    assert(spark.catalog.findDatabase("db10") === None)
+    withTempDatabase { db =>
+      assert(spark.catalog.findDatabase(db).map(_.name) === Some(db))
+    }
+  }
+
+  test("find table") {
+    withTempDatabase { db =>
+      withTable(s"tbl_x", s"$db.tbl_y") {
+        // Try to find non existing tables.
+        assert(spark.catalog.findTable("tbl_x") === None)
+        assert(spark.catalog.findTable("tbl_y") === None)
+        assert(spark.catalog.findTable(db, "tbl_y") === None)
+
+        // Create objects.
+        createTempTable("tbl_x")
+        createTable("tbl_y", Some(db))
+
+        // Find a temporary table
+        assert(spark.catalog.findTable("tbl_x").map(_.name) === Some("tbl_x"))
+
+        // Find a qualified table
+        assert(spark.catalog.findTable(db, "tbl_y").map(_.name) === Some("tbl_y"))
+
+        // Find an unqualified table using the current database
+        assert(spark.catalog.findTable("tbl_y") === None)
+        spark.catalog.setCurrentDatabase(db)
+        assert(spark.catalog.findTable("tbl_y").map(_.name) === Some("tbl_y"))
+      }
+    }
+  }
+
+  test("find function") {
+    withTempDatabase { db =>
+      withUserDefinedFunction("fn1" -> true, s"$db.fn2" -> false) {
+        // Try to find non existing functions.
+        assert(spark.catalog.findFunction("fn1") === None)
+        assert(spark.catalog.findFunction("fn2") === None)
+        assert(spark.catalog.findFunction(db, "fn2") === None)
+
+        // Create objects.
+        createTempFunction("fn1")
+        createFunction("fn2", Some(db))
+
+        // Find a temporary function
+        assert(spark.catalog.findFunction("fn1").map(_.name) === Some("fn1"))
+
+        // Find a qualified function
+        assert(spark.catalog.findFunction(db, "fn2").map(_.name) === Some("fn2"))
+
+        // Find an unqualified function using the current database
+        assert(spark.catalog.findFunction("fn2") === None)
+        spark.catalog.setCurrentDatabase(db)
+        assert(spark.catalog.findFunction("fn2").map(_.name) === Some("fn2"))
+      }
+    }
+  }
+
+  test("database exists") {
+    assert(!spark.catalog.databaseExists("db10"))
+    createDatabase("db10")
+    assert(spark.catalog.databaseExists("db10"))
+    dropDatabase("db10")
+  }
+
+  test("table exists") {
+    withTempDatabase { db =>
+      withTable(s"tbl_x", s"$db.tbl_y") {
+        // Try to find non existing tables.
+        assert(!spark.catalog.tableExists("tbl_x"))
+        assert(!spark.catalog.tableExists("tbl_y"))
+        assert(!spark.catalog.tableExists(db, "tbl_y"))
+
+        // Create objects.
+        createTempTable("tbl_x")
+        createTable("tbl_y", Some(db))
+
+        // Find a temporary table
+        assert(spark.catalog.tableExists("tbl_x"))
+
+        // Find a qualified table
+        assert(spark.catalog.tableExists(db, "tbl_y"))
+
+        // Find an unqualified table using the current database
+        assert(!spark.catalog.tableExists("tbl_y"))
+        spark.catalog.setCurrentDatabase(db)
+        assert(spark.catalog.tableExists("tbl_y"))
+      }
+    }
+  }
+
+  test("function exists") {
+    withTempDatabase { db =>
+      withUserDefinedFunction("fn1" -> true, s"$db.fn2" -> false) {
+        // Try to find non existing functions.
+        assert(!spark.catalog.functionExists("fn1"))
+        assert(!spark.catalog.functionExists("fn2"))
+        assert(!spark.catalog.functionExists(db, "fn2"))
+
+        // Create objects.
+        createTempFunction("fn1")
+        createFunction("fn2", Some(db))
+
+        // Find a temporary function
+        assert(spark.catalog.functionExists("fn1"))
+
+        // Find a qualified function
+        assert(spark.catalog.functionExists(db, "fn2"))
+
+        // Find an unqualified function using the current database
+        assert(!spark.catalog.functionExists("fn2"))
+        spark.catalog.setCurrentDatabase(db)
+        assert(spark.catalog.functionExists("fn2"))
+      }
+    }
+  }
+
   // TODO: add tests for the rest of them
 
 }
