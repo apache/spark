@@ -20,9 +20,7 @@ import java.util.{Arrays, Date, List => JList}
 import javax.ws.rs.{DefaultValue, GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
-import scala.collection.mutable.ListBuffer
-
-import org.apache.spark.deploy.history.{ApplicationHistoryInfo, HistoryServer}
+import org.apache.spark.deploy.history.ApplicationHistoryInfo
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class ApplicationListResource(uiRoot: UIRoot) {
@@ -35,7 +33,7 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
       @QueryParam("limit") limit: Integer)
   : Iterator[ApplicationInfo] = {
     val numApps = Option(limit).getOrElse(Integer.MAX_VALUE).asInstanceOf[Int]
-    val appsIter = uiRoot.asInstanceOf[HistoryServer].getApplicationList().iterator
+    val allApps = uiRoot.getApplicationInfoListView
 
     val adjStatus = {
       if (status.isEmpty) {
@@ -44,13 +42,10 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
         status
       }
     }
+
     val includeCompleted = adjStatus.contains(ApplicationStatus.COMPLETED)
     val includeRunning = adjStatus.contains(ApplicationStatus.RUNNING)
-
-    val allApps: ListBuffer[ApplicationInfo] = ListBuffer.empty
-    while (appsIter.hasNext && allApps.size < numApps) {
-      val app = ApplicationsListResource.appHistoryInfoToPublicAppInfo(appsIter.next)
-
+    allApps.filter { app =>
       val anyRunning = app.attempts.exists(!_.completed)
       // if any attempt is still running, we consider the app to also still be running
       val statusOk = (!anyRunning && includeCompleted) ||
@@ -60,13 +55,8 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
         attempt.startTime.getTime >= minDate.timestamp &&
           attempt.startTime.getTime <= maxDate.timestamp
       }
-
-      if (statusOk && dateOk) {
-        allApps += app
-      }
-    }
-
-    allApps.iterator
+      statusOk && dateOk
+    }.take(numApps).force.iterator
   }
 }
 

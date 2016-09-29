@@ -21,6 +21,7 @@ import java.util.NoSuchElementException
 import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
+import scala.collection.IterableView
 import scala.util.control.NonFatal
 
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
@@ -29,7 +30,8 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource, UIRoot}
+import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource,
+  UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
@@ -180,6 +182,10 @@ class HistoryServer(
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+  }
+
+  def getApplicationInfoListView: IterableView[ApplicationInfo, Iterable[_]] = {
+    getApplicationList().view.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
 
   override def writeEventLogs(

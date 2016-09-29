@@ -21,6 +21,8 @@ import javax.servlet.ServletContext
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
 
+import scala.collection.IterableView
+
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.glassfish.jersey.server.ServerProperties
@@ -222,6 +224,7 @@ private[spark] object ApiRootResource {
 private[spark] trait UIRoot {
   def getSparkUI(appKey: String): Option[SparkUI]
   def getApplicationInfoList: Iterator[ApplicationInfo]
+  def getApplicationInfoListView: IterableView[ApplicationInfo, Iterable[_]]
 
   /**
    * Write the event logs for the given app to the [[ZipOutputStream]] instance. If attemptId is
