@@ -224,6 +224,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getListing(): Iterable[FsApplicationHistoryInfo] = applications.values
 
+  override def getApplicationInfo(appId: String): Option[FsApplicationHistoryInfo] = {
+    applications.get(appId)
+  }
+
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
     try {
       applications.get(appId).flatMap { appInfo =>
