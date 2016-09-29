@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
+import org.apache.spark.sql.internal.GlobalSQLConf
 import org.apache.spark.sql.internal.SQLConf
 
 
@@ -36,6 +37,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: String): Unit = {
+    assertNotGlobalSQLConf(key)
     sqlConf.setConfString(key, value)
   }
 
@@ -122,6 +124,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def unset(key: String): Unit = {
+    assertNotGlobalSQLConf(key)
     sqlConf.unsetConf(key)
   }
 
@@ -132,4 +135,9 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
     sqlConf.contains(key)
   }
 
+  private def assertNotGlobalSQLConf(key: String): Unit = {
+    if (GlobalSQLConf.globalConfKeys.contains(key)) {
+      throw new AnalysisException(s"Can not set/unset a global SQL conf: $key")
+    }
+  }
 }

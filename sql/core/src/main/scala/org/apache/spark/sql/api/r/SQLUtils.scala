@@ -28,11 +28,11 @@ import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.command.ShowTablesCommand
+import org.apache.spark.sql.internal.GlobalSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
 
 private[sql] object SQLUtils extends Logging {

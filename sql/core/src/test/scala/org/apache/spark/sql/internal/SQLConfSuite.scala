@@ -19,11 +19,14 @@ package org.apache.spark.sql.internal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
+import org.apache.spark.sql._
 import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.internal.GlobalSQLConf._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
+
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"
 
@@ -249,5 +252,21 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
           .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
       }
     }
+  }
+
+  test("global SQL conf comes from SparkConf") {
+    val newSession = SparkSession.builder()
+      .config(SCHEMA_STRING_LENGTH_THRESHOLD.key, "2000")
+      .getOrCreate()
+
+    assert(newSession.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD.key) == "2000")
+    checkAnswer(
+      newSession.sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}"),
+      Row(SCHEMA_STRING_LENGTH_THRESHOLD.key, "2000"))
+  }
+
+  test("cannot set/unset global SQL conf") {
+    intercept[AnalysisException](sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}=10"))
+    intercept[AnalysisException](sql(s"UNSET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}=10"))
   }
 }
