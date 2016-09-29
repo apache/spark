@@ -333,10 +333,11 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     logInfo("Filtered files: \n" + generatedFiles.mkString("\n"))
     assert(generatedFiles.size > 1)
     if (isCompressed) {
-      assert(generatedFiles.filter(_.getName.endsWith(".gz")).size > 0)
+      assert(
+        generatedFiles.filter(_.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)).size > 0)
     }
     val allText = generatedFiles.map { file =>
-      if (file.getName.endsWith(".gz")) {
+      if (file.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)) {
         val inputStream = new GZIPInputStream(new FileInputStream(file))
         try {
           IOUtils.toString(inputStream, StandardCharsets.UTF_8)
