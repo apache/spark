@@ -179,7 +179,17 @@ class HistoryServer(
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
-    getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+    new Iterator[ApplicationInfo] {
+      private val appIter = getApplicationList().iterator
+
+      override def hasNext: Boolean = {
+        appIter.hasNext
+      }
+
+      override def next(): ApplicationInfo = {
+        ApplicationsListResource.appHistoryInfoToPublicAppInfo(appIter.next)
+      }
+    }
   }
 
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {

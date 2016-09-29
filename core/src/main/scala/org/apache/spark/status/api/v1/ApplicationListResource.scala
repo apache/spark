@@ -42,22 +42,39 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
     }
     val includeCompleted = adjStatus.contains(ApplicationStatus.COMPLETED)
     val includeRunning = adjStatus.contains(ApplicationStatus.RUNNING)
-    val appList = allApps.filter { app =>
-      val anyRunning = app.attempts.exists(!_.completed)
-      // if any attempt is still running, we consider the app to also still be running
-      val statusOk = (!anyRunning && includeCompleted) ||
-        (anyRunning && includeRunning)
-      // keep the app if *any* attempts fall in the right time window
-      val dateOk = app.attempts.exists { attempt =>
-        attempt.startTime.getTime >= minDate.timestamp &&
-          attempt.startTime.getTime <= maxDate.timestamp
+    val numApps = Option(limit).getOrElse(Integer.MAX_VALUE).asInstanceOf[Int]
+    
+    new Iterator[ApplicationInfo] {
+      private var appCount = 0
+      private var nextApp: Option[ApplicationInfo] = None
+
+      override def hasNext: Boolean = {
+        nextApp = None
+
+        while (nextApp == None && appCount < numApps && allApps.hasNext) {
+          val app = allApps.next
+          val anyRunning = app.attempts.exists(!_.completed)
+          // if any attempt is still running, we consider the app to also still be running
+          val statusOk = (!anyRunning && includeCompleted) ||
+            (anyRunning && includeRunning)
+          // keep the app if *any* attempts fall in the right time window
+          val dateOk = app.attempts.exists { attempt =>
+            attempt.startTime.getTime >= minDate.timestamp &&
+              attempt.startTime.getTime <= maxDate.timestamp
+          }
+
+          if (statusOk && dateOk) {
+            nextApp = Some(app)
+            appCount += 1
+          }
+        }
+
+        nextApp != None
       }
-      statusOk && dateOk
-    }
-    if (limit != null) {
-      appList.take(limit)
-    } else {
-      appList
+
+      override def next(): ApplicationInfo = {
+        nextApp.get
+      }
     }
   }
 }
