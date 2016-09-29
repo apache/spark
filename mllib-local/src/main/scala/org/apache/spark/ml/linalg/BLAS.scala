@@ -643,11 +643,9 @@ private[spark] object BLAS extends Serializable {
             sum += Avals(i) * xValues(k)
             k += 1
             i += 1
-          }
-          else if (xIndices(k) < Acols(i)) {
+          } else if (xIndices(k) < Acols(i)) {
             k += 1
-          }
-          else {
+          } else {
             i += 1
           }
         }
