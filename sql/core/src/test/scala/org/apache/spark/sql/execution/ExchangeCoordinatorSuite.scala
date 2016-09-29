@@ -694,12 +694,12 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       import spark.implicits._
        val df1 = spark.sparkContext.makeRDD(1 to 10).
          map(i => {
-           ((if (i < 5) 9999 else if (i == 8) 8888 else 500 + i), "b" + i, "fuck")
+           ((if (i < 5) 9999 else if (i == 8) 8888 else 500 + i), "b" + i, "skew test")
          }).
-         toDF("sid", "sname", "fuck")
+         toDF("sid", "sname", "scomment")
       val df2 = spark.sparkContext.makeRDD(1 to 10).map(i => {
-        ((if (i == 5) 9999 else if (i < 5) 8888 else i), "a" + i, "TMD")
-      }).toDF("rid", "rname", "tmd")
+        ((if (i == 5) 9999 else if (i < 5) 8888 else i), "a" + i, "test skew")
+      }).toDF("rid", "rname", "rcomment")
       val join = df1.join(df2, $"sid"===$"rid")
       assert(join.collect().length === 8)
     }
@@ -710,11 +710,11 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_SKEW_JOIN.key, 500)
       import spark.implicits._
       val df1 = spark.sparkContext.makeRDD(1 to 1000).map(i => {
-        ((if (i < 100) 9999 else 500 + i), "b" + i, "fuck")
-      }).toDF("sid", "sname", "fuck")
+        ((if (i < 100) 9999 else 500 + i), "b" + i, "skew test")
+      }).toDF("sid", "sname", "scomment")
       val df2 = spark.sparkContext.makeRDD(1 to 1000).map(i => {
-        ((if (i < 50) 9999 else if (i < 500) 555 else i), "a" + i, "TMD")
-      }).toDF("rid", "rname", "tmd")
+        ((if (i < 50) 9999 else if (i < 500) 555 else i), "a" + i, "test skew")
+      }).toDF("rid", "rname", "rcomment")
       val join = df1.join(df2, $"sid"===$"rid")
       assert(join.collect().length === 5252)
     }
