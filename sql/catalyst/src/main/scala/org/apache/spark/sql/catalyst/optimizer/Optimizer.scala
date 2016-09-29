@@ -710,7 +710,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
       val (pushDown, rest) = candidates.partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        replaced.references.subsetOf(aggregate.child.outputSet)
+        cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
       }
 
       val stayUp = rest ++ containingNonDeterministic
