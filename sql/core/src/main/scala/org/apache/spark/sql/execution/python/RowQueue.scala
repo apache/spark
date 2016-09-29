@@ -71,7 +71,7 @@ private[python] abstract class InMemoryRowQueue(val page: MemoryBlock, numFields
   private var readOffset = page.getBaseOffset
   private val resultRow = new UnsafeRow(numFields)
 
-  def add(row: UnsafeRow): Boolean = {
+  def add(row: UnsafeRow): Boolean = synchronized {
     val size = row.getSizeInBytes
     if (writeOffset + 4 + size > endOfPage) {
       // if there is not enough space in this page to hold the new record
@@ -88,7 +88,7 @@ private[python] abstract class InMemoryRowQueue(val page: MemoryBlock, numFields
     }
   }
 
-  def remove(): UnsafeRow = {
+  def remove(): UnsafeRow = synchronized {
     if (readOffset + 4 > endOfPage || Platform.getInt(base, readOffset) < 0) {
       null
     } else {
