@@ -14,13 +14,24 @@ checkout:
 
 dependencies:
   override:
-    - ./build/sbt -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive update
+    - ./build/mvn -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive install
 
 test:
   override:
     - ? |
           set -euo pipefail
           version=$(git describe --tags)
+
+          publish_artifacts() {
+            tmp_settings="tmp-settings.xml"
+            echo "<settings><servers><server>" > $tmp_settings
+            echo "<id>bintray-palantir-release</id><username>$BINTRAY_USERNAME</username>" >> $tmp_settings
+            echo "<password>$BINTRAY_PASSWORD</password>" >> $tmp_settings
+            echo "</server></servers></settings>" >> $tmp_settings
+
+            ./build/mvn versions:set -DnewVersion=$version
+            ./build/mvn --settings $tmp_settings -DskipTests "$1" clean deploy
+          }
 
           make_dist() {
             dist_name="$1"
@@ -33,7 +44,7 @@ test:
 
           case $CIRCLE_NODE_INDEX in
           0)
-            ./build/sbt -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive publish
+            publish_artifacts "-Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive"
             ;;
           1)
             make_dist hadoop-2.7 "-Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive"
