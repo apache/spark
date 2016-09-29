@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import scala.collection.mutable
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
@@ -101,7 +101,8 @@ case class AnalyzeColumnCommand(
     // unwrap the result
     val rowCount = statsRow.getLong(0)
     val columnStats = attributesToAnalyze.zipWithIndex.map { case (expr, i) =>
-      (expr.name, ColumnStatStruct.unwrapStruct(statsRow, i + 1, expr, ndvMaxErr, rowCount))
+      val numFields = ColumnStatStruct.numStatFields(expr.dataType)
+      (expr.name, ColumnStat(statsRow.getStruct(i + 1, numFields)))
     }.toMap
     (rowCount, columnStats)
   }
@@ -147,6 +148,13 @@ object ColumnStatStruct {
     Seq(numNulls(e), numTrues(e), numFalses(e))
   }
 
+  def numStatFields(dataType: DataType): Int = {
+    dataType match {
+      case BinaryType | BooleanType => 3
+      case _ => 4
+    }
+  }
+
   def apply(e: Attribute, relativeSD: Double): CreateStruct = e.dataType match {
     // Use aggregate functions to compute statistics we need.
     case _: NumericType | TimestampType | DateType => getStruct(numericColumnStat(e, relativeSD))
@@ -156,20 +164,5 @@ object ColumnStatStruct {
     case otherType =>
       throw new AnalysisException("Analyzing columns is not supported for column " +
         s"${e.name} of data type: ${e.dataType}.")
-  }
-
-  def unwrapStruct(
-      row: InternalRow,
-      offset: Int,
-      e: Expression,
-      relativeSD: Double,
-      rowCount: Long): ColumnStat = {
-    val numFields = e.dataType match {
-      case _: NumericType | TimestampType | DateType => numericColumnStat(e, relativeSD).length
-      case StringType => stringColumnStat(e, relativeSD).length
-      case BinaryType => binaryColumnStat(e).length
-      case BooleanType => booleanColumnStat(e).length
-    }
-    ColumnStat(row.getStruct(offset, numFields))
   }
 }

@@ -72,9 +72,8 @@ class StatisticsColumnSuite extends StatisticsTest {
     val table = "tbl"
     val colName1 = "abc"
     val colName2 = "x.yz"
-    val quotedColName2 = s"`$colName2`"
     withTable(table) {
-      sql(s"CREATE TABLE $table ($colName1 int, $quotedColName2 string) USING PARQUET")
+      sql(s"CREATE TABLE $table ($colName1 int, `$colName2` string) USING PARQUET")
 
       val invalidColError = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS key")

@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
-import org.apache.spark.sql.execution.command.AnalyzeColumnCommand
+import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, ColumnStatStruct}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -48,7 +48,8 @@ trait StatisticsTest extends QueryTest with SharedSQLContext {
 
         // check if we get the same colStat after encoding and decoding
         val encodedCS = colStat.toString
-        val decodedCS = ColumnStat(expected._1.dataType, encodedCS)
+        val numFields = ColumnStatStruct.numStatFields(expected._1.dataType)
+        val decodedCS = ColumnStat(numFields, encodedCS)
         StatisticsTest.checkColStat(
           dataType = expected._1.dataType,
           colStat = decodedCS,
