@@ -14,7 +14,7 @@ checkout:
 
 dependencies:
   override:
-    - ./build/mvn -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive install
+    - ./build/mvn -DskipTests -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive install
 
 test:
   override:
