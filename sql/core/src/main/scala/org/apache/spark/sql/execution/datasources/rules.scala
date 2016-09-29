@@ -148,7 +148,7 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
 
   private def checkBucketColumns(schema: StructType, tableDesc: CatalogTable): CatalogTable = {
     tableDesc.bucketSpec match {
-      case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames)) =>
+      case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames, _)) =>
         val normalizedBucketCols = bucketColumnNames.map { colName =>
           normalizeColumnName(tableDesc.identifier, schema, colName, "bucket")
         }

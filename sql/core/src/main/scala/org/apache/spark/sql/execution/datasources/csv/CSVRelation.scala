@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.BucketingInfoExtractor
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile, WriterContainer}
@@ -172,6 +173,7 @@ private[csv] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWrit
   override def newInstance(
       path: String,
       bucketId: Option[Int],
+      bucketingInfoExtractor: BucketingInfoExtractor,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
     if (bucketId.isDefined) sys.error("csv doesn't support bucketing")

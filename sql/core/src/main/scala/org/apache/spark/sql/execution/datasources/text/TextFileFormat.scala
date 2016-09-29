@@ -26,6 +26,7 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.BucketingInfoExtractor
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
 import org.apache.spark.sql.execution.datasources._
@@ -74,6 +75,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       override def newInstance(
           path: String,
           bucketId: Option[Int],
+          bucketingInfoExtractor: BucketingInfoExtractor,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
         if (bucketId.isDefined) {

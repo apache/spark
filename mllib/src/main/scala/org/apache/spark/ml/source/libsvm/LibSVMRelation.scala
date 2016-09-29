@@ -31,6 +31,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.BucketingInfoExtractor
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -134,6 +135,7 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       override def newInstance(
           path: String,
           bucketId: Option[Int],
+          bucketingInfoExtractor: BucketingInfoExtractor,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
         if (bucketId.isDefined) { sys.error("LibSVM doesn't support bucketing") }

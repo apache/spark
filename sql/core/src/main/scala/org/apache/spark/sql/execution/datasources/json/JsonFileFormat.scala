@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.BucketingInfoExtractor
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -82,9 +83,12 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       override def newInstance(
           path: String,
           bucketId: Option[Int],
+          bucketingInfoExtractor: BucketingInfoExtractor,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new JsonOutputWriter(path, parsedOptions, bucketId, dataSchema, context)
+        new JsonOutputWriter(
+          path, parsedOptions, bucketId, bucketingInfoExtractor, dataSchema, context
+        )
       }
     }
   }
@@ -154,6 +158,7 @@ private[json] class JsonOutputWriter(
     path: String,
     options: JSONOptions,
     bucketId: Option[Int],
+    bucketingInfoExtractor: BucketingInfoExtractor,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
@@ -166,12 +171,13 @@ private[json] class JsonOutputWriter(
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
-        val taskAttemptId = context.getTaskAttemptID
-        val split = taskAttemptId.getTaskID.getId
-        val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString.json$extension")
+        val filename = bucketingInfoExtractor.getBucketedFilename(
+          context.getTaskAttemptID.getTaskID.getId,
+          context.getConfiguration.get(WriterContainer.DATASOURCE_WRITEJOBUUID),
+          bucketId,
+          s".json$extension"
+        )
+        new Path(path, filename)
       }
     }.getRecordWriter(context)
   }
