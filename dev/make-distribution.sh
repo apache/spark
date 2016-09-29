@@ -35,7 +35,6 @@ DISTDIR="$SPARK_HOME/dist"
 MAKE_TGZ=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
-SBT="$SPARK_HOME/build/sbt"
 
 function exit_with_usage {
   echo "make-distribution.sh - tool for making binary distributions of Spark"
@@ -151,7 +150,7 @@ export MAVEN_OPTS="${MAVEN_OPTS:--Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCac
 # Store the command as an array because $MVN variable might have spaces in it.
 # Normal quoting tricks don't work.
 # See: http://mywiki.wooledge.org/BashFAQ/050
-BUILD_COMMAND=("$SBT" assembly/package examples/package network-yarn/assembly $@)
+BUILD_COMMAND=("$MVN" -T 1C clean package -DskipTests $@)
 
 # Actually build the jar
 echo -e "\nBuilding with..."
@@ -169,9 +168,9 @@ echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 cp "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
 
 # Only create the yarn directory if the yarn artifacts were build.
-if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-network-yarn-*.jar ]; then
+if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then
   mkdir "$DISTDIR"/yarn
-  cp "$SPARK_HOME"/common/network-yarn/target/scala*/spark-network-yarn-*.jar "$DISTDIR/yarn/spark-${VERSION}-yarn-shuffle.jar"
+  cp "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/yarn"
 fi
 
 # Copy examples and dependencies
