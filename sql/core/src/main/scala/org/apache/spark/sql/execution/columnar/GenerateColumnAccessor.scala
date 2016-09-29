@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, CodeGenerator, UnsafeRowWriter}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An Iterator to walk through the InternalRows from a CachedBatch
@@ -57,17 +62,56 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends BaseGenericInternalR
   override protected def genericGet(ordinal: Int): Any = throw new UnsupportedOperationException
   override def numFields: Int = throw new UnsupportedOperationException
   override def copy(): InternalRow = throw new UnsupportedOperationException
+
+  def setDecimal(i: Int, v: Decimal, precision: Int, scale: Int): Unit =
+    writer.write(i, v, precision, scale)
+  def setUTF8String(i: Int, s: UTF8String): Unit = writer.write(i, s)
+  def setBinary(i: Int, b: Array[Byte]): Unit = writer.write(i, b)
+  def setArray(i: Int, a: ArrayData): Unit = {
+    val u = a.asInstanceOf[UnsafeArrayData]
+    val base = u.getBaseObject.asInstanceOf[Array[Byte]]
+    val offset = u.getBaseOffset - Platform.BYTE_ARRAY_OFFSET
+    if (offset > Integer.MAX_VALUE) {
+      throw new UnsupportedOperationException("Cannot write this array as it's too big.")
+    }
+    val size = u.getSizeInBytes
+    writer.write(i, base, offset.toInt, size)
+  }
+  def setMap(i: Int, m: MapData): Unit = {
+    val u = m.asInstanceOf[UnsafeMapData]
+    val base = u.getBaseObject.asInstanceOf[Array[Byte]]
+    val offset = u.getBaseOffset - Platform.BYTE_ARRAY_OFFSET
+    if (offset > Integer.MAX_VALUE) {
+      throw new UnsupportedOperationException("Cannot write this array as it's too big.")
+    }
+    val size = u.getSizeInBytes
+    writer.write(i, base, offset.toInt, size)
+  }
+  def setStruct(i: Int, r: MutableRow): Unit = {
+    val u = r.asInstanceOf[UnsafeRow]
+    val base = u.getBaseObject.asInstanceOf[Array[Byte]]
+    val offset = u.getBaseOffset - Platform.BYTE_ARRAY_OFFSET
+    if (offset > Integer.MAX_VALUE) {
+      throw new UnsupportedOperationException("Cannot write this array as it's too big.")
+    }
+    val size = u.getSizeInBytes
+    writer.write(i, base, offset.toInt, size)
+  }
 }
 
 /**
  * Generates bytecode for a [[ColumnarIterator]] for columnar cache.
  */
-object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarIterator] with Logging {
+class GenerateColumnAccessor(conf: SparkConf)
+    extends CodeGenerator[Seq[DataType], ColumnarIterator] with Logging {
 
   protected def canonicalize(in: Seq[DataType]): Seq[DataType] = in
   protected def bind(in: Seq[DataType], inputSchema: Seq[Attribute]): Seq[DataType] = in
 
   protected def create(columnTypes: Seq[DataType]): ColumnarIterator = {
+    if (conf != null) {
+      return createItrForCacheColumnarBatch(conf, columnTypes)
+    }
     val ctx = newCodeGenContext()
     val numFields = columnTypes.size
     val (initializeAccessors, extractors) = columnTypes.zipWithIndex.map { case (dt, index) =>
@@ -229,8 +273,149 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
     val code = CodeFormatter.stripOverlappingComments(
       new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
-    logDebug(s"Generated ColumnarIterator:\n${CodeFormatter.format(code)}")
+    logDebug(s"Generated ColumnarIteratorForCachedBatchBytes:\n${CodeFormatter.format(code)}")
 
     CodeGenerator.compile(code).generate(Array.empty).asInstanceOf[ColumnarIterator]
   }
+
+  protected def createItrForCacheColumnarBatch(conf: SparkConf, columnTypes: Seq[DataType])
+      : ColumnarIterator = {
+    val ctx = newCodeGenContext()
+    val numFields = columnTypes.size
+    val confVar = ctx.addReferenceObj("conf", conf, classOf[SparkConf].getName)
+
+    val setters = ctx.splitExpressions(
+      "row",
+      columnTypes.zipWithIndex.map { case (dt, index) =>
+        val setter = dt match {
+          case NullType =>
+            s"if (colInstances[$index].isNullAt(rowIdx)) { mutableRow.setNullAt($index); }\n"
+          case BooleanType => s"setBoolean($index, colInstances[$index].getBoolean(rowIdx))"
+          case ByteType => s"setByte($index, colInstances[$index].getByte(rowIdx))"
+          case ShortType => s"setShort($index, colInstances[$index].getShort(rowIdx))"
+          case IntegerType | DateType => s"setInt($index, colInstances[$index].getInt(rowIdx))"
+          case LongType | TimestampType => s"setLong($index, colInstances[$index].getLong(rowIdx))"
+          case FloatType => s"setFloat($index, colInstances[$index].getFloat(rowIdx))"
+          case DoubleType => s"setDouble($index, colInstances[$index].getDouble(rowIdx))"
+          case dt: DecimalType if dt.precision <= Decimal.MAX_INT_DIGITS =>
+            s"setLong($index, (long)colInstances[$index].getInt(rowIdx))"
+          case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
+            s"setLong($index, colInstances[$index].getLong(rowIdx))"
+          case dt: DecimalType =>
+            val p = dt.precision
+            val s = dt.scale
+            s"setDecimal($index, colInstances[$index].getDecimal(rowIdx, $p, $s), $p, $s)"
+          case StringType => s"setUTF8String($index, colInstances[$index].getUTF8String(rowIdx))"
+          case BinaryType => s"setBinary($index, colInstances[$index].getBinary(rowIdx))"
+          case array: ArrayType => s"setArray($index, colInstances[$index].getArray(rowIdx))"
+          case t: MapType => s"setMap($index, colInstances[$index].getMap(rowIdx))"
+          case struct: StructType =>
+            val s = struct.fields.length
+            s"setStruct($index, colInstances[$index].getStruct(rowIdx, $s))"
+        }
+
+        dt match {
+          case NullType => setter
+          case dt: DecimalType if dt.precision > Decimal.MAX_LONG_DIGITS =>
+            s"""
+            if (colInstances[$index].isNullAt(rowIdx)) {
+              mutableRow.setDecimal($index, null, ${dt.precision}, ${dt.scale});
+            } else {
+              mutableRow.$setter;
+            }
+           """
+          case _ =>
+            s"""
+            if (colInstances[$index].isNullAt(rowIdx)) {
+              mutableRow.setNullAt($index);
+            } else {
+              mutableRow.$setter;
+            }
+           """
+        }
+      }
+    )
+
+    val codeBody = s"""
+      import scala.collection.Iterator;
+      import org.apache.spark.sql.types.DataType;
+      import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
+      import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
+      import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
+      import org.apache.spark.sql.execution.vectorized.ColumnVector;
+      import org.apache.spark.sql.execution.vectorized.OnHeapUnsafeColumnVector;
+
+      public SpecificColumnarIterator generate(Object[] references) {
+        return new SpecificColumnarIterator(references);
+      }
+
+      class SpecificColumnarIterator extends ${classOf[ColumnarIterator].getName} {
+        private ColumnVector[] colInstances;
+        private UnsafeRow unsafeRow = new UnsafeRow($numFields);
+        private BufferHolder bufferHolder = new BufferHolder(unsafeRow);
+        private UnsafeRowWriter rowWriter = new UnsafeRowWriter(bufferHolder, $numFields);
+        private MutableUnsafeRow mutableRow = null;
+
+        private int rowIdx = 0;
+        private int numRowsInBatch = 0;
+
+        private scala.collection.Iterator input = null;
+        private DataType[] columnTypes = null;
+        private int[] columnIndexes = null;
+
+        ${ctx.declareMutableStates()}
+
+        public SpecificColumnarIterator(Object[] references) {
+          ${ctx.initMutableStates()}
+          this.mutableRow = new MutableUnsafeRow(rowWriter);
+        }
+
+        public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes) {
+          this.input = input;
+          this.columnTypes = columnTypes;
+          this.columnIndexes = columnIndexes;
+        }
+
+        ${ctx.declareAddedFunctions()}
+
+        public boolean hasNext() {
+          if (rowIdx < numRowsInBatch) {
+            return true;
+          }
+          if (!input.hasNext()) {
+            return false;
+          }
+
+          ${classOf[CachedColumnarBatch].getName} cachedBatch =
+            (${classOf[CachedColumnarBatch].getName}) input.next();
+          ${classOf[ColumnarBatch].getName} batch = cachedBatch.columnarBatch();
+          rowIdx = 0;
+          numRowsInBatch = cachedBatch.getNumRows();
+          colInstances = new ColumnVector[columnIndexes.length];
+          for (int i = 0; i < columnIndexes.length; i ++) {
+            colInstances[i] = batch.column(columnIndexes[i]);
+            ((OnHeapUnsafeColumnVector)colInstances[i]).decompress($confVar);
+          }
+
+          return hasNext();
+        }
+
+        public InternalRow next() {
+          bufferHolder.reset();
+          rowWriter.zeroOutNullBytes();
+          InternalRow row = null;
+          ${setters}
+          unsafeRow.setTotalSize(bufferHolder.totalSize());
+          rowIdx += 1;
+          return unsafeRow;
+        }
+      }"""
+
+    val code = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
+    logDebug(s"Generated ColumnarIteratorForCachedColumnarBatch:\n${CodeFormatter.format(code)}")
+
+    CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[ColumnarIterator]
+  }
+
 }

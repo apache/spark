@@ -163,7 +163,6 @@ case class InMemoryTableScanExec(
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
   protected override def doExecute(): RDD[InternalRow] = {
-    assert(!relation.useColumnarBatches)
     val numOutputRows = longMetric("numOutputRows")
 
     if (enableAccumulators) {
@@ -177,7 +176,8 @@ case class InMemoryTableScanExec(
     val schemaIndex = schema.zipWithIndex
     val relOutput: AttributeSeq = relation.output
     assert(relation.cachedColumnBuffers != null)
-    val buffers = relation.cachedColumnBuffers.asInstanceOf[RDD[CachedBatchBytes]]
+    val buffers = relation.cachedColumnBuffers
+    val conf = if (relation.useColumnarBatches) sqlContext.sparkContext.conf else null
 
     buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
       val partitionFilter = newPredicate(
@@ -216,7 +216,7 @@ case class InMemoryTableScanExec(
         if (enableAccumulators) {
           readBatches.add(1)
         }
-        numOutputRows += batch.numRows
+        numOutputRows += batch.getNumRows()
         batch
       }
 
@@ -224,7 +224,7 @@ case class InMemoryTableScanExec(
         case udt: UserDefinedType[_] => udt.sqlType
         case other => other
       }.toArray
-      val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
+      val columnarIterator = new GenerateColumnAccessor(conf).generate(columnTypes)
       columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray)
       if (enableAccumulators && columnarIterator.hasNext) {
         readPartitions.add(1)

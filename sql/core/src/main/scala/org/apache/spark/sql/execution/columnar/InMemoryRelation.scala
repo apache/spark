@@ -37,7 +37,10 @@ import org.apache.spark.util.LongAccumulator
 /**
  * An abstract representation of a cached batch of rows.
  */
-private[columnar] trait CachedBatch
+private[columnar] trait CachedBatch {
+  val stats: InternalRow
+  def getNumRows(): Int
+}
 
 
 /**
@@ -49,14 +52,18 @@ private[columnar] trait CachedBatch
  */
 private[columnar] case class CachedBatchBytes(
     numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
-  extends CachedBatch
+  extends CachedBatch {
+  def getNumRows(): Int = numRows
+}
 
 
 /**
  * A cached batch of rows stored as a [[ColumnarBatch]].
  */
 private[columnar] case class CachedColumnarBatch(columnarBatch: ColumnarBatch, stats: InternalRow)
-  extends CachedBatch
+  extends CachedBatch {
+  def getNumRows(): Int = columnarBatch.numRows()
+}
 
 
 object InMemoryRelation {

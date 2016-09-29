@@ -119,7 +119,7 @@ public final class OnHeapUnsafeColumnVector extends ColumnVector implements Seri
     compressed = (compressedData != null) || (compressedNulls != null);
   }
 
-  public void decompress(SparkConf conf) throws IOException {
+  public void decompress(SparkConf conf) {
     if (!compressed) return;
     if (codec == null) {
       String codecName = conf.get(SQLConf.CACHE_COMPRESSION_CODEC());
@@ -132,10 +132,14 @@ public final class OnHeapUnsafeColumnVector extends ColumnVector implements Seri
       bis = new ByteArrayInputStream(compressedData);
       in = codec.compressedInputStream(bis);
       try {
-        data = IOUtils.toByteArray(in);
-      } finally {
-        in.close();
-       }
+        try {
+          data = IOUtils.toByteArray(in);
+        } finally {
+          in.close();
+         }
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
       compressedData = null;
     }
 
@@ -143,9 +147,13 @@ public final class OnHeapUnsafeColumnVector extends ColumnVector implements Seri
       bis = new ByteArrayInputStream(compressedNulls);
       in = codec.compressedInputStream(bis);
       try {
-        nulls = IOUtils.toByteArray(in);
-      } finally {
-        in.close();
+        try {
+          nulls = IOUtils.toByteArray(in);
+        } finally {
+          in.close();
+        }
+      } catch (IOException e) {
+        throw new RuntimeException(e);
       }
       compressedNulls = null;
     }
