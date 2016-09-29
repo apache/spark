@@ -339,6 +339,8 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
 
     def onAddData(data: Any, metadata: Any) { }
 
+    def onAddFirstDataItem(data: Any, timestamp: Any) { }
+
     def onGenerateBlock(blockId: StreamBlockId) { }
 
     def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {

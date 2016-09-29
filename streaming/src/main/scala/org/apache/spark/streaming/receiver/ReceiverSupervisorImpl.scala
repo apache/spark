@@ -100,6 +100,8 @@ private[streaming] class ReceiverSupervisorImpl(
   private val defaultBlockGeneratorListener = new BlockGeneratorListener {
     def onAddData(data: Any, metadata: Any): Unit = { }
 
+    def onAddFirstDataItem(data: Any, timestamp: Any) { }
+
     def onGenerateBlock(blockId: StreamBlockId): Unit = { }
 
     def onError(message: String, throwable: Throwable) {

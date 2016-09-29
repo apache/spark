@@ -153,6 +153,7 @@ private[streaming] class RateTestReceiver(receiverId: Int, host: Option[String] 
       override def onError(message: String, throwable: Throwable): Unit = {}
       override def onGenerateBlock(blockId: StreamBlockId): Unit = {}
       override def onAddData(data: Any, metadata: Any): Unit = {}
+      override def onAddFirstDataItem(data: Any, timestamp: Any) {}
     }
   )
 

@@ -257,5 +257,6 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
       addedMetadata.add(metadata)
       onAddDataCalled = true
     }
+    override def onAddFirstDataItem(data: Any, timestamp: Any) {}
   }
 }
