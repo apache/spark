@@ -82,13 +82,13 @@ object Literal {
    */
   private[this] def componentTypeToDataType(clz: Class[_]): DataType = clz match {
     // primitive types
-    case c: Class[_] if c == JavaShort.TYPE => ShortType
-    case c: Class[_] if c == JavaInteger.TYPE => IntegerType
-    case c: Class[_] if c == JavaLong.TYPE => LongType
-    case c: Class[_] if c == JavaDouble.TYPE => DoubleType
-    case c: Class[_] if c == JavaByte.TYPE => ByteType
-    case c: Class[_] if c == JavaFloat.TYPE => FloatType
-    case c: Class[_] if c == JavaBoolean.TYPE => BooleanType
+    case JavaShort.TYPE => ShortType
+    case JavaInteger.TYPE => IntegerType
+    case JavaLong.TYPE => LongType
+    case JavaDouble.TYPE => DoubleType
+    case JavaByte.TYPE => ByteType
+    case JavaFloat.TYPE => FloatType
+    case JavaBoolean.TYPE => BooleanType
 
     // java classes
     case c: Class[_] if c == classOf[Date] => DateType
