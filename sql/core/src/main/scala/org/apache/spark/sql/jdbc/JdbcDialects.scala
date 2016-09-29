@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.Connection
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.sql.types._
 
 /**
@@ -96,6 +96,19 @@ abstract class JdbcDialect extends Serializable {
    * @return The SQL query to use for checking the table.
    */
   def getTableExistsQuery(table: String): String = {
+    s"SELECT * FROM $table WHERE 1=0"
+  }
+
+  /**
+   * The SQL query that should be used to discover the schema of a table. It only needs to
+   * ensure that the result set has the same schema as the table, such as by calling
+   * "SELECT * ...". Dialects can override this method to return a query that works best in a
+   * particular database.
+   * @param table The name of the table.
+   * @return The SQL query to use for discovering the schema.
+   */
+  @Since("2.1.0")
+  def getSchemaQuery(table: String): String = {
     s"SELECT * FROM $table WHERE 1=0"
   }
 
