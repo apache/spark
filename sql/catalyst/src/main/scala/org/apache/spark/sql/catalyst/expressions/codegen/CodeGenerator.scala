@@ -88,6 +88,9 @@ class CodegenContext {
    * Add an object to `references`.
    *
    * Returns the code to access it.
+   *
+   * This is for minor objects not to store the object into field but refer it from the references
+   * field at the time of use because number of fields in class is limited so we should reduce it.
    */
   def addReferenceObj(obj: Any): String = {
     val idx = references.length
