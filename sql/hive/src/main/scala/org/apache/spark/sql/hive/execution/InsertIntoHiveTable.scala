@@ -300,10 +300,10 @@ case class InsertIntoHiveTable(
           (UnspecifiedDistribution, Nil)
         } else {
           def toAttribute(colName: String, colType: String): Attribute =
-            child.output.find(_.name == colName).getOrElse {
+            table.attributes.find(_.name == colName).getOrElse {
               throw new AnalysisException(
                 s"Could not find $colType column $colName for output table " +
-                  s"${table.catalogTable.qualifiedName} in the child operator's output columns : " +
+                  s"${table.catalogTable.qualifiedName} in its known columns : " +
                   s"(${child.output.map(_.name).mkString(", ")})")
             }
 

@@ -191,7 +191,7 @@ case class HiveTableScanExec(
         // above
 
         def toAttribute(colName: String): Option[Attribute] =
-          output.find(_.name == colName)
+          relation.attributes.find(_.name == colName)
 
         val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
         if (bucketColumns.size == spec.bucketColumnNames.size) {
