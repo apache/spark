@@ -222,6 +222,12 @@
     <MaxPermGen>512m</MaxPermGen>
     <CodeCacheSize>512m</CodeCacheSize>
   </properties>
+  <distributionManagement>
+    <repository>
+      <id>bintray-palantir-release</id>
+      <url>https://api.bintray.com/maven/palantir/releases/spark/;publish=1</url>
+    </repository>
+  </distributionManagement>
   <repositories>
     <repository>
       <id>palantir</id>
