@@ -77,6 +77,20 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
     assert(e2.message.contains("system preserved database"))
   }
 
+  test("CREATE GLOBAL TEMP VIEW USING") {
+    withTempPath { path =>
+      try {
+        Seq(1 -> "a").toDF("i", "j").write.parquet(path.getAbsolutePath)
+        sql(s"CREATE GLOBAL TEMP VIEW src USING parquet OPTIONS (PATH '${path.getAbsolutePath}')")
+        checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
+        sql(s"INSERT INTO $globalTempDB.src SELECT 2, 'b'")
+        checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a") :: Row(2, "b") :: Nil)
+      } finally {
+        spark.catalog.dropGlobalTempView("src")
+      }
+    }
+  }
+
   test("CREATE TABLE LIKE should work for global temp view") {
     try {
       sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1 AS a, '2' AS b")
@@ -118,6 +132,9 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
 
       // Use qualified name to lookup a global temp view.
       checkAnswer(sql(s"SELECT * FROM $globalTempDB.same_name"), Row(3, 4))
+    } finally {
+      spark.catalog.dropTempView("same_name")
+      spark.catalog.dropGlobalTempView("same_name")
     }
   }
 }
