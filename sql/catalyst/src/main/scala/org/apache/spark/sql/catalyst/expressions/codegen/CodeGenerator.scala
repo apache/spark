@@ -90,18 +90,9 @@ class CodegenContext {
    * Returns the code to access it.
    */
   def addReferenceObj(obj: Any): String = {
-    addReferenceObj(obj, null)
-  }
-
-  /**
-   * Add an object to `references`.
-   *
-   * Returns the code to access it.
-   */
-  def addReferenceObj(obj: Any, className: String): String = {
     val idx = references.length
     references += obj
-    val clsName = Option(className).getOrElse(obj.getClass.getName)
+    val clsName = obj.getClass.getName
     s"(($clsName) references[$idx])"
   }
 
