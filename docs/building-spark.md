@@ -214,7 +214,8 @@ For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troub
 
 # Running Tests
 
-Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin). All tests should not be run by `root` or any admin user.
+Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin).
+Note that tests should not be run as root or an admin user.
 
 Some of the tests require Spark to be packaged first, so always run `mvn package` with `-DskipTests` the first time.  The following is an example of a correct (build, test) sequence:
 
