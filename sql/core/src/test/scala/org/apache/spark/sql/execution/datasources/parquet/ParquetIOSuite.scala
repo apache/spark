@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtoc
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
 // with an empty configuration (it is after all not intended to be used in this way?)
@@ -110,12 +110,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         |  required binary h(DECIMAL(32,0));
         |  required fixed_len_byte_array(32) i(DECIMAL(32,0));
         |  required int64 j(TIMESTAMP_MILLIS);
+        |  required fixed_len_byte_array(12) j(INTERVAL);
         |}
       """.stripMargin)
 
     val expectedSparkTypes = Seq(ByteType, ShortType, DateType, DecimalType(1, 0),
       DecimalType(10, 0), StringType, StringType, DecimalType(32, 0), DecimalType(32, 0),
-      TimestampType)
+      TimestampType, CalendarIntervalType)
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
@@ -171,6 +172,47 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       data.write.parquet(dir.getCanonicalPath)
       readParquetFile(dir.getCanonicalPath) { df =>
         checkAnswer(df, data.collect().toSeq)
+      }
+    }
+  }
+
+  test("interval type - read and write") {
+    val data = Seq(
+      (1, CalendarInterval.fromString("interval 10 years 9 months")),
+      (2, CalendarInterval.fromString("interval -14 weeks -2 days")),
+      (3, CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 " +
+        "minutes 32 seconds 99 milliseconds")),
+      (4, CalendarInterval.fromString("interval 30 years")),
+      (5, CalendarInterval.fromString("interval 25 months")),
+      (6, CalendarInterval.fromString("interval -14 weeks -2 days")),
+      (7, CalendarInterval.fromString("interval 1 days 16 hours")),
+      (8, CalendarInterval.fromString("interval 1 hour 20 minutes")),
+      (9, CalendarInterval.fromString("interval 4 minutes 59 seconds 889 " +
+        "milliseconds"))
+    ).toDF
+    withTempPath { dir =>
+      data.write.parquet(dir.getCanonicalPath)
+      readParquetFile(dir.getCanonicalPath) { df =>
+        checkAnswer(df, data.collect().toSeq)
+      }
+    }
+  }
+
+  test("interval type - truncation after millis") {
+    val data = Seq(
+      (1, CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes " +
+        "32 seconds 99 milliseconds 899 microseconds"))
+    ).toDF
+
+    val truncated_data = Seq(
+      (1, CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes " +
+        "32 seconds 99 milliseconds"))
+    ).toDF
+
+    withTempPath { dir =>
+      data.write.parquet(dir.getCanonicalPath)
+      readParquetFile(dir.getCanonicalPath) { df =>
+        checkAnswer(df, truncated_data.collect().toSeq)
       }
     }
   }

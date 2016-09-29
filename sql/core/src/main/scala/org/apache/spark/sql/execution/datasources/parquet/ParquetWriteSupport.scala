@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter.minBytesForPrecision
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * A Parquet [[WriteSupport]] implementation that writes Catalyst [[InternalRow]]s as Parquet
@@ -184,6 +185,17 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
           recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))
         }
 
+      case CalendarIntervalType =>
+        (row: SpecializedGetters, ordinal: Int) => {
+          val data: CalendarInterval = row.getInterval(ordinal)
+          val months = data.months
+          val days = (data.microseconds / CalendarInterval.MICROS_PER_DAY).toInt
+          val millis =
+            ((data.microseconds - (days *  CalendarInterval.MICROS_PER_DAY)) / 1000L).toInt
+          val buf = ByteBuffer.wrap(timestampBuffer)
+          buf.order(ByteOrder.LITTLE_ENDIAN).putInt(data.months).putInt(days).putInt(millis)
+          recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))
+        }
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addBinary(Binary.fromReusedByteArray(row.getBinary(ordinal)))
