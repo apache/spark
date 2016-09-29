@@ -369,7 +369,10 @@ class NaiveBayes private (
 
     // Input labels for [[org.apache.spark.ml.classification.NaiveBayes]] must be
     // in range [0, numClasses).
-    val dataset = data.toDF("label", "features")
+    val dataset = data.map {
+      case LabeledPoint(label, features) =>
+        (label, features.asML)
+    }.toDF("label", "features")
 
     val newModel = nb.fit(dataset)
 
