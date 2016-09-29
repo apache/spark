@@ -31,7 +31,8 @@ import org.apache.spark.unsafe.memory.MemoryBlock
  * A RowQueue is an FIFO queue for UnsafeRow.
  *
  * This RowQueue is ONLY designed and used for Python UDF, which has only one writer and only one
- * reader, the reader ALWAYS ran behind the writer.
+ * reader, the reader ALWAYS ran behind the writer. See the doc of class [[BatchEvalPythonExec]]
+ * on how it works.
  */
 private[python] trait RowQueue {
 

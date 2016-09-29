@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
-import org.apache.spark.util.{CompletionIterator, Utils}
+import org.apache.spark.util.Utils
 
 
 /**
@@ -40,9 +40,25 @@ import org.apache.spark.util.{CompletionIterator, Utils}
  * Python evaluation works by sending the necessary (projected) input data via a socket to an
  * external Python process, and combine the result from the Python process with the original row.
  *
- * For each row we send to Python, we also put it in a queue. For each output row from Python,
+ * For each row we send to Python, we also put it in a queue first. For each output row from Python,
  * we drain the queue to find the original input row. Note that if the Python process is way too
  * slow, this could lead to the queue growing unbounded and spill into disk when run out of memory.
+ *
+ * Here is a diagram to show how this works:
+ *
+ *            Upstream (from child)
+ *             /      \
+ *            /     socket
+ *           /         \
+ *        RowQueue    Python
+ *           \         /
+ *            \     socket
+ *             \     /
+ *          Downstream (for parent)
+ *
+ * The rows sent to and received from Python are packed into batches (100 rows) and serialized,
+ * there should be always some rows buffered in the socket or Python process, so the pulling from
+ * RowQueue ALWAYS happened after pushing into it.
  */
 case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], child: SparkPlan)
   extends SparkPlan {
