@@ -610,8 +610,8 @@ class DDLCommandSuite extends PlanTest {
     val expected1_table = AlterTableDropPartitionCommand(
       tableIdent,
       Seq(
-        Map("dt" -> "2008-08-08", "country" -> "us"),
-        Map("dt" -> "2009-09-09", "country" -> "uk")),
+        Map("dt" -> ("=", "2008-08-08"), "country" -> ("=", "us")),
+        Map("dt" -> ("=", "2009-09-09"), "country" -> ("=", "uk"))),
       ifExists = true,
       purge = false)
     val expected2_table = expected1_table.copy(ifExists = false)

@@ -187,14 +187,37 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a partition specification map.
+   * Create a partition specification map: name -> value.
    */
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
     val parts = ctx.partitionVal.asScala.map { pVal =>
       val name = pVal.identifier.getText.toLowerCase
+      val operator = Option(pVal.comparisonOperator).map(_.getText)
+      if (operator.isDefined && !operator.get.equals("=")) {
+        throw new ParseException("Only '=' partition specification is allowed", ctx)
+      }
       val value = Option(pVal.constant).map(visitStringConstant)
       name -> value
+    }
+    // Check for duplicate partition columns in one spec.
+    checkDuplicateKeys(parts, ctx)
+    parts.toMap
+  }
+
+  /**
+   * Create a partition range specification map: name -> (operator, value).
+   */
+  def visitPartitionRangeSpec(
+      ctx: PartitionSpecContext): Map[String, (String, String)] = withOrigin(ctx) {
+    val parts = ctx.partitionVal.asScala.map { pVal =>
+      val name = pVal.identifier.getText.toLowerCase
+      val operator = Option(pVal.comparisonOperator).map(_.getText)
+      if (operator.isDefined) {
+        name -> (operator.get, visitStringConstant(pVal.constant))
+      } else {
+        throw new ParseException("Invalid partition specification", ctx)
+      }
     }
     // Check for duplicate partition columns in one spec.
     checkDuplicateKeys(parts, ctx)

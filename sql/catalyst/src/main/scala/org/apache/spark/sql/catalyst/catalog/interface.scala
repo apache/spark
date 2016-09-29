@@ -234,6 +234,7 @@ object CatalogTypes {
    * Specifications of a table partition. Mapping column name to column value.
    */
   type TablePartitionSpec = Map[String, String]
+  type TablePartitionRangeSpec = Map[String, (String, String)]
 }
 
 

@@ -28,8 +28,9 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTablePartition, CatalogTableType, SessionCatalog}
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.{TablePartitionRangeSpec, TablePartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
@@ -402,10 +403,32 @@ case class AlterTableRenamePartitionCommand(
  */
 case class AlterTableDropPartitionCommand(
     tableName: TableIdentifier,
-    specs: Seq[TablePartitionSpec],
+    specs: Seq[TablePartitionRangeSpec],
     ifExists: Boolean,
     purge: Boolean)
   extends RunnableCommand {
+
+  private def isInRange(
+      table: CatalogTable,
+      rangeSpec: TablePartitionRangeSpec,
+      partition: CatalogTablePartition): Boolean = rangeSpec.forall {
+    case (key, (operator, value)) =>
+      if (!partition.spec.contains(key)) {
+        throw new AnalysisException(
+          s"Partition spec is invalid. The spec (${rangeSpec.keys.mkString(", ")}) must be " +
+            s"contained within the partition spec (${table.partitionColumnNames.mkString(", ")}) " +
+            s"defined in table '${table.identifier}'")
+      }
+      val result = partition.spec(key).compareTo(value)
+      operator match {
+        case "=" => result == 0
+        case "<" => result < 0
+        case "<=" => result <= 0
+        case ">" => result > 0
+        case ">=" => result >= 0
+        case _ => throw new UnsupportedOperationException("Unsupported operator: $operator")
+      }
+  }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -415,7 +438,13 @@ case class AlterTableDropPartitionCommand(
       throw new AnalysisException(
         "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
     }
-    catalog.dropPartitions(table.identifier, specs, ignoreIfNotExists = ifExists, purge = purge)
+    val partitions = catalog.listPartitions(table.identifier)
+    val targets = partitions.filter(p => specs.exists(isInRange(table, _, p))).map(p => p.spec)
+    if (targets.nonEmpty) {
+      catalog.dropPartitions(table.identifier, targets, ignoreIfNotExists = ifExists, purge = purge)
+    } else if (!ifExists) {
+      throw new AnalysisException(specs.toString)
+    }
     Seq.empty[Row]
   }
 
