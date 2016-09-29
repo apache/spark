@@ -1780,11 +1780,9 @@ class LogisticRegressionSuite
   test("evaluate with labels that are not doubles") {
     // Evaluate a test set with Label that is a numeric type other than Double
     val lr = new LogisticRegression()
-        .setMaxIter(10)
-        .setRegParam(1.0)
-        .setThreshold(0.6)
+      .setMaxIter(1)
+      .setRegParam(1.0)
     val model = lr.fit(smallBinaryDataset)
-
     val summary = model.evaluate(smallBinaryDataset).asInstanceOf[BinaryLogisticRegressionSummary]
 
     val longLabelData = smallBinaryDataset.select(col(model.getLabelCol).cast(LongType),
