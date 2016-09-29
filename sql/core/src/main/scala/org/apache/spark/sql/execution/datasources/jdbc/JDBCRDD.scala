@@ -299,10 +299,10 @@ private[jdbc] class JDBCRDD(
     val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-    val fetchSize = properties.getProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "0").toInt
+    val fetchSize = properties.getProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, "0").toInt
     require(fetchSize >= 0,
       s"Invalid value `${fetchSize.toString}` for parameter " +
-      s"`${JDBCOptions.JDBC_BATCH_FETCH_SIZE}`. The minimum value is 0. When the value is 0, " +
+      s"`${JdbcUtils.JDBC_BATCH_FETCH_SIZE}`. The minimum value is 0. When the value is 0, " +
       "the JDBC driver ignores the value and does the estimates.")
     stmt.setFetchSize(fetchSize)
     rs = stmt.executeQuery()

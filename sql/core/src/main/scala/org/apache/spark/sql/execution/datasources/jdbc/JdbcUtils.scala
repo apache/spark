@@ -41,6 +41,12 @@ import org.apache.spark.util.NextIterator
  * Util functions for JDBC tables.
  */
 object JdbcUtils extends Logging {
+
+  // the property names are case sensitive
+  val JDBC_BATCH_FETCH_SIZE = "fetchsize"
+  val JDBC_BATCH_INSERT_SIZE = "batchsize"
+  val JDBC_TXN_ISOLATION_LEVEL = "isolationLevel"
+
   /**
    * Returns a factory for creating connections to the given JDBC URL.
    *
@@ -48,7 +54,7 @@ object JdbcUtils extends Logging {
    * @param properties JDBC connection properties.
    */
   def createConnectionFactory(url: String, properties: Properties): () => Connection = {
-    val userSpecifiedDriverClass = Option(properties.getProperty(JDBCOptions.JDBC_DRIVER_CLASS))
+    val userSpecifiedDriverClass = Option(properties.getProperty("driver"))
     userSpecifiedDriverClass.foreach(DriverRegistry.register)
     // Performing this part of the logic on the driver guards against the corner-case where the
     // driver returned for a URL is different on the driver and executors due to classpath
@@ -546,7 +552,7 @@ object JdbcUtils extends Logging {
       isolationLevel: Int): Iterator[Byte] = {
     require(batchSize >= 1,
       s"Invalid value `${batchSize.toString}` for parameter " +
-      s"`${JDBCOptions.JDBC_BATCH_INSERT_SIZE}`. The minimum value is 1.")
+      s"`${JdbcUtils.JDBC_BATCH_INSERT_SIZE}`. The minimum value is 1.")
 
     val conn = getConnection()
     var committed = false
@@ -678,9 +684,9 @@ object JdbcUtils extends Logging {
 
     val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(url, properties)
-    val batchSize = properties.getProperty(JDBCOptions.JDBC_BATCH_INSERT_SIZE, "1000").toInt
+    val batchSize = properties.getProperty(JdbcUtils.JDBC_BATCH_INSERT_SIZE, "1000").toInt
     val isolationLevel =
-      properties.getProperty(JDBCOptions.JDBC_TXN_ISOLATION_LEVEL, "READ_UNCOMMITTED") match {
+      properties.getProperty(JdbcUtils.JDBC_TXN_ISOLATION_LEVEL, "READ_UNCOMMITTED") match {
         case "NONE" => Connection.TRANSACTION_NONE
         case "READ_UNCOMMITTED" => Connection.TRANSACTION_READ_UNCOMMITTED
         case "READ_COMMITTED" => Connection.TRANSACTION_READ_COMMITTED

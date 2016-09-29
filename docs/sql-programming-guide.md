@@ -1024,7 +1024,6 @@ the Data Sources API. The following options are supported:
       The JDBC URL to connect to.
     </td>
   </tr>
-
   <tr>
     <td><code>dbtable</code></td>
     <td>
@@ -1059,21 +1058,7 @@ the Data Sources API. The following options are supported:
       The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (eg. Oracle with 10 rows).
     </td>
   </tr>
-
-  <tr>
-    <td><code>batchsize</code></td>
-    <td>
-      The JDBC batch size, which determines how many rows to insert per round trip. This can help performance on JDBC drivers.
-    </td>
-  </tr>
-
-  <tr>
-    <td><code>isolationLevel</code></td>
-    <td>
-      The transaction isolation level, which applies to current connection. Please refer the documenation in <code>java.sql.Connection</code>.
-    </td>
-  </tr>
-
+  
   <tr>
     <td><code>truncate</code></td>
     <td>
