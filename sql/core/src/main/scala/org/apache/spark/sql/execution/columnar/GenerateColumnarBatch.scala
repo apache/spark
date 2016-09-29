@@ -93,36 +93,21 @@ class GenerateColumnarBatch(
             case dt => (classOf[OtherColumnStats].getName, "()")
           }
         ctx.addMutableState(columnStatsCls, varName, "")
-        s"$varName = new $columnStatsCls$arg;\n"
+        s"$varName = new $columnStatsCls$arg; statsArray[$i] = $varName;\n"
       }
     )
-    val assignCollectedStatistics = ctx.splitExpressions(
-      "row",
-      colStatVars.zipWithIndex.map { case (name, i) =>
-        s"assignStats(array, $name, $i);\n"
-      },
-      Seq(("Object[]", "array"))
-    )
-    val numColStats = colStatVars.length * 5
 
     val populateColumnVectorsCode = ctx.splitExpressions(
       rowVar,
       (schemas.fields zip colStatVars).zipWithIndex.map {
         case ((field, colStatVar), i) =>
           GenerateColumnarBatch.putColumnCode(ctx, field.dataType, field.nullable,
-            batchVar, rowVar, rowNumVar, colStatVar, i, numBytesVar)
+            batchVar, rowVar, rowNumVar, colStatVar, i, numBytesVar).trim
       },
       Seq(("ColumnarBatch", batchVar), ("int", rowNumVar))
     )
 
     val confVar = ctx.addReferenceObj("conf", conf, classOf[SparkConf].getName)
-    val compress =
-      s"""
-       for (int i = 0; i < $numColumns; i++) {
-         ((OnHeapUnsafeColumnVector)$batchVar.column(i)).compress($confVar);
-       }
-     """
-
     val code = s"""
       import org.apache.spark.memory.MemoryMode;
       import org.apache.spark.sql.catalyst.InternalRow;
@@ -143,26 +128,10 @@ class GenerateColumnarBatch(
 
         ${ctx.declareAddedFunctions()}
 
+        $columnStatsCls[] statsArray = new $columnStatsCls[$numColumns];
         private void allocateColumnStats() {
           InternalRow row = null;
-          $colStatCode
-        }
-
-        private void assignStats(Object[] array, $columnStatsCls stat, int i) {
-          Object[] stats = stat.collectedStats();
-          int idx = i * 5;
-          array[idx] = stats[0];
-          array[idx+1] = stats[1];
-          array[idx+2] = stats[2];
-          array[idx+3] = stats[3];
-          array[idx+4] = stats[4];
-        }
-
-        private InternalRow allocateStats() {
-          InternalRow row = null;
-          Object[] array = new Object[$numColStats];
-          $assignCollectedStatistics
-          return new GenericInternalRow(array);
+          ${colStatCode.trim}
         }
 
         @Override
@@ -183,8 +152,11 @@ class GenerateColumnarBatch(
             $rowNumVar += 1;
           }
           $batchVar.setNumRows($rowNumVar);
-          $compress
-          return ${classOf[CachedColumnarBatch].getName}.apply($batchVar, allocateStats());
+          for (int i = 0; i < $numColumns; i++) {
+            ((OnHeapUnsafeColumnVector)$batchVar.column(i)).compress($confVar);
+          }
+          return ${classOf[CachedColumnarBatch].getName}.apply(
+            $batchVar, ${classOf[GenerateColumnarBatch].getName}.generateStats(statsArray));
         }
       }
       """
@@ -238,11 +210,11 @@ private[sql] object GenerateColumnarBatch {
         val put = "put" + typeName.capitalize
         val get = "get" + typeName.capitalize
         s"""
-         |$typeName val = $rowVar.$get($colNum);
-         |$colVar.$put($rowNumVar, val);
-         |$numBytesVar += ${dt.defaultSize};
-         |$colStatVar.gatherValueStats(val);
-       """.stripMargin
+         $typeName val = $rowVar.$get($colNum);
+         $colVar.$put($rowNumVar, val);
+         $numBytesVar += ${dt.defaultSize};
+         $colStatVar.gatherValueStats(val);
+       """
       case StringType | BinaryType =>
         val typeName = GenerateColumnarBatch.typeToName(dt)
         val typeDeclName = dt match {
@@ -252,69 +224,74 @@ private[sql] object GenerateColumnarBatch {
         val put = "put" + typeName.capitalize
         val get = "get" + typeName.capitalize
         s"""
-         |$typeDeclName val = $rowVar.$get($colNum);
-         |int size = $colVar.$put($rowNumVar, val);
-         |$numBytesVar += size;
-         |$colStatVar.gatherValueStats(val, size);
-       """.stripMargin
+         $typeDeclName val = $rowVar.$get($colNum);
+         int size = $colVar.$put($rowNumVar, val);
+         $numBytesVar += size;
+         $colStatVar.gatherValueStats(val, size);
+       """
       case NullType =>
         return s"""
-        |if ($rowVar.isNullAt($colNum)) {
-        |  $colVar.putNull($rowNumVar);
-        |} else {
-        |  $colVar.putNotNull($rowNumVar);
-        |}
-        |$numBytesVar += 1;
-        |$colStatVar.gatherValueStats(null, 1);
-       """.stripMargin
+        if ($rowVar.isNullAt($colNum)) {
+          $colVar.putNull($rowNumVar);
+        } else {
+          $colVar.putNotNull($rowNumVar);
+        }
+        $numBytesVar += 1;
+        $colStatVar.gatherValueStats(null, 1);
+       """
       case dt: DecimalType =>
         val precision = dt.precision
         val scale = dt.scale
         s"""
-         |Decimal val = $rowVar.getDecimal($colNum, $precision, $scale);
-         |int size = $colVar.putDecimal($rowNumVar, val, $precision);
-         |$numBytesVar += size;
-         |$colStatVar.gatherValueStats(val, size);
-       """.stripMargin
+         Decimal val = $rowVar.getDecimal($colNum, $precision, $scale);
+         int size = $colVar.putDecimal($rowNumVar, val, $precision);
+         $numBytesVar += size;
+         $colStatVar.gatherValueStats(val, size);
+       """
       case array: ArrayType =>
         s"""
-         |ArrayData val = $rowVar.getArray($colNum);
-         |int size = $colVar.putArray($rowNumVar, val);
-         |$numBytesVar += size;
-         |$colStatVar.gatherValueStats(val, size);
-       """.stripMargin
+         ArrayData val = $rowVar.getArray($colNum);
+         int size = $colVar.putArray($rowNumVar, val);
+         $numBytesVar += size;
+         $colStatVar.gatherValueStats(val, size);
+       """
       case t: MapType =>
         s"""
-         |MapData val = $rowVar.getMap($colNum);
-         |int size = $colVar.putMap($rowNumVar, val);
-         |$numBytesVar += size;
-         |$colStatVar.gatherValueStats(val, size);
-       """.stripMargin
+         MapData val = $rowVar.getMap($colNum);
+         int size = $colVar.putMap($rowNumVar, val);
+         $numBytesVar += size;
+         $colStatVar.gatherValueStats(val, size);
+       """
       case struct: StructType =>
         s"""
-         |InternalRow val = $rowVar.getStruct($colNum, ${struct.length});
-         |int size = $colVar.putStruct($rowNumVar,val);
-         |$numBytesVar += size;
-         |$colStatVar.gatherValueStats(val, size);
-       """.stripMargin
+         InternalRow val = $rowVar.getStruct($colNum, ${struct.length});
+         int size = $colVar.putStruct($rowNumVar,val);
+         $numBytesVar += size;
+         $colStatVar.gatherValueStats(val, size);
+       """
       case _ =>
         throw new UnsupportedOperationException("Unsupported data type " + dt.simpleString);
     }
     if (nullable) {
       s"""
-       |if ($rowVar.isNullAt($colNum)) {
-       |  $colVar.putNull($rowNumVar);
-       |  $colStatVar.gatherNullStats();
-       |} else {
-       |  $body
-       |}
-      """.stripMargin
+       if ($rowVar.isNullAt($colNum)) {
+         $colVar.putNull($rowNumVar);
+         $colStatVar.gatherNullStats();
+       } else {
+         ${body.trim}
+       }
+      """
     } else {
       s"""
-       |{
-       |  $body
-       |}
-      """.stripMargin
+       {
+         ${body.trim}
+       }
+      """
     }
+  }
+
+  def generateStats(columnStats: Array[ColumnStats]): InternalRow = {
+    val array = columnStats.map(_.collectedStats).flatten
+    InternalRow.fromSeq(array)
   }
 }
