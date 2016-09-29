@@ -651,14 +651,28 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
  *   SHOW COLUMNS (FROM | IN) table_identifier [(FROM | IN) database];
  * }}}
  */
-case class ShowColumnsCommand(tableName: TableIdentifier) extends RunnableCommand {
+case class ShowColumnsCommand(
+    databaseName: Option[String],
+    tableName: TableIdentifier) extends RunnableCommand {
   override val output: Seq[Attribute] = {
     AttributeReference("col_name", StringType, nullable = false)() :: Nil
   }
 
+  private def nameEqual(name1: String, name2: String, caseSensitive: Boolean): Boolean = {
+    if (caseSensitive) name1 == name2 else name1.equalsIgnoreCase(name2)
+  }
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTempViewOrPermanentTableMetadata(tableName)
+    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val lookupTable = databaseName match {
+      case None => tableName
+      case Some(db) if tableName.database.exists(!nameEqual(_, db, caseSensitive)) =>
+        throw new AnalysisException(
+          s"SHOW COLUMNS with conflicting databases: '$db' != '${tableName.database.get}'")
+      case Some(db) => TableIdentifier(tableName.identifier, Some(db))
+    }
+    val table = catalog.getTempViewOrPermanentTableMetadata(lookupTable)
     table.schema.map { c =>
       Row(c.name)
     }
