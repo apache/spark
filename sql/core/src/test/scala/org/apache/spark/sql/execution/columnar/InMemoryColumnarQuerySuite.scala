@@ -232,4 +232,29 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val columnTypes2 = List.fill(length2)(IntegerType)
     val columnarIterator2 = GenerateColumnAccessor.generate(columnTypes2)
   }
+
+  test("SPARK-17549: cached table size should be correctly calculated") {
+    val data = spark.sparkContext.parallelize(1 to 10, 5).map { i => (i, i.toLong) }
+      .toDF("col1", "col2")
+    val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
+    val cached = InMemoryRelation(true, 5, MEMORY_ONLY, plan, None)
+
+    // Materialize the data.
+    val expectedAnswer = data.collect()
+    checkAnswer(cached, expectedAnswer)
+
+    // Check that the right size was calculated.
+    val expectedColSizes = expectedAnswer.size * (INT.defaultSize + LONG.defaultSize)
+    assert(cached.statistics.sizeInBytes === expectedColSizes)
+
+    // Create a projection of the cached data and make sure the statistics are correct.
+    val projected = cached.withOutput(Seq(plan.output.last))
+    assert(projected.statistics.sizeInBytes === expectedAnswer.size * LONG.defaultSize)
+
+    // Create a silly projection that repeats columns of the first cached relation, and
+    // check that the size is calculated correctly.
+    val projected2 = cached.withOutput(Seq(plan.output.last, plan.output.last))
+    assert(projected2.statistics.sizeInBytes === 2 * expectedAnswer.size * LONG.defaultSize)
+  }
+
 }
