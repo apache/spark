@@ -1402,10 +1402,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * :: DeveloperApi ::
    * Broadcast a read-only variable to the cluster, returning a
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
    */
+  @DeveloperApi
   def broadcastRDDOnExecutor[T: ClassTag, U: ClassTag](
       rdd: RDD[T], mode: BroadcastMode[T]): Broadcast[U] = {
     assertNotStopped()

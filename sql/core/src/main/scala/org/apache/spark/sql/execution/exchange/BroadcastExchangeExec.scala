@@ -45,9 +45,17 @@ case class BroadcastExchangeExec[T: ClassTag](
     mode: broadcast.BroadcastMode[InternalRow],
     child: SparkPlan) extends Exchange {
 
-  override lazy val metrics = Map(
-    "buildTime" -> SQLMetrics.createMetric(sparkContext, "time to build (ms)"),
-    "broadcastTime" -> SQLMetrics.createMetric(sparkContext, "time to broadcast (ms)"))
+  override lazy val metrics = if (sqlContext.conf.executorSideBroadcastEnabled) {
+      Map(
+        "buildTime" -> SQLMetrics.createMetric(sparkContext, "time to build (ms)"),
+        "broadcastTime" -> SQLMetrics.createMetric(sparkContext, "time to broadcast (ms)"))
+    } else {
+      Map(
+        "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
+        "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"),
+        "buildTime" -> SQLMetrics.createMetric(sparkContext, "time to build (ms)"),
+        "broadcastTime" -> SQLMetrics.createMetric(sparkContext, "time to broadcast (ms)"))
+    }
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
@@ -67,9 +75,59 @@ case class BroadcastExchangeExec[T: ClassTag](
     }
   }
 
-  // Private variable used to hold the reference of RDD created during broadcasting.
+  // Private variable used to hold the reference of RDD created during executor-side broadcasting.
   // If we don't keep its reference, it will be cleaned up.
   private var childRDD: RDD[InternalRow] = null
+
+  private def executorSideBroadcast(): broadcast.Broadcast[Any] = {
+    val beforeBuild = System.nanoTime()
+    // Call persist on the RDD because we want to broadcast the RDD blocks on executors.
+    childRDD = child.execute().mapPartitionsInternal { rowIterator =>
+      rowIterator.map(_.copy())
+    }.persist(StorageLevel.MEMORY_AND_DISK)
+
+    val numOfRows = childRDD.count()
+    if (numOfRows >= 512000000) {
+      throw new SparkException(
+        s"Cannot broadcast the table with more than 512 millions rows: ${numOfRows} rows")
+    }
+
+    // Broadcast the relation on executors.
+    val beforeBroadcast = System.nanoTime()
+    longMetric("buildTime") += (beforeBuild - beforeBroadcast) / 1000000
+
+    val broadcasted = sparkContext.broadcastRDDOnExecutor[InternalRow, T](childRDD, mode)
+      .asInstanceOf[broadcast.Broadcast[Any]]
+
+    longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
+    broadcasted
+  }
+
+  private def driverSideBroadcast(): broadcast.Broadcast[Any] = {
+    val beforeCollect = System.nanoTime()
+    // Note that we use .executeCollect() because we don't want to convert data to
+    // Scala types
+    val input: Array[InternalRow] = child.executeCollect()
+    if (input.length >= 512000000) {
+      throw new SparkException(
+        s"Cannot broadcast the table with more than 512 millions rows: ${input.length} rows")
+    }
+    val beforeBuild = System.nanoTime()
+    longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
+    val dataSize = input.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
+    longMetric("dataSize") += dataSize
+    if (dataSize >= (8L << 30)) {
+      throw new SparkException(
+        s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
+    }
+    // Construct and broadcast the relation.
+    val relation = mode.transform(input)
+    val beforeBroadcast = System.nanoTime()
+    longMetric("buildTime") += (beforeBroadcast - beforeBuild) / 1000000
+    val broadcasted = sparkContext.broadcast(relation)
+    longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
+    broadcasted
+  }
 
   @transient
   private lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
@@ -80,26 +138,11 @@ case class BroadcastExchangeExec[T: ClassTag](
       // with the correct execution.
       SQLExecution.withExecutionId(sparkContext, executionId) {
         try {
-          val beforeBuild = System.nanoTime()
-          // Call persist on the RDD because we want to broadcast the RDD blocks on executors.
-          childRDD = child.execute().mapPartitionsInternal { rowIterator =>
-            rowIterator.map(_.copy())
-          }.persist(StorageLevel.MEMORY_AND_DISK)
-
-          val numOfRows = childRDD.count()
-          if (numOfRows >= 512000000) {
-            throw new SparkException(
-              s"Cannot broadcast the table with more than 512 millions rows: ${numOfRows} rows")
+          val broadcasted = if (sqlContext.conf.executorSideBroadcastEnabled) {
+            executorSideBroadcast()
+          } else {
+            driverSideBroadcast()
           }
-
-          // Broadcast the relation on executors.
-          val beforeBroadcast = System.nanoTime()
-          longMetric("buildTime") += (beforeBuild - beforeBroadcast) / 1000000
-
-          val broadcasted = sparkContext.broadcastRDDOnExecutor[InternalRow, T](childRDD,
-            mode).asInstanceOf[broadcast.Broadcast[Any]]
-
-          longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
 
           // There are some cases we don't care about the metrics and call `SparkPlan.doExecute`
           // directly without setting an execution id. We should be tolerant to it.
@@ -139,13 +182,6 @@ case class BroadcastExchangeExec[T: ClassTag](
 }
 
 object BroadcastExchangeExec {
-  /*
-  def apply[T: ClassTag](
-      mode: broadcast.BroadcastMode[InternalRow],
-      child: SparkPlan): BroadcastExchangeExec[T] =
-    BroadcastExchangeExec[T](mode, child, implicitly[ClassTag[T]])
-  */
-
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("broadcast-exchange", 128))
 }

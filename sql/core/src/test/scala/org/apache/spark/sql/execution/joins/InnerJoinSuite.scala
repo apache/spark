@@ -127,26 +127,30 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       EnsureRequirements(spark.sessionState.conf).apply(sortMergeJoin)
     }
 
-    test(s"$testName using BroadcastHashJoin (build=left)") {
+    def usingBroadcastHashJoin(buildSide: joins.BuildSide): Unit = {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeBroadcastHashJoin(
-              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildLeft),
+              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, buildSide),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
       }
     }
 
+    test(s"$testName using BroadcastHashJoin (build=left)") {
+      Seq("true", "false").foreach { executorSideBroadcast =>
+        withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> executorSideBroadcast) {
+          usingBroadcastHashJoin(joins.BuildLeft)
+        }
+      }
+    }
+
     test(s"$testName using BroadcastHashJoin (build=right)") {
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
-        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-          checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
-            makeBroadcastHashJoin(
-              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildRight),
-            expectedAnswer.map(Row.fromTuple),
-            sortAnswers = true)
+      Seq("true", "false").foreach { executorSideBroadcast =>
+        withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> executorSideBroadcast) {
+          usingBroadcastHashJoin(joins.BuildRight)
         }
       }
     }
@@ -196,21 +200,28 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       }
     }
 
-    test(s"$testName using BroadcastNestedLoopJoin build left") {
+    def usingBroadcastNestedLoopJoin(buildSide: joins.BuildSide): Unit = {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          BroadcastNestedLoopJoinExec(left, right, BuildLeft, Inner, Some(condition())),
+          BroadcastNestedLoopJoinExec(left, right, buildSide, Inner, Some(condition())),
           expectedAnswer.map(Row.fromTuple),
           sortAnswers = true)
       }
     }
 
+    test(s"$testName using BroadcastNestedLoopJoin build left") {
+      Seq("true", "false").foreach { executorSideBroadcast =>
+        withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> executorSideBroadcast) {
+          usingBroadcastNestedLoopJoin(BuildLeft)
+        }
+      }
+    }
+
     test(s"$testName using BroadcastNestedLoopJoin build right") {
-      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          BroadcastNestedLoopJoinExec(left, right, BuildRight, Inner, Some(condition())),
-          expectedAnswer.map(Row.fromTuple),
-          sortAnswers = true)
+      Seq("true", "false").foreach { executorSideBroadcast =>
+        withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> executorSideBroadcast) {
+          usingBroadcastNestedLoopJoin(BuildRight)
+        }
       }
     }
   }
