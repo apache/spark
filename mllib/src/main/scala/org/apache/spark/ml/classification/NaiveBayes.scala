@@ -19,7 +19,6 @@ package org.apache.spark.ml.classification
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.linalg._
@@ -126,9 +125,9 @@ class NaiveBayes @Since("1.5.0") (
         case sv: SparseVector => sv.values
         case dv: DenseVector => dv.values
       }
-      if (!values.forall(_ >= 0.0)) {
-        throw new SparkException(s"Naive Bayes requires nonnegative feature values but found $v.")
-      }
+
+      require(values.forall(_ >= 0.0),
+        s"Naive Bayes requires nonnegative feature values but found $v.")
     }
 
     val requireZeroOneBernoulliValues: Vector => Unit = (v: Vector) => {
@@ -136,10 +135,9 @@ class NaiveBayes @Since("1.5.0") (
         case sv: SparseVector => sv.values
         case dv: DenseVector => dv.values
       }
-      if (!values.forall(v => v == 0.0 || v == 1.0)) {
-        throw new SparkException(
-          s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
-      }
+
+      require(values.forall(v => v == 0.0 || v == 1.0),
+        s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
     }
 
     val requireValues: Vector => Unit = {
@@ -273,10 +271,8 @@ class NaiveBayesModel private[ml] (
 
   private def bernoulliCalculation(features: Vector) = {
     features.foreachActive((_, value) =>
-      if (value != 0.0 && value != 1.0) {
-        throw new SparkException(
-          s"Bernoulli naive Bayes requires 0 or 1 feature values but found $features.")
-      }
+      require(value == 0.0 || value == 1.0,
+        s"Bernoulli naive Bayes requires 0 or 1 feature values but found $features.")
     )
     val prob = thetaMinusNegTheta.get.multiply(features)
     BLAS.axpy(1.0, pi, prob)
@@ -375,5 +371,4 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       model
     }
   }
-
 }
