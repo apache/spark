@@ -2489,8 +2489,10 @@ private[spark] class CallerContext(
   def setCurrentContext(): Boolean = {
     var succeed = false
     try {
-      val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-      val Builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
+      // scalastyle:off classforname
+      val callerContext = Class.forName("org.apache.hadoop.ipc.CallerContext")
+      val Builder = Class.forName("org.apache.hadoop.ipc.CallerContext$Builder")
+      // scalastyle:on classforname
       val builderInst = Builder.getConstructor(classOf[String]).newInstance(context)
       val hdfsContext = Builder.getMethod("build").invoke(builderInst)
       callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
