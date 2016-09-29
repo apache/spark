@@ -63,9 +63,13 @@ class SkewCoalescedPartitioner(
   override def hashCode(): Int = 31 * parent.hashCode() + partitionStartIndices.hashCode()
 }
 
+ /**
+  * if mapIndex is -1, same as ShuffledRowRDDPartition
+  * if mapIndex > -1 ,only read one block of mappers.
+  */
 private final class SkewShuffledRowRDDPartition(
     val postShufflePartitionIndex: Int,
-    val mapindex: Int,
+    val mapIndex: Int,
     val startPreShufflePartitionIndex: Int,
     val endPreShufflePartitionIndex: Int) extends Partition {
   override val index: Int = postShufflePartitionIndex
@@ -75,7 +79,18 @@ private final class SkewShuffledRowRDDPartition(
   override def equals(other: Any): Boolean = super.equals(other)
 }
 
-
+ /**
+  * only use for skew data join. In join case , need fetch the same partition of
+  * left output and rigth output together. but when some partiton have bigger data than
+  * other partitions, it occur data skew . in the case , we need a specialized RDD to handling this.
+  * in skew partition side,we don't produce one partition, because one partition produce
+  * one task deal so much data is too slaw . but produce per-stage mapping task num parititons.
+  * one task only deal one mapper data. in other no skew side. In order to deal with the
+  * corresponding skew partition , we need produce same partition per-stage parititon num
+  * times.(Equivalent to broadcoast this partition)
+  *
+  * other no skew partition, then deal like ShuffledRowRDD
+  */
 class SkewShuffleRowRDD(
     var dependency1: ShuffleDependency[Int, InternalRow, InternalRow],
     partitionStartIndices: Array[(Int, Int, Int)])
@@ -114,7 +129,7 @@ class SkewShuffleRowRDD(
     }
     partitions.toArray
   }
-
+  // Todo: get mapidx location
   override def getPreferredLocations(partition: Partition): Seq[String] = Nil
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
@@ -125,7 +140,7 @@ class SkewShuffleRowRDD(
         skewShuffledRowRDDPartition.startPreShufflePartitionIndex,
         skewShuffledRowRDDPartition.endPreShufflePartitionIndex,
         context,
-        skewShuffledRowRDDPartition.mapindex)
+        skewShuffledRowRDDPartition.mapIndex)
     reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
   }
 

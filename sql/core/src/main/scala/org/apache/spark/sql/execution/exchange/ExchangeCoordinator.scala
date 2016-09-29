@@ -190,43 +190,42 @@ class ExchangeCoordinator(
     partitionStartIndices.toArray
   }
 
-
   /**
-    * the skew algorithm , given last stage map output statitsics,  partitionStartIndices
-    * provided by estimatePartitionStartIndices function. pre-shuffle stages partition num.
-    * And return a Array of 2-item tuples , the return value is use to create SkewShuffleRowRDD.
-    *
-    * we find data skew partition by mapOutputStatistics, and reuse partitionStartIndices which
-    * provided by estimatePartitionStartIndices function, to generate new partition start indices.
-    * For example, we have two stages with the following pre-shuffle partition size statistics
-    * stage 1: [100 MB, 20 MB, 20000 MB, 10MB, 30 MB] and stage 1 partition is 3
-    * stage 2: [10 MB,  10 MB, 70 MB,  5 MB, 5 MB]
-    * assuming the target input size is 128 MB
-    * obviously partition 3 is data skew。
-    * we use SkewShuffleRowRDD read per-stage data，in skew join，it‘s no same deal process。
-    * in this case ， we find partition3 is data skew，as SPARK-9862 said ，we don't put this
-    * partition in a reduce task。but broadcast other stage partition3 to this stage partition。
-    * we will return like this：
-    * （ 5/*partition num*/
-    * （（-1/*mean no skew*/,/* index like partitionStartIndices */ ）,1 /*only generate 1 partition*/）
-    * （1/*mean‘s this side data skew*/，2/*index*/，3/*generate 3 partition*/），
-    * （-1,3,1））// this for generate  SkewShuffleRowRDD of stage 1.
-    * （ 5/*partition num*/）
-    * （（-1/*mean no skew*/）,0/*index like partitionStartIndices */,1 /*only generate 1 partition*/），
-    * （2/*mean‘s  other side data skew*/，2/*index*/，3/*generate 3 partition*/），
-    * （-1,3,1）// this for generate SkewShuffleRowRDD of stage 2.
-    *
-    * @param mapOutputStatistics pre-shuffle stages.
-    * @param prePartitionNum  partition num of pre-shuffle stages
-    * @param partitionStartIndices provided by estimatePartitionStartIndices function
-    * @return return Array of 2-item tuples, the first item in the tuple is mean how many
-    * partition should generate by SkewShuffleRowRDD, if the value is -1, then use ShuffledRowRDD
-    * second item is a array of (isSkew, partition index, gen partition num)
-    * isSkew is -1 mean's no skew. 1 my side is skew. SkewShuffleRowRDD should generate many
-    * partition by gen partition num,a partition only read a pre-state partition one block
-    * isSkew is 2 mean's other side data skew , so SkewShuffleRowRDD should generate many some
-    * partition .
-    */
+  * the skew algorithm , given last stage map output statitsics,  partitionStartIndices
+  * provided by estimatePartitionStartIndices function. pre-shuffle stages partition num.
+  * And return a Array of 2-item tuples , the return value is use to create SkewShuffleRowRDD.
+  *
+  * we find data skew partition by mapOutputStatistics, and reuse partitionStartIndices which
+  * provided by estimatePartitionStartIndices function, to generate new partition start indices.
+  * For example, we have two stages with the following pre-shuffle partition size statistics
+  * stage 1: [100 MB, 20 MB, 20000 MB, 10MB, 30 MB] and stage 1 partition is 3
+  * stage 2: [10 MB,  10 MB, 70 MB,  5 MB, 5 MB]
+  * assuming the target input size is 128 MB
+  * obviously partition 3 is data skew。
+  * we use SkewShuffleRowRDD read per-stage data，in skew join，it‘s no same deal process。
+  * in this case ， we find partition3 is data skew，as SPARK-9862 said ，we don't put this
+  * partition in a reduce task。but broadcast other stage partition3 to this stage partition。
+  * we will return like this：
+  * （ 5/*partition num*/
+  * （（-1/*mean no skew*/,/* index like partitionStartIndices */ ）,1 /*only generate 1 partition*/）
+  * （1/*mean‘s this side data skew*/，2/*index*/，3/*generate 3 partition*/），
+  * （-1,3,1））// this for generate  SkewShuffleRowRDD of stage 1.
+  * （ 5/*partition num*/）
+  * （（-1/*mean no skew*/）,0/*index like partitionStartIndices */,1 /*only generate 1 partition*/），
+  * （2/*mean‘s  other side data skew*/，2/*index*/，3/*generate 3 partition*/），
+  * （-1,3,1）// this for generate SkewShuffleRowRDD of stage 2.
+  *
+  * @param mapOutputStatistics pre-shuffle stages.
+  * @param prePartitionNum  partition num of pre-shuffle stages
+  * @param partitionStartIndices provided by estimatePartitionStartIndices function
+  * @return return Array of 2-item tuples, the first item in the tuple is mean how many
+  * partition should generate by SkewShuffleRowRDD, if the value is -1, then use ShuffledRowRDD
+  * second item is a array of (isSkew, partition index, gen partition num)
+  * isSkew is -1 mean's no skew. 1 my side is skew. SkewShuffleRowRDD should generate many
+  * partition by gen partition num,a partition only read a pre-state partition one block
+  * isSkew is 2 mean's other side data skew , so SkewShuffleRowRDD should generate many some
+  * partition .
+  */
   def skewPartitionIdx(
     mapOutputStatistics: Array[MapOutputStatistics],
     prePartitionNum: Array[Int],
