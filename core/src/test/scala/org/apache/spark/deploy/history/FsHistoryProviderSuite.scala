@@ -394,17 +394,25 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("ignore hidden files") {
+
     // FsHistoryProvider should ignore hidden files.  (It even writes out a hidden file itself
-    // that should be ignored).  Note that this test really *should* also check that no errors are
-    // logged, but that part has to be manual for now.
-    val hiddenFile = new File(testDir, ".garbage")
-    val out = new PrintWriter(hiddenFile)
+    // that should be ignored).
+
+    // write out one totally bogus hidden file
+    val hiddenGarbageFile = new File(testDir, ".garbage")
+    val out = new PrintWriter(hiddenGarbageFile)
     // scalastyle:off println
     out.println("GARBAGE")
     // scalastyle:on println
     out.close()
 
-    val newAppComplete = newLogFile("new1", None, inProgress = false)
+    // also write out one real event log file, but since its a hidden file, we shouldn't read it
+    val tmpNewAppFile = newLogFile("hidden", None, inProgress = false)
+    val hiddenNewAppFile = new File(tmpNewAppFile.getParentFile, "." + tmpNewAppFile.getName)
+    tmpNewAppFile.renameTo(hiddenNewAppFile)
+
+    // and write one real file, which should still get picked up just fine
+    val newAppComplete = newLogFile("real-app", None, inProgress = false)
     writeFile(newAppComplete, true, None,
       SparkListenerApplicationStart(newAppComplete.getName(), Some("new-app-complete"), 1L, "test",
         None),
@@ -414,6 +422,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val provider = new FsHistoryProvider(createTestConf())
     updateAndCheck(provider) { list =>
       list.size should be (1)
+      list(0).name should be ("real-app")
     }
   }
 

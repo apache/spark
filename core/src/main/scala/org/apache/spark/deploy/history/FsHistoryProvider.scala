@@ -291,9 +291,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           try {
             val prevFileSize = fileToAppInfo.get(entry.getPath()).map{_.fileSize}.getOrElse(0L)
             !entry.isDirectory() &&
-              // FsHistoryProvider generates a hidden file which can't be read, and the user may
-              // generate others which can't be read.  Accidentally reading a garbage file is safe,
-              // but we would log an error which can be scary to the end-user.
+              // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
+              // reading a garbage file is safe, but we would log an error which can be scary to
+              // the end-user.
               !entry.getPath().getName().startsWith(".") &&
               prevFileSize < entry.getLen()
           } catch {
