@@ -203,6 +203,7 @@ class GenerateColumnAccessor(conf: SparkConf)
       import org.apache.spark.sql.types.DataType;
       import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
       import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
+      import org.apache.spark.sql.execution.columnar.CachedBatchBytes;
       import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
 
       public SpecificColumnarIterator generate(Object[] references) {
@@ -249,8 +250,7 @@ class GenerateColumnAccessor(conf: SparkConf)
             return false;
           }
 
-          ${classOf[CachedBatchBytes].getName} batch =
-            (${classOf[CachedBatchBytes].getName}) input.next();
+          CachedBatchBytes batch = (CachedBatchBytes)input.next();
           currentRow = 0;
           numRowsInBatch = batch.numRows();
           for (int i = 0; i < columnIndexes.length; i ++) {

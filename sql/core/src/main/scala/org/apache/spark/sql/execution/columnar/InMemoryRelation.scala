@@ -198,7 +198,7 @@ case class InMemoryRelation(
    */
   private def buildColumnarBatches(): RDD[CachedColumnarBatch] = {
     val schema = StructType.fromAttributes(child.output)
-    val newStorageLevel = GenerateColumnarBatch.compressStorageLevel(storageLevel)
+    val newStorageLevel = GenerateColumnarBatch.compressStorageLevel(storageLevel, useCompression)
     val conf = child.sqlContext.sparkSession.sparkContext.conf
     child.execute().mapPartitionsInternal { rows =>
       new GenerateColumnarBatch(schema, batchSize, newStorageLevel, conf).generate(rows).map {

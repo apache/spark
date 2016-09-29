@@ -102,15 +102,23 @@ class GenerateColumnarBatch(
       (schemas.fields zip colStatVars).zipWithIndex.map {
         case ((field, colStatVar), i) =>
           GenerateColumnarBatch.putColumnCode(ctx, field.dataType, field.nullable,
-            batchVar, rowVar, rowNumVar, colStatVar, i, numBytesVar).trim
+            batchVar, rowVar, rowNumVar, colStatVar, i, numBytesVar).trim + "\n"
       },
       Seq(("ColumnarBatch", batchVar), ("int", rowNumVar))
     )
 
     val confVar = ctx.addReferenceObj("conf", conf, classOf[SparkConf].getName)
+    val compress = if (!GenerateColumnarBatch.isCompress(storageLevel)) "" else s"""
+      for (int i = 0; i < $numColumns; i++) {
+        ((OnHeapUnsafeColumnVector)$batchVar.column(i)).compress($confVar);
+      }
+     """
+
     val code = s"""
       import org.apache.spark.memory.MemoryMode;
       import org.apache.spark.sql.catalyst.InternalRow;
+      import org.apache.spark.sql.execution.columnar.CachedColumnarBatch;
+      import org.apache.spark.sql.execution.columnar.GenerateColumnarBatch;
       import org.apache.spark.sql.execution.vectorized.ColumnarBatch;
       import org.apache.spark.sql.execution.vectorized.ColumnVector;
       import org.apache.spark.sql.execution.vectorized.OnHeapUnsafeColumnVector;
@@ -140,7 +148,7 @@ class GenerateColumnarBatch(
         }
 
         @Override
-        public ${classOf[CachedColumnarBatch].getName} next() {
+        public CachedColumnarBatch next() {
           ColumnarBatch $batchVar =
           ColumnarBatch.allocate($schemaVar, MemoryMode.ON_HEAP_UNSAFE, $batchSize);
           allocateColumnStats();
@@ -152,11 +160,9 @@ class GenerateColumnarBatch(
             $rowNumVar += 1;
           }
           $batchVar.setNumRows($rowNumVar);
-          for (int i = 0; i < $numColumns; i++) {
-            ((OnHeapUnsafeColumnVector)$batchVar.column(i)).compress($confVar);
-          }
-          return ${classOf[CachedColumnarBatch].getName}.apply(
-            $batchVar, ${classOf[GenerateColumnarBatch].getName}.generateStats(statsArray));
+          ${compress.trim}
+          return CachedColumnarBatch.apply(
+            $batchVar, GenerateColumnarBatch.generateStats(statsArray));
         }
       }
       """
@@ -171,7 +177,8 @@ class GenerateColumnarBatch(
 
 private[sql] object GenerateColumnarBatch {
 
-  def compressStorageLevel(storageLevel: StorageLevel): StorageLevel = {
+  def compressStorageLevel(storageLevel: StorageLevel, useCompression: Boolean): StorageLevel = {
+    if (!useCompression) return storageLevel
     storageLevel match {
       case MEMORY_ONLY => MEMORY_ONLY_SER
       case MEMORY_ONLY_2 => MEMORY_ONLY_SER_2
