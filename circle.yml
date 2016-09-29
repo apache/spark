@@ -14,7 +14,7 @@ checkout:
 
 dependencies:
   override:
-    - ./build/mvn -DskipTests -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive install
+    - ./build/mvn -DskipTests -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive dependency:go-offline
 
 test:
   override:
@@ -30,7 +30,7 @@ test:
             echo "</server></servers></settings>" >> $tmp_settings
 
             ./build/mvn versions:set -DnewVersion=$version
-            ./build/mvn --settings $tmp_settings -DskipTests "$1" clean deploy
+            ./build/mvn --settings $tmp_settings -DskipTests -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver clean deploy
           }
 
           make_dist() {
@@ -44,7 +44,7 @@ test:
 
           case $CIRCLE_NODE_INDEX in
           0)
-            publish_artifacts "-Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive"
+            publish_artifacts
             ;;
           1)
             make_dist hadoop-2.7 "-Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive"
