@@ -209,6 +209,10 @@ private[json] trait TestJsonData {
     spark.sparkContext.parallelize(
       """{"ts":1451732645}""" :: Nil)
 
+  def timestampAsFloat: RDD[String] =
+    spark.sparkContext.parallelize(
+      """{"ts":1451732645.123456}""" :: Nil)
+
   def arrayAndStructRecords: RDD[String] =
     spark.sparkContext.parallelize(
       """{"a": {"b": 1}}""" ::

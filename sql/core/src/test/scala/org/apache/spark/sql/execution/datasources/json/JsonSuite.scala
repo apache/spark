@@ -92,6 +92,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         enforceCorrectType(intNumber, TimestampType))
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber.toLong * 1000L)),
         enforceCorrectType(intNumber.toLong, TimestampType))
+    checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(123L + intNumber * 1000L)),
+      enforceCorrectType(0.123 + intNumber, TimestampType))
     val strTime = "2014-09-30 12:34:56"
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(strTime)),
         enforceCorrectType(strTime, TimestampType))
@@ -1673,6 +1675,20 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       checkAnswer(
         sql("select ts from jsonTable"),
         Row(java.sql.Timestamp.valueOf("2016-01-02 03:04:05"))
+      )
+    }
+  }
+
+  test("Casting float as timestamp") {
+    withTempView("jsonTable") {
+      val schema = (new StructType).add("ts", TimestampType)
+      val jsonDF = spark.read.schema(schema).json(timestampAsFloat)
+
+      jsonDF.createOrReplaceTempView("jsonTable")
+
+      checkAnswer(
+        sql("select ts from jsonTable"),
+        Row(java.sql.Timestamp.valueOf("2016-01-02 03:04:05.123456"))
       )
     }
   }
