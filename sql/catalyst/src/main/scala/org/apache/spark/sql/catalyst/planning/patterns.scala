@@ -188,42 +188,6 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
   }
 }
 
-
-/**
- * A pattern that collects all adjacent unions and returns their children as a Seq.
- * If the top union is wrapped in a [[Distinct]], then the [[Distinct]] in the adjacent unions, if
- * any, will be eliminated.
- */
-object Unions {
-  def unapply(plan: LogicalPlan): Option[(Seq[LogicalPlan], Boolean)] = plan match {
-    case u: Union =>
-      Some(collectUnionChildren(mutable.Stack(u), Seq.empty[LogicalPlan], false), false)
-    case Distinct(u: Union) =>
-      Some(collectUnionChildren(mutable.Stack(u), Seq.empty[LogicalPlan], true), true)
-    case _ => None
-  }
-
-  // Doing a depth-first tree traversal to combine all the union children.
-  @tailrec
-  private def collectUnionChildren(
-      plans: mutable.Stack[LogicalPlan],
-      children: Seq[LogicalPlan],
-      dedupDistinct: Boolean): Seq[LogicalPlan] = {
-    if (plans.isEmpty) children
-    else {
-      plans.pop match {
-        case Distinct(u @ Union(grandchildren)) if dedupDistinct =>
-          grandchildren.reverseMap(plans.push(_))
-          collectUnionChildren(plans, children, dedupDistinct)
-        case Union(grandchildren) =>
-          grandchildren.reverseMap(plans.push(_))
-          collectUnionChildren(plans, children, dedupDistinct)
-        case other => collectUnionChildren(plans, children :+ other, dedupDistinct)
-      }
-    }
-  }
-}
-
 /**
  * An extractor used when planning the physical execution of an aggregation. Compared with a logical
  * aggregation, the following transformations are performed:

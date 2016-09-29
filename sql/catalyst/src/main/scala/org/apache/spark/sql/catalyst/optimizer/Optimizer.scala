@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.api.java.function.FilterFunction
@@ -29,7 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
-import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
+import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -580,12 +581,24 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
  */
 object CombineUnions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case Unions(children, isDistinct) =>
-      if (isDistinct) {
-        Distinct(Union(children))
-      } else {
-        Union(children)
+    case u: Union => flattenUnion(u, false)
+    case Distinct(u: Union) => Distinct(flattenUnion(u, true))
+  }
+
+  private def flattenUnion(union: Union, flattenDistinct: Boolean): Union = {
+    val stack = mutable.Stack[LogicalPlan](union)
+    val flattened = mutable.ArrayBuffer.empty[LogicalPlan]
+    while (stack.nonEmpty) {
+      stack.pop() match {
+        case Distinct(Union(children)) if flattenDistinct =>
+          stack.pushAll(children.reverse)
+        case Union(children) =>
+          stack.pushAll(children.reverse)
+        case child =>
+          flattened += child
       }
+    }
+    Union(flattened)
   }
 }
 
