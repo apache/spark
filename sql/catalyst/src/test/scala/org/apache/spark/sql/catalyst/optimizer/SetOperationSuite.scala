@@ -78,7 +78,7 @@ class SetOperationSuite extends PlanTest {
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
-  test("no more unnecessary distincts in multiple unions") {
+  test("Remove unnecessary distincts in multiple unions") {
     val query1 = OneRowRelation
       .select(Literal(1).as('a))
     val query2 = OneRowRelation
@@ -86,23 +86,62 @@ class SetOperationSuite extends PlanTest {
     val query3 = OneRowRelation
       .select(Literal(3).as('c))
 
+    // D - U - D - U - query1
+    //     |       |
+    //     query3  query2
     val unionQuery1 = Distinct(Union(Distinct(Union(query1, query2)), query3)).analyze
     val optimized1 = Optimize.execute(unionQuery1)
     val distinctUnionCorrectAnswer1 =
       Distinct(Union(query1 :: query2 :: query3 :: Nil)).analyze
     comparePlans(distinctUnionCorrectAnswer1, optimized1)
 
-    val unionQuery2 = Union(Distinct(Union(query1, query2)), query3).analyze
+    //         query1
+    //         |
+    // D - U - U - query2
+    //     |
+    //     D - U - query2
+    //         |
+    //         query3
+    val unionQuery2 = Distinct(Union(Union(query1, query2),
+      Distinct(Union(query2, query3)))).analyze
     val optimized2 = Optimize.execute(unionQuery2)
     val distinctUnionCorrectAnswer2 =
-      Union(Distinct(Union(query1 :: query2 :: Nil)) :: query3 :: Nil).analyze
-    comparePlans(distinctUnionCorrectAnswer2, optimized2)
-
-    val unionQuery3 = Distinct(Union(Union(query1, query2),
-      Distinct(Union(query2, query3)))).analyze
-    val optimized3 = Optimize.execute(unionQuery3)
-    val distinctUnionCorrectAnswer3 =
       Distinct(Union(query1 :: query2 :: query2 :: query3 :: Nil)).analyze
-    comparePlans(distinctUnionCorrectAnswer3, optimized3)
+    comparePlans(distinctUnionCorrectAnswer2, optimized2)
+  }
+
+  test("Keep necessary distincts in multiple unions") {
+    val query1 = OneRowRelation
+      .select(Literal(1).as('a))
+    val query2 = OneRowRelation
+      .select(Literal(2).as('b))
+    val query3 = OneRowRelation
+      .select(Literal(3).as('c))
+    val query4 = OneRowRelation
+      .select(Literal(4).as('d))
+
+    // U - D - U - query1
+    // |       |
+    // query3  query2
+    val unionQuery1 = Union(Distinct(Union(query1, query2)), query3).analyze
+    val optimized1 = Optimize.execute(unionQuery1)
+    val distinctUnionCorrectAnswer1 =
+      Union(Distinct(Union(query1 :: query2 :: Nil)) :: query3 :: Nil).analyze
+    comparePlans(distinctUnionCorrectAnswer1, optimized1)
+
+    //         query1
+    //         |
+    // U - D - U - query2
+    // |
+    // D - U - query3
+    //     |
+    //     query4
+    val unionQuery2 =
+      Union(Distinct(Union(query1, query2)), Distinct(Union(query3, query4))).analyze
+    val optimized2 = Optimize.execute(unionQuery2)
+    val distinctUnionCorrectAnswer2 =
+      Union(Distinct(Union(query1 :: query2 :: Nil)),
+            Distinct(Union(query3 :: query4 :: Nil))).analyze
+    comparePlans(distinctUnionCorrectAnswer2, optimized2)
   }
 }
