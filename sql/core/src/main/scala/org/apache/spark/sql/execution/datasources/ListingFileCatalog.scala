@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.FileNotFoundException
+import java.util.regex.Pattern
 
 import scala.collection.mutable
 
@@ -56,11 +57,11 @@ class ListingFileCatalog(
    * HDFS skip these files matching the configured regex-patterns from being picked up by Streaming
    * Job.
    */
-  private lazy val excludeFiles: Set[String] = parameters
-    .getOrElse("excludeFiles", ".*._COPYING_,_temporary").split(",").toSet
+  private lazy val excludeFiles: Set[Pattern] = parameters
+    .getOrElse("excludeFiles", ".*._COPYING_,_temporary").split(",").toSet.map(Pattern.compile)
 
   private def isExcludedFile(path: Path): Boolean = {
-    excludeFiles.map(path.getName.matches).fold(false)(_ || _)
+    excludeFiles.map(x => x.matcher(path.getName).matches).fold(false)(_ || _)
   }
 
   override def partitionSpec(): PartitionSpec = {
