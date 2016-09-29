@@ -25,7 +25,7 @@ import org.apache.spark.util.Benchmark
 
 class CacheBenchmark extends BenchmarkBase {
 
-  test("cache with randomized keys - end-to-end") {
+  ignore("cache with randomized keys - end-to-end") {
     benchmarkRandomizedKeys(size = 20 << 18, readPathOnly = false)
 
     /*
@@ -41,7 +41,7 @@ class CacheBenchmark extends BenchmarkBase {
      */
   }
 
-  test("cache with randomized keys - read path only") {
+  ignore("cache with randomized keys - read path only") {
     benchmarkRandomizedKeys(size = 20 << 21, readPathOnly = true)
 
     /*
