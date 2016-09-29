@@ -943,7 +943,8 @@ abstract class RDD[T: ClassTag](
    *
    * User should pass in a translate function to compute the broadcast value from the rdd.
    */
-  def broadcast[U: ClassTag](transFunc: TransFunc[T, U]): Broadcast[U] = withScope {
+  @Since("2.1.0")
+  private[spark] def broadcast[U: ClassTag](transFunc: TransFunc[T, U]): Broadcast[U] = withScope {
     val bc = if (partitions.size > 0) {
       val id = sc.env.broadcastManager.newBroadcastId
 
@@ -974,7 +975,14 @@ abstract class RDD[T: ClassTag](
     bc
   }
 
-  // executor-side broadcast api
+  /**
+   * Executor broadcast api, it broadcast the rdd to the cluster from executor, returning a
+   * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
+   * The variable will be sent to each cluster only once.
+   *
+   * @param f is a translate function to compute the broadcast value from the rdd.
+   */
+  @Since("2.1.0")
   def broadcast[U: ClassTag](f: Iterator[T] => U): Broadcast[U] = withScope {
     val transFunc = new TransFunc[T, U] {
       override def transform(rows: Array[T]): U = {

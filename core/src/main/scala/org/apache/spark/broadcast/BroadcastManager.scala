@@ -17,12 +17,17 @@
 
 package org.apache.spark.broadcast
 
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.ShutdownHookManager
 
 private[spark] class BroadcastManager(
     val isDriver: Boolean,
@@ -32,6 +37,9 @@ private[spark] class BroadcastManager(
 
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
+  private val shutdownHook = addShutdownHook()
+  private[spark] lazy val hdfsBackupDir =
+    Option(new Path(conf.get("spark.broadcast.backup.dir", s"/tmp/spark/${conf.getAppId}_blocks")))
 
   initialize()
 
@@ -47,6 +55,26 @@ private[spark] class BroadcastManager(
   }
 
   def stop() {
+    // Remove the shutdown hook.  It causes memory leaks if we leave it around.
+    try {
+      ShutdownHookManager.removeShutdownHook(shutdownHook)
+    } catch {
+      case e: Exception =>
+        logError(s"Exception while removing shutdown hook.", e)
+    }
+    // only delete the path from driver when the app stop.
+    if (isDriver) {
+      hdfsBackupDir.foreach { dirPath =>
+        try {
+          val fs = dirPath.getFileSystem(SparkHadoopUtil.get.conf)
+          fs.delete(dirPath, true)
+        } catch {
+          case e: IOException =>
+            logWarning(s"Failed to delete broadcast temp dir $dirPath.", e)
+        }
+      }
+    }
+
     broadcastFactory.stop()
   }
 
@@ -78,6 +106,15 @@ private[spark] class BroadcastManager(
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
     broadcastFactory.unbroadcast(id, removeFromDriver, blocking)
   }
+
+  private def addShutdownHook(): AnyRef = {
+    logDebug("Adding shutdown hook") // force eager creation of logger
+    ShutdownHookManager.addShutdownHook(ShutdownHookManager.TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
+      logInfo("Shutdown hook called")
+      BroadcastManager.this.stop()
+    }
+  }
+
 }
 
 /**

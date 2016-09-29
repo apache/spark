@@ -38,6 +38,7 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  *
  * The mechanism is as follows:
  *
+ * 1 For driver side broadcast(when isExecutorSide is false):
  * The driver divides the serialized object into small chunks and
  * stores those chunks in the BlockManager of the driver.
  *
@@ -48,6 +49,19 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  *
  * This prevents the driver from being the bottleneck in sending out multiple copies of the
  * broadcast data (one per executor).
+ *
+ * When initialized, TorrentBroadcast objects read SparkEnv.get.conf.
+ *
+ * 2 For executor side broadcast(when isExecutorSide is true):
+ * One executor divides the serialized object into small chunks and
+ * stores those chunks in the BlockManager of the executor.
+ *
+ * On other executors, the executor first attempts to fetch the object from its BlockManager. If
+ * it does not exist, it then uses remote fetches to fetch the small chunks from
+ * other executors if available. Once it gets the chunks, it puts the chunks in its own
+ * BlockManager, ready for other executors to fetch from.
+ *
+ * In executor side broadcast driver never holds the broadcast data.
  *
  * When initialized, TorrentBroadcast objects read SparkEnv.get.conf.
  *

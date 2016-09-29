@@ -53,44 +53,44 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val transFun = new TransFunc[Int, Int] {
       override def transform(rows: Array[Int]): Int = {
-        if (rows.size > 0) rows.apply(0) else 10
+        if (rows.size > 0) rows.reduce(_ + _) else 0
       }
     }
     val b1 = nums.broadcast(transFun)
     val b2 = nums.broadcast { iter =>
-      if (iter.hasNext) iter.next() else 10
+      if (iter.hasNext) iter.reduce(_ + _) else 0
     }
-    assert(b1.value == 1)
-    assert(b2.value == 1)
+    assert(b1.value == 10)
+    assert(b2.value == 10)
   }
 
   test("executor broadcast --- empty rdd") {
     val empty = sc.makeRDD(Array.empty[Int], 2)
     val transFun = new TransFunc[Int, Int] {
-      override def transform(rows: Array[Int]): Int = if (rows.size > 0) rows.apply(0) else 10
+      override def transform(rows: Array[Int]): Int = if (rows.size > 0) rows.reduce(_ + _) else 0
     }
     val b1 = empty.broadcast(transFun)
-    assert(b1.value == 10)
+    assert(b1.value == 0)
     val b2 = empty.broadcast { iter =>
-      if (iter.hasNext) iter.next() else 10
+      if (iter.hasNext) iter.reduce(_ + _) else 0
     }
-    assert(b2.value == 10)
+    assert(b2.value == 0)
   }
 
   test("executor broadcast --- broadcast data lost from executor") {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val transFun = new TransFunc[Int, Int] {
-      override def transform(rows: Array[Int]): Int = if (rows.size > 0) rows.apply(0) else 10
+      override def transform(rows: Array[Int]): Int = if (rows.size > 0) rows.reduce(_ + _) else 0
     }
     val b1 = nums.broadcast(transFun)
     sc.env.blockManager.removeBroadcast(b1.id, false)
-    assert(b1.value == 1)
+    assert(b1.value == 10)
 
     val b2 = nums.broadcast{ iter =>
-      if (iter.hasNext) iter.next() else 10
+      if (iter.hasNext) iter.reduce(_ + _) else 0
     }
     sc.env.blockManager.removeBroadcast(b2.id, false)
-    assert(b2.value == 1)
+    assert(b2.value == 10)
   }
 
   test("basic operations") {

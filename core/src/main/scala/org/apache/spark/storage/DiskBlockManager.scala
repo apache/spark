@@ -23,7 +23,7 @@ import java.util.UUID
 
 import org.apache.hadoop.fs._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.Logging
@@ -49,8 +49,8 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     logError("Failed to create any local dir.")
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
-  private[spark] lazy val hdfsDir =
-    Option(new Path(conf.get("spark.hdfs.dir", s"/tmp/spark/${conf.getAppId}_blocks")))
+
+  private[spark] lazy val broadcastBackupDir = SparkEnv.get.broadcastManager.hdfsBackupDir
 
   // The content of subDirs is immutable but the content of subDirs(i) is mutable. And the content
   // of subDirs(i) is protected by the lock of subDirs(i)
@@ -150,7 +150,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
 
   def persistBroadcastPiece(id: BlockId, block: ByteBuffer): Unit = {
-    hdfsDir.foreach { dirPath =>
+    broadcastBackupDir.foreach { dirPath =>
       val blockFile = id.toString
       val filePath = new Path(dirPath, blockFile)
       var fs: FileSystem = null
@@ -197,7 +197,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   }
 
   def cleanBroadcastPieces(id: Long): Unit = {
-    hdfsDir.foreach { dirPath =>
+    broadcastBackupDir.foreach { dirPath =>
       val fileFilter = new PathFilter {
         override def accept(pathname: Path): Boolean = {
           pathname.getName.startsWith(s"broadcast_${id}_piece")
@@ -222,7 +222,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   def getBroadcastPiece(id: BlockId): Option[ChunkedByteBuffer] = {
     var inputStream: FSDataInputStream = null
     try {
-      hdfsDir.map { dirPath =>
+      broadcastBackupDir.map { dirPath =>
         val blockFile = id.toString
         val filePath = new Path(dirPath, blockFile)
         val fs = filePath.getFileSystem(SparkHadoopUtil.get.conf)
