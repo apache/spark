@@ -341,9 +341,9 @@ class CatalogSuite
   }
 
   test("find database") {
-    assert(spark.catalog.findDatabase("db10") === None)
+    intercept[AnalysisException](spark.catalog.findDatabase("db10"))
     withTempDatabase { db =>
-      assert(spark.catalog.findDatabase(db).map(_.name) === Some(db))
+      assert(spark.catalog.findDatabase(db).name === db)
     }
   }
 
@@ -351,24 +351,24 @@ class CatalogSuite
     withTempDatabase { db =>
       withTable(s"tbl_x", s"$db.tbl_y") {
         // Try to find non existing tables.
-        assert(spark.catalog.findTable("tbl_x") === None)
-        assert(spark.catalog.findTable("tbl_y") === None)
-        assert(spark.catalog.findTable(db, "tbl_y") === None)
+        intercept[AnalysisException](spark.catalog.findTable("tbl_x"))
+        intercept[AnalysisException](spark.catalog.findTable("tbl_y"))
+        intercept[AnalysisException](spark.catalog.findTable(db, "tbl_y"))
 
         // Create objects.
         createTempTable("tbl_x")
         createTable("tbl_y", Some(db))
 
         // Find a temporary table
-        assert(spark.catalog.findTable("tbl_x").map(_.name) === Some("tbl_x"))
+        assert(spark.catalog.findTable("tbl_x").name === "tbl_x")
 
         // Find a qualified table
-        assert(spark.catalog.findTable(db, "tbl_y").map(_.name) === Some("tbl_y"))
+        assert(spark.catalog.findTable(db, "tbl_y").name === "tbl_y")
 
         // Find an unqualified table using the current database
-        assert(spark.catalog.findTable("tbl_y") === None)
+        intercept[AnalysisException](spark.catalog.findTable("tbl_y"))
         spark.catalog.setCurrentDatabase(db)
-        assert(spark.catalog.findTable("tbl_y").map(_.name) === Some("tbl_y"))
+        assert(spark.catalog.findTable("tbl_y").name === "tbl_y")
       }
     }
   }
@@ -377,24 +377,24 @@ class CatalogSuite
     withTempDatabase { db =>
       withUserDefinedFunction("fn1" -> true, s"$db.fn2" -> false) {
         // Try to find non existing functions.
-        assert(spark.catalog.findFunction("fn1") === None)
-        assert(spark.catalog.findFunction("fn2") === None)
-        assert(spark.catalog.findFunction(db, "fn2") === None)
+        intercept[AnalysisException](spark.catalog.findFunction("fn1"))
+        intercept[AnalysisException](spark.catalog.findFunction("fn2"))
+        intercept[AnalysisException](spark.catalog.findFunction(db, "fn2"))
 
         // Create objects.
         createTempFunction("fn1")
         createFunction("fn2", Some(db))
 
         // Find a temporary function
-        assert(spark.catalog.findFunction("fn1").map(_.name) === Some("fn1"))
+        assert(spark.catalog.findFunction("fn1").name === "fn1")
 
         // Find a qualified function
-        assert(spark.catalog.findFunction(db, "fn2").map(_.name) === Some("fn2"))
+        assert(spark.catalog.findFunction(db, "fn2").name === "fn2")
 
         // Find an unqualified function using the current database
-        assert(spark.catalog.findFunction("fn2") === None)
+        intercept[AnalysisException](spark.catalog.findFunction("fn2"))
         spark.catalog.setCurrentDatabase(db)
-        assert(spark.catalog.findFunction("fn2").map(_.name) === Some("fn2"))
+        assert(spark.catalog.findFunction("fn2").name === "fn2")
       }
     }
   }

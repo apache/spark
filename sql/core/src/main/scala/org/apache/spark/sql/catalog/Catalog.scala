@@ -102,44 +102,50 @@ abstract class Catalog {
   def listColumns(dbName: String, tableName: String): Dataset[Column]
 
   /**
-   * Find the database with the specified name. This returns [[None]] when no [[Database]] can be
-   * found.
+   * Find the database with the specified name. This throws an AnalysisException when the database
+   * cannot be found.
    *
    * @since 2.1.0
    */
-  def findDatabase(dbName: String): Option[Database]
+  @throws[AnalysisException]("database does not exist")
+  def findDatabase(dbName: String): Database
 
   /**
    * Find the table with the specified name. This table can be a temporary table or a table in the
-   * current database. This returns [[None]] when no [[Table]] can be found.
+   * current database. This throws an AnalysisException when the table cannot be found.
    *
    * @since 2.1.0
    */
-  def findTable(tableName: String): Option[Table]
+  @throws[AnalysisException]("table does not exist")
+  def findTable(tableName: String): Table
 
   /**
-   * Find the table with the specified name in the specified database. This returns [[None]] when
-   * no [[Table]] can be found.
+   * Find the table with the specified name in the specified database. This throws an
+   * AnalysisException when the table cannot be found.
    *
    * @since 2.1.0
    */
-  def findTable(dbName: String, tableName: String): Option[Table]
+  @throws[AnalysisException]("database or table does not exist")
+  def findTable(dbName: String, tableName: String): Table
 
   /**
    * Find the function with the specified name. This function can be a temporary function or a
-   * function in the current database. This returns [[None]] when no [[Function]] can be found.
+   * function in the current database. This throws an AnalysisException when the function cannot
+   * be found.
    *
    * @since 2.1.0
    */
-  def findFunction(functionName: String): Option[Function]
+  @throws[AnalysisException]("function does not exist")
+  def findFunction(functionName: String): Function
 
   /**
-   * Find the function with the specified name. This returns [[None]] when no [[Function]] can be
-   * found.
+   * Find the function with the specified name. This throws an AnalysisException when the function
+   * cannot be found.
    *
    * @since 2.1.0
    */
-  def findFunction(dbName: String, functionName: String): Option[Function]
+  @throws[AnalysisException]("database or function does not exist")
+  def findFunction(dbName: String, functionName: String): Function
 
   /**
    * Check if the database with the specified name exists.
