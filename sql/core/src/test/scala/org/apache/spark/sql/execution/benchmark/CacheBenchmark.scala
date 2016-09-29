@@ -25,51 +25,46 @@ import org.apache.spark.util.Benchmark
 
 class CacheBenchmark extends BenchmarkBase {
 
-  ignore("cache with randomized keys - end-to-end") {
-    benchmarkRandomizedKeys(size = 20 << 18, readPathOnly = false)
+  ignore("cache with randomized keys - both build and read paths") {
+    benchmarkRandomizedKeys(size = 16 * 1024 * 1024, readPathOnly = false)
 
     /*
-     Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.9.5
-     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-
-     Cache random keys:                      Best/Avg Time(ms)   Rate(M/s)   Per Row(ns)   Relative
+     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+     Intel Xeon E3-12xx v2 (Ivy Bridge)
+     Cache random keys:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns) Relative
      ----------------------------------------------------------------------------------------------
-     cache = F                                      641 /  667        8.2         122.2       1.0X
-     cache = T columnar_batches = F compress = F   1696 / 1833        3.1         323.6       0.4X
-     cache = T columnar_batches = F compress = T   7517 / 7748        0.7        1433.8       0.1X
-     cache = T columnar_batches = T                1023 / 1102        5.1         195.0       0.6X
+     cache = T columnarBatch = F compress = T      7211 / 7366          2.3         429.8      1.0X
+     cache = T columnarBatch = F compress = F      2381 / 2460          7.0         141.9      3.0X
+     cache = F                                      137 /  140        122.7           8.1     52.7X
+     cache = T columnarBatch = T compress = T      2109 / 2252          8.0         125.7      3.4X
+     cache = T columnarBatch = T compress = F      1126 / 1184         14.9          67.1      6.4X
      */
   }
 
   ignore("cache with randomized keys - read path only") {
-    benchmarkRandomizedKeys(size = 20 << 21, readPathOnly = true)
+    benchmarkRandomizedKeys(size = 64 * 1024 * 1024, readPathOnly = true)
 
     /*
-     Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.9.5
-     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-
-     Cache random keys:                       Best/Avg Time(ms)   Rate(M/s)   Per Row(ns)   Relative
-     -----------------------------------------------------------------------------------------------
-     cache = F                                      890 /  920        47.1          21.2       1.0X
-     cache = T columnar_batches = F compress = F   1950 / 1978        21.5          46.5       0.5X
-     cache = T columnar_batches = F compress = T   1893 / 1927        22.2          45.1       0.5X
-     cache = T columnar_batches = T                 540 /  544        77.7          12.9       1.6X
+     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+     Intel Xeon E3-12xx v2 (Ivy Bridge)
+     Cache random keys:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns) Relative
+     ----------------------------------------------------------------------------------------------
+     cache = T columnarBatch = F compress = T      1615 / 1655         41.5          24.1      1.0X
+     cache = T columnarBatch = F compress = F      1603 / 1690         41.9          23.9      1.0X
+     cache = F                                      444 /  449        151.3           6.6      3.6X
+     cache = T columnarBatch = T compress = T      1404 / 1526         47.8          20.9      1.2X
+     cache = T columnarBatch = T compress = F       116 /  125        579.0           1.7     13.9X
      */
   }
 
   /**
-   * Call collect on a [[DataFrame]] after deleting all existing temporary files.
-   * This also checks whether the collected result matches the expected answer.
+   * Call clean on a [[DataFrame]] after deleting all existing temporary files.
    */
-  private def collect(df: DataFrame, expectedAnswer: Seq[Row]): Unit = {
+  private def clean(df: DataFrame): Unit = {
     df.sparkSession.sparkContext.parallelize(1 to 10, 10).foreach { _ =>
       SparkEnv.get.blockManager.diskBlockManager.getAllFiles().foreach { dir =>
         dir.delete()
       }
-    }
-    QueryTest.checkAnswer(df, expectedAnswer) match {
-      case Some(errMessage) => throw new RuntimeException(errMessage)
-      case None => // all good
     }
   }
 
@@ -88,34 +83,32 @@ class CacheBenchmark extends BenchmarkBase {
       .selectExpr("id", "floor(rand() * 10000) as k")
       .createOrReplaceTempView("test")
     val query = "select count(k), count(id) from test"
-    val expectedAnswer = sparkSession.sql(query).collect().toSeq
 
     /**
      * Add a benchmark case, optionally specifying whether to cache the dataset.
      */
     def addBenchmark(name: String, cache: Boolean, params: Map[String, String] = Map()): Unit = {
       val ds = sparkSession.sql(query)
+      var dsResult: DataFrame = null
       val defaults = params.keys.flatMap { k => sparkSession.conf.getOption(k).map((k, _)) }
       def prepare(): Unit = {
+        clean(ds)
         params.foreach { case (k, v) => sparkSession.conf.set(k, v) }
-        if (cache) { sparkSession.catalog.cacheTable("test") }
-        if (readPathOnly) {
-          collect(ds, expectedAnswer)
+        if (cache && readPathOnly) {
+          sparkSession.sql("cache table test")
         }
       }
       def cleanup(): Unit = {
+        clean(dsResult)
         defaults.foreach { case (k, v) => sparkSession.conf.set(k, v) }
         sparkSession.catalog.clearCache()
       }
       benchmark.addCase(name, numIters, prepare, cleanup) { _ =>
-        if (readPathOnly) {
-          collect(ds, expectedAnswer)
-        } else {
-          // also benchmark the time it takes to build the column buffers
-          val ds2 = sparkSession.sql(query)
-          collect(ds2, expectedAnswer)
-          collect(ds2, expectedAnswer)
+        if (cache && !readPathOnly) {
+          sparkSession.sql("cache table test")
         }
+        dsResult = sparkSession.sql(query)
+        dsResult.collect
       }
     }
 
@@ -123,21 +116,27 @@ class CacheBenchmark extends BenchmarkBase {
     sparkSession.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
 
     // Benchmark cases:
-    //   (1) No caching
+    //   (1) Caching with compression
     //   (2) Caching without compression
-    //   (3) Caching with compression
-    //   (4) Caching with column batches (without compression)
-    addBenchmark("cache = F", cache = false)
-    addBenchmark("cache = T columnar_batches = F compress = F", cache = true, Map(
-      SQLConf.CACHE_CODEGEN.key -> "false",
-      SQLConf.COMPRESS_CACHED.key -> "false"
-    ))
-    addBenchmark("cache = T columnar_batches = F compress = T", cache = true, Map(
+    //   (3) No caching
+    //   (4) Caching using column batch with compression
+    //   (5) Caching using column batch without compression
+    addBenchmark("cache = T columnarBatch = F compress = T", cache = true, Map(
       SQLConf.CACHE_CODEGEN.key -> "false",
       SQLConf.COMPRESS_CACHED.key -> "true"
     ))
-    addBenchmark("cache = T columnar_batches = T", cache = true, Map(
-      SQLConf.CACHE_CODEGEN.key -> "true"
+    addBenchmark("cache = T columnarBatch = F compress = F", cache = true, Map(
+      SQLConf.CACHE_CODEGEN.key -> "false",
+      SQLConf.COMPRESS_CACHED.key -> "false"
+    ))
+    addBenchmark("cache = F", cache = false)
+    addBenchmark("cache = T columnarBatch = T compress = T", cache = true, Map(
+      SQLConf.CACHE_CODEGEN.key -> "true",
+      SQLConf.COMPRESS_CACHED.key -> "true"
+    ))
+    addBenchmark("cache = T columnarBatch = T compress = F", cache = true, Map(
+      SQLConf.CACHE_CODEGEN.key -> "true",
+      SQLConf.COMPRESS_CACHED.key -> "false"
     ))
     benchmark.run()
   }

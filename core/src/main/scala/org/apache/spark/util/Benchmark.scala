@@ -106,12 +106,7 @@ private[spark] class Benchmark(
 
     val results = benchmarks.map { c =>
       println("  Running case: " + c.name)
-      try {
-        c.prepare()
-        measure(valuesPerIteration, c.numIters)(c.fn)
-      } finally {
-        c.cleanup()
-      }
+      measure(valuesPerIteration, c.numIters, c.prepare, c.cleanup)(c.fn)
     }
     println
 
@@ -138,21 +133,33 @@ private[spark] class Benchmark(
    * Runs a single function `f` for iters, returning the average time the function took and
    * the rate of the function.
    */
-  def measure(num: Long, overrideNumIters: Int)(f: Timer => Unit): Result = {
+  def measure(num: Long, overrideNumIters: Int, prepare: () => Unit, cleanup: () => Unit)
+      (f: Timer => Unit): Result = {
     System.gc()  // ensures garbage from previous cases don't impact this one
     val warmupDeadline = warmupTime.fromNow
     while (!warmupDeadline.isOverdue) {
-      f(new Benchmark.Timer(-1))
+      try {
+        prepare()
+        f(new Benchmark.Timer(-1))
+      } finally {
+        cleanup()
+      }
     }
     val minIters = if (overrideNumIters != 0) overrideNumIters else minNumIters
     val minDuration = if (overrideNumIters != 0) 0 else minTime.toNanos
     val runTimes = ArrayBuffer[Long]()
     var i = 0
     while (i < minIters || runTimes.sum < minDuration) {
-      val timer = new Benchmark.Timer(i)
-      f(timer)
-      val runTime = timer.totalTime()
-      runTimes += runTime
+      val runTime = try {
+        prepare()
+        val timer = new Benchmark.Timer(i)
+        f(timer)
+        val time = timer.totalTime()
+        runTimes += time
+        time
+      } finally {
+        cleanup()
+      }
 
       if (outputPerIteration) {
         // scalastyle:off
