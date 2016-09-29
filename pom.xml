@@ -225,7 +225,7 @@
   <distributionManagement>
     <repository>
       <id>bintray-palantir-release</id>
-      <url>https://api.bintray.com/maven/palantir/releases/spark/;publish=1</url>
+      <url>https://api.bintray.com/maven/palantir/releases/spark/</url>
     </repository>
   </distributionManagement>
   <repositories>
