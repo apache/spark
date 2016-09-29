@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Types}
 
-import org.apache.spark.sql.execution.datasources.jdbc.{JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types._
 
 
