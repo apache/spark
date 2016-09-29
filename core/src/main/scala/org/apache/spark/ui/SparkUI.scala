@@ -19,6 +19,7 @@ package org.apache.spark.ui
 
 import java.util.{Date, ServiceLoader}
 
+import scala.collection.IterableView
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
@@ -125,6 +126,10 @@ private[spark] class SparkUI private (
         completed = false
       ))
     ))
+  }
+
+  def getApplicationInfoListView: IterableView[ApplicationInfo, Iterable[_]] = {
+    getApplicationInfoList.toList.view
   }
 }
 
