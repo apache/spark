@@ -250,27 +250,13 @@ class StreamExecution(
             logDebug(s"Resuming with committed offsets: $committedOffsets")
         }
 
-        // Compare the offsets we just read from the checkpoint against the
-        // sources' own checkpoint data.
-        val offsetChanges = mutable.Map[Source, Offset]()
-        committedOffsets.foreach {
-          case (src, checkptOffset) =>
-            val srcOffset = src.lastCommittedOffset
-            if (srcOffset.isDefined && srcOffset.get != checkptOffset) {
-              logWarning(s"Source $src lost offsets between $checkptOffset " +
-                s"and ${srcOffset.get} when resuming. Skipping ahead to ${srcOffset.get}.")
-              offsetChanges += (src -> srcOffset.get)
-            }
-        }
-        committedOffsets ++= offsetChanges
-
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0
         constructNextBatch()
     }
   }
-  
+
   /**
    * Returns true if there is any new data available to be processed.
    */
@@ -312,17 +298,20 @@ class StreamExecution(
       logInfo(s"Committed offsets for batch $currentBatchId.")
 
       // Now that we've updated the scheduler's persistent checkpoint, it is safe for the
-      // sources to discard data from the *previous* batch.
-      committedOffsets.foreach {
-        case (src, off) => src.commit(off)
+      // sources to discard data from before the *previous* batch.
+      val prevBatchOff = offsetLog.get(currentBatchId - 2)
+      if (prevBatchOff.isDefined) {
+        prevBatchOff.get.toStreamProgress(sources).foreach {
+          case (src, off) => src.commit(off)
+        }
       }
 
       // Now that we have logged the new batch, no further processing will happen for
-      // the previous batch, and it is safe to discard the old metadata.
+      // the batch before the previous batch, and it is safe to discard the old metadata.
       // Note that purge is exclusive, i.e. it purges everything before currentBatchId.
       // NOTE: If StreamExecution implements pipeline parallelism (multiple batches in
       // flight at the same time), this cleanup logic will need to change.
-      offsetLog.purge(currentBatchId)
+      offsetLog.purge(currentBatchId - 1)
     } else {
       awaitBatchLock.lock()
       try {
