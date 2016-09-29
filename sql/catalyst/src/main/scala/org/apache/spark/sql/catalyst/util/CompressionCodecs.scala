@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources
+package org.apache.spark.sql.catalyst.util
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.SequenceFile.CompressionType
-import org.apache.hadoop.io.compress.{BZip2Codec, DeflateCodec, GzipCodec, Lz4Codec, SnappyCodec}
+import org.apache.hadoop.io.compress._
 
 import org.apache.spark.util.Utils
 
-private[datasources] object CompressionCodecs {
+object CompressionCodecs {
   private val shortCompressionCodecNames = Map(
     "none" -> null,
     "uncompressed" -> null,
