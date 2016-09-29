@@ -25,9 +25,8 @@ import com.google.common.base.Objects
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{FieldSchema, Order}
+import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata.{Partition, Table => HiveTable}
-import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.sql.SparkSession
@@ -93,21 +92,6 @@ private[hive] case class MetastoreRelation(
     }
     sd.setCols(schema.asJava)
     tTable.setPartitionKeys(partCols.asJava)
-
-    catalogTable.bucketSpec match {
-      case Some(bucketSpec) =>
-        sd.setNumBuckets(bucketSpec.numBuckets)
-        sd.setBucketCols(bucketSpec.bucketColumnNames.toList.asJava)
-
-        if (bucketSpec.sortColumnNames.nonEmpty) {
-          sd.setSortCols(
-            bucketSpec.sortColumnNames
-              .map(col => new Order(col, HIVE_COLUMN_ORDER_ASC))
-              .asJava
-          )
-        }
-      case _ =>
-    }
 
     catalogTable.storage.locationUri.foreach(sd.setLocation)
     catalogTable.storage.inputFormat.foreach(sd.setInputFormat)

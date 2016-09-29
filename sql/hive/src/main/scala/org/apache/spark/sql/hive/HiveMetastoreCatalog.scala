@@ -195,8 +195,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
     val tableIdentifier =
       QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
-
-    val bucketSpec = metastoreRelation.catalogTable.bucketSpec
+    val bucketSpec = None  // We don't support hive bucketed tables, only ones we write out.
 
     val result = if (metastoreRelation.hiveQlTable.isPartitioned) {
       val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
