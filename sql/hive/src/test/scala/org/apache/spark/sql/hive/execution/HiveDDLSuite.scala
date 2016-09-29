@@ -506,6 +506,25 @@ class HiveDDLSuite
     }
   }
 
+  test("desc table for Hive table - bucketed + sorted table") {
+    withTable("tbl") {
+      sql(s"""
+        CREATE TABLE tbl (id int, name string)
+        PARTITIONED BY (ds string)
+        CLUSTERED BY(id)
+        SORTED BY(id, name) INTO 1024 BUCKETS
+        """)
+
+      assert(sql("DESC FORMATTED tbl").collect().containsSlice(
+        Seq(
+          Row("Num Buckets", "8", null),
+          Row("Bucket Columns", "id1", null),
+          Row("Sort Columns", "id, name", null)
+        )
+      ))
+    }
+  }
+
   test("desc formatted table for permanent view") {
     withTable("tbl") {
       withView("view1") {

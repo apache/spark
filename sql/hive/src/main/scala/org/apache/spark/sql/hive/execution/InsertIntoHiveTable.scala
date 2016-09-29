@@ -20,10 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io.IOException
 import java.net.URI
 import java.text.SimpleDateFormat
-import java.util
 import java.util.{Date, Random}
-
-import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -196,6 +193,30 @@ case class InsertIntoHiveTable(
       if (isDynamic.init.zip(isDynamic.tail).contains((true, false))) {
         throw new AnalysisException(ErrorMsg.PARTITION_DYN_STA_ORDER.getMsg)
       }
+    }
+
+    table.catalogTable.bucketSpec match {
+      case Some(bucketSpec) =>
+        // We can not populate bucketing information for Hive tables as Spark SQL has a different
+        // implementation of hash function from Hive.
+        // Hive native hashing will be supported after SPARK-17495. Until then, writes to bucketed
+        // tables are allowed only if user does not care about maintaining table's bucketing
+        // ie. both "hive.enforce.bucketing" and "hive.enforce.sorting" are set to false
+
+        val enforceBucketingConfig = "hive.enforce.bucketing"
+        val enforceSortingConfig = "hive.enforce.sorting"
+
+        val message = s"Output Hive table ${table.catalogTable.identifier} is bucketed but Spark" +
+          "currently does NOT populate bucketed output which is compatible with Hive."
+
+        if (hadoopConf.get(enforceBucketingConfig, "false").toBoolean ||
+          hadoopConf.get(enforceSortingConfig, "false").toBoolean) {
+          throw new AnalysisException(message)
+        } else {
+          logWarning(message + s" Inserting data anyways since both $enforceBucketingConfig and " +
+            s"$enforceSortingConfig are set to false.")
+        }
+      case _ => // do nothing since table has no bucketing
     }
 
     val jobConf = new JobConf(hadoopConf)
