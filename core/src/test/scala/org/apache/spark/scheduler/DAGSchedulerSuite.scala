@@ -103,6 +103,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   import DAGSchedulerSuite._
 
   val conf = new SparkConf
+  conf.set("spark.app.id", "DAGSchedulerSuite")
+
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
 

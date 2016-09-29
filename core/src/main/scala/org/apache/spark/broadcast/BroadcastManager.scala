@@ -67,7 +67,9 @@ private[spark] class BroadcastManager(
       hdfsBackupDir.foreach { dirPath =>
         try {
           val fs = dirPath.getFileSystem(SparkHadoopUtil.get.conf)
-          fs.delete(dirPath, true)
+          if (fs.exists(dirPath)) {
+            fs.delete(dirPath, true)
+          }
         } catch {
           case e: IOException =>
             logWarning(s"Failed to delete broadcast temp dir $dirPath.", e)
