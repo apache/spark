@@ -2771,8 +2771,7 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns true if the array contains `value` or `value` match any
-   * of the pattern available in array if array is of type string.
+   * Returns true if the array contains `value`
    * @group collection_funcs
    * @since 1.5.0
    */

@@ -17,14 +17,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Comparator
-import java.util.regex.Pattern
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Given an array or map, returns its size. Returns -1 if null.
@@ -193,15 +191,11 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
 }
 
 /**
- * Checks if the array (left) has the element (right) and pattern match in
- * case left is Array of type string
+ * Checks if the array (left) has the element (right)
  */
-
 @ExpressionDescription(
-  usage = """_FUNC_(array, value) - Returns TRUE if the array contains the value or
-    for string arrays, if string matches with the any pattern in the array.
-    This is complete word match""",
-  extended = """ > SELECT _FUNC_(array("\\d\\s\\d", "2", "3"), "1 5");\n true""")
+  usage = "_FUNC_(array, value) - Returns TRUE if the array contains the value.",
+  extended = " > SELECT _FUNC_(array(1, 2, 3), 2);\n true")
 case class ArrayContains(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -231,101 +225,38 @@ case class ArrayContains(left: Expression, right: Expression)
     left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull
   }
 
-  // last regex in string, we will update the pattern iff regexp value changed.
-  @transient private var lastRegexArray: ArrayData = _
-  // last regex pattern, we cache it for performance concern
-  @transient private var patternArray: Array[Pattern] = _
-
-
-  override def nullSafeEval(arrAny: Any, value: Any): Any = {
-    val arr = arrAny.asInstanceOf[ArrayData]
+  override def nullSafeEval(arr: Any, value: Any): Any = {
     var hasNull = false
-    if (right.dataType == StringType) {
-      if (!arr.equals(lastRegexArray)) {
-        lastRegexArray = arr.copy()
-        patternArray = new Array[Pattern](arr.numElements())
-        lastRegexArray.foreach(StringType, (i : Int, str : Any) => if (str == null) {
-          patternArray(i) = null
-        } else {
-          patternArray(i) = Pattern.compile("^".concat(str.toString).concat("$"))
-        })
-      }
-      patternArray.foreach(v => if (v == null) {
+    arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
+      if (v == null) {
         hasNull = true
-        false
-      } else if (v.matcher(value.asInstanceOf[UTF8String].toString).find()) {
+      } else if (v == value) {
         return true
-      })
-    } else {
-      arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
-        if (v == null) {
-          hasNull = true
-        } else if (v == value) {
-          return true
-        }
-      )
-    }
-
+      }
+    )
     if (hasNull) {
       null
     } else {
       false
     }
   }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-
-    val termLastRegexArray = ctx.freshName("lastRegexArray")
-    val termPatternArray = ctx.freshName("patternArray")
-    val patternClassNamePattern = classOf[Pattern].getCanonicalName.stripSuffix("[]")
-    val arrayDataClassNamePattern = classOf[ArrayData].getCanonicalName.stripSuffix("[]")
-
-    ctx.addMutableState(s"$arrayDataClassNamePattern", termLastRegexArray,
-      s"${termLastRegexArray} = null;")
-    ctx.addMutableState(s"$patternClassNamePattern[]", termPatternArray,
-      s"${termPatternArray} = null;")
-
     nullSafeCodeGen(ctx, ev, (arr, value) => {
       val i = ctx.freshName("i")
-      var getValue = ctx.getValue(arr, right.dataType, i)
-      val code = if (right.dataType == StringType) {
-        s"""
-        if (!$arr.equals(${termLastRegexArray})) {
-          // regex Array value changed
-          ${termPatternArray} = new ${patternClassNamePattern}[$arr.numElements()];
-          ${termLastRegexArray} = $arr.copy();
-          for (int $i = 0; $i < $arr.numElements(); $i ++) {
-            if ($arr.isNullAt($i)) {
-              ${termPatternArray}[$i] = null;
-            } else {
-              ${termPatternArray}[$i] = ${patternClassNamePattern}.compile(
-              "^".concat(${getValue}.toString()).concat("$$"));
-            }
-          }
-        }""".stripMargin
-      } else ""
-      val k = {
-        if (right.dataType == StringType) {
-          getValue = s"${termPatternArray}[$i]"
+      val getValue = ctx.getValue(arr, right.dataType, i)
+      s"""
+      for (int $i = 0; $i < $arr.numElements(); $i ++) {
+        if ($arr.isNullAt($i)) {
+          ${ev.isNull} = true;
+        } else if (${ctx.genEqual(right.dataType, value, getValue)}) {
+          ${ev.isNull} = false;
+          ${ev.value} = true;
+          break;
         }
-        s"""
-        for (int $i = 0; $i < $arr.numElements(); $i ++) {
-          if ($arr.isNullAt($i)) {
-            ${ev.isNull} = true;
-          } else if (${genEqual(ctx, ev, right.dataType, value, getValue)}) {
-            ${ev.isNull} = false;
-            ${ev.value} = true;
-            break;
-          }
-        }""".stripMargin }
-      code + k
-    }
-    )
-  }
-
-  def genEqual(ctx: CodegenContext, ev: ExprCode, dataType: DataType,
-               c1: String, c2: String): String = dataType match {
-    case StringType => s"${c2}.matcher($c1.toString()).find()".stripMargin
-    case _ => ctx.genEqual(dataType, c1, c2)
+      }
+     """
+    })
   }
 
   override def prettyName: String = "array_contains"

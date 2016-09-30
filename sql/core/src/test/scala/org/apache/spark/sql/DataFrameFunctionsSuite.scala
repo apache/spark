@@ -371,97 +371,39 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("array contains function") {
-    val df1 = Seq(
+    val df = Seq(
       (Seq[Int](1, 2), "x"),
       (Seq[Int](), "x")
     ).toDF("a", "b")
 
     // Simple test cases
     checkAnswer(
-      df1.select(array_contains(df1("a"), 1)),
+      df.select(array_contains(df("a"), 1)),
       Seq(Row(true), Row(false))
     )
     checkAnswer(
-      df1.selectExpr("array_contains(a, 1)"),
+      df.selectExpr("array_contains(a, 1)"),
       Seq(Row(true), Row(false))
     )
 
     // In hive, this errors because null has no type information
     intercept[AnalysisException] {
-      df1.select(array_contains(df1("a"), null))
+      df.select(array_contains(df("a"), null))
     }
     intercept[AnalysisException] {
-      df1.selectExpr("array_contains(a, null)")
+      df.selectExpr("array_contains(a, null)")
     }
     intercept[AnalysisException] {
-      df1.selectExpr("array_contains(null, 1)")
+      df.selectExpr("array_contains(null, 1)")
     }
 
     checkAnswer(
-      df1.selectExpr("array_contains(array(array(1), null)[0], 1)"),
+      df.selectExpr("array_contains(array(array(1), null)[0], 1)"),
       Seq(Row(true), Row(true))
     )
     checkAnswer(
-      df1.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
+      df.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
       Seq(Row(true), Row(true))
     )
-    val df2 = Seq(
-      (Seq[String]("1", "2"), "x"),
-      (Seq[String](), "x"),
-      (Seq[String]("\\d\\s-\\s\\d", "pattern", ""), "x")
-    ).toDF("a", "b")
-
-    // Simple test cases
-    checkAnswer(
-      df2.select(array_contains(df2("a"), "1")),
-      Seq(Row(true), Row(false), Row(false))
-    )
-    checkAnswer(
-      df2.selectExpr("""array_contains(a, "1")"""),
-      Seq(Row(true), Row(false), Row(false))
-    )
-    checkAnswer(
-      df2.select(array_contains(df2("a"), "1 - 2")),
-      Seq(Row(false), Row(false), Row(true))
-    )
-    checkAnswer(
-      df2.selectExpr("""array_contains(a, "3 - 4")"""),
-      Seq(Row(false), Row(false), Row(true))
-    )
-
-    // In hive, this errors because null has no type information
-    intercept[AnalysisException] {
-      df2.select(array_contains(df2("a"), null))
-    }
-    intercept[AnalysisException] {
-      df2.selectExpr("array_contains(a, null)")
-    }
-    intercept[AnalysisException] {
-      df2.selectExpr("array_contains(null, 1)")
-    }
-
-    checkAnswer(
-      df2.selectExpr("array_contains(array(array(1), null)[0], 1)"),
-      Seq(Row(true), Row(true), Row(true))
-    )
-
-    checkAnswer(
-      df2.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
-      Seq(Row(true), Row(true), Row(true))
-    )
-
-    checkAnswer(
-      df2.selectExpr(
-        """array_contains(array(array("\\d\\s\\d"), null)[0],
-          "1 3")""".stripMargin),
-      Seq(Row(true), Row(true), Row(true))
-    )
-
-    checkAnswer(
-      df2.selectExpr(
-        """array_contains(array("\\d\\s\\d", null), array("1 3", null)[0])""".stripMargin),
-      Seq(Row(true), Row(true), Row(true))
-    )
-
   }
 }

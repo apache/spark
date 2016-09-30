@@ -91,9 +91,8 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val a1 = Literal.create(Seq[String](null, ""), ArrayType(StringType))
     val a2 = Literal.create(Seq(null), ArrayType(LongType))
     val a3 = Literal.create(null, ArrayType(StringType))
-    val a4 = Literal.create(Seq[String]("\\d\\d\\s-\\s\\d\\d", null, "", "pattern"),
-      ArrayType(StringType))
 
+    checkEvaluation(ArrayContains(a0, Literal(1)), true)
     checkEvaluation(ArrayContains(a0, Literal(0)), false)
     checkEvaluation(ArrayContains(a0, Literal.create(null, IntegerType)), null)
 
@@ -106,14 +105,5 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
-
-    checkEvaluation(ArrayContains(a4, Literal.create(null, StringType)), null)
-    checkEvaluation(ArrayContains(a4, Literal.create("", StringType)), true)
-    checkEvaluation(ArrayContains(a4, Literal.create("12 - 20", StringType)), true)
-    checkEvaluation(ArrayContains(a4, Literal.create("pat", StringType)), null)
-    checkEvaluation(ArrayContains(a4, Literal.create("pattern", StringType)), true)
-    checkEvaluation(ArrayContains(a4, Literal.create("ab - cd", StringType)), null)
-    checkEvaluation(ArrayContains(a4, Literal.create(" 12 - 20 ", StringType)), null)
-    checkEvaluation(ArrayContains(a4, Literal.create("132 - 20", StringType)), null)
   }
 }
