@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.util.{ManualClock, Utils}
 
@@ -104,7 +104,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
     )
   }
 
-  testQuietly("source and sink statuses") {
+  testQuietly("statuses") {
     val inputData = MemoryStream[Int]
 
     // This is make the sure the execution plan ends with a node (filter) that supports
@@ -113,7 +113,20 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
     val mapped = inputData.toDS().map(6 / _).where("value > 0")
 
     testStream(mapped)(
-      AssertOnQuery(_.sourceStatuses.length === 1),
+      AssertOnQuery(q => q.queryStatus.name === q.name),
+      AssertOnQuery(q => q.queryStatus.id === q.id),
+      AssertOnQuery(_.queryStatus.timestamp <= System.currentTimeMillis),
+      AssertOnQuery(_.queryStatus.inputRate === 0.0),
+      AssertOnQuery(_.queryStatus.processingRate === 0.0),
+      AssertOnQuery(_.queryStatus.outputRate === 0.0),
+      AssertOnQuery(_.queryStatus.sourceStatuses.length === 1),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).description.contains("Memory")),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).offsetDesc === None),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).inputRate === 0.0),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).processingRate === 0.0),
+      AssertOnQuery(_.queryStatus.sinkStatus.description.contains("Memory")),
+      AssertOnQuery(_.queryStatus.sinkStatus.offsetDesc === CompositeOffset(None :: Nil).toString),
+      AssertOnQuery(_.queryStatus.sinkStatus.outputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).description.contains("Memory")),
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === None),
       AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
@@ -124,21 +137,44 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
 
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
+      AssertOnQuery(_.queryStatus.timestamp <= System.currentTimeMillis),
+      AssertOnQuery(_.queryStatus.inputRate >= 0.0),
+      AssertOnQuery(_.queryStatus.processingRate >= 0.0),
+      AssertOnQuery(_.queryStatus.outputRate >= 0.0),
+      AssertOnQuery(_.queryStatus.sourceStatuses.length === 1),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).description.contains("Memory")),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString)),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).inputRate >= 0.0),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).processingRate >= 0.0),
+      AssertOnQuery(_.queryStatus.sinkStatus.description.contains("Memory")),
+      AssertOnQuery(_.queryStatus.sinkStatus.offsetDesc ===
+        CompositeOffset.fill(LongOffset(0)).toString),
+      AssertOnQuery(_.queryStatus.sinkStatus.outputRate >= 0.0),
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString)),
-      AssertOnQuery(_.sourceStatuses(0).inputRate > 0.0), // disable if flaky
+      AssertOnQuery(_.sourceStatuses(0).inputRate >= 0.0),
       AssertOnQuery(_.sourceStatuses(0).processingRate >= 0.0),
       AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString),
       AssertOnQuery(_.sinkStatus.outputRate >= 0.0),
 
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3, 6, 3),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).offsetDesc === Some(LongOffset(1).toString)),
+      AssertOnQuery(_.queryStatus.sinkStatus.offsetDesc ===
+        CompositeOffset.fill(LongOffset(1)).toString),
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(1).toString)),
-      AssertOnQuery(_.sourceStatuses(0).inputRate > 0.0), // disable if flaky
-      AssertOnQuery(_.sourceStatuses(0).processingRate >= 0.0),
       AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
-      AssertOnQuery(_.sinkStatus.outputRate >= 0.0),
 
       StopStream,
+      AssertOnQuery(_.queryStatus.inputRate === 0.0),
+      AssertOnQuery(_.queryStatus.processingRate === 0.0),
+      AssertOnQuery(_.queryStatus.outputRate === 0.0),
+      AssertOnQuery(_.queryStatus.sourceStatuses.length === 1),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).offsetDesc === Some(LongOffset(1).toString)),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).inputRate === 0.0),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).processingRate === 0.0),
+      AssertOnQuery(_.queryStatus.sinkStatus.offsetDesc ===
+        CompositeOffset.fill(LongOffset(1)).toString),
+      AssertOnQuery(_.queryStatus.sinkStatus.outputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(1).toString)),
       AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
@@ -148,6 +184,16 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
       StartStream(),
       AddData(inputData, 0),
       ExpectFailure[SparkException],
+      AssertOnQuery(_.queryStatus.inputRate === 0.0),
+      AssertOnQuery(_.queryStatus.processingRate === 0.0),
+      AssertOnQuery(_.queryStatus.outputRate === 0.0),
+      AssertOnQuery(_.queryStatus.sourceStatuses.length === 1),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).offsetDesc === Some(LongOffset(2).toString)),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).inputRate === 0.0),
+      AssertOnQuery(_.queryStatus.sourceStatuses(0).processingRate === 0.0),
+      AssertOnQuery(_.queryStatus.sinkStatus.offsetDesc ===
+        CompositeOffset.fill(LongOffset(1)).toString),
+      AssertOnQuery(_.queryStatus.sinkStatus.outputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(2).toString)),
       AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),

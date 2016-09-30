@@ -139,6 +139,10 @@ class StreamExecution(
   /** Whether the query is currently active or not */
   override def isActive: Boolean = state == ACTIVE
 
+  override def queryStatus: StreamingQueryInfo = {
+    this.toInfo
+  }
+
   /** Returns current status of all the sources. */
   override def sourceStatuses: Array[SourceStatus] = {
     val localAvailableOffsets = availableOffsets
@@ -159,7 +163,6 @@ class StreamExecution(
       committedOffsets.toCompositeOffset(sources).toString,
       streamMetrics.currentOutputRate())
   }
-
 
   /** Returns the [[StreamingQueryException]] if the query was terminated by an exception. */
   override def exception: Option[StreamingQueryException] = Option(streamDeathCause)
@@ -570,9 +573,9 @@ class StreamExecution(
 
     val stateNodes = executedPlan.collect { case p if p.isInstanceOf[StateStoreSaveExec] => p }
     stateNodes.zipWithIndex.foreach { case (s, i) =>
-      streamMetrics.reportTriggerInfo(NUM_TOTAL_STATE_ROWS(i),
+      streamMetrics.reportTriggerInfo(NUM_TOTAL_STATE_ROWS(i + 1),
         s.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L))
-      streamMetrics.reportTriggerInfo(NUM_UPDATED_STATE_ROWS(i),
+      streamMetrics.reportTriggerInfo(NUM_UPDATED_STATE_ROWS(i + 1),
         s.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L))
     }
   }

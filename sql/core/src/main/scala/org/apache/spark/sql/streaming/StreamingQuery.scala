@@ -63,6 +63,12 @@ trait StreamingQuery {
   def exception: Option[StreamingQueryException]
 
   /**
+   * Returns the current status of the query.
+   * @since 2.1.0
+   */
+  def queryStatus: StreamingQueryInfo
+
+  /**
    * Returns current status of all the sources.
    * @since 2.0.0
    */

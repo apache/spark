@@ -29,6 +29,7 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.apache.spark.SparkException
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.functions._
 import org.apache.spark.util.{JsonProtocol, ManualClock}
 
 
@@ -126,7 +127,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("single listener, trigger infos") {
+  test("single listener, check trigger infos") {
     import StreamingQueryListenerSuite._
     clock = new ManualClock()
 
@@ -152,14 +153,14 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     // - Query waits for manual clock to be 600 first time there is data
     // - Exec plan ends with a node (filter) that supports the numOutputRows metric
     spark.conf.set("spark.sql.codegen.wholeStage", false)
-    val mapped = inputData.toDS().coalesce(1).map { x =>
+    val mapped = inputData.toDS().agg(count("*")).as[Long].coalesce(1).map { x =>
       clock.waitTillTime(600)
       x
-    }.where("value != 1")
+    }.where("value != 100")
 
     val listener = new QueryStatusCollector
     withListenerAdded(listener) {
-      testStream(mapped)(
+      testStream(mapped, OutputMode.Complete)(
         StartStream(triggerClock = clock),
         AddData(inputData, 1, 2),
         AdvanceManualClock(100),  // unblock getOffset, will block on getBatch
@@ -187,13 +188,15 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           assert(status.triggerInfo("latency.offsetLogWrite") === "0")
           assert(status.triggerInfo("latency.fullTrigger") === "600")
 
-          assert(status.triggerInfo("numRows.input") === "2")
+          assert(status.triggerInfo("numRows.input.total") === "2")
           assert(status.triggerInfo("numRows.output") === "1")
+          assert(status.triggerInfo("numRows.state.aggregation1.total") === "1")
+          assert(status.triggerInfo("numRows.state.aggregation1.updated") === "1")
 
           assert(status.sourceStatuses.size === 1)
           assert(status.sourceStatuses(0).triggerInfo("triggerId") === "0")
           assert(status.sourceStatuses(0).triggerInfo("latency.sourceGetOffset") === "100")
-          assert(status.sourceStatuses(0).triggerInfo("numRows.sourceInput") === "2")
+          assert(status.sourceStatuses(0).triggerInfo("numRows.input.source") === "2")
           true
         },
         CheckAnswer(2)

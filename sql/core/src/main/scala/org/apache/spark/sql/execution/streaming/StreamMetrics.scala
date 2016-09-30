@@ -242,9 +242,9 @@ object StreamMetrics extends Logging {
   val GET_BATCH_LATENCY = "latency.getBatch"
   val TRIGGER_LATENCY = "latency.fullTrigger"
 
-  val NUM_INPUT_ROWS = "numRows.input"
+  val NUM_INPUT_ROWS = "numRows.input.total"
   val NUM_OUTPUT_ROWS = "numRows.output"
-  val NUM_SOURCE_INPUT_ROWS = "numRows.sourceInput"
-  def NUM_TOTAL_STATE_ROWS(aggId: Int): String = s"numRows.state.$aggId.total"
-  def NUM_UPDATED_STATE_ROWS(aggId: Int): String = s"numRows.state.$aggId.updated"
+  val NUM_SOURCE_INPUT_ROWS = "numRows.input.source"
+  def NUM_TOTAL_STATE_ROWS(aggId: Int): String = s"numRows.state.aggregation$aggId.total"
+  def NUM_UPDATED_STATE_ROWS(aggId: Int): String = s"numRows.state.aggregation$aggId.updated"
 }
