@@ -299,6 +299,8 @@ class StreamExecution(
 
       // Now that we've updated the scheduler's persistent checkpoint, it is safe for the
       // sources to discard data from before the *previous* batch.
+      // The scheduler might still request the previous batch from a source in some cases
+      // if a crash and recovery occured.
       val prevBatchOff = offsetLog.get(currentBatchId - 2)
       if (prevBatchOff.isDefined) {
         prevBatchOff.get.toStreamProgress(sources).foreach {
@@ -308,7 +310,7 @@ class StreamExecution(
 
       // Now that we have logged the new batch, no further processing will happen for
       // the batch before the previous batch, and it is safe to discard the old metadata.
-      // Note that purge is exclusive, i.e. it purges everything before currentBatchId.
+      // Note that purge is exclusive, i.e. it purges everything before the target ID.
       // NOTE: If StreamExecution implements pipeline parallelism (multiple batches in
       // flight at the same time), this cleanup logic will need to change.
       offsetLog.purge(currentBatchId - 1)
