@@ -380,7 +380,7 @@ object SparkPlan {
 }
 
 trait LeafExecNode extends SparkPlan {
-  override def children: Seq[SparkPlan] = Nil
+  override final def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
 }
 
@@ -394,7 +394,7 @@ object UnaryExecNode {
 trait UnaryExecNode extends SparkPlan {
   def child: SparkPlan
 
-  override def children: Seq[SparkPlan] = child :: Nil
+  override final def children: Seq[SparkPlan] = child :: Nil
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
@@ -403,5 +403,5 @@ trait BinaryExecNode extends SparkPlan {
   def left: SparkPlan
   def right: SparkPlan
 
-  override def children: Seq[SparkPlan] = Seq(left, right)
+  override final def children: Seq[SparkPlan] = Seq(left, right)
 }

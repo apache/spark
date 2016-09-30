@@ -2441,6 +2441,70 @@ private[spark] object Utils extends Logging {
 }
 
 /**
+ * An utility class used to set up Spark caller contexts to HDFS and Yarn. The `context` will be
+ * constructed by parameters passed in.
+ * When Spark applications run on Yarn and HDFS, its caller contexts will be written into Yarn RM
+ * audit log and hdfs-audit.log. That can help users to better diagnose and understand how
+ * specific applications impacting parts of the Hadoop system and potential problems they may be
+ * creating (e.g. overloading NN). As HDFS mentioned in HDFS-9184, for a given HDFS operation, it's
+ * very helpful to track which upper level job issues it.
+ *
+ * @param from who sets up the caller context (TASK, CLIENT, APPMASTER)
+ *
+ * The parameters below are optional:
+ * @param appId id of the app this task belongs to
+ * @param appAttemptId attempt id of the app this task belongs to
+ * @param jobId id of the job this task belongs to
+ * @param stageId id of the stage this task belongs to
+ * @param stageAttemptId attempt id of the stage this task belongs to
+ * @param taskId task id
+ * @param taskAttemptNumber task attempt id
+ */
+private[spark] class CallerContext(
+   from: String,
+   appId: Option[String] = None,
+   appAttemptId: Option[String] = None,
+   jobId: Option[Int] = None,
+   stageId: Option[Int] = None,
+   stageAttemptId: Option[Int] = None,
+   taskId: Option[Long] = None,
+   taskAttemptNumber: Option[Int] = None) extends Logging {
+
+   val appIdStr = if (appId.isDefined) s"_${appId.get}" else ""
+   val appAttemptIdStr = if (appAttemptId.isDefined) s"_${appAttemptId.get}" else ""
+   val jobIdStr = if (jobId.isDefined) s"_JId_${jobId.get}" else ""
+   val stageIdStr = if (stageId.isDefined) s"_SId_${stageId.get}" else ""
+   val stageAttemptIdStr = if (stageAttemptId.isDefined) s"_${stageAttemptId.get}" else ""
+   val taskIdStr = if (taskId.isDefined) s"_TId_${taskId.get}" else ""
+   val taskAttemptNumberStr =
+     if (taskAttemptNumber.isDefined) s"_${taskAttemptNumber.get}" else ""
+
+   val context = "SPARK_" + from + appIdStr + appAttemptIdStr +
+     jobIdStr + stageIdStr + stageAttemptIdStr + taskIdStr + taskAttemptNumberStr
+
+  /**
+   * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
+   * [[org.apache.hadoop.ipc.CallerContext]], which was added in hadoop 2.8.
+   */
+  def setCurrentContext(): Boolean = {
+    var succeed = false
+    try {
+      // scalastyle:off classforname
+      val callerContext = Class.forName("org.apache.hadoop.ipc.CallerContext")
+      val Builder = Class.forName("org.apache.hadoop.ipc.CallerContext$Builder")
+      // scalastyle:on classforname
+      val builderInst = Builder.getConstructor(classOf[String]).newInstance(context)
+      val hdfsContext = Builder.getMethod("build").invoke(builderInst)
+      callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
+      succeed = true
+    } catch {
+      case NonFatal(e) => logInfo("Fail to set Spark caller context", e)
+    }
+    succeed
+  }
+}
+
+/**
  * A utility class to redirect the child process's stdout or stderr.
  */
 private[spark] class RedirectThread(
