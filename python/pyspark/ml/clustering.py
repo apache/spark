@@ -254,14 +254,14 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
-                 initMode="k-means||", initSteps=5, tol=1e-4, maxIter=20, seed=None):
+                 initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None):
         """
         __init__(self, featuresCol="features", predictionCol="prediction", k=2, \
-                 initMode="k-means||", initSteps=5, tol=1e-4, maxIter=20, seed=None)
+                 initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None)
         """
         super(KMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
-        self._setDefault(k=2, initMode="k-means||", initSteps=5, tol=1e-4, maxIter=20)
+        self._setDefault(k=2, initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -271,10 +271,10 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     @keyword_only
     @since("1.5.0")
     def setParams(self, featuresCol="features", predictionCol="prediction", k=2,
-                  initMode="k-means||", initSteps=5, tol=1e-4, maxIter=20, seed=None):
+                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None):
         """
         setParams(self, featuresCol="features", predictionCol="prediction", k=2, \
-                  initMode="k-means||", initSteps=5, tol=1e-4, maxIter=20, seed=None)
+                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None)
 
         Sets params for KMeans.
         """

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -56,12 +55,6 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       }
     }
 
-    val optionsWithPath = if (table.tableType == CatalogTableType.MANAGED) {
-      table.storage.properties + ("path" -> sessionState.catalog.defaultTablePath(table.identifier))
-    } else {
-      table.storage.properties
-    }
-
     // Create the relation to validate the arguments before writing the metadata to the metastore,
     // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
     val dataSource: BaseRelation =
@@ -70,7 +63,16 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
         className = table.provider.get,
         bucketSpec = table.bucketSpec,
-        options = optionsWithPath).resolveRelation(checkPathExist = false)
+        options = table.storage.properties).resolveRelation()
+
+    dataSource match {
+      case fs: HadoopFsRelation =>
+        if (table.tableType == CatalogTableType.EXTERNAL && fs.location.paths.isEmpty) {
+          throw new AnalysisException(
+            "Cannot create a file-based external data source table without path")
+        }
+      case _ =>
+    }
 
     val partitionColumnNames = if (table.schema.nonEmpty) {
       table.partitionColumnNames
@@ -81,6 +83,12 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         case r: HadoopFsRelation => r.partitionSchema.fieldNames.toSeq
         case _ => Nil
       }
+    }
+
+    val optionsWithPath = if (table.tableType == CatalogTableType.MANAGED) {
+      table.storage.properties + ("path" -> sessionState.catalog.defaultTablePath(table.identifier))
+    } else {
+      table.storage.properties
     }
 
     val newTable = table.copy(
@@ -113,16 +121,18 @@ case class CreateDataSourceTableAsSelectCommand(
     query: LogicalPlan)
   extends RunnableCommand {
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+  override protected def innerChildren: Seq[LogicalPlan] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
     assert(table.provider.isDefined)
     assert(table.schema.isEmpty)
 
-    val tableName = table.identifier.unquotedString
     val provider = table.provider.get
     val sessionState = sparkSession.sessionState
+    val db = table.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val tableIdentWithDB = table.identifier.copy(database = Some(db))
+    val tableName = tableIdentWithDB.unquotedString
 
     val optionsWithPath = if (table.tableType == CatalogTableType.MANAGED) {
       table.storage.properties + ("path" -> sessionState.catalog.defaultTablePath(table.identifier))
@@ -132,7 +142,7 @@ case class CreateDataSourceTableAsSelectCommand(
 
     var createMetastoreTable = false
     var existingSchema = Option.empty[StructType]
-    if (sparkSession.sessionState.catalog.tableExists(table.identifier)) {
+    if (sparkSession.sessionState.catalog.tableExists(tableIdentWithDB)) {
       // Check if we need to throw an exception or just return.
       mode match {
         case SaveMode.ErrorIfExists =>
@@ -156,8 +166,9 @@ case class CreateDataSourceTableAsSelectCommand(
           // TODO: Check that options from the resolved relation match the relation that we are
           // inserting into (i.e. using the same compression).
 
-          EliminateSubqueryAliases(
-            sessionState.catalog.lookupRelation(table.identifier)) match {
+          // Pass a table identifier with database part, so that `lookupRelation` won't get temp
+          // views unexpectedly.
+          EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdentWithDB)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
               // check if the file formats match
               l.relation match {
@@ -180,7 +191,7 @@ case class CreateDataSourceTableAsSelectCommand(
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
         case SaveMode.Overwrite =>
-          sparkSession.sql(s"DROP TABLE IF EXISTS $tableName")
+          sessionState.catalog.dropTable(tableIdentWithDB, ignoreIfNotExists = true, purge = false)
           // Need to create the table again.
           createMetastoreTable = true
       }
@@ -222,7 +233,7 @@ case class CreateDataSourceTableAsSelectCommand(
     }
 
     // Refresh the cache of the table in the catalog.
-    sessionState.catalog.refreshTable(table.identifier)
+    sessionState.catalog.refreshTable(tableIdentWithDB)
     Seq.empty[Row]
   }
 }

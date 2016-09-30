@@ -601,7 +601,7 @@ private[columnar] case class ARRAY(dataType: ArrayType)
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     val unsafeArray = getField(row, ordinal)
-    4 + unsafeArray.getSizeInBytes
+    8 + unsafeArray.getSizeInBytes
   }
 
   override def append(value: UnsafeArrayData, buffer: ByteBuffer): Unit = {
@@ -640,7 +640,7 @@ private[columnar] case class MAP(dataType: MapType)
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     val unsafeMap = getField(row, ordinal)
-    4 + unsafeMap.getSizeInBytes
+    8 + unsafeMap.getSizeInBytes
   }
 
   override def append(value: UnsafeMapData, buffer: ByteBuffer): Unit = {

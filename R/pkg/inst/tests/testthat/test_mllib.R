@@ -22,6 +22,11 @@ context("MLlib functions")
 # Tests for MLlib functions in SparkR
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 
+absoluteSparkPath <- function(x) {
+  sparkHome <- sparkR.conf("spark.home")
+  file.path(sparkHome, x)
+}
+
 test_that("formula of spark.glm", {
   training <- suppressWarnings(createDataFrame(iris))
   # directly calling the spark API
@@ -354,7 +359,8 @@ test_that("spark.kmeans", {
 })
 
 test_that("spark.mlp", {
-  df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
+  df <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
+                source = "libsvm")
   model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs", maxIter = 100,
                      tol = 0.5, stepSize = 1, seed = 1)
 
@@ -363,6 +369,8 @@ test_that("spark.mlp", {
   expect_equal(summary$labelCount, 3)
   expect_equal(summary$layers, c(4, 5, 4, 3))
   expect_equal(length(summary$weights), 64)
+  expect_equal(head(summary$weights, 5), list(-0.878743, 0.2154151, -1.16304, -0.6583214, 1.009825),
+               tolerance = 1e-6)
 
   # Test predict method
   mlpTestDF <- df
@@ -383,6 +391,25 @@ test_that("spark.mlp", {
 
   unlink(modelPath)
 
+  # Test default parameter
+  model <- spark.mlp(df, layers = c(4, 5, 4, 3))
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 10), c(1, 1, 1, 1, 0, 1, 2, 2, 1, 0))
+
+  # Test illegal parameter
+  expect_error(spark.mlp(df, layers = NULL), "layers must be a integer vector with length > 1.")
+  expect_error(spark.mlp(df, layers = c()), "layers must be a integer vector with length > 1.")
+  expect_error(spark.mlp(df, layers = c(3)), "layers must be a integer vector with length > 1.")
+
+  # Test random seed
+  # default seed
+  model <- spark.mlp(df, layers = c(4, 5, 4, 3), maxIter = 10)
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 12), c(1, 1, 1, 1, 0, 1, 2, 2, 1, 2, 0, 1))
+  # seed equals 10
+  model <- spark.mlp(df, layers = c(4, 5, 4, 3), maxIter = 10, seed = 10)
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 12), c(1, 1, 1, 1, 2, 1, 2, 2, 1, 0, 0, 1))
 })
 
 test_that("spark.naiveBayes", {
@@ -616,7 +643,7 @@ test_that("spark.gaussianMixture", {
 })
 
 test_that("spark.lda with libsvm", {
-  text <- read.df("data/mllib/sample_lda_libsvm_data.txt", source = "libsvm")
+  text <- read.df(absoluteSparkPath("data/mllib/sample_lda_libsvm_data.txt"), source = "libsvm")
   model <- spark.lda(text, optimizer = "em")
 
   stats <- summary(model, 10)
@@ -652,7 +679,7 @@ test_that("spark.lda with libsvm", {
 })
 
 test_that("spark.lda with text input", {
-  text <- read.text("data/mllib/sample_lda_data.txt")
+  text <- read.text(absoluteSparkPath("data/mllib/sample_lda_data.txt"))
   model <- spark.lda(text, optimizer = "online", features = "value")
 
   stats <- summary(model)
@@ -688,7 +715,7 @@ test_that("spark.lda with text input", {
 })
 
 test_that("spark.posterior and spark.perplexity", {
-  text <- read.text("data/mllib/sample_lda_data.txt")
+  text <- read.text(absoluteSparkPath("data/mllib/sample_lda_data.txt"))
   model <- spark.lda(text, features = "value", k = 3)
 
   # Assert perplexities are equal
@@ -740,6 +767,28 @@ test_that("spark.als", {
   expect_equal(itemFactors$features[orderItem], itemFactors2$features[orderItem2])
 
   unlink(modelPath)
+})
+
+test_that("spark.kstest", {
+  data <- data.frame(test = c(0.1, 0.15, 0.2, 0.3, 0.25, -1, -0.5))
+  df <- createDataFrame(data)
+  testResult <- spark.kstest(df, "test", "norm")
+  stats <- summary(testResult)
+
+  rStats <- ks.test(data$test, "pnorm", alternative = "two.sided")
+
+  expect_equal(stats$p.value, rStats$p.value, tolerance = 1e-4)
+  expect_equal(stats$statistic, unname(rStats$statistic), tolerance = 1e-4)
+  expect_match(capture.output(stats)[1], "Kolmogorov-Smirnov test summary:")
+
+  testResult <- spark.kstest(df, "test", "norm", -0.5)
+  stats <- summary(testResult)
+
+  rStats <- ks.test(data$test, "pnorm", -0.5, 1, alternative = "two.sided")
+
+  expect_equal(stats$p.value, rStats$p.value, tolerance = 1e-4)
+  expect_equal(stats$statistic, unname(rStats$statistic), tolerance = 1e-4)
+  expect_match(capture.output(stats)[1], "Kolmogorov-Smirnov test summary:")
 })
 
 sparkR.session.stop()

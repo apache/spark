@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.json
+package org.apache.spark.sql.catalyst.json
 
 import java.io.ByteArrayOutputStream
 
@@ -28,18 +28,22 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
-private[json] class SparkSQLJsonProcessingException(msg: String) extends RuntimeException(msg)
+private[sql] class SparkSQLJsonProcessingException(msg: String) extends RuntimeException(msg)
 
+/**
+ * Constructs a parser for a given schema that translates a json string to an [[InternalRow]].
+ */
 class JacksonParser(
     schema: StructType,
     columnNameOfCorruptRecord: String,
     options: JSONOptions) extends Logging {
 
+  import JacksonUtils._
+  import ParseModes._
   import com.fasterxml.jackson.core.JsonToken._
 
   // A `ValueConverter` is responsible for converting a value from `JsonParser`
@@ -52,6 +56,11 @@ class JacksonParser(
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
 
+  private val emptyRow: Seq[InternalRow] = Seq(new GenericInternalRow(schema.length))
+
+  @transient
+  private[this] var isWarningPrintedForMalformedRecord: Boolean = false
+
   /**
    * This function deals with the cases it fails to parse. This function will be called
    * when exceptions are caught during converting. This functions also deals with `mode` option.
@@ -59,11 +68,42 @@ class JacksonParser(
   private def failedRecord(record: String): Seq[InternalRow] = {
     // create a row even if no corrupt record column is present
     if (options.failFast) {
-      throw new RuntimeException(s"Malformed line in FAILFAST mode: $record")
+      throw new SparkSQLJsonProcessingException(s"Malformed line in FAILFAST mode: $record")
     }
     if (options.dropMalformed) {
-      logWarning(s"Dropping malformed line: $record")
+      if (!isWarningPrintedForMalformedRecord) {
+        logWarning(
+          s"""Found at least one malformed records (sample: $record). The JSON reader will drop
+             |all malformed records in current $DROP_MALFORMED_MODE parser mode. To find out which
+             |corrupted records have been dropped, please switch the parser mode to $PERMISSIVE_MODE
+             |mode and use the default inferred schema.
+             |
+             |Code example to print all malformed records (scala):
+             |===================================================
+             |// The corrupted record exists in column ${columnNameOfCorruptRecord}
+             |val parsedJson = spark.read.json("/path/to/json/file/test.json")
+             |
+           """.stripMargin)
+        isWarningPrintedForMalformedRecord = true
+      }
       Nil
+    } else if (schema.getFieldIndex(columnNameOfCorruptRecord).isEmpty) {
+      if (!isWarningPrintedForMalformedRecord) {
+        logWarning(
+          s"""Found at least one malformed records (sample: $record). The JSON reader will replace
+             |all malformed records with placeholder null in current $PERMISSIVE_MODE parser mode.
+             |To find out which corrupted records have been replaced with null, please use the
+             |default inferred schema instead of providing a custom schema.
+             |
+             |Code example to print all malformed records (scala):
+             |===================================================
+             |// The corrupted record exists in column ${columnNameOfCorruptRecord}.
+             |val parsedJson = spark.read.json("/path/to/json/file/test.json")
+             |
+           """.stripMargin)
+        isWarningPrintedForMalformedRecord = true
+      }
+      emptyRow
     } else {
       val row = new GenericMutableRow(schema.length)
       for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecord)) {

@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
+import java.util.concurrent.TimeUnit
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
@@ -33,6 +35,7 @@ import org.scalatest.mock.MockitoSugar
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
@@ -55,7 +58,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   // All 'requests' to the scheduler run immediately on the same thread, so
   // demand that all futures have their value available immediately.
-  implicit override val patienceConfig = PatienceConfig(timeout = 0.seconds)
+  implicit override val patienceConfig = PatienceConfig(timeout = Duration(0, TimeUnit.SECONDS))
 
   test("mesos supports killing and limiting executors") {
     setBackend()
@@ -219,7 +222,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   }
 
   test("Port offer decline when there is no appropriate range") {
-    setBackend(Map("spark.blockManager.port" -> "30100"))
+    setBackend(Map(BLOCK_MANAGER_PORT.key -> "30100"))
     val offeredPorts = (31100L, 31200L)
     val (mem, cpu) = (backend.executorMemory(sc), 4)
 
@@ -240,7 +243,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("Port offer accepted with user defined port numbers") {
     val port = 30100
-    setBackend(Map("spark.blockManager.port" -> s"$port"))
+    setBackend(Map(BLOCK_MANAGER_PORT.key -> s"$port"))
     val offeredPorts = (30000L, 31000L)
     val (mem, cpu) = (backend.executorMemory(sc), 4)
 

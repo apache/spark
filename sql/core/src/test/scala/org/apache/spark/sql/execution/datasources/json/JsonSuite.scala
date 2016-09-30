@@ -26,9 +26,10 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.json.InferSchema.compatibleType
@@ -1081,7 +1082,34 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(jsonDFTwo.schema === schemaTwo)
   }
 
-  test("Corrupt records: PERMISSIVE mode") {
+  test("Corrupt records: PERMISSIVE mode, without designated column for malformed records") {
+    withTempView("jsonTable") {
+      val schema = StructType(
+        StructField("a", StringType, true) ::
+          StructField("b", StringType, true) ::
+          StructField("c", StringType, true) :: Nil)
+
+      val jsonDF = spark.read.schema(schema).json(corruptRecords)
+      jsonDF.createOrReplaceTempView("jsonTable")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, b, c
+            |FROM jsonTable
+          """.stripMargin),
+        Seq(
+          // Corrupted records are replaced with null
+          Row(null, null, null),
+          Row(null, null, null),
+          Row(null, null, null),
+          Row("str_a_4", "str_b_4", "str_c_4"),
+          Row(null, null, null))
+      )
+    }
+  }
+
+  test("Corrupt records: PERMISSIVE mode, with designated column for malformed records") {
     // Test if we can query corrupt records.
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
       withTempView("jsonTable") {

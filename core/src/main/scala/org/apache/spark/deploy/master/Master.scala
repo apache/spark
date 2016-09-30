@@ -114,6 +114,7 @@ private[deploy] class Master(
 
   // Default maxCores for applications that don't specify it (i.e. pass Int.MaxValue)
   private val defaultCores = conf.getInt("spark.deploy.defaultCores", Int.MaxValue)
+  val reverseProxy = conf.getBoolean("spark.ui.reverseProxy", false)
   if (defaultCores < 1) {
     throw new SparkException("spark.deploy.defaultCores must be positive")
   }
@@ -129,6 +130,11 @@ private[deploy] class Master(
     webUi = new MasterWebUI(this, webUiPort)
     webUi.bind()
     masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
+    if (reverseProxy) {
+      masterWebUiUrl = conf.get("spark.ui.reverseProxyUrl", masterWebUiUrl)
+      logInfo(s"Spark Master is acting as a reverse proxy. Master, Workers and " +
+       s"Applications UIs are available at $masterWebUiUrl")
+    }
     checkForWorkerTimeOutTask = forwardMessageThread.scheduleAtFixedRate(new Runnable {
       override def run(): Unit = Utils.tryLogNonFatalError {
         self.send(CheckForWorkerTimeOut)
@@ -252,7 +258,7 @@ private[deploy] class Master(
             appInfo.resetRetryCount()
           }
 
-          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus))
+          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus, false))
 
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
@@ -755,6 +761,9 @@ private[deploy] class Master(
     workers += worker
     idToWorker(worker.id) = worker
     addressToWorker(workerAddress) = worker
+    if (reverseProxy) {
+       webUi.addProxyTargets(worker.id, worker.webUiAddress)
+    }
     true
   }
 
@@ -763,10 +772,13 @@ private[deploy] class Master(
     worker.setState(WorkerState.DEAD)
     idToWorker -= worker.id
     addressToWorker -= worker.endpoint.address
+    if (reverseProxy) {
+      webUi.removeProxyTargets(worker.id)
+    }
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
       exec.application.driver.send(ExecutorUpdated(
-        exec.id, ExecutorState.LOST, Some("worker lost"), None))
+        exec.id, ExecutorState.LOST, Some("worker lost"), None, workerLost = true))
       exec.state = ExecutorState.LOST
       exec.application.removeExecutor(exec)
     }
@@ -810,6 +822,9 @@ private[deploy] class Master(
     endpointToApp(app.driver) = app
     addressToApp(appAddress) = app
     waitingApps += app
+    if (reverseProxy) {
+      webUi.addProxyTargets(app.id, app.desc.appUiUrl)
+    }
   }
 
   private def finishApplication(app: ApplicationInfo) {
@@ -823,6 +838,9 @@ private[deploy] class Master(
       idToApp -= app.id
       endpointToApp -= app.driver
       addressToApp -= app.driver.address
+      if (reverseProxy) {
+        webUi.removeProxyTargets(app.id)
+      }
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach { a =>
