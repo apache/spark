@@ -441,7 +441,7 @@ class SessionCatalog(
     } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
       globalTempViewManager.get(table).map { plan =>
         CatalogTable(
-          identifier = TableIdentifier(table),
+          identifier = TableIdentifier(table, Some(globalTempViewManager.database)),
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
           schema = plan.output.toStructType)

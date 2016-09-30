@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalog.Table
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.test.SharedSQLContext
@@ -67,6 +68,17 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
     // We can also use Catalog API to drop global temp view
     spark.catalog.dropGlobalTempView("src2")
     intercept[NoSuchTableException](spark.table(s"$globalTempDB.src2"))
+  }
+
+  test("global temp view is shared among all sessions") {
+    try {
+      sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1, 2")
+      checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, 2))
+      val newSession = spark.newSession()
+      checkAnswer(newSession.table(s"$globalTempDB.src"), Row(1, 2))
+    } finally {
+      spark.catalog.dropGlobalTempView("src")
+    }
   }
 
   test("global temp view database should be preserved") {
@@ -135,6 +147,22 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
     } finally {
       spark.catalog.dropTempView("same_name")
       spark.catalog.dropGlobalTempView("same_name")
+    }
+  }
+
+  test("public Catalog should recognize global temp view") {
+    try {
+      sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1, 2")
+
+      assert(spark.catalog.tableExists(globalTempDB, "src"))
+      assert(spark.catalog.findTable(globalTempDB, "src").toString == new Table(
+        name = "src",
+        database = globalTempDB,
+        description = null,
+        tableType = "TEMPORARY",
+        isTemporary = true).toString)
+    } finally {
+      spark.catalog.dropGlobalTempView("src")
     }
   }
 }
