@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.util.Properties
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.mapAsJavaMapConverter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._

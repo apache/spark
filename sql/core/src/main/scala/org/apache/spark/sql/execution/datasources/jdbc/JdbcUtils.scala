@@ -699,7 +699,7 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Creates a table according to the given schema.
+   * Creates a table with a given schema.
    */
   def createTable(
       schema: StructType,
@@ -708,7 +708,7 @@ object JdbcUtils extends Logging {
       createTableOptions: String,
       conn: Connection): Unit = {
     val strSchema = schemaString(schema, url)
-    // Create the table if the table didn't exist.
+    // Create the table if the table does not exist.
     // To allow certain options to append when create a new table, which can be
     // table_options or partition_options.
     // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
