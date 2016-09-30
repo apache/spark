@@ -82,7 +82,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     }
   }
 
-  test("fit, transform, and summary") {
+  test("fit, transform and summary") {
     val predictionColName = "kmeans_prediction"
     val kmeans = new KMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
     val model = kmeans.fit(dataset)
