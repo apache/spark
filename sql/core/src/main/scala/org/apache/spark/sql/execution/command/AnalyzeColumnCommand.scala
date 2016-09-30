@@ -84,6 +84,8 @@ case class AnalyzeColumnCommand(
       // do deduplication
       if (!attributesToAnalyze.contains(expr)) {
         attributesToAnalyze += expr
+      } else {
+        logWarning(s"Duplicated column: $col")
       }
     }
 
