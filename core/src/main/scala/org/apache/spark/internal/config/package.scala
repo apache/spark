@@ -93,6 +93,11 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val MAX_TASK_FAILURES =
+    ConfigBuilder("spark.task.maxFailures")
+      .intConf
+      .createWithDefault(4)
+
   // Blacklist confs
   private[spark] val BLACKLIST_ENABLED =
     ConfigBuilder("spark.blacklist.enabled")

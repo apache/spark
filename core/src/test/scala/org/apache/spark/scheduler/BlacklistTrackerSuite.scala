@@ -54,20 +54,20 @@ class BlacklistTrackerSuite extends SparkFunSuite {
       (2, 3),
       (3, 3)
     ).foreach { case (maxTaskFailures, maxNodeAttempts) =>
-      conf.set("spark.task.maxFailures", maxTaskFailures.toString)
+      conf.set(config.MAX_TASK_FAILURES, maxTaskFailures)
       conf.set(config.MAX_TASK_ATTEMPTS_PER_NODE.key, maxNodeAttempts.toString)
       val excMsg = intercept[IllegalArgumentException] {
         BlacklistTracker.validateBlacklistConfs(conf)
       }.getMessage()
       assert(excMsg === s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
-        s"( = ${maxNodeAttempts}) was >= spark.task.maxFailures " +
+        s"( = ${maxNodeAttempts}) was >= ${config.MAX_TASK_FAILURES.key} " +
         s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
         s"Spark will not be robust to one bad node.  Decrease " +
-        s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key }, increase spark.task.maxFailures, or disable " +
-        s"blacklisting with ${config.BLACKLIST_ENABLED.key}")
+        s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.MAX_TASK_FAILURES.key}, " +
+        s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
     }
 
-    conf.remove("spark.task.maxFailures")
+    conf.remove(config.MAX_TASK_FAILURES)
     conf.remove(config.MAX_TASK_ATTEMPTS_PER_NODE)
 
     Seq(

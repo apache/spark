@@ -112,16 +112,16 @@ private[scheduler] object BlacklistTracker extends Logging {
         }
       }
 
-      val maxTaskFailures = conf.getInt("spark.task.maxFailures", 4)
+      val maxTaskFailures = conf.get(config.MAX_TASK_FAILURES)
       val maxNodeAttempts = conf.get(config.MAX_TASK_ATTEMPTS_PER_NODE)
 
       if (maxNodeAttempts >= maxTaskFailures) {
         throw new IllegalArgumentException(s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
-          s"( = ${maxNodeAttempts}) was >= spark.task.maxFailures " +
+          s"( = ${maxNodeAttempts}) was >= ${config.MAX_TASK_FAILURES.key} " +
           s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
           s"Spark will not be robust to one bad node.  Decrease " +
-          s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase spark.task.maxFailures, or " +
-          s"disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
+          s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.MAX_TASK_FAILURES.key}, " +
+          s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
       }
     }
   }

@@ -62,7 +62,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     extraConfs = Seq(
       config.BLACKLIST_ENABLED.key -> "true",
       config.MAX_TASK_ATTEMPTS_PER_NODE.key -> "5",
-      "spark.task.maxFailures" -> "4",
+      config.MAX_TASK_FAILURES.key -> "4",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "5",
       "spark.testing.nCoresPerExecutor" -> "10",
@@ -88,7 +88,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     "With default settings, job can succeed despite multiple bad executors on node",
     extraConfs = Seq(
       config.BLACKLIST_ENABLED.key -> "true",
-      "spark.task.maxFailures" -> "4",
+      config.MAX_TASK_FAILURES.key -> "4",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "5",
       "spark.testing.nCoresPerExecutor" -> "10"
