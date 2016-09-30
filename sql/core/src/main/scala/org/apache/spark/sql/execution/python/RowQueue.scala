@@ -37,14 +37,14 @@ import org.apache.spark.unsafe.memory.MemoryBlock
 private[python] trait RowQueue {
 
   /**
-   * Add a row to the end of it, returns true iff the row has added into it.
+   * Add a row to the end of it, returns true iff the row has been added to the queue.
    */
   def add(row: UnsafeRow): Boolean
 
   /**
    * Retrieve and remove the first row, returns null if it's empty.
    *
-   * It can only be called after add is called.
+   * It can only be called after add is called, otherwise it will fail (NPE).
    */
   def remove(): UnsafeRow
 
@@ -60,6 +60,8 @@ private[python] trait RowQueue {
  *
  * The format of UnsafeRow in page:
  * [4 bytes to hold length of record (N)] [N bytes to hold record] [...]
+ *
+ * -1 length means end of page.
  */
 private[python] abstract class InMemoryRowQueue(val page: MemoryBlock, numFields: Int)
   extends RowQueue {
@@ -89,6 +91,7 @@ private[python] abstract class InMemoryRowQueue(val page: MemoryBlock, numFields
   }
 
   def remove(): UnsafeRow = synchronized {
+    assert(readOffset <= writeOffset, "reader should not go beyond writer")
     if (readOffset + 4 > endOfPage || Platform.getInt(base, readOffset) < 0) {
       null
     } else {

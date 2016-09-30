@@ -46,15 +46,15 @@ import org.apache.spark.util.Utils
  *
  * Here is a diagram to show how this works:
  *
- *            Upstream (from child)
+ *            Downstream (for parent)
  *             /      \
- *            /     socket
+ *            /     socket  (output of UDF)
  *           /         \
  *        RowQueue    Python
  *           \         /
- *            \     socket
+ *            \     socket  (input of UDF)
  *             \     /
- *          Downstream (for parent)
+ *          upstream (from child)
  *
  * The rows sent to and received from Python are packed into batches (100 rows) and serialized,
  * there should be always some rows buffered in the socket or Python process, so the pulling from
@@ -89,10 +89,8 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
-      val queue = HybridRowQueue(
-        TaskContext.get().taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)),
-        child.output.length)
+      val queue = HybridRowQueue(TaskContext.get().taskMemoryManager(),
+        new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length)
       TaskContext.get().addTaskCompletionListener({ ctx =>
         queue.close()
       })
