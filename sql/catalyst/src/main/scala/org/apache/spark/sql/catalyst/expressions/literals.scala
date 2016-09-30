@@ -91,27 +91,27 @@ object Literal {
     case JavaBoolean.TYPE => BooleanType
 
     // java classes
-    case c: Class[_] if c == classOf[Date] => DateType
-    case c: Class[_] if c == classOf[Timestamp] => TimestampType
-    case c: Class[_] if c == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
-    case c: Class[_] if c == classOf[Array[Byte]] => BinaryType
-    case c: Class[_] if c == classOf[JavaShort] => ShortType
-    case c: Class[_] if c == classOf[JavaInteger] => IntegerType
-    case c: Class[_] if c == classOf[JavaLong] => LongType
-    case c: Class[_] if c == classOf[JavaDouble] => DoubleType
-    case c: Class[_] if c == classOf[JavaByte] => ByteType
-    case c: Class[_] if c == classOf[JavaFloat] => FloatType
-    case c: Class[_] if c == classOf[JavaBoolean] => BooleanType
+    case _ if clz == classOf[Date] => DateType
+    case _ if clz == classOf[Timestamp] => TimestampType
+    case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
+    case _ if clz == classOf[Array[Byte]] => BinaryType
+    case _ if clz == classOf[JavaShort] => ShortType
+    case _ if clz == classOf[JavaInteger] => IntegerType
+    case _ if clz == classOf[JavaLong] => LongType
+    case _ if clz == classOf[JavaDouble] => DoubleType
+    case _ if clz == classOf[JavaByte] => ByteType
+    case _ if clz == classOf[JavaFloat] => FloatType
+    case _ if clz == classOf[JavaBoolean] => BooleanType
 
     // other scala classes
-    case c: Class[_] if c == classOf[String] => StringType
-    case c: Class[_] if c == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
-    case c: Class[_] if c == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
-    case c: Class[_] if c == classOf[CalendarInterval] => CalendarIntervalType
+    case _ if clz == classOf[String] => StringType
+    case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
+    case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
+    case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
 
-    case c: Class[_] if c.isArray => ArrayType(componentTypeToDataType(c.getComponentType))
+    case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
 
-    case c => throw new AnalysisException(s"Unsupported component type $c in arrays")
+    case _ => throw new AnalysisException(s"Unsupported component type $clz in arrays")
   }
 
   /**
