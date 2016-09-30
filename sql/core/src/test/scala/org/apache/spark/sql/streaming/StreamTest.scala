@@ -297,6 +297,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
     try {
       startedTest.foreach { action =>
+        logInfo(s"Processing test stream action: $action")
         action match {
           case StartStream(trigger, triggerClock) =>
             verify(currentStream == null, "stream already running")

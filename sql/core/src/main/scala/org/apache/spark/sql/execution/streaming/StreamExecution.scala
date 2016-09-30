@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
@@ -57,6 +57,7 @@ class StreamExecution(
   extends StreamingQuery with Logging {
 
   import org.apache.spark.sql.streaming.StreamingQueryListener._
+  import StreamMetrics._
 
   private val pollingDelayMs = sparkSession.conf.get(SQLConf.STREAMING_POLLING_DELAY)
 
@@ -105,10 +106,13 @@ class StreamExecution(
   var lastExecution: QueryExecution = null
 
   @volatile
-  var streamDeathCause: StreamingQueryException = null
+  private var streamDeathCause: StreamingQueryException = null
 
   /* Get the call site in the caller thread; will pass this into the micro batch thread */
   private val callSite = Utils.getCallSite()
+
+  private val streamMetrics = new StreamMetrics(uniqueSources.toSet, triggerClock,
+    "%s.StructuredStreamingMetrics.%s".format(sparkSession.sparkContext.appName, name))
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
@@ -140,12 +144,23 @@ class StreamExecution(
   override def sourceStatuses: Array[SourceStatus] = {
     val localAvailableOffsets = availableOffsets
     sources.map(s =>
-      new SourceStatus(s.toString, localAvailableOffsets.get(s).map(_.toString))).toArray
+      new SourceStatus(
+        s.toString,
+        localAvailableOffsets.get(s).map(_.toString),
+        streamMetrics.currentSourceInputRate(s),
+        streamMetrics.currentSourceProcessingRate(s),
+        streamMetrics.currentSourceTriggerInfo(s))
+    ).toArray
   }
 
   /** Returns current status of the sink. */
-  override def sinkStatus: SinkStatus =
-    new SinkStatus(sink.toString, committedOffsets.toCompositeOffset(sources).toString)
+  override def sinkStatus: SinkStatus = {
+    new SinkStatus(
+      sink.toString,
+      committedOffsets.toCompositeOffset(sources).toString,
+      streamMetrics.currentOutputRate())
+  }
+
 
   /** Returns the [[StreamingQueryException]] if the query was terminated by an exception. */
   override def exception: Option[StreamingQueryException] = Option(streamDeathCause)
@@ -176,6 +191,7 @@ class StreamExecution(
       // Mark ACTIVE and then post the event. QueryStarted event is synchronously sent to listeners,
       // so must mark this as ACTIVE first.
       state = ACTIVE
+      sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       postEvent(new QueryStarted(this.toInfo)) // Assumption: Does not throw exception.
 
       // Unblock starting thread
@@ -185,25 +201,36 @@ class StreamExecution(
       SparkSession.setActiveSession(sparkSession)
 
       triggerExecutor.execute(() => {
-        if (isActive) {
-          if (currentBatchId < 0) {
-            // We'll do this initialization only once
-            populateStartOffsets()
-            logDebug(s"Stream running from $committedOffsets to $availableOffsets")
+        streamMetrics.reportTriggerStarted(currentBatchId)
+        streamMetrics.reportTriggerInfo(STATUS_MESSAGE, "Finding new data from sources")
+        val isTerminated = timeIt(TRIGGER_LATENCY) {
+          if (isActive) {
+            if (currentBatchId < 0) {
+              // We'll do this initialization only once
+              populateStartOffsets()
+              logDebug(s"Stream running from $committedOffsets to $availableOffsets")
+            } else {
+              constructNextBatch()
+            }
+            if (dataAvailable) {
+              streamMetrics.reportTriggerInfo(STATUS_MESSAGE, "Processing new data")
+              streamMetrics.reportTriggerInfo(DATA_AVAILABLE, true)
+              runBatch()
+              // We'll increase currentBatchId after we complete processing current batch's data
+              currentBatchId += 1
+            } else {
+              streamMetrics.reportTriggerInfo(STATUS_MESSAGE, "No new data")
+              streamMetrics.reportTriggerInfo(DATA_AVAILABLE, false)
+              Thread.sleep(100)
+            }
+            true
           } else {
-            constructNextBatch()
+            false
           }
-          if (dataAvailable) {
-            runBatch()
-            // We'll increase currentBatchId after we complete processing current batch's data
-            currentBatchId += 1
-          } else {
-            Thread.sleep(pollingDelayMs)
-          }
-          true
-        } else {
-          false
         }
+        streamMetrics.reportTriggerFinished()
+        postEvent(new QueryProgress(this.toInfo))
+        isTerminated
       })
     } catch {
       case _: InterruptedException if state == TERMINATED => // interrupted by stop()
@@ -217,6 +244,8 @@ class StreamExecution(
     } finally {
       state = TERMINATED
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
+      streamMetrics.stop()
+      sparkSession.sparkContext.env.metricsSystem.removeSource(streamMetrics)
       postEvent(new QueryTerminated(
         this.toInfo,
         exception.map(_.getMessage),
@@ -276,8 +305,14 @@ class StreamExecution(
     val hasNewData = {
       awaitBatchLock.lock()
       try {
-        val newData = uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
-        availableOffsets ++= newData
+        timeIt(GET_OFFSET_LATENCY) {
+          val latestOffsets: Map[Source, Option[Offset]] = uniqueSources.map { s =>
+            timeIt(s, SOURCE_GET_OFFSET_LATENCY) {
+              (s, s.getOffset)
+            }
+          }.toMap
+          availableOffsets ++= latestOffsets.filter { case (s, o) => o.nonEmpty }.mapValues(_.get)
+        }
 
         if (dataAvailable) {
           true
@@ -290,9 +325,11 @@ class StreamExecution(
       }
     }
     if (hasNewData) {
-      assert(offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
-        s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
-      logInfo(s"Committed offsets for batch $currentBatchId.")
+      timeIt(OFFSET_WAL_WRITE_LATENCY) {
+        assert(offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
+          s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
+        logInfo(s"Committed offsets for batch $currentBatchId.")
+      }
     } else {
       awaitBatchLock.lock()
       try {
@@ -302,6 +339,7 @@ class StreamExecution(
         awaitBatchLock.unlock()
       }
     }
+    streamMetrics.reportTimestamp(GET_OFFSET_TIMESTAMP)
   }
 
   /**
@@ -313,14 +351,18 @@ class StreamExecution(
     // TODO: Move this to IncrementalExecution.
 
     // Request unprocessed data from all sources.
-    val newData = availableOffsets.flatMap {
-      case (source, available) if committedOffsets.get(source).map(_ < available).getOrElse(true) =>
-        val current = committedOffsets.get(source)
-        val batch = source.getBatch(current, available)
-        logDebug(s"Retrieving data from $source: $current -> $available")
-        Some(source -> batch)
-      case _ => None
-    }.toMap
+    val newData = timeIt(GET_BATCH_LATENCY) {
+      availableOffsets.flatMap {
+        case (source, available)
+          if committedOffsets.get(source).map(_ < available).getOrElse(true) =>
+          val current = committedOffsets.get(source)
+          val batch = source.getBatch(current, available)
+          logDebug(s"Retrieving data from $source: $current -> $available")
+          Some(source -> batch)
+        case _ => None
+      }
+    }
+    streamMetrics.reportTimestamp(GET_BATCH_TIMESTAMP)
 
     // A list of attributes that will need to be updated.
     var replacements = new ArrayBuffer[(Attribute, Attribute)]
@@ -353,13 +395,14 @@ class StreamExecution(
       checkpointFile("state"),
       currentBatchId)
 
-    lastExecution.executedPlan
+    val executedPlan = lastExecution.executedPlan // Force the lazy generation of execution plan
     val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
     logDebug(s"Optimized batch in ${optimizerTime}ms")
 
     val nextBatch =
       new Dataset(sparkSession, lastExecution, RowEncoder(lastExecution.analyzed.schema))
     sink.addBatch(currentBatchId, nextBatch)
+    reportMetrics(executedPlan)
 
     awaitBatchLock.lock()
     try {
@@ -373,7 +416,6 @@ class StreamExecution(
     logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
     // Update committed offsets.
     committedOffsets ++= availableOffsets
-    postEvent(new QueryProgress(this.toInfo))
   }
 
   private def postEvent(event: StreamingQueryListener.Event) {
@@ -503,12 +545,59 @@ class StreamExecution(
      """.stripMargin
   }
 
+  private def reportMetrics(executedPlan: SparkPlan): Unit = {
+    val execPlanLeaves = executedPlan.collect { case p if p.children.isEmpty => p }
+    val sourceToNumInputRows = if (execPlanLeaves.size == sources.size) {
+      sources.zip(execPlanLeaves).flatMap { case (s, leaf) =>
+        leaf.metrics.get("numOutputRows").map { m => s -> m.value }
+      }.toMap
+    } else {
+      logWarning(
+        "Could not report metrics as number of sources did not match number of leaves in" +
+          s" execution plan: sources(${sources.size}) = ${sources.mkString(", ")};" +
+          s" leaves(${execPlanLeaves.size}) = ${execPlanLeaves.mkString(",")}")
+      Map.empty[Source, Long]
+    }
+    val numOutputRows = executedPlan.metrics.get("numOutputRows").map(_.value)
+    streamMetrics.reportNumRows(sourceToNumInputRows, numOutputRows)
+
+    val stateNodes = executedPlan.collect { case p if p.isInstanceOf[StateStoreSaveExec] => p }
+    stateNodes.zipWithIndex.foreach { case (s, i) =>
+      streamMetrics.reportTriggerInfo(NUM_TOTAL_STATE_ROWS(i),
+        s.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L))
+      streamMetrics.reportTriggerInfo(NUM_UPDATED_STATE_ROWS(i),
+        s.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L))
+    }
+  }
+
+  private def timeIt[T](triggerInfoKey: String)(body: => T): T = {
+    val startTime = triggerClock.getTimeMillis()
+    val result = body
+    val endTime = triggerClock.getTimeMillis()
+    streamMetrics.reportLatency(triggerInfoKey, math.max(endTime - startTime, 0))
+    result
+  }
+
+  private def timeIt[T](source: Source, triggerInfoKey: String)(body: => T): T = {
+    val startTime = triggerClock.getTimeMillis()
+    val result = body
+    val endTime = triggerClock.getTimeMillis()
+    streamMetrics.reportLatency(source, triggerInfoKey, math.max(endTime - startTime, 0))
+    result
+  }
+
   private def toInfo: StreamingQueryInfo = {
     new StreamingQueryInfo(
       this.name,
       this.id,
+      triggerClock.getTimeMillis(),
+      streamMetrics.currentInputRate,
+      streamMetrics.currentProcessingRate,
+      streamMetrics.currentOutputRate,
+      streamMetrics.currentLatency,
       this.sourceStatuses,
-      this.sinkStatus)
+      this.sinkStatus,
+      streamMetrics.currentTriggerInfo)
   }
 
   trait State

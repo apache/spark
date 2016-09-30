@@ -26,9 +26,13 @@ import org.apache.spark.sql.execution.streaming.Source
  *
  * @param description Description of the source corresponding to this status
  * @param offsetDesc Description of the current [[Source]] offset if known
+ * @param inputRate Current ingestion rate as rows / second
  * @since 2.0.0
  */
 @Experimental
-class SourceStatus private[sql] (
+case class SourceStatus private[sql](
     val description: String,
-    val offsetDesc: Option[String])
+    val offsetDesc: Option[String],
+    val inputRate: Double,
+    val processingRate: Double,
+    val triggerInfo: Map[String, String])

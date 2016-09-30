@@ -95,23 +95,27 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   /**
    * Returns the data that is between the offsets (`start`, `end`].
    */
-  override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+  override def getBatch(start: Option[Offset], end: Offset): DataFrame = synchronized {
     val startOrdinal =
       start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1
     val endOrdinal = end.asInstanceOf[LongOffset].offset.toInt + 1
-    val newBlocks = synchronized { batches.slice(startOrdinal, endOrdinal) }
+    val batchData = synchronized { batches.slice(startOrdinal, endOrdinal) }.flatMap(_.collect())
 
-    logDebug(
-      s"MemoryBatch [$startOrdinal, $endOrdinal]: ${newBlocks.flatMap(_.collect()).mkString(", ")}")
-    newBlocks
-      .map(_.toDF())
-      .reduceOption(_ union _)
-      .getOrElse {
-        sys.error("No data selected!")
-      }
+    logInfo(
+      s"MemoryBatch [$startOrdinal, $endOrdinal]: ${batchData.mkString(", ")}")
+    if (batchData.isEmpty) { sys.error("No data selected!") }
+
+    // Merge data into a single logical plan node so that StreamExecution can
+    // match the number of leaf nodes with the number of sources for getting metrics
+    sqlContext.createDataset(batchData).toDF()
   }
 
   override def stop() {}
+
+  def reset(): Unit = synchronized {
+    batches.clear()
+    currentOffset = new LongOffset(-1)
+  }
 }
 
 /**

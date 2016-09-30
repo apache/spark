@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.SparkPlan
 
@@ -56,7 +57,12 @@ case class StateStoreRestoreExec(
     child: SparkPlan)
   extends execution.UnaryExecNode with StatefulOperator {
 
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
   override protected def doExecute(): RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+
     child.execute().mapPartitionsWithStateStore(
       getStateId.checkpointLocation,
       operatorId = getStateId.operatorId,
@@ -69,6 +75,7 @@ case class StateStoreRestoreExec(
         iter.flatMap { row =>
           val key = getKey(row)
           val savedState = store.get(key)
+          numOutputRows += 1
           row +: savedState.toSeq
         }
     }
@@ -85,6 +92,11 @@ case class StateStoreSaveExec(
     returnAllStates: Option[Boolean],
     child: SparkPlan)
   extends execution.UnaryExecNode with StatefulOperator {
+
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
+    "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"))
 
   override protected def doExecute(): RDD[InternalRow] = {
     assert(returnAllStates.nonEmpty,
@@ -111,6 +123,10 @@ case class StateStoreSaveExec(
   private def saveAndReturnUpdated(
       store: StateStore,
       iter: Iterator[InternalRow]): Iterator[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+    val numTotalStateRows = longMetric("numTotalStateRows")
+    val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+
     new Iterator[InternalRow] {
       private[this] val baseIterator = iter
       private[this] val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
@@ -118,6 +134,7 @@ case class StateStoreSaveExec(
       override def hasNext: Boolean = {
         if (!baseIterator.hasNext) {
           store.commit()
+          numTotalStateRows += store.numKeys()
           false
         } else {
           true
@@ -128,6 +145,8 @@ case class StateStoreSaveExec(
         val row = baseIterator.next().asInstanceOf[UnsafeRow]
         val key = getKey(row)
         store.put(key.copy(), row.copy())
+        numOutputRows += 1
+        numUpdatedStateRows += 1
         row
       }
     }
@@ -142,12 +161,21 @@ case class StateStoreSaveExec(
       store: StateStore,
       iter: Iterator[InternalRow]): Iterator[InternalRow] = {
     val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+    val numOutputRows = longMetric("numOutputRows")
+    val numTotalStateRows = longMetric("numTotalStateRows")
+    val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+
     while (iter.hasNext) {
       val row = iter.next().asInstanceOf[UnsafeRow]
       val key = getKey(row)
       store.put(key.copy(), row.copy())
+      numUpdatedStateRows += 1
     }
     store.commit()
-    store.iterator().map(_._2.asInstanceOf[InternalRow])
+    numTotalStateRows += store.numKeys()
+    store.iterator().map { case (k, v) =>
+      numOutputRows += 1
+      v.asInstanceOf[InternalRow]
+    }
   }
 }

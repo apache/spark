@@ -17,17 +17,21 @@
 
 package org.apache.spark.sql.streaming
 
+import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.execution.streaming.{CompositeOffset, LongOffset, MemoryStream, StreamExecution}
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.util.{ManualClock, Utils}
 
 
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
 
   import AwaitTerminationTester._
   import testImplicits._
+
+  // To make === between double tolerate inexact values
+  implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
 
   after {
     sqlContext.streams.active.foreach(_.stop())
@@ -102,26 +106,53 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
 
   testQuietly("source and sink statuses") {
     val inputData = MemoryStream[Int]
-    val mapped = inputData.toDS().map(6 / _)
+
+    // This is make the sure the execution plan ends with a node (filter) that supports
+    // the numOutputRows metric.
+    spark.conf.set("spark.sql.codegen.wholeStage", false)
+    val mapped = inputData.toDS().map(6 / _).where("value > 0")
 
     testStream(mapped)(
       AssertOnQuery(_.sourceStatuses.length === 1),
       AssertOnQuery(_.sourceStatuses(0).description.contains("Memory")),
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === None),
+      AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
+      AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
       AssertOnQuery(_.sinkStatus.description.contains("Memory")),
       AssertOnQuery(_.sinkStatus.offsetDesc === new CompositeOffset(None :: Nil).toString),
+      AssertOnQuery(_.sinkStatus.outputRate === 0.0),
+
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString)),
+      AssertOnQuery(_.sourceStatuses(0).inputRate > 0.0), // disable if flaky
+      AssertOnQuery(_.sourceStatuses(0).processingRate >= 0.0),
       AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString),
+      AssertOnQuery(_.sinkStatus.outputRate >= 0.0),
+
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3, 6, 3),
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(1).toString)),
+      AssertOnQuery(_.sourceStatuses(0).inputRate > 0.0), // disable if flaky
+      AssertOnQuery(_.sourceStatuses(0).processingRate >= 0.0),
       AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
+      AssertOnQuery(_.sinkStatus.outputRate >= 0.0),
+
+      StopStream,
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(1).toString)),
+      AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
+      AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
+      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
+      AssertOnQuery(_.sinkStatus.outputRate === 0.0),
+
+      StartStream(),
       AddData(inputData, 0),
       ExpectFailure[SparkException],
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(2).toString)),
-      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString)
+      AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
+      AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
+      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
+      AssertOnQuery(_.sinkStatus.outputRate === 0.0)
     )
   }
 

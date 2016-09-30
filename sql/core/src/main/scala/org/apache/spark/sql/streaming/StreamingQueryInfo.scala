@@ -30,8 +30,15 @@ import org.apache.spark.annotation.Experimental
  * @param sinkStatus The current status of the [[StreamingQuery]]'s sink.
  */
 @Experimental
-class StreamingQueryInfo private[sql](
+case class StreamingQueryInfo private[sql](
   val name: String,
   val id: Long,
+  val timestamp: Long,
+  val inputRate: Double,
+  val processingRate: Double,
+  val outputRate: Double,
+  val latencyMs: Option[Double],
   val sourceStatuses: Seq[SourceStatus],
-  val sinkStatus: SinkStatus)
+  val sinkStatus: SinkStatus,
+  val triggerInfo: Map[String, String]
+)
