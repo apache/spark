@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.test
 
-import scala.collection.JavaConverters._
-
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
@@ -80,18 +78,11 @@ trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach with Logging
 
   protected override def beforeEach(): Unit = {
     super.beforeEach()
-    DebugFilesystem.openStreams.clear()
+    DebugFilesystem.clearOpenStreams()
   }
 
   protected override def afterEach(): Unit = {
     super.afterEach()
-    val numOpen = DebugFilesystem.openStreams.size
-    if (numOpen > 0) {
-      for (exc <- DebugFilesystem.openStreams.values.asScala) {
-        logWarning("Leaked filesystem connection created at:")
-        exc.printStackTrace()
-      }
-      throw new RuntimeException(s"There are $numOpen possibly leaked file streams.")
-    }
+    DebugFilesystem.assertNoOpenStreams()
   }
 }

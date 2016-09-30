@@ -22,13 +22,29 @@ import java.lang
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.fs._
 
 object DebugFilesystem {
   // Stores the set of active streams and their creation sites.
-  val openStreams = new ConcurrentHashMap[FSDataInputStream, Throwable]()
+  private val openStreams = new ConcurrentHashMap[FSDataInputStream, Throwable]()
+
+  def clearOpenStreams(): Unit = {
+    openStreams.clear()
+  }
+
+  def assertNoOpenStreams(): Unit = {
+    val numOpen = openStreams.size()
+    if (numOpen > 0) {
+      for (exc <- openStreams.values().asScala) {
+        logWarning("Leaked filesystem connection created at:")
+        exc.printStackTrace()
+      }
+      throw new AssertionError(s"There are $numOpen possibly leaked file streams.")
+    }
+  }
 }
 
 /**
