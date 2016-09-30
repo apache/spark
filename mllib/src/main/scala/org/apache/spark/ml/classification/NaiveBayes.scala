@@ -25,6 +25,8 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util._
+import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.types.DoubleType
@@ -362,9 +364,11 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath).select("pi", "theta").head()
-      val pi = data.getAs[Vector](0)
-      val theta = data.getAs[Matrix](1)
+      val data = sparkSession.read.parquet(dataPath)
+      val vecConverted = MLUtils.convertVectorColumnsToML(data, "pi")
+      val Row(pi: Vector, theta: Matrix) = MLUtils.convertMatrixColumnsToML(vecConverted, "theta")
+        .select("pi", "theta")
+        .head()
       val model = new NaiveBayesModel(metadata.uid, pi, theta)
 
       DefaultParamsReader.getAndSetParams(model, metadata)
