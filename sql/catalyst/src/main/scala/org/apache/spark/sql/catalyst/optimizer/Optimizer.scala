@@ -546,8 +546,7 @@ object CollapseWindow extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case w @ Window(we1, ps1, os1, Window(we2, ps2, os2, grandChild))
         if ps1.equals(ps2) && os1.equals(os2) =>
-      val newWindowExpressions = ExpressionSet(we1 ++ we2).toSeq.asInstanceOf[Seq[NamedExpression]]
-      w.copy(windowExpressions = newWindowExpressions, child = grandChild)
+      w.copy(windowExpressions = we1 ++ we2, child = grandChild)
   }
 }
 
