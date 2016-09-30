@@ -111,8 +111,9 @@ abstract class Catalog {
   def getDatabase(dbName: String): Database
 
   /**
-   * Get the table with the specified name. This table can be a temporary table or a table in the
-   * current database. This throws an AnalysisException when the table cannot be found.
+   * Get the table or view with the specified name. This table can be a temporary view or a
+   * table/view in the current database. This throws an AnalysisException when no Table
+   * can be found.
    *
    * @since 2.1.0
    */
@@ -120,8 +121,8 @@ abstract class Catalog {
   def getTable(tableName: String): Table
 
   /**
-   * Get the table with the specified name in the specified database. This throws an
-   * AnalysisException when the table cannot be found.
+   * Get the table or view with the specified name in the specified database. This throws an
+   * AnalysisException when no Table can be found.
    *
    * @since 2.1.0
    */
@@ -155,15 +156,15 @@ abstract class Catalog {
   def databaseExists(dbName: String): Boolean
 
   /**
-   * Check if the table with the specified name exists. This can either be a temporary table or a
-   * table in the current database.
+   * Check if the table or view with the specified name exists. This can either be a temporary
+   * view or a table/view in the current database.
    *
    * @since 2.1.0
    */
   def tableExists(tableName: String): Boolean
 
   /**
-   * Check if the table with the specified name exists in the specified database.
+   * Check if the table or view with the specified name exists in the specified database.
    *
    * @since 2.1.0
    */

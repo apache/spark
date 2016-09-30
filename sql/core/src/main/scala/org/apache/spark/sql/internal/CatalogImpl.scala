@@ -68,13 +68,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Returns a list of databases available across all sessions.
    */
   override def listDatabases(): Dataset[Database] = {
-    val databases = sessionCatalog.listDatabases().map { dbName =>
-      makeDatabase(sessionCatalog.getDatabaseMetadata(dbName))
-    }
+    val databases = sessionCatalog.listDatabases().map(makeDatabase)
     CatalogImpl.makeDataset(databases, sparkSession)
   }
 
-  private def makeDatabase(metadata: CatalogDatabase): Database = {
+  private def makeDatabase(dbName: String): Database = {
+    val metadata = sessionCatalog.getDatabaseMetadata(dbName)
     new Database(
       name = metadata.name,
       description = metadata.description,
@@ -96,20 +95,19 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   @throws[AnalysisException]("database does not exist")
   override def listTables(dbName: String): Dataset[Table] = {
     requireDatabaseExists(dbName)
-    val tables = sessionCatalog.listTables(dbName).map { tableIdent =>
-      makeTable(tableIdent, tableIdent.database.isEmpty)
-    }
+    val tables = sessionCatalog.listTables(dbName).map(makeTable)
     CatalogImpl.makeDataset(tables, sparkSession)
   }
 
-  private def makeTable(tableIdent: TableIdentifier, isTemp: Boolean): Table = {
-    val metadata = if (isTemp) None else Some(sessionCatalog.getTableMetadata(tableIdent))
+  private def makeTable(tableIdent: TableIdentifier): Table = {
+    val isTemporary = tableIdent.database.isDefined
+    val metadata = sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent)
     new Table(
-      name = tableIdent.identifier,
-      database = metadata.flatMap(_.identifier.database).orNull,
-      description = metadata.flatMap(_.comment).orNull,
-      tableType = metadata.map(_.tableType.name).getOrElse("TEMPORARY"),
-      isTemporary = isTemp)
+      name = tableIdent.table,
+      database = tableIdent.database.orNull,
+      description = metadata.comment.orNull,
+      tableType = if (isTemporary) "TEMPORARY" else metadata.tableType.name,
+      isTemporary = isTemporary)
   }
 
   /**
@@ -183,32 +181,34 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def getDatabase(dbName: String): Database = {
     if (sessionCatalog.databaseExists(dbName)) {
-      makeDatabase(sessionCatalog.getDatabaseMetadata(dbName))
+      makeDatabase(dbName)
     } else {
       throw new AnalysisException(s"The specified database $dbName does not exist.")
     }
   }
 
   /**
-   * Get the table with the specified name. This table can be a temporary table or a table in the
-   * current database. This throws an [[AnalysisException]] when no [[Table]] can be found.
+   * Get the table or view with the specified name. This table can be a temporary view or a
+   * table/view in the current database. This throws an [[AnalysisException]] when no [[Table]]
+   * can be found.
    */
   override def getTable(tableName: String): Table = {
     getTable(null, tableName)
   }
 
   /**
-   * Get the table with the specified name in the specified database. This throws an
+   * Get the table or view with the specified name in the specified database. This throws an
    * [[AnalysisException]] when no [[Table]] can be found.
    */
   override def getTable(dbName: String, tableName: String): Table = {
-    val tableIdent = TableIdentifier(tableName, Option(dbName))
-    val isTemporary = sessionCatalog.isTemporaryTable(tableIdent)
-    if (isTemporary || sessionCatalog.tableExists(tableIdent)) {
-      makeTable(tableIdent, isTemporary)
-    } else {
-      throw new AnalysisException(s"The specified table $tableIdent does not exist.")
+    val tableIdent = TableIdentifier(tableName, Option(dbName)) match {
+      case id if sessionCatalog.isTemporaryTable(id) => id
+      case id if sessionCatalog.tableExists(id) =>
+        if (dbName == null) id.copy(database = Some(sessionCatalog.getCurrentDatabase))
+        else id
+      case id => throw new AnalysisException(s"The specified table/view $id does not exist.")
     }
+    makeTable(tableIdent)
   }
 
   /**
@@ -241,15 +241,15 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Check if the table with the specified name exists. This can either be a temporary table or a
-   * table in the current database.
+   * Check if the table or view with the specified name exists. This can either be a temporary
+   * view or a table/view in the current database.
    */
   override def tableExists(tableName: String): Boolean = {
     tableExists(null, tableName)
   }
 
   /**
-   * Check if the table with the specified name exists in the specified database.
+   * Check if the table or view with the specified name exists in the specified database.
    */
   override def tableExists(dbName: String, tableName: String): Boolean = {
     val tableIdent = TableIdentifier(tableName, Option(dbName))
