@@ -106,4 +106,37 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
   }
+
+  test("Array contains with pattern match") {
+    val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq[String](null, ""), ArrayType(StringType))
+    val a2 = Literal.create(Seq(null), ArrayType(LongType))
+    val a3 = Literal.create(null, ArrayType(StringType))
+    val a4 = Literal.create(Seq[String]("\\d\\d\\s-\\s\\d\\d", null, "", "pattern"),
+      ArrayType(StringType))
+
+    checkEvaluation(ArrayContainsWithPatternMatch(a0, Literal(0)), false)
+    checkEvaluation(ArrayContainsWithPatternMatch(a0, Literal.create(null, IntegerType)), null)
+
+    checkEvaluation(ArrayContainsWithPatternMatch(a1, Literal("")), true)
+    checkEvaluation(ArrayContainsWithPatternMatch(a1, Literal("a")), null)
+    checkEvaluation(ArrayContainsWithPatternMatch(a1, Literal.create(null, StringType)), null)
+
+    checkEvaluation(ArrayContainsWithPatternMatch(a2, Literal(1L)), null)
+    checkEvaluation(ArrayContainsWithPatternMatch(a2, Literal.create(null, LongType)), null)
+
+    checkEvaluation(ArrayContainsWithPatternMatch(a3, Literal("")), null)
+    checkEvaluation(ArrayContainsWithPatternMatch(a3, Literal.create(null, StringType)), null)
+
+    checkEvaluation(ArrayContainsWithPatternMatch(a4, Literal.create(null, StringType)), null)
+    checkEvaluation(ArrayContainsWithPatternMatch(a4, Literal.create("", StringType)), true)
+    checkEvaluation(ArrayContainsWithPatternMatch(a4, Literal.create("12 - 20", StringType)), true)
+    checkEvaluation(ArrayContainsWithPatternMatch(a4, Literal.create("pat", StringType)), null)
+    checkEvaluation(ArrayContainsWithPatternMatch(a4, Literal.create("pattern", StringType)), true)
+    checkEvaluation(ArrayContainsWithPatternMatch(a4, Literal.create("ab - cd", StringType)), null)
+    checkEvaluation(ArrayContainsWithPatternMatch(a4, Literal.create(" 12 - 20 ", StringType)),
+      null)
+    checkEvaluation(ArrayContainsWithPatternMatch(a4, Literal.create("132 - 20", StringType)), null)
+  }
 }
+

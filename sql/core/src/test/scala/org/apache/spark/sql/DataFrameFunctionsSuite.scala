@@ -406,4 +406,99 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(true), Row(true))
     )
   }
+
+  test("array contains with pattern match function") {
+    val df1 = Seq(
+      (Seq[Int](1, 2), "x"),
+      (Seq[Int](), "x")
+    ).toDF("a", "b")
+
+    // Simple test cases
+    checkAnswer(
+      df1.select(array_contains_with_pattern_match(df1("a"), 1)),
+      Seq(Row(true), Row(false))
+    )
+    checkAnswer(
+      df1.selectExpr("array_contains_with_pattern_match(a, 1)"),
+      Seq(Row(true), Row(false))
+    )
+
+    // In hive, this errors because null has no type information
+    intercept[AnalysisException] {
+      df1.select(array_contains_with_pattern_match(df1("a"), null))
+    }
+    intercept[AnalysisException] {
+      df1.selectExpr("array_contains_with_pattern_match(a, null)")
+    }
+    intercept[AnalysisException] {
+      df1.selectExpr("array_contains_with_pattern_match(null, 1)")
+    }
+
+    checkAnswer(
+      df1.selectExpr("array_contains_with_pattern_match(array(array(1), null)[0], 1)"),
+      Seq(Row(true), Row(true))
+    )
+    checkAnswer(
+      df1.selectExpr("array_contains_with_pattern_match(array(1, null), array(1, null)[0])"),
+      Seq(Row(true), Row(true))
+    )
+    val df2 = Seq(
+      (Seq[String]("1", "2"), "x"),
+      (Seq[String](), "x"),
+      (Seq[String]("\\d\\s-\\s\\d", "pattern", ""), "x")
+    ).toDF("a", "b")
+
+    // Simple test cases
+    checkAnswer(
+      df2.select(array_contains_with_pattern_match(df2("a"), "1")),
+      Seq(Row(true), Row(false), Row(false))
+    )
+    checkAnswer(
+      df2.selectExpr("""array_contains_with_pattern_match(a, "1")"""),
+      Seq(Row(true), Row(false), Row(false))
+    )
+    checkAnswer(
+      df2.select(array_contains_with_pattern_match(df2("a"), "1 - 2")),
+      Seq(Row(false), Row(false), Row(true))
+    )
+    checkAnswer(
+      df2.selectExpr("""array_contains_with_pattern_match(a, "3 - 4")"""),
+      Seq(Row(false), Row(false), Row(true))
+    )
+
+    // In hive, this errors because null has no type information
+    intercept[AnalysisException] {
+      df2.select(array_contains_with_pattern_match(df2("a"), null))
+    }
+    intercept[AnalysisException] {
+      df2.selectExpr("array_contains_with_pattern_match(a, null)")
+    }
+    intercept[AnalysisException] {
+      df2.selectExpr("array_contains_with_pattern_match(null, 1)")
+    }
+
+    checkAnswer(
+      df2.selectExpr("array_contains_with_pattern_match(array(array(1), null)[0], 1)"),
+      Seq(Row(true), Row(true), Row(true))
+    )
+
+    checkAnswer(
+      df2.selectExpr("array_contains_with_pattern_match(array(1, null), array(1, null)[0])"),
+      Seq(Row(true), Row(true), Row(true))
+    )
+
+    checkAnswer(
+      df2.selectExpr(
+        """array_contains_with_pattern_match(array(array("\\d\\s\\d"), null)[0],
+          "1 3")""".stripMargin),
+      Seq(Row(true), Row(true), Row(true))
+    )
+
+    checkAnswer(
+      df2.selectExpr(
+        """array_contains_with_pattern_match(array("\\d\\s\\d", null), array("1 3", null)[0])""".stripMargin),
+      Seq(Row(true), Row(true), Row(true))
+    )
+
+  }
 }

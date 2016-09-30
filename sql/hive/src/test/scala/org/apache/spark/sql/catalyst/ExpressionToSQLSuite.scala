@@ -261,6 +261,8 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   test("collection functions") {
     checkSqlGeneration("SELECT array_contains(array(2, 9, 8), 9)")
+    checkSqlGeneration("""SELECT array_contains_with_pattern_match(array("\\d\\s\\d", "pattern",
+      "8"), "9 8")""".stripMargin)
     checkSqlGeneration("SELECT size(array('b', 'd', 'c', 'a'))")
     checkSqlGeneration("SELECT sort_array(array('b', 'd', 'c', 'a'))")
   }
