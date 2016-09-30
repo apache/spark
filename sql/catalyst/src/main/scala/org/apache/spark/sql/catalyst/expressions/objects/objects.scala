@@ -906,6 +906,8 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
 
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the value is null.
     val errMsgField = ctx.addReferenceObj(errMsg)
 
     val code = s"""
@@ -941,6 +943,8 @@ case class GetExternalRowField(
   private val errMsg = s"The ${index}th field '$fieldName' of input row cannot be null."
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the field is null.
     val errMsgField = ctx.addReferenceObj(errMsg)
     val row = child.genCode(ctx)
     val code = s"""
@@ -979,6 +983,8 @@ case class ValidateExternalType(child: Expression, expected: DataType)
   private val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the type doesn't match.
     val errMsgField = ctx.addReferenceObj(errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
