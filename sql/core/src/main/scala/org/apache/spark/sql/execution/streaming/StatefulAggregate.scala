@@ -99,6 +99,7 @@ case class StateStoreSaveExec(
     "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"))
 
   override protected def doExecute(): RDD[InternalRow] = {
+    metrics // force lazy init at driver
     assert(returnAllStates.nonEmpty,
       "Incorrect planning in IncrementalExecution, returnAllStates have not been set")
     val saveAndReturnFunc = if (returnAllStates.get) saveAndReturnAll _ else saveAndReturnUpdated _
