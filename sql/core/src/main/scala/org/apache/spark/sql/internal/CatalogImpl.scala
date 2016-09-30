@@ -178,10 +178,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Find the database with the specified name. This throws an [[AnalysisException]] when no
+   * Get the database with the specified name. This throws an [[AnalysisException]] when no
    * [[Database]] can be found.
    */
-  override def findDatabase(dbName: String): Database = {
+  override def getDatabase(dbName: String): Database = {
     if (sessionCatalog.databaseExists(dbName)) {
       makeDatabase(sessionCatalog.getDatabaseMetadata(dbName))
     } else {
@@ -190,18 +190,18 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Find the table with the specified name. This table can be a temporary table or a table in the
+   * Get the table with the specified name. This table can be a temporary table or a table in the
    * current database. This throws an [[AnalysisException]] when no [[Table]] can be found.
    */
-  override def findTable(tableName: String): Table = {
-    findTable(null, tableName)
+  override def getTable(tableName: String): Table = {
+    getTable(null, tableName)
   }
 
   /**
-   * Find the table with the specified name in the specified database. This throws an
+   * Get the table with the specified name in the specified database. This throws an
    * [[AnalysisException]] when no [[Table]] can be found.
    */
-  override def findTable(dbName: String, tableName: String): Table = {
+  override def getTable(dbName: String, tableName: String): Table = {
     val tableIdent = TableIdentifier(tableName, Option(dbName))
     val isTemporary = sessionCatalog.isTemporaryTable(tableIdent)
     if (isTemporary || sessionCatalog.tableExists(tableIdent)) {
@@ -212,19 +212,19 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Find the function with the specified name. This function can be a temporary function or a
+   * Get the function with the specified name. This function can be a temporary function or a
    * function in the current database. This throws an [[AnalysisException]] when no [[Function]]
    * can be found.
    */
-  override def findFunction(functionName: String): Function = {
-    findFunction(null, functionName)
+  override def getFunction(functionName: String): Function = {
+    getFunction(null, functionName)
   }
 
   /**
-   * Find the function with the specified name. This returns [[None]] when no [[Function]] can be
+   * Get the function with the specified name. This returns [[None]] when no [[Function]] can be
    * found.
    */
-  override def findFunction(dbName: String, functionName: String): Function = {
+  override def getFunction(dbName: String, functionName: String): Function = {
     val functionIdent = FunctionIdentifier(functionName, Option(dbName))
     if (sessionCatalog.functionExists(functionIdent)) {
       makeFunction(functionIdent)

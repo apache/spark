@@ -102,50 +102,50 @@ abstract class Catalog {
   def listColumns(dbName: String, tableName: String): Dataset[Column]
 
   /**
-   * Find the database with the specified name. This throws an AnalysisException when the database
+   * Get the database with the specified name. This throws an AnalysisException when the database
    * cannot be found.
    *
    * @since 2.1.0
    */
   @throws[AnalysisException]("database does not exist")
-  def findDatabase(dbName: String): Database
+  def getDatabase(dbName: String): Database
 
   /**
-   * Find the table with the specified name. This table can be a temporary table or a table in the
+   * Get the table with the specified name. This table can be a temporary table or a table in the
    * current database. This throws an AnalysisException when the table cannot be found.
    *
    * @since 2.1.0
    */
   @throws[AnalysisException]("table does not exist")
-  def findTable(tableName: String): Table
+  def getTable(tableName: String): Table
 
   /**
-   * Find the table with the specified name in the specified database. This throws an
+   * Get the table with the specified name in the specified database. This throws an
    * AnalysisException when the table cannot be found.
    *
    * @since 2.1.0
    */
   @throws[AnalysisException]("database or table does not exist")
-  def findTable(dbName: String, tableName: String): Table
+  def getTable(dbName: String, tableName: String): Table
 
   /**
-   * Find the function with the specified name. This function can be a temporary function or a
+   * Get the function with the specified name. This function can be a temporary function or a
    * function in the current database. This throws an AnalysisException when the function cannot
    * be found.
    *
    * @since 2.1.0
    */
   @throws[AnalysisException]("function does not exist")
-  def findFunction(functionName: String): Function
+  def getFunction(functionName: String): Function
 
   /**
-   * Find the function with the specified name. This throws an AnalysisException when the function
+   * Get the function with the specified name. This throws an AnalysisException when the function
    * cannot be found.
    *
    * @since 2.1.0
    */
   @throws[AnalysisException]("database or function does not exist")
-  def findFunction(dbName: String, functionName: String): Function
+  def getFunction(dbName: String, functionName: String): Function
 
   /**
    * Check if the database with the specified name exists.
