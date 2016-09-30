@@ -517,9 +517,9 @@ class HiveDDLSuite
 
       assert(sql("DESC FORMATTED tbl").collect().containsSlice(
         Seq(
-          Row("Num Buckets", "8", null),
-          Row("Bucket Columns", "id1", null),
-          Row("Sort Columns", "id, name", null)
+          Row("Num Buckets:", "1024", ""),
+          Row("Bucket Columns:", "[id]", ""),
+          Row("Sort Columns:", "[id, name]", "")
         )
       ))
     }
