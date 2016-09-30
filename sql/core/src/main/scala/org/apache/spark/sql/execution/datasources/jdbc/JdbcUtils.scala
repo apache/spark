@@ -657,10 +657,10 @@ object JdbcUtils extends Logging {
   /**
    * Compute the schema string for this RDD.
    */
-  def schemaString(df: DataFrame, url: String): String = {
+  def schemaString(schema: StructType, url: String): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
-    df.schema.fields foreach { field =>
+    schema.fields foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
       val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
       val nullable = if (field.nullable) "" else "NOT NULL"
@@ -702,17 +702,17 @@ object JdbcUtils extends Logging {
    * Creates a table according to the given schema.
    */
   def createTable(
-      df: DataFrame,
+      schema: StructType,
       url: String,
       table: String,
       createTableOptions: String,
       conn: Connection): Unit = {
-    val schema = schemaString(df, url)
+    val strSchema = schemaString(schema, url)
     // Create the table if the table didn't exist.
     // To allow certain options to append when create a new table, which can be
     // table_options or partition_options.
     // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-    val sql = s"CREATE TABLE $table ($schema) $createTableOptions"
+    val sql = s"CREATE TABLE $table ($strSchema) $createTableOptions"
     val statement = conn.createStatement
     try {
       statement.executeUpdate(sql)

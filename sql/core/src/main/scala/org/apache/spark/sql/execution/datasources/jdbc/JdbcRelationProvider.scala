@@ -77,7 +77,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, table)
-              createTable(df, url, table, createTableOptions, conn)
+              createTable(df.schema, url, table, createTableOptions, conn)
               saveTable(df, url, table, props)
             }
 
@@ -94,7 +94,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
             // Therefore, it is okay to do nothing here and then just return the relation below.
         }
       } else {
-        createTable(df, url, table, createTableOptions, conn)
+        createTable(df.schema, url, table, createTableOptions, conn)
         saveTable(df, url, table, props)
       }
     } finally {
