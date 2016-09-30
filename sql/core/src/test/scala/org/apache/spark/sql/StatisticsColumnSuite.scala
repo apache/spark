@@ -31,30 +31,17 @@ class StatisticsColumnSuite extends StatisticsTest {
   import testImplicits._
 
   test("parse analyze column commands") {
-    def assertAnalyzeColumnCommand(analyzeCommand: String, c: Class[_]) {
-      val parsed = spark.sessionState.sqlParser.parsePlan(analyzeCommand)
-      val operators = parsed.collect {
-        case a: AnalyzeColumnCommand => a
-        case o => o
-      }
-      assert(operators.size == 1)
-      if (operators.head.getClass != c) {
-        fail(
-          s"""$analyzeCommand expected command: $c, but got ${operators.head}
-             |parsed command:
-             |$parsed
-           """.stripMargin)
-      }
-    }
+    val tableName = "tbl"
 
-    val table = "table"
-    assertAnalyzeColumnCommand(
-      s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS key, value",
-      classOf[AnalyzeColumnCommand])
-
+    // we need to specify column names
     intercept[ParseException] {
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS")
+      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS")
     }
+
+    val analyzeSql = s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS key, value"
+    val parsed = spark.sessionState.sqlParser.parsePlan(analyzeSql)
+    val expected = AnalyzeColumnCommand(TableIdentifier(tableName), Seq("key", "value"))
+    comparePlans(parsed, expected)
   }
 
   test("analyzing columns of non-atomic types is not supported") {
