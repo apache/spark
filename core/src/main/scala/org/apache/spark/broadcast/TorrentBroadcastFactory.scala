@@ -39,7 +39,7 @@ private[spark] class TorrentBroadcastFactory extends BroadcastFactory {
       rdd: RDD[T],
       mode: BroadcastMode[T],
       isLocal: Boolean, id: Long): Broadcast[U] = {
-    new TorrentExecutorBroadcast[T, U](rdd.getNumPartitions, rdd.id, mode, id)
+    new TorrentExecutorBroadcast[T, U](rdd, mode, id)
   }
 
   override def stop() { }

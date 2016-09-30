@@ -29,7 +29,9 @@ import org.apache.hadoop.mapred.{FileSplit, TextInputFormat}
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.broadcast.BroadcastMode
 import org.apache.spark.rdd.RDDSuiteUtils._
+import org.apache.spark.storage.BroadcastBlockId
 import org.apache.spark.util.Utils
 
 class RDDSuite extends SparkFunSuite with SharedSparkContext {
@@ -1080,6 +1082,62 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
       assert(splitSizeSum <= maxSplitSize)
     })
     assert(totalPartitionCount == 10)
+  }
+
+  test("executor side broadcast for RDD") {
+    // Cache and materilize the RDD to be broadcasted on executors.
+    val rdd = sc.parallelize(1 to 4, 2).cache()
+    rdd.count()
+    val mode = new BroadcastMode[Int] {
+      override def transform(rows: Array[Int]): Array[Int] = rows
+      override def compatibleWith(other: BroadcastMode[Int]): Boolean = true
+    }
+    val broadcastedVal = sc.broadcastRDDOnExecutor[Int, Array[Int]](rdd, mode)
+    val collected = sc.parallelize(1 to 2, 2).map { _ =>
+      broadcastedVal.value.reduce(_ + _) // 1 + 2 + 3 + 4 = 10
+    }.collect()
+    assert(broadcastedVal.value.sum == 10)
+    assert(collected.sum == 20)
+  }
+
+  test("executor side broadcast for RDD: unbroadcast") {
+    // Cache and materilize the RDD to be broadcasted on executors.
+    val rdd = sc.parallelize(1 to 4, 2).cache()
+    rdd.count()
+    val mode = new BroadcastMode[Int] {
+      override def transform(rows: Array[Int]): Int = 1
+      override def compatibleWith(other: BroadcastMode[Int]): Boolean = true
+    }
+    val broadcastedVal = sc.broadcastRDDOnExecutor[Int, Int](rdd, mode)
+    val collected = sc.parallelize(1 to 2, 2).map { _ =>
+      broadcastedVal.value
+    }.collect()
+    val blockId = BroadcastBlockId(broadcastedVal.id)
+    assert(sc.env.blockManager.getSingle(blockId).isDefined)
+    sc.env.blockManager.releaseLock(blockId)
+    // Unbroadcast it.
+    sc.env.broadcastManager.unbroadcast(broadcastedVal.id, true, true)
+    assert(sc.env.blockManager.getSingle(blockId).isEmpty)
+  }
+
+  test("executor side broadcast for RDD: unpersist RDD") {
+    // Cache and materilize the RDD to be broadcasted on executors.
+    val rdd = sc.parallelize(1 to 4, 2).cache()
+    rdd.count()
+    val mode = new BroadcastMode[Int] {
+      override def transform(rows: Array[Int]): Int = 1
+      override def compatibleWith(other: BroadcastMode[Int]): Boolean = true
+    }
+    val broadcastedVal = sc.broadcastRDDOnExecutor[Int, Int](rdd, mode)
+    // If the RDD to be broadasted on executors is unpersisted before the broadcast variable is
+    // used, we can't access the RDD data so the exception will be thrown.
+    rdd.unpersist()
+    val thrown = intercept[SparkException] {
+      val collected = sc.parallelize(1 to 2, 2).map { _ =>
+        broadcastedVal.value
+      }.collect()
+    }
+    assert(thrown.getMessage.contains("Failed to get rdd_"))
   }
 
   // NOTE

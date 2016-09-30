@@ -1406,6 +1406,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Broadcast a read-only variable to the cluster, returning a
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
+   *
+   * Notice that the RDD to be broadcasted should be cached and materilized first so we can
+   * access its data on the executors. If the RDD is unpersisted before the broadcast variable
+   * is used on the executors, an exception will be thrown because the RDD data can't be accessed
+   * anymore on the executors.
    */
   @DeveloperApi
   def broadcastRDDOnExecutor[T: ClassTag, U: ClassTag](

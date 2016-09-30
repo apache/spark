@@ -21,7 +21,7 @@ package org.apache.spark.broadcast
  * Marker trait to identify the shape in which tuples are broadcasted. Typical examples of this are
  * identity (tuples remain unchanged) or hashed (tuples are converted into some hash index).
  */
-trait BroadcastMode[T] {
+trait BroadcastMode[T] extends Serializable {
   def transform(rows: Array[T]): Any
 
   /**

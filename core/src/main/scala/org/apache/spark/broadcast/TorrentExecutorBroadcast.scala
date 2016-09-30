@@ -25,6 +25,7 @@ import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockResult, BroadcastBlockId, RDDBlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
@@ -45,17 +46,20 @@ import org.apache.spark.util.Utils
  * @tparam T The type of the element of RDD to be broadcasted.
  * @tparam U The type of object transformed from the collection of elements of the RDD.
  *
- * @param numBlocks Total number of blocks this broadcast variable contains.
- * @param rddId The id of the RDD to be broadcasted on executors.
+ @ @param rdd The RDD to be broadcasted on executors.
  * @param mode The [[BroadcastMode]] object used to transform the result of RDD to the object which
  *             will be stored in the [[BlockManager]].
  * @param id A unique identifier for the broadcast variable.
  */
 private[spark] class TorrentExecutorBroadcast[T: ClassTag, U: ClassTag](
-    numBlocks: Int,
-    rddId: Int,
+    @transient private val rdd: RDD[T],
     mode: BroadcastMode[T],
     id: Long) extends Broadcast[U](id) with Logging with Serializable {
+
+  // Total number of blocks this broadcast variable contains.
+  private val numBlocks: Int = rdd.getNumPartitions
+  // The id of the RDD to be broadcasted on executors.
+  private val rddId: Int = rdd.id
 
   /**
    * Value of the broadcast object on executors. This is reconstructed by [[readBroadcastBlock]],
