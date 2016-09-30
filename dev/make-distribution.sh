@@ -135,7 +135,7 @@ if [ "$NAME" == "none" ]; then
 fi
 
 echo "Spark version is $VERSION"
-
+VERSION_SET=$("$MVN" versions:set -DnewVersion=$VERSION | tail -n 1)
 if [ "$MAKE_TGZ" == "true" ]; then
   echo "Making spark-$VERSION-bin-$NAME.tgz"
 else
