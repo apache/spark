@@ -34,6 +34,7 @@ class DecisionTreeClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import DecisionTreeClassifierSuite.compareAPIs
+  import testImplicits._
 
   private var categoricalDataPointsRDD: RDD[LabeledPoint] = _
   private var orderedLabeledPointsWithLabel0RDD: RDD[LabeledPoint] = _
@@ -345,7 +346,7 @@ class DecisionTreeClassifierSuite
   }
 
   test("Fitting without numClasses in metadata") {
-    val df: DataFrame = spark.createDataFrame(TreeTests.featureImportanceData(sc))
+    val df: DataFrame = TreeTests.featureImportanceData(sc).toDF()
     val dt = new DecisionTreeClassifier().setMaxDepth(1)
     dt.fit(df)
   }
