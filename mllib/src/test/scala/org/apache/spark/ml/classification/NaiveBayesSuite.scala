@@ -25,7 +25,7 @@ import breeze.stats.distributions.{Multinomial => BrzMultinomial}
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.classification.NaiveBayes.{Bernoulli, Multinomial}
 import org.apache.spark.ml.classification.NaiveBayesSuite._
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
