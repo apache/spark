@@ -589,7 +589,7 @@ private[columnar] case class STRUCT(dataType: StructType)
 private[columnar] case class ARRAY(dataType: ArrayType)
   extends ColumnType[UnsafeArrayData] with DirectCopyColumnType[UnsafeArrayData] {
 
-  override def defaultSize: Int = 16
+  override def defaultSize: Int = 28
 
   override def setField(row: MutableRow, ordinal: Int, value: UnsafeArrayData): Unit = {
     row.update(ordinal, value)
@@ -601,7 +601,7 @@ private[columnar] case class ARRAY(dataType: ArrayType)
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     val unsafeArray = getField(row, ordinal)
-    8 + unsafeArray.getSizeInBytes
+    4 + unsafeArray.getSizeInBytes
   }
 
   override def append(value: UnsafeArrayData, buffer: ByteBuffer): Unit = {
@@ -628,7 +628,7 @@ private[columnar] case class ARRAY(dataType: ArrayType)
 private[columnar] case class MAP(dataType: MapType)
   extends ColumnType[UnsafeMapData] with DirectCopyColumnType[UnsafeMapData] {
 
-  override def defaultSize: Int = 32
+  override def defaultSize: Int = 68
 
   override def setField(row: MutableRow, ordinal: Int, value: UnsafeMapData): Unit = {
     row.update(ordinal, value)
@@ -640,7 +640,7 @@ private[columnar] case class MAP(dataType: MapType)
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     val unsafeMap = getField(row, ordinal)
-    8 + unsafeMap.getSizeInBytes
+    4 + unsafeMap.getSizeInBytes
   }
 
   override def append(value: UnsafeMapData, buffer: ByteBuffer): Unit = {
