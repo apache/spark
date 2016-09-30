@@ -46,14 +46,12 @@ private[scheduler] object BlacklistTracker extends Logging {
         conf.get(config.BLACKLIST_LEGACY_TIMEOUT_CONF) match {
           case Some(legacyTimeout) =>
             if (legacyTimeout == 0) {
-              logWarning(s"Turning off blacklisting due to legacy configuaration:" +
-                s" $legacyKey == 0")
+              logWarning(s"Turning off blacklisting due to legacy configuration: $legacyKey == 0")
               false
             } else {
               // mostly this is necessary just for tests, since real users that want the blacklist
               // will get it anyway by default
-              logWarning(s"Turning on blacklisting due to legacy configuration:" +
-                s" $legacyKey > 0")
+              logWarning(s"Turning on blacklisting due to legacy configuration: $legacyKey > 0")
               true
             }
           case None =>

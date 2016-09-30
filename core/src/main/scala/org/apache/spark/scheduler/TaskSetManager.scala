@@ -48,10 +48,10 @@ import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
  *                        task set will be aborted
  */
 private[spark] class TaskSetManager(
-    val sched: TaskSchedulerImpl,
+    sched: TaskSchedulerImpl,
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
-    val clock: Clock = new SystemClock()) extends Schedulable with Logging {
+    clock: Clock = new SystemClock()) extends Schedulable with Logging {
 
   private val conf = sched.sc.conf
 
@@ -264,10 +264,10 @@ private[spark] class TaskSetManager(
   }
 
   private def isTaskBlacklistedOnExecOrNode(index: Int, execId: String, host: String): Boolean = {
-    taskSetBlacklistOpt.map { blacklist =>
+    taskSetBlacklistOpt.exists { blacklist =>
       blacklist.isNodeBlacklistedForTask(host, index) ||
         blacklist.isExecutorBlacklistedForTask(execId, index)
-    }.getOrElse(false)
+    }
   }
 
   /**
@@ -412,10 +412,10 @@ private[spark] class TaskSetManager(
       maxLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
-    val offerBlacklisted = taskSetBlacklistOpt.map { blacklist =>
+    val offerBlacklisted = taskSetBlacklistOpt.exists { blacklist =>
       blacklist.isNodeBlacklistedForTaskSet(host) ||
         blacklist.isExecutorBlacklistedForTaskSet(execId)
-    }.getOrElse(false)
+    }
     if (!isZombie && !offerBlacklisted) {
       val curTime = clock.getTimeMillis()
 
@@ -477,12 +477,14 @@ private[spark] class TaskSetManager(
             s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit} bytes)")
 
           sched.dagScheduler.taskStarted(task, info)
-          return Some(new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
+          Some(new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
             taskName, index, serializedTask))
         case _ =>
+          None
       }
+    } else {
+      None
     }
-    None
   }
 
   private def maybeFinishTaskSet() {
@@ -631,7 +633,7 @@ private[spark] class TaskSetManager(
           }
           if (blacklistedEverywhere) {
             val partition = tasks(indexInTaskSet).partitionId
-            abort(s"Aborting ${taskSet} because task $indexInTaskSet (partition $partition) " +
+            abort(s"Aborting $taskSet because task $indexInTaskSet (partition $partition) " +
               s"cannot run anywhere due to node and executor blacklist.  Blacklisting behavior " +
               s"can be configured via spark.blacklist.*.")
           }
