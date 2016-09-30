@@ -37,7 +37,7 @@ test:
             dist_name="$1"
             build_flags="$2"
             file_name="spark-${version}-bin-${dist_name}.tgz"
-
+            sudo apt-get --assume-yes install r-base r-base-dev 
             ./dev/make-distribution.sh --name $dist_name --tgz $build_flags
             curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T $file_name "https://api.bintray.com/content/palantir/releases/spark/${version}/org/apache/spark/dist/${file_name}"
           }
