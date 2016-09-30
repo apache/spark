@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -47,8 +46,6 @@ case class CacheTableCommand(
 
     Seq.empty[Row]
   }
-
-  override def output: Seq[Attribute] = Seq.empty
 }
 
 
@@ -58,8 +55,6 @@ case class UncacheTableCommand(tableIdent: TableIdentifier) extends RunnableComm
     sparkSession.catalog.uncacheTable(tableIdent.quotedString)
     Seq.empty[Row]
   }
-
-  override def output: Seq[Attribute] = Seq.empty
 }
 
 /**
@@ -71,6 +66,4 @@ case object ClearCacheCommand extends RunnableCommand {
     sparkSession.catalog.clearCache()
     Seq.empty[Row]
   }
-
-  override def output: Seq[Attribute] = Seq.empty
 }

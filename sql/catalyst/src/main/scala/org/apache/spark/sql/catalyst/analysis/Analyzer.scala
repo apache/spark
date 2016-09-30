@@ -64,13 +64,7 @@ class Analyzer(
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
-  def resolver: Resolver = {
-    if (conf.caseSensitiveAnalysis) {
-      caseSensitiveResolution
-    } else {
-      caseInsensitiveResolution
-    }
-  }
+  def resolver: Resolver = conf.resolver
 
   protected val fixedPoint = FixedPoint(maxIterations)
 
@@ -84,8 +78,9 @@ class Analyzer(
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      new UnresolvedOrdinalSubstitution(conf)),
+      new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
+      ResolveTableValuedFunctions ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveDeserializer ::
@@ -107,6 +102,7 @@ class Analyzer(
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
+      ResolveInlineTables ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -120,15 +116,14 @@ class Analyzer(
   )
 
   /**
-   * Substitute child plan with cte definitions
+   * Analyze cte definitions and substitute child plan with analyzed cte definitions.
    */
   object CTESubstitution extends Rule[LogicalPlan] {
-    // TODO allow subquery to define CTE
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators  {
       case With(child, relations) =>
         substituteCTE(child, relations.foldLeft(Seq.empty[(String, LogicalPlan)]) {
           case (resolved, (name, relation)) =>
-            resolved :+ name -> ResolveRelations(substituteCTE(relation, resolved))
+            resolved :+ name -> execute(substituteCTE(relation, resolved))
         })
       case other => other
     }
@@ -138,7 +133,7 @@ class Analyzer(
         case u : UnresolvedRelation =>
           val substituted = cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
             .map(_._2).map { relation =>
-              val withAlias = u.alias.map(SubqueryAlias(_, relation))
+              val withAlias = u.alias.map(SubqueryAlias(_, relation, None))
               withAlias.getOrElse(relation)
             }
           substituted.getOrElse(u)
@@ -146,7 +141,7 @@ class Analyzer(
           // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
           other transformExpressions {
             case e: SubqueryExpression =>
-              e.withNewPlan(substituteCTE(e.query, cteRelations))
+              e.withNewPlan(substituteCTE(e.plan, cteRelations))
           }
       }
     }
@@ -377,7 +372,15 @@ class Analyzer(
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
         val singleAgg = aggregates.size == 1
         def outputName(value: Literal, aggregate: Expression): String = {
-          if (singleAgg) value.toString else value + "_" + aggregate.sql
+          if (singleAgg) {
+            value.toString
+          } else {
+            val suffix = aggregate match {
+              case n: NamedExpression => n.name
+              case _ => aggregate.sql
+            }
+            value + "_" + suffix
+          }
         }
         if (aggregates.forall(a => PivotFirst.supportsDataType(a.dataType))) {
           // Since evaluating |pivotValues| if statements for each input row can get slow this is an
@@ -718,9 +721,9 @@ class Analyzer(
       case s @ Sort(orders, global, child)
         if orders.exists(_.child.isInstanceOf[UnresolvedOrdinal]) =>
         val newOrders = orders map {
-          case s @ SortOrder(UnresolvedOrdinal(index), direction) =>
+          case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrdering) =>
             if (index > 0 && index <= child.output.size) {
-              SortOrder(child.output(index - 1), direction)
+              SortOrder(child.output(index - 1), direction, nullOrdering)
             } else {
               s.failAnalysis(
                 s"ORDER BY position $index is not in select list " +
@@ -1007,7 +1010,7 @@ class Analyzer(
           failOnOuterReference(j)
           failOnOuterReferenceInSubTree(left, "a RIGHT OUTER JOIN")
           j
-        case j @ Join(_, right, jt, _) if jt != Inner =>
+        case j @ Join(_, right, jt, _) if !jt.isInstanceOf[InnerLike] =>
           failOnOuterReference(j)
           failOnOuterReferenceInSubTree(right, "a LEFT (OUTER) JOIN")
           j
@@ -1091,7 +1094,7 @@ class Analyzer(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
       // Step 1: Resolve the outer expressions.
       var previous: LogicalPlan = null
-      var current = e.query
+      var current = e.plan
       do {
         // Try to resolve the subquery plan using the regular analyzer.
         previous = current
@@ -1659,27 +1662,17 @@ class Analyzer(
         }
       }.toSeq
 
-      // Third, for every Window Spec, we add a Window operator and set currentChild as the
-      // child of it.
-      var currentChild = child
-      var i = 0
-      while (i < groupedWindowExpressions.size) {
-        val ((partitionSpec, orderSpec), windowExpressions) = groupedWindowExpressions(i)
-        // Set currentChild to the newly created Window operator.
-        currentChild =
-          Window(
-            windowExpressions,
-            partitionSpec,
-            orderSpec,
-            currentChild)
+      // Third, we aggregate them by adding each Window operator for each Window Spec and then
+      // setting this to the child of the next Window operator.
+      val windowOps =
+        groupedWindowExpressions.foldLeft(child) {
+          case (last, ((partitionSpec, orderSpec), windowExpressions)) =>
+            Window(windowExpressions, partitionSpec, orderSpec, last)
+        }
 
-        // Move to next Window Spec.
-        i += 1
-      }
-
-      // Finally, we create a Project to output currentChild's output
+      // Finally, we create a Project to output windowOps's output
       // newExpressionsWithWindowFunctions.
-      Project(currentChild.output ++ newExpressionsWithWindowFunctions, currentChild)
+      Project(windowOps.output ++ newExpressionsWithWindowFunctions, windowOps)
     } // end of addWindow
 
     // We have to use transformDown at here to make sure the rule of
@@ -1903,7 +1896,7 @@ class Analyzer(
         joinedCols ++
           lUniqueOutput.map(_.withNullability(true)) ++
           rUniqueOutput.map(_.withNullability(true))
-      case Inner =>
+      case _ : InnerLike =>
         leftKeys ++ lUniqueOutput ++ rUniqueOutput
       case _ =>
         sys.error("Unsupported natural join type " + joinType)
@@ -2057,7 +2050,7 @@ class Analyzer(
  */
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case SubqueryAlias(_, child) => child
+    case SubqueryAlias(_, child, _) => child
   }
 }
 

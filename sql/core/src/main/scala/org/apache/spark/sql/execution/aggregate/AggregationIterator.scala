@@ -73,9 +73,10 @@ abstract class AggregationIterator(
       startingInputBufferOffset: Int): Array[AggregateFunction] = {
     var mutableBufferOffset = 0
     var inputBufferOffset: Int = startingInputBufferOffset
-    val functions = new Array[AggregateFunction](expressions.length)
+    val expressionsLength = expressions.length
+    val functions = new Array[AggregateFunction](expressionsLength)
     var i = 0
-    while (i < expressions.length) {
+    while (i < expressionsLength) {
       val func = expressions(i).aggregateFunction
       val funcWithBoundReferences: AggregateFunction = expressions(i).mode match {
         case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
@@ -171,7 +172,7 @@ abstract class AggregationIterator(
             case PartialMerge | Final =>
               (buffer: MutableRow, row: InternalRow) => ae.merge(buffer, row)
           }
-      }
+      }.toArray
       // This projection is used to merge buffer values for all expression-based aggregates.
       val aggregationBufferSchema = functions.flatMap(_.aggBufferAttributes)
       val updateProjection =
@@ -234,7 +235,22 @@ abstract class AggregationIterator(
       val resultProjection = UnsafeProjection.create(
         groupingAttributes ++ bufferAttributes,
         groupingAttributes ++ bufferAttributes)
+
+      // TypedImperativeAggregate stores generic object in aggregation buffer, and requires
+      // calling serialization before shuffling. See [[TypedImperativeAggregate]] for more info.
+      val typedImperativeAggregates: Array[TypedImperativeAggregate[_]] = {
+        aggregateFunctions.collect {
+          case (ag: TypedImperativeAggregate[_]) => ag
+        }
+      }
+
       (currentGroupingKey: UnsafeRow, currentBuffer: MutableRow) => {
+        // Serializes the generic object stored in aggregation buffer
+        var i = 0
+        while (i < typedImperativeAggregates.length) {
+          typedImperativeAggregates(i).serializeAggregateBufferInPlace(currentBuffer)
+          i += 1
+        }
         resultProjection(joinedRow(currentGroupingKey, currentBuffer))
       }
     } else {

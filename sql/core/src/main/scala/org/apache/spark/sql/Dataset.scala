@@ -29,7 +29,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
-import org.apache.spark.api.python.PythonRDD
+import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand}
-import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.streaming.{DataStreamWriter, StreamingQuery}
@@ -589,9 +589,9 @@ class Dataset[T] private[sql](
   def stat: DataFrameStatFunctions = new DataFrameStatFunctions(toDF())
 
   /**
-   * Cartesian join with another [[DataFrame]].
+   * Join with another [[DataFrame]].
    *
-   * Note that cartesian joins are very expensive without an extra filter that can be pushed down.
+   * Behaves as an INNER JOIN and requires a subsequent join predicate.
    *
    * @param right Right side of the join operation.
    *
@@ -761,6 +761,20 @@ class Dataset[T] private[sql](
     withPlan {
       plan.copy(condition = cond)
     }
+  }
+
+  /**
+   * Explicit cartesian join with another [[DataFrame]].
+   *
+   * Note that cartesian joins are very expensive without an extra filter that can be pushed down.
+   *
+   * @param right Right side of the join operation.
+   *
+   * @group untypedrel
+   * @since 2.0.0
+   */
+  def crossJoin(right: Dataset[_]): DataFrame = withPlan {
+    Join(logicalPlan, right.logicalPlan, joinType = Cross, None)
   }
 
   /**
@@ -967,7 +981,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def as(alias: String): Dataset[T] = withTypedPlan {
-    SubqueryAlias(alias, logicalPlan)
+    SubqueryAlias(alias, logicalPlan, None)
   }
 
   /**
@@ -2553,8 +2567,12 @@ class Dataset[T] private[sql](
   }
 
   private[sql] def collectToPython(): Int = {
+    EvaluatePython.registerPicklers()
     withNewExecutionId {
-      PythonRDD.collectAndServe(javaToPython.rdd)
+      val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
+      val iter = new SerDeUtil.AutoBatchedPickler(
+        queryExecution.executedPlan.executeCollect().iterator.map(toJava))
+      PythonRDD.serveIterator(iter, "serve-DataFrame")
     }
   }
 

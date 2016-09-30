@@ -83,7 +83,7 @@ abstract class Classifier[
       case Row(label: Double, features: Vector) =>
         require(label % 1 == 0 && label >= 0 && label < numClasses, s"Classifier was given" +
           s" dataset with invalid label $label.  Labels must be integers in range" +
-          s" [0, 1, ..., $numClasses), where numClasses=$numClasses.")
+          s" [0, $numClasses).")
         LabeledPoint(label, features)
     }
   }

@@ -96,10 +96,7 @@ class SparkSession private(
    */
   @transient
   private[sql] lazy val sharedState: SharedState = {
-    existingSharedState.getOrElse(
-      SparkSession.reflect[SharedState, SparkContext](
-        SparkSession.sharedStateClassName(sparkContext.conf),
-        sparkContext))
+    existingSharedState.getOrElse(new SharedState(sparkContext))
   }
 
   /**
@@ -913,15 +910,7 @@ object SparkSession {
   /** Reference to the root SparkSession. */
   private val defaultSession = new AtomicReference[SparkSession]
 
-  private val HIVE_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
   private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
-
-  private def sharedStateClassName(conf: SparkConf): String = {
-    conf.get(CATALOG_IMPLEMENTATION) match {
-      case "hive" => HIVE_SHARED_STATE_CLASS_NAME
-      case "in-memory" => classOf[SharedState].getCanonicalName
-    }
-  }
 
   private def sessionStateClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
@@ -948,12 +937,11 @@ object SparkSession {
   }
 
   /**
-   * Return true if Hive classes can be loaded, otherwise false.
+   * @return true if Hive classes can be loaded, otherwise false.
    */
   private[spark] def hiveClassesArePresent: Boolean = {
     try {
       Utils.classForName(HIVE_SESSION_STATE_CLASS_NAME)
-      Utils.classForName(HIVE_SHARED_STATE_CLASS_NAME)
       Utils.classForName("org.apache.hadoop.hive.conf.HiveConf")
       true
     } catch {

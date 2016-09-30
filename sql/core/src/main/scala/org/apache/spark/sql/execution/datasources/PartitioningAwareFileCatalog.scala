@@ -76,7 +76,15 @@ abstract class PartitioningAwareFileCatalog(
       paths.flatMap { path =>
         // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
         val fs = path.getFileSystem(hadoopConf)
-        val qualifiedPath = fs.makeQualified(path)
+        val qualifiedPathPre = fs.makeQualified(path)
+        val qualifiedPath: Path = if (qualifiedPathPre.isRoot && !qualifiedPathPre.isAbsolute) {
+          // SPARK-17613: Always append `Path.SEPARATOR` to the end of parent directories,
+          // because the `leafFile.getParent` would have returned an absolute path with the
+          // separator at the end.
+          new Path(qualifiedPathPre, Path.SEPARATOR)
+        } else {
+          qualifiedPathPre
+        }
 
         // There are three cases possible with each path
         // 1. The path is a directory and has children files in it. Then it must be present in
@@ -126,7 +134,7 @@ abstract class PartitioningAwareFileCatalog(
         PartitioningUtils.parsePartitions(
           leafDirs,
           PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled(),
+          typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
           basePaths = basePaths)
     }
   }

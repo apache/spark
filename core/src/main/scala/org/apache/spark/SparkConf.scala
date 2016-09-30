@@ -56,10 +56,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   private val settings = new ConcurrentHashMap[String, String]()
 
-  private val reader = new ConfigReader(new SparkConfigProvider(settings))
-  reader.bindEnv(new ConfigProvider {
-    override def get(key: String): Option[String] = Option(getenv(key))
-  })
+  @transient private lazy val reader: ConfigReader = {
+    val _reader = new ConfigReader(new SparkConfigProvider(settings))
+    _reader.bindEnv(new ConfigProvider {
+      override def get(key: String): Option[String] = Option(getenv(key))
+    })
+    _reader
+  }
 
   if (loadDefaults) {
     loadFromSystemProperties(false)
@@ -418,6 +421,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     settings.containsKey(key) ||
       configsWithAlternatives.get(key).toSeq.flatten.exists { alt => contains(alt.key) }
   }
+
+  private[spark] def contains(entry: ConfigEntry[_]): Boolean = contains(entry.key)
 
   /** Copy this object */
   override def clone: SparkConf = {

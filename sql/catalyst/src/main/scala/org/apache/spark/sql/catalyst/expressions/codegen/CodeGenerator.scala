@@ -23,6 +23,7 @@ import java.util.{Map => JavaMap}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleCompiler}
@@ -584,21 +585,24 @@ class CodegenContext {
    * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(row: String, expressions: Seq[String]): String = {
-    if (row == null) {
+    if (row == null || currentVars != null) {
       // Cannot split these expressions because they are not created from a row object.
       return expressions.mkString("\n")
     }
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
-      // We can't know how many byte code will be generated, so use the number of bytes as limit
-      if (blockBuilder.length > 64 * 1000) {
-        blocks.append(blockBuilder.toString())
+      // We can't know how many bytecode will be generated, so use the length of source code
+      // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
+      // also not be too small, or it will have many function calls (for wide table), see the
+      // results in BenchmarkWideTable.
+      if (blockBuilder.length > 1024) {
+        blocks += blockBuilder.toString()
         blockBuilder.clear()
       }
       blockBuilder.append(code)
     }
-    blocks.append(blockBuilder.toString())
+    blocks += blockBuilder.toString()
 
     if (blocks.length == 1) {
       // inline execution if only one block
@@ -659,10 +663,6 @@ class CodegenContext {
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
     val codes = commonExprs.map { e =>
       val expr = e.head
-      val fnName = freshName("evalExpr")
-      val isNull = s"${fnName}IsNull"
-      val value = s"${fnName}Value"
-
       // Generate the code for this expression tree.
       val code = expr.genCode(this)
       val state = SubExprEliminationState(code.isNull, code.value)
@@ -911,14 +911,19 @@ object CodeGenerator extends Logging {
     codeAttrField.setAccessible(true)
     classes.foreach { case (_, classBytes) =>
       CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
-      val cf = new ClassFile(new ByteArrayInputStream(classBytes))
-      cf.methodInfos.asScala.foreach { method =>
-        method.getAttributes().foreach { a =>
-          if (a.getClass.getName == codeAttr.getName) {
-            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(
-              codeAttrField.get(a).asInstanceOf[Array[Byte]].length)
+      try {
+        val cf = new ClassFile(new ByteArrayInputStream(classBytes))
+        cf.methodInfos.asScala.foreach { method =>
+          method.getAttributes().foreach { a =>
+            if (a.getClass.getName == codeAttr.getName) {
+              CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(
+                codeAttrField.get(a).asInstanceOf[Array[Byte]].length)
+            }
           }
         }
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Error calculating stats of compiled class.", e)
       }
     }
   }

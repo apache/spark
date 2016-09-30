@@ -123,6 +123,7 @@ of the most common options to set are:
     Number of cores to use for the driver process, only in cluster mode.
   </td>
 </tr>
+<tr>
   <td><code>spark.driver.maxResultSize</code></td>
   <td>1g</td>
   <td>
@@ -217,7 +218,7 @@ Apart from these, the following properties are also available, and may be useful
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
     Instead, please set this through the <code>--driver-class-path</code> command line option or in
-    your default properties file.</td>
+    your default properties file.
   </td>
 </tr>
 <tr>
@@ -244,7 +245,7 @@ Apart from these, the following properties are also available, and may be useful
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
     Instead, please set this through the <code>--driver-library-path</code> command line option or in
-    your default properties file.</td>
+    your default properties file.
   </td>
 </tr>
 <tr>
@@ -559,6 +560,29 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.io.compression.codec</code>.
   </td>
 </tr>
+<tr>
+  <td><code>spark.io.encryption.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enable IO encryption. Only supported in YARN mode.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.encryption.keySizeBits</code></td>
+  <td>128</td>
+  <td>
+    IO encryption key size in bits. Supported values are 128, 192 and 256.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.encryption.keygen.algorithm</code></td>
+  <td>HmacSHA1</td>
+  <td>
+    The algorithm to use when generating the IO encryption key. The supported algorithms are
+    described in the KeyGenerator section of the Java Cryptography Architecture Standard Algorithm
+    Name Documentation.
+  </td>
+</tr>
 </table>
 
 #### Spark UI
@@ -624,6 +648,28 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many stages the Spark UI and status APIs remember before garbage
     collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.retainedTasks</code></td>
+  <td>100000</td>
+  <td>
+    How many tasks the Spark UI and status APIs remember before garbage
+    collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.reverseProxy</code></td>
+  <td>false</td>
+  <td>
+    Enable running Spark Master as reverse proxy for worker and application UIs. In this mode, Spark master will reverse proxy the worker and application UIs to enable access without requiring direct access to their hosts. Use it with caution, as worker and application UI will not be accessible directly, you will only be able to access them through spark master/proxy public URL. This setting affects all the workers and application UIs running in the cluster and must be set on all the workers, drivers and masters.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.reverseProxyUrl</code></td>
+  <td></td>
+  <td>
+    This is the URL where your proxy is running. This URL is for proxy which is running in front of Spark Master. This is useful when running proxy for authentication e.g. OAuth proxy. Make sure this is a complete URL including scheme (http/https) and port to reach your proxy.
   </td>
 </tr>
 <tr>
@@ -942,7 +988,8 @@ Apart from these, the following properties are also available, and may be useful
     <td>10s</td>
     <td>Interval between each executor's heartbeats to the driver.  Heartbeats let
     the driver know that the executor is still alive and update it with metrics for in-progress
-    tasks.</td>
+    tasks. spark.executor.heartbeatInterval should be significantly less than
+    spark.network.timeout</td>
 </tr>
 <tr>
   <td><code>spark.files.fetchTimeout</code></td>
@@ -1022,10 +1069,31 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.blockManager.port</code></td>
+  <td>(value of spark.blockManager.port)</td>
+  <td>
+    Driver-specific port for the block manager to listen on, for cases where it cannot use the same
+    configuration as executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.bindAddress</code></td>
+  <td>(value of spark.driver.host)</td>
+  <td>
+    <p>Hostname or IP address where to bind listening sockets. This config overrides the SPARK_LOCAL_IP
+    environment variable (see below).</p>
+
+    <p>It also allows a different address from the local one to be advertised to executors or external systems.
+    This is useful, for example, when running containers with bridged networking. For this to properly work,
+    the different ports used by the driver (RPC, block manager and UI) need to be forwarded from the
+    container's host.</p>
+  </td>
+</tr>
+<tr>
   <td><code>spark.driver.host</code></td>
   <td>(local hostname)</td>
   <td>
-    Hostname or IP address for the driver to listen on.
+    Hostname or IP address for the driver.
     This is used for communicating with the executors and the standalone Master.
   </td>
 </tr>
@@ -1472,6 +1540,9 @@ Apart from these, the following properties are also available, and may be useful
         <td>
             <p>Whether to enable SSL connections on all supported protocols.</p>
 
+            <p>When <code>spark.ssl.enabled</code> is configured, <code>spark.ssl.protocol</code>
+            is required.</p>
+
             <p>All the SSL settings like <code>spark.ssl.xxx</code> where <code>xxx</code> is a
             particular configuration property, denote the global configuration for all the supported
             protocols. In order to override the global configuration for the particular protocol,
@@ -1752,6 +1823,14 @@ showDF(properties, numRows = 200, truncate = FALSE)
     Executable for executing R scripts in client modes for driver. Ignored in cluster modes.
   </td>
 </tr>
+<tr>
+  <td><code>spark.r.shell.command</code></td>
+  <td>R</td>
+  <td>
+    Executable for executing sparkR shell in client modes for driver. Ignored in cluster modes. It is the same as environment variable <code>SPARKR_DRIVER_R</code>, but take precedence over it.
+    <code>spark.r.shell.command</code> is used for sparkR shell while <code>spark.r.driver.command</code> is used for running R script.
+  </td>
+</tr>
 </table>
 
 #### Deploy
@@ -1818,7 +1897,8 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>SPARKR_DRIVER_R</code></td>
-    <td>R binary executable to use for SparkR shell (default is <code>R</code>).</td>
+    <td>R binary executable to use for SparkR shell (default is <code>R</code>).
+    Property <code>spark.r.shell.command</code> take precedence if it is set</td>
   </tr>
   <tr>
     <td><code>SPARK_LOCAL_IP</code></td>

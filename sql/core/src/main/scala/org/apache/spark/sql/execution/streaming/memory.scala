@@ -77,7 +77,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     logDebug(s"Adding ds: $ds")
     this.synchronized {
       currentOffset = currentOffset + 1
-      batches.append(ds)
+      batches += ds
       currentOffset
     }
   }
@@ -159,7 +159,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
 
         case InternalOutputModes.Complete =>
           batches.clear()
-          batches.append(AddedData(batchId, data.collect()))
+          batches += AddedData(batchId, data.collect())
 
         case _ =>
           throw new IllegalArgumentException(

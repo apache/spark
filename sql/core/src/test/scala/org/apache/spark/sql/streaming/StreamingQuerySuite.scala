@@ -156,6 +156,30 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
     )
   }
 
+  testQuietly("StreamExecution metadata garbage collection") {
+    val inputData = MemoryStream[Int]
+    val mapped = inputData.toDS().map(6 / _)
+
+    // Run 3 batches, and then assert that only 1 metadata file is left at the end
+    // since the first 2 should have been purged.
+    testStream(mapped)(
+      AddData(inputData, 1, 2),
+      CheckAnswer(6, 3),
+      AddData(inputData, 1, 2),
+      CheckAnswer(6, 3, 6, 3),
+      AddData(inputData, 4, 6),
+      CheckAnswer(6, 3, 6, 3, 1, 1),
+
+      AssertOnQuery("metadata log should contain only one file") { q =>
+        val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
+        val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
+        val toTest = logFileNames.filter(! _.endsWith(".crc"))  // Workaround for SPARK-17475
+        assert(toTest.size == 1 && toTest.head == "2")
+        true
+      }
+    )
+  }
+
   /**
    * A [[StreamAction]] to test the behavior of `StreamingQuery.awaitTermination()`.
    *

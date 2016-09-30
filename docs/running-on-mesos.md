@@ -207,6 +207,16 @@ The scheduler will start executors round-robin on the offers Mesos
 gives it, but there are no spread guarantees, as Mesos does not
 provide such guarantees on the offer stream.
 
+In this mode spark executors will honor port allocation if such is
+provided from the user. Specifically if the user defines
+`spark.executor.port` or `spark.blockManager.port` in Spark configuration,
+the mesos scheduler will check the available offers for a valid port
+range containing the port numbers. If no such range is available it will
+not launch any task. If no restriction is imposed on port numbers by the
+user, ephemeral ports are used as usual. This port honouring implementation
+implies one task per host if the user defines a port. In the future network
+isolation shall be supported.
+
 The benefit of coarse-grained mode is much lower startup overhead, but
 at the cost of reserving Mesos resources for the complete duration of
 the application.  To configure your job to dynamically adjust to its

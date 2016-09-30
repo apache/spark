@@ -59,9 +59,9 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import explode
 from pyspark.sql.functions import split
 
-spark = SparkSession\
-    .builder()\
-    .appName("StructuredNetworkWordCount")\
+spark = SparkSession \
+    .builder() \
+    .appName("StructuredNetworkWordCount") \
     .getOrCreate()
 {% endhighlight %}
 
@@ -88,7 +88,7 @@ val words = lines.as[String].flatMap(_.split(" "))
 val wordCounts = words.groupBy("value").count()
 {% endhighlight %}
 
-This `lines` DataFrame represents an unbounded table containing the streaming text data. This table contains one column of strings named “value”, and each line in the streaming text data becomes a row in the table. Note, that this is not currently receiving any data as we are just setting up the transformation, and have not yet started it. Next, we have converted the DataFrame to a  Dataset of String using `.as[String]`, so that we can apply the `flatMap` operation to split each line into multiple words. The resultant `words` Dataset contains all the words. Finally, we have defined the `wordCounts` DataFrame by grouping by the unique values in the Dataset and counting them. Note that this is a streaming DataFrame which represents the running word counts of the stream.
+This `lines` DataFrame represents an unbounded table containing the streaming text data. This table contains one column of strings named "value", and each line in the streaming text data becomes a row in the table. Note, that this is not currently receiving any data as we are just setting up the transformation, and have not yet started it. Next, we have converted the DataFrame to a  Dataset of String using `.as[String]`, so that we can apply the `flatMap` operation to split each line into multiple words. The resultant `words` Dataset contains all the words. Finally, we have defined the `wordCounts` DataFrame by grouping by the unique values in the Dataset and counting them. Note that this is a streaming DataFrame which represents the running word counts of the stream.
 
 </div>
 <div data-lang="java"  markdown="1">
@@ -117,37 +117,37 @@ Dataset<String> words = lines
 Dataset<Row> wordCounts = words.groupBy("value").count();
 {% endhighlight %}
 
-This `lines` DataFrame represents an unbounded table containing the streaming text data. This table contains one column of strings named “value”, and each line in the streaming text data becomes a row in the table. Note, that this is not currently receiving any data as we are just setting up the transformation, and have not yet started it. Next, we have converted the DataFrame to a  Dataset of String using `.as(Encoders.STRING())`, so that we can apply the `flatMap` operation to split each line into multiple words. The resultant `words` Dataset contains all the words. Finally, we have defined the `wordCounts` DataFrame by grouping by the unique values in the Dataset and counting them. Note that this is a streaming DataFrame which represents the running word counts of the stream.
+This `lines` DataFrame represents an unbounded table containing the streaming text data. This table contains one column of strings named "value", and each line in the streaming text data becomes a row in the table. Note, that this is not currently receiving any data as we are just setting up the transformation, and have not yet started it. Next, we have converted the DataFrame to a  Dataset of String using `.as(Encoders.STRING())`, so that we can apply the `flatMap` operation to split each line into multiple words. The resultant `words` Dataset contains all the words. Finally, we have defined the `wordCounts` DataFrame by grouping by the unique values in the Dataset and counting them. Note that this is a streaming DataFrame which represents the running word counts of the stream.
 
 </div>
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
 # Create DataFrame representing the stream of input lines from connection to localhost:9999
-lines = spark\
-    .readStream\
-    .format('socket')\
-    .option('host', 'localhost')\
-    .option('port', 9999)\
+lines = spark \
+    .readStream \
+    .format("socket") \
+    .option("host", "localhost") \
+    .option("port", 9999) \
     .load()
 
 # Split the lines into words
 words = lines.select(
    explode(
-       split(lines.value, ' ')
-   ).alias('word')
+       split(lines.value, " ")
+   ).alias("word")
 )
 
 # Generate running word count
-wordCounts = words.groupBy('word').count()
+wordCounts = words.groupBy("word").count()
 {% endhighlight %}
 
-This `lines` DataFrame represents an unbounded table containing the streaming text data. This table contains one column of strings named “value”, and each line in the streaming text data becomes a row in the table. Note, that this is not currently receiving any data as we are just setting up the transformation, and have not yet started it. Next, we have used two built-in SQL functions - split and explode, to split each line into multiple rows with a word each. In addition, we use the function `alias` to name the new column as “word”. Finally, we have defined the `wordCounts` DataFrame by grouping by the unique values in the Dataset and counting them. Note that this is a streaming DataFrame which represents the running word counts of the stream.
+This `lines` DataFrame represents an unbounded table containing the streaming text data. This table contains one column of strings named "value", and each line in the streaming text data becomes a row in the table. Note, that this is not currently receiving any data as we are just setting up the transformation, and have not yet started it. Next, we have used two built-in SQL functions - split and explode, to split each line into multiple rows with a word each. In addition, we use the function `alias` to name the new column as "word". Finally, we have defined the `wordCounts` DataFrame by grouping by the unique values in the Dataset and counting them. Note that this is a streaming DataFrame which represents the running word counts of the stream.
 
 </div>
 </div>
 
-We have now set up the query on the streaming data. All that is left is to actually start receiving data and computing the counts. To do this, we set it up to print the complete set of counts (specified by `outputMode(“complete”)`) to the console every time they are updated. And then start the streaming computation using `start()`.
+We have now set up the query on the streaming data. All that is left is to actually start receiving data and computing the counts. To do this, we set it up to print the complete set of counts (specified by `outputMode("complete")`) to the console every time they are updated. And then start the streaming computation using `start()`.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
@@ -180,10 +180,10 @@ query.awaitTermination();
 
 {% highlight python %}
  # Start running the query that prints the running counts to the console
-query = wordCounts\
-    .writeStream\
-    .outputMode('complete')\
-    .format('console')\
+query = wordCounts \
+    .writeStream \
+    .outputMode("complete") \
+    .format("console") \
     .start()
 
 query.awaitTermination()
@@ -361,16 +361,16 @@ table, and Spark runs it as an *incremental* query on the *unbounded* input
 table. Let’s understand this model in more detail.
 
 ## Basic Concepts
-Consider the input data stream as the “Input Table”. Every data item that is 
+Consider the input data stream as the "Input Table". Every data item that is 
 arriving on the stream is like a new row being appended to the Input Table.
 
 ![Stream as a Table](img/structured-streaming-stream-as-a-table.png "Stream as a Table")
 
-A query on the input will generate the “Result Table”. Every trigger interval (say, every 1 second), new rows get appended to the Input Table, which eventually updates the Result Table. Whenever the result table gets updated, we would want to write the changed result rows to an external sink. 
+A query on the input will generate the "Result Table". Every trigger interval (say, every 1 second), new rows get appended to the Input Table, which eventually updates the Result Table. Whenever the result table gets updated, we would want to write the changed result rows to an external sink. 
 
 ![Model](img/structured-streaming-model.png)
 
-The “Output” is defined as what gets written out to the external storage. The output can be defined in different modes 
+The "Output" is defined as what gets written out to the external storage. The output can be defined in different modes 
 
   - *Complete Mode* - The entire updated Result Table will be written to the external storage. It is up to the storage connector to decide how to handle writing of the entire table. 
 
@@ -386,7 +386,7 @@ the final `wordCounts` DataFrame is the result table. Note that the query on
 streaming `lines` DataFrame to generate `wordCounts` is *exactly the same* as 
 it would be a static DataFrame. However, when this query is started, Spark 
 will continuously check for new data from the socket connection. If there is 
-new data, Spark will run an “incremental” query that combines the previous 
+new data, Spark will run an "incremental" query that combines the previous 
 running counts with the new data to compute updated counts, as shown below.
 
 ![Model](img/structured-streaming-example-model.png)
@@ -400,13 +400,13 @@ data, thus relieving the users from reasoning about it. As an example, let’s
 see how this model handles event-time based processing and late arriving data.
 
 ## Handling Event-time and Late Data
-Event-time is the time embedded in the data itself. For many applications, you may want to operate on this event-time. For example, if you want to get the number of events generated by IoT devices every minute, then you probably want to use the time when the data was generated (that is, event-time in the data), rather than the time Spark receives them. This event-time is very naturally expressed in this model -- each event from the devices is a row in the table, and event-time is a column value in the row. This allows window-based aggregations (e.g. number of event every minute) to be just a special type of grouping and aggregation on the even-time column -- each time window is a group and each row can belong to multiple windows/groups. Therefore, such event-time-window-based aggregation queries can be defined consistently on both a static dataset (e.g. from collected device events logs) as well as on a data stream, making the life of the user much easier.
+Event-time is the time embedded in the data itself. For many applications, you may want to operate on this event-time. For example, if you want to get the number of events generated by IoT devices every minute, then you probably want to use the time when the data was generated (that is, event-time in the data), rather than the time Spark receives them. This event-time is very naturally expressed in this model -- each event from the devices is a row in the table, and event-time is a column value in the row. This allows window-based aggregations (e.g. number of events every minute) to be just a special type of grouping and aggregation on the even-time column -- each time window is a group and each row can belong to multiple windows/groups. Therefore, such event-time-window-based aggregation queries can be defined consistently on both a static dataset (e.g. from collected device events logs) as well as on a data stream, making the life of the user much easier.
 
 Furthermore, this model naturally handles data that has arrived later than expected based on its event-time. Since Spark is updating the Result Table, it has full control over updating/cleaning up the aggregates when there is late data. While not yet implemented in Spark 2.0, event-time watermarking will be used to manage this data. These are explained later in more details in the [Window Operations](#window-operations-on-event-time) section.
 
 ## Fault Tolerance Semantics
 Delivering end-to-end exactly-once semantics was one of key goals behind the design of Structured Streaming. To achieve that, we have designed the Structured Streaming sources, the sinks and the execution engine to reliably track the exact progress of the processing so that it can handle any kind of failure by restarting and/or reprocessing. Every streaming source is assumed to have offsets (similar to Kafka offsets, or Kinesis sequence numbers)
-to track the read position in the stream. The engine uses checkpointing and write ahead logs to record the offset range of the data being processed in each trigger. The streaming sinks are designed to be idempotent for handling reprocessing. Together, using replayable sources and idempotant sinks, Structured Streaming can ensure **end-to-end exactly-once semantics** under any failure.
+to track the read position in the stream. The engine uses checkpointing and write ahead logs to record the offset range of the data being processed in each trigger. The streaming sinks are designed to be idempotent for handling reprocessing. Together, using replayable sources and idempotent sinks, Structured Streaming can ensure **end-to-end exactly-once semantics** under any failure.
 
 # API using Datasets and DataFrames
 Since Spark 2.0, DataFrames and Datasets can represent static, bounded data, as well as streaming, unbounded data. Similar to static Datasets/DataFrames, you can use the common entry point `SparkSession` ([Scala](api/scala/index.html#org.apache.spark.sql.SparkSession)/
@@ -488,7 +488,7 @@ spark = SparkSession. ...
 
 # Read text from socket 
 socketDF = spark \
-    .readStream()  \
+    .readStream() \
     .format("socket") \
     .option("host", "localhost") \
     .option("port", 9999) \
@@ -504,13 +504,19 @@ csvDF = spark \
     .readStream() \
     .option("sep", ";") \
     .schema(userSchema) \
-    .csv("/path/to/directory")    # Equivalent to format("csv").load("/path/to/directory")
+    .csv("/path/to/directory")  # Equivalent to format("csv").load("/path/to/directory")
 {% endhighlight %}
 
 </div>
 </div>
 
 These examples generate streaming DataFrames that are untyped, meaning that the schema of the DataFrame is not checked at compile time, only checked at runtime when the query is submitted. Some operations like `map`, `flatMap`, etc. need the type to be known at compile time. To do those, you can convert these untyped streaming DataFrames to typed streaming Datasets using the same methods as static DataFrame. See the [SQL Programming Guide](sql-programming-guide.html) for more details. Additionally, more details on the supported streaming sources are discussed later in the document.
+
+### Schema inference and partition of streaming DataFrames/Datasets
+
+By default, Structured Streaming from file based sources requires you to specify the schema, rather than rely on Spark to infer it automatically. This restriction ensures a consistent schema will be used for the streaming query, even in the case of failures. For ad-hoc use cases, you can reenable schema inference by setting `spark.sql.streaming.schemaInference` to `true`.
+
+Partition discovery does occur when subdirectories that are named `/key=value/` are present and listing will automatically recurse into these directories. If these columns appear in the user provided schema, they will be filled in by Spark based on the path of the file being read. The directories that make up the partitioning scheme must be present when the query starts and must remain static. For example, it is okay to add `/data/year=2016/` when `/data/year=2015/` was present, but it is invalid to change the partitioning column (i.e. by creating the directory `/data/date=2016-04-17/`).
 
 ## Operations on streaming DataFrames/Datasets
 You can apply all kinds of operations on streaming DataFrames/Datasets – ranging from untyped, SQL-like operations (e.g. `select`, `where`, `groupBy`), to typed RDD-like operations (e.g. `map`, `filter`, `flatMap`). See the [SQL programming guide](sql-programming-guide.html) for more details. Let’s take a look at a few example operations that you can use.
@@ -535,7 +541,7 @@ ds.filter(_.signal > 10).map(_.device)         // using typed APIs
 df.groupBy("type").count()                          // using untyped API
 
 // Running average signal for each device type
-Import org.apache.spark.sql.expressions.scalalang.typed._
+import org.apache.spark.sql.expressions.scalalang.typed._
 ds.groupByKey(_.type).agg(typed.avg(_.signal))    // using typed API
 {% endhighlight %}
 
@@ -596,8 +602,7 @@ ds.groupByKey(new MapFunction<DeviceData, String>() { // using typed API
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-
-df = ...    # streaming DataFrame with IOT device data with schema { device: string, type: string, signal: double, time: DateType }
+df = ...  # streaming DataFrame with IOT device data with schema { device: string, type: string, signal: double, time: DateType }
 
 # Select the devices which have signal more than 10
 df.select("device").where("signal > 10")                              
@@ -653,11 +658,11 @@ Dataset<Row> windowedCounts = words.groupBy(
 </div>
 <div data-lang="python"  markdown="1">
 {% highlight python %}
-words = ... # streaming DataFrame of schema { timestamp: Timestamp, word: String }
+words = ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
 
 # Group the data by window and word and compute the count of each group
 windowedCounts = words.groupBy(
-    window(words.timestamp, '10 minutes', '5 minutes'),
+    window(words.timestamp, "10 minutes", "5 minutes"),
     words.word
 ).count()
 {% endhighlight %}
@@ -682,8 +687,8 @@ Streaming DataFrames can be joined with static DataFrames to create new streamin
 val staticDf = spark.read. ...
 val streamingDf = spark.readStream. ... 
 
-streamingDf.join(staticDf, “type”)          // inner equi-join with a static DF
-streamingDf.join(staticDf, “type”, “right_join”)  // right outer join with a static DF  
+streamingDf.join(staticDf, "type")          // inner equi-join with a static DF
+streamingDf.join(staticDf, "type", "right_join")  // right outer join with a static DF  
 
 {% endhighlight %}
 
@@ -704,7 +709,7 @@ streamingDf.join(staticDf, "type", "right_join");  // right outer join with a st
 {% highlight python %}
 staticDf = spark.read. ...
 streamingDf = spark.readStream. ...
-streamingDf.join(staticDf, "type")         # inner equi-join with a static DF
+streamingDf.join(staticDf, "type")  # inner equi-join with a static DF
 streamingDf.join(staticDf, "type", "right_join")  # right outer join with a static DF
 {% endhighlight %}
 
@@ -726,9 +731,9 @@ However, note that all of the operations applicable on static DataFrames/Dataset
 
     + Full outer join with a streaming Dataset is not supported
 
-    + Left outer join with a streaming Dataset on the left is not supported
+    + Left outer join with a streaming Dataset on the right is not supported
 
-    + Right outer join with a streaming Dataset on the right is not supported
+    + Right outer join with a streaming Dataset on the left is not supported
 
 - Any kind of joins between two streaming Datasets are not yet supported.
 
@@ -789,7 +794,7 @@ Here is a table of all the sinks, and the corresponding settings.
   <tr>
     <td><b>File Sink</b><br/>(only parquet in Spark 2.0)</td>
     <td>Append</td>
-    <td><pre>writeStream<br/>  .format(“parquet”)<br/>  .start()</pre></td>
+    <td><pre>writeStream<br/>  .format("parquet")<br/>  .start()</pre></td>
     <td>Yes</td>
     <td>Supports writes to partitioned tables. Partitioning by time may be useful.</td>
   </tr>
@@ -803,14 +808,14 @@ Here is a table of all the sinks, and the corresponding settings.
   <tr>
     <td><b>Console Sink</b></td>
     <td>Append, Complete</td>
-    <td><pre>writeStream<br/>  .format(“console”)<br/>  .start()</pre></td>
+    <td><pre>writeStream<br/>  .format("console")<br/>  .start()</pre></td>
     <td>No</td>
     <td></td>
   </tr>
   <tr>
     <td><b>Memory Sink</b></td>
     <td>Append, Complete</td>
-    <td><pre>writeStream<br/>  .format(“memory”)<br/>  .queryName(“table”)<br/>  .start()</pre></td>
+    <td><pre>writeStream<br/>  .format("memory")<br/>  .queryName("table")<br/>  .start()</pre></td>
     <td>No</td>
     <td>Saves the output data as a table, for interactive querying. Table name is the query name.</td>
   </tr> 
@@ -839,7 +844,7 @@ noAggDF
   .start()
    
 // ========== DF with aggregation ==========
-val aggDF = df.groupBy(“device”).count()
+val aggDF = df.groupBy("device").count()
 
 // Print updated aggregations to console
 aggDF
@@ -879,7 +884,7 @@ noAggDF
   .start();
    
 // ========== DF with aggregation ==========
-Dataset<Row> aggDF = df.groupBy(“device”).count();
+Dataset<Row> aggDF = df.groupBy("device").count();
 
 // Print updated aggregations to console
 aggDF
@@ -907,25 +912,25 @@ spark.sql("select * from aggregates").show();   // interactively query in-memory
 noAggDF = deviceDataDf.select("device").where("signal > 10")   
 
 # Print new data to console
-noAggDF\
-    .writeStream()\
-    .format("console")\
+noAggDF \
+    .writeStream() \
+    .format("console") \
     .start()
 
 # Write new data to Parquet files
-noAggDF\
-    .writeStream()\
-    .parquet("path/to/destination/directory")\
+noAggDF \
+    .writeStream() \
+    .parquet("path/to/destination/directory") \
     .start()
    
 # ========== DF with aggregation ==========
-aggDF = df.groupBy(“device”).count()
+aggDF = df.groupBy("device").count()
 
 # Print updated aggregations to console
-aggDF\
-    .writeStream()\
-    .outputMode("complete")\
-    .format("console")\
+aggDF \
+    .writeStream() \
+    .outputMode("complete") \
+    .format("console") \
     .start()
 
 # Have all the aggregates in an in memory table. The query name will be the table name
@@ -1072,11 +1077,11 @@ spark.streams().awaitAnyTermination();   // block until any one of them terminat
 {% highlight python %}
 spark = ...  # spark session
 
-spark.streams().active    # get the list of currently active streaming queries
+spark.streams().active  # get the list of currently active streaming queries
 
-spark.streams().get(id)   # get a query object by its unique id
+spark.streams().get(id)  # get a query object by its unique id
 
-spark.streams().awaitAnyTermination()   # block until any one of them terminates
+spark.streams().awaitAnyTermination()  # block until any one of them terminates
 {% endhighlight %}
 
 </div>
@@ -1095,7 +1100,7 @@ In case of a failure or intentional shutdown, you can recover the previous progr
 aggDF
   .writeStream
   .outputMode("complete")
-  .option(“checkpointLocation”, “path/to/HDFS/dir”)
+  .option("checkpointLocation", "path/to/HDFS/dir")
   .format("memory")
   .start()
 {% endhighlight %}
@@ -1107,7 +1112,7 @@ aggDF
 aggDF
   .writeStream()
   .outputMode("complete")
-  .option(“checkpointLocation”, “path/to/HDFS/dir”)
+  .option("checkpointLocation", "path/to/HDFS/dir")
   .format("memory")
   .start();
 {% endhighlight %}
@@ -1116,11 +1121,11 @@ aggDF
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-aggDF\
-    .writeStream()\
-    .outputMode("complete")\
-    .option(“checkpointLocation”, “path/to/HDFS/dir”)\
-    .format("memory")\
+aggDF \
+    .writeStream() \
+    .outputMode("complete") \
+    .option("checkpointLocation", "path/to/HDFS/dir") \
+    .format("memory") \
     .start()
 {% endhighlight %}
 

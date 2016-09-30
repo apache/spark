@@ -42,7 +42,10 @@ case class LocalTableScanExec(
     }
   }
 
-  private lazy val rdd = sqlContext.sparkContext.parallelize(unsafeRows)
+  private lazy val numParallelism: Int = math.min(math.max(unsafeRows.length, 1),
+    sqlContext.sparkContext.defaultParallelism)
+
+  private lazy val rdd = sqlContext.sparkContext.parallelize(unsafeRows, numParallelism)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
