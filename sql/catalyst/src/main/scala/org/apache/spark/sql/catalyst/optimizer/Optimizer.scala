@@ -88,6 +88,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       // Operator combine
       CollapseRepartition,
       CollapseProject,
+      CollapseWindow,
       CombineFilters,
       CombineLimits,
       CombineUnions,
@@ -534,6 +535,19 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // Case 3
     case RepartitionByExpression(exprs, Repartition(_, _, child), numPartitions) =>
       RepartitionByExpression(exprs, child, numPartitions)
+  }
+}
+
+/**
+ * Collapse Adjacent Window Expression.
+ * - Collapse only if they have the same partition specs and order specs.
+ */
+object CollapseWindow extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case w @ Window(we1, ps1, os1, Window(we2, ps2, os2, grandChild))
+        if ps1.equals(ps2) && os1.equals(os2) =>
+      val newWindowExpressions = ExpressionSet(we1 ++ we2).toSeq.asInstanceOf[Seq[NamedExpression]]
+      w.copy(windowExpressions = newWindowExpressions, child = grandChild)
   }
 }
 
