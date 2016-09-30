@@ -20,14 +20,13 @@ package org.apache.spark.sql.test
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 
 
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
-trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach with Logging {
+trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach {
 
   protected val sparkConf = new SparkConf()
 

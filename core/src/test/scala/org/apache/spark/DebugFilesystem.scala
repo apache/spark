@@ -27,7 +27,9 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs._
 
-object DebugFilesystem {
+import org.apache.spark.internal.Logging
+
+object DebugFilesystem extends Logging {
   // Stores the set of active streams and their creation sites.
   private val openStreams = new ConcurrentHashMap[FSDataInputStream, Throwable]()
 
@@ -51,6 +53,7 @@ object DebugFilesystem {
  * DebugFilesystem wraps file open calls to track all open connections. This can be used in tests
  * to check that connections are not leaked.
  */
+// TODO(ekl) we should consider always interposing this to expose num open conns as a metric
 class DebugFilesystem extends LocalFileSystem {
   import DebugFilesystem._
 
