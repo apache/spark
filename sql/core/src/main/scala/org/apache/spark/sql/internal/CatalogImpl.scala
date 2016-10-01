@@ -100,7 +100,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   private def makeTable(tableIdent: TableIdentifier): Table = {
-    val isTemporary = tableIdent.database.isDefined
+    val isTemporary = tableIdent.database.isEmpty
     val metadata = sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent)
     new Table(
       name = tableIdent.table,
@@ -208,6 +208,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         else id
       case id => throw new AnalysisException(s"The specified table/view $id does not exist.")
     }
+    // scalastyle:off
+    println(tableIdent)
+    // scalastyle:on
     makeTable(tableIdent)
   }
 
