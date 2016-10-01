@@ -34,6 +34,7 @@ import org.apache.spark._
 import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -200,6 +201,24 @@ abstract class RDD[T: ClassTag](
 
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   def cache(): this.type = persist()
+
+  /**
+   * Broadcast this RDD on executors. The executor side broadcast variable is created by
+   * [[SparkContext]]. This RDD should be cached and materialized first before calling on
+   * this method.
+   */
+  private[spark] def broadcast[U: ClassTag](broadcasted: Broadcast[U]): Unit = {
+    // The RDD should be cached and materialized before it can be executor side broadcasted.
+    // We do the checking here.
+    if (storageLevel == StorageLevel.NONE) {
+      throw new SparkException("To broadcast this RDD on executors, it should be cached first.")
+    }
+    // Create the executor side broadcast object on executors.
+    mapPartitionsInternal { iter: Iterator[T] =>
+      broadcasted.value
+      Iterator.empty.asInstanceOf[Iterator[T]]
+    }.count
+  }
 
   /**
    * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.

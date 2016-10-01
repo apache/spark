@@ -1085,7 +1085,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("executor side broadcast for RDD") {
-    // Cache and materilize the RDD to be broadcasted on executors.
+    // Materialize and cache the RDD to be broadcasted on executors.
     val rdd = sc.parallelize(1 to 4, 2).cache()
     rdd.count()
     val mode = new BroadcastMode[Int] {
@@ -1101,7 +1101,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("executor side broadcast for RDD: unbroadcast") {
-    // Cache and materilize the RDD to be broadcasted on executors.
+    // Materialize and cache the RDD to be broadcasted on executors.
     val rdd = sc.parallelize(1 to 4, 2).cache()
     rdd.count()
     val mode = new BroadcastMode[Int] {
@@ -1121,7 +1121,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("executor side broadcast for RDD: unpersist RDD") {
-    // Cache and materilize the RDD to be broadcasted on executors.
+    // Materialize and cache the RDD to be broadcasted on executors.
     val rdd = sc.parallelize(1 to 4, 2).cache()
     rdd.count()
     val mode = new BroadcastMode[Int] {
@@ -1129,15 +1129,11 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
       override def compatibleWith(other: BroadcastMode[Int]): Boolean = true
     }
     val broadcastedVal = sc.broadcastRDDOnExecutor[Int, Int](rdd, mode)
-    // If the RDD to be broadasted on executors is unpersisted before the broadcast variable is
-    // used, we can't access the RDD data so the exception will be thrown.
     rdd.unpersist()
-    val thrown = intercept[SparkException] {
-      val collected = sc.parallelize(1 to 2, 2).map { _ =>
-        broadcastedVal.value
-      }.collect()
-    }
-    assert(thrown.getMessage.contains("Failed to get rdd_"))
+    val collected = sc.parallelize(1 to 2, 2).map { _ =>
+      broadcastedVal.value
+    }.collect()
+    assert(collected.sum == 2)
   }
 
   // NOTE

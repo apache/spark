@@ -1417,6 +1417,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       rdd: RDD[T], mode: BroadcastMode[T]): Broadcast[U] = {
     assertNotStopped()
     val bc = env.broadcastManager.newBroadcastOnExecutor[T, U](rdd, mode, isLocal)
+    rdd.broadcast(bc)
     val callSite = getCallSite
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))
