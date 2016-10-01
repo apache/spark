@@ -27,11 +27,12 @@ import org.apache.spark.sql.catalyst.rules._
 class InferFiltersFromConstraintsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("InferFilters", FixedPoint(100), InferFiltersFromConstraints) ::
-      Batch("PredicatePushdown", FixedPoint(100),
+    val batches =
+      Batch("InferAndPushDownFilters", FixedPoint(100),
         PushPredicateThroughJoin,
-        PushDownPredicate) ::
-      Batch("CombineFilters", FixedPoint(100), CombineFilters) :: Nil
+        PushDownPredicate,
+        InferFiltersFromConstraints,
+        CombineFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -123,7 +124,41 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("don't generate constraints for recursive functions") {
+  test("inner join with alias: alias contains multiple attributes") {
+    val t1 = testRelation.subquery('t1)
+    val t2 = testRelation.subquery('t2)
+
+    val originalQuery = t1.select('a, Coalesce(Seq('a, 'b)).as('int_col)).as("t")
+      .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
+      .analyze
+    val currectAnswer = t1.where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'b)))
+        &&'a === Coalesce(Seq('a, 'b)))
+      .select('a, Coalesce(Seq('a, 'b)).as('int_col)).as("t")
+      .join(t2.where(IsNotNull('a)), Inner,
+        Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, currectAnswer)
+  }
+
+  test("inner join with alias: alias contains single attributes") {
+    val t1 = testRelation.subquery('t1)
+    val t2 = testRelation.subquery('t2)
+
+    val originalQuery = t1.select('a, 'b.as('d)).as("t")
+      .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
+      .analyze
+    val currectAnswer = t1.where(IsNotNull('a) && IsNotNull('b)
+        && 'a <=> 'a && 'b <=> 'b &&'a === 'b)
+      .select('a, 'b.as('d)).as("t")
+      .join(t2.where(IsNotNull('a) && 'a <=> 'a), Inner,
+        Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, currectAnswer)
+  }
+
+  test("inner join with alias: don't generate constraints for recursive functions") {
     val t1 = testRelation.subquery('t1)
     val t2 = testRelation.subquery('t2)
 
@@ -133,11 +168,14 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
           && "t.d".attr === "t2.a".attr
           && "t.int_col".attr === "t2.a".attr))
       .analyze
-    val correctAnswer = t1.where(IsNotNull('a) && 'a === Coalesce(Seq('a, 'b))
-      && IsNotNull('b) && 'b === Coalesce(Seq('a, 'b))
-      && IsNotNull(Coalesce(Seq('a, 'b))) && 'a === 'b)
+    val correctAnswer = t1.where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
+      && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a)) && 'a <=> 'a
+      && 'a === 'b && IsNotNull(Coalesce(Seq('a, 'b))) && 'a === Coalesce(Seq('a, 'b))
+      && IsNotNull('b) && IsNotNull(Coalesce(Seq('b, 'b)))
+      && 'b === Coalesce(Seq('b, 'b)) && 'b <=> Coalesce(Seq('b, 'b)) && 'b <=> 'b)
       .select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col)).as("t")
-      .join(t2.where(IsNotNull('a)), Inner,
+      .join(t2.where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
+      && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a)) && 'a <=> 'a), Inner,
         Some("t.a".attr === "t2.a".attr
           && "t.d".attr === "t2.a".attr
           && "t.int_col".attr === "t2.a".attr))
