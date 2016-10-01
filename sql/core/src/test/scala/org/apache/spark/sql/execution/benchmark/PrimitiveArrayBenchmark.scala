@@ -87,7 +87,7 @@ class PrimitiveArrayBenchmark extends BenchmarkBase {
     val n = 1024 * 1024
     val rows = 15
 
-    val benchmark = new Benchmark("Read primitive array", n)
+    val benchmark = new Benchmark("Write an array in Dataframe", n)
 
     val intDF = sparkSession.sparkContext.parallelize(0 until rows, 1)
       .map(i => Array.tabulate(n)(i => i)).toDF()
