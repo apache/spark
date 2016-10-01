@@ -178,10 +178,12 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Assume the execution plan is
     // ... -> BroadcastHashJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
     val df = df1.join(broadcast(df2), "key")
-    testSparkPlanMetrics(df, 2, Map(
-      1L -> ("BroadcastHashJoin", Map(
-        "number of output rows" -> 2L)))
-    )
+    withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> "false") {
+      testSparkPlanMetrics(df, 2, Map(
+        1L -> ("BroadcastHashJoin", Map(
+          "number of output rows" -> 2L)))
+      )
+    }
   }
 
   test("BroadcastHashJoin(outer) metrics") {
@@ -190,32 +192,38 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Assume the execution plan is
     // ... -> BroadcastHashJoin(nodeId = 0)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "left_outer")
-    testSparkPlanMetrics(df, 2, Map(
-      0L -> ("BroadcastHashJoin", Map(
-        "number of output rows" -> 5L)))
-    )
+    withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> "false") {
+      testSparkPlanMetrics(df, 2, Map(
+        0L -> ("BroadcastHashJoin", Map(
+          "number of output rows" -> 5L)))
+      )
+    }
 
     val df3 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
-    testSparkPlanMetrics(df3, 2, Map(
-      0L -> ("BroadcastHashJoin", Map(
-        "number of output rows" -> 6L)))
-    )
+    withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> "false") {
+      testSparkPlanMetrics(df3, 2, Map(
+        0L -> ("BroadcastHashJoin", Map(
+          "number of output rows" -> 6L)))
+      )
+    }
   }
 
   test("BroadcastNestedLoopJoin metrics") {
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      withTempView("testDataForJoin") {
-        // Assume the execution plan is
-        // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-        val df = spark.sql(
-          "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
-            "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
-        testSparkPlanMetrics(df, 3, Map(
-          1L -> ("BroadcastNestedLoopJoin", Map(
-            "number of output rows" -> 12L)))
-        )
+    withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        withTempView("testDataForJoin") {
+          // Assume the execution plan is
+          // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+          val df = spark.sql(
+            "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
+              "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
+          testSparkPlanMetrics(df, 3, Map(
+            1L -> ("BroadcastNestedLoopJoin", Map(
+              "number of output rows" -> 12L)))
+          )
+        }
       }
     }
   }
@@ -226,10 +234,12 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Assume the execution plan is
     // ... -> BroadcastHashJoin(nodeId = 0)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
-    testSparkPlanMetrics(df, 2, Map(
-      0L -> ("BroadcastHashJoin", Map(
-        "number of output rows" -> 2L)))
-    )
+    withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> "false") {
+      testSparkPlanMetrics(df, 2, Map(
+        0L -> ("BroadcastHashJoin", Map(
+          "number of output rows" -> 2L)))
+      )
+    }
   }
 
   test("CartesianProduct metrics") {
