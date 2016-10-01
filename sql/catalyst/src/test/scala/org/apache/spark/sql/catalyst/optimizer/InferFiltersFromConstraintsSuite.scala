@@ -27,9 +27,11 @@ import org.apache.spark.sql.catalyst.rules._
 class InferFiltersFromConstraintsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("InferFilters", FixedPoint(5), InferFiltersFromConstraints) ::
-      Batch("PredicatePushdown", FixedPoint(5), PushPredicateThroughJoin) ::
-      Batch("CombineFilters", FixedPoint(5), CombineFilters) :: Nil
+    val batches = Batch("InferFilters", FixedPoint(100), InferFiltersFromConstraints) ::
+      Batch("PredicatePushdown", FixedPoint(100),
+        PushPredicateThroughJoin,
+        PushDownPredicate) ::
+      Batch("CombineFilters", FixedPoint(100), CombineFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -117,6 +119,30 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       x.join(y, Inner, Some("x.a".attr === "y.a".attr)).where("x.a".attr > 5).analyze
     val correctAnswer = x.where(IsNotNull('a) && 'a.attr > 5)
       .join(y.where(IsNotNull('a) && 'a.attr > 5), Inner, Some("x.a".attr === "y.a".attr)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("don't generate constraints for recursive functions") {
+    val t1 = testRelation.subquery('t1)
+    val t2 = testRelation.subquery('t2)
+    val t3 = testRelation.subquery('t3)
+
+    val originalQuery = t1.select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col)).as("t")
+      .join(t2, Inner,
+        Some("t.a".attr === "t2.a".attr
+          && "t.d".attr === "t2.a".attr
+          && "t.int_col".attr === "t2.a".attr))
+      .analyze
+    val correctAnswer = t1.where(IsNotNull('a) && 'a === Coalesce(Seq('a, 'b))
+      && IsNotNull('b) && 'b === Coalesce(Seq('a, 'b))
+      && IsNotNull(Coalesce(Seq('a, 'b))) && 'a === 'b)
+      .select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col)).as("t")
+      .join(t2.where(IsNotNull('a)), Inner,
+        Some("t.a".attr === "t2.a".attr
+          && "t.d".attr === "t2.a".attr
+          && "t.int_col".attr === "t2.a".attr))
+      .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
