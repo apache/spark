@@ -118,7 +118,8 @@ setClass("DecisionTreeClassificationModel", representation(jobj = "jobj"))
 #' @export
 #' @seealso \link{spark.glm}, \link{glm},
 #' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
-#' @seealso \link{spark.lda}, \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{spark.lda}, \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg},
+#' @seealso \link{spark.decisionTree},
 #' @seealso \link{read.ml}
 NULL
 
@@ -131,7 +132,7 @@ NULL
 #' @export
 #' @seealso \link{spark.glm}, \link{glm},
 #' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
-#' @seealso \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}, \link{spark.decisionTree}
 NULL
 
 write_internal <- function(object, path, overwrite = FALSE) {
@@ -911,22 +912,6 @@ setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "charact
             write_internal(object, path, overwrite)
           })
 
-#' Save the Decision Tree Regression model to the input path.
-#'
-#' @param object A fitted Decision tree regression model
-#' @param path The directory where the model is saved
-#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#'
-#' @aliases write.ml,DecisionTreeRegressionModel,character-method
-#' @rdname spark.decisionTreeRegression
-#' @export
-#' @note write.ml(DecisionTreeRegressionModel, character) since 2.1.0
-setMethod("write.ml", signature(object = "DecisionTreeRegressionModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
-          })
-
 #' Load a fitted MLlib model from the input path.
 #'
 #' @param path path of the model to read.
@@ -964,6 +949,8 @@ read.ml <- function(path) {
     new("ALSModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.DecisionTreeRegressorWrapper")) {
     new("DecisionTreeRegressionModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.DecisionTreeClassifierWrapper")) {
+    new("DecisionTreeClassificationModel", jobj = jobj)
   } else {
     stop("Unsupported model: ", jobj)
   }
@@ -1477,6 +1464,7 @@ print.summary.KSTest <- function(x, ...) {
 #' df <- createDataFrame(sqlContext, kyphosis)
 #' model <- spark.decisionTree(df, Kyphosis ~ Age + Number + Start)
 #' }
+#' @note spark.decisionTree since 2.1.0
 setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, type = c("regression", "classification")) {
             formula <- paste(deparse(formula), collapse = "")
@@ -1491,7 +1479,48 @@ setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "fo
             }
           })
 
+# Makes predictions from a Decision Tree model or a model produced by spark.decisionTree()
+
+#' @param newData a SparkDataFrame for testing.
+#' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
+#' "prediction"
+#' @rdname spark.decisionTree
+#' @export
+#' @note predict(decisionTreeRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "DecisionTreeRegressionModel"),
           function(object, newData) {
-            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+            predict_internal(object, newData)
+          })
+
+#' Save the Decision Tree Regression model to the input path.
+#'
+#' @param object A fitted Decision tree regression model
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @aliases write.ml,DecisionTreeRegressionModel,character-method
+#' @rdname spark.decisionTreeRegression
+#' @export
+#' @note write.ml(DecisionTreeRegressionModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "DecisionTreeRegressionModel", path = "character"),
+function(object, path, overwrite = FALSE) {
+    write_internal(object, path, overwrite)
+})
+
+#  Get the summary of an IsotonicRegressionModel model
+
+#' @param object a fitted IsotonicRegressionModel
+#' @param ... Other optional arguments to summary of an IsotonicRegressionModel
+#' @return \code{summary} returns the model's boundaries and prediction as lists
+#' @rdname spark.isoreg
+#' @aliases summary,IsotonicRegressionModel-method
+#' @export
+#' @note summary(IsotonicRegressionModel) since 2.1.0
+setMethod("summary", signature(object = "DecisionTreeRegressionModel"),
+          function(object, ...) {
+            jobj <- object@jobj
+            boundaries <- callJMethod(jobj, "boundaries")
+            predictions <- callJMethod(jobj, "predictions")
+            return(list(boundaries = boundaries, predictions = predictions))
           })
