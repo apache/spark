@@ -79,4 +79,36 @@ class PrimitiveArrayBenchmark extends BenchmarkBase {
   ignore("Write an array in Dataset") {
     writeDatasetArray(4)
   }
+
+  def writeArray(iters: Int): Unit = {
+    import sparkSession.implicits._
+
+    val iters = 5
+    val n = 1024 * 1024
+    val rows = 15
+
+    val benchmark = new Benchmark("Read primitive array", n)
+
+    val intDF = sparkSession.sparkContext.parallelize(0 until rows, 1)
+      .map(i => Array.tabulate(n)(i => i)).toDF()
+    intDF.count() // force to create df
+
+    benchmark.addCase(s"Write int array in DataFrame", numIters = iters)(iter => {
+      intDF.selectExpr("value as a").collect
+    })
+
+    val doubleDF = sparkSession.sparkContext.parallelize(0 until rows, 1)
+      .map(i => Array.tabulate(n)(i => i.toDouble)).toDF()
+    doubleDF.count() // force to create df
+
+    benchmark.addCase(s"Write double array in DataFrame", numIters = iters)(iter => {
+      doubleDF.selectExpr("value as a").collect
+    })
+
+    benchmark.run()
+  }
+
+  ignore("Write an array in DataFrame") {
+    writeArray(1)
+  }
 }

@@ -40,14 +40,15 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     val specializedIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        array = GenericArrayData.allocate(primitiveIntArray)
+        array = new GenericArrayData(primitiveIntArray)
         n += 1
       }
     }
+    val anyArray = primitiveIntArray.toArray[Any]
     val genericIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        array = new GenericRefArrayData(primitiveIntArray)
+        array = new GenericArrayData(anyArray)
         n += 1
       }
     }
@@ -57,14 +58,6 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Generic    ")(genericIntArray)
     benchmark.addCase("Specialized")(specializedIntArray)
     benchmark.run
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Allocate GenericArrayData for int:       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Generic                                         40 /   43        522.2           1.9       1.0X
-    Specialized                                      0 /    0  209715200.0           0.0  401598.7X
-    */
   }
 
   def allocateGenericDoubleArray(iters: Int): Unit = {
@@ -75,14 +68,15 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     val specializedDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        array = GenericArrayData.allocate(primitiveDoubleArray)
+        array = new GenericArrayData(primitiveDoubleArray)
         n += 1
       }
     }
+    val anyArray = primitiveDoubleArray.toArray[Any]
     val genericDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        array = new GenericRefArrayData(primitiveDoubleArray)
+        array = new GenericArrayData(anyArray)
         n += 1
       }
     }
@@ -92,99 +86,75 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Generic    ")(genericDoubleArray)
     benchmark.addCase("Specialized")(specializedDoubleArray)
     benchmark.run
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Allocate GenericArrayData for double:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Generic                                         40 /   44        523.2           1.9       1.0X
-    Specialized                                      0 /    0  225500215.1           0.0  431013.0X
-    */
   }
 
   def getPrimitiveIntArray(iters: Int): Unit = {
-    val count = 1024 * 1024
+    val count = 1024 * 1024 * 8
 
-    val intSparseArray: GenericArrayData = new GenericRefArrayData(new Array[Int](count))
-    val intDenseArray: GenericArrayData = GenericArrayData.allocate(new Array[Int](count))
+    val anyArray: GenericArrayData = new GenericArrayData(new Array[Int](count).toArray[Any])
+    val intArray: GenericArrayData = new GenericArrayData(new Array[Int](count))
     var primitiveIntArray: Array[Int] = null
     val genericIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        primitiveIntArray = intSparseArray.toIntArray
+        primitiveIntArray = anyArray.toIntArray
         n += 1
       }
     }
-    val denseIntArray = { i: Int =>
+    val specializedIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        primitiveIntArray = intDenseArray.toIntArray
+        primitiveIntArray = intArray.toIntArray
         n += 1
       }
     }
 
     val benchmark = new Benchmark("Get int primitive array", count * iters)
-    benchmark.addCase("Generic    ")(genericIntArray)
-    benchmark.addCase("Specialized")(denseIntArray)
+    benchmark.addCase("Generic")(genericIntArray)
+    benchmark.addCase("Specialized")(specializedIntArray)
     benchmark.run
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Get int primitive array:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Generic                                         67 /   70        783.9           1.3       1.0X
-    Specialized                                     41 /   43       1263.8           0.8       1.6X
-    */
   }
 
   def getPrimitiveDoubleArray(iters: Int): Unit = {
-    val count = 1024 * 1024
+    val count = 1024 * 1024 * 8
 
-    val doubleSparseArray: GenericArrayData = new GenericRefArrayData(new Array[Double](count))
-    val doubleDenseArray: GenericArrayData = GenericArrayData.allocate(new Array[Double](count))
+    val anyArray: GenericArrayData = new GenericArrayData(new Array[Double](count).toArray[Any])
+    val doubleArray: GenericArrayData = new GenericArrayData(new Array[Double](count))
     var primitiveDoubleArray: Array[Double] = null
     val genericDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        primitiveDoubleArray = doubleSparseArray.toDoubleArray
+        primitiveDoubleArray = anyArray.toDoubleArray
         n += 1
       }
     }
     val specializedDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        primitiveDoubleArray = doubleDenseArray.toDoubleArray
+        primitiveDoubleArray = doubleArray.toDoubleArray
         n += 1
       }
     }
 
     val benchmark = new Benchmark("Get double primitive array", count * iters)
-    benchmark.addCase("Generic    ")(genericDoubleArray)
+    benchmark.addCase("Generic")(genericDoubleArray)
     benchmark.addCase("Specialized")(specializedDoubleArray)
     benchmark.run
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Get double primitive array:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Generic                                        211 /  217        248.6           4.0       1.0X
-    Specialized                                     95 /  100        554.1           1.8       2.2X
-    */
   }
 
   def readGenericIntArray(iters: Int): Unit = {
-    val count = 1024 * 1024 * 2
+    val count = 1024 * 1024 * 8
     var result: Int = 0
 
-    val sparseArray = new GenericRefArrayData(new Array[Int](count))
+    val anyArray = new GenericArrayData(new Array[Int](count).toArray[Any])
     val genericIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        val len = sparseArray.numElements
+        val len = anyArray.numElements
         var sum = 0
         var i = 0
         while (i < len) {
-          sum += sparseArray.getInt(i)
+          sum += anyArray.getInt(i)
           i += 1
         }
         result = sum
@@ -192,15 +162,15 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
       }
     }
 
-    val denseArray = GenericArrayData.allocate(new Array[Int](count))
-    val denseIntArray = { i: Int =>
+    val intArray = new GenericArrayData(new Array[Int](count))
+    val specializedIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        val len = denseArray.numElements
+        val len = intArray.numElements
         var sum = 0
         var i = 0
         while (i < len) {
-          sum += denseArray.getInt(i)
+          sum += intArray.getInt(i)
           i += 1
         }
         result = sum
@@ -209,32 +179,24 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     }
 
     val benchmark = new Benchmark("Read GenericArrayData Int", count * iters)
-    benchmark.addCase("Sparse")(genericIntArray)
-    benchmark.addCase("Dense ")(denseIntArray)
+    benchmark.addCase("Generic")(genericIntArray)
+    benchmark.addCase("Specialized")(specializedIntArray)
     benchmark.run
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Read GenericArrayData Int:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Generic                                        160 /  163       1314.5           0.8       1.0X
-    Specialized                                     68 /   69       3080.0           0.3       2.3X
-    */
   }
 
   def readGenericDoubleArray(iters: Int): Unit = {
-    val count = 1024 * 1024 * 2
+    val count = 1024 * 1024 *8 
     var result: Double = 0
 
-    val sparseArray = new GenericRefArrayData(new Array[Double](count))
+    val anyArray = new GenericArrayData(new Array[Double](count).toArray[Any])
     val genericDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        val len = sparseArray.numElements
+        val len = anyArray.numElements
         var sum = 0.toDouble
         var i = 0
         while (i < len) {
-          sum += sparseArray.getDouble(i)
+          sum += anyArray.getDouble(i)
           i += 1
         }
         result = sum
@@ -242,15 +204,15 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
       }
     }
 
-    val denseArray = GenericArrayData.allocate(new Array[Double](count))
+    val doubleArray = new GenericArrayData(new Array[Double](count))
     val specializedDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        val len = denseArray.numElements
+        val len = doubleArray.numElements
         var sum = 0.toDouble
         var i = 0
         while (i < len) {
-          sum += denseArray.getDouble(i)
+          sum += doubleArray.getDouble(i)
           i += 1
         }
         result = sum
@@ -262,14 +224,6 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Generic")(genericDoubleArray)
     benchmark.addCase("Specialized")(specializedDoubleArray)
     benchmark.run
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Read GenericArrayData Double:            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Generic                                        611 /  613        343.3           2.9       1.0X
-    Specialized                                    199 /  202       1051.5           1.0       3.1X
-    */
   }
 
   ignore("allocate GenericArrayData") {
@@ -278,12 +232,12 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
   }
 
   ignore("get primitive array") {
-    getPrimitiveIntArray(50)
-    getPrimitiveDoubleArray(50)
+    getPrimitiveIntArray(20)
+    getPrimitiveDoubleArray(20)
   }
 
   ignore("read elements in GenericArrayData") {
-    readGenericIntArray(100)
-    readGenericDoubleArray(100)
+    readGenericIntArray(25)
+    readGenericDoubleArray(25)
   }
 }
