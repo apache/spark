@@ -123,7 +123,7 @@ class ExpressionSQLBuilderSuite extends SQLBuilderTest {
   }
 
   test("interval arithmetic") {
-    val interval = Literal(new CalendarInterval(0, 86400000000L))
+    val interval = Literal(new CalendarInterval(0, 86400000000L)) // milliseconds per 24 hours
 
     checkSQL(
       TimeAdd('a, interval),

@@ -1150,7 +1150,13 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     withTable("dates") {
       sql("create table dates (ts timestamp)")
       checkSQL(
-        "select ts + interval 1 days, ts - interval 2 days from dates",
+        """
+          |select ts + interval 1 day, ts + interval 2 days,
+          |       ts - interval 1 day, ts - interval 2 days,
+          |       ts + interval '1' day, ts + interval '2' days,
+          |       ts - interval '1' day, ts - interval '2' days
+          |from dates
+        """.stripMargin,
         "interval_arithmetic"
       )
     }
