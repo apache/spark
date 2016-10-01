@@ -126,7 +126,6 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   test("don't generate constraints for recursive functions") {
     val t1 = testRelation.subquery('t1)
     val t2 = testRelation.subquery('t2)
-    val t3 = testRelation.subquery('t3)
 
     val originalQuery = t1.select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col)).as("t")
       .join(t2, Inner,
