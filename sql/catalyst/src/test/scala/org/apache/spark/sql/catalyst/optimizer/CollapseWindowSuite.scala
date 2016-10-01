@@ -30,16 +30,14 @@ class CollapseWindowSuite extends PlanTest {
         CollapseWindow) :: Nil
   }
 
-  val testRelation = LocalRelation('a.double, 'b.double, 'c.string, 'd.string)
+  val testRelation = LocalRelation('a.double, 'b.double, 'c.string)
   val a = testRelation.output(0)
   val b = testRelation.output(1)
   val c = testRelation.output(2)
-  val d = testRelation.output(3)
   val partitionSpec1 = Seq(c)
   val partitionSpec2 = Seq(c + 1)
   val orderSpec1 = Seq(c.asc)
   val orderSpec2 = Seq(c.desc)
-  val orderSpec3 = Seq(c.desc, d.asc)
 
   test("collapse two adjacent windows with the same partition/order") {
     val query = testRelation
