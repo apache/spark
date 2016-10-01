@@ -74,18 +74,34 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * additional constraint of the form `b = 5`
    */
   private def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
+    // Collect alias from expressions to avoid producing non-converging set of constraints
+    // for recursive functions.
+    // For more details, infer https://issues.apache.org/jira/browse/SPARK-17733
+    val aliasMap = AttributeMap((expressions ++ children.flatMap(_.expressions)).collect {
+      case a: Alias => (a.toAttribute, a.child)
+    })
+
     var inferredConstraints = Set.empty[Expression]
     constraints.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
         inferredConstraints ++= (constraints - eq).map(_ transform {
-          case a: Attribute if a.semanticEquals(l) => r
+          case a: Attribute if a.semanticEquals(l) && !isRecursiveDeduction(a, r, aliasMap) => r
         })
         inferredConstraints ++= (constraints - eq).map(_ transform {
-          case a: Attribute if a.semanticEquals(r) => l
+          case a: Attribute if a.semanticEquals(r) && !isRecursiveDeduction(l, a, aliasMap) => l
         })
       case _ => // No inference
     }
     inferredConstraints -- constraints
+  }
+
+  private def isRecursiveDeduction(
+      left: Attribute,
+      right: Attribute,
+      aliasMap: AttributeMap[Expression]): Boolean = {
+    val leftExpression = aliasMap.getOrElse(left, left)
+    val rightExpression = aliasMap.getOrElse(right, right)
+    leftExpression.containsChild(rightExpression) || rightExpression.containsChild(leftExpression)
   }
 
   /**

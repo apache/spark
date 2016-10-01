@@ -2678,4 +2678,45 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-17733 InferFiltersFromConstraints rule never terminates for query") {
+    withTempView("tmpv") {
+      spark.range(10).toDF("a").createTempView("tmpv")
+
+      // Just ensure the following query will successfully execute complete.
+      assert(sql(
+        """
+          |SELECT
+          |  *
+          |FROM (
+          |  SELECT
+          |    COALESCE(t1.a, t2.a) AS int_col,
+          |    t1.a,
+          |    t2.a AS b
+          |  FROM tmpv t1
+          |  CROSS JOIN tmpv t2
+          |) t1
+          |INNER JOIN tmpv t2
+          |ON (((t2.a) = (t1.a)) AND ((t2.a) = (t1.int_col))) AND ((t2.a) = (t1.b))
+        """.stripMargin).count() > 0
+      )
+
+    //sql("CREATE TEMPORARY VIEW foo(a) AS VALUES (CAST(-993 AS BIGINT))")
+
+    /*sql(
+      """
+        |SELECT
+        |*
+        |FROM (
+        |    SELECT
+        |    COALESCE(t1.a, t2.a) AS int_col,
+        |    t1.a,
+        |    t2.a AS b
+        |    FROM foo t1
+        |    CROSS JOIN foo t2
+        |) t1
+        |INNER JOIN foo t2 ON (((t2.a) = (t1.a)) AND ((t2.a) = (t1.int_col))) AND ((t2.a) = (t1.b))
+      """.stripMargin).collect()*/
+    }
+  }
 }
