@@ -26,7 +26,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -83,7 +82,7 @@ class CreateTableAsSelectSuite
   }
 
   test("CREATE TABLE USING AS SELECT based on the file without write permission") {
-    // setWritable(boolean) doesn't work on Windows
+    // setWritable(boolean) does not work on Windows. Please refer JDK-6728842.
     assume(!Utils.isWindows)
     val childPath = new File(path.toString, "child")
     path.mkdir()
