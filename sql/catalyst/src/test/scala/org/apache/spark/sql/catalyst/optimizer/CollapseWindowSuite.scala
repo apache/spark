@@ -58,30 +58,6 @@ class CollapseWindowSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("collapse two adjacent windows with the same partition and the prefix order") {
-    val query1 = testRelation
-      .window(Seq(min(a).as('min_a)), partitionSpec1, orderSpec2)
-      .window(Seq(max(a).as('max_a)), partitionSpec1, orderSpec3)
-
-    val optimized1 = Optimize.execute(query1.analyze)
-    val correctAnswer1 = testRelation.window(Seq(
-      max(a).as('max_a),
-      min(a).as('min_a)), partitionSpec1, orderSpec3)
-
-    comparePlans(optimized1, correctAnswer1)
-
-    val query2 = testRelation
-      .window(Seq(min(a).as('min_a)), partitionSpec1, orderSpec3)
-      .window(Seq(max(a).as('max_a)), partitionSpec1, orderSpec2)
-
-    val optimized2 = Optimize.execute(query2.analyze)
-    val correctAnswer2 = testRelation.window(Seq(
-      max(a).as('max_a),
-      min(a).as('min_a)), partitionSpec1, orderSpec3)
-
-    comparePlans(optimized2, correctAnswer2)
-  }
-
   test("Don't collapse adjacent windows with different partitions or orders") {
     val query1 = testRelation
       .window(Seq(min(a).as('min_a)), partitionSpec1, orderSpec1)

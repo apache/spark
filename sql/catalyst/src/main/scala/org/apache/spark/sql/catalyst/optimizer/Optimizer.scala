@@ -540,20 +540,12 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 
 /**
  * Collapse Adjacent Window Expression.
- *
- * 1. If the partition specs and order specs are the same, collapse into the parent.
- * 2. If the partition specs are the same and one order spec is a prefix of the other,
- *    collapse to the more specific one.
+ * - If the partition specs and order specs are the same, collapse into the parent.
  */
 object CollapseWindow extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case w @ Window(we1, ps1, os1, Window(we2, ps2, os2, grandChild))
-        if ps1 == ps2 && (os1.length >= os2.length && os1.take(os2.length) == os2) =>
+    case w @ Window(we1, ps1, os1, Window(we2, ps2, os2, grandChild)) if ps1 == ps2 && os1 == os2 =>
       w.copy(windowExpressions = we1 ++ we2, child = grandChild)
-
-    case w @ Window(we1, ps1, os1, Window(we2, ps2, os2, grandChild))
-        if ps1 == ps2 && (os1.length < os2.length && os2.take(os1.length) == os1) =>
-      w.copy(windowExpressions = we1 ++ we2, orderSpec = os2, child = grandChild)
   }
 }
 
