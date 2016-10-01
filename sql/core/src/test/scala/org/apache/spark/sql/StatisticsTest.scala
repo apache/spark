@@ -35,25 +35,25 @@ trait StatisticsTest extends QueryTest with SharedSQLContext {
       val columns = expectedColStatsSeq.map(_._1)
       val tableIdent = TableIdentifier(table, Some("default"))
       val relation = spark.sessionState.catalog.lookupRelation(tableIdent)
-      val columnStats =
-        AnalyzeColumnCommand(tableIdent, columns.map(_.name)).computeColStats(spark, relation)._2
-      expectedColStatsSeq.foreach { expected =>
-        assert(columnStats.contains(expected._1.name))
-        val colStat = columnStats(expected._1.name)
+      val (_, columnStats) =
+        AnalyzeColumnCommand(tableIdent, columns.map(_.name)).computeColStats(spark, relation)
+      expectedColStatsSeq.foreach { case (field, expectedColStat) =>
+        assert(columnStats.contains(field.name))
+        val colStat = columnStats(field.name)
         StatisticsTest.checkColStat(
-          dataType = expected._1.dataType,
+          dataType = field.dataType,
           colStat = colStat,
-          expectedColStat = expected._2,
+          expectedColStat = expectedColStat,
           rsd = spark.sessionState.conf.ndvMaxError)
 
         // check if we get the same colStat after encoding and decoding
         val encodedCS = colStat.toString
-        val numFields = ColumnStatStruct.numStatFields(expected._1.dataType)
+        val numFields = ColumnStatStruct.numStatFields(field.dataType)
         val decodedCS = ColumnStat(numFields, encodedCS)
         StatisticsTest.checkColStat(
-          dataType = expected._1.dataType,
+          dataType = field.dataType,
           colStat = decodedCS,
-          expectedColStat = expected._2,
+          expectedColStat = expectedColStat,
           rsd = spark.sessionState.conf.ndvMaxError)
       }
     }

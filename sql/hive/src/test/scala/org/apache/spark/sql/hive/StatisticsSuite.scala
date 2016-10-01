@@ -390,13 +390,13 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       val readback = spark.table(tableName)
       val relations = readback.queryExecution.analyzed.collect { case rel: LogicalRelation =>
         val columnStats = rel.catalogTable.get.stats.get.colStats
-        expectedColStatsSeq.foreach { expected =>
-          assert(columnStats.contains(expected._1.name))
-          val colStat = columnStats(expected._1.name)
+        expectedColStatsSeq.foreach { case (field, expectedColStat) =>
+          assert(columnStats.contains(field.name))
+          val colStat = columnStats(field.name)
           StatisticsTest.checkColStat(
-            dataType = expected._1.dataType,
+            dataType = field.dataType,
             colStat = colStat,
-            expectedColStat = expected._2,
+            expectedColStat = expectedColStat,
             rsd = spark.sessionState.conf.ndvMaxError)
         }
         rel

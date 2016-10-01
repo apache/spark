@@ -78,8 +78,8 @@ class StatisticsColumnSuite extends StatisticsTest {
         val columnsToAnalyze = Seq(colName2.toUpperCase, colName1, colName2)
         val tableIdent = TableIdentifier(table, Some("default"))
         val relation = spark.sessionState.catalog.lookupRelation(tableIdent)
-        val columnStats =
-          AnalyzeColumnCommand(tableIdent, columnsToAnalyze).computeColStats(spark, relation)._2
+        val (_, columnStats) =
+          AnalyzeColumnCommand(tableIdent, columnsToAnalyze).computeColStats(spark, relation)
         assert(columnStats.contains(colName1))
         assert(columnStats.contains(colName2))
         // check deduplication
@@ -279,29 +279,22 @@ class StatisticsColumnSuite extends StatisticsTest {
 
   test("update table-level stats while collecting column-level stats") {
     val table = "tbl"
-    val tmpTable = "tmp"
-    withTable(table, tmpTable) {
-      val values = Seq(1)
-      val df = values.toDF("c1")
-      df.write.format("json").saveAsTable(tmpTable)
-
+    withTable(table) {
       sql(s"CREATE TABLE $table (c1 int) USING PARQUET")
-      sql(s"INSERT INTO $table SELECT * FROM $tmpTable")
+      sql(s"INSERT INTO $table SELECT 1")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-      checkTableStats(tableName = table, expectedRowCount = Some(values.length))
+      checkTableStats(tableName = table, expectedRowCount = Some(1))
 
       // update table-level stats between analyze table and analyze column commands
-      sql(s"INSERT INTO $table SELECT * FROM $tmpTable")
+      sql(s"INSERT INTO $table SELECT 1")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c1")
-      val fetchedStats =
-        checkTableStats(tableName = table, expectedRowCount = Some(values.length * 2))
+      val fetchedStats = checkTableStats(tableName = table, expectedRowCount = Some(2))
 
       val colStat = fetchedStats.get.colStats("c1")
       StatisticsTest.checkColStat(
         dataType = IntegerType,
         colStat = colStat,
-        expectedColStat = ColumnStat(InternalRow.fromSeq(
-          Seq(0L, values.max, values.min, values.distinct.length.toLong))),
+        expectedColStat = ColumnStat(InternalRow(0L, 1, 1, 1L)),
         rsd = spark.sessionState.conf.ndvMaxError)
     }
   }

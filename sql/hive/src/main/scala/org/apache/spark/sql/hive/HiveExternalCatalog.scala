@@ -476,9 +476,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       }
     }
     // construct Spark's statistics from information in Hive metastore
-    if (catalogTable.properties.filterKeys(_.startsWith(STATISTICS_PREFIX)).nonEmpty) {
-      val colStatsProps = catalogTable.properties
-        .filterKeys(_.startsWith(STATISTICS_COL_STATS_PREFIX))
+    val statsProps = catalogTable.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
+    if (statsProps.nonEmpty) {
+      val colStatsProps = statsProps.filterKeys(_.startsWith(STATISTICS_COL_STATS_PREFIX))
         .map { case (k, v) => (k.drop(STATISTICS_COL_STATS_PREFIX.length), v) }
       val colStats: Map[String, ColumnStat] = catalogTable.schema.collect {
         case f if colStatsProps.contains(f.name) =>

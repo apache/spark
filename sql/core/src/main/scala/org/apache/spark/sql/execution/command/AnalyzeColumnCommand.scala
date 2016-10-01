@@ -77,6 +77,7 @@ case class AnalyzeColumnCommand(
 
     // check correctness of column names
     val attributesToAnalyze = mutable.MutableList[Attribute]()
+    val duplicatedColumns = mutable.MutableList[String]()
     val resolver = sparkSession.sessionState.conf.resolver
     columnNames.foreach { col =>
       val exprOption = relation.output.find(attr => resolver(attr.name, col))
@@ -85,8 +86,12 @@ case class AnalyzeColumnCommand(
       if (!attributesToAnalyze.contains(expr)) {
         attributesToAnalyze += expr
       } else {
-        logWarning(s"Duplicated column: $col")
+        duplicatedColumns += col
       }
+    }
+    if (duplicatedColumns.nonEmpty) {
+      logWarning(s"Duplicated columns ${duplicatedColumns.mkString("(", ", ", ")")} detected " +
+        s"when analyzing columns ${columnNames.mkString("(", ", ", ")")}, ignoring them.")
     }
 
     // Collect statistics per column.
