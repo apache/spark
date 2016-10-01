@@ -208,9 +208,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         else id
       case id => throw new AnalysisException(s"The specified table/view $id does not exist.")
     }
-    // scalastyle:off
-    println(tableIdent)
-    // scalastyle:on
     makeTable(tableIdent)
   }
 
