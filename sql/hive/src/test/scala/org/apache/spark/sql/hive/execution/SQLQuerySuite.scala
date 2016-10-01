@@ -1883,6 +1883,25 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-17750 Cannot create view which includes interval arithmetic") {
+    withTable("dates") {
+      sql("create table dates (ts timestamp)")
+      sql("insert into dates values ('2016-10-01 12:34:56')")
+
+      withView("view_plus", "view_minus") {
+        sql("create view view_plus as select ts + interval 1 day from dates")
+        checkAnswer(
+          sql("select * from view_plus"),
+          sql("select ts + interval 1 day from dates"))
+
+        sql("create view view_minus as select ts - interval 1 day from dates")
+        checkAnswer(
+          sql("select * from view_minus"),
+          sql("select ts - interval 1 day from dates"))
+      }
+    }
+  }
+
   def testCommandAvailable(command: String): Boolean = {
     val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
     attempt.isSuccess && attempt.get == 0
