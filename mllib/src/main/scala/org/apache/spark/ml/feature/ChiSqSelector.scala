@@ -193,7 +193,7 @@ final class ChiSqSelectorModel private[ml] (
 
   import ChiSqSelectorModel._
 
-  /** list of indices to select (filter). Must be ordered asc */
+  /** list of indices to select (filter). */
   @Since("1.6.0")
   val selectedFeatures: Array[Int] = chiSqSelector.selectedFeatures
 
