@@ -100,14 +100,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   private def makeTable(tableIdent: TableIdentifier): Table = {
-    val isTemporary = tableIdent.database.isEmpty
     val metadata = sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent)
+    val database = metadata.identifier.database
     new Table(
       name = tableIdent.table,
-      database = tableIdent.database.orNull,
+      database = database.orNull,
       description = metadata.comment.orNull,
-      tableType = if (isTemporary) "TEMPORARY" else metadata.tableType.name,
-      isTemporary = isTemporary)
+      tableType = if (database.isEmpty) "TEMPORARY" else metadata.tableType.name,
+      isTemporary = database.isEmpty)
   }
 
   /**
@@ -180,11 +180,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * [[Database]] can be found.
    */
   override def getDatabase(dbName: String): Database = {
-    if (sessionCatalog.databaseExists(dbName)) {
-      makeDatabase(dbName)
-    } else {
-      throw new AnalysisException(s"The specified database $dbName does not exist.")
-    }
+    makeDatabase(dbName)
   }
 
   /**
@@ -201,14 +197,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * [[AnalysisException]] when no [[Table]] can be found.
    */
   override def getTable(dbName: String, tableName: String): Table = {
-    val tableIdent = TableIdentifier(tableName, Option(dbName)) match {
-      case id if sessionCatalog.isTemporaryTable(id) => id
-      case id if sessionCatalog.tableExists(id) =>
-        if (dbName == null) id.copy(database = Some(sessionCatalog.getCurrentDatabase))
-        else id
-      case id => throw new AnalysisException(s"The specified table/view $id does not exist.")
-    }
-    makeTable(tableIdent)
+    makeTable(TableIdentifier(tableName, Option(dbName)))
   }
 
   /**
@@ -225,12 +214,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * found.
    */
   override def getFunction(dbName: String, functionName: String): Function = {
-    val functionIdent = FunctionIdentifier(functionName, Option(dbName))
-    if (sessionCatalog.functionExists(functionIdent)) {
-      makeFunction(functionIdent)
-    } else {
-      throw new AnalysisException(s"The specified function $functionIdent does not exist.")
-    }
+    makeFunction(FunctionIdentifier(functionName, Option(dbName)))
   }
 
   /**
