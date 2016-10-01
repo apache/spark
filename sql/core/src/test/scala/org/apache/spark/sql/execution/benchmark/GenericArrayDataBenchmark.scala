@@ -185,7 +185,7 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
   }
 
   def readGenericDoubleArray(iters: Int): Unit = {
-    val count = 1024 * 1024 *8 
+    val count = 1024 * 1024 * 8
     var result: Double = 0
 
     val anyArray = new GenericArrayData(new Array[Double](count).toArray[Any])
