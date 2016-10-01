@@ -48,4 +48,10 @@ class AnalysisException protected[sql] (
     val planAnnotation = plan.map(p => s";\n$p").getOrElse("")
     s"$message;$lineAnnotation$positionAnnotation$planAnnotation"
   }
+
+  def getSimpleMessage: String = {
+    val lineAnnotation = line.map(l => s" line $l").getOrElse("")
+    val positionAnnotation = startPosition.map(p => s" pos $p").getOrElse("")
+    s"$message;$lineAnnotation$positionAnnotation"
+  }
 }
