@@ -57,7 +57,7 @@ class GenericArrayData(val array: Array[Any],
   def this(primitiveArray: Array[Double]) =
     this(null, null, null, null, null, null, null, primitiveArray)
 
-  def this(primitiveArray: Array[Any]) = this(primitiveArray.toSeq)
+  def this(array: Array[Any]) = this(array, null, null, null, null, null, null, null)
 
   def this(seqOrArray: Any) = this(GenericArrayData.anyToSeq(seqOrArray))
 
