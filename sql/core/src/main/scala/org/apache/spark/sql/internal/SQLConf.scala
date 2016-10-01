@@ -288,7 +288,7 @@ object SQLConf {
     .createWithDefault(5 * 60)
 
   val EXECUTOR_SIDE_BROADCAST_ENABLED = SQLConfigBuilder("spark.sql.executorSideBroadcast.enabled")
-    .doc("When true, we will use executor-side broadcast for BroadcastExchangeExec in sql. " +
+    .doc("When true, we will use executor side broadcast for Broadcast-based join in sql. " +
          "Notice that broadcasted pieces of data in executor-side broadcast are not persisted " +
          "in the driver, but fetched from RDD pieces persisted in other executors. " +
          "If one executor is lost before its piece is fetched by other executors, " +

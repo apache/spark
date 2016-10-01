@@ -18,14 +18,11 @@
 package org.apache.spark.broadcast
 
 /**
- * Marker trait to identify the shape in which tuples are broadcasted. Typical examples of this are
- * identity (tuples remain unchanged) or hashed (tuples are converted into some hash index).
+ * The trait used in executor side broadcast. The implementation of `transform` identify the shape
+ * in which the results of a RDD are broadcasted.
+ *
+ * @tparam T The type of RDD elements.
  */
 trait BroadcastMode[T] extends Serializable {
   def transform(rows: Array[T]): Any
-
-  /**
-   * Returns true iff this [[BroadcastMode]] generates the same result as `other`.
-   */
-  def compatibleWith(other: BroadcastMode[T]): Boolean
 }

@@ -26,7 +26,7 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastPartitioning, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastPartitioning, Partitioning, RowBroadcastMode}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -42,7 +42,7 @@ import org.apache.spark.util.ThreadUtils
  * @tparam T The type of the object transformed from the result of RDD by [[BroadcastMode]].
  */
 case class BroadcastExchangeExec[T: ClassTag](
-    mode: broadcast.BroadcastMode[InternalRow],
+    mode: RowBroadcastMode,
     child: SparkPlan) extends Exchange {
 
   override lazy val metrics = if (sqlContext.conf.executorSideBroadcastEnabled) {

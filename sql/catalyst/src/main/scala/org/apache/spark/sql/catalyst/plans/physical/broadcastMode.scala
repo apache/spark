@@ -21,13 +21,24 @@ import org.apache.spark.broadcast.BroadcastMode
 import org.apache.spark.sql.catalyst.InternalRow
 
 /**
+ * Marker trait to identify the shape in which tuples are broadcasted. Typical examples of this are
+ * identity (tuples remain unchanged) or hashed (tuples are converted into some hash index).
+ */
+abstract class RowBroadcastMode extends BroadcastMode[InternalRow] {
+  /**
+   * Returns true iff this [[RowBroadcastMode]] generates the same result as `other`.
+   */
+  def compatibleWith(other: RowBroadcastMode): Boolean
+}
+
+/**
  * IdentityBroadcastMode requires that rows are broadcasted in their original form.
  */
-case object IdentityBroadcastMode extends BroadcastMode[InternalRow] {
+case object IdentityBroadcastMode extends RowBroadcastMode {
   // TODO: pack the UnsafeRows into single bytes array.
   override def transform(rows: Array[InternalRow]): Array[InternalRow] = rows
 
-  override def compatibleWith(other: BroadcastMode[InternalRow]): Boolean = {
+  override def compatibleWith(other: RowBroadcastMode): Boolean = {
     this eq other
   }
 }

@@ -1090,7 +1090,6 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     rdd.count()
     val mode = new BroadcastMode[Int] {
       override def transform(rows: Array[Int]): Array[Int] = rows
-      override def compatibleWith(other: BroadcastMode[Int]): Boolean = true
     }
     val broadcastedVal = sc.broadcastRDDOnExecutor[Int, Array[Int]](rdd, mode)
     val collected = sc.parallelize(1 to 2, 2).map { _ =>
@@ -1106,7 +1105,6 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     rdd.count()
     val mode = new BroadcastMode[Int] {
       override def transform(rows: Array[Int]): Int = 1
-      override def compatibleWith(other: BroadcastMode[Int]): Boolean = true
     }
     val broadcastedVal = sc.broadcastRDDOnExecutor[Int, Int](rdd, mode)
     val collected = sc.parallelize(1 to 2, 2).map { _ =>
@@ -1126,7 +1124,6 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     rdd.count()
     val mode = new BroadcastMode[Int] {
       override def transform(rows: Array[Int]): Int = 1
-      override def compatibleWith(other: BroadcastMode[Int]): Boolean = true
     }
     val broadcastedVal = sc.broadcastRDDOnExecutor[Int, Int](rdd, mode)
     rdd.unpersist()
