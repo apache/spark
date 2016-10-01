@@ -237,6 +237,22 @@ object DateTimeUtils {
     (day.toInt, micros * 1000L)
   }
 
+  /*
+   * Converts the timestamp to milliseconds since epoc. In spark timestamp values have microseconds
+   * precision, so this conversion is lossy.
+   */
+  def toMillis(us: SQLTimestamp): Long = {
+    val julian_us = us + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
+    julian_us / 1000L
+  }
+
+  /*
+   * Converts millseconds since epoc to SQLTimestamp.
+   */
+  def fromMillis(millis: SQLTimestamp): Long = {
+    (millis - JULIAN_DAY_OF_EPOCH * MILLIS_PER_DAY) * 1000L
+  }
+
   /**
    * Parses a given UTF8 date string to the corresponding a corresponding [[Long]] value.
    * The return type is [[Option]] in order to distinguish between 0L and null. The following
