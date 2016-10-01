@@ -1596,8 +1596,8 @@ case class Sentences(
         widx = wi.current
         if (Character.isLetterOrDigit(word.charAt(0))) words += UTF8String.fromString(word)
       }
-      result += GenericArrayData.allocate(words)
+      result += new GenericArrayData(words)
     }
-    GenericArrayData.allocate(result)
+    new GenericArrayData(result)
   }
 }

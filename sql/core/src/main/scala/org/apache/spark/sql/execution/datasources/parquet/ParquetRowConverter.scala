@@ -491,7 +491,7 @@ private[parquet] class ParquetRowConverter(
 
     override def getConverter(fieldIndex: Int): Converter = elementConverter
 
-    override def end(): Unit = updater.set(GenericArrayData.allocate(currentArray.toArray))
+    override def end(): Unit = updater.set(new GenericArrayData(currentArray.toArray))
 
     // NOTE: We can't reuse the mutable `ArrayBuffer` here and must instantiate a new buffer for the
     // next value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored
@@ -590,7 +590,7 @@ private[parquet] class ParquetRowConverter(
 
     protected def newArrayUpdater(updater: ParentContainerUpdater) = new ParentContainerUpdater {
       override def start(): Unit = currentArray = ArrayBuffer.empty[Any]
-      override def end(): Unit = updater.set(GenericArrayData.allocate(currentArray.toArray))
+      override def end(): Unit = updater.set(new GenericArrayData(currentArray.toArray))
       override def set(value: Any): Unit = currentArray += value
     }
   }

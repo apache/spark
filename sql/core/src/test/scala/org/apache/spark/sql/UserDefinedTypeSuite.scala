@@ -50,7 +50,7 @@ object UDT {
     override def sqlType: DataType = ArrayType(DoubleType, containsNull = false)
 
     override def serialize(features: MyDenseVector): ArrayData = {
-      GenericArrayData.allocate(features.data.map(_.asInstanceOf[Any]))
+      new GenericArrayData(features.data.map(_.asInstanceOf[Any]))
     }
 
     override def deserialize(datum: Any): MyDenseVector = {

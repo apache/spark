@@ -51,7 +51,7 @@ class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
     val output = new Array[Any](2)
     output(0) = p.x
     output(1) = p.y
-    GenericArrayData.allocate(output)
+    new GenericArrayData(output)
   }
 
   override def deserialize(datum: Any): ExamplePoint = {

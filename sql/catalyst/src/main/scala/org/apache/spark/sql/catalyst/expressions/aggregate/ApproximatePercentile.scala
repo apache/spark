@@ -143,7 +143,7 @@ case class ApproximatePercentile(
     if (result.length == 0) {
       null
     } else if (returnPercentileArray) {
-      GenericArrayData.allocate(result)
+      new GenericArrayData(result)
     } else {
       result(0)
     }

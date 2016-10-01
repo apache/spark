@@ -481,7 +481,7 @@ private[hive] trait HiveInspectors {
         val values = li.getWritableConstantValue.asScala
           .map(unwrapper)
           .toArray
-        val constant = GenericArrayData.allocate(values)
+        val constant = new GenericArrayData(values)
         _ => constant
       case poi: VoidObjectInspector =>
         _ => null // always be null for void object inspector
@@ -637,7 +637,7 @@ private[hive] trait HiveInspectors {
             Option(li.getList(data))
               .map { l =>
                 val values = l.asScala.map(unwrapper).toArray
-                GenericArrayData.allocate(values)
+                new GenericArrayData(values)
               }
               .orNull
           } else {

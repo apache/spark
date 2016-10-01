@@ -78,7 +78,7 @@ abstract class Collect extends ImperativeAggregate {
   }
 
   override def eval(input: InternalRow): Any = {
-    GenericArrayData.allocate(buffer.toArray)
+    new GenericArrayData(buffer.toArray)
   }
 }
 

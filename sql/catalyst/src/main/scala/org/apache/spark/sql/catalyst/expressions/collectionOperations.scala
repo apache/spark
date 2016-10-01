@@ -206,7 +206,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
     if (elementType != NullType) {
       java.util.Arrays.sort(data, if (ascending.asInstanceOf[Boolean]) lt else gt)
     }
-    GenericArrayData.allocate(data.asInstanceOf[Array[Any]])
+    new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
 
   override def prettyName: String = "sort_array"

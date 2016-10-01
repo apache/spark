@@ -176,7 +176,7 @@ case class GetArrayStructFields(
       }
       i += 1
     }
-    GenericArrayData.allocate(result)
+    new GenericArrayData(result)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -201,7 +201,7 @@ case class GetArrayStructFields(
             }
           }
         }
-        ${ev.value} = $arrayClass.allocate($values);
+        ${ev.value} = new $arrayClass($values);
       """
     })
   }
