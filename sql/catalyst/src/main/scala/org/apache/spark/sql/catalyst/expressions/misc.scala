@@ -517,7 +517,10 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
+
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the value is null or false.
+    val errMsgField = ctx.addReferenceObj(errMsg)
     ExprCode(code = s"""${eval.code}
        |if (${eval.isNull} || !${eval.value}) {
        |  throw new RuntimeException($errMsgField);
