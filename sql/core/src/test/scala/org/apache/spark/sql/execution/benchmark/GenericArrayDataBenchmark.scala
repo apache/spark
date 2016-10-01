@@ -58,6 +58,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Generic    ")(genericIntArray)
     benchmark.addCase("Specialized")(specializedIntArray)
     benchmark.run
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Allocate GenericArrayData for int:       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Generic                                          0 /    0   46500044.3           0.0       1.0X
+    Specialized                                      0 /    0  170500162.6           0.0       3.7X
+    */
   }
 
   def allocateGenericDoubleArray(iters: Int): Unit = {
@@ -86,6 +94,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Generic    ")(genericDoubleArray)
     benchmark.addCase("Specialized")(specializedDoubleArray)
     benchmark.run
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Allocate GenericArrayData for double:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Generic                                          0 /    0   55627374.0           0.0       1.0X
+    Specialized                                      0 /    0  177724745.8           0.0       3.2X
+    */
   }
 
   def getPrimitiveIntArray(iters: Int): Unit = {
@@ -113,6 +129,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Generic")(genericIntArray)
     benchmark.addCase("Specialized")(specializedIntArray)
     benchmark.run
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Get int primitive array:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Generic                                        334 /  382        502.4           2.0       1.0X
+    Specialized                                    282 /  314        595.4           1.7       1.2X
+    */
   }
 
   def getPrimitiveDoubleArray(iters: Int): Unit = {
@@ -140,6 +164,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Generic")(genericDoubleArray)
     benchmark.addCase("Specialized")(specializedDoubleArray)
     benchmark.run
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Get double primitive array:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Generic                                       1720 / 1883         97.6          10.3       1.0X
+    Specialized                                    703 / 1117        238.7           4.2       2.4X
+    */
   }
 
   def readGenericIntArray(iters: Int): Unit = {
@@ -182,6 +214,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Generic")(genericIntArray)
     benchmark.addCase("Specialized")(specializedIntArray)
     benchmark.run
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Read GenericArrayData Int:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Generic                                        206 /  212       1017.6           1.0       1.0X
+    Specialized                                    161 /  167       1301.0           0.8       1.3X
+    */
   }
 
   def readGenericDoubleArray(iters: Int): Unit = {
@@ -224,6 +264,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Generic")(genericDoubleArray)
     benchmark.addCase("Specialized")(specializedDoubleArray)
     benchmark.run
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Read GenericArrayData Double:            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Generic                                        547 /  581        383.3           2.6       1.0X
+    Specialized                                    237 /  260        884.0           1.1       2.3X
+    */
   }
 
   ignore("allocate GenericArrayData") {
