@@ -210,7 +210,7 @@ case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
         ret(i) = UTF8String.fromString(nodeList.item(i).getNodeValue)
         i += 1
       }
-      GenericArrayData.allocate(ret)
+      new GenericArrayData(ret)
     } else {
       null
     }
