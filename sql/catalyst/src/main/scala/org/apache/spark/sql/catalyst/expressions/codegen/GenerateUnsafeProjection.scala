@@ -292,7 +292,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
         ${writeArrayToBuffer(ctx, keys, keyType, false, bufferHolder)}
         // Write the numBytes of key array into the first 8 bytes.
-        Platform.putInt($bufferHolder.buffer, $tmpCursor - 8, $bufferHolder.cursor - $tmpCursor);
+        Platform.putLong($bufferHolder.buffer, $tmpCursor - 8, $bufferHolder.cursor - $tmpCursor);
 
         ${writeArrayToBuffer(ctx, values, valueType, true, bufferHolder)}
       }
