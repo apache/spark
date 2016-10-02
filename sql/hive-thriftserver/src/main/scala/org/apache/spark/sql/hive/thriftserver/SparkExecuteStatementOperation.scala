@@ -61,7 +61,8 @@ private[hive] class SparkExecuteStatementOperation(
     } else {
       logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
       val schema = result.queryExecution.analyzed.output.map { attr =>
-        new FieldSchema(attr.name, attr.dataType.catalogString, "")
+        val attrTypeString = if (attr.dataType == NullType) "void" else attr.dataType.catalogString
+        new FieldSchema(attr.name, attrTypeString, "")
       }
       new TableSchema(schema.asJava)
     }
