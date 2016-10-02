@@ -244,7 +244,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkMetadata(CreateStruct(Seq(a, b)))
     checkMetadata(CreateNamedStruct(Seq("a", a, "b", b)))
     checkMetadata(CreateStructUnsafe(Seq(a, b)))
-    checkMetadata(CreateNamedStructUnsafe(Seq("a", a, "b", b)))
   }
 
   test("StringToMap") {
