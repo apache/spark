@@ -202,6 +202,31 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     }
   }
 
+  test("INSERT INTO TABLE - complex type but different names") {
+    val tab1 = "tab1"
+    val tab2 = "tab2"
+    withTable(tab1, tab2) {
+      sql(
+        s"""
+           |CREATE TABLE $tab1 (s struct<a: string, b: string>)
+           |USING parquet
+         """.stripMargin)
+      sql(s"INSERT INTO TABLE $tab1 SELECT named_struct('col1','1','col2','2')")
+
+      sql(
+        s"""
+           |CREATE TABLE $tab2 (p struct<c: string, d: string>)
+           |USING parquet
+         """.stripMargin)
+      sql(s"INSERT INTO TABLE $tab2 SELECT * FROM $tab1")
+
+      checkAnswer(
+        spark.table(tab1),
+        spark.table(tab2)
+      )
+    }
+  }
+
   test("it is not allowed to write to a table while querying it.") {
     val message = intercept[AnalysisException] {
       sql(
