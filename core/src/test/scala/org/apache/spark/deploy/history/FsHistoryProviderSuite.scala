@@ -126,6 +126,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("SPARK-3697: ignore directories that cannot be read.") {
+    // setReadable(...) does not work on Windows. Please refer JDK-6728842.
+    assume(!Utils.isWindows)
     val logFile1 = newLogFile("new1", None, inProgress = false)
     writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1-1", Some("app1-1"), 1L, "test", None),
