@@ -532,11 +532,11 @@ primaryExpression
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
     | '(' expression (',' expression)+ ')'                                                     #rowConstructor
-    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
     | '(' query ')'                                                                            #subqueryExpression
-    | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END                   #simpleCase
+    | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CAST '(' expression AS dataType ')'                                                      #cast
+    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
