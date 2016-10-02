@@ -78,6 +78,9 @@ methods `spark.mllib` supports:
   </tbody>
 </table>
 
+A binary label y is denoted as either +1 (positive) or −1 (negative), which is convenient
+for the formulation.
+
 ### Regularizers
 
 The purpose of the
