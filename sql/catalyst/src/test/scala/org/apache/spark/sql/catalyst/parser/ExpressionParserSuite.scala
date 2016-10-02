@@ -294,6 +294,8 @@ class ExpressionParserSuite extends PlanTest {
       CaseKeyWhen('a, Seq(1, 'b, 2, 'c, 'd)))
     assertEqual("case (a or b) when true then c when false then d else e end",
       CaseKeyWhen('a || 'b, Seq(true, 'c, false, 'd, 'e)))
+    assertEqual("case 'a'='a' when true then 1 end",
+      CaseKeyWhen("a" ===  "a", Seq(true, 1)))
     assertEqual("case when a = 1 then b when a = 2 then c else d end",
       CaseWhen(Seq(('a === 1, 'b.expr), ('a === 2, 'c.expr)), 'd))
   }
