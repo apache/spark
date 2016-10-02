@@ -63,7 +63,7 @@ object RowEncoder {
     new ExpressionEncoder[Row](
       schema,
       flat = false,
-      serializer.asInstanceOf[CreateNamedStruct].flatten,
+      serializer.asInstanceOf[CreateStruct].children,
       deserializer,
       ClassTag(cls))
   }

@@ -120,7 +120,6 @@ object UnsafeProjection {
   def create(exprs: Seq[Expression]): UnsafeProjection = {
     val unsafeExprs = exprs.map(_ transform {
       case CreateStruct(children) => CreateStructUnsafe(children)
-      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
     })
     GenerateUnsafeProjection.generate(unsafeExprs)
   }
@@ -146,7 +145,6 @@ object UnsafeProjection {
     val e = exprs.map(BindReferences.bindReference(_, inputSchema))
       .map(_ transform {
         case CreateStruct(children) => CreateStructUnsafe(children)
-        case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
     })
     GenerateUnsafeProjection.generate(e, subexpressionEliminationEnabled)
   }

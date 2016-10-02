@@ -69,7 +69,7 @@ object ExpressionEncoder {
     new ExpressionEncoder[T](
       schema,
       flat,
-      serializer.flatten,
+      serializer.children,
       deserializer,
       ClassTag[T](cls))
   }
@@ -85,7 +85,7 @@ object ExpressionEncoder {
     new ExpressionEncoder[T](
       schema.asInstanceOf[StructType],
       flat = false,
-      serializer.flatten,
+      serializer.children,
       deserializer,
       ClassTag[T](beanClass))
   }

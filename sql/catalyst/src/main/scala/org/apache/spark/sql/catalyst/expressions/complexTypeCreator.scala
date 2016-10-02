@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -227,93 +228,31 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
 }
 
 
-/**
- * Creates a struct with the given field names and values
- *
- * @param children Seq(name1, val1, name2, val2, ...)
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.")
-// scalastyle:on line.size.limit
-case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
+object CreateNamedStruct {
+  /**
+   * Construct a named expression.
+   */
+  def apply(children: Seq[Expression]): CreateStruct = {
+    def name(e: Expression): String = e.eval(EmptyRow).toString
+    val namedChildren = children.grouped(2).map {
+      case Seq(n, e) => Alias(e, name(n))()
+    }
+    CreateStruct(namedChildren.toSeq)
+  }
 
   /**
-   * Returns Aliased [[Expression]]s that could be used to construct a flattened version of this
-   * StructType.
+   * Registration used to add the 'named_struct' to the
+   * [[org.apache.spark.sql.catalyst.analysis.FunctionRegistry]]
    */
-  def flatten: Seq[NamedExpression] = valExprs.zip(names).map {
-    case (v, n) => Alias(v, n.toString)()
+  val registration: (String, (ExpressionInfo, FunctionBuilder)) = {
+    val info = new ExpressionInfo(
+      classOf[CreateStruct].getCanonicalName,
+      "named_struct",
+      "_FUNC_(name1, val1, name2, val2, ...) - "
+        + "Creates a struct with the given field names and values.",
+      "")
+    ("named_struct", (info, apply))
   }
-
-  private lazy val (nameExprs, valExprs) =
-    children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
-
-  private lazy val names = nameExprs.map(_.eval(EmptyRow))
-
-  override lazy val dataType: StructType = {
-    val fields = names.zip(valExprs).map {
-      case (name, valExpr: NamedExpression) =>
-        StructField(name.asInstanceOf[UTF8String].toString,
-          valExpr.dataType, valExpr.nullable, valExpr.metadata)
-      case (name, valExpr) =>
-        StructField(name.asInstanceOf[UTF8String].toString,
-          valExpr.dataType, valExpr.nullable, Metadata.empty)
-    }
-    StructType(fields)
-  }
-
-  override def foldable: Boolean = valExprs.forall(_.foldable)
-
-  override def nullable: Boolean = false
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
-    } else {
-      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
-      if (invalidNames.nonEmpty) {
-        TypeCheckResult.TypeCheckFailure(
-          s"Only foldable StringType expressions are allowed to appear at odd position , got :" +
-            s" ${invalidNames.mkString(",")}")
-      } else if (!names.contains(null)) {
-        TypeCheckResult.TypeCheckSuccess
-      } else {
-        TypeCheckResult.TypeCheckFailure("Field name should not be null")
-      }
-    }
-  }
-
-  override def eval(input: InternalRow): Any = {
-    InternalRow(valExprs.map(_.eval(input)): _*)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val rowClass = classOf[GenericInternalRow].getName
-    val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
-
-    ev.copy(code = s"""
-      boolean ${ev.isNull} = false;
-      $values = new Object[${valExprs.size}];""" +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        valExprs.zipWithIndex.map { case (e, i) =>
-          val eval = e.genCode(ctx)
-          eval.code + s"""
-          if (${eval.isNull}) {
-            $values[$i] = null;
-          } else {
-            $values[$i] = ${eval.value};
-          }"""
-        }) +
-      s"""
-        final InternalRow ${ev.value} = new $rowClass($values);
-        this.$values = null;
-      """)
-  }
-
-  override def prettyName: String = "named_struct"
 }
 
 /**
@@ -351,47 +290,6 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
   }
 
   override def prettyName: String = "struct_unsafe"
-}
-
-
-/**
- * Creates a struct with the given field names and values. This is a variant that returns
- * UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
- * this expression automatically at runtime.
- *
- * @param children Seq(name1, val1, name2, val2, ...)
- */
-case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression {
-
-  private lazy val (nameExprs, valExprs) =
-    children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
-
-  private lazy val names = nameExprs.map(_.eval(EmptyRow).toString)
-
-  override lazy val dataType: StructType = {
-    val fields = names.zip(valExprs).map {
-      case (name, valExpr: NamedExpression) =>
-        StructField(name, valExpr.dataType, valExpr.nullable, valExpr.metadata)
-      case (name, valExpr) =>
-        StructField(name, valExpr.dataType, valExpr.nullable, Metadata.empty)
-    }
-    StructType(fields)
-  }
-
-  override def foldable: Boolean = valExprs.forall(_.foldable)
-
-  override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any = {
-    InternalRow(valExprs.map(_.eval(input)): _*)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
-    ExprCode(code = eval.code, isNull = eval.isNull, value = eval.value)
-  }
-
-  override def prettyName: String = "named_struct_unsafe"
 }
 
 /**

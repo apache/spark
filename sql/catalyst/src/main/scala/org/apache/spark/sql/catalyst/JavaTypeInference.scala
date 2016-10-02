@@ -322,9 +322,9 @@ object JavaTypeInference {
   /**
    * Returns an expression for serializing an object of the given type to an internal row.
    */
-  def serializerFor(beanClass: Class[_]): CreateNamedStruct = {
+  def serializerFor(beanClass: Class[_]): CreateStruct = {
     val inputObject = BoundReference(0, ObjectType(beanClass), nullable = true)
-    serializerFor(inputObject, TypeToken.of(beanClass)).asInstanceOf[CreateNamedStruct]
+    serializerFor(inputObject, TypeToken.of(beanClass)).asInstanceOf[CreateStruct]
   }
 
   private def serializerFor(inputObject: Expression, typeToken: TypeToken[_]): Expression = {
