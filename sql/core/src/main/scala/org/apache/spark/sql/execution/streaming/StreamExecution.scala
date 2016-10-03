@@ -358,9 +358,14 @@ class StreamExecution(
       checkpointFile("state"),
       currentBatchId)
 
-    lastExecution.executedPlan
-    val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
-    logDebug(s"Optimized batch in ${optimizerTime}ms")
+    // This if condition is to eliminate unnecessary physical planning for `ForeachSink`; refer to
+    // SPARK-16545 for details.
+    // TODO: remove this if condition after the full resolution of incremental execution
+    if (!sink.isInstanceOf[ForeachSink[_]]) {
+      lastExecution.executedPlan
+      val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
+      logDebug(s"Optimized batch in ${optimizerTime}ms")
+    }
 
     val nextBatch =
       new Dataset(sparkSession, lastExecution, RowEncoder(lastExecution.analyzed.schema))
