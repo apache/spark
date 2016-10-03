@@ -743,7 +743,6 @@
       <dependency>
         <groupId>com.spotify</groupId>
         <artifactId>docker-client</artifactId>
-        <classifier>shaded</classifier>
         <version>3.6.6</version>
         <scope>test</scope>
         <exclusions>
@@ -2618,8 +2617,9 @@
               <configuration>
                 <compilerArgs combine.children="append">
                   <arg>-bootclasspath</arg>
-                  <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                  <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
                 </compilerArgs>
+                <verbose>true</verbose>
               </configuration>
             </plugin>
             <plugin>
@@ -2634,7 +2634,7 @@
                   <configuration>
                     <args combine.children="append">
                       <arg>-javabootclasspath</arg>
-                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
                     </args>
                   </configuration>
                 </execution>
@@ -2643,7 +2643,7 @@
                   <configuration>
                     <args combine.children="append">
                       <arg>-javabootclasspath</arg>
-                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
                     </args>
                   </configuration>
                 </execution>

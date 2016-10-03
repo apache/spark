@@ -25,9 +25,11 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce._
 
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -112,7 +114,9 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     (file: PartitionedFile) => {
       val lineIterator = {
         val conf = broadcastedHadoopConf.value.value
-        new HadoopFileLinesReader(file, conf).map { line =>
+        val linesReader = new HadoopFileLinesReader(file, conf)
+        Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+        linesReader.map { line =>
           new String(line.getBytes, 0, line.getLength, csvOptions.charset)
         }
       }

@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.json
+package org.apache.spark.sql.catalyst.json
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
+import org.apache.spark.sql.catalyst.util.{CompressionCodecs, ParseModes}
 
 /**
- * Options for the JSON data source.
+ * Options for parsing JSON data into Spark SQL rows.
  *
  * Most of these map directly to Jackson's internal options, specified in [[JsonParser.Feature]].
  */
