@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
@@ -314,22 +314,22 @@ object JdbcUtils extends Logging {
   // A `JDBCValueGetter` is responsible for getting a value from `ResultSet` into a field
   // for `MutableRow`. The last argument `Int` means the index for the value to be set in
   // the row and also used for the value in `ResultSet`.
-  private type JDBCValueGetter = (ResultSet, MutableRow, Int) => Unit
+  private type JDBCValueGetter = (ResultSet, InternalRow, Int) => Unit
 
   /**
    * Creates `JDBCValueGetter`s according to [[StructType]], which can set
-   * each value from `ResultSet` to each field of [[MutableRow]] correctly.
+   * each value from `ResultSet` to each field of [[InternalRow]] correctly.
    */
   private def makeGetters(schema: StructType): Array[JDBCValueGetter] =
     schema.fields.map(sf => makeGetter(sf.dataType, sf.metadata))
 
   private def makeGetter(dt: DataType, metadata: Metadata): JDBCValueGetter = dt match {
     case BooleanType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setBoolean(pos, rs.getBoolean(pos + 1))
 
     case DateType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         // DateTimeUtils.fromJavaDate does not handle null value, so we need to check it.
         val dateVal = rs.getDate(pos + 1)
         if (dateVal != null) {
@@ -347,25 +347,25 @@ object JdbcUtils extends Logging {
     // retrieve it, you will get wrong result 199.99.
     // So it is needed to set precision and scale for Decimal based on JDBC metadata.
     case DecimalType.Fixed(p, s) =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         val decimal =
           nullSafeConvert[java.math.BigDecimal](rs.getBigDecimal(pos + 1), d => Decimal(d, p, s))
         row.update(pos, decimal)
 
     case DoubleType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setDouble(pos, rs.getDouble(pos + 1))
 
     case FloatType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setFloat(pos, rs.getFloat(pos + 1))
 
     case IntegerType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setInt(pos, rs.getInt(pos + 1))
 
     case LongType if metadata.contains("binarylong") =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         val bytes = rs.getBytes(pos + 1)
         var ans = 0L
         var j = 0
@@ -376,20 +376,20 @@ object JdbcUtils extends Logging {
         row.setLong(pos, ans)
 
     case LongType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setLong(pos, rs.getLong(pos + 1))
 
     case ShortType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setShort(pos, rs.getShort(pos + 1))
 
     case StringType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
         row.update(pos, UTF8String.fromString(rs.getString(pos + 1)))
 
     case TimestampType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         val t = rs.getTimestamp(pos + 1)
         if (t != null) {
           row.setLong(pos, DateTimeUtils.fromJavaTimestamp(t))
@@ -398,7 +398,7 @@ object JdbcUtils extends Logging {
         }
 
     case BinaryType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.update(pos, rs.getBytes(pos + 1))
 
     case ArrayType(et, _) =>
@@ -437,7 +437,7 @@ object JdbcUtils extends Logging {
         case _ => (array: Object) => array.asInstanceOf[Array[Any]]
       }
 
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         val array = nullSafeConvert[Object](
           rs.getArray(pos + 1).getArray,
           array => new GenericArrayData(elementConversion.apply(array)))

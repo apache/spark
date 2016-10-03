@@ -124,7 +124,7 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
         .compute(inputIterator, context.partitionId(), context)
 
       val unpickle = new Unpickler
-      val mutableRow = new GenericMutableRow(1)
+      val mutableRow = new GenericInternalRow(1)
       val joined = new JoinedRow
       val resultType = if (udfs.length == 1) {
         udfs.head.dataType

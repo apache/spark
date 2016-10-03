@@ -686,25 +686,25 @@ private[hive] trait HiveInspectors {
    * @return A function that performs in-place updating of a MutableRow.
    *         Use the overloaded ObjectInspector version for assignments.
    */
-  def unwrapperFor(field: HiveStructField): (Any, MutableRow, Int) => Unit =
+  def unwrapperFor(field: HiveStructField): (Any, InternalRow, Int) => Unit =
     field.getFieldObjectInspector match {
       case oi: BooleanObjectInspector =>
-        (value: Any, row: MutableRow, ordinal: Int) => row.setBoolean(ordinal, oi.get(value))
+        (value: Any, row: InternalRow, ordinal: Int) => row.setBoolean(ordinal, oi.get(value))
       case oi: ByteObjectInspector =>
-        (value: Any, row: MutableRow, ordinal: Int) => row.setByte(ordinal, oi.get(value))
+        (value: Any, row: InternalRow, ordinal: Int) => row.setByte(ordinal, oi.get(value))
       case oi: ShortObjectInspector =>
-        (value: Any, row: MutableRow, ordinal: Int) => row.setShort(ordinal, oi.get(value))
+        (value: Any, row: InternalRow, ordinal: Int) => row.setShort(ordinal, oi.get(value))
       case oi: IntObjectInspector =>
-        (value: Any, row: MutableRow, ordinal: Int) => row.setInt(ordinal, oi.get(value))
+        (value: Any, row: InternalRow, ordinal: Int) => row.setInt(ordinal, oi.get(value))
       case oi: LongObjectInspector =>
-        (value: Any, row: MutableRow, ordinal: Int) => row.setLong(ordinal, oi.get(value))
+        (value: Any, row: InternalRow, ordinal: Int) => row.setLong(ordinal, oi.get(value))
       case oi: FloatObjectInspector =>
-        (value: Any, row: MutableRow, ordinal: Int) => row.setFloat(ordinal, oi.get(value))
+        (value: Any, row: InternalRow, ordinal: Int) => row.setFloat(ordinal, oi.get(value))
       case oi: DoubleObjectInspector =>
-        (value: Any, row: MutableRow, ordinal: Int) => row.setDouble(ordinal, oi.get(value))
+        (value: Any, row: InternalRow, ordinal: Int) => row.setDouble(ordinal, oi.get(value))
       case oi =>
         val unwrapper = unwrapperFor(oi)
-        (value: Any, row: MutableRow, ordinal: Int) => row(ordinal) = unwrapper(value)
+        (value: Any, row: InternalRow, ordinal: Int) => row(ordinal) = unwrapper(value)
     }
 
   def wrap(a: Any, oi: ObjectInspector, dataType: DataType): AnyRef = {

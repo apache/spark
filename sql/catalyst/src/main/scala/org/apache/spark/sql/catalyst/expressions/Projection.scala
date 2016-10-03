@@ -69,10 +69,10 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
   })
 
   private[this] val exprArray = expressions.toArray
-  private[this] var mutableRow: MutableRow = new GenericMutableRow(exprArray.length)
+  private[this] var mutableRow: InternalRow = new GenericInternalRow(exprArray.length)
   def currentValue: InternalRow = mutableRow
 
-  override def target(row: MutableRow): MutableProjection = {
+  override def target(row: InternalRow): MutableProjection = {
     mutableRow = row
     this
   }

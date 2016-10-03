@@ -154,6 +154,6 @@ private[window] final class AggregateProcessor(
   }
 
   /** Evaluate buffer. */
-  def evaluate(target: MutableRow): Unit =
+  def evaluate(target: InternalRow): Unit =
   evaluateProjection.target(target)(buffer)
 }
