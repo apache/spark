@@ -40,8 +40,8 @@ else:
     from itertools import imap as map, ifilter as filter
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
-    BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
-    PickleSerializer, pack_long, AutoBatchedSerializer
+    BatchedSerializer, PairDeserializer, PickleSerializer, pack_long, \
+    AutoBatchedSerializer
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -2311,12 +2311,11 @@ class RDD(object):
 
 def _prepare_for_python_RDD(sc, command):
     # the serialized command will be compressed by broadcast
-    ser = CloudPickleSerializer()
-    pickled_command = ser.dumps(command)
+    pickled_command = sc._function_serializer.dumps(command)
     if len(pickled_command) > (1 << 20):  # 1M
         # The broadcast will have same life cycle as created PythonRDD
         broadcast = sc.broadcast(pickled_command)
-        pickled_command = ser.dumps(broadcast)
+        pickled_command = sc._function_serializer.dumps(broadcast)
     # There is a bug in py4j.java_gateway.JavaClass with auto_convert
     # https://github.com/bartdag/py4j/issues/161
     # TODO: use auto_convert once py4j fix the bug
