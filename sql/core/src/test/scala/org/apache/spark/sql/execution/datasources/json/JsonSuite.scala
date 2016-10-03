@@ -50,8 +50,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       assert(expected.getClass == actual.getClass,
         s"Failed to promote ${actual.getClass} to ${expected.getClass}.")
       assert(expected == actual,
-        s"Promoted value ${actual}(${actual.getClass}) does not equal the expected value " +
-          s"${expected}(${expected.getClass}).")
+        s"Promoted value $actual(${actual.getClass}) does not equal the expected value " +
+          s"$expected(${expected.getClass}).")
     }
 
     val factory = new JsonFactory()
@@ -1748,5 +1748,47 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       checkAnswer(stringTimestampsWithFormat, expectedStringDatesWithFormat)
     }
+  }
+
+  test("Do not allow siently parsing the values for non-nullable fields") {
+    // Json having null.
+    val testJson = """{"nullInt":null}""" :: Nil
+    val testSchema = StructType(StructField("nullInt", IntegerType, false) :: Nil)
+    val data = spark.sparkContext.parallelize(testJson)
+
+    val exceptionOne = intercept[SparkException] {
+      spark.read.schema(testSchema).option("mode", "PERMISSIVE").json(data).collect()
+    }
+    assert(exceptionOne.getMessage.contains("Null not allowed: {"))
+
+    val exceptionTwo = intercept[SparkException] {
+      spark.read.schema(testSchema).option("mode", "FAILFAST").json(data).collect()
+    }
+    assert(exceptionTwo.getMessage.contains("Null not allowed: {"))
+
+    val dropmalformedDf = spark.read.schema(testSchema).option("mode", "DROPMALFORMED").json(data)
+    assert(dropmalformedDf.collect().length == 0)
+
+    // Nested json having null.
+    val testNestedJson = """{"nullStruct": { "e" : null }}""" :: Nil
+    val testNestedSchema =
+      StructType(
+        StructField("nullStruct",
+          StructType(StructField("e", StringType, false) :: Nil), true):: Nil)
+    val nestedData = spark.sparkContext.parallelize(testNestedJson)
+
+    val exceptionThree = intercept[SparkException] {
+      spark.read.schema(testNestedSchema).option("mode", "PERMISSIVE").json(nestedData).collect()
+    }
+    assert(exceptionThree.getMessage.contains("Null not allowed: {"))
+
+    val exceptionFour = intercept[SparkException] {
+      spark.read.schema(testNestedSchema).option("mode", "FAILFAST").json(nestedData).collect()
+    }
+    assert(exceptionFour.getMessage.contains("Null not allowed: {"))
+
+    val dropmalformedNestedDf =
+      spark.read.schema(testNestedSchema).option("mode", "DROPMALFORMED").json(nestedData)
+    assert(dropmalformedNestedDf.collect().length == 0)
   }
 }
