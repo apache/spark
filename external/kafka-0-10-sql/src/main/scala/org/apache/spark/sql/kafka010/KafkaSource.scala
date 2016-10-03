@@ -181,8 +181,8 @@ private[kafka010] case class KafkaSource(
       KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
     }.filter { range =>
       if (range.untilOffset < range.fromOffset) {
-        logWarning(s"Partition ${range.topicPartition} was deleted and then added, " +
-          "some data may have been missed")
+        reportCorruptMetadata(s"Partition ${range.topicPartition}'s offset was changed from " +
+          s"${range.fromOffset} to ${range.untilOffset}, some data may have been missed")
         false
       } else {
         true

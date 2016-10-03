@@ -72,6 +72,9 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
         .toMap
 
     val deserClassName = classOf[ByteArrayDeserializer].getName
+    // Each running query should use its own group id. Otherwise, the query may be only assigned
+    // partial data since Kafka will assign partitions to multiple consumers having the same group
+    // id. Hence, we should generate a unique id for each query.
     val uniqueGroupId = s"spark-kafka-source-${UUID.randomUUID}-${metadataPath.hashCode}"
 
     val autoOffsetResetValue = caseInsensitiveParams.get(STARTING_OFFSET_OPTION_KEY) match {
@@ -90,7 +93,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
         // So that consumers can start from earliest or latest
         .set(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, autoOffsetResetValue)
 
-        // So that consumers in the driver does not commit offsets unnecessaribly
+        // So that consumers in the driver does not commit offsets unnecessarily
         .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
 
         // So that the driver does not pull too much data
