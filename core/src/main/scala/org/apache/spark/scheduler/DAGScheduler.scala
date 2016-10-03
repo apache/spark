@@ -1294,7 +1294,6 @@ class DAGScheduler(
                 DAGScheduler.RESUBMIT_TIMEOUT,
                 TimeUnit.MILLISECONDS)
             }
-
           }
           // Mark the map whose fetch failed as broken in the map stage
           if (mapId != -1) {
