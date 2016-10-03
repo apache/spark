@@ -186,7 +186,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = CodeGenerator.compile(code)
-    val resultRow = new SpecificMutableRow(expressions.map(_.dataType))
+    val resultRow = new SpecificInternalRow(expressions.map(_.dataType))
     c.generate(ctx.references.toArray :+ resultRow).asInstanceOf[Projection]
   }
 }

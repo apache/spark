@@ -123,7 +123,7 @@ private[window] final class AggregateProcessor(
 
   private[this] val join = new JoinedRow
   private[this] val numImperatives = imperatives.length
-  private[this] val buffer = new SpecificMutableRow(bufferSchema.toSeq.map(_.dataType))
+  private[this] val buffer = new SpecificInternalRow(bufferSchema.toSeq.map(_.dataType))
   initialProjection.target(buffer)
   updateProjection.target(buffer)
 

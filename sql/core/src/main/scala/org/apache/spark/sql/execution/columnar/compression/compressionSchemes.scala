@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.types._
 
@@ -86,7 +86,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
     private var _compressedSize = 0
 
     // Using `MutableRow` to store the last value to avoid boxing/unboxing cost.
-    private val lastValue = new SpecificMutableRow(Seq(columnType.dataType))
+    private val lastValue = new SpecificInternalRow(Seq(columnType.dataType))
     private var lastRun = 0
 
     override def uncompressedSize: Int = _uncompressedSize
@@ -117,9 +117,9 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       to.putInt(RunLengthEncoding.typeId)
 
       if (from.hasRemaining) {
-        val currentValue = new SpecificMutableRow(Seq(columnType.dataType))
+        val currentValue = new SpecificInternalRow(Seq(columnType.dataType))
         var currentRun = 1
-        val value = new SpecificMutableRow(Seq(columnType.dataType))
+        val value = new SpecificInternalRow(Seq(columnType.dataType))
 
         columnType.extract(from, currentValue, 0)
 

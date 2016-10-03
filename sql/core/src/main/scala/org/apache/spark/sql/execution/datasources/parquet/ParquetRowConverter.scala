@@ -166,7 +166,7 @@ private[parquet] class ParquetRowConverter(
     override def setFloat(value: Float): Unit = row.setFloat(ordinal, value)
   }
 
-  private val currentRow = new SpecificMutableRow(catalystType.map(_.dataType))
+  private val currentRow = new SpecificInternalRow(catalystType.map(_.dataType))
 
   private val unsafeProjection = UnsafeProjection.create(catalystType)
 

@@ -120,7 +120,7 @@ class HadoopTableReader(
     val hadoopRDD = createHadoopRdd(tableDesc, inputPathStr, ifc)
 
     val attrsWithIndex = attributes.zipWithIndex
-    val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
+    val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
 
     val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
       val hconf = broadcastedHadoopConf.value.value
@@ -215,7 +215,7 @@ class HadoopTableReader(
       val tableDesc = relation.tableDesc
       val broadcastedHiveConf = _broadcastedHadoopConf
       val localDeserializer = partDeserializer
-      val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
+      val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
 
       // Splits all attributes into two groups, partition key attributes and those that are not.
       // Attached indices indicate the position of each attribute in the output schema.

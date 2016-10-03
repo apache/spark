@@ -211,7 +211,7 @@ abstract class AggregationIterator(
         case ae: DeclarativeAggregate => ae.evaluateExpression
         case agg: AggregateFunction => NoOp
       }
-      val aggregateResult = new SpecificMutableRow(aggregateAttributes.map(_.dataType))
+      val aggregateResult = new SpecificInternalRow(aggregateAttributes.map(_.dataType))
       val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferAttributes)
       expressionAggEvalProjection.target(aggregateResult)
 

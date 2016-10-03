@@ -312,7 +312,7 @@ case class WindowExec(
         val inputFields = child.output.length
         var sorter: UnsafeExternalSorter = null
         var rowBuffer: RowBuffer = null
-        val windowFunctionResult = new SpecificMutableRow(expressions.map(_.dataType))
+        val windowFunctionResult = new SpecificInternalRow(expressions.map(_.dataType))
         val frames = factories.map(_(windowFunctionResult))
         val numFrames = frames.length
         private[this] def fetchNextPartition() {
