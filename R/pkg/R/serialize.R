@@ -136,8 +136,17 @@ serializeRow <- function(row) {
 }
 
 writeRaw <- function(con, batch) {
+  dataSize <- length(batch)
   writeInt(con, length(batch))
-  writeBin(batch, con, endian = "big")
+
+  LENTMAX <- 2147483000 # Slightly less than R_LEN_T_MAX macro in R
+  sizeVec <- c(rep(LENTMAX, dataSize %/% LENTMAX), dataSize %% LENTMAX)
+
+  curIndex <- 1
+  for (sizeIndex in cumsum(sizeVec)) {
+    writeBin(batch[curIndex:sizeIndex], con, endian = "big")
+    curIndex <- sizeIndex + 1
+  }
 }
 
 writeType <- function(con, class) {
