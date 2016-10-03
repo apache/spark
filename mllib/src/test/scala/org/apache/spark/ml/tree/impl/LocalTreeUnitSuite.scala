@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.tree.{CategoricalSplit, ContinuousSplit, LearningNode, Split}
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.tree.impurity.Entropy
+import org.apache.spark.mllib.tree.impurity.{Entropy, Impurity}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.collection.BitSet
 
@@ -30,32 +30,20 @@ import org.apache.spark.util.collection.BitSet
 class LocalTreeUnitSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  /** Returns numNodes empty LearningNodes */
   private def getDummyActiveNodes(numNodes: Int): Array[LearningNode] = {
     0.until(numNodes).toArray.map(_ => LearningNode.emptyNode(nodeIndex = -1))
   }
 
-  /** Returns a DecisionTreeMetadata instance with hard-coded values for use in tests */
-  private def getMetadata(
-      numExamples: Int,
-      numFeatures: Int,
-      numClasses: Int,
-      featureArity: Map[Int, Int]): DecisionTreeMetadata = {
-    // Assume all categorical features within tests
-    // have small enough arity to be treated as unordered
-    val unordered = featureArity.keys.toSet
-    val maxBins = 4
-    val numBins = 0.until(numFeatures).toArray.map(_ => maxBins)
-    new DecisionTreeMetadata(numFeatures = numFeatures, numExamples = numExamples,
-      numClasses = numClasses, maxBins = maxBins, minInfoGain = 0.0, featureArity = featureArity,
-      unorderedFeatures = unordered, numBins = numBins, impurity = Entropy,
-      quantileStrategy = null, maxDepth = 5, minInstancesPerNode = 1, numTrees = 1,
-      numFeaturesPerNode = 2)
-  }
-
+  /**
+   * Returns an array of all possible unordered splits for a feature with the
+   * passed-in array of values
+   */
   private def getUnorderedSplits(
       values: Array[Int],
       featureIndex: Int): Array[CategoricalSplit] = {
     val uniqueVals = values.map(_.toDouble).distinct.toList
+    /** Returns a list of subsets of the passed-in array */
     def recurse(vals: List[Double]): List[List[Double]] = {
       vals match {
         case Nil => List(List.empty)
@@ -194,7 +182,7 @@ class LocalTreeUnitSuite
     val labels = Array(0, 0, 0, 1, 1, 1, 1).map(_.toDouble)
 
     val featureArity = Map[Int, Int](1 -> 3)
-    val metadata = getMetadata(numExamples = numRows, numFeatures = 2, numClasses = 2,
+    val metadata = TreeTests.getMetadata(numExamples = numRows, numFeatures = 2, numClasses = 2,
       featureArity)
     val fullImpurityAgg = metadata.createImpurityAggregator()
     labels.foreach(label => fullImpurityAgg.update(label))
@@ -205,7 +193,7 @@ class LocalTreeUnitSuite
     val nodeOffsets = Array((0, numRows))
     val activeNodes = getDummyActiveNodes(1)
 
-    val info = new PartitionInfo(Array(col1, col2), nodeOffsets, activeNodes)
+    val info = PartitionInfo(Array(col1, col2), nodeOffsets, activeNodes)
 
     // Create bitVector for splitting the 4 rows: L, R, L, R
     // New groups are {0, 2}, {1, 3}
@@ -253,7 +241,8 @@ class LocalTreeUnitSuite
     val fromOffset = 1
     val toOffset = 4
     val impurity = Entropy
-    val metadata = getMetadata(numExamples = 7, numFeatures = 2, numClasses = 2, Map.empty)
+    val metadata = TreeTests.getMetadata(numExamples = 7,
+      numFeatures = 2, numClasses = 2, Map.empty)
     val splits = getContinuousSplits(1.to(8).toArray, featureIndex = 0)
     val fullImpurityAgg = metadata.createImpurityAggregator()
     labels.foreach(label => fullImpurityAgg.update(label))
@@ -274,7 +263,7 @@ class LocalTreeUnitSuite
   test("chooseOrderedCategoricalSplit: basic case") {
     val featureIndex = 0
     val values = Array(0, 0, 1, 2, 2, 2, 2)
-    val featureArity = values.max.toInt + 1
+    val featureArity = values.max + 1
     val arityMap = Map[Int, Int](featureIndex -> featureArity)
 
     def testHelper(
@@ -286,7 +275,7 @@ class LocalTreeUnitSuite
       val expectedRightCategories = Range(0, featureArity)
         .filter(c => !expectedLeftCategories.contains(c)).map(_.toDouble).toArray
       val impurity = Entropy
-      val metadata = getMetadata(numExamples = values.length, numFeatures = 3,
+      val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 3,
         numClasses = 2, arityMap)
       val fullImpurityAgg = metadata.createImpurityAggregator()
       labels.foreach(fullImpurityAgg.update(_))
@@ -324,12 +313,12 @@ class LocalTreeUnitSuite
   test("chooseOrderedCategoricalSplit: return bad split if we should not split") {
     val featureIndex = 0
     val values = Array(0, 0, 1, 2, 2, 2, 2)
-    val featureArity = values.max.toInt + 1
+    val featureArity = values.max + 1
 
     val labels = Array(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
 
     val impurity = Entropy
-    val metadata = getMetadata(numExamples = values.length, numFeatures = 1,
+    val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
       numClasses = 2, Map(featureIndex -> featureArity))
     val fullImpurityAgg = metadata.createImpurityAggregator()
     labels.foreach(fullImpurityAgg.update(_))
@@ -342,10 +331,7 @@ class LocalTreeUnitSuite
     val fullImpurityStatsArray =
       Array(labels.count(_ == 0.0).toDouble, labels.count(_ == 1.0).toDouble)
     val fullImpurity = impurity.calculate(fullImpurityStatsArray, labels.length)
-    assert(stats.gain === 0.0)
-    assert(stats.impurity === fullImpurity)
-    assert(stats.impurityCalculator.stats === fullImpurityStatsArray)
-    assert(stats.valid)
+    assert(!stats.valid)
   }
 
   test("chooseUnorderedCategoricalSplit: basic case") {
@@ -357,7 +343,7 @@ class LocalTreeUnitSuite
     val impurity = Entropy
     val splits = getUnorderedSplits(values, featureIndex)
 
-    val metadata = getMetadata(numExamples = values.length, numFeatures = 1,
+    val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
       numClasses = 3, Map(featureIndex -> featureArity))
     val fullImpurityAgg = metadata.createImpurityAggregator()
     labels.foreach(fullImpurityAgg.update(_))
@@ -386,7 +372,7 @@ class LocalTreeUnitSuite
     val impurity = Entropy
     val splits = getUnorderedSplits(values, featureIndex)
 
-    val metadata = getMetadata(numExamples = values.length, numFeatures = 1,
+    val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
       numClasses = 2, Map(featureIndex -> featureArity))
     val fullImpurityAgg = metadata.createImpurityAggregator()
     labels.foreach(fullImpurityAgg.update(_))
@@ -398,10 +384,7 @@ class LocalTreeUnitSuite
     val fullImpurityStatsArray =
       Array(labels.count(_ == 0.0).toDouble, labels.count(_ == 1.0).toDouble)
     val fullImpurity = impurity.calculate(fullImpurityStatsArray, labels.length)
-    assert(stats.gain === -1.0)
-    assert(stats.impurity === fullImpurity)
-    assert(stats.impurityCalculator.stats === fullImpurityStatsArray)
-    assert(stats.valid)
+    assert(!stats.valid)
   }
 
   test("chooseContinuousSplit: basic case") {
@@ -411,8 +394,8 @@ class LocalTreeUnitSuite
     val splits = getContinuousSplits(thresholds, featureIndex)
     val labels = Array(0.0, 0.0, 1.0, 1.0, 1.0)
     val impurity = Entropy
-    val metadata = getMetadata(numExamples = values.length, numFeatures = 1,
-      numClasses = 2, Map.empty[Int, Int])
+    val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
+      numClasses = 2, Map.empty)
     val fullImpurityAgg = metadata.createImpurityAggregator()
     labels.foreach(label => fullImpurityAgg.update(label))
 
@@ -444,7 +427,7 @@ class LocalTreeUnitSuite
     val splits = getContinuousSplits(thresholds, featureIndex)
     val labels = Array(0.0, 0.0, 0.0, 0.0, 0.0)
     val impurity = Entropy
-    val metadata = getMetadata(numExamples = values.length, numFeatures = 1,
+    val metadata = TreeTests.getMetadata(numExamples = values.length, numFeatures = 1,
       numClasses = 2, Map.empty[Int, Int])
     val fullImpurityAgg = metadata.createImpurityAggregator()
     labels.foreach(label => fullImpurityAgg.update(label))
@@ -453,17 +436,10 @@ class LocalTreeUnitSuite
       values.indices.toArray, labels, 0, values.length, metadata, splits, fullImpurityAgg)
     // split should be None
     assert(split.isEmpty)
-    // stats for parent node should be correct
-    val fullImpurityStatsArray =
-      Array(labels.count(_ == 0.0).toDouble, labels.count(_ == 1.0).toDouble)
-    val fullImpurity = impurity.calculate(fullImpurityStatsArray, labels.length)
-    assert(stats.gain === 0.0)
-    assert(stats.impurity === fullImpurity)
-    assert(stats.impurityCalculator.stats === fullImpurityStatsArray)
+    assert(!stats.valid)
   }
 
   /* * * * * * * * * * * Bit subvectors * * * * * * * * * * */
-
   test("bitSubvectorFromSplit: 1 node") {
     val featureIndex = 0
     val thresholds = Array(1, 2, 4, 6, 7)

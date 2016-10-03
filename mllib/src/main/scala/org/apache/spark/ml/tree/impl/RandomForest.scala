@@ -713,7 +713,7 @@ private[spark] object RandomForest extends Logging {
           }
           // Find best split.
           val (bestFeatureSplitIndex, bestFeatureGainStats) =
-            Range(0, numSplits).map { case splitIdx =>
+            Range(0, numSplits).map { splitIdx =>
               // Impurity calculators for rows on left & right sides of split
               // Get ImpurityCalculator containing an array of stats for all nodes on left
               // side of split
@@ -753,7 +753,7 @@ private[spark] object RandomForest extends Logging {
            *
            * centroidForCategories is a list: (category, centroid)
            */
-          val centroidForCategories = Range(0, numCategories).map { case featureValue =>
+          val centroidForCategories = Range(0, numCategories).map { featureValue =>
             val categoryStats =
               binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
             val centroid = if (categoryStats.count != 0) {

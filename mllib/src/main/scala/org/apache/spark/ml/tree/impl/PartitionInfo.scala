@@ -130,8 +130,8 @@ private[impl] case class PartitionInfo(
       val numBitsSet = if (nodeOffsets.length == 1) {
         instanceBitVector.cardinality()
       } else {
-        from.until(to).foldLeft(0) { case (count, i) =>
-          count + (if (instanceBitVector.get(col.indices(i))) 1 else 0)
+        from.until(to).foldLeft(0) { case (bitCount, i) =>
+          bitCount + (if (instanceBitVector.get(col.indices(i))) 1 else 0)
         }
       }
 
@@ -142,8 +142,7 @@ private[impl] case class PartitionInfo(
       if (wasSplit) {
         val leftIndices = (from, from + numBitsNotSet)
         val rightIndices = (from + numBitsNotSet, to)
-        // TODO(smurching): Check that this adds indices in the same order as activeNodes
-        // are produced during splitting
+        // newNodeOffsets(i) contains the offsets corresponding to the ith node in
         newNodeOffsets ++= Array(leftIndices, rightIndices)
         LocalDecisionTreeUtils.sortCol(col, from, to, numBitsNotSet,
           tempVals, tempIndices, instanceBitVector)

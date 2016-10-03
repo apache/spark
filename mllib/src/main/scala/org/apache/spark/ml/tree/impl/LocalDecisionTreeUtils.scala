@@ -30,61 +30,36 @@ import org.apache.spark.mllib.tree.model.Predict
 import org.apache.spark.util.collection.BitSet
 
 /**
- * DecisionTree which partitions data by feature.
- *
- * Algorithm:
- *  - Repartition data, grouping by feature.
- *  - Prep data (sort continuous features).
- *  - On each partition, initialize instance--node map with each instance at root node.
- *  - Iterate, training 1 new level of the tree at a time:
- *     - On each partition, for each feature on the partition, select the best split for each node.
- *     - Aggregate best split for each node.
- *     - Aggregate bit vector (1 bit/instance) indicating whether each instance splits
- *       left or right.
- *     - Broadcast bit vector.  On each partition, update instance--node map.
- *
- * TODO: Update to use a sparse column store.
+ * Utility methods for local decision tree training.
  */
 private[ml] object LocalDecisionTreeUtils extends Logging {
 
   /**
-   * Convert a dataset of [[Vector]] from row storage to column storage.
-   * This can take any [[Vector]] type but stores data as [[DenseVector]].
-   *
-   * This maintains sparsity in the data.
-   *
-   * This maintains matrix structure.  I.e., each partition of the output RDD holds adjacent
-   * columns.  The number of partitions will be min(input RDD's number of partitions, numColumns).
-   *
-   * @param rowStore  An array of input data rows, each represented as an
-   *                  int array of binned feature values
-   * @return Transpose of rowStore with
-   *
-   * TODO: Add implementation for sparse data.
-   *       For sparse data, distribute more evenly based on number of non-zeros.
-   *       (First collect stats to decide how to partition.)
+   * Returns a single-node impurity aggregator consisting of label statistics for the rows
+   * coresponding to the feature values at indices [from, to) in the passed-in column
+   * @param metadata Metadata object describing parameters of the learning algorithm.
    */
-  private[impl] def rowToColumnStoreDense(rowStore: Array[Array[Int]]): Array[Array[Int]] = {
-    // Compute the number of rows in the data
-    val numRows = {
-      val longNumRows: Long = rowStore.length
-      require(longNumRows < Int.MaxValue, s"rowToColumnStore given RDD with $longNumRows rows," +
-        s" but can handle at most ${Int.MaxValue} rows")
-      longNumRows.toInt
+  private[impl] def getImpurity(
+      col: FeatureVector,
+      from: Int,
+      to: Int,
+      metadata: DecisionTreeMetadata,
+      labels: Array[Double]): ImpurityAggregatorSingle = {
+    val aggregator = metadata.createImpurityAggregator()
+    from.until(to).foreach { idx =>
+      val rowIndex = col.indices(idx)
+      val label = labels(rowIndex)
+      aggregator.update(label)
     }
-
-    // Return an empty array for a dataset with zero rows or columns, otherwise
-    // return the transpose of the rowStore matrix
-    if (numRows == 0 || rowStore(0).length == 0) {
-      Array.empty
-    } else {
-      val numCols = rowStore(0).length
-      0.until(numCols).map { colIdx =>
-        rowStore.map(row => row(colIdx))
-      }.toArray
-    }
+    aggregator
   }
 
+  /**
+   * Given the root node of a decision tree, returns a corresponding DecisionTreeModel
+   * @param algo Enum describing the algorithm used to fit the tree
+   * @param numClasses Number of label classes (for classification trees)
+   * @param parentUID UID of parent estimator
+   */
   private[impl] def finalizeTree(
       rootNode: Node,
       algo: OldAlgo.Algo,
@@ -107,11 +82,6 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
           new DecisionTreeRegressionModel(rootNode, numFeatures = numFeatures)
         }
     }
-  }
-
-  private[impl] def getPredict(impurityCalculator: ImpurityCalculator): Predict = {
-    val pred = impurityCalculator.predict
-    new Predict(predict = pred, prob = impurityCalculator.prob(pred))
   }
 
   /** Converts the passed-in compressed bitmap to a bitset of the specified size */
@@ -195,27 +165,6 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
   }
 
   /**
-   * Returns a single-node impurity aggregator consisting of label statistics for the rows
-   * coresponding to the feature values at indices [from, to) in the passed-in column
-   *
-   * @param metadata Metadata object describing parameters of the learning algorithm.
-   */
-  private[impl] def getImpurity(
-      col: FeatureVector,
-      from: Int,
-      to: Int,
-      metadata: DecisionTreeMetadata,
-      labels: Array[Double]): ImpurityAggregatorSingle = {
-    val aggregator = metadata.createImpurityAggregator()
-    from.until(to).foreach { idx =>
-      val rowIndex = col.indices(idx)
-      val label = labels(rowIndex)
-      aggregator.update(label)
-    }
-    aggregator
-  }
-
-  /**
    * Sorts the subset of feature values at indices [from, to) in the passed-in column
    *
    * @param tempVals Destination buffer for sorted feature values
@@ -268,6 +217,44 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
     // with the corresponding indices
     System.arraycopy(tempVals, from, col.values, from, to - from)
     System.arraycopy(tempIndices, from, col.indices, from, to - from)
+  }
+
+  /**
+   * Convert a dataset of [[Vector]] from row storage to column storage.
+   * This can take any [[Vector]] type but stores data as [[DenseVector]].
+   *
+   * This maintains sparsity in the data.
+   *
+   * This maintains matrix structure.  I.e., each partition of the output RDD holds adjacent
+   * columns.  The number of partitions will be min(input RDD's number of partitions, numColumns).
+   *
+   * @param rowStore  An array of input data rows, each represented as an
+   *                  int array of binned feature values
+   * @return Transpose of rowStore with
+   *
+   * TODO: Add implementation for sparse data.
+   *       For sparse data, distribute more evenly based on number of non-zeros.
+   *       (First collect stats to decide how to partition.)
+   */
+  private[impl] def rowToColumnStoreDense(rowStore: Array[Array[Int]]): Array[Array[Int]] = {
+    // Compute the number of rows in the data
+    val numRows = {
+      val longNumRows: Long = rowStore.length
+      require(longNumRows < Int.MaxValue, s"rowToColumnStore given RDD with $longNumRows rows," +
+        s" but can handle at most ${Int.MaxValue} rows")
+      longNumRows.toInt
+    }
+
+    // Return an empty array for a dataset with zero rows or columns, otherwise
+    // return the transpose of the rowStore matrix
+    if (numRows == 0 || rowStore(0).length == 0) {
+      Array.empty
+    } else {
+      val numCols = rowStore(0).length
+      0.until(numCols).map { colIdx =>
+        rowStore.map(row => row(colIdx))
+      }.toArray
+    }
   }
 
 }

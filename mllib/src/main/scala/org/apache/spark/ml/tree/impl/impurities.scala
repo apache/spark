@@ -29,7 +29,7 @@ private[tree] abstract class ImpurityAggregatorSingle(val stats: Array[Double])
 
   /**
    * Add two aggregators: this + other
- *
+   *
    * @return This aggregator (modified).
    */
   def add(other: ImpurityAggregatorSingle): this.type = {
@@ -43,7 +43,7 @@ private[tree] abstract class ImpurityAggregatorSingle(val stats: Array[Double])
 
   /**
    * Subtract another aggregators from this one: this - other
- *
+   *
    * @return This aggregator (modified).
    */
   def subtract(other: ImpurityAggregatorSingle): this.type = {
@@ -57,14 +57,14 @@ private[tree] abstract class ImpurityAggregatorSingle(val stats: Array[Double])
 
   /**
    * Update stats with the given label and instance weight.
- *
+   *
    * @return This aggregator (modified).
    */
   def update(label: Double, instanceWeight: Double): this.type
 
   /**
    * Update stats with the given label.
- *
+   *
    * @return This aggregator (modified).
    */
   def update(label: Double): this.type = update(label, 1.0)
