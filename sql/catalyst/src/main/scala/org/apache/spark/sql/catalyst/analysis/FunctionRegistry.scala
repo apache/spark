@@ -352,12 +352,12 @@ object FunctionRegistry {
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
     expression[CreateMap]("map"),
-    CreateNamedStruct.registration,
     expression[MapKeys]("map_keys"),
     expression[MapValues]("map_values"),
     expression[Size]("size"),
     expression[SortArray]("sort_array"),
     expression[CreateStruct]("struct"),
+    CreateStruct.named_struct,
 
     // misc functions
     expression[AssertTrue]("assert_true"),

@@ -186,12 +186,12 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row = create_row(1, 2, 3)
     val c1 = 'a.int.at(0)
     val c3 = 'c.int.at(2)
-    checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", c3)), create_row(1, 3), row)
-    checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", "y")),
+    checkEvaluation(CreateStruct.withFlatExpressions(Seq("a", c1, "b", c3)), create_row(1, 3), row)
+    checkEvaluation(CreateStruct.withFlatExpressions(Seq("a", c1, "b", "y")),
       create_row(1, UTF8String.fromString("y")), row)
-    checkEvaluation(CreateNamedStruct(Seq("a", "x", "b", 2.0)),
+    checkEvaluation(CreateStruct.withFlatExpressions(Seq("a", "x", "b", 2.0)),
       create_row(UTF8String.fromString("x"), 2.0))
-    checkEvaluation(CreateNamedStruct(Seq("a", Literal.create(null, IntegerType))),
+    checkEvaluation(CreateStruct.withFlatExpressions(Seq("a", Literal.create(null, IntegerType))),
       create_row(null))
   }
 
@@ -242,8 +242,8 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val a = AttributeReference("a", IntegerType, metadata = metadata)()
     val b = AttributeReference("b", IntegerType)()
     checkMetadata(CreateStruct(Seq(a, b)))
-    checkMetadata(CreateNamedStruct(Seq("a", a, "b", b)))
-    checkMetadata(CreateStructUnsafe(Seq(a, b)))
+    checkMetadata(CreateStruct(Seq(a, b), Seq("a", "b")))
+    checkMetadata(new CreateStructUnsafe(Seq(a, b)))
   }
 
   test("StringToMap") {

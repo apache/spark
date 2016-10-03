@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{StructType, _}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -173,24 +174,28 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 }
 
 /**
- * Returns a Row containing the evaluation of all children expressions.
+ * Common trait for [[CreateStruct]] and [[CreateStructUnsafe]].
  */
-@ExpressionDescription(
-  usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
-case class CreateStruct(children: Seq[Expression]) extends Expression {
+trait CreateStructLike extends Expression {
+  val names: Seq[String]
+
+  override lazy val resolved: Boolean = childrenResolved && names.size == children.size
 
   override def foldable: Boolean = children.forall(_.foldable)
 
   override lazy val dataType: StructType = {
-    val fields = children.zipWithIndex.map { case (child, idx) =>
-      child match {
-        case ne: NamedExpression =>
-          StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
-        case _ =>
-          StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
+    val fields = children.zip(names).map { case (child, name) =>
+      val metadata = child match {
+        case ne: NamedExpression => ne.metadata
+        case _ => Metadata.empty
       }
+      StructField(name, child.dataType, child.nullable, metadata)
     }
     StructType(fields)
+  }
+
+  lazy val flatten: Seq[NamedExpression] = children.zip(names).map { case (child, name) =>
+    Alias(child, name)()
   }
 
   override def nullable: Boolean = false
@@ -198,6 +203,25 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
   override def eval(input: InternalRow): Any = {
     InternalRow(children.map(_.eval(input)): _*)
   }
+
+  override def sql: String = {
+    // Note that we always create SQL for a 'named_struct' here. By doing this we guarantee that
+    // the names of the fields in the structure will always be the same, even if we modify the
+    // naming algorithm used by CreateStruct.
+    val namesAndChildren = children.zip(names).flatMap { case (child, name) =>
+      Seq(Literal(name), child)
+    }
+    namesAndChildren.map(_.sql).mkString("named_struct(", ", ", ")")
+  }
+}
+
+/**
+ * Returns a Row containing the evaluation of all children expressions.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
+case class CreateStruct(children: Seq[Expression], names: Seq[String]) extends CreateStructLike {
+  def this(children: Seq[Expression]) = this(children, CreateStruct.generateNames(children))
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
@@ -227,31 +251,70 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
   override def prettyName: String = "struct"
 }
 
-
-object CreateNamedStruct {
+object CreateStruct {
   /**
-   * Construct a named expression.
+   * Construct a [[CreateStruct]] using unnamed expressions.
    */
-  def apply(children: Seq[Expression]): CreateStruct = {
-    def name(e: Expression): String = e.eval(EmptyRow).toString
-    val namedChildren = children.grouped(2).map {
-      case Seq(n, e) => Alias(e, name(n))()
+  def apply(children: Seq[Expression]): CreateStruct = new CreateStruct(children)
+
+  /**
+   * Generate names for the given expressions. This method will only generate names when all the
+   * expressions in the sequence are resolved. Names are generated using an expressions name (if
+   * it is a [[NamedExpression]] or using the index of that expression.
+   */
+  def generateNames(children: Seq[Expression]): Seq[String] = {
+    if (!children.forall(_.resolved)) Seq.empty
+    else {
+      children.zipWithIndex.map {
+        case (ne: NamedExpression, _) => ne.name
+        case (_, idx) => s"col${idx + 1}"
+      }
     }
-    CreateStruct(namedChildren.toSeq)
+  }
+
+  /**
+   * Create a [[CreateStruct]] using custom names from a sequence of name value pairs.
+   */
+  def withNameValuePairs(nameChildPairs: Seq[(String, Expression)]): CreateStruct = {
+    val (names, children) = nameChildPairs.unzip
+    CreateStruct(children, names)
+  }
+
+  /**
+   * Construct a [[CreateStruct]] using custom names. The input should adhere to the following
+   * pattern: name_1, value_1, name_2, value_2, ...
+   */
+  def withFlatExpressions(namesAndChildren: Seq[Expression]): CreateStruct = {
+    if (namesAndChildren.size % 2 != 0) {
+      throw new AnalysisException("An even number of arguments is expected")
+    }
+    val (children, names) = namesAndChildren.grouped(2).toSeq.map {
+      case Seq(n, child) =>
+        if (!n.foldable || n.dataType != StringType) {
+          throw new AnalysisException(
+            s"Only foldable StringType expressions are allowed to appear at odd position, got: $n")
+        }
+        val name = n.eval(EmptyRow)
+        if (name == null) {
+          throw new AnalysisException("Field name should not be null")
+        }
+        (child, name.toString)
+    }.unzip
+    CreateStruct(children, names)
   }
 
   /**
    * Registration used to add the 'named_struct' to the
    * [[org.apache.spark.sql.catalyst.analysis.FunctionRegistry]]
    */
-  val registration: (String, (ExpressionInfo, FunctionBuilder)) = {
+  val named_struct: (String, (ExpressionInfo, FunctionBuilder)) = {
     val info = new ExpressionInfo(
       classOf[CreateStruct].getCanonicalName,
       "named_struct",
       "_FUNC_(name1, val1, name2, val2, ...) - "
         + "Creates a struct with the given field names and values.",
       "")
-    ("named_struct", (info, apply))
+    ("named_struct", (info, withFlatExpressions))
   }
 }
 
@@ -260,29 +323,11 @@ object CreateNamedStruct {
  * returns UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
  * this expression automatically at runtime.
  */
-case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
-
-  override def foldable: Boolean = children.forall(_.foldable)
-
-  override lazy val resolved: Boolean = childrenResolved
-
-  override lazy val dataType: StructType = {
-    val fields = children.zipWithIndex.map { case (child, idx) =>
-      child match {
-        case ne: NamedExpression =>
-          StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
-        case _ =>
-          StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
-      }
-    }
-    StructType(fields)
-  }
-
-  override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any = {
-    InternalRow(children.map(_.eval(input)): _*)
-  }
+case class CreateStructUnsafe(
+    children: Seq[Expression],
+    names: Seq[String])
+  extends CreateStructLike {
+  def this(children: Seq[Expression]) = this(children, CreateStruct.generateNames(children))
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = GenerateUnsafeProjection.createCode(ctx, children)
