@@ -1292,7 +1292,8 @@ class DAGScheduler(
                   override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
                 },
                 DAGScheduler.RESUBMIT_TIMEOUT,
-                TimeUnit.MILLISECONDS)
+                TimeUnit.MILLISECONDS
+              )
             }
           }
           // Mark the map whose fetch failed as broken in the map stage
