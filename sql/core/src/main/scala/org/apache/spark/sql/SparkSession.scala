@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
@@ -773,6 +773,16 @@ object SparkSession {
     }
 
     /**
+     * Enables the use of provided ExternalCatalog and SessionState classes.
+     *
+     * @since 2.1.0
+     */
+    def enableProvidedCatalog(): Builder = synchronized {
+      // Assume that the classes exit in classpath.
+      config(CATALOG_IMPLEMENTATION.key, "provided")
+    }
+
+    /**
      * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new
      * one based on the options set in this builder.
      *
@@ -910,12 +920,11 @@ object SparkSession {
   /** Reference to the root SparkSession. */
   private val defaultSession = new AtomicReference[SparkSession]
 
-  private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
-
   private def sessionStateClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
-      case "hive" => HIVE_SESSION_STATE_CLASS_NAME
+      case "hive" => SQLConf.EXTERNAL_SESSION_STATE_CLASS_NAME.defaultValueString
       case "in-memory" => classOf[SessionState].getCanonicalName
+      case "provided" => conf.get(SQLConf.EXTERNAL_SESSION_STATE_CLASS_NAME)
     }
   }
 
@@ -941,7 +950,7 @@ object SparkSession {
    */
   private[spark] def hiveClassesArePresent: Boolean = {
     try {
-      Utils.classForName(HIVE_SESSION_STATE_CLASS_NAME)
+      Utils.classForName(SQLConf.EXTERNAL_SESSION_STATE_CLASS_NAME.defaultValueString)
       Utils.classForName("org.apache.hadoop.hive.conf.HiveConf")
       true
     } catch {

@@ -58,6 +58,16 @@ object SQLConf {
     .stringConf
     .createWithDefault("${system:user.dir}/spark-warehouse")
 
+  val EXTERNAL_CATALOG_CLASS_NAME = ConfigBuilder("spark.sql.externalCatalog")
+    .internal()
+    .stringConf
+    .createWithDefault("org.apache.spark.sql.hive.HiveExternalCatalog")
+
+  val EXTERNAL_SESSION_STATE_CLASS_NAME = ConfigBuilder("spark.sql.externalSessionState")
+    .internal()
+    .stringConf
+    .createWithDefault("org.apache.spark.sql.hive.HiveSessionState")
+
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
     .doc("The max number of iterations the optimizer and analyzer runs.")
