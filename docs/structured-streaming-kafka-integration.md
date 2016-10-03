@@ -151,21 +151,21 @@ Right now, the Kafka source has the following Spark's specific options.
   <td>failOnCorruptMetadata</td>
   <td>[true, false]</td>
   <td>true</td>
-  <td>Whether to fail the query when metadata is corrupt (e.g., topics are deleted), which can cause
-   data lost.</td>
+  <td>Whether to fail the query when metadata is corrupt (e.g., topics are deleted, or offsets are 
+  out of range), which may lost data.</td>
 </tr>
 <tr>
   <td>subscribe</td>
   <td>A comma-separated list of topics</td>
   <td>(none)</td>
-  <td>The topic list to subscribe. Only one of "subscribe" and "subscribeParttern" options can be 
+  <td>The topic list to subscribe. Only one of "subscribe" and "subscribePattern" options can be 
   specified for Kafka source.</td>
 </tr>
 <tr>
-  <td>subscribeParttern</td>
+  <td>subscribePattern</td>
   <td>Java regex string</td>
   <td>(none)</td>
-  <td>The pattern used to subscribe the topic. Only one of "subscribe" and "subscribeParttern" 
+  <td>The pattern used to subscribe the topic. Only one of "subscribe" and "subscribePattern" 
   options can be specified for Kafka source.</td>
 </tr>
 </table>
@@ -173,6 +173,21 @@ Right now, the Kafka source has the following Spark's specific options.
 Kafka's own configurations can be set via `DataStreamReader.option` with `kafka.` prefix, e.g, 
 `stream.option("kafka.bootstrap.servers", "host:port")`. For possible kafkaParams, see 
 [Kafka consumer config docs](http://kafka.apache.org/documentation.html#newconsumerconfigs).
+
+Note that the following Kafka params cannot be set and the Kafka source will throw an exception:
+- **group.id**: Kafka source will create a unique group id for each query automatically.
+- **auto.offset.reset**: Set the source option `startingOffset` to `earliest` or `latest` to specify
+ where to start instead. Structured Streaming manages which offsets are consumed internally, rather 
+ than rely on the kafka Consumer to do it. This will ensure that no data is missed when when new 
+ topics/partitions are dynamically subscribed. Note that `startingOffset` only applies when a new
+ Streaming query is started, and that resuming will always pick up from where the query left off.
+- **key.deserializer**: Keys are always deserialized as byte arrays with ByteArrayDeserializer. Use 
+ Dataframe operations to explicitly deserialize the keys.
+- **value.deserializer**: Values are always deserialized as byte arrays with ByteArrayDeserializer. 
+ Use Dataframe operations to explicitly deserialize the values.
+- **enable.auto.commit**: Kafka source doesn't commit any offset.
+- **interceptor.classes**: Kafka source always read keys and values as byte arrays. It's not safe to
+ use ConsumerInterceptor as it may break the query.
 
 ### Deploying
 

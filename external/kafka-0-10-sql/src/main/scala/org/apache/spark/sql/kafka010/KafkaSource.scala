@@ -82,6 +82,7 @@ private[kafka010] case class KafkaSource(
     consumerStrategy: ConsumerStrategy,
     executorKafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String],
+    metadataPath: String,
     failOnCorruptMetadata: Boolean)
   extends Source with Logging {
 
@@ -99,9 +100,13 @@ private[kafka010] case class KafkaSource(
    * forever (KAFKA-1894).
    */
   private lazy val initialPartitionOffsets = {
-    val offsets = fetchPartitionOffsets(seekToEnd = false)
-    logInfo(s"Initial offsets: $offsets")
-    offsets
+    val metadataLog = new HDFSMetadataLog[KafkaSourceOffset](sqlContext.sparkSession, metadataPath)
+    metadataLog.get(0).getOrElse {
+      val offsets = KafkaSourceOffset(fetchPartitionOffsets(seekToEnd = false))
+      metadataLog.add(0, offsets)
+      logInfo(s"Initial offsets: $offsets")
+      offsets
+    }.partitionToOffsets
   }
 
   override def schema: StructType = KafkaSource.kafkaSchema
@@ -150,8 +155,7 @@ private[kafka010] case class KafkaSource(
     }
 
     val deletedPartitions = fromPartitionOffsets.keySet.diff(untilPartitionOffsets.keySet)
-    // TODO should this one ever throw an exception?
-    reportCorruptMetadata(s"$deletedPartitions are removed. Some data may have been missed")
+    logWarning(s"$deletedPartitions are gone. Some data may have been missed")
 
     // Use the until partitions to calculate offset ranges to ignore partitions that have
     // been deleted

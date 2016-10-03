@@ -139,13 +139,14 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
     }
 
     val failOnCorruptMetadata =
-      caseInsensitiveParams.getOrElse(FAIL_ON_CORRUPT_METADATA_OPTION_KEY, "false").toBoolean
+      caseInsensitiveParams.getOrElse(FAIL_ON_CORRUPT_METADATA_OPTION_KEY, "true").toBoolean
 
     new KafkaSource(
       sqlContext,
       strategy,
       kafkaParamsForExecutors,
       parameters,
+      metadataPath,
       failOnCorruptMetadata)
   }
 
@@ -219,17 +220,17 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
 
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG}")) {
       throw new IllegalArgumentException(
-        s"Kafka option '${ConsumerConfig.GROUP_ID_CONFIG}' is not supported as keys are " +
-          s"deserialized as byte arrays with ByteArrayDeserializer. Use Dataframe operations to " +
-          s"explicitly deserialize the keys.")
+        s"Kafka option '${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG}' is not supported as keys "
+          + "are deserialized as byte arrays with ByteArrayDeserializer. Use Dataframe operations "
+          + "to explicitly deserialize the keys.")
     }
 
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG}"))
     {
       throw new IllegalArgumentException(
-        s"Kafka option '${ConsumerConfig.GROUP_ID_CONFIG}' is not supported as value are " +
-          s"deserialized as byte arrays with ByteArrayDeserializer. Use Dataframe operations to " +
-          s"explicitly deserialize the values.")
+        s"Kafka option '${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG}' is not supported as "
+          + "value are deserialized as byte arrays with ByteArrayDeserializer. Use Dataframe "
+          + "operations to explicitly deserialize the values.")
     }
 
     val otherUnsupportedConfigs = Seq(
