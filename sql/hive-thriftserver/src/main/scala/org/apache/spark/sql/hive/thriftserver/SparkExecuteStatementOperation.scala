@@ -34,7 +34,6 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.command.SetCommand
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -60,7 +59,8 @@ private[hive] class SparkExecuteStatementOperation(
     if (result == null || result.queryExecution.analyzed.output.isEmpty) {
       new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
     } else {
-      SparkExecuteStatementOperation.getTableSchema(result.queryExecution.analyzed.output)
+      logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
+      SparkExecuteStatementOperation.getTableSchema(result.queryExecution.analyzed.schema)
     }
   }
 
@@ -280,12 +280,11 @@ private[hive] class SparkExecuteStatementOperation(
   }
 }
 
-object SparkExecuteStatementOperation extends Logging {
-  def getTableSchema(output: Seq[Attribute]): TableSchema = {
-    logInfo(s"Result Schema: ${output}")
-    val schema = output.map { attr =>
-      val attrTypeString = if (attr.dataType == NullType) "void" else attr.dataType.catalogString
-      new FieldSchema(attr.name, attrTypeString, "")
+object SparkExecuteStatementOperation {
+  def getTableSchema(structType: StructType): TableSchema = {
+    val schema = structType.map { field =>
+      val attrTypeString = if (field.dataType == NullType) "void" else field.dataType.catalogString
+      new FieldSchema(field.name, attrTypeString, "")
     }
     new TableSchema(schema.asJava)
   }
