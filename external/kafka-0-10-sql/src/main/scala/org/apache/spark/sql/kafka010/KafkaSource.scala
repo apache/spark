@@ -170,18 +170,18 @@ private[kafka010] case class KafkaSource(
 
     // Use the until partitions to calculate offset ranges to ignore partitions that have
     // been deleted
-    val sortedTopicPartitions = untilPartitionOffsets.keySet.filter { tp =>
+    val topicPartitions = untilPartitionOffsets.keySet.filter { tp =>
       // Ignore partitions that we don't know the from offsets.
       newPartitionOffsets.contains(tp) || fromPartitionOffsets.contains(tp)
-    }.toSeq.sorted(topicPartitionOrdering)
-    logDebug("Sorted topicPartitions: " + sortedTopicPartitions.mkString(", "))
+    }.toSeq
+    logDebug("TopicPartitions: " + topicPartitions.mkString(", "))
 
     val sortedExecutors = getSortedExecutorList(sc)
     val numExecutors = sortedExecutors.length
     logDebug("Sorted executors: " + sortedExecutors.mkString(", "))
 
     // Calculate offset ranges
-    val offsetRanges = sortedTopicPartitions.map { tp =>
+    val offsetRanges = topicPartitions.map { tp =>
       val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
         newPartitionOffsets.getOrElse(tp, {
           // This should not happen since newPartitionOffsets contains all partitions not in
@@ -191,6 +191,8 @@ private[kafka010] case class KafkaSource(
       }
       val untilOffset = untilPartitionOffsets(tp)
       val preferredLoc = if (numExecutors > 0) {
+        // This allows cached KafkaConsumers in the executors to be re-used to read the same
+        // partition in every batch.
         Some(sortedExecutors(floorMod(tp.hashCode, numExecutors)))
       } else None
       KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
@@ -388,17 +390,6 @@ private[kafka010] object KafkaSource {
 
   private def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
     if (a.host == b.host) { a.executorId > b.executorId } else { a.host > b.host }
-  }
-
-  // Sort the partitions and current list of executors to consistently assign each partition
-  // to the executor. This allows cached KafkaConsumers in the executors to be re-used to
-  // read the same partition in every batch.
-  private val topicPartitionOrdering = new Ordering[TopicPartition] {
-    override def compare(l: TopicPartition, r: TopicPartition): Int = {
-      implicitly[Ordering[(String, Long)]].compare(
-        (l.topic, l.partition),
-        (r.topic, r.partition))
-    }
   }
 
   private def floorMod(a: Long, b: Int): Int = ((a % b).toInt + b) % b

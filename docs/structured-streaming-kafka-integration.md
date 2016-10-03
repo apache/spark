@@ -4,7 +4,8 @@ title: Structured Streaming + Kafka Integration Guide (Kafka broker version 0.10
 ---
 
 Structured Streaming integration for Kafka 0.10 to poll data from Kafka. It provides simple parallelism,
-1:1 correspondence between Kafka partitions and Spark partitions.
+1:1 correspondence between Kafka partitions and Spark partitions. The source will cache the Kafka
+consumer in executors and try the best to schedule the same Kafka topic partition to the same executor.
 
 ### Linking
 For Scala/Java applications using SBT/Maven project definitions, link your application with the following artifact:
