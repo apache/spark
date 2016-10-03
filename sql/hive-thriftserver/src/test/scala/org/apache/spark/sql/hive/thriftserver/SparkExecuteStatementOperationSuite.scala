@@ -17,37 +17,15 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.types.NullType
 
-class SparkExecuteStatementOperationSuite
-  extends SparkFunSuite with BeforeAndAfterAll with Logging {
-
-  private var spark: SparkSession = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    spark = SparkSession
-      .builder
-      .master("local[1]")
-      .appName("SparkExecuteStatementOperationSuite")
-      .getOrCreate()
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      spark.stop()
-    } finally {
-      super.afterAll()
-    }
-  }
-
+class SparkExecuteStatementOperationSuite extends SparkFunSuite {
   test("SPARK-17112 `select null` via JDBC triggers IllegalArgumentException in ThriftServer") {
-    val df = spark.sql("select null, if(true,null,null)")
-    val columns = SparkExecuteStatementOperation.getTableSchema(df).getColumnDescriptors()
+    val c1 = AttributeReference("NULL", NullType, nullable = true)()
+    val c2 = AttributeReference("(IF(true, NULL, NULL))", NullType, nullable = true)()
+    val columns = SparkExecuteStatementOperation.getTableSchema(Seq(c1, c2)).getColumnDescriptors()
     assert(columns.size() == 2)
     assert(columns.get(0).getType() == org.apache.hive.service.cli.Type.NULL_TYPE)
     assert(columns.get(1).getType() == org.apache.hive.service.cli.Type.NULL_TYPE)

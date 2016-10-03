@@ -34,6 +34,7 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.command.SetCommand
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -55,7 +56,13 @@ private[hive] class SparkExecuteStatementOperation(
   private var dataTypes: Array[DataType] = _
   private var statementId: String = _
 
-  private lazy val resultSchema: TableSchema = SparkExecuteStatementOperation.getTableSchema(result)
+  private lazy val resultSchema: TableSchema = {
+    if (result == null || result.queryExecution.analyzed.output.isEmpty) {
+      new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
+    } else {
+      SparkExecuteStatementOperation.getTableSchema(result.queryExecution.analyzed.output)
+    }
+  }
 
   def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
@@ -274,16 +281,12 @@ private[hive] class SparkExecuteStatementOperation(
 }
 
 object SparkExecuteStatementOperation extends Logging {
-  def getTableSchema(result: DataFrame): TableSchema = {
-    if (result == null || result.queryExecution.analyzed.output.isEmpty) {
-      new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
-    } else {
-      logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
-      val schema = result.queryExecution.analyzed.output.map { attr =>
-        val attrTypeString = if (attr.dataType == NullType) "void" else attr.dataType.catalogString
-        new FieldSchema(attr.name, attrTypeString, "")
-      }
-      new TableSchema(schema.asJava)
+  def getTableSchema(output: Seq[Attribute]): TableSchema = {
+    logInfo(s"Result Schema: ${output}")
+    val schema = output.map { attr =>
+      val attrTypeString = if (attr.dataType == NullType) "void" else attr.dataType.catalogString
+      new FieldSchema(attr.name, attrTypeString, "")
     }
+    new TableSchema(schema.asJava)
   }
 }
