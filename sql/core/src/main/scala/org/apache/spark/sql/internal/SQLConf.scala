@@ -581,6 +581,13 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10L)
 
+  val NDV_MAX_ERROR =
+    SQLConfigBuilder("spark.sql.statistics.ndv.maxError")
+      .internal()
+      .doc("The maximum estimation error allowed in HyperLogLog++ algorithm.")
+      .doubleConf
+      .createWithDefault(0.05)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -757,6 +764,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
 
   override def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
+
+  def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

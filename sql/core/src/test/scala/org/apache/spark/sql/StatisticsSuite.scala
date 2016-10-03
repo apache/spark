@@ -18,11 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, Join, LocalLimit}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class StatisticsSuite extends QueryTest with SharedSQLContext {
+class StatisticsSuite extends StatisticsTest {
   import testImplicits._
 
   test("SPARK-15392: DataFrame created from RDD should not be broadcasted") {
@@ -77,20 +75,10 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("test table-level statistics for data source table created in InMemoryCatalog") {
-    def checkTableStats(tableName: String, expectedRowCount: Option[BigInt]): Unit = {
-      val df = sql(s"SELECT * FROM $tableName")
-      val relations = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
-        assert(rel.catalogTable.isDefined)
-        assert(rel.catalogTable.get.stats.flatMap(_.rowCount) === expectedRowCount)
-        rel
-      }
-      assert(relations.size === 1)
-    }
-
     val tableName = "tbl"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName(i INT, j STRING) USING parquet")
-      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto(tableName)
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
