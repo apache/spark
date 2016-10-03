@@ -102,6 +102,90 @@ abstract class Catalog {
   def listColumns(dbName: String, tableName: String): Dataset[Column]
 
   /**
+   * Get the database with the specified name. This throws an AnalysisException when the database
+   * cannot be found.
+   *
+   * @since 2.1.0
+   */
+  @throws[AnalysisException]("database does not exist")
+  def getDatabase(dbName: String): Database
+
+  /**
+   * Get the table or view with the specified name. This table can be a temporary view or a
+   * table/view in the current database. This throws an AnalysisException when no Table
+   * can be found.
+   *
+   * @since 2.1.0
+   */
+  @throws[AnalysisException]("table does not exist")
+  def getTable(tableName: String): Table
+
+  /**
+   * Get the table or view with the specified name in the specified database. This throws an
+   * AnalysisException when no Table can be found.
+   *
+   * @since 2.1.0
+   */
+  @throws[AnalysisException]("database or table does not exist")
+  def getTable(dbName: String, tableName: String): Table
+
+  /**
+   * Get the function with the specified name. This function can be a temporary function or a
+   * function in the current database. This throws an AnalysisException when the function cannot
+   * be found.
+   *
+   * @since 2.1.0
+   */
+  @throws[AnalysisException]("function does not exist")
+  def getFunction(functionName: String): Function
+
+  /**
+   * Get the function with the specified name. This throws an AnalysisException when the function
+   * cannot be found.
+   *
+   * @since 2.1.0
+   */
+  @throws[AnalysisException]("database or function does not exist")
+  def getFunction(dbName: String, functionName: String): Function
+
+  /**
+   * Check if the database with the specified name exists.
+   *
+   * @since 2.1.0
+   */
+  def databaseExists(dbName: String): Boolean
+
+  /**
+   * Check if the table or view with the specified name exists. This can either be a temporary
+   * view or a table/view in the current database.
+   *
+   * @since 2.1.0
+   */
+  def tableExists(tableName: String): Boolean
+
+  /**
+   * Check if the table or view with the specified name exists in the specified database.
+   *
+   * @since 2.1.0
+   */
+  def tableExists(dbName: String, tableName: String): Boolean
+
+  /**
+   * Check if the function with the specified name exists. This can either be a temporary function
+   * or a function in the current database.
+   *
+   * @since 2.1.0
+   */
+  def functionExists(functionName: String): Boolean
+
+  /**
+   * Check if the function with the specified name exists in the specified database.
+   *
+   * @since 2.1.0
+   */
+  def functionExists(dbName: String, functionName: String): Boolean
+
+  /**
    * :: Experimental ::
    * Creates an external table from the given path and returns the corresponding DataFrame.
    * It will use the default data source configured by spark.sql.sources.default.
