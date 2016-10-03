@@ -119,9 +119,6 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
   }
 
   test("analyze MetastoreRelations") {
-    def queryTotalSize(tableName: String): BigInt =
-      spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName)).statistics.sizeInBytes
-
     // Non-partitioned table
     sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
@@ -154,11 +151,15 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
         |SELECT * FROM src
       """.stripMargin).collect()
 
-    assert(queryTotalSize("analyzeTable_part") === spark.sessionState.conf.defaultSizeInBytes)
+    // This is from Hive-generated statistics
+    val totalSizeFromHive = queryTotalSize("analyzeTable_part")
 
     sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
 
-    assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
+    // This is from Spark-generated statistics
+    val totalSizeFromSpark = queryTotalSize("analyzeTable_part")
+
+    assert(totalSizeFromHive == totalSizeFromSpark)
 
     sql("DROP TABLE analyzeTable_part").collect()
 
@@ -170,6 +171,9 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     spark.sessionState.catalog.dropTable(
       TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
   }
+
+  private def queryTotalSize(tableName: String): BigInt =
+    spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName)).statistics.sizeInBytes
 
   private def checkStats(
       stats: Option[Statistics],
@@ -232,6 +236,79 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       val fetchedStats2 = checkStats(
         textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = Some(500))
       assert(fetchedStats1.get.sizeInBytes == fetchedStats2.get.sizeInBytes)
+    }
+  }
+
+  test("gather table-level statistics of managed partitioned tables from Hive") {
+    val managedTable = "partitionedTable"
+    withTable(managedTable) {
+      sql(
+        s"""
+           |CREATE TABLE $managedTable (key INT, value STRING)
+           |PARTITIONED BY (ds STRING, hr STRING)
+        """.stripMargin)
+
+      for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE $managedTable
+             |partition (ds='$ds',hr='$hr')
+             |SELECT 1, 'a'
+           """.stripMargin)
+      }
+
+      checkStats(
+        managedTable, isDataSourceTable = false, hasSizeInBytes = false, expectedRowCounts = None)
+
+      // This is from Hive-generated statistics
+      val totalSizeFromHive = queryTotalSize(managedTable)
+
+      sql(s"ANALYZE TABLE $managedTable COMPUTE STATISTICS noscan")
+
+      // This is from Spark-generated statistics
+      val totalSizeFromSpark = queryTotalSize(managedTable)
+
+      assert(totalSizeFromHive == totalSizeFromSpark)
+    }
+  }
+
+  test("gather statistics for external partitioned table from Hive") {
+    val catalog = spark.sessionState.catalog
+    val externalPartitionedTable = "partitionedTable"
+    withTempDir { tempDir =>
+      val basePath = tempDir.getCanonicalPath
+      withTable(externalPartitionedTable) {
+        sql(
+          s"""
+             |CREATE EXTERNAL TABLE $externalPartitionedTable (key INT, value STRING)
+             |PARTITIONED BY (ds STRING, hr STRING)
+             |LOCATION '$basePath'
+           """.stripMargin)
+        for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE $externalPartitionedTable
+               |partition (ds='$ds',hr='$hr')
+               |SELECT 1, 'a'
+             """.stripMargin)
+        }
+        val totalSizeFromHive1 = queryTotalSize(externalPartitionedTable)
+
+        sql(
+          s"""
+             |ALTER TABLE $externalPartitionedTable DROP PARTITION (ds='2008-04-08'),
+             |PARTITION (hr='12')
+           """.stripMargin)
+        assert(
+          catalog.listPartitions(TableIdentifier(externalPartitionedTable)).map(_.spec).toSet ==
+          Set(Map("ds" -> "2008-04-09", "hr" -> "11")))
+        val totalSizeFromHive2 = queryTotalSize(externalPartitionedTable)
+
+        sql(s"ALTER TABLE $externalPartitionedTable ADD PARTITION (ds='2008-04-08', hr='12')")
+        val totalSizeFromHive3 = queryTotalSize(externalPartitionedTable)
+
+        assert(totalSizeFromHive1 > totalSizeFromHive3 && totalSizeFromHive3 > totalSizeFromHive2)
+      }
     }
   }
 
