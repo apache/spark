@@ -60,7 +60,8 @@ private[kafka010] case class KafkaSourceRDDPartition(
 private[kafka010] class KafkaSourceRDD(
     sc: SparkContext,
     executorKafkaParams: ju.Map[String, Object],
-    offsetRanges: Seq[KafkaSourceRDDOffsetRange])
+    offsetRanges: Seq[KafkaSourceRDDOffsetRange],
+    pollTimeoutMs: Long)
   extends RDD[ConsumerRecord[Array[Byte], Array[Byte]]](sc, Nil) {
 
   override def persist(newLevel: StorageLevel): this.type = {
@@ -137,7 +138,7 @@ private[kafka010] class KafkaSourceRDD(
         override def hasNext(): Boolean = requestOffset < range.untilOffset
         override def next(): ConsumerRecord[Array[Byte], Array[Byte]] = {
           assert(hasNext(), "Can't call next() once untilOffset has been reached")
-          val r = consumer.get(requestOffset)
+          val r = consumer.get(requestOffset, pollTimeoutMs)
           requestOffset += 1
           r
         }

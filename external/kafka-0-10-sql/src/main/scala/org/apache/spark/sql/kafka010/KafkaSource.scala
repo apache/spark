@@ -47,10 +47,9 @@ import org.apache.spark.util.UninterruptibleThread
  *
  * - The [[ConsumerStrategy]] class defines which Kafka topics and partitions should be read
  *   by this source. These strategies directly correspond to the different consumption options
- *   in . This class is designed to return a configured
- *   [[KafkaConsumer]] that is used by the [[KafkaSource]] to query for the offsets.
- *   See the docs on [[org.apache.spark.sql.kafka010.KafkaSource.ConsumerStrategy]] for
- *   more details.
+ *   in . This class is designed to return a configured [[KafkaConsumer]] that is used by the
+ *   [[KafkaSource]] to query for the offsets. See the docs on
+ *   [[org.apache.spark.sql.kafka010.KafkaSource.ConsumerStrategy]] for more details.
  *
  * - The [[KafkaSource]] written to do the following.
  *
@@ -88,6 +87,14 @@ private[kafka010] case class KafkaSource(
 
   private val sc = sqlContext.sparkContext
 
+  private val pollTimeoutMs = sourceOptions.getOrElse("kafka.consumer.poll.timeoutMs", "512").toLong
+
+  private val maxOffsetFetchAttempts =
+    sourceOptions.getOrElse("fetchOffset.numRetries", "3").toInt
+
+  private val offsetFetchAttemptIntervalMs =
+    sourceOptions.getOrElse("fetchOffset.retry.intervalMs", "10").toLong
+
   /**
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
    * offsets and never commits them.
@@ -121,7 +128,11 @@ private[kafka010] case class KafkaSource(
     Some(offset)
   }
 
-  /** Returns the data that is between the offsets [`start`, `end`), i.e. end is exclusive. */
+  /**
+   * Returns the data that is between the offsets
+   * [`start.get.partitionToOffsets`, `end.partitionToOffsets`), i.e. end.partitionToOffsets is
+   * exclusive.
+   */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     // Make sure initialPartitionOffsets is set
     initialPartitionOffsets
@@ -195,7 +206,7 @@ private[kafka010] case class KafkaSource(
 
     // Create a RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
-      sc, executorKafkaParams, offsetRanges).map { cr =>
+      sc, executorKafkaParams, offsetRanges, pollTimeoutMs).map { cr =>
       Row(cr.key, cr.value, cr.topic, cr.partition, cr.offset, cr.timestamp, cr.timestampType.id)
     }
 
@@ -273,7 +284,7 @@ private[kafka010] case class KafkaSource(
       var result: Option[Map[TopicPartition, Long]] = None
       var attempt = 1
       var lastException: Throwable = null
-      while (result.isEmpty && attempt <= MAX_OFFSET_FETCH_ATTEMPTS
+      while (result.isEmpty && attempt <= maxOffsetFetchAttempts
         && !Thread.currentThread().isInterrupted) {
         Thread.currentThread match {
           case ut: UninterruptibleThread =>
@@ -291,7 +302,7 @@ private[kafka010] case class KafkaSource(
                   lastException = e
                   logWarning(s"Error in attempt $attempt getting Kafka offsets: ", e)
                   attempt += 1
-                  Thread.sleep(OFFSET_FETCH_ATTEMPT_INTERVAL_MS)
+                  Thread.sleep(offsetFetchAttemptIntervalMs)
               }
             }
           case _ =>
@@ -303,7 +314,7 @@ private[kafka010] case class KafkaSource(
         throw new InterruptedException()
       }
       if (result.isEmpty) {
-        assert(attempt > MAX_OFFSET_FETCH_ATTEMPTS)
+        assert(attempt > maxOffsetFetchAttempts)
         assert(lastException != null)
         throw lastException
       }
@@ -327,9 +338,6 @@ private[kafka010] case class KafkaSource(
 
 /** Companion object for the [[KafkaSource]]. */
 private[kafka010] object KafkaSource {
-
-  val MAX_OFFSET_FETCH_ATTEMPTS = 3
-  val OFFSET_FETCH_ATTEMPT_INTERVAL_MS = 10
 
   def kafkaSchema: StructType = StructType(Seq(
     StructField("key", BinaryType),

@@ -180,6 +180,24 @@ Right now, the Kafka source has the following Spark's specific options.
   <td>The pattern used to subscribe the topic. Only one of "subscribe" and "subscribePattern" 
   options can be specified for Kafka source.</td>
 </tr>
+<tr>
+  <td>kafka.consumer.poll.timeoutMs</td>
+  <td>long</td>
+  <td>512</td>
+  <td>The timeout in milliseconds to poll data from Kafka in executors.</td>
+</tr>
+<tr>
+  <td>fetchOffset.numRetries</td>
+  <td>int</td>
+  <td>3</td>
+  <td>Number of times to retry before giving up fatch Kafka latest offsets.</td>
+</tr>
+<tr>
+  <td>fetchOffset.retry.intervalMs</td>
+  <td>long</td>
+  <td>10</td>
+  <td>milliseconds to wait before retrying to fetch Kafka offsets</td>
+</tr>
 </table>
 
 Kafka's own configurations can be set via `DataStreamReader.option` with `kafka.` prefix, e.g, 
