@@ -55,13 +55,13 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
         // countFileSize to count the table size.
         val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
 
-        def calculateTableSize(fs: FileSystem, path: Path): Long = {
+        def calculateSize(fs: FileSystem, path: Path): Long = {
           val fileStatus = fs.getFileStatus(path)
           val size = if (fileStatus.isDirectory) {
             fs.listStatus(path)
               .map { status =>
                 if (!status.getPath.getName.startsWith(stagingDir)) {
-                  calculateTableSize(fs, status.getPath)
+                  calculateSize(fs, status.getPath)
                 } else {
                   0L
                 }
@@ -73,20 +73,24 @@ case class AnalyzeTableCommand(tableName: String, noscan: Boolean = true) extend
           size
         }
 
+        def calculateTableSize(pathStr: String): Long = {
+          val path = new Path(pathStr)
+          try {
+            val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+            calculateSize(fs, path)
+          } catch {
+            case NonFatal(e) =>
+              logWarning(
+                s"Failed to get the size of table ${catalogTable.identifier.table} in the " +
+                  s"database ${catalogTable.identifier.database} because of ${e.toString}", e)
+              0L
+          }
+        }
+
         val newTotalSize =
-          catalogTable.storage.locationUri.map { p =>
-            val path = new Path(p)
-            try {
-              val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
-              calculateTableSize(fs, path)
-            } catch {
-              case NonFatal(e) =>
-                logWarning(
-                  s"Failed to get the size of table ${catalogTable.identifier.table} in the " +
-                    s"database ${catalogTable.identifier.database} because of ${e.toString}", e)
-                0L
-            }
-          }.getOrElse(0L)
+          catalogTable.storage.locationUri.map(calculateTableSize)
+            .getOrElse(catalogTable.storage.properties.get("path").map(calculateTableSize)
+              .getOrElse(0L))
 
         updateTableStats(catalogTable, newTotalSize)
 

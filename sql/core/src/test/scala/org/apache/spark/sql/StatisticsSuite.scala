@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, Join, LocalLimit}
+import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, Join, LocalLimit, Statistics}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -77,28 +77,41 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("test table-level statistics for data source table created in InMemoryCatalog") {
-    def checkTableStats(tableName: String, expectedRowCount: Option[BigInt]): Unit = {
+    def checkStats(
+        tableName: String,
+        hasSizeInBytes: Boolean,
+        expectedRowCount: Option[BigInt]): Option[Statistics] = {
       val df = sql(s"SELECT * FROM $tableName")
-      val relations = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
+      val statsSeq = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
         assert(rel.catalogTable.isDefined)
-        assert(rel.catalogTable.get.stats.flatMap(_.rowCount) === expectedRowCount)
-        rel
+        val stats = rel.catalogTable.get.stats
+        if (hasSizeInBytes || expectedRowCount.nonEmpty) {
+          assert(stats.isDefined)
+          assert(stats.get.sizeInBytes > 0)
+          assert(stats.get.rowCount === expectedRowCount)
+        } else {
+          assert(stats.isEmpty)
+        }
+        rel.catalogTable.get.stats
       }
-      assert(relations.size === 1)
+      assert(statsSeq.size === 1)
+      statsSeq.head
     }
 
     val tableName = "tbl"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName(i INT, j STRING) USING parquet")
       Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
+      checkStats(tableName, hasSizeInBytes = false, expectedRowCount = None)
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
-      checkTableStats(tableName, expectedRowCount = None)
+      val fetchedStats1 = checkStats(tableName, hasSizeInBytes = true, expectedRowCount = None)
 
       // without noscan, we count the number of rows
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
-      checkTableStats(tableName, expectedRowCount = Some(2))
+      val fetchedStats2 = checkStats(tableName, hasSizeInBytes = true, expectedRowCount = Some(2))
+      assert(fetchedStats1.get.sizeInBytes === fetchedStats2.get.sizeInBytes)
     }
   }
 }
