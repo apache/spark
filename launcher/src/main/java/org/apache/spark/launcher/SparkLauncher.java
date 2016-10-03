@@ -80,6 +80,8 @@ public class SparkLauncher {
 
   private static final String CHILD_PROCESS_LAUNCHER_STOP_FLAG = "spark.launcher.internal.stop.flag";
 
+  private static final String CHILD_THREAD_LAUNCHER_ENABLED = "spark.launcher.internal.thread.enabled";
+
   /**
    * A special value for the resource that tells Spark to not try to process the app resource as a
    * file. This is useful when the class being executed is added to the application using other
@@ -599,6 +601,7 @@ public class SparkLauncher {
     setConf(LAUNCHER_INTERNAL_PORT,String.valueOf(LauncherServer.getServerInstance().getPort()));
     setConf(CHILD_PROCESS_LAUNCHER_INTERNAL_SECRET, handle.getSecret());
     setConf(CHILD_PROCESS_LAUNCHER_STOP_FLAG, String.valueOf(stopIfInterrupted));
+    setConf(CHILD_THREAD_LAUNCHER_ENABLED,"true");
     try {
       // It is important that spark-submit class is available in the classpath.
       // Trying to see if method is available in the classpath else throws Exception.

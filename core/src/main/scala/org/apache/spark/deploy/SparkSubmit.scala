@@ -21,8 +21,10 @@ import java.io.{File, PrintStream}
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
 import java.security.PrivilegedExceptionAction
+import java.util
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.commons.lang3.StringUtils
@@ -113,8 +115,8 @@ object SparkSubmit {
   }
   // scalastyle:on println
 
-  def main(args: Array[String]): Unit = {
-    val appArgs = new SparkSubmitArguments(args)
+  def main(argStrings: Array[String]) {
+    val appArgs = new SparkSubmitArguments(argStrings)
     if (appArgs.verbose) {
       // scalastyle:off println
       printStream.println(appArgs)
@@ -676,9 +678,21 @@ object SparkSubmit {
       addJarToClasspath(jar, loader)
     }
 
-    for ((key, value) <- sysProps) {
-      System.setProperty(key, value)
+    val threadEnabled = sysProps.getOrElse("spark.launcher.internal.launcher.thread.enabled",
+       "false").toBoolean
+    if (!threadEnabled) {
+      for ((key, value) <- sysProps) {
+        System.setProperty(key, value)
+      }
+    } else {
+      for ( (key, value) <- sys.props ++ sys.env) {
+        if (!sysProps.contains(key)) {
+          sysProps.put(key, value)
+        }
+      }
+
     }
+
 
     var mainClass: Class[_] = null
 
@@ -710,7 +724,12 @@ object SparkSubmit {
       printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
     }
 
-    val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
+    val mainMethod =
+    if (threadEnabled ) {
+      mainClass.getMethods().filter(i => i.getName() == "mainWithEnv")(0)
+    } else {
+      mainClass.getMethod("main", new Array[String](0).getClass)
+    }
     if (!Modifier.isStatic(mainMethod.getModifiers)) {
       throw new IllegalStateException("The main method in the given main class must be static")
     }
@@ -726,7 +745,11 @@ object SparkSubmit {
     }
 
     try {
+      if (threadEnabled) {
+        mainMethod.invoke(null, childArgs.toArray, sysProps)
+      } else {
       mainMethod.invoke(null, childArgs.toArray)
+      }
     } catch {
       case t: Throwable =>
         findCause(t) match {

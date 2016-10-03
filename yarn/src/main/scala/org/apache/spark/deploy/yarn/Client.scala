@@ -59,14 +59,24 @@ import org.apache.spark.util.Utils
 private[spark] class Client(
     val args: ClientArguments,
     val hadoopConf: Configuration,
-    val sparkConf: SparkConf)
+    val sparkConf: SparkConf,
+    val sysEnvironmentInput: Map[String, String])
   extends Logging {
 
   import Client._
   import YarnSparkHadoopUtil._
 
+  def this(clientArgs: ClientArguments, spConf: SparkConf, sysenvironment: Map[String, String]) =
+    this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf, sysenvironment)
+
+  def this(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: SparkConf) =
+    this(clientArgs, hadoopConf, spConf, Map() ++ sys.env)
+
   def this(clientArgs: ClientArguments, spConf: SparkConf) =
-    this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf)
+    this(clientArgs, spConf, Map() ++  sys.env)
+
+  private val sysEnvironment: scala.collection.immutable.Map[scala.Predef.String,
+   scala.Predef.String] = collection.immutable.Map() ++ sysEnvironmentInput
 
   private val yarnClient = YarnClient.createYarnClient
   private val yarnConf = new YarnConfiguration(hadoopConf)
@@ -77,7 +87,8 @@ private[spark] class Client(
   private val launcherServerSecret : String = sparkConf.get("spark.launcher.internal.secret", "")
   private val launcherServerStopFlag : Boolean = sparkConf.get("spark.launcher.internal.stop.flag",
     "false").toBoolean
-
+  private val launcherServerInThreadFlag: Boolean =
+    sparkConf.get("spark.launcher.internal.thread.enabled", "false").toBoolean
   // AM related configurations
   private val amMemory = if (isClusterMode) {
     sparkConf.get(DRIVER_MEMORY).toInt
@@ -704,7 +715,7 @@ private[spark] class Client(
     }
 
     Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
-      sys.env.get(envKey).foreach { path =>
+      sysEnvironment.get(envKey).foreach { path =>
         val dir = new File(path)
         if (dir.isDirectory()) {
           val files = dir.listFiles()
@@ -757,7 +768,8 @@ private[spark] class Client(
       pySparkArchives: Seq[String]): HashMap[String, String] = {
     logInfo("Setting up the launch environment for our AM container")
     val env = new HashMap[String, String]()
-    populateClasspath(args, yarnConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
+    populateClasspath(args, yarnConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH),
+      sysEnvironment)
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
@@ -775,7 +787,7 @@ private[spark] class Client(
       .foreach { case (k, v) => YarnSparkHadoopUtil.addPathToEnvironment(env, k, v) }
 
     // Keep this for backwards compatibility but users should move to the config
-    sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
+    sysEnvironment.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
     // Allow users to specify some environment variables.
       YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)
       // Pass SPARK_YARN_USER_ENV itself to the AM so it can use it to set up executor environments.
@@ -804,7 +816,7 @@ private[spark] class Client(
 
     // Finally, update the Spark config to propagate PYTHONPATH to the AM and executors.
     if (pythonPath.nonEmpty) {
-      val pythonPathStr = (sys.env.get("PYTHONPATH") ++ pythonPath)
+      val pythonPathStr = (sysEnvironment.get("PYTHONPATH") ++ pythonPath)
         .mkString(YarnSparkHadoopUtil.getClassPathSeparator)
       env("PYTHONPATH") = pythonPathStr
       sparkConf.setExecutorEnv("PYTHONPATH", pythonPathStr)
@@ -819,7 +831,7 @@ private[spark] class Client(
     // SparkConf#validateSettings() is duplicated here (to avoid triggering the condition
     // described above).
     if (isClusterMode) {
-      sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
+      sysEnvironment.get("SPARK_JAVA_OPTS").foreach { value =>
         val warning =
           s"""
             |SPARK_JAVA_OPTS was detected (set to '$value').
@@ -842,12 +854,12 @@ private[spark] class Client(
       // propagate PYSPARK_DRIVER_PYTHON and PYSPARK_PYTHON to driver in cluster mode
       Seq("PYSPARK_DRIVER_PYTHON", "PYSPARK_PYTHON").foreach { envname =>
         if (!env.contains(envname)) {
-          sys.env.get(envname).foreach(env(envname) = _)
+          sysEnvironment.get(envname).foreach(env(envname) = _)
         }
       }
     }
 
-    sys.env.get(ENV_DIST_CLASSPATH).foreach { dcp =>
+    sysEnvironment.get(ENV_DIST_CLASSPATH).foreach { dcp =>
       env(ENV_DIST_CLASSPATH) = dcp
     }
 
@@ -913,7 +925,8 @@ private[spark] class Client(
 
     // Include driver-specific java options if we are launching a driver
     if (isClusterMode) {
-      val driverOpts = sparkConf.get(DRIVER_JAVA_OPTIONS).orElse(sys.env.get("SPARK_JAVA_OPTS"))
+      val driverOpts = sparkConf.get(DRIVER_JAVA_OPTIONS).orElse(
+        sysEnvironment.get("SPARK_JAVA_OPTS"))
       driverOpts.foreach { opts =>
         javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
       }
@@ -1185,10 +1198,10 @@ private[spark] class Client(
   }
 
   private def findPySparkArchives(): Seq[String] = {
-    sys.env.get("PYSPARK_ARCHIVES_PATH")
+    sysEnvironment.get("PYSPARK_ARCHIVES_PATH")
       .map(_.split(",").toSeq)
       .getOrElse {
-        val pyLibPath = Seq(sys.env("SPARK_HOME"), "python", "lib").mkString(File.separator)
+        val pyLibPath = Seq(sysEnvironment("SPARK_HOME"), "python", "lib").mkString(File.separator)
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           s"$pyArchivesFile not found; cannot run pyspark application in YARN mode.")
@@ -1204,6 +1217,10 @@ private[spark] class Client(
 private object Client extends Logging {
 
   def main(argStrings: Array[String]) {
+    mainWithEnv(argStrings, Map() ++ sys.env)
+  }
+
+  def mainWithEnv(argStrings: Array[String], env: Map[String, String]): Unit = {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       logWarning("WARNING: This client is deprecated and will be removed in a " +
         "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
@@ -1212,11 +1229,21 @@ private object Client extends Logging {
     // Set an env variable indicating we are running in YARN mode.
     // Note that any env variable with the SPARK_ prefix gets propagated to all (remote) processes
     System.setProperty("SPARK_YARN_MODE", "true")
+
+    val threadEnabled: Boolean = env.get("spark.launcher.internal.thread.enabled").
+      getOrElse("false").toBoolean
+
     val sparkConf = new SparkConf
+    if( threadEnabled) {
+      for ((key, value) <- env if key.startsWith("spark.")) {
+        sparkConf.set(key, value, true)
+      }
+    }
 
     val args = new ClientArguments(argStrings)
-    new Client(args, sparkConf).run()
+    new Client(args, sparkConf, env).run()
   }
+
 
   // Alias for the user jar
   val APP_JAR_NAME: String = "__app__.jar"
@@ -1322,6 +1349,15 @@ private object Client extends Logging {
     triedDefault.toOption
   }
 
+  private[yarn] def populateClasspath(
+      args: ClientArguments,
+      conf: Configuration,
+      sparkConf: SparkConf,
+      env: HashMap[String, String],
+      extraClassPath: Option[String]): Unit = {
+    populateClasspath(args, conf, sparkConf, env, extraClassPath, sys.env)
+  }
+
   /**
    * Populate the classpath entry in the given environment map.
    *
@@ -1337,7 +1373,9 @@ private object Client extends Logging {
       conf: Configuration,
       sparkConf: SparkConf,
       env: HashMap[String, String],
-      extraClassPath: Option[String] = None): Unit = {
+      extraClassPath: Option[String] = None,
+      providedEnv: scala.collection.immutable.Map[scala.Predef.String, scala.Predef.String]
+        = sys.env): Unit = {
     extraClassPath.foreach { cp =>
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
     }
@@ -1383,7 +1421,7 @@ private object Client extends Logging {
     }
 
     populateHadoopClasspath(conf, env)
-    sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
+    providedEnv.get(ENV_DIST_CLASSPATH).foreach { cp =>
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
     }
   }
