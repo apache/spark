@@ -619,7 +619,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
         val conf = Seq(
           HiveContext.CONVERT_METASTORE_PARQUET.key -> "false",
           SQLConf.PARQUET_BINARY_AS_STRING.key -> "true",
-          SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key -> "true")
+          SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "false")
 
         withSQLConf(conf: _*) {
           sql(

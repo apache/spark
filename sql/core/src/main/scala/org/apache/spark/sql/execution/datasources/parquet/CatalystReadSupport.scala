@@ -261,7 +261,7 @@ private[parquet] object CatalystReadSupport {
   private def clipParquetGroupFields(
       parquetRecord: GroupType, structType: StructType): Seq[Type] = {
     val parquetFieldMap = parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
-    val toParquet = new CatalystSchemaConverter(followParquetFormatSpec = true)
+    val toParquet = new CatalystSchemaConverter(writeLegacyParquetFormat = false)
     structType.map { f =>
       parquetFieldMap
         .get(f.name)
