@@ -49,7 +49,7 @@ getSerdeType <- function(object) {
   }
 }
 
-writeObject <- function(con, object, writeType = TRUE) {
+writeObject <- function(con, object, writeType = TRUE, ...) {
   # NOTE: In R vectors have same type as objects. So we don't support
   # passing in vectors as arrays and instead require arrays to be passed
   # as lists.
@@ -74,7 +74,7 @@ writeObject <- function(con, object, writeType = TRUE) {
          logical = writeBoolean(con, object),
          double = writeDouble(con, object),
          numeric = writeDouble(con, object),
-         raw = writeRaw(con, object),
+         raw = writeRaw(con, object, ...),
          array = writeArray(con, object),
          list = writeList(con, object),
          struct = writeList(con, object),
@@ -135,11 +135,22 @@ serializeRow <- function(row) {
   rawConnectionValue(rawObj)
 }
 
-writeRaw <- function(con, batch) {
+writeRaw <- function(con, batch, ...) {
   dataSize <- length(batch)
   writeInt(con, length(batch))
+  extraArgs <- list(...)
 
-  LENTMAX <- 2147483000 # Slightly less than R_LEN_T_MAX macro in R
+  if ("maxArgSizeBytes" %in% names(extraArgs)) {
+    if (dataSize > extraArgs$maxArgSizeBytes) {
+      stop("data size exceeds spark.r.maxArgByteSize")
+    }
+  }
+
+  LENTMAX <- if ("maxBatchSize" %in% names(extraArgs)) {
+    extraArgs$maxBatchSize
+  } else {
+    .Machine$integer.max - 1 # Slightly less than R_LEN_T_MAX macro in R
+  }
   sizeVec <- c(rep(LENTMAX, dataSize %/% LENTMAX), dataSize %% LENTMAX)
 
   curIndex <- 1
@@ -221,10 +232,10 @@ writeTime <- function(con, time) {
 # Used to serialize in a list of objects where each
 # object can be of a different type. Serialization format is
 # <object type> <object> for each object
-writeArgs <- function(con, args) {
+writeArgs <- function(con, args, maxArgSize) {
   if (length(args) > 0) {
     for (a in args) {
-      writeObject(con, a)
+      writeObject(con, a, maxArgSize)
     }
   }
 }

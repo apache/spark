@@ -83,6 +83,11 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
     }
   }
 
+  maxByteSize <- if (exists(".maxArgByteSize", .sparkREnv)) {
+    as.numeric(get(".maxArgByteSize", envir = .sparkREnv))
+  } else {
+    .Machine$integer.max * 10
+  }
 
   rc <- rawConnection(raw(0), "r+")
 
@@ -92,7 +97,7 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
 
   args <- list(...)
   writeInt(rc, length(args))
-  writeArgs(rc, args)
+  writeArgs(rc, args, maxArgSize = maxByteSize)
 
   # Construct the whole request message to send it once,
   # avoiding write-write-read pattern in case of Nagle's algorithm.
