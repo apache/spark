@@ -53,4 +53,4 @@ fi
 
 export SUBMIT_USAGE_FUNCTION=usage
 
-exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit $CLASS 1 "$@"
+exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit $CLASS 1 --name "Thrift JDBC/ODBC Server" "$@"
