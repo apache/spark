@@ -51,18 +51,20 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
 
   // =========== Initialization ===========
 
-  registerGauge("inputRate.total", currentInputRate)
-  registerGauge("processingRate.total", () => currentProcessingRate)
-  registerGauge("outputRate.total", () => currentOutputRate)
-  registerGauge("latencyMs", () => currentLatency().getOrElse(-1.0))
+  // Metric names should not have . in them, so that all the metrics of a query are identified
+  // together in Ganglia as a single metric group
+  registerGauge("inputRate-total", currentInputRate)
+  registerGauge("processingRate-total", () => currentProcessingRate)
+  registerGauge("outputRate", () => currentOutputRate)
+  registerGauge("latency", () => currentLatency().getOrElse(-1.0))
 
   sources.foreach { s =>
     inputRates.put(s, new RateCalculator)
     processingRates.put(s, new RateCalculator)
     sourceTriggerInfo.put(s, new mutable.HashMap[String, String])
 
-    registerGauge(s"inputRate.${s.toString}", () => currentSourceInputRate(s))
-    registerGauge(s"processingRate.${s.toString}", () => currentSourceProcessingRate(s))
+    registerGauge(s"inputRate-${s.toString}", () => currentSourceInputRate(s))
+    registerGauge(s"processingRate-${s.toString}", () => currentSourceProcessingRate(s))
   }
 
   // =========== Setter methods ===========
@@ -132,14 +134,14 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
     // as this may be different for each source if there are many sources in the query plan
     // and getOffset is called serially on them.
     if (previousInputIntervalOption.nonEmpty) {
-      numInputRows.foreach { case (s, v) =>
-        inputRates(s).update(v, previousInputIntervalOption.get)
+      sources.foreach { s =>
+        inputRates(s).update(numInputRows.getOrElse(s, 0), previousInputIntervalOption.get)
       }
     }
 
     // Update processing rate = num rows processed for each source in current trigger duration
-    numInputRows.foreach { case (s, v) =>
-      processingRates(s).update(v, currentTriggerDuration)
+    sources.foreach { s =>
+      processingRates(s).update(numInputRows.getOrElse(s, 0), currentTriggerDuration)
     }
 
     // Update output rate = num rows output to the sink in current trigger duration

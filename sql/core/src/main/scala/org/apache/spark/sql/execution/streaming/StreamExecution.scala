@@ -111,7 +111,7 @@ class StreamExecution(
   private val callSite = Utils.getCallSite()
 
   private val streamMetrics = new StreamMetrics(uniqueSources.toSet, triggerClock,
-    "%s.StructuredStreamingMetrics.%s".format(sparkSession.sparkContext.appName, name))
+    s"StructuredStreaming.$name")
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
