@@ -354,14 +354,14 @@ class JacksonParser(
       parser: JsonParser,
       dataType: DataType,
       nullable: Boolean = true)(f: PartialFunction[JsonToken, Any]): Any = {
-    val nullParser = makeNullConverter(nullable)
+    val nullConverter = makeNullConverter(nullable)
     parser.getCurrentToken match {
       case FIELD_NAME =>
         // There are useless FIELD_NAMEs between START_OBJECT and END_OBJECT tokens
         parser.nextToken()
         parseJsonToken(parser, dataType, nullable)(f)
 
-      case null | VALUE_NULL => nullParser.apply(parser)
+      case null | VALUE_NULL => nullConverter.apply(parser)
 
       case other => f.applyOrElse(other, failedConversion(parser, dataType, nullable))
     }
@@ -375,13 +375,13 @@ class JacksonParser(
       parser: JsonParser,
       dataType: DataType,
       nullable: Boolean): PartialFunction[JsonToken, Any] = {
-    val nullParser = makeNullConverter(nullable)
+    val nullConverter = makeNullConverter(nullable)
 
     {
       case VALUE_STRING if parser.getTextLength < 1 =>
         // If conversion is failed, this produces `null` rather than throwing exception.
         // This will protect the mismatch of types.
-        nullParser.apply(parser)
+        nullConverter.apply(parser)
 
       case token =>
         // We cannot parse this token based on the given data type. So, we throw a
