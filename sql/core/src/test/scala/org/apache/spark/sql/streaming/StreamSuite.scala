@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.StreamSourceProvider
@@ -271,6 +273,198 @@ class StreamSuite extends StreamTest {
       q.stop()
     }
   }
+
+
+  // Instrument MemoryStream to collect timings.
+  class MemoryStreamWithTiming(id : Int) extends MemoryStream[String](id, sqlContext) {
+    val pollTimes = new ArrayBuffer[Long]
+    override def getOffset: Option[Offset] = synchronized {
+      pollTimes.append(System.currentTimeMillis())
+      super.getOffset
+    }
+
+    def pollIntervals : Array[Long] = {
+      pollTimes.sliding(2).map( w => w(1) - w(0) ).toArray
+    }
+  }
+
+  test("SPARK-17386: Polling rate should decrease if there is no data") {
+
+    // Shared SQL context, so save and restore the config values we change
+    val origMinDelay = sqlContext.getConf("spark.sql.streaming.minPollingDelay")
+    val origMaxDelay = sqlContext.getConf("spark.sql.streaming.maxPollingDelay")
+
+    // Isolate this test case from changes to the default values of the polling
+    // delay parameters.
+    sqlContext.setConf("spark.sql.streaming.minPollingDelay", "10")
+    sqlContext.setConf("spark.sql.streaming.maxPollingDelay", "200")
+
+    {
+      val inputData = new MemoryStreamWithTiming(42)
+      val df = inputData.toDS()
+
+
+
+      testStream(df)(
+        AddData(inputData, "hello"),
+        CheckAnswer("hello"),
+        Assert({
+          Thread.sleep(2000); true
+        })
+      )
+
+      // Observed polling interval should converge to about 200 msec.
+      val badIntervals = inputData.pollIntervals.drop(10).
+        filter( x => (x > 250 || x < 150))
+      if (badIntervals.size > 0) {
+        fail(s"Unexpected intervals between polls: ${badIntervals.mkString(", ")}")
+      }
+    }
+
+
+    sqlContext.setConf("spark.sql.streaming.minPollingDelay", origMinDelay)
+    sqlContext.setConf("spark.sql.streaming.maxPollingDelay", origMaxDelay)
+  }
+
+  // This test is ignored by default because it is somewhat timing-dependent
+  ignore("SPARK-17386: Polling rate should increase if data comes quickly") {
+    // Shared SQL context, so save and restore the config values we change
+    val origMinDelay = sqlContext.getConf("spark.sql.streaming.minPollingDelay")
+    val origMaxDelay = sqlContext.getConf("spark.sql.streaming.maxPollingDelay")
+
+    // The current version of the scheduler has trouble getting below 50 msec
+    // when there's data to process, so do everything in slow motion.
+    val targetMinDelayMsec = 100;
+    sqlContext.setConf("spark.sql.streaming.minPollingDelay", targetMinDelayMsec.toString())
+    sqlContext.setConf("spark.sql.streaming.maxPollingDelay", (20 * targetMinDelayMsec).toString())
+
+    {
+      val inputData = new MemoryStreamWithTiming(42)
+      val df = inputData.toDS().toDF()
+      val sink = new MemorySink(df.schema, OutputMode.Append)
+      val metadataRoot = org.apache.spark.util.Utils
+        .createTempDir(namePrefix = "streaming.metadata")
+        .getCanonicalPath
+
+      val stream = spark
+        .streams
+        .startQuery(
+          None,
+          Some(metadataRoot),
+          df,
+          sink,
+          OutputMode.Append)
+        .asInstanceOf[StreamExecution]
+
+      val targetDelays = new ArrayBuffer[Long]
+
+      val endTimeMsec = System.currentTimeMillis() + (20 * targetMinDelayMsec)
+      while (System.currentTimeMillis() < endTimeMsec) {
+        inputData.addData("a")
+
+        // ignore result, but record current polling delay
+        targetDelays.append(stream.curPollingDelayMs)
+
+        Thread.sleep(10)
+      }
+      stream.stop()
+
+      val averageDelay = targetDelays.sum / targetDelays.size
+
+      if (averageDelay < targetMinDelayMsec) {
+        fail(s"Average delay of $averageDelay msec too small " +
+          s"(should be > $targetMinDelayMsec)")
+      }
+      if (averageDelay > targetMinDelayMsec * 1.5) {
+        fail(s"Average delay of $averageDelay msec too small " +
+          s"(should be < ${targetMinDelayMsec * 1.5})")
+      }
+
+      val pollDelays = inputData.pollIntervals.toList
+      val averagePollDelay = pollDelays.sum / pollDelays.size
+      if (averagePollDelay > targetMinDelayMsec) {
+        fail(s"Average delay of $averageDelay msec too large " +
+          s"(should be < $targetMinDelayMsec)")
+      }
+    }
+
+    sqlContext.setConf("spark.sql.streaming.minPollingDelay", origMinDelay)
+    sqlContext.setConf("spark.sql.streaming.maxPollingDelay", origMaxDelay)
+  }
+
+  // This test is ignored by default because it is somewhat timing-dependent
+  ignore("SPARK-17386: Polling rate should converge to rate of constant data arrival") {
+
+    // Shared SQL context, so save and restore the config values we change
+    val origMinDelay = sqlContext.getConf("spark.sql.streaming.minPollingDelay")
+    val origMaxDelay = sqlContext.getConf("spark.sql.streaming.maxPollingDelay")
+
+    // The current version of the scheduler has trouble getting below 50 msec
+    // when there's data to process, so do everything in slow motion.
+    val targetMinDelayMsec = 50;
+    val actualBatchDelayMsec = 5 * targetMinDelayMsec
+    sqlContext.setConf("spark.sql.streaming.minPollingDelay", targetMinDelayMsec.toString())
+    sqlContext.setConf("spark.sql.streaming.maxPollingDelay", (20 * targetMinDelayMsec).toString())
+
+    {
+      val inputData = new MemoryStreamWithTiming(42)
+      val df = inputData.toDS().toDF()
+      val sink = new MemorySink(df.schema, OutputMode.Append)
+      val metadataRoot = org.apache.spark.util.Utils
+        .createTempDir(namePrefix = "streaming.metadata")
+        .getCanonicalPath
+
+      val stream = spark
+        .streams
+        .startQuery(
+          None,
+          Some(metadataRoot),
+          df,
+          sink,
+          OutputMode.Append)
+        .asInstanceOf[StreamExecution]
+
+      val targetDelays = new ArrayBuffer[Long]
+
+      val endTimeMsec = System.currentTimeMillis() + (100 * targetMinDelayMsec)
+      while (System.currentTimeMillis() < endTimeMsec) {
+        inputData.addData("a")
+
+        // ignore result, but record current polling delay
+        targetDelays.append(stream.curPollingDelayMs)
+
+        Thread.sleep(actualBatchDelayMsec)
+      }
+      stream.stop()
+
+      val averageTargetDelay = targetDelays.sum / targetDelays.size
+
+      // Target polling rate should converge to within a factor of 2 of the
+      // actual data rate
+      if (averageTargetDelay > 2 * actualBatchDelayMsec
+          || averageTargetDelay < actualBatchDelayMsec / 2 ) {
+        fail(s"Average target delay of $averageTargetDelay msec outside" +
+          s"of expected range (${actualBatchDelayMsec / 2}, " +
+          s"${actualBatchDelayMsec * 2})")
+      }
+
+      val pollDelays = inputData.pollIntervals.toList
+      val averagePollDelay = pollDelays.sum / pollDelays.size
+
+      // Actual polling rate should be about half the target rate, since the
+      // scheduler always polls a second time after successfully reading data.
+      if (averagePollDelay > actualBatchDelayMsec
+        || averageTargetDelay < actualBatchDelayMsec / 4 ) {
+        fail(s"Average observed delay of $averagePollDelay msec outside" +
+          s"of expected range (${actualBatchDelayMsec / 4},  " +
+          s"${actualBatchDelayMsec})")
+      }
+    }
+
+    sqlContext.setConf("spark.sql.streaming.minPollingDelay", origMinDelay)
+    sqlContext.setConf("spark.sql.streaming.maxPollingDelay", origMaxDelay)
+  }
+
 }
 
 /**

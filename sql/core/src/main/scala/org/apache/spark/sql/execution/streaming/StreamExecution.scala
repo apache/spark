@@ -58,7 +58,46 @@ class StreamExecution(
 
   import org.apache.spark.sql.streaming.StreamingQueryListener._
 
-  private val pollingDelayMs = sparkSession.sessionState.conf.streamingPollingDelay
+  // Constants that drive AIMD algorithm to choose polling interval
+  private val minPollingDelayMs = sparkSession.sessionState.conf.streamingPollingMinDelay
+  private val maxPollingDelayMs = sparkSession.sessionState.conf.streamingPollingMaxDelay
+  if (minPollingDelayMs <= 0) {
+    sys.error(s"Invalid value of $minPollingDelayMs for minimimum polling interval. Must be > 0.")
+  }
+  if (maxPollingDelayMs < minPollingDelayMs) {
+    sys.error(s"Invalid value of $maxPollingDelayMs for maximum polling interval. Must be >= " +
+      s"minimum polling interval of $minPollingDelayMs msec.")
+  }
+  private val NUM_ADDITIVE_RATE_STEPS = 10
+  private val pollingRateIncreaseHz =
+    ((1000.0 / minPollingDelayMs) - (1000.0 / maxPollingDelayMs)) / NUM_ADDITIVE_RATE_STEPS
+  private val MULTIPLICATIVE_RATE_STEP_SZ = 2
+
+  /**
+   * We use the additive increase, multiplicative decrease algorithm (AKA TCP congestion
+   * avoidance) to govern the rate of polling. This field tracks 1/(current max polling rate)
+   * and is adjusted by the two methods that follow.
+   */
+  var curPollingDelayMs = minPollingDelayMs
+  var amPolling = false
+
+  private def increasePollingRate() = {
+    val prevDelay = curPollingDelayMs
+    curPollingDelayMs = math.max(minPollingDelayMs,
+      (1000.0 / ((1000.0 / prevDelay) + pollingRateIncreaseHz)).toInt)
+    if (curPollingDelayMs != prevDelay) {
+      logDebug(s"Polling delay decreased from $prevDelay to $curPollingDelayMs msec")
+    }
+  }
+
+  private def decreasePollingRate() = {
+    val prevDelay = curPollingDelayMs
+    curPollingDelayMs =
+      math.min(maxPollingDelayMs, prevDelay * MULTIPLICATIVE_RATE_STEP_SZ)
+    if (curPollingDelayMs != prevDelay) {
+      logDebug(s"Polling delay increased from $prevDelay to $curPollingDelayMs msec")
+    }
+  }
 
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
@@ -194,11 +233,20 @@ class StreamExecution(
             constructNextBatch()
           }
           if (dataAvailable) {
+            // Found data ==> linear increase in *rate* of polling
+            increasePollingRate()
             runBatch()
             // We'll increase currentBatchId after we complete processing current batch's data
             currentBatchId += 1
+            amPolling = false
           } else {
-            Thread.sleep(pollingDelayMs)
+            // No data ==> multiplicative decrease in rate of polling, provided that we
+            //             have waited for at least the current polling interval.
+            if (amPolling) {
+              decreasePollingRate()
+            }
+            Thread.sleep(curPollingDelayMs)
+            amPolling = true
           }
           true
         } else {

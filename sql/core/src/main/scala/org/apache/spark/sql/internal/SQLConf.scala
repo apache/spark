@@ -574,12 +574,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val STREAMING_POLLING_DELAY =
-    SQLConfigBuilder("spark.sql.streaming.pollingDelay")
+  val STREAMING_POLLING_MIN_DELAY =
+    SQLConfigBuilder("spark.sql.streaming.minPollingDelay")
       .internal()
-      .doc("How long to delay polling new data when no data is available")
+      .doc("Minimimum time to delay polling new data when no data is available")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10L)
+
+  val STREAMING_POLLING_MAX_DELAY =
+    SQLConfigBuilder("spark.sql.streaming.maxPollingDelay")
+      .internal()
+      .doc("Maximum time to delay polling new data when no data is available")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(200L)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -632,7 +639,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def streamingSchemaInference: Boolean = getConf(STREAMING_SCHEMA_INFERENCE)
 
-  def streamingPollingDelay: Long = getConf(STREAMING_POLLING_DELAY)
+  def streamingPollingMinDelay: Long = getConf(STREAMING_POLLING_MIN_DELAY)
+
+  def streamingPollingMaxDelay: Long = getConf(STREAMING_POLLING_MAX_DELAY)
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
