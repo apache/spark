@@ -56,11 +56,11 @@ private[hive] class SparkExecuteStatementOperation(
   private var statementId: String = _
 
   private lazy val resultSchema: TableSchema = {
-    if (result == null || result.queryExecution.analyzed.output.isEmpty) {
+    if (result == null || result.schema.isEmpty) {
       new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
     } else {
-      logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
-      SparkExecuteStatementOperation.getTableSchema(result.queryExecution.analyzed.schema)
+      logInfo(s"Result Schema: ${result.schema}")
+      SparkExecuteStatementOperation.getTableSchema(result.schema)
     }
   }
 
