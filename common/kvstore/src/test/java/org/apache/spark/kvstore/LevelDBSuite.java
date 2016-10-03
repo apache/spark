@@ -1,0 +1,281 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.kvstore;
+
+import java.io.File;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import static java.nio.charset.StandardCharsets.UTF_8;
+
+import com.google.common.collect.Iterators;
+import org.apache.commons.io.FileUtils;
+import org.iq80.leveldb.DBIterator;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class LevelDBSuite {
+
+  private LevelDB db;
+  private File dbpath;
+
+  @After
+  public void cleanup() throws Exception {
+    if (db != null) {
+      db.close();
+    }
+    if (dbpath != null) {
+      FileUtils.deleteQuietly(dbpath);
+    }
+  }
+
+  @Before
+  public void setup() throws Exception {
+    dbpath = File.createTempFile("test.", ".ldb");
+    dbpath.delete();
+    db = new LevelDB(dbpath);
+  }
+
+  @Test
+  public void testReopenAndVersionCheckDb() throws Exception {
+    db.close();
+    db = null;
+    assertTrue(dbpath.exists());
+
+    db = new LevelDB(dbpath);
+    assertEquals(LevelDB.STORE_VERSION,
+      db.serializer.deserializeLong(db.db.get(LevelDB.STORE_VERSION_KEY)));
+    db.db.put(LevelDB.STORE_VERSION_KEY, db.serializer.serialize(LevelDB.STORE_VERSION + 1));
+    db.close();
+    db = null;
+
+    try {
+      db = new LevelDB(dbpath);
+      fail("Should have failed version check.");
+    } catch (UnsupportedStoreVersionException e) {
+      // Expected.
+    }
+  }
+
+  @Test
+  public void testStringWriteReadDelete() throws Exception {
+    String string = "testString";
+    byte[] key = string.getBytes(UTF_8);
+    testReadWriteDelete(key, string);
+  }
+
+  @Test
+  public void testIntWriteReadDelete() throws Exception {
+    int value = 42;
+    byte[] key = "key".getBytes(UTF_8);
+    testReadWriteDelete(key, value);
+  }
+
+  @Test
+  public void testSimpleTypeWriteReadDelete() throws Exception {
+    byte[] key = "testKey".getBytes(UTF_8);
+    CustomType1 t = new CustomType1();
+    t.id = "id";
+    t.name = "name";
+    testReadWriteDelete(key, t);
+  }
+
+  @Test
+  public void testObjectWriteReadDelete() throws Exception {
+    CustomType1 t = new CustomType1();
+    t.key = "key";
+    t.id = "id";
+    t.name = "name";
+
+    try {
+      db.read(CustomType1.class, t.key);
+      fail("Expected exception for non-existant object.");
+    } catch (NoSuchElementException nsee) {
+      // Expected.
+    }
+
+    db.write(t);
+    assertEquals(t, db.read(t.getClass(), t.key));
+    assertEquals(1L, db.count(t.getClass()));
+
+    db.delete(t.getClass(), t.key);
+    try {
+      db.read(t.getClass(), t.key);
+      fail("Expected exception for deleted object.");
+    } catch (NoSuchElementException nsee) {
+      // Expected.
+    }
+
+    // Look into the actual DB and make sure that all the keys related to the type have been
+    // removed.
+    assertEquals(0, countKeys(t.getClass()));
+  }
+
+  @Test
+  public void testMultipleObjectWriteReadDelete() throws Exception {
+    CustomType1 t1 = new CustomType1();
+    t1.key = "key1";
+    t1.id = "id";
+    t1.name = "name1";
+
+    CustomType1 t2 = new CustomType1();
+    t2.key = "key2";
+    t2.id = "id";
+    t2.name = "name2";
+
+    db.write(t1);
+    db.write(t2);
+
+    assertEquals(t1, db.read(t1.getClass(), t1.key));
+    assertEquals(t2, db.read(t2.getClass(), t2.key));
+    assertEquals(2L, db.count(t1.getClass()));
+
+    // There should be one "id" index entry with two values.
+    assertEquals(2, countIndexEntries(t1.getClass(), "id", t1.id));
+
+    // Delete the first entry; now there should be 3 remaining keys, since one of the "name"
+    // index entries should have been removed.
+    db.delete(t1.getClass(), t1.key);
+
+    // Make sure there's a single entry in the "id" index now.
+    assertEquals(1, countIndexEntries(t2.getClass(), "id", t2.id));
+
+    // Delete the remaining entry, make sure all data is gone.
+    db.delete(t2.getClass(), t2.key);
+    assertEquals(0, countKeys(t2.getClass()));
+  }
+
+  @Test
+  public void testMultipleTypesWriteReadDelete() throws Exception {
+    CustomType1 t1 = new CustomType1();
+    t1.key = "1";
+    t1.id = "id";
+    t1.name = "name1";
+
+    IntKeyType t2 = new IntKeyType();
+    t2.key = 2;
+    t2.id = "2";
+    t2.values = Arrays.asList("value1", "value2");
+
+    db.write(t1);
+    db.write(t2);
+
+    assertEquals(t1, db.read(t1.getClass(), t1.key));
+    assertEquals(t2, db.read(t2.getClass(), t2.key));
+
+    // There should be one "id" index with a single entry for each type.
+    assertEquals(1, countIndexEntries(t1.getClass(), "id", t1.id));
+    assertEquals(1, countIndexEntries(t2.getClass(), "id", t2.id));
+
+    // Delete the first entry; this should not affect the entries for the second type.
+    db.delete(t1.getClass(), t1.key);
+    assertEquals(0, countKeys(t1.getClass()));
+    assertEquals(1, countIndexEntries(t2.getClass(), "id", t2.id));
+
+    // Delete the remaining entry, make sure all data is gone.
+    db.delete(t2.getClass(), t2.key);
+    assertEquals(0, countKeys(t2.getClass()));
+  }
+
+  @Test
+  public void testMetadata() throws Exception {
+    assertNull(db.getMetadata(CustomType1.class));
+
+    CustomType1 t = new CustomType1();
+    t.id = "id";
+    t.name = "name";
+
+    db.setMetadata(t);
+    assertEquals(t, db.getMetadata(CustomType1.class));
+
+    db.setMetadata(null);
+    assertNull(db.getMetadata(CustomType1.class));
+  }
+
+  private long countIndexEntries(Class<?> type, String index, Object value) throws Exception {
+    LevelDBTypeInfo<?>.Index idx = db.getTypeInfo(type).index(index);
+    return idx.getCount(idx.end());
+  }
+
+  private int countKeys(Class<?> type) throws Exception {
+    byte[] prefix = db.getTypeInfo(type).keyPrefix();
+    int count = 0;
+
+    DBIterator it = db.db.iterator();
+    it.seek(prefix);
+
+    while (it.hasNext()) {
+      byte[] key = it.next().getKey();
+      if (LevelDBIterator.startsWith(key, prefix)) {
+        count++;
+      }
+    }
+
+    return count;
+  }
+
+  private <T> void testReadWriteDelete(byte[] key, T value) throws Exception {
+    try {
+      db.get(key, value.getClass());
+      fail("Expected exception for non-existent key.");
+    } catch (NoSuchElementException nsee) {
+      // Expected.
+    }
+
+    db.put(key, value);
+    assertEquals(value, db.get(key, value.getClass()));
+
+    db.delete(key);
+    try {
+      db.get(key, value.getClass());
+      fail("Expected exception for deleted key.");
+    } catch (NoSuchElementException nsee) {
+      // Expected.
+    }
+  }
+
+  public static class IntKeyType {
+
+    @KVIndex
+    public int key;
+
+    @KVIndex("id")
+    public String id;
+
+    public List<String> values;
+
+    @Override
+    public boolean equals(Object o) {
+      if (o instanceof IntKeyType) {
+        IntKeyType other = (IntKeyType) o;
+        return key == other.key && id.equals(other.id) && values.equals(other.values);
+      }
+      return false;
+    }
+
+    @Override
+    public int hashCode() {
+      return id.hashCode();
+    }
+
+  }
+
+}
