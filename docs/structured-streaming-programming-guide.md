@@ -1126,6 +1126,12 @@ aggDF \
 </div>
 </div>
 
+## Advanced Sources
+
+Structured Streaming supports the following advanced sources:
+
+- **Kafka:** Structured Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kafka broker versions 0.10.0 or higher. See the [Kafka Integration Guide](structured-streaming-kafka-integration.html) for more details.
+
 # Where to go from here
 - Examples: See and run the 
 [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/sql/streaming)/[Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/sql/streaming)/[Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python/sql/streaming) 
