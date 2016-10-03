@@ -252,6 +252,7 @@ SELECT * FROM global_temp.temp_view
 {% endhighlight %}
 
 </div>
+</div>
 
 
 ## Creating Datasets

@@ -155,7 +155,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
       sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1, 2")
 
       assert(spark.catalog.tableExists(globalTempDB, "src"))
-      assert(spark.catalog.findTable(globalTempDB, "src").toString == new Table(
+      assert(spark.catalog.getTable(globalTempDB, "src").toString == new Table(
         name = "src",
         database = globalTempDB,
         description = null,
