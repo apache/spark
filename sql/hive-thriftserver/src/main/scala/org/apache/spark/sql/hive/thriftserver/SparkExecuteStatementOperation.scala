@@ -55,18 +55,7 @@ private[hive] class SparkExecuteStatementOperation(
   private var dataTypes: Array[DataType] = _
   private var statementId: String = _
 
-  private lazy val resultSchema: TableSchema = {
-    if (result == null || result.queryExecution.analyzed.output.size == 0) {
-      new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
-    } else {
-      logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
-      val schema = result.queryExecution.analyzed.output.map { attr =>
-        val attrTypeString = if (attr.dataType == NullType) "void" else attr.dataType.catalogString
-        new FieldSchema(attr.name, attrTypeString, "")
-      }
-      new TableSchema(schema.asJava)
-    }
-  }
+  private lazy val resultSchema: TableSchema = SparkExecuteStatementOperation.getTableSchema(result)
 
   def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
@@ -280,6 +269,21 @@ private[hive] class SparkExecuteStatementOperation(
       if (backgroundHandle != null) {
         backgroundHandle.cancel(true)
       }
+    }
+  }
+}
+
+object SparkExecuteStatementOperation extends Logging {
+  def getTableSchema(result: DataFrame): TableSchema = {
+    if (result == null || result.queryExecution.analyzed.output.isEmpty) {
+      new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
+    } else {
+      logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
+      val schema = result.queryExecution.analyzed.output.map { attr =>
+        val attrTypeString = if (attr.dataType == NullType) "void" else attr.dataType.catalogString
+        new FieldSchema(attr.name, attrTypeString, "")
+      }
+      new TableSchema(schema.asJava)
     }
   }
 }
