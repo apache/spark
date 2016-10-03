@@ -145,8 +145,10 @@ class KafkaSourceSuite extends KafkaSourceTest {
       .option("kafka.metadata.max.age.ms", "1")
       .option("subscribePattern", s"topic-.*")
 
-    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
-    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped = kafka.map(kv => kv._2.toInt + 1)
 
     testStream(mapped)(
       StopStream
@@ -190,8 +192,10 @@ class KafkaSourceSuite extends KafkaSourceTest {
       .option("kafka.metadata.max.age.ms", "1")
       .option("subscribePattern", s"$topicPrefix-.*")
 
-    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
-    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped = kafka.map(kv => kv._2.toInt + 1)
 
     testStream(mapped)(
       makeSureGetOffsetCalled,
@@ -272,8 +276,10 @@ class KafkaSourceSuite extends KafkaSourceTest {
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
     options.foreach { case (k, v) => reader.option(k, v) }
-    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
-    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped = kafka.map(kv => kv._2.toInt + 1)
 
     testStream(mapped)(
       makeSureGetOffsetCalled,
@@ -309,8 +315,10 @@ class KafkaSourceSuite extends KafkaSourceTest {
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
     options.foreach { case (k, v) => reader.option(k, v) }
-    val kafka = reader.load().select("key", "value").as[(Array[Byte], Array[Byte])]
-    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped = kafka.map(kv => kv._2.toInt + 1)
 
     testStream(mapped)(
       AddKafkaData(Set(topic), 4, 5, 6), // Add data when stream is stopped
@@ -368,10 +376,10 @@ class KafkaSourceStressSuite extends KafkaSourceTest with BeforeAndAfter {
         .option("subscribePattern", "stress.*")
         .option("failOnCorruptMetadata", "false")
         .load()
-        .select("key", "value")
-        .as[(Array[Byte], Array[Byte])]
+        .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+        .as[(String, String)]
 
-    val mapped = kafka.map(kv => new String(kv._2).toInt + 1)
+    val mapped = kafka.map(kv => kv._2.toInt + 1)
 
     runStressTest(
       mapped,

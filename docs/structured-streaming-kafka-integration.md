@@ -22,82 +22,94 @@ application. See the [Deploying](#deploying) subsection below.
 <div data-lang="scala" markdown="1">
 
     // Subscribe to 1 topic
-    spark
+    val ds1 = spark
       .readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
       .option("subscribe", "topic1")
       .load()
+    ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
 
     // Subscribe to multiple topics
-    spark
+    val ds2 = spark
       .readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
       .option("subscribe", "topic1,topic2")
       .load()
+    ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
 
     // Subscribe to a pattern
-    spark
+    val ds3 = spark
       .readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
       .option("subscribePattern", "topic.*")
       .load()
+    ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
 
 </div>
 <div data-lang="java" markdown="1">
 
     // Subscribe to 1 topic
-    spark
+    Dataset<Row> ds1 = spark
       .readStream()
       .format("kafka")
       .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
       .option("subscribe", "topic1")
       .load()
+    ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
     // Subscribe to multiple topics
-    spark
+    Dataset<Row> ds2 = spark
       .readStream()
       .format("kafka")
       .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
       .option("subscribe", "topic1,topic2")
       .load()
+    ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
     // Subscribe to a pattern
-    spark
+    Dataset<Row> ds3 = spark
       .readStream()
       .format("kafka")
       .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
       .option("subscribePattern", "topic.*")
       .load()
+    ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 </div>
 <div data-lang="python" markdown="1">
 
     # Subscribe to 1 topic
-    spark
+    ds1 = spark
       .readStream()
       .format("kafka")
       .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
       .option("subscribe", "topic1")
       .load()
+    ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
     # Subscribe to multiple topics
-    spark
+    ds2 = spark
       .readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
       .option("subscribe", "topic1,topic2")
       .load()
+    ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
     # Subscribe to a pattern
-    spark
+    ds3 = spark
       .readStream()
       .format("kafka")
       .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
       .option("subscribePattern", "topic.*")
       .load()
+    ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 </div>
 </div>
