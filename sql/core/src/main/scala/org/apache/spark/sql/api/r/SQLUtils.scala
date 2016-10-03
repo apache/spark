@@ -64,7 +64,7 @@ private[sql] object SQLUtils extends Logging {
       spark: SparkSession,
       sparkConfigMap: JMap[Object, Object]): Unit = {
     for ((name, value) <- sparkConfigMap.asScala) {
-      spark.conf.set(name.toString, value.toString)
+      spark.sessionState.conf.setConfString(name.toString, value.toString)
     }
     for ((name, value) <- sparkConfigMap.asScala) {
       spark.sparkContext.conf.set(name.toString, value.toString)
