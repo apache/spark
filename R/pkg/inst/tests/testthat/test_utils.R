@@ -170,7 +170,7 @@ test_that("captureJVMException", {
   expect_error(tryCatch(callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getSQLDataType",
                                     "unknown"),
                         error = captureJVMException),
-               "Invalid type unknown")
+               "illegal argument - Invalid type unknown")
 })
 
 test_that("hashCode", {
