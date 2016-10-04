@@ -202,8 +202,16 @@ case class InMemoryRelation(
     val conf = child.sqlContext.sparkSession.sparkContext.conf
     child.execute().mapPartitionsInternal { rows =>
       new GenerateColumnarBatch(schema, batchSize, newStorageLevel, conf).generate(rows).map {
-        cachedColumnarBatch => batchStats.add(cachedColumnarBatch.stats)
-        cachedColumnarBatch
+        cachedColumnarBatch => {
+          var i = 0
+          var totalSize = 0L
+          while (i < cachedColumnarBatch.columnarBatch.numCols()) {
+            totalSize += cachedColumnarBatch.stats.getLong(4 + i * 5)
+            i += 1
+          }
+          batchStats.add(totalSize)
+          cachedColumnarBatch
+        }
       }
     }.persist(storageLevel)
   }
