@@ -59,11 +59,10 @@ private[ml] class MinHashModel(override val uid: String, hashFunctions: Seq[Int 
  * The input set should be represented in sparse vector form. For example,
  *    Vectors.sparse(10, Array[(2, 1.0), (3, 1.0), (5, 1.0)])
  * means there are 10 elements in the space. This set contains elem 2, elem 3 and elem 5
- * @param uid
  */
 @Experimental
 @Since("2.1.0")
-private[ml] class MinHash(override val uid: String) extends LSH[MinHashModel] {
+class MinHash private[ml] (override val uid: String) extends LSH[MinHashModel] {
 
   private[this] val prime = 2038074743
 
