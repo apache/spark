@@ -791,8 +791,7 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.string
   }
   if (!is.null(schema)) {
     stopifnot(class(schema) == "structType")
-    method <- "loadDF"
-    sdf <- handledCallJStatic("org.apache.spark.sql.api.r.SQLUtils", method, sparkSession,
+    sdf <- handledCallJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession,
                               source, schema$jobj, options)
   } else {
     sdf <- handledCallJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession,
