@@ -120,7 +120,7 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(rp, dfA, dfB, 1.0)
     assert(precision == 1.0)
-    assert(recall >= 0.9)
+    assert(recall >= 0.8)
   }
 
   test("approxSimilarityJoin for self join") {

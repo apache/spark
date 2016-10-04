@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import scala.util.Random
 
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
@@ -32,28 +33,33 @@ import org.apache.spark.sql.types._
 /**
  * Params for [[LSH]].
  */
+@Experimental
+@Since("2.1.0")
 private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
   /**
    * Param for the dimension of LSH OR-amplification.
    *
-   * In this implementation, we use LSH OR-amplification to reduce the false negative rate. This
-   * param is the dimension of the amplification. The higher the dimension is, the lower the false
-   * negative rate.
+   * In this implementation, we use LSH OR-amplification to reduce the false negative rate. The
+   * higher the dimension is, the lower the false negative rate.
    * @group param
    */
-  final val outputDim: IntParam = new IntParam(this, "outputDim", "output dimension",
-    ParamValidators.gt(0))
+  @Since("2.1.0")
+  final val outputDim: IntParam = new IntParam(this, "outputDim", "output dimension, where" +
+    "increasing dimensionality lowers the false negative rate", ParamValidators.gt(0))
 
   /** @group getParam */
+  @Since("2.1.0")
   final def getOutputDim: Int = $(outputDim)
 
-  setDefault(outputDim -> 1, outputCol -> "lsh_output")
+  // TODO: Decide about this default. It should probably depend on the particular LSH algorithm.
+  setDefault(outputDim -> 1, outputCol -> "lshFeatures")
 
   /**
    * Transform the Schema for LSH
    * @param schema The schema of the input dataset without outputCol
    * @return A derived schema with outputCol added
    */
+  @Since("2.1.0")
   protected[this] final def validateAndTransformSchema(schema: StructType): StructType = {
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
@@ -62,85 +68,80 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
 /**
  * Model produced by [[LSH]].
  */
-abstract class LSHModel[T <: LSHModel[T]] private[ml]
-  extends Model[T] with LSHParams {
+@Experimental
+@Since("2.1.0")
+private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHParams {
+  self: T =>
+
+  @Since("2.1.0")
   override def copy(extra: ParamMap): T = defaultCopy(extra)
+
   /**
-   * :: DeveloperApi ::
-   *
    * The hash function of LSH, mapping a predefined KeyType to a Vector
    * @return The mapping of LSH function.
    */
+  @Since("2.1.0")
   protected[this] val hashFunction: Vector => Vector
 
   /**
-   * :: DeveloperApi ::
-   *
    * Calculate the distance between two different keys using the distance metric corresponding
    * to the hashFunction
    * @param x One of the point in the metric space
    * @param y Another the point in the metric space
-   * @return The distance between x and y in double
+   * @return The distance between x and y
    */
+  @Since("2.1.0")
   protected[ml] def keyDistance(x: Vector, y: Vector): Double
 
   /**
-   * :: DeveloperApi ::
-   *
-   * Calculate the distance between two different hash Vectors. By default, the distance is the
-   * minimum distance of two hash values in any dimension.
+   * Calculate the distance between two different hash Vectors.
    *
    * @param x One of the hash vector
    * @param y Another hash vector
-   * @return The distance between hash vectors x and y in double
+   * @return The distance between hash vectors x and y
    */
+  @Since("2.1.0")
   protected[ml] def hashDistance(x: Vector, y: Vector): Double
 
-  /**
-   * Transforms the input dataset.
-   */
+  @Since("2.1.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val transformUDF = udf(hashFunction, new VectorUDT)
     dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
   }
 
-  /**
-   * :: DeveloperApi ::
-   *
-   * Check transform validity and derive the output schema from the input schema.
-   *
-   * Typical implementation should first conduct verification on schema change and parameter
-   * validity, including complex parameter interaction checks.
-   */
+  @Since("2.1.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
   /**
    * Given a large dataset and an item, approximately find at most k items which have the closest
-   * distance to the item.
+   * distance to the item. If the outputCol is missing, the method will transform the data; if the
+   * the outputCol exists, it will use the outputCol. This allows caching of the transformed data
+   * when necessary.
    *
-   * This method has implemented two way of fetching k nearest neighbors:
-   *    Single Probing: Fast, return at most k elements (Probing only one buckets)
-   *    Multiple Probing: Slow, return exact k elements (Probing multiple buckets close to the key)
+   * This method implements two ways of fetching k nearest neighbors:
+   *  - Single Probing: Fast, return at most k elements (Probing only one buckets)
+   *  - Multiple Probing: Slow, return exact k elements (Probing multiple buckets close to the key)
    *
-   * @param dataset the dataset to look for the key
-   * @param key The key to hash for the item
-   * @param k The maximum number of items closest to the key
+   * @param dataset the dataset to search for nearest neighbors of the key
+   * @param key Feature vector representing the item to search for
+   * @param numNearestNeighbors The maximum number of nearest neighbors
    * @param singleProbing True for using Single Probing; false for multiple probing
-   * @param distCol The column to store the distance between pairs
+   * @param distCol Output column for storing the distance between each result record and the key
    * @return A dataset containing at most k items closest to the key. A distCol is added to show
    *         the distance between each record and the key.
    */
+  @Since("2.1.0")
   def approxNearestNeighbors(
-      dataset: Dataset[_],
-      key: Vector,
-      k: Int,
-      singleProbing: Boolean,
-      distCol: String): Dataset[_] = {
-    assert(k > 0, "The number of nearest neighbors cannot be less than 1")
-    // Get Hash Value of the key v
+      @Since("2.1.0") dataset: Dataset[_],
+      @Since("2.1.0") key: Vector,
+      @Since("2.1.0") numNearestNeighbors: Int,
+      @Since("2.1.0") singleProbing: Boolean,
+      @Since("2.1.0") distCol: String): Dataset[_] = {
+    require(numNearestNeighbors > 0, "The number of nearest neighbors cannot be less than 1")
+    // Get Hash Value of the key
     val keyHash = hashFunction(key)
     val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
         transform(dataset)
@@ -148,7 +149,7 @@ abstract class LSHModel[T <: LSHModel[T]] private[ml]
         dataset.toDF()
       }
 
-    // In the origin dataset, find the hash value u that is closest to v
+    // In the origin dataset, find the hash value that is closest to the key
     val hashDistUDF = udf((x: Vector) => hashDistance(x, keyHash), DataTypes.DoubleType)
     val hashDistCol = hashDistUDF(col($(outputCol)))
 
@@ -156,9 +157,9 @@ abstract class LSHModel[T <: LSHModel[T]] private[ml]
       modelDataset.filter(hashDistCol === 0.0)
     } else {
       // Compute threshold to get exact k elements.
-      val modelDatasetSortedByHash = modelDataset.sort(hashDistCol).limit(k)
+      val modelDatasetSortedByHash = modelDataset.sort(hashDistCol).limit(numNearestNeighbors)
       val thresholdDataset = modelDatasetSortedByHash.select(max(hashDistCol))
-      val hashThreshold = thresholdDataset.collect()(0)(0).asInstanceOf[Double]
+      val hashThreshold = thresholdDataset.take(1).head.getDouble(0)
 
       // Filter the dataset where the hash value is less than the threshold.
       modelDataset.filter(hashDistCol <= hashThreshold)
@@ -167,20 +168,19 @@ abstract class LSHModel[T <: LSHModel[T]] private[ml]
     // Get the top k nearest neighbor by their distance to the key
     val keyDistUDF = udf((x: Vector) => keyDistance(x, key), DataTypes.DoubleType)
     val modelSubsetWithDistCol = modelSubset.withColumn(distCol, keyDistUDF(col($(inputCol))))
-    modelSubsetWithDistCol.sort(distCol).limit(k)
+    modelSubsetWithDistCol.sort(distCol).limit(numNearestNeighbors)
   }
 
   /**
    * Overloaded method for approxNearestNeighbors. Use Single Probing as default way to search
    * nearest neighbors and "distCol" as default distCol.
-   * @param dataset the dataset to look for the key
-   * @param key The key to hash for the item
-   * @param k The maximum number of items closest to the key
-   * @return A dataset containing at most k items closest to the key. A distCol is added to show
-   *         the distance between each record and the key.
    */
-  def approxNearestNeighbors(dataset: Dataset[_], key: Vector, k: Int): Dataset[_] = {
-    approxNearestNeighbors(dataset, key, k, true, "distCol")
+  @Since("2.1.0")
+  def approxNearestNeighbors(
+      @Since("2.1.0") dataset: Dataset[_],
+      @Since("2.1.0") key: Vector,
+      @Since("2.1.0") numNearestNeighbors: Int): Dataset[_] = {
+    approxNearestNeighbors(dataset, key, numNearestNeighbors, true, "distCol")
   }
 
   /**
@@ -190,10 +190,9 @@ abstract class LSHModel[T <: LSHModel[T]] private[ml]
    * @param explodeCols The alias for the exploded columns, must be a seq of two strings.
    * @return A dataset containing idCol, inputCol and explodeCols
    */
+  @Since("2.1.0")
   private[this] def processDataset(dataset: Dataset[_], explodeCols: Seq[String]): Dataset[_] = {
-    if (explodeCols.size != 2) {
-      throw new Exception("explodeCols must be two strings.")
-    }
+    require(explodeCols.size == 2, "explodeCols must be two strings.")
     val vectorToMap: UserDefinedFunction = udf((x: Vector) => x.asBreeze.iterator.toMap,
       MapType(DataTypes.IntegerType, DataTypes.DoubleType))
     val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
@@ -212,8 +211,11 @@ abstract class LSHModel[T <: LSHModel[T]] private[ml]
    * @param tmpColName A temporary column name which does not conflict with existing columns
    * @return
    */
-  private[this] def recreateCol(dataset: Dataset[_], colName: String,
-                                tmpColName: String): Dataset[_] = {
+  @Since("2.1.0")
+  private[this] def recreateCol(
+      @Since("2.1.0") dataset: Dataset[_],
+      @Since("2.1.0") colName: String,
+      @Since("2.1.0") tmpColName: String): Dataset[_] = {
     dataset
       .withColumnRenamed(colName, tmpColName)
       .withColumn(colName, col(tmpColName))
@@ -226,15 +228,16 @@ abstract class LSHModel[T <: LSHModel[T]] private[ml]
    * @param datasetA One of the datasets to join
    * @param datasetB Another dataset to join
    * @param threshold The threshold for the distance of record pairs
-   * @param distCol The column to store the distance between pairs
+   * @param distCol Output column for storing the distance between each result record and the key
    * @return A joined dataset containing pairs of records. A distCol is added to show the distance
    *         between each pair of records.
    */
+  @Since("2.1.0")
   def approxSimilarityJoin(
-      datasetA: Dataset[_],
-      datasetB: Dataset[_],
-      threshold: Double,
-      distCol: String): Dataset[_] = {
+      @Since("2.1.0") datasetA: Dataset[_],
+      @Since("2.1.0") datasetB: Dataset[_],
+      @Since("2.1.0") threshold: Double,
+      @Since("2.1.0") distCol: String): Dataset[_] = {
 
     val explodeCols = Seq("lsh#entry", "lsh#hashValue")
     val explodedA = processDataset(datasetA, explodeCols)
@@ -264,15 +267,12 @@ abstract class LSHModel[T <: LSHModel[T]] private[ml]
 
   /**
    * Overloaded method for approxSimilarityJoin. Use "distCol" as default distCol.
-   * @param datasetA One of the datasets to join
-   * @param datasetB Another dataset to join
-   * @param threshold The threshold for the distance of record pairs
-   * @return
    */
+  @Since("2.1.0")
   def approxSimilarityJoin(
-      datasetA: Dataset[_],
-      datasetB: Dataset[_],
-      threshold: Double): Dataset[_] = {
+      @Since("2.1.0") datasetA: Dataset[_],
+      @Since("2.1.0") datasetB: Dataset[_],
+      @Since("2.1.0") threshold: Double): Dataset[_] = {
     approxSimilarityJoin(datasetA, datasetB, threshold, "distCol")
   }
 }
@@ -292,46 +292,42 @@ abstract class LSHModel[T <: LSHModel[T]] private[ml]
  * arXiv:1408.2927 (2014).
  * @tparam T The class type of lsh
  */
-abstract class LSH[T <: LSHModel[T]] extends Estimator[T] with LSHParams {
+@Experimental
+@Since("2.1.0")
+private[ml] abstract class LSH[T <: LSHModel[T]] extends Estimator[T] with LSHParams {
   /** @group setParam */
+  @Since("2.1.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("2.1.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("2.1.0")
   def setOutputDim(value: Int): this.type = set(outputDim, value)
 
   /**
-   * :: DeveloperApi ::
-   *
    * Validate and create a new instance of concrete LSHModel. Because different LSHModel may have
    * different initial setting, developer needs to define how their LSHModel is created instead of
    * using reflection in this abstract class.
    * @param inputDim The dimension of the input dataset
    * @return A new LSHModel instance without any params
    */
+  @Since("2.1.0")
   protected[this] def createRawLSHModel(inputDim: Int): T
 
+  @Since("2.1.0")
   override def copy(extra: ParamMap): Estimator[T] = defaultCopy(extra)
 
-  /**
-   * Fits a model to the input data.
-   */
+  @Since("2.1.0")
   override def fit(dataset: Dataset[_]): T = {
     val inputDim = dataset.select(col($(inputCol))).head().get(0).asInstanceOf[Vector].size
     val model = createRawLSHModel(inputDim).setParent(this)
     copyValues(model)
   }
 
-  /**
-   * :: DeveloperApi ::
-   *
-   * Check transform validity and derive the output schema from the input schema.
-   *
-   * Typical implementation should first conduct verification on schema change and parameter
-   * validity, including complex parameter interaction checks.
-   */
+  @Since("2.1.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
