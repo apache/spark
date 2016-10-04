@@ -16,7 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
-import java.util.{Arrays, Date, List => JList}
+import java.util.{Date, List => JList}
 import javax.ws.rs.{DefaultValue, GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
@@ -32,33 +32,21 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
       @DefaultValue("3000-01-01") @QueryParam("maxDate") maxDate: SimpleDateParam,
       @QueryParam("limit") limit: Integer)
   : Iterator[ApplicationInfo] = {
-    val allApps = uiRoot.getApplicationInfoList
-    val adjStatus = {
-      if (status.isEmpty) {
-        Arrays.asList(ApplicationStatus.values(): _*)
-      } else {
-        status
-      }
-    }
-    val includeCompleted = adjStatus.contains(ApplicationStatus.COMPLETED)
-    val includeRunning = adjStatus.contains(ApplicationStatus.RUNNING)
-    val appList = allApps.filter { app =>
+
+    val numApps = Option(limit).map(_.toInt).getOrElse(Integer.MAX_VALUE)
+    val includeCompleted = status.isEmpty || status.contains(ApplicationStatus.COMPLETED)
+    val includeRunning = status.isEmpty || status.contains(ApplicationStatus.RUNNING)
+
+    uiRoot.getApplicationInfoList.filter { app =>
       val anyRunning = app.attempts.exists(!_.completed)
-      // if any attempt is still running, we consider the app to also still be running
-      val statusOk = (!anyRunning && includeCompleted) ||
-        (anyRunning && includeRunning)
+      // if any attempt is still running, we consider the app to also still be running;
       // keep the app if *any* attempts fall in the right time window
-      val dateOk = app.attempts.exists { attempt =>
-        attempt.startTime.getTime >= minDate.timestamp &&
-          attempt.startTime.getTime <= maxDate.timestamp
+      ((!anyRunning && includeCompleted) || (anyRunning && includeRunning)) &&
+      app.attempts.exists { attempt =>
+        val start = attempt.startTime.getTime
+        start >= minDate.timestamp && start <= maxDate.timestamp
       }
-      statusOk && dateOk
-    }
-    if (limit != null) {
-      appList.take(limit)
-    } else {
-      appList
-    }
+    }.take(numApps)
   }
 }
 
