@@ -395,16 +395,14 @@ sparkR.session <- function(
                                 enableHiveSupport)
     assign(".sparkRsession", sparkSession, envir = .sparkREnv)
 
-    # Set maximum size of serialized data that can be sent as invokeJava arguments
-    assign(
-      ".maxArgByteSize",
-      callJMethod(
-        callJMethod(sparkSession, "conf"),
-        "get",
-        "spark.r.maxArgByteSize",
-        toString(.Machine$integer.max * 10)),
-      envir = .sparkREnv)
   }
+
+  # Set maximum size of serialized data that can be sent as invokeJava arguments
+  assign(
+    ".maxArgByteSize",
+    sparkR.conf("spark.r.maxArgByteSize", toString(.Machine$integer.max * 10)),
+    envir = .sparkREnv)
+
   sparkSession
 }
 
