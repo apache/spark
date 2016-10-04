@@ -35,7 +35,7 @@ discussing specific classes of algorithms, such as linear methods, trees, and en
 ## Logistic regression
 
 Logistic regression is a popular method to predict a categorical response. It is a special case of [Generalized Linear models](https://en.wikipedia.org/wiki/Generalized_linear_model) that predicts the probability of the outcomes.
-In `spark.ml` logistic regression can be used to predict a binary outcome by using binomial logistic regression, or it can be used to predict a multiclass outcome by using multinomial logistic regression. Use the [`family`](http://localhost:4000/api/scala/index.html#org.apache.spark.ml.classification.LogisticRegression@family:org.apache.spark.ml.param.DoubleParam)
+In `spark.ml` logistic regression can be used to predict a binary outcome by using binomial logistic regression, or it can be used to predict a multiclass outcome by using multinomial logistic regression. Use the `family`
 parameter to select between these two algorithms, or leave it unset and Spark will infer the correct variant.
 
   > Multinomial logistic regression can be used for binary classification by setting the `family` param to "multinomial". It will produce two sets of coefficients and two intercepts.
@@ -44,12 +44,12 @@ parameter to select between these two algorithms, or leave it unset and Spark wi
 
 ### Binomial logistic regression
 
-For more background and more details about the implementation of binomial logistic regression, refer to the documentation of the [logistic regression in `spark.mllib`](mllib-linear-methods.html#logistic-regression). 
+For more background and more details about the implementation of binomial logistic regression, refer to the documentation of [logistic regression in `spark.mllib`](mllib-linear-methods.html#logistic-regression). 
 
 **Example**
 
-The following example shows how to train a binary logistic regression 
-model with elastic net regularization. `elasticNetParam` corresponds to
+The following example shows how to train binomial and multinomial logistic regression 
+models for binary classification with elastic net regularization. `elasticNetParam` corresponds to
 $\alpha$ and `regParam` corresponds to $\lambda$.
 
 <div class="codetabs">

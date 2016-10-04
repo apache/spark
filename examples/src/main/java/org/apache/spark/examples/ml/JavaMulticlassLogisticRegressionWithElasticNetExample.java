@@ -45,7 +45,7 @@ public class JavaMulticlassLogisticRegressionWithElasticNetExample {
         // Fit the model
         LogisticRegressionModel lrModel = lr.fit(training);
 
-        // Print the coefficients and intercept for logistic regression
+        // Print the coefficients and intercept for multinomial logistic regression
         System.out.println("Coefficients: \n"
                 + lrModel.coefficientMatrix() + " \nIntercept: " + lrModel.interceptVector());
         // $example off$

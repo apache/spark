@@ -40,7 +40,7 @@ if __name__ == "__main__":
     # Fit the model
     lrModel = lr.fit(training)
 
-    # Print the coefficients and intercept for logistic regression
+    # Print the coefficients and intercept for multinomial logistic regression
     print("Coefficients: \n" + str(lrModel.coefficientMatrix))
     print("Intercept: " + str(lrModel.interceptVector))
     # $example off$
