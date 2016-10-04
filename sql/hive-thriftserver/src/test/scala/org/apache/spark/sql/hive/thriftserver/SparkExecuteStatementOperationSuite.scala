@@ -15,26 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.feature
+package org.apache.spark.sql.hive.thriftserver
 
-import scala.beans.BeanInfo
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.{NullType, StructField, StructType}
 
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.linalg.Vector
-
-/**
- * :: Experimental ::
- *
- * Class that represents the features and label of a data point.
- *
- * @param label Label for this data point.
- * @param features List of features for this data point.
- */
-@Since("2.0.0")
-@Experimental
-@BeanInfo
-case class LabeledPoint(@Since("2.0.0") label: Double, @Since("2.0.0") features: Vector) {
-  override def toString: String = {
-    s"($label,$features)"
+class SparkExecuteStatementOperationSuite extends SparkFunSuite {
+  test("SPARK-17112 `select null` via JDBC triggers IllegalArgumentException in ThriftServer") {
+    val field1 = StructField("NULL", NullType)
+    val field2 = StructField("(IF(true, NULL, NULL))", NullType)
+    val tableSchema = StructType(Seq(field1, field2))
+    val columns = SparkExecuteStatementOperation.getTableSchema(tableSchema).getColumnDescriptors()
+    assert(columns.size() == 2)
+    assert(columns.get(0).getType() == org.apache.hive.service.cli.Type.NULL_TYPE)
+    assert(columns.get(1).getType() == org.apache.hive.service.cli.Type.NULL_TYPE)
   }
 }
