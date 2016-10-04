@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import scala.collection.Iterator
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, CodeGenerator, UnsafeRowWriter}
+import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types._
 
 /**
@@ -28,7 +31,12 @@ import org.apache.spark.sql.types._
  */
 abstract class ColumnarIterator extends Iterator[InternalRow] {
   def initialize(input: Iterator[CachedBatch], columnTypes: Array[DataType],
-    columnIndexes: Array[Int]): Unit
+    columnIndexes: Array[Int], inMemoryTableScanExec: InMemoryTableScanExec): Unit
+  def getColumnIndexes(index: Int) : Int
+  def getColumnTypes(index: Int): DataType
+  def isSupportColumnarCodeGen: Boolean
+  def initForColumnar: Int
+  def getColumn(index: Int): ColumnVector
 }
 
 /**
@@ -68,6 +76,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
   protected def create(columnTypes: Seq[DataType]): ColumnarIterator = {
     val ctx = newCodeGenContext()
     val numFields = columnTypes.size
+    var _isSupportColumnarCodeGen = true
     val (initializeAccessors, extractors) = columnTypes.zipWithIndex.map { case (dt, index) =>
       val accessorName = ctx.freshName("accessor")
       val accessorCls = dt match {
@@ -92,10 +101,17 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
       val createCode = dt match {
         case t if ctx.isPrimitiveType(dt) =>
+          dt match {
+            case FloatType =>
+            case DoubleType =>
+            case _ => _isSupportColumnarCodeGen = false
+          }
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case NullType | StringType | BinaryType =>
+          _isSupportColumnarCodeGen = false
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case other =>
+          _isSupportColumnarCodeGen = false
           s"""$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder),
              (${dt.getClass.getName}) columnTypes[$index]);"""
       }
@@ -157,7 +173,10 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       import org.apache.spark.sql.types.DataType;
       import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
       import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
+      import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec;
+      import org.apache.spark.sql.execution.columnar.CachedBatch;
       import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
+      import org.apache.spark.sql.execution.vectorized.ColumnVector;
 
       public SpecificColumnarIterator generate(Object[] references) {
         return new SpecificColumnarIterator();
@@ -170,7 +189,10 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         private UnsafeRow unsafeRow = new UnsafeRow($numFields);
         private BufferHolder bufferHolder = new BufferHolder(unsafeRow);
         private UnsafeRowWriter rowWriter = new UnsafeRowWriter(bufferHolder, $numFields);
+        private InMemoryTableScanExec inMemoryTableScanExec = null;
         private MutableUnsafeRow mutableRow = null;
+        private boolean readPartitionIncremented = false;
+        private CachedBatch cachedBatch = null;
 
         private int currentRow = 0;
         private int numRowsInBatch = 0;
@@ -187,10 +209,12 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           this.mutableRow = new MutableUnsafeRow(rowWriter);
         }
 
-        public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes) {
+        public void initialize(Iterator input, DataType[] columnTypes,
+          int[] columnIndexes, InMemoryTableScanExec inMemoryTableScanExec) {
           this.input = input;
           this.columnTypes = columnTypes;
           this.columnIndexes = columnIndexes;
+          this.inMemoryTableScanExec = inMemoryTableScanExec;
         }
 
         ${ctx.declareAddedFunctions()}
@@ -203,7 +227,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
             return false;
           }
 
-          ${classOf[CachedBatch].getName} batch = (${classOf[CachedBatch].getName}) input.next();
+          CachedBatch batch = (CachedBatch) input.next();
           currentRow = 0;
           numRowsInBatch = batch.numRows();
           for (int i = 0; i < columnIndexes.length; i ++) {
@@ -221,6 +245,30 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           ${extractorCalls}
           unsafeRow.setTotalSize(bufferHolder.totalSize());
           return unsafeRow;
+        }
+
+        public int getColumnIndexes(int index) { return columnIndexes[index]; }
+
+        public DataType getColumnTypes(int index) { return columnTypes[index]; }
+
+        public boolean isSupportColumnarCodeGen() {
+          return ${_isSupportColumnarCodeGen};
+        }
+
+        public int initForColumnar() {
+          if (!input.hasNext()) {
+            return -1;
+          }
+          if ((inMemoryTableScanExec != null) && !readPartitionIncremented) {
+            inMemoryTableScanExec.incrementReadPartitionAccumulator();
+            readPartitionIncremented = true;
+          }
+          cachedBatch = (CachedBatch) input.next();
+          return cachedBatch.numRows();
+        }
+
+        public ColumnVector getColumn(int i) {
+          return cachedBatch.column(this, i);
         }
       }"""
 

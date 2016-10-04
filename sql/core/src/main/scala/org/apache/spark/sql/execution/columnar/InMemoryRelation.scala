@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.ByteOrder.nativeOrder
+
 import scala.collection.JavaConverters._
 
 import org.apache.commons.lang3.StringUtils
@@ -30,6 +33,8 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.vectorized.ColumnVector
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.CollectionAccumulator
 
@@ -53,7 +58,29 @@ object InMemoryRelation {
  * @param stats The stat of columns
  */
 private[columnar]
-case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
+case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow) {
+  def column(columnarIterator: ColumnarIterator, index: Int): ColumnVector = {
+    val ordinal = columnarIterator.getColumnIndexes(index)
+    val dataType = columnarIterator.getColumnTypes(index)
+    val buffer = ByteBuffer.wrap(buffers(ordinal)).order(nativeOrder)
+    val accessor: BasicColumnAccessor[_] = dataType match {
+      case FloatType => new FloatColumnAccessor(buffer)
+      case DoubleType => new DoubleColumnAccessor(buffer)
+    }
+
+    val (out, nullsBuffer) = if (accessor.isInstanceOf[NativeColumnAccessor[_]]) {
+      val nativeAccessor = accessor.asInstanceOf[NativeColumnAccessor[_]]
+      nativeAccessor.decompress(numRows);
+    } else {
+      val buffer = accessor.getByteBuffer
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind()
+      (buffer, nullsBuffer)
+    }
+
+    ColumnVector.allocate(numRows, dataType, true, out, nullsBuffer)
+  }
+}
 
 case class InMemoryRelation(
     output: Seq[Attribute],

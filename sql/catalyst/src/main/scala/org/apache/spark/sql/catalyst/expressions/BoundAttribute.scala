@@ -100,3 +100,28 @@ object BindReferences extends Logging {
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
   }
 }
+
+/**
+ * A column vector reference points to a specific column for ColumnVector.
+ * columnVar is a variable that keeps ColumnVector, and ordinal is row index in ColumnVector
+ */
+case class ColumnVectorReference(
+  columnVar: String, ordinal: String, dataType: DataType, nullable: Boolean)
+  extends LeafExpression {
+
+  override def toString: String = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
+
+  override def eval(input: InternalRow): Any = null
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = ctx.javaType(dataType)
+    val value = ctx.getValue(columnVar, dataType, ordinal)
+    if (nullable) {
+      ev.copy(code = s"""
+        boolean ${ev.isNull} = ${columnVar}.isNullAt($ordinal);
+        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);""")
+    } else {
+      ev.copy(code = s"""$javaType ${ev.value} = $value;""", isNull = "false")
+    }
+  }
+}

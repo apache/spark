@@ -144,11 +144,12 @@ class CodegenContext {
    *
    * They will be kept as member variables in generated classes like `SpecificProjection`.
    */
-  val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
-    mutable.ArrayBuffer.empty[(String, String, String)]
+  val mutableStates: mutable.ArrayBuffer[(String, String, String, String)] =
+    mutable.ArrayBuffer.empty[(String, String, String, String)]
 
-  def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
-    mutableStates += ((javaType, variableName, initCode))
+  def addMutableState(javaType: String, variableName: String, initCode: String,
+                      cleanupCode: String = ""): Unit = {
+    mutableStates += ((javaType, variableName, initCode, cleanupCode))
   }
 
   /**
@@ -170,7 +171,7 @@ class CodegenContext {
   def declareMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    mutableStates.distinct.map { case (javaType, variableName, _) =>
+    mutableStates.distinct.map { case (javaType, variableName, _, _) =>
       s"private $javaType $variableName;"
     }.mkString("\n")
   }
@@ -184,6 +185,9 @@ class CodegenContext {
     splitExpressions(initCodes, "init", Nil)
   }
 
+  def cleanupMutableStates(): String = {
+    mutableStates.map(_._4).mkString("\n")
+  }
   /**
    * Holding all the functions those will be added into generated class.
    */
@@ -229,6 +233,10 @@ class CodegenContext {
 
   /** The variable name of the input row in generated code. */
   final var INPUT_ROW = "i"
+
+  var isRow = true
+  var enableColumnCodeGen = false
+  var iteratorInput = ""
 
   /**
    * The map from a variable name to it's next ID.

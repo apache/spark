@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types.IntegralType
 
 class IntegralDeltaSuite extends SparkFunSuite {
+  val nullValue = -1
   testIntegralDelta(new IntColumnStats, INT, IntDelta)
   testIntegralDelta(new LongColumnStats, LONG, LongDelta)
 

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
@@ -64,6 +65,11 @@ trait CodegenSupport extends SparkPlan {
    * Which SparkPlan is calling produce() of this one. It's itself for the first SparkPlan.
    */
   protected var parent: CodegenSupport = null
+
+  /**
+   * Whether this SparkPlan uses UnsafeRow as input in doProduce or doConsume
+   */
+  def useUnsafeRow: Boolean = false
 
   /**
    * Returns all the RDDs of InternalRow which generates the input rows.
@@ -234,10 +240,14 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
   }
 
   override def doProduce(ctx: CodegenContext): String = {
+    ctx.enableColumnCodeGen = true
     val input = ctx.freshName("input")
+    ctx.iteratorInput = input
     // Right now, InputAdapter is only used when there is one input RDD.
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
-    val row = ctx.freshName("row")
+
+    if (ctx.isRow) {
+      val row = ctx.freshName("row")
     s"""
        | while ($input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
@@ -245,6 +255,9 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
        |   if (shouldStop()) return;
        | }
      """.stripMargin
+    } else {
+      InMemoryTableScanExec.produceColumnLoop(ctx, this, output)
+    }
   }
 
   override def generateTreeString(
@@ -299,6 +312,8 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     "pipelineTime" -> SQLMetrics.createTimingMetric(sparkContext,
       WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
 
+  var enableColumnCodeGen: Boolean = false
+
   /**
    * Generates code for this subtree.
    *
@@ -306,7 +321,20 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
    */
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
     val ctx = new CodegenContext
-    val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+    ctx.isRow = true
+    val codeRow = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+
+    enableColumnCodeGen = InMemoryTableScanExec.enableColumnCodeGen(sqlContext, ctx, child)
+    val codeProcessNext = if (!enableColumnCodeGen) {
+      s"""
+        protected void processNext() throws java.io.IOException {
+          ${codeRow.trim}
+        }
+      """
+    } else {
+      InMemoryTableScanExec.produceProcessNext(ctx, this, child, codeRow)
+    }
+
     val source = s"""
       public Object generate(Object[] references) {
         return new GeneratedIterator(references);
@@ -331,9 +359,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
 
         ${ctx.declareAddedFunctions()}
 
-        protected void processNext() throws java.io.IOException {
-          ${code.trim}
-        }
+        ${codeProcessNext}
       }
       """.trim
 

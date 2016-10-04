@@ -503,6 +503,8 @@ case class SortMergeJoinExec(
     }
   }
 
+  override def useUnsafeRow: Boolean = true
+
   override def doProduce(ctx: CodegenContext): String = {
     ctx.copyResult = true
     val leftInput = ctx.freshName("leftInput")

@@ -24,16 +24,18 @@ import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types.AtomicType
 
 class RunLengthEncodingSuite extends SparkFunSuite {
+  val nullValue = -1
   testRunLengthEncoding(new NoopColumnStats, BOOLEAN)
   testRunLengthEncoding(new ByteColumnStats, BYTE)
   testRunLengthEncoding(new ShortColumnStats, SHORT)
   testRunLengthEncoding(new IntColumnStats, INT)
   testRunLengthEncoding(new LongColumnStats, LONG)
-  testRunLengthEncoding(new StringColumnStats, STRING)
+  testRunLengthEncoding(new StringColumnStats, STRING, false)
 
   def testRunLengthEncoding[T <: AtomicType](
       columnStats: ColumnStats,
-      columnType: NativeColumnType[T]) {
+      columnType: NativeColumnType[T],
+      testDecompress: Boolean = true) {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
 

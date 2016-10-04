@@ -26,13 +26,15 @@ import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types.AtomicType
 
 class DictionaryEncodingSuite extends SparkFunSuite {
+  val nullValue = -1
   testDictionaryEncoding(new IntColumnStats, INT)
   testDictionaryEncoding(new LongColumnStats, LONG)
-  testDictionaryEncoding(new StringColumnStats, STRING)
+  testDictionaryEncoding(new StringColumnStats, STRING, false)
 
   def testDictionaryEncoding[T <: AtomicType](
       columnStats: ColumnStats,
-      columnType: NativeColumnType[T]) {
+      columnType: NativeColumnType[T],
+      testDecompress: Boolean = true) {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
 
