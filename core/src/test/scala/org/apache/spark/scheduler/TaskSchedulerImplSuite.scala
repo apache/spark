@@ -111,7 +111,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("Scheduler balance the assignment to the worker with more free cores") {
     val taskScheduler = setupScheduler(("spark.task.assigner", classOf[BalancedAssigner].getName))
-    val workerOffers = Seq(new WorkerOffer("executor0", "host0", 2),
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 2),
       new WorkerOffer("executor1", "host1", 4))
     val selectedExecutorIds = {
       val taskSet = FakeTask.createTaskSet(2)
@@ -127,7 +127,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("Scheduler balance the assignment across workers with same free cores") {
     val taskScheduler = setupScheduler(("spark.task.assigner", classOf[BalancedAssigner].getName))
-    val workerOffers = Seq(new WorkerOffer("executor0", "host0", 2),
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 2),
       new WorkerOffer("executor1", "host1", 2))
     val selectedExecutorIds = {
       val taskSet = FakeTask.createTaskSet(2)
@@ -143,7 +143,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("Scheduler packs the assignment to workers with less free cores") {
     val taskScheduler = setupScheduler(("spark.task.assigner", classOf[PackedAssigner].getName))
-    val workerOffers = Seq(new WorkerOffer("executor0", "host0", 2),
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 2),
       new WorkerOffer("executor1", "host1", 4))
     val selectedExecutorIds = {
       val taskSet = FakeTask.createTaskSet(2)
@@ -159,7 +159,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("Scheduler keeps packing the assignment to the same worker") {
     val taskScheduler = setupScheduler(("spark.task.assigner", classOf[PackedAssigner].getName))
-    val workerOffers = Seq(new WorkerOffer("executor0", "host0", 4),
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 4),
       new WorkerOffer("executor1", "host1", 4))
     val selectedExecutorIds = {
       val taskSet = FakeTask.createTaskSet(4)
