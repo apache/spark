@@ -22,10 +22,10 @@ import scala.util.Random
 import breeze.linalg.{DenseVector => BDV, Vector => BV}
 import breeze.stats.distributions.{Multinomial => BrzMultinomial}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.classification.NaiveBayes.{Bernoulli, Multinomial}
 import org.apache.spark.ml.classification.NaiveBayesSuite._
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
@@ -104,6 +104,11 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
         }
         assert(probability ~== expected relTol 1.0e-10)
     }
+  }
+
+  test("model types") {
+    assert(Multinomial === "multinomial")
+    assert(Bernoulli === "bernoulli")
   }
 
   test("params") {
@@ -226,6 +231,66 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val featureAndProbabilities = model.transform(validationDataset)
       .select("features", "probability")
     validateProbabilities(featureAndProbabilities, model, "bernoulli")
+  }
+
+  test("detect negative values") {
+    val dense = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(-1.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0))))
+    intercept[SparkException] {
+      new NaiveBayes().fit(dense)
+    }
+    val sparse = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+      LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(-1.0))),
+      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+      LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty))))
+    intercept[SparkException] {
+      new NaiveBayes().fit(sparse)
+    }
+    val nan = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+      LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(Double.NaN))),
+      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+      LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty))))
+    intercept[SparkException] {
+      new NaiveBayes().fit(nan)
+    }
+  }
+
+  test("detect non zero or one values in Bernoulli") {
+    val badTrain = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0))))
+
+    intercept[SparkException] {
+      new NaiveBayes().setModelType(Bernoulli).setSmoothing(1.0).fit(badTrain)
+    }
+
+    val okTrain = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0))))
+
+    val model = new NaiveBayes().setModelType(Bernoulli).setSmoothing(1.0).fit(okTrain)
+
+    val badPredict = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(2.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0))))
+
+    intercept[SparkException] {
+      model.transform(badPredict).collect()
+    }
   }
 
   test("read/write") {
