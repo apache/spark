@@ -26,7 +26,7 @@ library(SparkR)
 
 We use default settings in which it runs in local mode. It auto downloads Spark package in the background if no previous installation is found. For more details about setup, see [Spark Session](#SetupSparkSession).
 
-```{r, message=FALSE}
+```{r, message=FALSE, results="hide"}
 sparkR.session()
 ```
 
@@ -114,10 +114,12 @@ In particular, the following Spark driver properties can be set in `sparkConfig`
 
 Property Name | Property group | spark-submit equivalent
 ---------------- | ------------------ | ----------------------
-spark.driver.memory | Application Properties | --driver-memory
-spark.driver.extraClassPath | Runtime Environment | --driver-class-path
-spark.driver.extraJavaOptions | Runtime Environment | --driver-java-options
-spark.driver.extraLibraryPath | Runtime Environment | --driver-library-path
+`spark.driver.memory` | Application Properties | `--driver-memory`
+`spark.driver.extraClassPath` | Runtime Environment | `--driver-class-path`
+`spark.driver.extraJavaOptions` | Runtime Environment | `--driver-java-options`
+`spark.driver.extraLibraryPath` | Runtime Environment | `--driver-library-path`
+`spark.yarn.keytab` | Application Properties | `--keytab`
+`spark.yarn.principal` | Application Properties | `--principal`
 
 **For Windows users**: Due to different file prefixes across operating systems, to avoid the issue of potential wrong prefix, a current workaround is to specify `spark.sql.warehouse.dir` when starting the `SparkSession`.
 
@@ -161,7 +163,7 @@ head(df)
 ### Data Sources
 SparkR supports operating on a variety of data sources through the `SparkDataFrame` interface. You can check the Spark SQL programming guide for more [specific options](https://spark.apache.org/docs/latest/sql-programming-guide.html#manually-specifying-options) that are available for the built-in data sources.
 
-The general method for creating `SparkDataFrame` from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active Spark Session will be used automatically. SparkR supports reading CSV, JSON and Parquet files natively and through Spark Packages you can find data source connectors for popular file formats like Avro. These packages can be added with `sparkPackages` parameter when initializing SparkSession using `sparkR.session'.`
+The general method for creating `SparkDataFrame` from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active Spark Session will be used automatically. SparkR supports reading CSV, JSON and Parquet files natively and through Spark Packages you can find data source connectors for popular file formats like Avro. These packages can be added with `sparkPackages` parameter when initializing SparkSession using `sparkR.session`.
 
 ```{r, eval=FALSE}
 sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
@@ -406,9 +408,16 @@ class(model.summaries)
 ```
 
 
-To avoid lengthy display, we only present the result of the second fitted model. You are free to inspect other models as well.
+To avoid lengthy display, we only present the partial result of the second fitted model. You are free to inspect other models as well.
+```{r, include=FALSE}
+ops <- options()
+options(max.print=40)
+```
 ```{r}
 print(model.summaries[[2]])
+```
+```{r, include=FALSE}
+options(ops)
 ```
 
 
@@ -534,7 +543,7 @@ head(select(kmeansPredictions, "model", "mpg", "hp", "wt", "prediction"), n = 20
 Survival analysis studies the expected duration of time until an event happens, and often the relationship with risk factors or treatment taken on the subject. In contrast to standard regression analysis, survival modeling has to deal with special characteristics in the data including non-negative survival time and censoring.
 
 Accelerated Failure Time (AFT) model is a parametric survival model for censored data that assumes the effect of a covariate is to accelerate or decelerate the life course of an event by some constant. For more information, refer to the Wikipedia page [AFT Model](https://en.wikipedia.org/wiki/Accelerated_failure_time_model) and the references there. Different from a [Proportional Hazards Model](https://en.wikipedia.org/wiki/Proportional_hazards_model) designed for the same purpose, the AFT model is easier to parallelize because each instance contributes to the objective function independently.
-```{r}
+```{r, warning=FALSE}
 library(survival)
 ovarianDF <- createDataFrame(ovarian)
 aftModel <- spark.survreg(ovarianDF, Surv(futime, fustat) ~ ecog_ps + rx)
@@ -545,8 +554,8 @@ head(aftPredictions)
 
 ### Model Persistence
 The following example shows how to save/load an ML model by SparkR.
-```{r}
-irisDF <- suppressWarnings(createDataFrame(iris))
+```{r, warning=FALSE}
+irisDF <- createDataFrame(iris)
 gaussianGLM <- spark.glm(irisDF, Sepal_Length ~ Sepal_Width + Species, family = "gaussian")
 
 # Save and then load a fitted MLlib model
