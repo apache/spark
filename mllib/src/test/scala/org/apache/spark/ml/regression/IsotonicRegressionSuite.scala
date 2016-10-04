@@ -27,15 +27,15 @@ import org.apache.spark.sql.{DataFrame, Row}
 class IsotonicRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import testImplicits._
+
   private def generateIsotonicInput(labels: Seq[Double]): DataFrame = {
-    spark.createDataFrame(
-      labels.zipWithIndex.map { case (label, i) => (label, i.toDouble, 1.0) }
-    ).toDF("label", "features", "weight")
+    labels.zipWithIndex.map { case (label, i) => (label, i.toDouble, 1.0) }
+      .toDF("label", "features", "weight")
   }
 
   private def generatePredictionInput(features: Seq[Double]): DataFrame = {
-    spark.createDataFrame(features.map(Tuple1.apply))
-      .toDF("features")
+    features.map(Tuple1.apply).toDF("features")
   }
 
   test("isotonic regression predictions") {
@@ -145,10 +145,10 @@ class IsotonicRegressionSuite
   }
 
   test("vector features column with feature index") {
-    val dataset = spark.createDataFrame(Seq(
+    val dataset = Seq(
       (4.0, Vectors.dense(0.0, 1.0)),
       (3.0, Vectors.dense(0.0, 2.0)),
-      (5.0, Vectors.sparse(2, Array(1), Array(3.0))))
+      (5.0, Vectors.sparse(2, Array(1), Array(3.0)))
     ).toDF("label", "features")
 
     val ir = new IsotonicRegression()

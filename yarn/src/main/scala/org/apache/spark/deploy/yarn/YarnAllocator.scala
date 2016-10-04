@@ -496,7 +496,6 @@ private[yarn] class YarnAllocator(
 
       def updateInternalState(): Unit = synchronized {
         numExecutorsRunning += 1
-        assert(numExecutorsRunning <= targetNumExecutors)
         executorIdToContainer(executorId) = container
         containerIdToExecutorId(container.getId) = executorId
 
@@ -506,36 +505,41 @@ private[yarn] class YarnAllocator(
         allocatedContainerToHostMap.put(containerId, executorHostname)
       }
 
-      if (launchContainers) {
-        launcherPool.execute(new Runnable {
-          override def run(): Unit = {
-            try {
-              new ExecutorRunnable(
-                Some(container),
-                conf,
-                sparkConf,
-                driverUrl,
-                executorId,
-                executorHostname,
-                executorMemory,
-                executorCores,
-                appAttemptId.getApplicationId.toString,
-                securityMgr,
-                localResources
-              ).run()
-              updateInternalState()
-            } catch {
-              case NonFatal(e) =>
-                logError(s"Failed to launch executor $executorId on container $containerId", e)
-                // Assigned container should be released immediately to avoid unnecessary resource
-                // occupation.
-                amClient.releaseAssignedContainer(containerId)
+      if (numExecutorsRunning < targetNumExecutors) {
+        if (launchContainers) {
+          launcherPool.execute(new Runnable {
+            override def run(): Unit = {
+              try {
+                new ExecutorRunnable(
+                  Some(container),
+                  conf,
+                  sparkConf,
+                  driverUrl,
+                  executorId,
+                  executorHostname,
+                  executorMemory,
+                  executorCores,
+                  appAttemptId.getApplicationId.toString,
+                  securityMgr,
+                  localResources
+                ).run()
+                updateInternalState()
+              } catch {
+                case NonFatal(e) =>
+                  logError(s"Failed to launch executor $executorId on container $containerId", e)
+                  // Assigned container should be released immediately to avoid unnecessary resource
+                  // occupation.
+                  amClient.releaseAssignedContainer(containerId)
+              }
             }
-          }
-        })
+          })
+        } else {
+          // For test only
+          updateInternalState()
+        }
       } else {
-        // For test only
-        updateInternalState()
+        logInfo(("Skip launching executorRunnable as runnning Excecutors count: %d " +
+          "reached target Executors count: %d.").format(numExecutorsRunning, targetNumExecutors))
       }
     }
   }

@@ -23,6 +23,7 @@ import java.util.{Map => JavaMap}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleCompiler}
@@ -82,6 +83,21 @@ class CodegenContext {
    * Holding a list of objects that could be used passed into generated class.
    */
   val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
+
+  /**
+   * Add an object to `references`.
+   *
+   * Returns the code to access it.
+   *
+   * This is for minor objects not to store the object into field but refer it from the references
+   * field at the time of use because number of fields in class is limited so we should reduce it.
+   */
+  def addReferenceObj(obj: Any): String = {
+    val idx = references.length
+    references += obj
+    val clsName = obj.getClass.getName
+    s"(($clsName) references[$idx])"
+  }
 
   /**
    * Add an object to `references`, create a class member to access it.
@@ -910,14 +926,19 @@ object CodeGenerator extends Logging {
     codeAttrField.setAccessible(true)
     classes.foreach { case (_, classBytes) =>
       CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
-      val cf = new ClassFile(new ByteArrayInputStream(classBytes))
-      cf.methodInfos.asScala.foreach { method =>
-        method.getAttributes().foreach { a =>
-          if (a.getClass.getName == codeAttr.getName) {
-            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(
-              codeAttrField.get(a).asInstanceOf[Array[Byte]].length)
+      try {
+        val cf = new ClassFile(new ByteArrayInputStream(classBytes))
+        cf.methodInfos.asScala.foreach { method =>
+          method.getAttributes().foreach { a =>
+            if (a.getClass.getName == codeAttr.getName) {
+              CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(
+                codeAttrField.get(a).asInstanceOf[Array[Byte]].length)
+            }
           }
         }
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Error calculating stats of compiled class.", e)
       }
     }
   }

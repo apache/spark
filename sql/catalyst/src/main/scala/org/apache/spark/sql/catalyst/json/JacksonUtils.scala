@@ -15,10 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.sql.catalyst.json
 
-import org.apache.spark.SparkException
+import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 
-private[spark]
-case class BlockFetchException(messages: String, throwable: Throwable)
-  extends SparkException(messages, throwable)
+object JacksonUtils {
+  /**
+   * Advance the parser until a null or a specific token is found
+   */
+  def nextUntil(parser: JsonParser, stopOn: JsonToken): Boolean = {
+    parser.nextToken() match {
+      case null => false
+      case x => x != stopOn
+    }
+  }
+}

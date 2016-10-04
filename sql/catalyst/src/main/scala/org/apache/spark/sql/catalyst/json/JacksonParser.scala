@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.json
+package org.apache.spark.sql.catalyst.json
 
 import java.io.ByteArrayOutputStream
 
@@ -28,19 +28,22 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.datasources.ParseModes.{DROP_MALFORMED_MODE, PERMISSIVE_MODE}
-import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
-private[json] class SparkSQLJsonProcessingException(msg: String) extends RuntimeException(msg)
+private[sql] class SparkSQLJsonProcessingException(msg: String) extends RuntimeException(msg)
 
+/**
+ * Constructs a parser for a given schema that translates a json string to an [[InternalRow]].
+ */
 class JacksonParser(
     schema: StructType,
     columnNameOfCorruptRecord: String,
     options: JSONOptions) extends Logging {
 
+  import JacksonUtils._
+  import ParseModes._
   import com.fasterxml.jackson.core.JsonToken._
 
   // A `ValueConverter` is responsible for converting a value from `JsonParser`
@@ -65,7 +68,7 @@ class JacksonParser(
   private def failedRecord(record: String): Seq[InternalRow] = {
     // create a row even if no corrupt record column is present
     if (options.failFast) {
-      throw new RuntimeException(s"Malformed line in FAILFAST mode: $record")
+      throw new SparkSQLJsonProcessingException(s"Malformed line in FAILFAST mode: $record")
     }
     if (options.dropMalformed) {
       if (!isWarningPrintedForMalformedRecord) {

@@ -16,6 +16,30 @@
 
 grammar SqlBase;
 
+@members {
+  /**
+   * Verify whether current token is a valid decimal token (which contains dot).
+   * Returns true if the character that follows the token is not a digit or letter or underscore.
+   *
+   * For example:
+   * For char stream "2.3", "2." is not a valid decimal token, because it is followed by digit '3'.
+   * For char stream "2.3_", "2.3" is not a valid decimal token, because it is followed by '_'.
+   * For char stream "2.3W", "2.3" is not a valid decimal token, because it is followed by 'W'.
+   * For char stream "12.0D 34.E2+0.12 "  12.0D is a valid decimal token because it is folllowed
+   * by a space. 34.E2 is a valid decimal token because it is followed by symbol '+'
+   * which is not a digit or letter or underscore.
+   */
+  public boolean isValidDecimal() {
+    int nextChar = _input.LA(1);
+    if (nextChar >= 'A' && nextChar <= 'Z' || nextChar >= '0' && nextChar <= '9' ||
+      nextChar == '_') {
+      return false;
+    } else {
+      return true;
+    }
+  }
+}
+
 tokens {
     DELIMITER
 }
@@ -62,7 +86,7 @@ statement
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier                                    #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierSeq?)?                     #analyze
+        (identifier | FOR COLUMNS identifierSeq)?                      #analyze
     | ALTER (TABLE | VIEW) from=tableIdentifier
         RENAME TO to=tableIdentifier                                   #renameTable
     | ALTER (TABLE | VIEW) tableIdentifier
@@ -238,7 +262,7 @@ ctes
     ;
 
 namedQuery
-    : name=identifier AS? '(' queryNoWith ')'
+    : name=identifier AS? '(' query ')'
     ;
 
 tableProvider
@@ -324,7 +348,7 @@ queryPrimary
     ;
 
 sortItem
-    : expression ordering=(ASC | DESC)?
+    : expression ordering=(ASC | DESC)? (NULLS nullOrder=(LAST | FIRST))?
     ;
 
 querySpecification
@@ -503,16 +527,16 @@ valueExpression
     ;
 
 primaryExpression
-    : constant                                                                                 #constantDefault
-    | name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #timeFunctionCall
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #timeFunctionCall
+    | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
+    | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
+    | CAST '(' expression AS dataType ')'                                                      #cast
+    | constant                                                                                 #constantDefault
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
     | '(' expression (',' expression)+ ')'                                                     #rowConstructor
-    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
     | '(' query ')'                                                                            #subqueryExpression
-    | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END                   #simpleCase
-    | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
-    | CAST '(' expression AS dataType ')'                                                      #cast
+    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
@@ -640,7 +664,8 @@ number
 nonReserved
     : SHOW | TABLES | COLUMNS | COLUMN | PARTITIONS | FUNCTIONS | DATABASES
     | ADD
-    | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | MAP | ARRAY | STRUCT
+    | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | LAST | FIRST
+    | MAP | ARRAY | STRUCT
     | LATERAL | WINDOW | REDUCE | TRANSFORM | USING | SERDE | SERDEPROPERTIES | RECORDREADER
     | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
     | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | TEMPORARY | OPTIONS
@@ -728,6 +753,8 @@ UNBOUNDED: 'UNBOUNDED';
 PRECEDING: 'PRECEDING';
 FOLLOWING: 'FOLLOWING';
 CURRENT: 'CURRENT';
+FIRST: 'FIRST';
+LAST: 'LAST';
 ROW: 'ROW';
 WITH: 'WITH';
 VALUES: 'VALUES';
@@ -916,18 +943,18 @@ INTEGER_VALUE
     ;
 
 DECIMAL_VALUE
-    : DIGIT+ '.' DIGIT*
-    | DIGIT+ ('.' DIGIT*)? EXPONENT
-    | '.' DIGIT+ EXPONENT?
+    : DIGIT+ EXPONENT
+    | DECIMAL_DIGITS EXPONENT? {isValidDecimal()}?
     ;
 
 DOUBLE_LITERAL
-    : (INTEGER_VALUE | DECIMAL_VALUE) 'D'
+    : DIGIT+ EXPONENT? 'D'
+    | DECIMAL_DIGITS EXPONENT? 'D' {isValidDecimal()}?
     ;
 
 BIGDECIMAL_LITERAL
-    :
-    (INTEGER_VALUE | DECIMAL_VALUE) 'BD'
+    : DIGIT+ EXPONENT? 'BD'
+    | DECIMAL_DIGITS EXPONENT? 'BD' {isValidDecimal()}?
     ;
 
 IDENTIFIER
@@ -936,6 +963,11 @@ IDENTIFIER
 
 BACKQUOTED_IDENTIFIER
     : '`' ( ~'`' | '``' )* '`'
+    ;
+
+fragment DECIMAL_DIGITS
+    : DIGIT+ '.' DIGIT*
+    | '.' DIGIT+
     ;
 
 fragment EXPONENT

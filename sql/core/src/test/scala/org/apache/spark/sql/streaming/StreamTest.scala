@@ -95,6 +95,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     def addData(query: Option[StreamExecution]): (Source, Offset)
   }
 
+  /** A trait that can be extended when testing a source. */
+  trait ExternalAction extends StreamAction {
+    def runAction(): Unit
+  }
+
   case class AddDataMemory[A](source: MemoryStream[A], data: Seq[A]) extends AddData {
     override def toString: String = s"AddData to $source: ${data.mkString(",")}"
 
@@ -188,8 +193,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       new AssertOnQuery(condition, message)
     }
 
-    def apply(message: String)(condition: StreamExecution => Unit): AssertOnQuery = {
-      new AssertOnQuery(s => { condition(s); true }, message)
+    def apply(message: String)(condition: StreamExecution => Boolean): AssertOnQuery = {
+      new AssertOnQuery(condition, message)
     }
   }
 
@@ -428,6 +433,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
               case NonFatal(e) =>
                 failTest("Error adding data", e)
             }
+
+          case e: ExternalAction =>
+            e.runAction()
 
           case CheckAnswerRows(expectedAnswer, lastOnly, isSorted) =>
             verify(currentStream != null, "stream not running")

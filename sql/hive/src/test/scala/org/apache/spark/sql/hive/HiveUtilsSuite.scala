@@ -15,27 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources
+package org.apache.spark.sql.hive
 
-private[datasources] object ParseModes {
-  val PERMISSIVE_MODE = "PERMISSIVE"
-  val DROP_MALFORMED_MODE = "DROPMALFORMED"
-  val FAIL_FAST_MODE = "FAILFAST"
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
-  val DEFAULT = PERMISSIVE_MODE
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.QueryTest
 
-  def isValidMode(mode: String): Boolean = {
-    mode.toUpperCase match {
-      case PERMISSIVE_MODE | DROP_MALFORMED_MODE | FAIL_FAST_MODE => true
-      case _ => false
+class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+
+  test("newTemporaryConfiguration overwrites listener configurations") {
+    Seq(true, false).foreach { useInMemoryDerby =>
+      val conf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby)
+      assert(conf(ConfVars.METASTORE_PRE_EVENT_LISTENERS.varname) === "")
+      assert(conf(ConfVars.METASTORE_EVENT_LISTENERS.varname) === "")
+      assert(conf(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname) === "")
     }
-  }
-
-  def isDropMalformedMode(mode: String): Boolean = mode.toUpperCase == DROP_MALFORMED_MODE
-  def isFailFastMode(mode: String): Boolean = mode.toUpperCase == FAIL_FAST_MODE
-  def isPermissiveMode(mode: String): Boolean = if (isValidMode(mode))  {
-    mode.toUpperCase == PERMISSIVE_MODE
-  } else {
-    true // We default to permissive is the mode string is not valid
   }
 }

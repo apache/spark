@@ -1102,7 +1102,11 @@ for more details on the API.
 ## QuantileDiscretizer
 
 `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
-categorical features. The number of bins is set by the `numBuckets` parameter.
+categorical features. The number of bins is set by the `numBuckets` parameter. It is possible
+that the number of buckets used will be less than this value, for example, if there are too few
+distinct values of the input to create enough distinct quantiles. Note also that NaN values are
+handled specially and placed into their own bucket. For example, if 4 buckets are used, then
+non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
 The bin ranges are chosen using an approximate algorithm (see the documentation for
 [approxQuantile](api/scala/index.html#org.apache.spark.sql.DataFrameStatFunctions) for a
 detailed description). The precision of the approximation can be controlled with the
@@ -1327,10 +1331,16 @@ for more details on the API.
 ## ChiSqSelector
 
 `ChiSqSelector` stands for Chi-Squared feature selection. It operates on labeled data with
-categorical features. ChiSqSelector orders features based on a
-[Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test)
-from the class, and then filters (selects) the top features which the class label depends on the
-most. This is akin to yielding the features with the most predictive power.
+categorical features. ChiSqSelector uses the
+[Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test) to decide which
+features to choose. It supports three selection methods: `KBest`, `Percentile` and `FPR`:
+
+* `KBest` chooses the `k` top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
+* `Percentile` is similar to `KBest` but chooses a fraction of all features instead of a fixed number.
+* `FPR` chooses all features whose false positive rate meets some threshold.
+
+By default, the selection method is `KBest`, the default number of top features is 50. User can use
+`setNumTopFeatures`, `setPercentile` and `setAlpha` to set different selection methods.
 
 **Examples**
 
