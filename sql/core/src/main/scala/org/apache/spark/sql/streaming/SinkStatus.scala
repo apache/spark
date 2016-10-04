@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.streaming.Sink
  * @since 2.0.0
  */
 @Experimental
-case class SinkStatus private[sql](
+case class SinkStatus private(
     val description: String,
     val offsetDesc: String,
     val outputRate: Double)

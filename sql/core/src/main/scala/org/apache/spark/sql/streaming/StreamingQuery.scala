@@ -66,7 +66,7 @@ trait StreamingQuery {
    * Returns the current status of the query.
    * @since 2.1.0
    */
-  def queryStatus: StreamingQueryInfo
+  def status: StreamingQueryInfo
 
   /**
    * Returns current status of all the sources.

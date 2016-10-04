@@ -31,7 +31,6 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
-import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
@@ -69,6 +68,12 @@ class StreamExecution(
 
   private val startLatch = new CountDownLatch(1)
   private val terminationLatch = new CountDownLatch(1)
+
+  /**
+   * Lock object used to synchronized updates to data structures that are used to report
+   * query status.
+   */
+  private val statusLock = new Object
 
   /**
    * Tracks how much data we have processed and committed to the sink or state store from each
@@ -140,15 +145,15 @@ class StreamExecution(
   /** Whether the query is currently active or not */
   override def isActive: Boolean = state == ACTIVE
 
-  override def queryStatus: StreamingQueryInfo = {
+  override def status: StreamingQueryInfo = statusLock.synchronized {
     this.toInfo
   }
 
   /** Returns current status of all the sources. */
-  override def sourceStatuses: Array[SourceStatus] = {
+  override def sourceStatuses: Array[SourceStatus] = statusLock.synchronized {
     val localAvailableOffsets = availableOffsets
     sources.map(s =>
-      new SourceStatus(
+      SourceStatus(
         s.toString,
         localAvailableOffsets.get(s).map(_.toString),
         streamMetrics.currentSourceInputRate(s),
@@ -158,8 +163,8 @@ class StreamExecution(
   }
 
   /** Returns current status of the sink. */
-  override def sinkStatus: SinkStatus = {
-    new SinkStatus(
+  override def sinkStatus: SinkStatus = statusLock.synchronized {
+    SinkStatus(
       sink.toString,
       committedOffsets.toCompositeOffset(sources).toString,
       streamMetrics.currentOutputRate())
@@ -204,9 +209,11 @@ class StreamExecution(
       SparkSession.setActiveSession(sparkSession)
 
       triggerExecutor.execute(() => {
-        streamMetrics.reportTriggerStarted(currentBatchId)
-        streamMetrics.reportTriggerInfo(STATUS_MESSAGE, "Finding new data from sources")
-        val isTerminated = timeIt(TRIGGER_LATENCY) {
+        statusLock.synchronized {
+          streamMetrics.reportTriggerStarted(currentBatchId)
+          streamMetrics.reportTriggerInfo(STATUS_MESSAGE, "Finding new data from sources")
+        }
+        val isTerminated = reportTimeTaken(TRIGGER_LATENCY) {
           if (isActive) {
             if (currentBatchId < 0) {
               // We'll do this initialization only once
@@ -216,14 +223,18 @@ class StreamExecution(
               constructNextBatch()
             }
             if (dataAvailable) {
-              streamMetrics.reportTriggerInfo(STATUS_MESSAGE, "Processing new data")
-              streamMetrics.reportTriggerInfo(DATA_AVAILABLE, true)
+              statusLock.synchronized {
+                streamMetrics.reportTriggerInfo(DATA_AVAILABLE, true)
+                streamMetrics.reportTriggerInfo(STATUS_MESSAGE, "Processing new data")
+              }
               runBatch()
               // We'll increase currentBatchId after we complete processing current batch's data
               currentBatchId += 1
             } else {
-              streamMetrics.reportTriggerInfo(STATUS_MESSAGE, "No new data")
-              streamMetrics.reportTriggerInfo(DATA_AVAILABLE, false)
+              statusLock.synchronized {
+                streamMetrics.reportTriggerInfo(DATA_AVAILABLE, false)
+                streamMetrics.reportTriggerInfo(STATUS_MESSAGE, "No new data")
+              }
               Thread.sleep(pollingDelayMs)
             }
             true
@@ -231,7 +242,7 @@ class StreamExecution(
             false
           }
         }
-        streamMetrics.reportTriggerFinished()
+        statusLock.synchronized { streamMetrics.reportTriggerFinished() }
         postEvent(new QueryProgress(this.toInfo))
         isTerminated
       })
@@ -265,17 +276,18 @@ class StreamExecution(
   private def populateStartOffsets(): Unit = {
     offsetLog.getLatest() match {
       case Some((batchId, nextOffsets)) =>
-        logInfo(s"Resuming streaming query, starting with batch $batchId")
-        currentBatchId = batchId
-        availableOffsets = nextOffsets.toStreamProgress(sources)
-        logDebug(s"Found possibly uncommitted offsets $availableOffsets")
+        statusLock.synchronized {
+          logInfo(s"Resuming streaming query, starting with batch $batchId")
+          currentBatchId = batchId
+          availableOffsets = nextOffsets.toStreamProgress(sources)
+          logDebug(s"Found possibly uncommitted offsets $availableOffsets")
 
-        offsetLog.get(batchId - 1).foreach {
-          case lastOffsets =>
-            committedOffsets = lastOffsets.toStreamProgress(sources)
-            logDebug(s"Resuming with committed offsets: $committedOffsets")
+          offsetLog.get(batchId - 1).foreach {
+            case lastOffsets =>
+              committedOffsets = lastOffsets.toStreamProgress(sources)
+              logDebug(s"Resuming with committed offsets: $committedOffsets")
+          }
         }
-
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0
@@ -305,13 +317,15 @@ class StreamExecution(
     val hasNewData = {
       awaitBatchLock.lock()
       try {
-        timeIt(GET_OFFSET_LATENCY) {
+        reportTimeTaken(GET_OFFSET_LATENCY) {
           val latestOffsets: Map[Source, Option[Offset]] = uniqueSources.map { s =>
-            timeIt(s, SOURCE_GET_OFFSET_LATENCY) {
+            reportTimeTaken(s, SOURCE_GET_OFFSET_LATENCY) {
               (s, s.getOffset)
             }
           }.toMap
-          availableOffsets ++= latestOffsets.filter { case (s, o) => o.nonEmpty }.mapValues(_.get)
+          statusLock.synchronized {
+            availableOffsets ++= latestOffsets.filter { case (s, o) => o.nonEmpty }.mapValues(_.get)
+          }
         }
 
         if (dataAvailable) {
@@ -325,7 +339,7 @@ class StreamExecution(
       }
     }
     if (hasNewData) {
-      timeIt(OFFSET_WAL_WRITE_LATENCY) {
+      reportTimeTaken(OFFSET_WAL_WRITE_LATENCY) {
         assert(
           offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
           s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
@@ -347,7 +361,7 @@ class StreamExecution(
         awaitBatchLock.unlock()
       }
     }
-    streamMetrics.reportTimestamp(GET_OFFSET_TIMESTAMP)
+    reportTimestamp(GET_OFFSET_TIMESTAMP)
   }
 
   /**
@@ -359,7 +373,7 @@ class StreamExecution(
     // TODO: Move this to IncrementalExecution.
 
     // Request unprocessed data from all sources.
-    val newData = timeIt(GET_BATCH_LATENCY) {
+    val newData = reportTimeTaken(GET_BATCH_LATENCY) {
       availableOffsets.flatMap {
         case (source, available)
           if committedOffsets.get(source).map(_ != available).getOrElse(true) =>
@@ -370,7 +384,7 @@ class StreamExecution(
         case _ => None
       }
     }
-    streamMetrics.reportTimestamp(GET_BATCH_TIMESTAMP)
+    reportTimestamp(GET_BATCH_TIMESTAMP)
 
     // A list of attributes that will need to be updated.
     var replacements = new ArrayBuffer[(Attribute, Attribute)]
@@ -423,7 +437,9 @@ class StreamExecution(
     val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
     logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
     // Update committed offsets.
-    committedOffsets ++= availableOffsets
+    statusLock.synchronized {
+      committedOffsets ++= availableOffsets
+    }
   }
 
   private def postEvent(event: StreamingQueryListener.Event) {
@@ -569,36 +585,48 @@ class StreamExecution(
     val sourceToNumInputRows = StreamExecution.getNumInputRowsFromTrigger(
       triggerExecutionPlan, triggerLogicalPlan, sourceToDataframe)
     val numOutputRows = triggerExecutionPlan.metrics.get("numOutputRows").map(_.value)
-    streamMetrics.reportNumRows(sourceToNumInputRows, numOutputRows)
-
     val stateNodes = triggerExecutionPlan.collect {
-      case p if p.isInstanceOf[StateStoreSaveExec] => p }
-    stateNodes.zipWithIndex.foreach { case (s, i) =>
-      streamMetrics.reportTriggerInfo(NUM_TOTAL_STATE_ROWS(i + 1),
-        s.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L))
-      streamMetrics.reportTriggerInfo(NUM_UPDATED_STATE_ROWS(i + 1),
-        s.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L))
+      case p if p.isInstanceOf[StateStoreSaveExec] => p
+    }
+    statusLock.synchronized {streamMetrics.reportNumRows(sourceToNumInputRows, numOutputRows)
+      stateNodes.zipWithIndex.foreach { case (s, i) =>
+        streamMetrics.reportTriggerInfo(
+          NUM_TOTAL_STATE_ROWS(i + 1),
+          s.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L))
+        streamMetrics.reportTriggerInfo(
+          NUM_UPDATED_STATE_ROWS(i + 1),
+          s.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L))
+      }
     }
   }
 
-  private def timeIt[T](triggerInfoKey: String)(body: => T): T = {
+  private def reportTimeTaken[T](triggerInfoKey: String)(body: => T): T = {
     val startTime = triggerClock.getTimeMillis()
     val result = body
     val endTime = triggerClock.getTimeMillis()
-    streamMetrics.reportLatency(triggerInfoKey, math.max(endTime - startTime, 0))
+    statusLock.synchronized {
+      streamMetrics.reportTriggerInfo(triggerInfoKey, math.max(endTime - startTime, 0))
+    }
     result
   }
 
-  private def timeIt[T](source: Source, triggerInfoKey: String)(body: => T): T = {
+  private def reportTimeTaken[T](source: Source, triggerInfoKey: String)(body: => T): T = {
     val startTime = triggerClock.getTimeMillis()
     val result = body
     val endTime = triggerClock.getTimeMillis()
-    streamMetrics.reportLatency(source, triggerInfoKey, math.max(endTime - startTime, 0))
+    statusLock.synchronized {
+      streamMetrics.reportSourceTriggerInfo(
+        source, triggerInfoKey, math.max(endTime - startTime, 0))
+    }
     result
+  }
+
+  private def reportTimestamp(string: String): Unit = statusLock.synchronized {
+    streamMetrics.reportTriggerInfo(string, triggerClock.getTimeMillis)
   }
 
   private def toInfo: StreamingQueryInfo = {
-    new StreamingQueryInfo(
+    StreamingQueryInfo(
       this.name,
       this.id,
       triggerClock.getTimeMillis(),

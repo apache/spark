@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.streaming.Source
  * @since 2.0.0
  */
 @Experimental
-case class SourceStatus private[sql](
+case class SourceStatus private(
     val description: String,
     val offsetDesc: Option[String],
     val inputRate: Double,

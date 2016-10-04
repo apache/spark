@@ -85,18 +85,6 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
     reportTriggerInfo(START_TIMESTAMP, currentTriggerStartTimestamp)
   }
 
-  def reportTimestamp(key: String): Unit = synchronized {
-    triggerInfo.put(key, triggerClock.getTimeMillis().toString)
-  }
-
-  def reportLatency(key: String, latencyMs: Long): Unit = synchronized {
-    triggerInfo.put(key, latencyMs.toString)
-  }
-
-  def reportLatency(source: Source, key: String, latencyMs: Long): Unit = synchronized {
-    sourceTriggerInfo(source).put(key, latencyMs.toString)
-  }
-
   def reportTriggerInfo[T](key: String, value: T): Unit = synchronized {
     triggerInfo.put(key, value.toString)
   }

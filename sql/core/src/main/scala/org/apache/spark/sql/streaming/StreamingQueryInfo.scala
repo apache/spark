@@ -30,7 +30,7 @@ import org.apache.spark.annotation.Experimental
  * @param sinkStatus The current status of the [[StreamingQuery]]'s sink.
  */
 @Experimental
-case class StreamingQueryInfo private[sql](
+case class StreamingQueryInfo private(
   val name: String,
   val id: Long,
   val timestamp: Long,

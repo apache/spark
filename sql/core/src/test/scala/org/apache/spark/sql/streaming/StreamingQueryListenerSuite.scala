@@ -340,12 +340,12 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   private val testQueryInfo: StreamingQueryInfo = {
-    new StreamingQueryInfo(
+    StreamingQueryInfo(
       "name", 1, 123, 1.0, 2.0, 3.0, Some(345),
       Seq(
-        new SourceStatus("source1", Some(LongOffset(0).toString), 0.0, 0.0, Map.empty),
-        new SourceStatus("source2", Some(LongOffset(1).toString), 1.0, 2.0, Map("a" -> "b"))),
-      new SinkStatus("sink", CompositeOffset(None :: None :: Nil).toString, 2.0),
+        SourceStatus("source1", Some(LongOffset(0).toString), 0.0, 0.0, Map.empty),
+        SourceStatus("source2", Some(LongOffset(1).toString), 1.0, 2.0, Map("a" -> "b"))),
+      SinkStatus("sink", CompositeOffset(None :: None :: Nil).toString, 2.0),
       Map("a" -> "b"))
   }
 
