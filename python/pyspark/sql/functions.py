@@ -1724,6 +1724,29 @@ def json_tuple(col, *fields):
     return Column(jc)
 
 
+@since(2.1)
+def from_json(col, schema, options={}):
+    """
+    Parses a column containing a JSON string into a [[StructType]] with the
+    specified schema. Returns `null`, in the case of an unparseable string.
+
+    :param col: string column in json format
+    :param schema: a StructType to use when parsing the json column
+    :param options: options to control parsing. accepts the same options as the json datasource
+
+    >>> from pyspark.sql.types import *
+    >>> data = [(1, '''{"a": 1}''')]
+    >>> schema = StructType([StructField("a", IntegerType())])
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=Row(a=1))]
+    """
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.from_json(_to_java_column(col), schema.json(), options)
+    return Column(jc)
+
+
 @since(1.5)
 def size(col):
     """
