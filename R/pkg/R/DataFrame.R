@@ -2625,10 +2625,10 @@ setMethod("write.df",
           signature(df = "SparkDataFrame"),
           function(df, path = NULL, source = NULL, mode = "error", ...) {
             if (!is.null(path) && !is.character(path)) {
-              stop("path should be charactor, null or omitted.")
+              stop("path should be charactor, NULL or omitted.")
             }
             if (!is.null(source) && !is.character(source)) {
-              stop("source should be character, null or omitted. It is the datasource specified ",
+              stop("source should be character, NULL or omitted. It is the datasource specified ",
                    "in 'spark.sql.sources.default' configuration by default.")
             }
             if (!is.character(mode)) {

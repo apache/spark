@@ -2549,14 +2549,15 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
   # This tests if the exception is thrown from JVM not from SparkR side.
   # It makes sure that we can omit path argument in write.df API and then it calls
   # DataFrameWriter.save() without path.
-  expect_error(write.df(df, source = "csv"), "'path' is not specified")
+  expect_error(write.df(df, source = "csv"),
+               "Error in save : illegal argument - 'path' is not specified")
 
   # Arguments checking in R side.
   expect_error(write.df(df, "data.tmp", source = c(1, 2)),
-               paste("source should be character, null or omitted. It is the datasource specified",
+               paste("source should be character, NULL or omitted. It is the datasource specified",
                      "in 'spark.sql.sources.default' configuration by default."))
   expect_error(write.df(df, path = c(3)),
-               "path should be charactor, null or omitted.")
+               "path should be charactor, NULL or omitted.")
   expect_error(write.df(df, mode = TRUE),
                "mode should be charactor or omitted. It is 'error' by default.")
 })
@@ -2566,14 +2567,15 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
   # It makes sure that we can omit path argument in read.df API and then it calls
   # DataFrameWriter.load() without path.
   expect_error(read.df(source = "json"),
-               "Unable to infer schema for JSON at . It must be specified manually")
-  expect_error(read.df("arbitrary_path"), "Path does not exist:")
+               paste("Error in loadDF : analysis error - Unable to infer schema for JSON at .",
+                     "It must be specified manually"))
+  expect_error(read.df("arbitrary_path"), "Error in loadDF : analysis error - Path does not exist")
 
   # Arguments checking in R side.
   expect_error(read.df(path = c(3)),
-               "path should be charactor, null or omitted.")
+               "path should be charactor, NULL or omitted.")
   expect_error(read.df(jsonPath, source = c(1, 2)),
-               paste("source should be character, null or omitted. It is the datasource specified",
+               paste("source should be character, NULL or omitted. It is the datasource specified",
                      "in 'spark.sql.sources.default' configuration by default."))
 })
 
