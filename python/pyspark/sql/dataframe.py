@@ -85,6 +85,26 @@ class DataFrame(object):
             self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
         return self._lazy_rdd
 
+    @since(2.1)
+    def name(self):
+        """
+        Return the name of this Dataset.
+        """
+        n = self._jdf.name()
+        if n:
+            return n
+
+    @ignore_unicode_prefix
+    @since(2.1)
+    def setName(self, name):
+        """
+        >>> df = sc.parallelize(["bar"]).toDF()
+        >>> df.setName("DF1").name()
+        u'DF1'
+        """
+        self._jdf.setName(name)
+        return self
+
     @property
     @since("1.3.1")
     def na(self):

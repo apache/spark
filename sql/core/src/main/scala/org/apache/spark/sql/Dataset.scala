@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
@@ -166,6 +166,17 @@ class Dataset[T] private[sql](
 
   def this(sqlContext: SQLContext, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
     this(sqlContext.sparkSession, logicalPlan, encoder)
+  }
+
+  /** A friendly name for this Dataset */
+  @Since("2.1.0")
+  var name: String = null
+
+  /** Assign a name to this Dataset */
+  @Since("2.1.0")
+  def setName(_name: String): this.type = {
+    name = _name
+    this
   }
 
   @transient private[sql] val logicalPlan: LogicalPlan = {
@@ -318,6 +329,9 @@ class Dataset[T] private[sql](
   }
 
   override def toString: String = {
+    if (name != null) {
+      return name
+    }
     try {
       val builder = new StringBuilder
       val fields = schema.take(2).map {
