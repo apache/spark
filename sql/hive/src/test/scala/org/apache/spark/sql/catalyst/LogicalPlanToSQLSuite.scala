@@ -45,7 +45,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   // Used for generating new query answer files by saving
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
-  private val goldenSQLPath = getClass.getClassLoader.getResource("sqlgen").getPath
+  private val goldenSQLPath = getPath("sqlgen")
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()

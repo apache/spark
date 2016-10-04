@@ -17,7 +17,6 @@
 
 package org.apache.spark.ui
 
-import java.io.File
 import java.net.{BindException, ServerSocket}
 import java.net.URI
 import javax.servlet.http.HttpServletRequest
@@ -54,8 +53,7 @@ class UISuite extends SparkFunSuite {
   }
 
   private def sslEnabledConf(): (SparkConf, SSLOptions) = {
-    val keyStoreFile = getClass.getClassLoader.getResource("spark.keystore").getFile
-    val keyStoreFilePath = new File(keyStoreFile).getCanonicalPath
+    val keyStoreFilePath = getPath("spark.keystore")
     val conf = new SparkConf()
       .set("spark.ssl.ui.enabled", "true")
       .set("spark.ssl.ui.keyStore", keyStoreFilePath)

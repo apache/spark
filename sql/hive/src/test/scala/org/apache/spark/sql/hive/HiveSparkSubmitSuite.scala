@@ -152,7 +152,7 @@ class HiveSparkSubmitSuite
       case v if v.startsWith("2.10") || v.startsWith("2.11") => v.substring(0, 4)
       case x => throw new Exception(s"Unsupported Scala Version: $x")
     }
-    val jarDir = getClass.getClassLoader.getResource("regression-test-SPARK-8489").getPath
+    val jarDir = getPath("regression-test-SPARK-8489")
     val testJar = s"$jarDir/test-$version.jar"
     val args = Seq(
       "--conf", "spark.ui.enabled=false",
