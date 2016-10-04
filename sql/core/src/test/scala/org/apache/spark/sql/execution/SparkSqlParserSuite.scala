@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.{DescribeFunctionCommand, DescribeTableCommand,
   ShowFunctionsCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, CreateTempViewUsing}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 /**
@@ -124,6 +124,32 @@ class SparkSqlParserSuite extends PlanTest {
       provider: String = "parquet",
       options: Map[String, String] = Map.empty): LogicalPlan = {
     CreateTempViewUsing(TableIdentifier(table, database), schema, replace, provider, options)
+  }
+
+  private def createTable(
+      table: String,
+      database: Option[String] = None,
+      tableType: CatalogTableType = CatalogTableType.MANAGED,
+      storage: CatalogStorageFormat = CatalogStorageFormat.empty.copy(
+        inputFormat = HiveSerDe.sourceToSerDe("textfile").get.inputFormat,
+        outputFormat = HiveSerDe.sourceToSerDe("textfile").get.outputFormat),
+      schema: StructType = new StructType,
+      provider: Option[String] = Some("hive"),
+      partitionColumnNames: Seq[String] = Seq.empty,
+      comment: Option[String] = None,
+      mode: SaveMode = SaveMode.ErrorIfExists,
+      query: Option[LogicalPlan] = None): CreateTable = {
+    CreateTable(
+      CatalogTable(
+        identifier = TableIdentifier(table, database),
+        tableType = tableType,
+        storage = storage,
+        schema = schema,
+        provider = provider,
+        partitionColumnNames = partitionColumnNames,
+        comment = comment
+      ), mode, query
+    )
   }
 
   test("create table using - createTableHeader") {
