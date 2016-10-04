@@ -343,7 +343,7 @@ varargsToStrEnv <- function(...) {
     value <- pairs[[name]]
     if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
       stop(paste0("Unsupported type for ", name, " : ", class(value),
-           ". Supported types are logical, numeric, character and null."))
+           ". Supported types are logical, numeric, character and NULL."))
     }
     if (is.logical(value)) {
       env[[name]] <- tolower(as.character(value))
