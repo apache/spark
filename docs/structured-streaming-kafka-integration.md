@@ -190,7 +190,7 @@ The rest configurations are optional:
   as you expected.</td>
 </tr>
 <tr>
-  <td>kafka.consumer.poll.timeoutMs</td>
+  <td>kafkaConsumer.pollTimeoutMs</td>
   <td>long</td>
   <td>512</td>
   <td>The timeout in milliseconds to poll data from Kafka in executors.</td>
