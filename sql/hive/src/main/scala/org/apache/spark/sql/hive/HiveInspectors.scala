@@ -319,6 +319,8 @@ private[hive] trait HiveInspectors {
         withNullSafe(o => getTimestampWritable(o))
       case _: TimestampObjectInspector =>
         withNullSafe(o => DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]))
+      case _: VoidObjectInspector =>
+        (_: Any) => null // always be null for void object inspector
     }
 
     case soi: StandardStructObjectInspector =>
