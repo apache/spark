@@ -306,7 +306,7 @@ class ParquetFileFormat
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key,
-      sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+      sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis)
 
     // Try to push down filters when filter push-down is enabled.
     val pushed =

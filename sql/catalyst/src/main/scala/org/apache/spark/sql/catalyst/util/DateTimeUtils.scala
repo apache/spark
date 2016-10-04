@@ -258,7 +258,7 @@ object DateTimeUtils {
   /*
    * Converts millseconds since epoc to SQLTimestamp.
    */
-  def fromMillis(millis: SQLTimestamp): Long = {
+  def fromMillis(millis: Long): SQLTimestamp = {
     millis * 1000L
   }
 
