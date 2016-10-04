@@ -93,7 +93,7 @@ private[kafka010] case class KafkaSource(
     sourceOptions.getOrElse("fetchOffset.numRetries", "3").toInt
 
   private val offsetFetchAttemptIntervalMs =
-    sourceOptions.getOrElse("fetchOffset.retry.intervalMs", "10").toLong
+    sourceOptions.getOrElse("fetchOffset.retryIntervalMs", "10").toLong
 
   /**
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the

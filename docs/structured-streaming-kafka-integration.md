@@ -3,9 +3,7 @@ layout: global
 title: Structured Streaming + Kafka Integration Guide (Kafka broker version 0.10.0 or higher)
 ---
 
-Structured Streaming integration for Kafka 0.10 to poll data from Kafka. It provides simple parallelism,
-1:1 correspondence between Kafka partitions and Spark partitions. The source will cache the Kafka
-consumer in executors and try the best to schedule the same Kafka topic partition to the same executor.
+Structured Streaming integration for Kafka 0.10 to poll data from Kafka.
 
 ### Linking
 For Scala/Java applications using SBT/Maven project definitions, link your application with the following artifact:
@@ -148,7 +146,30 @@ Each row in the source has the following schema:
 </tr>
 </table>
 
-Right now, the Kafka source has the following Spark's specific options.
+The following options should be set for the Kafka source.
+
+<table class="table">
+<tr><th>Option</th><th>value</th><th>meaning</th></tr>
+<tr>
+  <td>subscribe</td>
+  <td>A comma-separated list of topics</td>
+  <td>The topic list to subscribe. Only one of "subscribe" and "subscribePattern" options can be
+  specified for Kafka source.</td>
+</tr>
+<tr>
+  <td>subscribePattern</td>
+  <td>Java regex string</td>
+  <td>The pattern used to subscribe the topic. Only one of "subscribe" and "subscribePattern"
+  options can be specified for Kafka source.</td>
+</tr>
+<tr>
+  <td>kafka.bootstrap.servers</td>
+  <td>A comma-separated list of host:port</td>
+  <td>The Kafka "bootstrap.servers" configuration.</td>
+</tr>
+</table>
+
+The rest configurations are optional:
 
 <table class="table">
 <tr><th>Option</th><th>value</th><th>default</th><th>meaning</th></tr>
@@ -161,25 +182,12 @@ Right now, the Kafka source has the following Spark's specific options.
   uery is started, and that resuming will always pick up from where the query left off.</td>
 </tr>
 <tr>
-  <td>failOnCorruptMetadata</td>
+  <td>failOnDataLoss</td>
   <td>[true, false]</td>
   <td>true</td>
-  <td>Whether to fail the query when metadata is corrupt (e.g., topics are deleted, or offsets are 
-  out of range), which may lost data.</td>
-</tr>
-<tr>
-  <td>subscribe</td>
-  <td>A comma-separated list of topics</td>
-  <td>(none)</td>
-  <td>The topic list to subscribe. Only one of "subscribe" and "subscribePattern" options can be 
-  specified for Kafka source.</td>
-</tr>
-<tr>
-  <td>subscribePattern</td>
-  <td>Java regex string</td>
-  <td>(none)</td>
-  <td>The pattern used to subscribe the topic. Only one of "subscribe" and "subscribePattern" 
-  options can be specified for Kafka source.</td>
+  <td>Whether to fail the query when it's possible that data is lost (e.g., topics are deleted, or 
+  offsets are out of range). This may be a false alarm. You can disable it when it doesn't work
+  as you expected.</td>
 </tr>
 <tr>
   <td>kafka.consumer.poll.timeoutMs</td>
@@ -194,7 +202,7 @@ Right now, the Kafka source has the following Spark's specific options.
   <td>Number of times to retry before giving up fatch Kafka latest offsets.</td>
 </tr>
 <tr>
-  <td>fetchOffset.retry.intervalMs</td>
+  <td>fetchOffset.retryIntervalMs</td>
   <td>long</td>
   <td>10</td>
   <td>milliseconds to wait before retrying to fetch Kafka offsets</td>

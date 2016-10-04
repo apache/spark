@@ -489,21 +489,21 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
    * Creates a stress test that randomly starts/stops/adds data/checks the result.
    *
    * @param ds a dataframe that executes + 1 on a stream of integers, returning the result
-   * @param preparedActions actions need to run before starting the stress test.
+   * @param prepareActions actions need to run before starting the stress test.
    * @param addData an add data action that adds the given numbers to the stream, encoding them
    *                as needed
    * @param iterations the iteration number
    */
   def runStressTest(
       ds: Dataset[Int],
-      preparedActions: Seq[StreamAction],
+      prepareActions: Seq[StreamAction],
       addData: (Seq[Int], Boolean) => StreamAction,
       iterations: Int): Unit = {
     implicit val intEncoder = ExpressionEncoder[Int]()
     var dataPos = 0
     var running = true
     val actions = new ArrayBuffer[StreamAction]()
-    actions ++= preparedActions
+    actions ++= prepareActions
 
     def addCheck() = { actions += CheckAnswer(1 to dataPos: _*) }
 
