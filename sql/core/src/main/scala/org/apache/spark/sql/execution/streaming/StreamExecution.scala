@@ -207,7 +207,7 @@ class StreamExecution(
       })
     } catch {
       case _: InterruptedException if state == TERMINATED => // interrupted by stop()
-      case NonFatal(e) =>
+      case e if NonFatal(e) || e.isInstanceOf[NoClassDefFoundError] =>
         streamDeathCause = new StreamingQueryException(
           this,
           s"Query $name terminated with exception: ${e.getMessage}",

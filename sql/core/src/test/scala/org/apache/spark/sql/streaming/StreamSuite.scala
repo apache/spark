@@ -236,6 +236,26 @@ class StreamSuite extends StreamTest {
     }
   }
 
+  test("NoClassDefFoundError from an incompatible source") {
+    val brokenSource = new Source {
+      override def getOffset: Option[Offset] = {
+        throw new NoClassDefFoundError
+      }
+
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        throw new NoClassDefFoundError
+      }
+
+      override def schema: StructType = StructType(Array(StructField("value", IntegerType)))
+
+      override def stop(): Unit = {}
+    }
+    val df = Dataset[Int](sqlContext.sparkSession, StreamingExecutionRelation(brokenSource))
+    testStream(df)(
+      ExpectFailure[NoClassDefFoundError]()
+    )
+  }
+
   test("output mode API in Scala") {
     val o1 = OutputMode.Append
     assert(o1 === InternalOutputModes.Append)
