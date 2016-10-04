@@ -59,8 +59,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext
   with ResetSystemProperties {
 
-  private val logDir = new File("src/test/resources/spark-events")
-  private val expRoot = new File("src/test/resources/HistoryServerExpectations/")
+  private val logDir = new File(getClass.getClassLoader.getResource("spark-events").getPath)
+  private val expRoot =
+    new File(getClass.getClassLoader.getResource("HistoryServerExpectations").getPath)
 
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null
