@@ -698,7 +698,7 @@ class SparseVector(Vector):
                 "Indices must be of type integer, got type %s" % type(index))
 
         if index >= self.size or index < -self.size:
-            raise ValueError("Index %d out of bounds." % index)
+            raise IndexError("Index %d out of bounds." % index)
         if index < 0:
             index += self.size
 
@@ -945,10 +945,10 @@ class DenseMatrix(Matrix):
     def __getitem__(self, indices):
         i, j = indices
         if i < 0 or i >= self.numRows:
-            raise ValueError("Row index %d is out of range [0, %d)"
+            raise IndexError("Row index %d is out of range [0, %d)"
                              % (i, self.numRows))
         if j >= self.numCols or j < 0:
-            raise ValueError("Column index %d is out of range [0, %d)"
+            raise IndexError("Column index %d is out of range [0, %d)"
                              % (j, self.numCols))
 
         if self.isTransposed:
@@ -1075,10 +1075,10 @@ class SparseMatrix(Matrix):
     def __getitem__(self, indices):
         i, j = indices
         if i < 0 or i >= self.numRows:
-            raise ValueError("Row index %d is out of range [0, %d)"
+            raise IndexError("Row index %d is out of range [0, %d)"
                              % (i, self.numRows))
         if j < 0 or j >= self.numCols:
-            raise ValueError("Column index %d is out of range [0, %d)"
+            raise IndexError("Column index %d is out of range [0, %d)"
                              % (j, self.numCols))
 
         # If a CSR matrix is given, then the row index should be searched
