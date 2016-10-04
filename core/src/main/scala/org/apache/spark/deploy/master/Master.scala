@@ -637,6 +637,14 @@ private[deploy] class Master(
       }
       freeWorkers = freeWorkers.filter(canLaunchExecutor)
     }
+
+    // Check to see if we managed to launch the requested number of executors
+    val numExecutorsLaunched = assignedExecutors.sum
+    if(numExecutorsLaunched != app.executorLimit) {
+      logWarning(s"Failed to launch the requested number of executors due to resource limits : " +
+        s"only $numExecutorsLaunched executors instead of ${app.executorLimit}")
+    }
+
     assignedCores
   }
 
