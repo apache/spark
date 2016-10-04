@@ -2646,7 +2646,7 @@ setMethod("write.df",
             write <- callJMethod(write, "format", source)
             write <- callJMethod(write, "mode", jmode)
             write <- callJMethod(write, "options", options)
-            write <- tryCatch(callJMethod(write, "save"), error = captureJVMException)
+            write <- handledCallJMethod(write, "save")
           })
 
 #' @rdname write.df

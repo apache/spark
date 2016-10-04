@@ -167,10 +167,13 @@ test_that("convertToJSaveMode", {
 })
 
 test_that("captureJVMException", {
-  expect_error(tryCatch(callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getSQLDataType",
+  method <- "getSQLDataType"
+  expect_error(tryCatch(callJStatic("org.apache.spark.sql.api.r.SQLUtils", method,
                                     "unknown"),
-                        error = captureJVMException),
-               "illegal argument - Invalid type unknown")
+                        error = function(e) {
+                          captureJVMException(e, method)
+                        }),
+               "Error in getSQLDataType : illegal argument - Invalid type unknown")
 })
 
 test_that("hashCode", {

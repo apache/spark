@@ -791,13 +791,12 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.string
   }
   if (!is.null(schema)) {
     stopifnot(class(schema) == "structType")
-    sdf <- tryCatch(callJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession,
-                                source, schema$jobj, options),
-                    error = captureJVMException)
+    method <- "loadDF"
+    sdf <- handledCallJStatic("org.apache.spark.sql.api.r.SQLUtils", method, sparkSession,
+                              source, schema$jobj, options)
   } else {
-    sdf <- tryCatch(callJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession,
-                                source, options),
-                    error = captureJVMException)
+    sdf <- handledCallJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession,
+                              source, options)
   }
   dataFrame(sdf)
 }
