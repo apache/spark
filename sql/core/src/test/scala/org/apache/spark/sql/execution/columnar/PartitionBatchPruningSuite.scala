@@ -71,6 +71,10 @@ class PartitionBatchPruningSuite
     }, 5).toDF()
     pruningStringData.createOrReplaceTempView("pruningStringData")
     spark.catalog.cacheTable("pruningStringData")
+
+    // Trigger the cache of the tables to enable eager partition pruning.
+    pruningData.count()
+    pruningStringData.count()
   }
 
   override protected def afterEach(): Unit = {

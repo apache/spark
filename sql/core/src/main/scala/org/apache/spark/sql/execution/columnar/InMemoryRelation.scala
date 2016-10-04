@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.TaskContext
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -63,8 +64,9 @@ case class InMemoryRelation(
     @transient child: SparkPlan,
     tableName: Option[String])(
     @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
-    val batchStats: CollectionAccumulator[InternalRow] =
-      child.sqlContext.sparkContext.collectionAccumulator[InternalRow])
+    // Accumulator tracking (partitionId, batchStats) for each CachedBatch
+    val batchStats: CollectionAccumulator[(Int, InternalRow)] =
+      child.sqlContext.sparkContext.collectionAccumulator[(Int, InternalRow)])
   extends logical.LeafNode with MultiInstanceRelation {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
@@ -87,7 +89,7 @@ case class InMemoryRelation(
           partitionStatistics.schema)
 
       val sizeInBytes =
-        batchStats.value.asScala.map(row => sizeOfRow.eval(row).asInstanceOf[Long]).sum
+        batchStats.value.asScala.map(_._2).map(row => sizeOfRow.eval(row).asInstanceOf[Long]).sum
       Statistics(sizeInBytes = sizeInBytes)
     }
   }
@@ -98,9 +100,14 @@ case class InMemoryRelation(
     buildBuffers()
   }
 
-  def recache(): Unit = {
-    _cachedColumnBuffers.unpersist()
+  def unpersist(blocking: Boolean = true): Unit = {
+    batchStats.reset()
+    _cachedColumnBuffers.unpersist(blocking)
     _cachedColumnBuffers = null
+  }
+
+  def recache(): Unit = {
+    unpersist(true)
     buildBuffers()
   }
 
@@ -142,7 +149,7 @@ case class InMemoryRelation(
           val stats = InternalRow.fromSeq(columnBuilders.map(_.columnStats.collectedStatistics)
             .flatMap(_.values))
 
-          batchStats.add(stats)
+          batchStats.add((TaskContext.get().partitionId(), stats))
           CachedBatch(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
           }, stats)

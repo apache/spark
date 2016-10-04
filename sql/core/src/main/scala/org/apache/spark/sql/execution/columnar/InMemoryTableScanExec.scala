@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import scala.collection.JavaConverters._
+
+import org.apache.spark.rdd.EmptyRDD
+import org.apache.spark.rdd.PartitionPruningRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -130,12 +134,37 @@ case class InMemoryTableScanExec(
     val schema = relation.partitionStatistics.schema
     val schemaIndex = schema.zipWithIndex
     val relOutput: AttributeSeq = relation.output
-    val buffers = relation.cachedColumnBuffers
+    val partitionFilter = newPredicate(
+      partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+      schema)
+
+    val buffers = if (inMemoryPartitionPruningEnabled && !relation.batchStats.value.isEmpty) {
+      val validPartitions = relation.batchStats.value.asScala
+        .filter(batchStat => partitionFilter(batchStat._2))
+        .map(_._1)
+        .distinct
+      if (validPartitions.isEmpty) {
+        sparkContext.emptyRDD[CachedBatch]
+      } else {
+        PartitionPruningRDD.create[CachedBatch](relation.cachedColumnBuffers,
+          index => {
+            if (validPartitions.contains(index)) {
+              true
+            } else {
+              logInfo(s"Skipping partition $index because all cached batches will be pruned")
+              false
+            }
+          })
+      }
+    } else {
+      relation.cachedColumnBuffers
+    }
 
     buffers.mapPartitionsInternal { cachedBatchIterator =>
-      val partitionFilter = newPredicate(
-        partitionFilters.reduceOption(And).getOrElse(Literal(true)),
-        schema)
+      if (enableAccumulators) {
+        // Mark any partition as a read partition
+        readPartitions.add(1)
+      }
 
       // Find the ordinals and data types of the requested columns.
       val (requestedColumnIndices, requestedColumnDataTypes) =
@@ -147,13 +176,16 @@ case class InMemoryTableScanExec(
       val cachedBatchesToScan =
         if (inMemoryPartitionPruningEnabled) {
           cachedBatchIterator.filter { cachedBatch =>
+            val partitionFilter = newPredicate(
+              partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+              schema)
             if (!partitionFilter(cachedBatch.stats)) {
               def statsString: String = schemaIndex.map {
                 case (a, i) =>
                   val value = cachedBatch.stats.get(i, a.dataType)
                   s"${a.name}: $value"
               }.mkString(", ")
-              logInfo(s"Skipping partition based on stats $statsString")
+              logInfo(s"Skipping batch based on stats $statsString")
               false
             } else {
               true
@@ -178,9 +210,6 @@ case class InMemoryTableScanExec(
       }.toArray
       val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
       columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray)
-      if (enableAccumulators && columnarIterator.hasNext) {
-        readPartitions.add(1)
-      }
       columnarIterator
     }
   }
