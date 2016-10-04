@@ -40,25 +40,23 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
         status
       }
     }
+
+    val numApps = Option(limit).map(_.toInt).getOrElse(Integer.MAX_VALUE)
     val includeCompleted = adjStatus.contains(ApplicationStatus.COMPLETED)
     val includeRunning = adjStatus.contains(ApplicationStatus.RUNNING)
-    val appList = allApps.filter { app =>
+    allApps.filter { app =>
       val anyRunning = app.attempts.exists(!_.completed)
       // if any attempt is still running, we consider the app to also still be running
       val statusOk = (!anyRunning && includeCompleted) ||
         (anyRunning && includeRunning)
+
       // keep the app if *any* attempts fall in the right time window
       val dateOk = app.attempts.exists { attempt =>
         attempt.startTime.getTime >= minDate.timestamp &&
           attempt.startTime.getTime <= maxDate.timestamp
       }
       statusOk && dateOk
-    }
-    if (limit != null) {
-      appList.take(limit)
-    } else {
-      appList
-    }
+    }.take(numApps)
   }
 }
 
