@@ -29,7 +29,7 @@ class StreamingMetricsSuite extends SparkFunSuite {
   // To make === between double tolerate inexact values
   implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
 
-  test("rate and latency - basic life cycle") {
+  test("rates and latencies - basic life cycle") {
     val sm = newStreamMetrics(source)
     assert(sm.currentInputRate() === 0.0)
     assert(sm.currentProcessingRate() === 0.0)
@@ -82,7 +82,7 @@ class StreamingMetricsSuite extends SparkFunSuite {
     assert(sm.currentLatency() === None)
   }
 
-  test("rate and latency - after trigger with no data") {
+  test("rates and latencies - after trigger with no data") {
     val sm = newStreamMetrics(source)
     // Trigger 1 with data
     sm.reportTriggerStarted(1)

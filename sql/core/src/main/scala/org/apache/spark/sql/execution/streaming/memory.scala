@@ -82,7 +82,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     }
   }
 
-  override def toString: String = s"MemorySource[${Utils.truncatedString(output, ",")}]"
+  override def toString: String = s"MemoryStream[${Utils.truncatedString(output, ",")}]"
 
   override def getOffset: Option[Offset] = synchronized {
     if (batches.isEmpty) {
@@ -95,19 +95,20 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   /**
    * Returns the data that is between the offsets (`start`, `end`].
    */
-  override def getBatch(start: Option[Offset], end: Offset): DataFrame = synchronized {
+  override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     val startOrdinal =
       start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1
     val endOrdinal = end.asInstanceOf[LongOffset].offset.toInt + 1
-    val selectedBatches = synchronized { batches.slice(startOrdinal, endOrdinal) }
-    if (selectedBatches.isEmpty) { sys.error("No data selected!") }
+    val newBlocks = synchronized { batches.slice(startOrdinal, endOrdinal) }
 
-    val batchData = selectedBatches.flatMap(_.collect())
-    logInfo(s"MemoryBatch [$startOrdinal, $endOrdinal]: ${batchData.mkString(", ")}")
-
-    // Merge data into a single logical plan node so that StreamExecution can
-    // match the number of leaf nodes with the number of sources for getting metrics
-    sqlContext.createDataset(batchData).toDF()
+    logDebug(
+      s"MemoryBatch [$startOrdinal, $endOrdinal]: ${newBlocks.flatMap(_.collect()).mkString(", ")}")
+    newBlocks
+      .map(_.toDF())
+      .reduceOption(_ union _)
+      .getOrElse {
+        sys.error("No data selected!")
+      }
   }
 
   override def stop() {}
@@ -169,8 +170,6 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
       logDebug(s"Skipping already committed batch: $batchId")
     }
   }
-
-  override def toString: String = s"MemorySink"
 }
 
 /**

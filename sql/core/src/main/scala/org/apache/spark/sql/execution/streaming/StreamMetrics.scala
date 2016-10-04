@@ -23,6 +23,9 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.{Source => CodahaleSource}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.util.Clock
 
 class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceName: String)
@@ -227,6 +230,7 @@ object StreamMetrics extends Logging {
 
     def stop(): Unit = { rate = None }
   }
+
 
   val TRIGGER_ID = "triggerId"
   val ACTIVE = "isActive"

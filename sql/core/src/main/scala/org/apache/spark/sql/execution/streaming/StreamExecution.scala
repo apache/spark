@@ -31,6 +31,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
@@ -390,14 +391,14 @@ class StreamExecution(
 
     // Rewire the plan to use the new attributes that were returned by the source.
     val replacementMap = AttributeMap(replacements)
-    val newPlan = withNewSources transformAllExpressions {
+    val triggerLogicalPlan = withNewSources transformAllExpressions {
       case a: Attribute if replacementMap.contains(a) => replacementMap(a)
     }
 
     val optimizerStart = System.nanoTime()
     lastExecution = new IncrementalExecution(
       sparkSession,
-      newPlan,
+      triggerLogicalPlan,
       outputMode,
       checkpointFile("state"),
       currentBatchId)
@@ -409,7 +410,7 @@ class StreamExecution(
     val nextBatch =
       new Dataset(sparkSession, lastExecution, RowEncoder(lastExecution.analyzed.schema))
     sink.addBatch(currentBatchId, nextBatch)
-    reportMetrics(executedPlan)
+    reportMetrics(executedPlan, triggerLogicalPlan, newData)
 
     awaitBatchLock.lock()
     try {
@@ -555,23 +556,23 @@ class StreamExecution(
      """.stripMargin
   }
 
-  private def reportMetrics(executedPlan: SparkPlan): Unit = {
-    val execPlanLeaves = executedPlan.collect { case p if p.children.isEmpty => p }
-    val sourceToNumInputRows = if (execPlanLeaves.size == sources.size) {
-      sources.zip(execPlanLeaves).flatMap { case (s, leaf) =>
-        leaf.metrics.get("numOutputRows").map { m => s -> m.value }
-      }.toMap
-    } else {
-      logWarning(
-        "Could not report metrics as number of sources did not match number of leaves in" +
-          s" execution plan: sources(${sources.size}) = ${sources.mkString(", ")};" +
-          s" leaves(${execPlanLeaves.size}) = ${execPlanLeaves.mkString(",")}")
-      Map.empty[Source, Long]
-    }
-    val numOutputRows = executedPlan.metrics.get("numOutputRows").map(_.value)
+  /**
+   * Report row metrics of the executed trigger
+   * @param triggerExecutionPlan Execution plan of the trigger
+   * @param triggerLogicalPlan Logical plan of the trigger, generated from the query logical plan
+   * @param sourceToDataframe Source to DataFrame returned by the source.getBatch in this trigger
+   */
+  private def reportMetrics(
+      triggerExecutionPlan: SparkPlan,
+      triggerLogicalPlan: LogicalPlan,
+      sourceToDataframe: Map[Source, DataFrame]): Unit = {
+    val sourceToNumInputRows = StreamExecution.getNumInputRowsFromTrigger(
+      triggerExecutionPlan, triggerLogicalPlan, sourceToDataframe)
+    val numOutputRows = triggerExecutionPlan.metrics.get("numOutputRows").map(_.value)
     streamMetrics.reportNumRows(sourceToNumInputRows, numOutputRows)
 
-    val stateNodes = executedPlan.collect { case p if p.isInstanceOf[StateStoreSaveExec] => p }
+    val stateNodes = triggerExecutionPlan.collect {
+      case p if p.isInstanceOf[StateStoreSaveExec] => p }
     stateNodes.zipWithIndex.foreach { case (s, i) =>
       streamMetrics.reportTriggerInfo(NUM_TOTAL_STATE_ROWS(i + 1),
         s.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L))
@@ -616,8 +617,62 @@ class StreamExecution(
   case object TERMINATED extends State
 }
 
-object StreamExecution {
+object StreamExecution extends Logging {
   private val _nextId = new AtomicLong(0)
+
+  /**
+   * Get the number of input rows from the executed plan of the trigger
+   * @param triggerExecutionPlan Execution plan of the trigger
+   * @param triggerLogicalPlan Logical plan of the trigger, generated from the query logical plan
+   * @param sourceToDataframe Source to DataFrame returned by the source.getBatch in this trigger
+   */
+  def getNumInputRowsFromTrigger(
+      triggerExecutionPlan: SparkPlan,
+      triggerLogicalPlan: LogicalPlan,
+      sourceToDataframe: Map[Source, DataFrame]): Map[Source, Long] = {
+
+    // We want to associate execution plan leaves to sources that generate them, so that we match
+    // the their metrics (e.g. numOutputRows) to the sources. To do this we do the following.
+    // Consider the translation from the streaming logical plan to the final executed plan.
+    //
+    //  streaming logical plan (with sources) <==> trigger's logical plan <==> executed plan
+    //
+    // 1. We keep track of streaming sources associated with each leaf in the trigger's logical plan
+    //    - Each logical plan leaf will be associated with a single streaming source.
+    //    - There can be multiple logical plan leaves associated a streaming source.
+    //    - There can be leaves not associated with any streaming source, because they were
+    //      generated from a batch source (e.g. stream-batch joins)
+    //
+    // 2. Assuming that the executed plan has same number of leaves in the same order as that of
+    //    the trigger logical plan, we associate executed plan leaves with corresponding
+    //    streaming sources.
+    //
+    // 3. For each source, we sum the metrics of the associated execution plan leaves.
+    //
+    val logicalPlanLeafToSource = sourceToDataframe.flatMap { case (source, df) =>
+      df.logicalPlan.collectLeaves().map { leaf => leaf -> source }
+    }
+    val allLogicalPlanLeaves = triggerLogicalPlan.collectLeaves() // includes non-streaming sources
+    val allExecPlanLeaves = triggerExecutionPlan.collectLeaves()
+    if (allLogicalPlanLeaves.size == allExecPlanLeaves.size) {
+      val execLeafToSource = allLogicalPlanLeaves.zip(allExecPlanLeaves).flatMap {
+        case (lp, ep) => logicalPlanLeafToSource.get(lp).map { source => ep -> source }
+      }
+      val sourceToNumInputRows = execLeafToSource.map { case (execLeaf, source) =>
+        val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
+        source -> numRows
+      }
+      sourceToNumInputRows.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
+    } else {
+      def toString[T](seq: Seq[T]): String = s"(size = ${seq.size}), ${seq.mkString(", ")}"
+      logWarning(
+        "Could not report metrics as number leaves in trigger logical plan did not match that" +
+          s" of the execution plan:\n" +
+          s"logical plan leaves: ${toString(allLogicalPlanLeaves)}\n" +
+          s"execution plan leaves: ${toString(allExecPlanLeaves)}\n")
+      Map.empty
+    }
+  }
 
   def nextId: Long = _nextId.getAndIncrement()
 }

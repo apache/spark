@@ -17,12 +17,18 @@
 
 package org.apache.spark.sql.streaming
 
-import org.scalactic.TolerantNumerics
-import org.scalatest.BeforeAndAfter
+import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.scalactic.TolerantNumerics
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
+
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.util.{ManualClock, Utils}
+import org.apache.spark.util.Utils
 
 
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
@@ -104,7 +110,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
     )
   }
 
-  testQuietly("statuses") {
+  testQuietly("query statuses") {
     val inputData = MemoryStream[Int]
 
     // This is make the sure the execution plan ends with a node (filter) that supports
@@ -199,6 +205,43 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
       AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
       AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
       AssertOnQuery(_.sinkStatus.outputRate === 0.0)
+    )
+  }
+
+  // This tests whether row stats are correctly associated with streaming sources when
+  // streaming plan also has batch sources
+  test("calculating input rows with mixed batch and streaming sources") {
+
+    // A streaming source that returns a pre-determined dataframe for a trigger
+    // Creates multiple leaves for a streaming source
+    val streamingTriggerDF = spark.createDataset(1 to 5).toDF.union(
+      spark.createDataset(6 to 10).toDF)
+    val streamingSource = new Source() {
+      override def schema: StructType = StructType(Seq(StructField("value", IntegerType)))
+      override def getOffset: Option[Offset] = Some(LongOffset(0))
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = streamingTriggerDF
+      override def stop(): Unit = {}
+    }
+    val streamingInputDF = StreamingExecutionRelation(streamingSource).toDF("value")
+    val staticInputDF = spark.createDataFrame(Seq(1 -> "1", 2 -> "2")).toDF("value", "anotherValue")
+
+    // streaming trigger input has 10 items, static input has 2 items, input row calculation for
+    // the source should return 10
+    spark.conf.set("spark.sql.codegen.wholeStage", false)
+    testStream(streamingInputDF.join(staticInputDF, "value"))(
+      StartStream(),
+      AssertOnQuery { q =>
+        eventually(Timeout(streamingTimeout)) {
+          assert(q.queryStatus.sinkStatus.offsetDesc
+            === CompositeOffset.fill(LongOffset(0)).toString)
+        }
+        val numInputRows = StreamExecution.getNumInputRowsFromTrigger(
+          q.lastExecution.executedPlan,
+          q.lastExecution.logical,
+          Map(streamingSource -> streamingTriggerDF))
+        assert(numInputRows === Map(streamingSource -> 10)) // streaming data has 10 items
+        true
+      }
     )
   }
 
