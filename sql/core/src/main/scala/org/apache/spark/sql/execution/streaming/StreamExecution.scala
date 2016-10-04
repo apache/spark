@@ -224,7 +224,7 @@ class StreamExecution(
             } else {
               streamMetrics.reportTriggerInfo(STATUS_MESSAGE, "No new data")
               streamMetrics.reportTriggerInfo(DATA_AVAILABLE, false)
-              Thread.sleep(100)
+              Thread.sleep(pollingDelayMs)
             }
             true
           } else {
