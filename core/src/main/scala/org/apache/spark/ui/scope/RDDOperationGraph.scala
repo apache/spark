@@ -26,7 +26,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.StageInfo
-import org.apache.spark.storage.{RDDInfo, StorageLevel}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * A representation of a generic cluster graph used for storing information on RDD operations.
