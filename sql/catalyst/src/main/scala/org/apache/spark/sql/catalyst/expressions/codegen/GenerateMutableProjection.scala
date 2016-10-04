@@ -104,13 +104,14 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
         private Object[] references;
         private InternalRow mutableRow;
         ${ctx.declareMutableStates()}
-        ${ctx.declareAddedFunctions()}
 
         public SpecificMutableProjection(Object[] references) {
           this.references = references;
           mutableRow = new $genericMutableRowType(${expressions.size});
           ${ctx.initMutableStates()}
         }
+
+        ${ctx.declareAddedFunctions()}
 
         public ${classOf[BaseMutableProjection].getName} target(InternalRow row) {
           mutableRow = row;
