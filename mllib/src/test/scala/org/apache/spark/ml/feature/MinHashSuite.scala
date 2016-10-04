@@ -54,8 +54,8 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(mh, df, key, 20,
       singleProbing = true)
-    assert(precision >= 0.7)
-    assert(recall >= 0.7)
+    assert(precision >= 0.6)
+    assert(recall >= 0.6)
   }
 
   test("approxSimilarityJoin for minhash on different dataset") {
