@@ -374,7 +374,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest with BeforeAndAfter {
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
         .option("kafka.metadata.max.age.ms", "1")
         .option("subscribePattern", "stress.*")
-        .option("failOnCorruptMetadata", "false")
+        .option("failOnDataLoss", "false")
         .load()
         .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
         .as[(String, String)]

@@ -82,7 +82,7 @@ private[kafka010] case class KafkaSource(
     executorKafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String],
     metadataPath: String,
-    failOnCorruptMetadata: Boolean)
+    failOnDataLoss: Boolean)
   extends Source with Logging {
 
   private val sc = sqlContext.sparkContext
@@ -156,12 +156,12 @@ private[kafka010] case class KafkaSource(
     if (newPartitionOffsets.keySet != newPartitions) {
       // We cannot get from offsets for some partitions. It means they got deleted.
       val deletedPartitions = newPartitions.diff(newPartitionOffsets.keySet)
-      reportCorruptMetadata(
+      reportDataLoss(
         s"Cannot find earliest offsets of ${deletedPartitions}. Some data may have been missed")
     }
     logInfo(s"Partitions added: $newPartitionOffsets")
     newPartitionOffsets.filter(_._2 != 0).foreach { case (p, o) =>
-      reportCorruptMetadata(
+      reportDataLoss(
         s"Added partition $p starts from $o instead of 0. Some data may have been missed")
     }
 
@@ -198,7 +198,7 @@ private[kafka010] case class KafkaSource(
       KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
     }.filter { range =>
       if (range.untilOffset < range.fromOffset) {
-        reportCorruptMetadata(s"Partition ${range.topicPartition}'s offset was changed from " +
+        reportDataLoss(s"Partition ${range.topicPartition}'s offset was changed from " +
           s"${range.fromOffset} to ${range.untilOffset}, some data may have been missed")
         false
       } else {
@@ -325,11 +325,11 @@ private[kafka010] case class KafkaSource(
   }
 
   /**
-   * If `failOnCorruptMetadata` is true, this method will throw an `IllegalStateException`.
+   * If `failOnDataLoss` is true, this method will throw an `IllegalStateException`.
    * Otherwise, just log a warning.
    */
-  private def reportCorruptMetadata(message: String): Unit = {
-    if (failOnCorruptMetadata) {
+  private def reportDataLoss(message: String): Unit = {
+    if (failOnDataLoss) {
       throw new IllegalStateException(message)
     } else {
       logWarning(message)

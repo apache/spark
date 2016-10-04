@@ -138,8 +138,8 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
         throw new IllegalArgumentException("Unknown option")
     }
 
-    val failOnCorruptMetadata =
-      caseInsensitiveParams.getOrElse(FAIL_ON_CORRUPT_METADATA_OPTION_KEY, "true").toBoolean
+    val failOnDataLoss =
+      caseInsensitiveParams.getOrElse(FAIL_ON_DATA_LOSS_OPTION_KEY, "true").toBoolean
 
     new KafkaSource(
       sqlContext,
@@ -147,7 +147,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
       kafkaParamsForExecutors,
       parameters,
       metadataPath,
-      failOnCorruptMetadata)
+      failOnDataLoss)
   }
 
   private def validateOptions(parameters: Map[String, String]): Unit = {
@@ -278,5 +278,5 @@ private[kafka010] object KafkaSourceProvider {
   private val STRATEGY_OPTION_KEYS = Set("subscribe", "subscribepattern")
   private val STARTING_OFFSET_OPTION_KEY = "startingoffset"
   private val STARTING_OFFSET_OPTION_VALUES = Set("earliest", "latest")
-  private val FAIL_ON_CORRUPT_METADATA_OPTION_KEY = "failoncorruptmetadata"
+  private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
 }
