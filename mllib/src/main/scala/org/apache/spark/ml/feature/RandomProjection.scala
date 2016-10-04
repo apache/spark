@@ -34,7 +34,8 @@ import org.apache.spark.ml.util.Identifiable
 private[ml] trait RandomProjectionParams extends Params {
   @Since("2.1.0")
   val bucketLength: DoubleParam = new DoubleParam(this, "bucketLength",
-    "the length of each hash bucket", ParamValidators.gt(0))
+    "the length of each hash bucket, a larger bucket lowers the false negative rate.",
+    ParamValidators.gt(0))
 
   /** @group getParam */
   @Since("2.1.0")
@@ -46,7 +47,7 @@ private[ml] trait RandomProjectionParams extends Params {
  */
 @Experimental
 @Since("2.1.0")
-private[ml] class RandomProjectionModel(
+class RandomProjectionModel private[ml] (
     @Since("2.1.0") override val uid: String,
     @Since("2.1.0") val randUnitVectors: Array[Vector])
   extends LSHModel[RandomProjectionModel] with RandomProjectionParams {

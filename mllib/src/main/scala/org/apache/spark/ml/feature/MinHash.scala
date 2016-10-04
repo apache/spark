@@ -28,7 +28,7 @@ import org.apache.spark.ml.util.Identifiable
  */
 @Experimental
 @Since("2.1.0")
-private[ml] class MinHashModel(override val uid: String, hashFunctions: Seq[Int => Long])
+class MinHashModel private[ml] (override val uid: String, hashFunctions: Seq[Int => Long])
   extends LSHModel[MinHashModel] {
 
   @Since("2.1.0")
