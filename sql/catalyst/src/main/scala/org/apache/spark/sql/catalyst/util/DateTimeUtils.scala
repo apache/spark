@@ -44,6 +44,7 @@ object DateTimeUtils {
   final val JULIAN_DAY_OF_EPOCH = 2440588
   final val SECONDS_PER_DAY = 60 * 60 * 24L
   final val MICROS_PER_SECOND = 1000L * 1000L
+  final val MILLIS_PER_SECOND = 1000L
   final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
   final val MICROS_PER_DAY = MICROS_PER_SECOND * SECONDS_PER_DAY
 
@@ -242,15 +243,23 @@ object DateTimeUtils {
    * precision, so this conversion is lossy.
    */
   def toMillis(us: SQLTimestamp): Long = {
-    val julian_us = us + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
-    julian_us / 1000L
+    var millis = us / 1000L
+
+    // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
+    // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
+    // In millis precision the above needs to be represented as (-157700927877)
+
+    if (us < 0 && (us % MILLIS_PER_SECOND < 0)) {
+      millis = millis - 1
+    }
+    millis
   }
 
   /*
    * Converts millseconds since epoc to SQLTimestamp.
    */
   def fromMillis(millis: SQLTimestamp): Long = {
-    (millis - JULIAN_DAY_OF_EPOCH * MILLIS_PER_DAY) * 1000L
+    millis * 1000L
   }
 
   /**

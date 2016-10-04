@@ -201,13 +201,21 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         sql("create table ts (c1 int, c2 timestamp) using parquet")
         sql("insert into ts values (1, '2016-01-01 10:11:12.123456')")
         sql("insert into ts values (2, null)")
-        sql("insert into ts values (3, '1965-01-01 10:11:12.123456')")
+        sql("insert into ts values (3, '1965-01-01 10:11:12.125456')")
+        sql("insert into ts values (4, '1965-01-01 10:11:12.125')")
+        sql("insert into ts values (5, '1965-01-01 10:11:12.1')")
+        sql("insert into ts values (6, '1965-01-01 10:11:12.123456789')")
+        sql("insert into ts values (7, '0001-01-01 00:00:00.000000')")
         checkAnswer(
           sql("select * from ts"),
           Seq(
             Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123")),
             Row(2, null),
-            Row(3, Timestamp.valueOf("1965-01-01 10:11:12.123"))))
+            Row(3, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+            Row(4, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+            Row(5, Timestamp.valueOf("1965-01-01 10:11:12.1")),
+            Row(6, Timestamp.valueOf("1965-01-01 10:11:12.123")),
+            Row(7, Timestamp.valueOf("0001-01-01 00:00:00.000"))))
       }
     }
   }
