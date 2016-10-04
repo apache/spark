@@ -285,7 +285,6 @@ class GenerateColumnAccessor(conf: SparkConf)
     val confVar = ctx.addReferenceObj("conf", conf, classOf[SparkConf].getName)
 
     val setters = ctx.splitExpressions(
-      "row",
       columnTypes.zipWithIndex.map { case (dt, index) =>
         val setter = dt match {
           case NullType =>
@@ -333,7 +332,9 @@ class GenerateColumnAccessor(conf: SparkConf)
             }
            """
         }
-      }
+      },
+      "apply",
+      Seq.empty
     )
 
     val codeBody = s"""
@@ -403,7 +404,6 @@ class GenerateColumnAccessor(conf: SparkConf)
         public InternalRow next() {
           bufferHolder.reset();
           rowWriter.zeroOutNullBytes();
-          InternalRow row = null;
           ${setters}
           unsafeRow.setTotalSize(bufferHolder.totalSize());
           rowIdx += 1;

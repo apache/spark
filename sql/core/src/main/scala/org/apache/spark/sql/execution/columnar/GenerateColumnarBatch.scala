@@ -75,7 +75,6 @@ class GenerateColumnarBatch(
 
     val colStatVars = (0 to numColumns - 1).map(i => ctx.freshName("colStat" + i))
     val colStatCode = ctx.splitExpressions(
-      "row",
       (schemas.fields zip colStatVars).zipWithIndex.map {
         case ((field, varName), i) =>
           val (columnStatsCls, arg) = field.dataType match {
@@ -94,17 +93,19 @@ class GenerateColumnarBatch(
           }
         ctx.addMutableState(columnStatsCls, varName, "")
         s"$varName = new $columnStatsCls$arg; statsArray[$i] = $varName;\n"
-      }
+      },
+      "apply",
+      Seq.empty
     )
 
     val populateColumnVectorsCode = ctx.splitExpressions(
-      rowVar,
       (schemas.fields zip colStatVars).zipWithIndex.map {
         case ((field, colStatVar), i) =>
           GenerateColumnarBatch.putColumnCode(ctx, field.dataType, field.nullable,
             batchVar, rowVar, rowNumVar, colStatVar, i, numBytesVar).trim + "\n"
       },
-      Seq(("ColumnarBatch", batchVar), ("int", rowNumVar))
+      "apply",
+      Seq(("InternalRow", rowVar), ("ColumnarBatch", batchVar), ("int", rowNumVar))
     )
 
     val confVar = ctx.addReferenceObj("conf", conf, classOf[SparkConf].getName)
@@ -128,9 +129,11 @@ class GenerateColumnarBatch(
       }
 
       class GeneratedColumnarBatchIterator extends ${classOf[ColumnarBatchIterator].getName} {
+        private Object[] references;
         ${ctx.declareMutableStates()}
 
         public GeneratedColumnarBatchIterator(Object[] references) {
+          this.references = references;
           ${ctx.initMutableStates()}
         }
 
@@ -138,7 +141,6 @@ class GenerateColumnarBatch(
 
         $columnStatsCls[] statsArray = new $columnStatsCls[$numColumns];
         private void allocateColumnStats() {
-          InternalRow row = null;
           ${colStatCode.trim}
         }
 
