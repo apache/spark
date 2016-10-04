@@ -159,7 +159,7 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
     }
   }
 
-  override lazy val statistics: Statistics = {
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics = {
     val leftSize = left.statistics.sizeInBytes
     val rightSize = right.statistics.sizeInBytes
     val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
@@ -184,7 +184,7 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
       left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
       duplicateResolved
 
-  override lazy val statistics: Statistics = {
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics = {
     left.statistics.copy()
   }
 }
@@ -224,7 +224,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     children.length > 1 && childrenResolved && allChildrenCompatible
   }
 
-  override lazy val statistics: Statistics = {
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics = {
     val sizeInBytes = children.map(_.statistics.sizeInBytes).sum
     Statistics(sizeInBytes = sizeInBytes)
   }
@@ -333,15 +333,16 @@ case class Join(
     case _ => resolvedExceptNatural
   }
 
-  override lazy val statistics: Statistics = joinType match {
-    case LeftAnti | LeftSemi =>
-      // LeftSemi and LeftAnti won't ever be bigger than left
-      left.statistics.copy()
-    case _ =>
-      // make sure we don't propagate isBroadcastable in other joins, because
-      // they could explode the size.
-      super.statistics.copy(isBroadcastable = false)
-  }
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics =
+    joinType match {
+      case LeftAnti | LeftSemi =>
+        // LeftSemi and LeftAnti won't ever be bigger than left
+        left.statistics.copy()
+      case _ =>
+        // make sure we don't propagate isBroadcastable in other joins, because
+        // they could explode the size.
+        super.statistics.copy(isBroadcastable = false)
+    }
 }
 
 /**
@@ -351,7 +352,8 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   // set isBroadcastable to true so the child will be broadcasted
-  override lazy val statistics: Statistics = super.statistics.copy(isBroadcastable = true)
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics =
+    super.statistics.copy(isBroadcastable = true)
 }
 
 case class InsertIntoTable(
@@ -462,7 +464,7 @@ case class Range(
 
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
-  override lazy val statistics: Statistics = {
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements
     Statistics( sizeInBytes = sizeInBytes )
   }
@@ -495,7 +497,7 @@ case class Aggregate(
     child.constraints.union(getAliasedConstraints(nonAgg))
   }
 
-  override lazy val statistics: Statistics = {
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics = {
     if (groupingExpressions.isEmpty) {
       super.statistics.copy(sizeInBytes = 1)
     } else {
@@ -595,7 +597,7 @@ case class Expand(
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
-  override lazy val statistics: Statistics = {
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics = {
     val sizeInBytes = super.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
@@ -667,7 +669,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
       case _ => None
     }
   }
-  override lazy val statistics: Statistics = {
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = if (limit == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
@@ -688,7 +690,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
       case _ => None
     }
   }
-  override lazy val statistics: Statistics = {
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = if (limit == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
@@ -727,7 +729,7 @@ case class Sample(
 
   override def output: Seq[Attribute] = child.output
 
-  override lazy val statistics: Statistics = {
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics = {
     val ratio = upperBound - lowerBound
     // BigInt can't multiply with Double
     var sizeInBytes = child.statistics.sizeInBytes * (ratio * 100).toInt / 100
@@ -774,5 +776,6 @@ case object OneRowRelation extends LeafNode {
    *
    * [[LeafNode]]s must override this.
    */
-  override lazy val statistics: Statistics = Statistics(sizeInBytes = 1)
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics =
+    Statistics(sizeInBytes = 1)
 }

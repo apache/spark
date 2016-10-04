@@ -98,7 +98,8 @@ case class LogicalRDD(
 
   override def producedAttributes: AttributeSet = outputSet
 
-  @transient override lazy val statistics: Statistics = Statistics(
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics =
+    Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
     sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)

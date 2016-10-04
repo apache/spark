@@ -22,7 +22,7 @@ import java.io.IOException
 import scala.collection.JavaConverters._
 
 import com.google.common.base.Objects
-import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.FieldSchema
@@ -32,9 +32,9 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.hive.client.HiveClient
 
@@ -110,39 +110,201 @@ private[hive] case class MetastoreRelation(
     new HiveTable(tTable)
   }
 
-  @transient override lazy val statistics: Statistics = Statistics(
+  @transient def getSize(): Long = {
+    val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
+    val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)
+
+    // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
+    // relatively cheap if parameters for the table are populated into the metastore.
+    // Besides `totalSize`, there are also `numFiles`, `numRows`, `rawDataSize` keys
+    // (see StatsSetupConst in Hive) that we can look at in the future.
+
+    // When table is external,`totalSize` is always zero, which will influence join strategy
+    // so when `totalSize` is zero, use `rawDataSize` instead
+    // if the size is still less than zero, we try to get the file size from HDFS.
+    // given this is only needed for optimization, if the HDFS call fails we return the default.
+    if (totalSize != null && totalSize.toLong > 0L) {
+      totalSize.toLong
+    } else if (rawDataSize != null && rawDataSize.toLong > 0) {
+      rawDataSize.toLong
+    } else if (sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+      try {
+        val hadoopConf = sparkSession.sessionState.newHadoopConf()
+        val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
+        fs.getContentSummary(hiveQlTable.getPath).getLength
+      } catch {
+        case e: IOException =>
+          logWarning("Failed to get table size from hdfs.", e)
+          sparkSession.sessionState.conf.defaultSizeInBytes
+      }
+    } else {
+      sparkSession.sessionState.conf.defaultSizeInBytes
+    }
+  }
+
+  @transient override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None):
+  Statistics = Statistics(
     sizeInBytes = {
-      val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
-      val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)
-      // TODO: check if this estimate is valid for tables after partition pruning.
-      // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
-      // relatively cheap if parameters for the table are populated into the metastore.
-      // Besides `totalSize`, there are also `numFiles`, `numRows`, `rawDataSize` keys
-      // (see StatsSetupConst in Hive) that we can look at in the future.
       BigInt(
-        // When table is external,`totalSize` is always zero, which will influence join strategy
-        // so when `totalSize` is zero, use `rawDataSize` instead
-        // if the size is still less than zero, we try to get the file size from HDFS.
-        // given this is only needed for optimization, if the HDFS call fails we return the default.
-        if (totalSize != null && totalSize.toLong > 0L) {
-          totalSize.toLong
-        } else if (rawDataSize != null && rawDataSize.toLong > 0) {
-          rawDataSize.toLong
-        } else if (sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+        if (sparkSession.sessionState.conf.prunedPartitionStatsEnabled) {
           try {
-            val hadoopConf = sparkSession.sessionState.newHadoopConf()
-            val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
-            fs.getContentSummary(hiveQlTable.getPath).getLength
+            // Get the immediate parent, if its not a filter we won't do the optimization.
+            // This is rigid for now but easy to traverse up the tree and find all filter blocks.
+            // but need to verify that will still lead to correct behavior.
+            val parentNodes = parents.getOrElse(Seq.empty[LogicalPlan])
+            val filterNode: Option[Filter] =
+              if (parentNodes.isEmpty || !parentNodes.head.isInstanceOf[Filter]) {
+              None
+            } else {
+              Some(parentNodes.head.asInstanceOf[Filter])
+            }
+            filterNode match {
+              case Some(filter) =>
+                val partitionPaths = getPartitionPathFromFilter(filter)
+                if (partitionPaths.nonEmpty) {
+                  val hadoopConf = sparkSession.sessionState.newHadoopConf()
+                  val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
+                  partitionPaths.foldLeft(0L)(
+                    (sum, path) => sum + fs.getContentSummary(path).getLength
+                  )
+                } else {
+                  getSize
+                }
+              case None => getSize
+            }
           } catch {
             case e: IOException =>
               logWarning("Failed to get table size from hdfs.", e)
-              sparkSession.sessionState.conf.defaultSizeInBytes
+              getSize
           }
         } else {
-          sparkSession.sessionState.conf.defaultSizeInBytes
+          getSize
         })
     }
   )
+
+  // Return list of paths for partitions that are valid for this operation, an empty list
+  // if no partition prunning is possible.
+  private def getPartitionPathFromFilter(filter: Filter): Seq[Path] = {
+
+    // TODO: For now just considering equalTO and IN, We could add more operators later.
+
+    // Following is the expected output for different cases:
+    // (p1 = b and p2 = c) or (p1 = d) should yield [p1=b/p2=c, p1=d]
+    // (p1 = b or p2 = c) should yield [p1=b, p2=c]
+    // (p1 = b or p2 = c) and (p3 = d) should yield [p1=b/p3=d, p2=c/p3=d]
+    // (p1 = b or p2 = c) or (p1 = d) should yield [p1=b, p2=c, p1=d]
+    // p1 IN (a,b,c) should yield [p1=a,p1=b,p1=c]
+    // If a column appears in any unsupported expression, we discard it from
+    // size estimate calculation
+    // TODO: We may still return incorrect size estimates due to operators that can add
+    // partition space and are higher up in parse tree so the columns never get blacklisted.
+    // i.e. if we have 'not (partition=1 or partition=2)' current code will provide estimate
+    // based on sizes of partition 1 and 2.
+    var blackListedPartitionColumns: Set[AttributeReference] = Set.empty[AttributeReference]
+
+    def getPartitionInfo(expression: Expression): Seq[Map[AttributeReference, String]] = {
+
+      def getPartitionTuple(attribute: AttributeReference, literal: Literal) = {
+        if (partitionKeys.contains(attribute)) {
+          Seq(Map(attribute -> literal.value.toString))
+        } else {
+          Seq.empty[Map[AttributeReference, String]]
+        }
+      }
+
+      expression match {
+        // Join adds notnull checks for all filter columns,
+        // to avoid blacklisting we handle it by returning empty map.
+        case e: IsNotNull => Seq.empty[Map[AttributeReference, String]]
+
+        // If a partition column appears under Not expression, we black list it.
+        case e: Not =>
+          getPartitionInfo(e.child).foldLeft(blackListedPartitionColumns)(
+            (s, m) => s ++ m.keySet
+          )
+          Seq.empty[Map[AttributeReference, String]]
+
+        case e: EqualTo => (e.left, e.right) match {
+          case (attr : AttributeReference, l: Literal) => getPartitionTuple(attr, l)
+          case (l: Literal, attr : AttributeReference) => getPartitionTuple(attr, l)
+          case _ => getPartitionInfo(e.left) ++ getPartitionInfo(e.right)
+        }
+
+        // In: Only processes a partition in list of literal values.
+        case e: In => (e.value, e.list)
+          if (e.value.isInstanceOf[AttributeReference] &&
+            e.list.filter(!_.isInstanceOf[Literal]).nonEmpty) {
+              e.list.map(literal => getPartitionTuple(e.value.asInstanceOf[AttributeReference],
+                literal.asInstanceOf[Literal])).flatten
+            } else {
+              getPartitionInfo(e.value) ++ e.list.flatMap(getPartitionInfo(_))
+            }
+
+        case e: And =>
+          val right = getPartitionInfo(e.right)
+          val left = getPartitionInfo(e.left)
+
+          if (left.isEmpty) {
+            right
+          } else if (right.isEmpty) {
+            left
+          } else {
+            left.map(lMap => right.map(rMap => if (lMap.keySet.intersect(rMap.keySet).isEmpty) {
+              lMap ++ rMap
+            } else {
+              Map.empty[AttributeReference, String]
+            })).flatten.filter(!_.isEmpty)
+          }
+
+        case e: Or => getPartitionInfo(e.left) ++ getPartitionInfo(e.right)
+
+        case e: AttributeReference =>
+          // If any of our partition keys are part of a filter condition that
+          // we do not handle, we should ignore those columns from size estimation
+          // for correctness.
+          if (partitionKeys.contains(e)) {
+            blackListedPartitionColumns = blackListedPartitionColumns + e
+          }
+          Seq.empty[Map[AttributeReference, String]]
+
+        case ex: Expression =>
+          if (expression.children.nonEmpty) {
+          expression.children.foldLeft(Seq.empty[Map[AttributeReference, String]]) (
+            (r, e) => r ++ getPartitionInfo(e)
+          )
+        } else {
+            Seq.empty[Map[AttributeReference, String]]
+          }
+      }
+    }
+
+    val partitionsWithEqualityCheck = getPartitionInfo(filter.condition).filter(!_.isEmpty)
+
+    // Build partition Paths in the same order as the storage layer, as soon as first
+    // missing partition is found we have to stop.
+    partitionsWithEqualityCheck.map(
+      m => {
+      var missingPartitionCol = false
+      var blacklistedCol = false
+      var partitionPath = hiveQlTable.getPath
+
+      for(partitionKey <- partitionKeys if !missingPartitionCol && !blacklistedCol) {
+         if (m.keySet.contains(partitionKey)) {
+            if (blackListedPartitionColumns.contains(partitionKey)) {
+              blacklistedCol = true
+              partitionPath = hiveQlTable.getPath
+            } else {
+              val path = partitionKey.name + "=" + m.get(partitionKey).get
+              partitionPath = new Path(partitionPath, path)
+            }
+          } else {
+            missingPartitionCol = true
+          }
+        }
+        partitionPath
+    }).filter(!_.equals(hiveQlTable.getPath))
+  }
 
   // When metastore partition pruning is turned off, we cache the list of all partitions to
   // mimic the behavior of Spark < 1.5
