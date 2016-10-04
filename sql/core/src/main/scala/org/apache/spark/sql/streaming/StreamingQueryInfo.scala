@@ -40,5 +40,5 @@ case class StreamingQueryInfo private(
   val latencyMs: Option[Double],
   val sourceStatuses: Seq[SourceStatus],
   val sinkStatus: SinkStatus,
-  val triggerInfo: Map[String, String]
+  val triggerStatus: Map[String, String]
 )

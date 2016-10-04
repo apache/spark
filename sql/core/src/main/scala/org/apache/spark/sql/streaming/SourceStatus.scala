@@ -35,4 +35,4 @@ case class SourceStatus private(
     val offsetDesc: Option[String],
     val inputRate: Double,
     val processingRate: Double,
-    val triggerInfo: Map[String, String])
+    val triggerStatus: Map[String, String])

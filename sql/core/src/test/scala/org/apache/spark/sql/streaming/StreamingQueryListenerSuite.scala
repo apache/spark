@@ -175,28 +175,28 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           // Check the correctness of the trigger info of the first completed batch reported by
           // onQueryProgress
           val status = listener.lastTriggerStatus.get
-          assert(status.triggerInfo("triggerId") == "0")
-          assert(status.triggerInfo("isActive") === "false")
+          assert(status.triggerStatus("triggerId") == "0")
+          assert(status.triggerStatus("isActive") === "false")
 
-          assert(status.triggerInfo("timestamp.triggerStart") === "0")
-          assert(status.triggerInfo("timestamp.afterGetOffset") === "100")
-          assert(status.triggerInfo("timestamp.afterGetBatch") === "300")
-          assert(status.triggerInfo("timestamp.triggerFinish") === "600")
+          assert(status.triggerStatus("timestamp.triggerStart") === "0")
+          assert(status.triggerStatus("timestamp.afterGetOffset") === "100")
+          assert(status.triggerStatus("timestamp.afterGetBatch") === "300")
+          assert(status.triggerStatus("timestamp.triggerFinish") === "600")
 
-          assert(status.triggerInfo("latency.getOffset") === "100")
-          assert(status.triggerInfo("latency.getBatch") === "200")
-          assert(status.triggerInfo("latency.offsetLogWrite") === "0")
-          assert(status.triggerInfo("latency.fullTrigger") === "600")
+          assert(status.triggerStatus("latency.getOffset") === "100")
+          assert(status.triggerStatus("latency.getBatch") === "200")
+          assert(status.triggerStatus("latency.offsetLogWrite") === "0")
+          assert(status.triggerStatus("latency.fullTrigger") === "600")
 
-          assert(status.triggerInfo("numRows.input.total") === "2")
-          assert(status.triggerInfo("numRows.output") === "1")
-          assert(status.triggerInfo("numRows.state.aggregation1.total") === "1")
-          assert(status.triggerInfo("numRows.state.aggregation1.updated") === "1")
+          assert(status.triggerStatus("numRows.input.total") === "2")
+          assert(status.triggerStatus("numRows.output") === "1")
+          assert(status.triggerStatus("numRows.state.aggregation1.total") === "1")
+          assert(status.triggerStatus("numRows.state.aggregation1.updated") === "1")
 
           assert(status.sourceStatuses.size === 1)
-          assert(status.sourceStatuses(0).triggerInfo("triggerId") === "0")
-          assert(status.sourceStatuses(0).triggerInfo("latency.sourceGetOffset") === "100")
-          assert(status.sourceStatuses(0).triggerInfo("numRows.input.source") === "2")
+          assert(status.sourceStatuses(0).triggerStatus("triggerId") === "0")
+          assert(status.sourceStatuses(0).triggerStatus("latency.sourceGetOffset") === "100")
+          assert(status.sourceStatuses(0).triggerStatus("numRows.input.source") === "2")
           true
         },
         CheckAnswer(2)
@@ -362,8 +362,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     /** Get the info of the last trigger that processed data */
     def lastTriggerStatus: Option[StreamingQueryInfo] = synchronized {
       progressStatuses.filter { i =>
-        i.triggerInfo("isActive").toBoolean == false &&
-          i.triggerInfo("isDataAvailable").toBoolean == true
+        i.triggerStatus("isActive").toBoolean == false &&
+          i.triggerStatus("isDataAvailable").toBoolean == true
       }.lastOption
     }
 

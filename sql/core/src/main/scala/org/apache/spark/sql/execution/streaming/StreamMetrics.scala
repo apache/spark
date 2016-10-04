@@ -34,8 +34,8 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
   import StreamMetrics._
 
   // Trigger infos
-  private val triggerInfo = new mutable.HashMap[String, String]
-  private val sourceTriggerInfo = new mutable.HashMap[Source, mutable.HashMap[String, String]]
+  private val triggerStatus = new mutable.HashMap[String, String]
+  private val sourceTriggerStatus = new mutable.HashMap[Source, mutable.HashMap[String, String]]
 
   // Rate estimators for sources and sinks
   private val inputRates = new mutable.HashMap[Source, RateCalculator]
@@ -64,7 +64,7 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
   sources.foreach { s =>
     inputRates.put(s, new RateCalculator)
     processingRates.put(s, new RateCalculator)
-    sourceTriggerInfo.put(s, new mutable.HashMap[String, String])
+    sourceTriggerStatus.put(s, new mutable.HashMap[String, String])
 
     registerGauge(s"inputRate-${s.toString}", () => currentSourceInputRate(s))
     registerGauge(s"processingRate-${s.toString}", () => currentSourceProcessingRate(s))
@@ -75,22 +75,22 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
   def reportTriggerStarted(triggerId: Long): Unit = synchronized {
     numInputRows.clear()
     numOutputRows = None
-    triggerInfo.clear()
-    sourceTriggerInfo.values.foreach(_.clear())
+    triggerStatus.clear()
+    sourceTriggerStatus.values.foreach(_.clear())
 
-    reportTriggerInfo(TRIGGER_ID, triggerId)
-    sources.foreach(s => reportSourceTriggerInfo(s, TRIGGER_ID, triggerId))
-    reportTriggerInfo(ACTIVE, true)
+    reportTriggerStatus(TRIGGER_ID, triggerId)
+    sources.foreach(s => reportSourceTriggerStatus(s, TRIGGER_ID, triggerId))
+    reportTriggerStatus(ACTIVE, true)
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
-    reportTriggerInfo(START_TIMESTAMP, currentTriggerStartTimestamp)
+    reportTriggerStatus(START_TIMESTAMP, currentTriggerStartTimestamp)
   }
 
-  def reportTriggerInfo[T](key: String, value: T): Unit = synchronized {
-    triggerInfo.put(key, value.toString)
+  def reportTriggerStatus[T](key: String, value: T): Unit = synchronized {
+    triggerStatus.put(key, value.toString)
   }
 
-  def reportSourceTriggerInfo[T](source: Source, key: String, value: T): Unit = synchronized {
-    sourceTriggerInfo(source).put(key, value.toString)
+  def reportSourceTriggerStatus[T](source: Source, key: String, value: T): Unit = synchronized {
+    sourceTriggerStatus(source).put(key, value.toString)
   }
 
   def reportNumRows(inputRows: Map[Source, Long], outputRows: Option[Long]): Unit = synchronized {
@@ -101,16 +101,16 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
   def reportTriggerFinished(): Unit = synchronized {
     require(currentTriggerStartTimestamp >= 0)
     val currentTriggerFinishTimestamp = triggerClock.getTimeMillis()
-    reportTriggerInfo(FINISH_TIMESTAMP, currentTriggerFinishTimestamp)
-    reportTriggerInfo(STATUS_MESSAGE, "")
-    reportTriggerInfo(ACTIVE, false)
+    reportTriggerStatus(FINISH_TIMESTAMP, currentTriggerFinishTimestamp)
+    reportTriggerStatus(STATUS_MESSAGE, "")
+    reportTriggerStatus(ACTIVE, false)
 
     // Report number of rows
     val totalNumInputRows = numInputRows.values.sum
-    reportTriggerInfo(NUM_INPUT_ROWS, totalNumInputRows)
-    reportTriggerInfo(NUM_OUTPUT_ROWS, numOutputRows.getOrElse(0))
+    reportTriggerStatus(NUM_INPUT_ROWS, totalNumInputRows)
+    reportTriggerStatus(NUM_OUTPUT_ROWS, numOutputRows.getOrElse(0))
     numInputRows.foreach { case (s, r) =>
-      reportSourceTriggerInfo(s, NUM_SOURCE_INPUT_ROWS, r)
+      reportSourceTriggerStatus(s, NUM_SOURCE_INPUT_ROWS, r)
     }
 
     val currentTriggerDuration = currentTriggerFinishTimestamp - currentTriggerStartTimestamp
@@ -176,10 +176,10 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
 
   def currentLatency(): Option[Double] = synchronized { latency }
 
-  def currentTriggerInfo(): Map[String, String] = synchronized { triggerInfo.toMap }
+  def currentTriggerStatus(): Map[String, String] = synchronized { triggerStatus.toMap }
 
-  def currentSourceTriggerInfo(source: Source): Map[String, String] = synchronized {
-    sourceTriggerInfo(source).toMap
+  def currentSourceTriggerStatus(source: Source): Map[String, String] = synchronized {
+    sourceTriggerStatus(source).toMap
   }
 
   // =========== Other methods ===========

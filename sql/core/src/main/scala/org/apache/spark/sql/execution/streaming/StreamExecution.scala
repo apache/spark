@@ -158,7 +158,7 @@ class StreamExecution(
         localAvailableOffsets.get(s).map(_.toString),
         streamMetrics.currentSourceInputRate(s),
         streamMetrics.currentSourceProcessingRate(s),
-        streamMetrics.currentSourceTriggerInfo(s))
+        streamMetrics.currentSourceTriggerStatus(s))
     ).toArray
   }
 
@@ -211,7 +211,7 @@ class StreamExecution(
       triggerExecutor.execute(() => {
         statusLock.synchronized {
           streamMetrics.reportTriggerStarted(currentBatchId)
-          streamMetrics.reportTriggerInfo(STATUS_MESSAGE, "Finding new data from sources")
+          streamMetrics.reportTriggerStatus(STATUS_MESSAGE, "Finding new data from sources")
         }
         val isTerminated = reportTimeTaken(TRIGGER_LATENCY) {
           if (isActive) {
@@ -224,16 +224,16 @@ class StreamExecution(
             }
             if (dataAvailable) {
               statusLock.synchronized {
-                streamMetrics.reportTriggerInfo(DATA_AVAILABLE, true)
-                streamMetrics.reportTriggerInfo(STATUS_MESSAGE, "Processing new data")
+                streamMetrics.reportTriggerStatus(DATA_AVAILABLE, true)
+                streamMetrics.reportTriggerStatus(STATUS_MESSAGE, "Processing new data")
               }
               runBatch()
               // We'll increase currentBatchId after we complete processing current batch's data
               currentBatchId += 1
             } else {
               statusLock.synchronized {
-                streamMetrics.reportTriggerInfo(DATA_AVAILABLE, false)
-                streamMetrics.reportTriggerInfo(STATUS_MESSAGE, "No new data")
+                streamMetrics.reportTriggerStatus(DATA_AVAILABLE, false)
+                streamMetrics.reportTriggerStatus(STATUS_MESSAGE, "No new data")
               }
               Thread.sleep(pollingDelayMs)
             }
@@ -590,39 +590,39 @@ class StreamExecution(
     }
     statusLock.synchronized {streamMetrics.reportNumRows(sourceToNumInputRows, numOutputRows)
       stateNodes.zipWithIndex.foreach { case (s, i) =>
-        streamMetrics.reportTriggerInfo(
+        streamMetrics.reportTriggerStatus(
           NUM_TOTAL_STATE_ROWS(i + 1),
           s.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L))
-        streamMetrics.reportTriggerInfo(
+        streamMetrics.reportTriggerStatus(
           NUM_UPDATED_STATE_ROWS(i + 1),
           s.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L))
       }
     }
   }
 
-  private def reportTimeTaken[T](triggerInfoKey: String)(body: => T): T = {
+  private def reportTimeTaken[T](triggerStatusKey: String)(body: => T): T = {
     val startTime = triggerClock.getTimeMillis()
     val result = body
     val endTime = triggerClock.getTimeMillis()
     statusLock.synchronized {
-      streamMetrics.reportTriggerInfo(triggerInfoKey, math.max(endTime - startTime, 0))
+      streamMetrics.reportTriggerStatus(triggerStatusKey, math.max(endTime - startTime, 0))
     }
     result
   }
 
-  private def reportTimeTaken[T](source: Source, triggerInfoKey: String)(body: => T): T = {
+  private def reportTimeTaken[T](source: Source, triggerStatusKey: String)(body: => T): T = {
     val startTime = triggerClock.getTimeMillis()
     val result = body
     val endTime = triggerClock.getTimeMillis()
     statusLock.synchronized {
-      streamMetrics.reportSourceTriggerInfo(
-        source, triggerInfoKey, math.max(endTime - startTime, 0))
+      streamMetrics.reportSourceTriggerStatus(
+        source, triggerStatusKey, math.max(endTime - startTime, 0))
     }
     result
   }
 
   private def reportTimestamp(string: String): Unit = statusLock.synchronized {
-    streamMetrics.reportTriggerInfo(string, triggerClock.getTimeMillis)
+    streamMetrics.reportTriggerStatus(string, triggerClock.getTimeMillis)
   }
 
   private def toInfo: StreamingQueryInfo = {
@@ -636,7 +636,7 @@ class StreamExecution(
       streamMetrics.currentLatency,
       this.sourceStatuses,
       this.sinkStatus,
-      streamMetrics.currentTriggerInfo)
+      streamMetrics.currentTriggerStatus)
   }
 
   trait State
