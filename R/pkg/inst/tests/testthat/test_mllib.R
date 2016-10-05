@@ -606,7 +606,7 @@ test_that("spark.logit", {
   blr_fmeasure <- collect(select(blr_summary$fMeasureByThreshold, "threshold", "F-Measure"))
   expect_equal(blr_fmeasure$threshold, c(0.8221347, 0.7884005, 0.6674709, 0.3785437, 0.3434487),
                tolerance = 1e-4)
-  expect_equal(blr_fmeasure$'F-Measure', c(0.5000000, 0.8000000, 0.6666667, 0.8571429, 0.7500000),
+  expect_equal(blr_fmeasure$"F-Measure", c(0.5000000, 0.8000000, 0.6666667, 0.8571429, 0.7500000),
                tolerance = 1e-4)
   blr_precision <- collect(select(blr_summary$precisionByThreshold, "threshold", "precision"))
   expect_equal(blr_precision$precision, c(1.0000000, 1.0000000, 0.6666667, 0.7500000, 0.6000000),
@@ -633,7 +633,7 @@ test_that("spark.logit", {
   data <- as.data.frame(cbind(label, feature1, feature2, feature3, feature4))
   df <- suppressWarnings(createDataFrame(data))
 
-  model <- spark.logit(df, label ~ ., family = "multinomial", thresholds=c(0, 1, 1))
+  model <- spark.logit(df, label ~., family = "multinomial", thresholds=c(0, 1, 1))
   predict1 <- collect(select(predict(model, df), "prediction"))
   expect_equal(predict1$prediction, c(0, 0, 0, 0, 0))
   # Summary of multinomial logistic regression is not implemented yet
