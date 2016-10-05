@@ -221,7 +221,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG}")) {
       throw new IllegalArgumentException(
         s"Kafka option '${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG}' is not supported as keys "
-          + "are deserialized as byte arrays with ByteArrayDeserializer. Use Dataframe operations "
+          + "are deserialized as byte arrays with ByteArrayDeserializer. Use DataFrame operations "
           + "to explicitly deserialize the keys.")
     }
 
@@ -229,7 +229,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
     {
       throw new IllegalArgumentException(
         s"Kafka option '${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG}' is not supported as "
-          + "value are deserialized as byte arrays with ByteArrayDeserializer. Use Dataframe "
+          + "value are deserialized as byte arrays with ByteArrayDeserializer. Use DataFrame "
           + "operations to explicitly deserialize the values.")
     }
 

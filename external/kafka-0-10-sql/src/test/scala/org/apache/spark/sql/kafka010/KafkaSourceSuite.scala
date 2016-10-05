@@ -257,9 +257,10 @@ class KafkaSourceSuite extends KafkaSourceTest {
     testUnsupportedConfig("kafka.key.deserializer")
     testUnsupportedConfig("kafka.value.deserializer")
 
-    // only earliest and latest is supported
     testUnsupportedConfig("kafka.auto.offset.reset", "none")
     testUnsupportedConfig("kafka.auto.offset.reset", "someValue")
+    testUnsupportedConfig("kafka.auto.offset.reset", "earliest")
+    testUnsupportedConfig("kafka.auto.offset.reset", "latest")
   }
 
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"

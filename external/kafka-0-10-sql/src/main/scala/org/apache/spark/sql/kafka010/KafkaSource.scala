@@ -102,9 +102,9 @@ private[kafka010] case class KafkaSource(
   private val consumer = consumerStrategy.createConsumer()
 
   /**
-   * Lazy set initialPartitionOffsets to make sure only call `KafkaConsumer.poll` in
-   * StreamExecutionThread. Otherwise, interrupting a thread running `KafkaConsumer.poll` may hang
-   * forever (KAFKA-1894).
+   * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
+   * called in StreamExecutionThread. Otherwise, interrupting a thread while running
+   * `KafkaConsumer.poll` may hang forever (KAFKA-1894).
    */
   private lazy val initialPartitionOffsets = {
     val metadataLog = new HDFSMetadataLog[KafkaSourceOffset](sqlContext.sparkSession, metadataPath)
@@ -120,7 +120,7 @@ private[kafka010] case class KafkaSource(
 
   /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = {
-    // Make sure initialPartitionOffsets is set
+    // Make sure initialPartitionOffsets is initialized
     initialPartitionOffsets
 
     val offset = KafkaSourceOffset(fetchPartitionOffsets(seekToEnd = true))
@@ -134,7 +134,7 @@ private[kafka010] case class KafkaSource(
    * exclusive.
    */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-    // Make sure initialPartitionOffsets is set
+    // Make sure initialPartitionOffsets is initialized
     initialPartitionOffsets
 
     logInfo(s"GetBatch called with start = $start, end = $end")
@@ -249,7 +249,7 @@ private[kafka010] case class KafkaSource(
   }
 
   /**
-   * Fetch the earliest offsets for newly discovered partitions. The return results may not contain
+   * Fetch the earliest offsets for newly discovered partitions. The return result may not contain
    * some partitions if they are deleted.
    */
   private def fetchNewPartitionEarliestOffsets(

@@ -146,7 +146,7 @@ Each row in the source has the following schema:
 </tr>
 </table>
 
-The following options should be set for the Kafka source.
+The following options must be set for the Kafka source.
 
 <table class="table">
 <tr><th>Option</th><th>value</th><th>meaning</th></tr>
@@ -169,7 +169,7 @@ The following options should be set for the Kafka source.
 </tr>
 </table>
 
-The rest configurations are optional:
+The following configurations are optional:
 
 <table class="table">
 <tr><th>Option</th><th>value</th><th>default</th><th>meaning</th></tr>
@@ -221,9 +221,9 @@ Note that the following Kafka params cannot be set and the Kafka source will thr
  topics/partitions are dynamically subscribed. Note that `startingOffset` only applies when a new
  Streaming query is started, and that resuming will always pick up from where the query left off.
 - **key.deserializer**: Keys are always deserialized as byte arrays with ByteArrayDeserializer. Use 
- Dataframe operations to explicitly deserialize the keys.
+ DataFrame operations to explicitly deserialize the keys.
 - **value.deserializer**: Values are always deserialized as byte arrays with ByteArrayDeserializer. 
- Use Dataframe operations to explicitly deserialize the values.
+ Use DataFrame operations to explicitly deserialize the values.
 - **enable.auto.commit**: Kafka source doesn't commit any offset.
 - **interceptor.classes**: Kafka source always read keys and values as byte arrays. It's not safe to
  use ConsumerInterceptor as it may break the query.
