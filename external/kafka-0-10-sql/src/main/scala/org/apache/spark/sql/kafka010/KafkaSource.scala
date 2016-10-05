@@ -332,7 +332,8 @@ private[kafka010] case class KafkaSource(
    */
   private def reportDataLoss(message: String): Unit = {
     if (failOnDataLoss) {
-      throw new IllegalStateException(message)
+      throw new IllegalStateException(message +
+        ". Set the source option 'failOnDataLoss' to 'false' if you want to ignore these checks.")
     } else {
       logWarning(message)
     }
