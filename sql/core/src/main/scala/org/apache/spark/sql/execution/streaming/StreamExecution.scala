@@ -53,7 +53,7 @@ class StreamExecution(
     val trigger: Trigger,
     val triggerClock: Clock,
     val outputMode: OutputMode)
-  extends StreamingQuery with Logging {
+  extends StreamingQuery with Logging with PeriodicWarning {
 
   import org.apache.spark.sql.streaming.StreamingQueryListener._
   import StreamMetrics._
@@ -629,7 +629,8 @@ class StreamExecution(
         sourceToNumInputRows.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
       } else {
         def toString[T](seq: Seq[T]): String = s"(size = ${seq.size}), ${seq.mkString(", ")}"
-        logDebug(
+        logPeriodicWarning(
+          periodSecs = 60,
           "Could not report metrics as number leaves in trigger logical plan did not match that" +
             s" of the execution plan:\n" +
             s"logical plan leaves: ${toString(allLogicalPlanLeaves)}\n" +

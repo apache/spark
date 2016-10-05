@@ -17,22 +17,23 @@
 
 package org.apache.spark.sql.streaming
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import org.scalactic.TolerantNumerics
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.BeforeAndAfter
-import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.streaming.StreamingQueryListener._
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.util.Utils
 
 
-class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
+class StreamingQuerySuite extends StreamTest
+    with BeforeAndAfter
+    with Logging
+    with PeriodicWarning {
 
   import AwaitTerminationTester._
   import testImplicits._
