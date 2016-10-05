@@ -32,8 +32,9 @@ private[scheduler] class ExecutorFailuresInTaskSet(val node: String) {
   def updateWithFailure(taskIndex: Int, failureExpiryTime: Long): Unit = {
     val (prevFailureCount, prevFailureExpiryTime) =
       taskToFailureCountAndExpiryTime.getOrElse(taskIndex, (0, -1L))
-    assert(failureExpiryTime >= prevFailureExpiryTime)
-    taskToFailureCountAndExpiryTime(taskIndex) = (prevFailureCount + 1, failureExpiryTime)
+    // just in case we encounter non-monotonicity in the clock, take the max time
+    val newExpiryTime = math.max(prevFailureExpiryTime, failureExpiryTime)
+    taskToFailureCountAndExpiryTime(taskIndex) = (prevFailureCount + 1, newExpiryTime)
   }
 
   def numUniqueTasksWithFailures: Int = taskToFailureCountAndExpiryTime.size

@@ -84,7 +84,7 @@ private[spark] class TaskSetManager(
   var totalResultSize = 0L
   var calculatedTasks = 0
 
-  private val taskSetBlacklistOpt: Option[TaskSetBlacklist] = {
+  private val taskSetBlacklistHelperOpt: Option[TaskSetBlacklist] = {
     if (BlacklistTracker.isBlacklistEnabled(conf)) {
       Some(new TaskSetBlacklist(conf, stageId, clock))
     } else {
@@ -264,7 +264,7 @@ private[spark] class TaskSetManager(
   }
 
   private def isTaskBlacklistedOnExecOrNode(index: Int, execId: String, host: String): Boolean = {
-    taskSetBlacklistOpt.exists { blacklist =>
+    taskSetBlacklistHelperOpt.exists { blacklist =>
       blacklist.isNodeBlacklistedForTask(host, index) ||
         blacklist.isExecutorBlacklistedForTask(execId, index)
     }
@@ -412,7 +412,7 @@ private[spark] class TaskSetManager(
       maxLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
-    val offerBlacklisted = taskSetBlacklistOpt.exists { blacklist =>
+    val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
       blacklist.isNodeBlacklistedForTaskSet(host) ||
         blacklist.isExecutorBlacklistedForTaskSet(execId)
     }
@@ -583,7 +583,7 @@ private[spark] class TaskSetManager(
    */
   private[scheduler] def abortIfCompletelyBlacklisted(
       hostToExecutors: HashMap[String, HashSet[String]]): Unit = {
-    taskSetBlacklistOpt.foreach { taskSetBlacklist =>
+    taskSetBlacklistHelperOpt.foreach { taskSetBlacklist =>
       // Only look for unschedulable tasks when at least one executor has registered. Otherwise,
       // task sets will be (unnecessarily) aborted in cases when no executors have registered yet.
       if (hostToExecutors.nonEmpty) {
@@ -786,7 +786,8 @@ private[spark] class TaskSetManager(
     }
 
     if (!isZombie && reason.countTowardsTaskFailures) {
-      taskSetBlacklistOpt.foreach(_.updateBlacklistForFailedTask(info.host, info.executorId, index))
+      taskSetBlacklistHelperOpt.foreach(_.updateBlacklistForFailedTask(
+        info.host, info.executorId, index))
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {

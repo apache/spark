@@ -37,8 +37,8 @@ private[scheduler] object BlacklistTracker extends Logging {
    */
   def isBlacklistEnabled(conf: SparkConf): Boolean = {
     conf.get(config.BLACKLIST_ENABLED) match {
-      case Some(isEnabled) =>
-        isEnabled
+      case Some(enabled) =>
+        enabled
       case None =>
         // if they've got a non-zero setting for the legacy conf, always enable the blacklist,
         // otherwise, use the default based on the cluster-mode (off for local-mode, on otherwise).
