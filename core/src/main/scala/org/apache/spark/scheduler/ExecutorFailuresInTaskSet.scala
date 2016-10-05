@@ -19,8 +19,8 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.HashMap
 
 /**
- * Small helper for tracking failed tasks for blacklisting purposes.  Info on all failures for one
- * task set, within one task set.
+ * Small helper for tracking failed tasks for blacklisting purposes.  Info on all failures on one
+ * executor, within one task set.
  */
 private[scheduler] class ExecutorFailuresInTaskSet(val node: String) {
   /**

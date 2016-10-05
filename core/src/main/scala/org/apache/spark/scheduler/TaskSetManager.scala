@@ -572,6 +572,11 @@ private[spark] class TaskSetManager(
   /**
    * Check whether the given task set has been blacklisted to the point that it can't run anywhere.
    *
+   * It is possible that this taskset has become impossible to schedule *anywhere* due to the
+   * blacklist.  The most common scenario would be if there are fewer executors than
+   * spark.task.maxFailures. We need to detect this so we can fail the task set, otherwise the job
+   * will hang.
+   *
    * There's a tradeoff here: we could make sure all tasks in the task set are schedulable, but that
    * would add extra time to each iteration of the scheduling loop. Here, we take the approach of
    * making sure at least one of the unscheduled tasks is schedulable. This means we may not detect

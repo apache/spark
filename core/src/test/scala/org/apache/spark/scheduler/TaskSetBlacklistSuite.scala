@@ -22,13 +22,20 @@ import org.apache.spark.util.{ManualClock, SystemClock}
 
 class TaskSetBlacklistSuite extends SparkFunSuite {
 
-  test("Blacklisting individual tasks") {
+  test("Blacklisting tasks, executors, and nodes") {
     val conf = new SparkConf().setAppName("test").setMaster("local")
       .set(config.BLACKLIST_ENABLED.key, "true")
     val clock = new ManualClock
 
     val taskSetBlacklist = new TaskSetBlacklist(conf, stageId = 0, clock = clock)
     clock.setTime(0)
+    // We will mark task 0 & 1 failed on both executor 1 & 2.
+    // We should blacklist all executors on that host, for all tasks for the stage.  Note the API
+    // will return false for isExecutorBacklistedForTaskSet even when the node is blacklisted, so
+    // the executor is implicitly blacklisted (this makes sense with how the scheduler uses the
+    // blacklist)
+
+    // First, mark task 0 as failed on exec1.
     // task 0 should be blacklisted on exec1, and nowhere else
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "exec1", index = 0)
     for {
@@ -41,11 +48,7 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
     assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
-    // Mark task 0 & 1 failed on both executor 1 & 2.
-    // We should blacklist all executors on that host, for all tasks for the stage.  Note the API
-    // will return false for isExecutorBacklistedForTaskSet even when the node is blacklisted, so
-    // the executor is implicitly blacklisted (this makes sense with how the scheduler uses the
-    // blacklist)
+    // Mark task 1 failed on exec1 -- this pushes the executor into the blacklist
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "exec1", index = 1)
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
@@ -60,6 +63,8 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec2"))
     assert(taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    // Make sure the blacklist has the correct per-task && per-executor responses, over a wider
+    // range of inputs.
     for {
       executor <- (1 to 4).map(e => s"exec$e")
       index <- 0 until 10
@@ -68,6 +73,8 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
         val badExec = (executor == "exec1" || executor == "exec2")
         val badIndex = (index == 0 || index == 1)
         assert(
+          // this ignores whether the executor is blacklisted entirely for the taskset -- that is
+          // intentional, it keeps it fast and is sufficient for usage in the scheduler.
           taskSetBlacklist.isExecutorBlacklistedForTask(executor, index) === (badExec && badIndex))
         assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet(executor) === badExec)
       }
@@ -88,7 +95,7 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
   }
 
   test("multiple attempts for the same task count once") {
-    // make sure that for blacklisting tasks, the node counts task attempts, not executors.  But for
+    // Make sure that for blacklisting tasks, the node counts task attempts, not executors.  But for
     // stage-level blacklisting, we count unique tasks.  The reason for this difference is, with
     // task-attempt blacklisting, we want to make it easy to configure so that you ensure a node
     // is blacklisted before the taskset is completely aborted because of spark.task.maxFailures.
@@ -101,7 +108,7 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
       .set(config.MAX_FAILURES_PER_EXEC_STAGE, 2)
       .set(config.MAX_FAILED_EXEC_PER_NODE_STAGE, 3)
     val taskSetBlacklist = new TaskSetBlacklist(conf, stageId = 0, new SystemClock())
-    // fail a task twice on hostA, exec:1
+    // Fail a task twice on hostA, exec:1
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
     assert(taskSetBlacklist.isExecutorBlacklistedForTask("1", 0))
@@ -109,24 +116,24 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
     assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
-    // fail the same task once more on hostA, exec:2
+    // Fail the same task once more on hostA, exec:2
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "2", index = 0)
     assert(taskSetBlacklist.isNodeBlacklistedForTask("hostA", 0))
     assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("2"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
-    // fail another task on hostA, exec:1.  Now that executor has failures on two different tasks,
+    // Fail another task on hostA, exec:1.  Now that executor has failures on two different tasks,
     // so its blacklisted
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 1)
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
-    // fail a third task on hostA, exec:2, so that exec is blacklisted for the whole task set
+    // Fail a third task on hostA, exec:2, so that exec is blacklisted for the whole task set
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "2", index = 2)
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("2"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
-    // fail a fourth & fifth task on hostA, exec:3.  Now we've got three executors that are
+    // Fail a fourth & fifth task on hostA, exec:3.  Now we've got three executors that are
     // blacklisted for the taskset, so blacklist the whole node.
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "3", index = 3)
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "3", index = 4)

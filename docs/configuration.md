@@ -1248,8 +1248,7 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.blacklist.enabled</code></td>
   <td>
-    <code>true</code> in cluster mode; <br/>
-    <code>false</code> in local mode
+    false
   </td>
   <td>
     If set to "true", prevent Spark from scheduling tasks on executors that have been blacklisted

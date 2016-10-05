@@ -48,7 +48,8 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
 
   /**
    * Map from node to all executors on it with failures.  Needed because we want to know about
-   * executors on a node even after they have died.
+   * executors on a node even after they have died. (We don't want to bother tracking the
+   * node -> execs mapping in the usual case when there aren't any failures).
    */
   private val nodeToExecsWithFailures: HashMap[String, HashSet[String]] = new HashMap()
   private val nodeToBlacklistedTasks: HashMap[String, HashSet[Int]] = new HashMap()
@@ -64,19 +65,15 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
   def isExecutorBlacklistedForTask(
       executorId: String,
       index: Int): Boolean = {
-    execToFailures.get(executorId)
-      .map { execFailures =>
-        execFailures.getNumTaskFailures(index) >= MAX_TASK_ATTEMPTS_PER_EXECUTOR
-      }
-      .getOrElse(false)
+    execToFailures.get(executorId).exists { execFailures =>
+      execFailures.getNumTaskFailures(index) >= MAX_TASK_ATTEMPTS_PER_EXECUTOR
+    }
   }
 
   def isNodeBlacklistedForTask(
       node: String,
       index: Int): Boolean = {
-    nodeToBlacklistedTasks.get(node)
-      .map(_.contains(index))
-      .getOrElse(false)
+    nodeToBlacklistedTasks.get(node).exists(_.contains(index))
   }
 
   /**
@@ -98,10 +95,12 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
       exec: String,
       index: Int): Unit = {
     val execFailures = execToFailures.getOrElseUpdate(exec, new ExecutorFailuresInTaskSet(host))
-    execFailures.updateWithFailure(index, clock.getTimeMillis() + TIMEOUT_MILLIS)
+    execFailures.updateWithFailure(
+      taskIndex = index,
+      failureExpiryTime = clock.getTimeMillis() + TIMEOUT_MILLIS)
 
     // check if this task has also failed on other executors on the same host -- if its gone
-    // over the limit, blacklist it from the entire host
+    // over the limit, blacklist this task from the entire host.
     val execsWithFailuresOnNode = nodeToExecsWithFailures.getOrElseUpdate(host, new HashSet())
     execsWithFailuresOnNode += exec
     val failuresOnHost = execsWithFailuresOnNode.toIterator.flatMap { exec =>
