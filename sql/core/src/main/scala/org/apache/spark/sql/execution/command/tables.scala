@@ -449,7 +449,15 @@ case class DescribeTableCommand(
       describeSchema(catalog.lookupRelation(table).schema, result)
     } else {
       val metadata = catalog.getTableMetadata(table)
-      describeSchema(metadata.schema, result)
+
+      if (DDLUtils.isDatasourceTable(metadata)) {
+        DDLUtils.getSchemaFromTableProperties(metadata) match {
+          case Some(userSpecifiedSchema) => describeSchema(userSpecifiedSchema, result)
+          case None => describeSchema(catalog.lookupRelation(table).schema, result)
+        }
+      } else {
+        describeSchema(metadata.schema, result)
+      }
 
       describePartitionInfo(metadata, result)
 
