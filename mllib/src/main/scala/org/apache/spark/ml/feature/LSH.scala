@@ -45,7 +45,8 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
    */
   @Since("2.1.0")
   final val outputDim: IntParam = new IntParam(this, "outputDim", "output dimension, where" +
-    "increasing dimensionality lowers the false negative rate", ParamValidators.gt(0))
+    "increasing dimensionality lowers the false negative rate, and decreasing dimensionality" +
+    " improves the running performance", ParamValidators.gt(0))
 
   /** @group getParam */
   @Since("2.1.0")
@@ -56,8 +57,8 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
 
   /**
    * Transform the Schema for LSH
-   * @param schema The schema of the input dataset without outputCol
-   * @return A derived schema with outputCol added
+   * @param schema The schema of the input dataset without [[outputCol]]
+   * @return A derived schema with [[outputCol]] added
    */
   @Since("2.1.0")
   protected[this] final def validateAndTransformSchema(schema: StructType): StructType = {
@@ -117,9 +118,9 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
 
   /**
    * Given a large dataset and an item, approximately find at most k items which have the closest
-   * distance to the item. If the outputCol is missing, the method will transform the data; if the
-   * the outputCol exists, it will use the outputCol. This allows caching of the transformed data
-   * when necessary.
+   * distance to the item. If the [[outputCol]] is missing, the method will transform the data; if
+   * the [[outputCol]] exists, it will use the [[outputCol]]. This allows caching of the
+   * transformed data when necessary.
    *
    * This method implements two ways of fetching k nearest neighbors:
    *  - Single Probing: Fast, return at most k elements (Probing only one buckets)
@@ -135,11 +136,11 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
    */
   @Since("2.1.0")
   def approxNearestNeighbors(
-      @Since("2.1.0") dataset: Dataset[_],
-      @Since("2.1.0") key: Vector,
-      @Since("2.1.0") numNearestNeighbors: Int,
-      @Since("2.1.0") singleProbing: Boolean,
-      @Since("2.1.0") distCol: String): Dataset[_] = {
+      dataset: Dataset[_],
+      key: Vector,
+      numNearestNeighbors: Int,
+      singleProbing: Boolean,
+      distCol: String): Dataset[_] = {
     require(numNearestNeighbors > 0, "The number of nearest neighbors cannot be less than 1")
     // Get Hash Value of the key
     val keyHash = hashFunction(key)
@@ -177,21 +178,24 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
    */
   @Since("2.1.0")
   def approxNearestNeighbors(
-      @Since("2.1.0") dataset: Dataset[_],
-      @Since("2.1.0") key: Vector,
-      @Since("2.1.0") numNearestNeighbors: Int): Dataset[_] = {
+      dataset: Dataset[_],
+      key: Vector,
+      numNearestNeighbors: Int): Dataset[_] = {
     approxNearestNeighbors(dataset, key, numNearestNeighbors, true, "distCol")
   }
 
   /**
-   * Preprocess step for approximate similarity join. Transform and explode the outputCol to
+   * Preprocess step for approximate similarity join. Transform and explode the [[outputCol]] to
    * explodeCols.
    * @param dataset The dataset to transform and explode.
    * @param explodeCols The alias for the exploded columns, must be a seq of two strings.
    * @return A dataset containing idCol, inputCol and explodeCols
    */
   @Since("2.1.0")
-  private[this] def processDataset(dataset: Dataset[_], explodeCols: Seq[String]): Dataset[_] = {
+  private[this] def processDataset(
+      dataset: Dataset[_],
+      inputName: String,
+      explodeCols: Seq[String]): Dataset[_] = {
     require(explodeCols.size == 2, "explodeCols must be two strings.")
     val vectorToMap: UserDefinedFunction = udf((x: Vector) => x.asBreeze.iterator.toMap,
       MapType(DataTypes.IntegerType, DataTypes.DoubleType))
@@ -200,7 +204,9 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
     } else {
       dataset.toDF()
     }
-    modelDataset.select(col("*"), explode(vectorToMap(col($(outputCol)))).as(explodeCols))
+    modelDataset.select(
+      struct(col("*")).as(inputName),
+      explode(vectorToMap(col($(outputCol)))).as(explodeCols))
   }
 
   /**
@@ -213,9 +219,9 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
    */
   @Since("2.1.0")
   private[this] def recreateCol(
-      @Since("2.1.0") dataset: Dataset[_],
-      @Since("2.1.0") colName: String,
-      @Since("2.1.0") tmpColName: String): Dataset[_] = {
+      dataset: Dataset[_],
+      colName: String,
+      tmpColName: String): Dataset[_] = {
     dataset
       .withColumnRenamed(colName, tmpColName)
       .withColumn(colName, col(tmpColName))
@@ -223,8 +229,11 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
   }
 
   /**
-   * Join two dataset to approximately find all pairs of records whose distance are smaller
-   * than the threshold.
+   * Join two dataset to approximately find all pairs of records whose distance are smaller than
+   * the threshold. If the [[outputCol]] is missing, the method will transform the data; if the
+   * [[outputCol]] exists, it will use the [[outputCol]]. This allows caching of the transformed
+   * data when necessary.
+   *
    * @param datasetA One of the datasets to join
    * @param datasetB Another dataset to join
    * @param threshold The threshold for the distance of record pairs
@@ -234,21 +243,22 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
    */
   @Since("2.1.0")
   def approxSimilarityJoin(
-      @Since("2.1.0") datasetA: Dataset[_],
-      @Since("2.1.0") datasetB: Dataset[_],
-      @Since("2.1.0") threshold: Double,
-      @Since("2.1.0") distCol: String): Dataset[_] = {
+      datasetA: Dataset[_],
+      datasetB: Dataset[_],
+      threshold: Double,
+      distCol: String): Dataset[_] = {
 
-    val explodeCols = Seq("lsh#entry", "lsh#hashValue")
-    val explodedA = processDataset(datasetA, explodeCols)
+    val explodeCols = Seq("entry", "hashValue")
+    val inputName = "input"
+    val explodedA = processDataset(datasetA, inputName, explodeCols)
 
     // If this is a self join, we need to recreate the inputCol of datasetB to avoid ambiguity.
     // TODO: Remove recreateCol logic once SPARK-17154 is resolved.
     val explodedB = if (datasetA != datasetB) {
-      processDataset(datasetB, explodeCols)
+      processDataset(datasetB, inputName, explodeCols)
     } else {
       val recreatedB = recreateCol(datasetB, $(inputCol), s"${$(inputCol)}#${Random.nextString(5)}")
-      processDataset(recreatedB, explodeCols)
+      processDataset(recreatedB, inputName, explodeCols)
     }
 
     // Do a hash join on where the exploded hash values are equal.
@@ -258,7 +268,8 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
     // Add a new column to store the distance of the two records.
     val distUDF = udf((x: Vector, y: Vector) => keyDistance(x, y), DataTypes.DoubleType)
     val joinedDatasetWithDist = joinedDataset.select(col("*"),
-      distUDF(explodedA($(inputCol)), explodedB($(inputCol))).as(distCol)
+      distUDF(explodedA(s"$inputName.${$(inputCol)}"),
+        explodedB(s"$inputName.${$(inputCol)}")).as(distCol)
     )
 
     // Filter the joined datasets where the distance are smaller than the threshold.
@@ -270,9 +281,9 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
    */
   @Since("2.1.0")
   def approxSimilarityJoin(
-      @Since("2.1.0") datasetA: Dataset[_],
-      @Since("2.1.0") datasetB: Dataset[_],
-      @Since("2.1.0") threshold: Double): Dataset[_] = {
+      datasetA: Dataset[_],
+      datasetB: Dataset[_],
+      threshold: Double): Dataset[_] = {
     approxSimilarityJoin(datasetA, datasetB, threshold, "distCol")
   }
 }
@@ -282,19 +293,17 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
  * hash column, approximate nearest neighbor search with a dataset and a key, and approximate
  * similarity join of two datasets.
  *
- * Currently the following LSH family is implemented:
- *  - Euclidean Distance: Random Projection
- *
  * References:
  * (1) Gionis, Aristides, Piotr Indyk, and Rajeev Motwani. "Similarity search in high dimensions
  * via hashing." VLDB 7 Sep. 1999: 518-529.
  * (2) Wang, Jingdong et al. "Hashing for similarity search: A survey." arXiv preprint
  * arXiv:1408.2927 (2014).
- * @tparam T The class type of lsh
  */
 @Experimental
 @Since("2.1.0")
 private[ml] abstract class LSH[T <: LSHModel[T]] extends Estimator[T] with LSHParams {
+  self: Estimator[T] =>
+
   /** @group setParam */
   @Since("2.1.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -322,13 +331,9 @@ private[ml] abstract class LSH[T <: LSHModel[T]] extends Estimator[T] with LSHPa
 
   @Since("2.1.0")
   override def fit(dataset: Dataset[_]): T = {
+    transformSchema(dataset.schema, logging = true)
     val inputDim = dataset.select(col($(inputCol))).head().get(0).asInstanceOf[Vector].size
     val model = createRawLSHModel(inputDim).setParent(this)
     copyValues(model)
-  }
-
-  @Since("2.1.0")
-  override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
   }
 }

@@ -22,9 +22,10 @@ import scala.util.Random
 import breeze.linalg.normalize
 
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, Params, ParamValidators}
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.sql.types.StructType
 
 /**
  * Params for [[RandomProjection]].
@@ -43,7 +44,7 @@ private[ml] trait RandomProjectionParams extends Params {
 }
 
 /**
- * Model produced by [[LSH]]
+ * Model produced by [[RandomProjection]]
  */
 @Experimental
 @Since("2.1.0")
@@ -115,5 +116,12 @@ class RandomProjection private[ml] (
       }
     }
     new RandomProjectionModel(uid, randUnitVectors)
+  }
+
+  @Since("2.1.0")
+  override def transformSchema(schema: StructType): StructType = {
+    require(schema.apply($(inputCol)).dataType.sameType(new VectorUDT),
+      s"${$(inputCol)} must be vectors")
+    validateAndTransformSchema(schema)
   }
 }

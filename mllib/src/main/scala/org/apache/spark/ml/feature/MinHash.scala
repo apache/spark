@@ -20,8 +20,9 @@ package org.apache.spark.ml.feature
 import scala.util.Random
 
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.sql.types.StructType
 
 /**
  * Model produced by [[MinHash]]
@@ -87,7 +88,7 @@ class MinHash private[ml] (override val uid: String) extends LSH[MinHashModel] {
   @Since("2.1.0")
   override protected[this] def createRawLSHModel(inputDim: Int): MinHashModel = {
     val numEntry = inputDim * 2
-    assert(numEntry < prime, "The input vector dimension is too large for MinHash to handle.")
+    require(numEntry < prime, "The input vector dimension is too large for MinHash to handle.")
     val hashFunctions: Seq[Int => Long] = {
       (0 until $(outputDim)).map { i: Int =>
         // Perfect Hash function, use 2n buckets to reduce collision.
@@ -95,5 +96,12 @@ class MinHash private[ml] (override val uid: String) extends LSH[MinHashModel] {
       }
     }
     new MinHashModel(uid, hashFunctions)
+  }
+
+  @Since("2.1.0")
+  override def transformSchema(schema: StructType): StructType = {
+    require(schema.apply($(inputCol)).dataType.sameType(new VectorUDT),
+      s"${$(inputCol)} must be vectors")
+    validateAndTransformSchema(schema)
   }
 }
