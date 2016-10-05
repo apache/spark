@@ -771,6 +771,13 @@ dropTempView <- function(viewName) {
 #' @method read.df default
 #' @note read.df since 1.4.0
 read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.strings = "NA", ...) {
+  if (!is.null(path) && !is.character(path)) {
+    stop("path should be charactor, NULL or omitted.")
+  }
+  if (!is.null(source) && !is.character(source)) {
+    stop("source should be character, NULL or omitted. It is the datasource specified ",
+         "in 'spark.sql.sources.default' configuration by default.")
+  }
   sparkSession <- getSparkSession()
   options <- varargsToEnv(...)
   if (!is.null(path)) {
@@ -784,16 +791,16 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.string
   }
   if (!is.null(schema)) {
     stopifnot(class(schema) == "structType")
-    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession, source,
-                       schema$jobj, options)
+    sdf <- handledCallJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession,
+                              source, schema$jobj, options)
   } else {
-    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
-                       "loadDF", sparkSession, source, options)
+    sdf <- handledCallJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession,
+                              source, options)
   }
   dataFrame(sdf)
 }
 
-read.df <- function(x, ...) {
+read.df <- function(x = NULL, ...) {
   dispatchFunc("read.df(path = NULL, source = NULL, schema = NULL, ...)", x, ...)
 }
 
@@ -805,7 +812,7 @@ loadDF.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
   read.df(path, source, schema, ...)
 }
 
-loadDF <- function(x, ...) {
+loadDF <- function(x = NULL, ...) {
   dispatchFunc("loadDF(path = NULL, source = NULL, schema = NULL, ...)", x, ...)
 }
 
