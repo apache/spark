@@ -107,6 +107,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
     conf.set("spark.driver.port", rpcEnv.address.port.toString)
 
+    // Mock SparkContext to reduce the memory usage of tests. It's fine since the only reason we
+    // need to create a SparkContext is to initialize LiveListenerBus.
     sc = mock(classOf[SparkContext])
     when(sc.conf).thenReturn(conf)
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
