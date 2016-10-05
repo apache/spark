@@ -47,7 +47,6 @@ private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
     threadDumpEnabled: Boolean)
   extends WebUIPage("") {
-  private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val content =
