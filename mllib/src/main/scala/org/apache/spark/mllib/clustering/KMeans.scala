@@ -254,7 +254,7 @@ class KMeans private (
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
     logInfo(f"Initialization with $initializationMode took $initTimeInSeconds%.3f seconds.")
 
-    var active = true
+    var converged = false
     var cost = 0.0
     var iteration = 0
 
@@ -263,7 +263,7 @@ class KMeans private (
     instr.foreach(_.logNumFeatures(centers.head.vector.size))
 
     // Execute iterations of Lloyd's algorithm until converged
-    while (iteration < maxIterations && active) {
+    while (iteration < maxIterations && !converged) {
       val costAccum = sc.doubleAccumulator
       val bcCenters = sc.broadcast(centers)
 
@@ -292,12 +292,12 @@ class KMeans private (
       bcCenters.destroy(blocking = false)
 
       // Update the cluster centers and costs
-      active = false
+      converged = true
       totalContribs.foreach { case (j, (sum, count)) =>
         scal(1.0 / count, sum)
         val newCenter = new VectorWithNorm(sum)
-        if (!active && KMeans.fastSquaredDistance(newCenter, centers(j)) > epsilon * epsilon) {
-          active = true
+        if (converged && KMeans.fastSquaredDistance(newCenter, centers(j)) > epsilon * epsilon) {
+          converged = false
         }
         centers(j) = newCenter
       }
@@ -321,17 +321,16 @@ class KMeans private (
   }
 
   /**
-   * Initialize set of cluster centers at random.
+   * Initialize a set of cluster centers at random.
    */
   private def initRandom(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {
-    val sample = data.takeSample(false, k, new XORShiftRandom(this.seed).nextInt())
-    sample.map(v => new VectorWithNorm(Vectors.dense(v.vector.toArray), v.norm))
+    data.takeSample(false, k, new XORShiftRandom(this.seed).nextInt()).map(_.toDense)
   }
 
   /**
-   * Initialize set of cluster centers using the k-means|| algorithm by Bahmani et al.
+   * Initialize a set of cluster centers using the k-means|| algorithm by Bahmani et al.
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). This is a variant of k-means++ that tries
-   * to find with dissimilar cluster centers by starting with a random center and then doing
+   * to find dissimilar cluster centers by starting with a random center and then doing
    * passes where more centers are chosen with probability proportional to their squared distance
    * to the current cluster set. It results in a provable approximation to an optimal clustering.
    *
@@ -341,7 +340,7 @@ class KMeans private (
     // Initialize empty centers and point costs.
     var costs = data.map(_ => Double.PositiveInfinity)
 
-    // Initialize each run's first center to a random point.
+    // Initialize the first center to a random point.
     val seed = new XORShiftRandom(this.seed).nextInt()
     val sample = data.takeSample(false, 1, seed)
     // Could be empty if data is empty; fail with a better message early:
@@ -381,19 +380,19 @@ class KMeans private (
     bcNewCentersList.foreach(_.destroy(false))
 
     if (centers.size <= k) {
-      return centers.toArray
+      centers.toArray
+    } else {
+      // Finally, we might have a set of more than k candidate centers; weight each
+      // candidate by the number of points in the dataset mapping to it and run a local k-means++
+      // on the weighted centers to pick just k of them
+      val bcCenters = data.context.broadcast(centers)
+      val countMap = data.map(KMeans.findClosest(bcCenters.value, _)._1).countByValue()
+
+      bcCenters.destroy(blocking = false)
+
+      val myWeights = centers.indices.map(countMap.getOrElse(_, 0L).toDouble).toArray
+      LocalKMeans.kMeansPlusPlus(0, centers.toArray, myWeights, k, 30)
     }
-
-    // Finally, we might have a set of more than k candidate centers; weight each
-    // candidate by the number of points in the dataset mapping to it and run a local k-means++
-    // on the weighted centers to pick just k of them
-    val bcCenters = data.context.broadcast(centers)
-    val countMap = data.map(p => KMeans.findClosest(bcCenters.value, p)._1).countByValue()
-
-    bcCenters.destroy(blocking = false)
-
-    val myWeights = centers.indices.map(countMap.getOrElse(_, 0L).toDouble).toArray
-    LocalKMeans.kMeansPlusPlus(0, centers.toArray, myWeights, k, 30)
   }
 }
 
