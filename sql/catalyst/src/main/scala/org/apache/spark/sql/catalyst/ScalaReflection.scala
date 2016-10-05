@@ -441,11 +441,15 @@ object ScalaReflection extends ScalaReflection {
           val newPath = s"""- array element class: "$clsName"""" +: walkedTypePath
           MapObjects(serializerFor(_, elementType, newPath), input, dt)
 
-        case dt @ (IntegerType | DoubleType) =>
-        // case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
-        //            FloatType | DoubleType) =>
+         case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
+                    FloatType | DoubleType) =>
           val cls = input.dataType.asInstanceOf[ObjectType].cls
-          if (cls.isAssignableFrom(classOf[Array[Int]]) ||
+          if (cls.isAssignableFrom(classOf[Array[Boolean]]) ||
+              cls.isAssignableFrom(classOf[Array[Byte]]) ||
+              cls.isAssignableFrom(classOf[Array[Short]]) ||
+              cls.isAssignableFrom(classOf[Array[Int]]) ||
+              cls.isAssignableFrom(classOf[Array[Long]]) ||
+              cls.isAssignableFrom(classOf[Array[Float]]) ||
               cls.isAssignableFrom(classOf[Array[Double]])) {
             StaticInvoke(
               classOf[UnsafeArrayData],

@@ -989,13 +989,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("array") {
+    val arrayByte = Array(1.toByte, 2.toByte, 3.toByte)
     val arrayInt = Array(1, 2, 3)
+    val arrayLong = Array(1.toLong, 2.toLong, 3.toLong)
     val arrayDouble = Array(1.1, 2.2, 3.3)
     val arrayString = Array("a", "b", "c")
+    val dsByte = sparkContext.parallelize(Seq(arrayByte), 1).toDS.map(e => e)
     val dsInt = sparkContext.parallelize(Seq(arrayInt), 1).toDS.map(e => e)
+    val dsLong = sparkContext.parallelize(Seq(arrayLong), 1).toDS.map(e => e)
     val dsDouble = sparkContext.parallelize(Seq(arrayDouble), 1).toDS.map(e => e)
     val dsString = sparkContext.parallelize(Seq(arrayString), 1).toDS.map(e => e)
+    checkDataset(dsByte, arrayByte)
     checkDataset(dsInt, arrayInt)
+    checkDataset(dsLong, arrayLong)
     checkDataset(dsDouble, arrayDouble)
     checkDataset(dsString, arrayString)
   }
