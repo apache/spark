@@ -75,16 +75,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Python-friendly version of [[approxQuantile()]]
-   */
-  private[spark] def approxQuantile(
-      col: String,
-      probabilities: List[Double],
-      relativeError: Double): java.util.List[Double] = {
-    approxQuantile(col, probabilities.toArray, relativeError).toList.asJava
-  }
-
-  /**
    * Calculates the approximate quantiles of numerical columns of a DataFrame.
    *
    * The result of this algorithm has the following deterministic bound:
