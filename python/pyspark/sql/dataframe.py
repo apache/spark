@@ -1365,8 +1365,8 @@ class DataFrame(object):
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
-        :param col: the name of the numerical column, or a list/tuple of
-          numerical columns.
+        :param col: str, list.
+          Can be a single column name, or a list of names for multiple columns.
         :param probabilities: a list of quantile probabilities
           Each number must belong to [0, 1].
           For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
