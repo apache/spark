@@ -139,7 +139,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
           {rddStorageInfo.partitions.map(_.size).getOrElse(0)} Partitions
         </h4>
         {blockTableHTML ++ jsForScrollingDownToBlockTable}
-      </div>;
+      </div>
 
     UIUtils.headerSparkPage("RDD Storage Info for " + rddStorageInfo.name, content, parent)
   }
