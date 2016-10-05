@@ -36,3 +36,6 @@ case class SourceStatus private(
     val inputRate: Double,
     val processingRate: Double,
     val triggerStatus: Map[String, String])
+
+/** Companion object, primarily for creating SourceStatus instances internally */
+private[sql] object SourceStatus

@@ -34,3 +34,6 @@ case class SinkStatus private(
     val description: String,
     val offsetDesc: String,
     val outputRate: Double)
+
+/** Companion object, primarily for creating SinkStatus instances internally */
+private[sql] object SinkStatus

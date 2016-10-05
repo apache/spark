@@ -42,3 +42,6 @@ case class StreamingQueryInfo private(
   val sinkStatus: SinkStatus,
   val triggerStatus: Map[String, String]
 )
+
+/** Companion object, primarily for creating StreamingQueryInfo instances internally */
+private[sql] object StreamingQueryInfo
