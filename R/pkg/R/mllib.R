@@ -706,16 +706,37 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' data <- list(list(7.0, 0.0), list(5.0, 1.0), list(3.0, 2.0),
-#'         list(5.0, 3.0), list(1.0, 4.0))
-#' df <- createDataFrame(data, c("label", "feature"))
+#' # binary logistic regression
+#' label <- c(1.0, 1.0, 1.0, 0.0, 0.0)
+#' feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
+#' binary_data <- as.data.frame(cbind(label, feature))
+#' binary_df <- suppressWarnings(createDataFrame(binary_data))
+#' blr_model <- spark.logit(binary_df, label ~ feature, threshold = 1.0)
+#' blr_predict <- collect(select(predict(blr_model, binary_df), "prediction"))
+#'
+#' # summary of binary logistic regression
+#' blr_summary <- summary(blr_model)
+#' blr_fmeasure <- collect(select(blr_summary$fMeasureByThreshold, "threshold", "F-Measure"))
 #' # save fitted model to input path
 #' path <- "path/to/model"
-#' write.ml(model, path)
+#' write.ml(blr_model, path)
 #'
 #' # can also read back the saved model and print
 #' savedModel <- read.ml(path)
 #' summary(savedModel)
+#'
+#' # multinomial logistic regression
+#'
+#' label <- c(0.0, 1.0, 2.0, 0.0, 0.0)
+#' feature1 <- c(4.845940, 5.64480, 7.430381, 6.464263, 5.555667)
+#' feature2 <- c(2.941319, 2.614812, 2.162451, 3.339474, 2.970987)
+#' feature3 <- c(1.322733, 1.348044, 3.861237, 9.686976, 3.447130)
+#' feature4 <- c(1.3246388, 0.5510444, 0.9225810, 1.2147881, 1.6020842)
+#' data <- as.data.frame(cbind(label, feature1, feature2, feature3, feature4))
+#' df <- suppressWarnings(createDataFrame(data))
+#'
+#' model <- spark.logit(df, label ~ ., family = "multinomial", thresholds=c(0, 1, 1))
+#' predict1 <- collect(select(predict(model, df), "prediction"))
 #' }
 #' @note spark.logit since 2.1.0
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
@@ -786,19 +807,19 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
             fMeasureByThreshold <- if (is.loaded) {
               NULL
             } else {
-              callJMethod(jobj, "fMeasureByThreshold")
+              dataFrame(callJMethod(jobj, "fMeasureByThreshold"))
             }
 
             precisionByThreshold <- if (is.loaded) {
               NULL
             } else {
-              callJMethod(jobj, "precisionByThreshold")
+              dataFrame(callJMethod(jobj, "precisionByThreshold"))
             }
 
             recallByThreshold <- if (is.loaded) {
               NULL
             } else {
-              callJMethod(jobj, "recallByThreshold")
+              dataFrame(callJMethod(jobj, "recallByThreshold"))
             }
 
             totalIterations <- if (is.loaded) {
