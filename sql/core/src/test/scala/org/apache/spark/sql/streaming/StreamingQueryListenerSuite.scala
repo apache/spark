@@ -41,49 +41,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
   import StreamingQueryListener._
 
-
-  abstract class AddFileData extends AddData {
-    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
-      require(
-        query.nonEmpty,
-        "Cannot add data when there is no query for finding the active file stream source")
-
-      val sources = query.get.logicalPlan.collect {
-        case StreamingExecutionRelation(source, _) if source.isInstanceOf[FileStreamSource] =>
-          source.asInstanceOf[FileStreamSource]
-      }
-      if (sources.isEmpty) {
-        throw new Exception(
-          "Could not find file source in the StreamExecution logical plan to add data to")
-      } else if (sources.size > 1) {
-        throw new Exception(
-          "Could not select the file source in the StreamExecution logical plan as there" +
-            "are multiple file sources:\n\t" + sources.mkString("\n\t"))
-      }
-      val source = sources.head
-      val newOffset = source.withBatchingLocked {
-        addData(source)
-        source.currentOffset + 1
-      }
-      logInfo(s"Added file to $source at offset $newOffset")
-      (source, newOffset)
-    }
-
-    protected def addData(source: FileStreamSource): Unit
-  }
-
-  case class AddTextFileData(content: String, src: File, tmp: File)
-    extends AddFileData {
-
-    override def addData(source: FileStreamSource): Unit = {
-      val tempFile = Utils.tempFileWith(new File(tmp, "text"))
-      val finalFile = new File(src, tempFile.getName)
-      src.mkdirs()
-      require(stringToFile(tempFile, content).renameTo(finalFile))
-      logInfo(s"Written text '$content' to file $finalFile")
-    }
-  }
-
   // To make === between double tolerate inexact values
   implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
 
@@ -93,88 +50,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     assert(addedListeners.isEmpty)
     // Make sure we don't leak any events to the next test
   }
-
-  test("codegen") { withTempDir { case src =>
-    val temp = org.apache.spark.util.Utils.createTempDir().getCanonicalFile
-
-    val input = spark.readStream.format("text").load(src.getCanonicalPath).as[String]
-
-    val listener = new QueryStatusCollector
-
-    // This is to make sure that    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
-
-    // - Query takes non-zero time to compute
-    // - Exec plan ends with a node (filter) that supports the numOutputRows metric
-    // spark.conf.set("spark.sql.codegen.wholeStage", false)
-    val df = input.map { x => Thread.sleep(10); x.toInt }.toDF("value").where("value != 0")
-
-    withListenerAdded(listener) {
-      testStream(df)(
-        StartStream(),
-        AssertOnQuery("Incorrect query status in onQueryStarted") { query =>
-          val status = listener.startStatus
-          assert(status != null)
-          assert(status.name === query.name)
-          assert(status.id === query.id)
-          assert(status.sourceStatuses.size === 1)
-          assert(status.sourceStatuses(0).description.contains("File"))
-
-          // The source and sink offsets must be None as this must be called before the
-          // batches have started
-          assert(status.sourceStatuses(0).offsetDesc === None)
-          assert(status.sinkStatus.offsetDesc === CompositeOffset(None :: Nil).toString)
-          assert(status.sinkStatus.outputRate === 0.0)
-
-          // The source and sink rates must be None as this must be called before the batches
-          // have started
-          assert(status.sourceStatuses(0).inputRate === 0.0)
-          assert(status.sourceStatuses(0).processingRate === 0.0)
-
-          // No progress events or termination events
-          assert(listener.terminationStatus === null)
-          true
-        },
-        AddTextFileData("1", src, temp),
-        CheckAnswer(1),
-        AssertOnQuery("Incorrect query status in onQueryProgress") { query =>
-          eventually(Timeout(streamingTimeout)) {
-            assert(listener.lastTriggerStatus.nonEmpty)
-          }
-          // Check the correctness of data in the latest query info reported by onQueryProgress
-          val status = listener.lastTriggerStatus.get
-          assert(status != null)
-          assert(status.name === query.name)
-          assert(status.id === query.id)
-          assert(status.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString))
-          assert(status.sourceStatuses(0).inputRate >= 0.0) // flaky if checked for ==
-          assert(status.sourceStatuses(0).processingRate > 0.0)
-          assert(status.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString)
-          assert(status.sinkStatus.outputRate === 0.0)
-
-          // No termination events
-          assert(listener.terminationStatus === null)
-          true
-        },
-        StopStream,
-        AssertOnQuery("Incorrect query status in onQueryTerminated") { query =>
-          eventually(Timeout(streamingTimeout)) {
-            val status = listener.terminationStatus
-            assert(status != null)
-            assert(status.name === query.name)
-            assert(status.id === query.id)
-            assert(status.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString))
-            assert(status.sourceStatuses(0).inputRate === 0.0)
-            assert(status.sourceStatuses(0).processingRate === 0.0)
-            assert(status.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString)
-            assert(status.sinkStatus.outputRate === 0.0)
-            assert(listener.terminationException === None)
-          }
-          listener.checkAsyncErrors()
-          true
-        }
-      )
-    }
-  }}
 
   test("single listener, check trigger statuses") {
     import StreamingQueryListenerSuite._

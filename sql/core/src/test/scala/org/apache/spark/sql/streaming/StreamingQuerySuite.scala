@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
+
 import org.scalactic.TolerantNumerics
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.SparkException
@@ -44,6 +47,51 @@ class StreamingQuerySuite extends StreamTest
   after {
     sqlContext.streams.active.foreach(_.stop())
   }
+
+  abstract class AddFileData extends AddData {
+    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+      require(
+        query.nonEmpty,
+        "Cannot add data when there is no query for finding the active file stream source")
+
+      val sources = query.get.logicalPlan.collect {
+        case StreamingExecutionRelation(source, _) if source.isInstanceOf[FileStreamSource] =>
+          source.asInstanceOf[FileStreamSource]
+      }
+      if (sources.isEmpty) {
+        throw new Exception(
+          "Could not find file source in the StreamExecution logical plan to add data to")
+      } else if (sources.size > 1) {
+        throw new Exception(
+          "Could not select the file source in the StreamExecution logical plan as there" +
+            "are multiple file sources:\n\t" + sources.mkString("\n\t"))
+      }
+      val source = sources.head
+      val newOffset = source.withBatchingLocked {
+        addData(source)
+        source.currentOffset + 1
+      }
+      logInfo(s"Added file to $source at offset $newOffset")
+      (source, newOffset)
+    }
+
+    protected def addData(source: FileStreamSource): Unit
+  }
+
+  case class AddTextFileData(content: String, src: File, tmp: File)
+    extends AddFileData {
+
+    override def addData(source: FileStreamSource): Unit = {
+      val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+      val finalFile = new File(src, tempFile.getName)
+      src.mkdirs()
+      require(stringToFile(tempFile, content).renameTo(finalFile))
+      logInfo(s"Written text '$content' to file $finalFile")
+    }
+  }
+
+
+
 
   test("names unique across active queries, ids unique across all started queries") {
     val inputData = MemoryStream[Int]
