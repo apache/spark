@@ -77,6 +77,9 @@ class LastTestSuite extends SparkFunSuite {
   }
 
   test("eval") {
+    // Null Eval
+    assert(evaluator.eval(InternalRow(null, null)) === InternalRow(null))
+
     // Empty Eval
     val p0 = evaluator.initialize()
     assert(evaluator.eval(p0) === InternalRow(null))
