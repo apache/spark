@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.functions.from_json
+import org.apache.spark.sql.functions.{from_json, struct, to_json}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{CalendarIntervalType, IntegerType, StructType}
 
 class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -97,7 +97,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(expr, expected)
   }
 
-  test("json_parser") {
+  test("from_json") {
     val df = Seq("""{"a": 1}""").toDS()
     val schema = new StructType().add("a", IntegerType)
 
@@ -106,7 +106,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Row(1)) :: Nil)
   }
 
-  test("json_parser missing columns") {
+  test("from_json missing columns") {
     val df = Seq("""{"a": 1}""").toDS()
     val schema = new StructType().add("b", IntegerType)
 
@@ -115,12 +115,30 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Row(null)) :: Nil)
   }
 
-  test("json_parser invalid json") {
+  test("from_json invalid json") {
     val df = Seq("""{"a" 1}""").toDS()
     val schema = new StructType().add("a", IntegerType)
 
     checkAnswer(
       df.select(from_json($"value", schema)),
       Row(null) :: Nil)
+  }
+
+  test("to_json") {
+    val df = Seq(Tuple1(Tuple1(1))).toDF("a")
+
+    checkAnswer(
+      df.select(to_json($"a")),
+      Row("""{"_1":1}""") :: Nil)
+  }
+
+  test("to_json unsupported type") {
+    val df = Seq(Tuple1(Tuple1("interval -3 month 7 hours"))).toDF("a")
+      .select(struct($"a._1".cast(CalendarIntervalType).as("a")).as("c"))
+    val e = intercept[RuntimeException]{
+      // Unsupported type throws an exception
+      df.select(to_json($"c")).collect()
+    }
+    assert(e.getMessage.contains("Failed to convert value interval -3 months 7 hours"))
   }
 }

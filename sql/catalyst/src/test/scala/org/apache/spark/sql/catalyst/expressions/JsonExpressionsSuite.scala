@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.ParseModes
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{CalendarIntervalType, IntegerType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -342,5 +342,24 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       JsonToStruct(schema, Map("mode" -> ParseModes.PERMISSIVE_MODE), Literal(jsonData)),
       null
     )
+  }
+
+  test("to_json") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val struct = Literal.create(create_row(1), schema)
+    checkEvaluation(
+      StructToJson(Map.empty, struct),
+      """{"a":1}"""
+    )
+  }
+
+  test("to_json - invalid type") {
+    val schema = StructType(StructField("a", CalendarIntervalType) :: Nil)
+    val struct = Literal.create(create_row(1), schema)
+    val e = intercept[RuntimeException]{
+      // Unsupported type throws an exception
+      checkEvaluation(StructToJson(Map.empty, struct), null)
+    }
+    assert(e.getCause.getMessage.contains("Failed to convert value 1"))
   }
 }
