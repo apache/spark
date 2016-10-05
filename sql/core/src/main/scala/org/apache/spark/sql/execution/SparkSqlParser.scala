@@ -265,7 +265,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
 
     val statement = plan(ctx.statement)
-    if (isExplainableStatement(statement)) {
+    if (statement == null) {
+      null  // This is enough since ParseException will raise later.
+    } else if (isExplainableStatement(statement)) {
       ExplainCommand(statement, extended = ctx.EXTENDED != null, codegen = ctx.CODEGEN != null)
     } else {
       ExplainCommand(OneRowRelation)

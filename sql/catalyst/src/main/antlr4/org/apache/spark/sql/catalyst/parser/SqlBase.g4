@@ -136,7 +136,7 @@ statement
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
-    | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
+    | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH .*?                                                      #refreshResource
