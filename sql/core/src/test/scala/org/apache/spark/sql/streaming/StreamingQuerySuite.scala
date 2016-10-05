@@ -25,6 +25,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
@@ -208,41 +209,30 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
     )
   }
 
-  // This tests whether row stats are correctly associated with streaming sources when
-  // streaming plan also has batch sources
-  test("calculating input rows with mixed batch and streaming sources") {
-
-    // A streaming source that returns a pre-determined dataframe for a trigger
-    // Creates multiple leaves for a streaming source
-    val streamingTriggerDF = spark.createDataset(1 to 5).toDF.union(
-      spark.createDataset(6 to 10).toDF)
-    val streamingSource = new Source() {
-      override def schema: StructType = StructType(Seq(StructField("value", IntegerType)))
-      override def getOffset: Option[Offset] = Some(LongOffset(0))
-      override def getBatch(start: Option[Offset], end: Offset): DataFrame = streamingTriggerDF
-      override def stop(): Unit = {}
-    }
-    val streamingInputDF = StreamingExecutionRelation(streamingSource).toDF("value")
+  test("input row calculation with mixed batch and streaming sources") {
+    val streamingTriggerDF = spark.createDataset(1 to 10).toDF
+    val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
     val staticInputDF = spark.createDataFrame(Seq(1 -> "1", 2 -> "2")).toDF("value", "anotherValue")
 
-    // streaming trigger input has 10 items, static input has 2 items, input row calculation for
-    // the source should return 10
-    spark.conf.set("spark.sql.codegen.wholeStage", false)
-    testStream(streamingInputDF.join(staticInputDF, "value"))(
-      StartStream(),
-      AssertOnQuery { q =>
-        eventually(Timeout(streamingTimeout)) {
-          assert(q.status.sinkStatus.offsetDesc
-            === CompositeOffset.fill(LongOffset(0)).toString)
-        }
-        val numInputRows = StreamExecution.getNumInputRowsFromTrigger(
-          q.lastExecution.executedPlan,
-          q.lastExecution.logical,
-          Map(streamingSource -> streamingTriggerDF))
-        assert(numInputRows === Map(streamingSource -> 10)) // streaming data has 10 items
-        true
-      }
-    )
+    // Trigger input has 10 rows, static input has 2 rows,
+    // therefore after the first trigger, the calculated input rows should be 10
+    val status = getFirstTriggerStatus(streamingInputDF.join(staticInputDF, "value"))
+    assert(status.triggerStatus("numRows.input.total") === "10")
+    assert(status.sourceStatuses.size === 1)
+    assert(status.sourceStatuses(0).triggerStatus("numRows.input.source") === "10")
+  }
+
+  test("input row calculation with trigger DF having multiple leaves") {
+    val streamingTriggerDF =
+      spark.createDataset(1 to 5).toDF.union(spark.createDataset(6 to 10).toDF)
+    require(streamingTriggerDF.logicalPlan.collectLeaves().size > 1)
+    val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF)
+
+    // After the first trigger, the calculated input rows should be 10
+    val status = getFirstTriggerStatus(streamingInputDF)
+    assert(status.triggerStatus("numRows.input.total") === "10")
+    assert(status.sourceStatuses.size === 1)
+    assert(status.sourceStatuses(0).triggerStatus("numRows.input.source") === "10")
   }
 
   testQuietly("StreamExecution metadata garbage collection") {
@@ -267,6 +257,45 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
         true
       }
     )
+  }
+
+  /** Create a streaming DF that only execute one batch in which it returns the given static DF */
+  private def createSingleTriggerStreamingDF(triggerDF: DataFrame): DataFrame = {
+    require(!triggerDF.isStreaming)
+    // A streaming Source that generate only on trigger and returns the given Dataframe as batch
+    val source = new Source() {
+      override def schema: StructType = triggerDF.schema
+      override def getOffset: Option[Offset] = Some(LongOffset(0))
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = triggerDF
+      override def stop(): Unit = {}
+    }
+    StreamingExecutionRelation(source)
+  }
+
+  /** Returns the query status at the end of the first trigger of streaming DF */
+  private def getFirstTriggerStatus(streamingDF: DataFrame): StreamingQueryInfo = {
+    // A StreamingQueryListener that gets the query status after the first completed trigger
+    val listener = new StreamingQueryListener {
+      @volatile var firstStatus: StreamingQueryInfo = null
+      override def onQueryStarted(queryStarted: QueryStarted): Unit = { }
+      override def onQueryProgress(queryProgress: QueryProgress): Unit = {
+       if (firstStatus == null) firstStatus = queryProgress.queryInfo
+      }
+      override def onQueryTerminated(queryTerminated: QueryTerminated): Unit = { }
+    }
+
+    try {
+      spark.streams.addListener(listener)
+      val q = streamingDF.writeStream.format("memory").queryName("test").start()
+      q.processAllAvailable()
+      eventually(timeout(streamingTimeout)) {
+        assert(listener.firstStatus != null)
+      }
+      listener.firstStatus
+    } finally {
+      spark.streams.active.map(_.stop())
+      spark.streams.removeListener(listener)
+    }
   }
 
   /**

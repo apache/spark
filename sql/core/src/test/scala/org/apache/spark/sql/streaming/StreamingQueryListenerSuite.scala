@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
+
 import scala.collection.mutable
 
 import org.scalactic.TolerantNumerics
@@ -28,15 +30,59 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
-import org.apache.spark.util.{JsonProtocol, ManualClock}
+import org.apache.spark.util.{JsonProtocol, ManualClock, Utils}
 
 
 class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
   import StreamingQueryListener._
+
+
+  abstract class AddFileData extends AddData {
+    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+      require(
+        query.nonEmpty,
+        "Cannot add data when there is no query for finding the active file stream source")
+
+      val sources = query.get.logicalPlan.collect {
+        case StreamingExecutionRelation(source, _) if source.isInstanceOf[FileStreamSource] =>
+          source.asInstanceOf[FileStreamSource]
+      }
+      if (sources.isEmpty) {
+        throw new Exception(
+          "Could not find file source in the StreamExecution logical plan to add data to")
+      } else if (sources.size > 1) {
+        throw new Exception(
+          "Could not select the file source in the StreamExecution logical plan as there" +
+            "are multiple file sources:\n\t" + sources.mkString("\n\t"))
+      }
+      val source = sources.head
+      val newOffset = source.withBatchingLocked {
+        addData(source)
+        source.currentOffset + 1
+      }
+      logInfo(s"Added file to $source at offset $newOffset")
+      (source, newOffset)
+    }
+
+    protected def addData(source: FileStreamSource): Unit
+  }
+
+  case class AddTextFileData(content: String, src: File, tmp: File)
+    extends AddFileData {
+
+    override def addData(source: FileStreamSource): Unit = {
+      val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+      val finalFile = new File(src, tempFile.getName)
+      src.mkdirs()
+      require(stringToFile(tempFile, content).renameTo(finalFile))
+      logInfo(s"Written text '$content' to file $finalFile")
+    }
+  }
 
   // To make === between double tolerate inexact values
   implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
@@ -46,18 +92,21 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     assert(spark.streams.active.isEmpty)
     assert(addedListeners.isEmpty)
     // Make sure we don't leak any events to the next test
-    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
   }
 
-  test("single listener, check statuses") {
-    val listener = new QueryStatusCollector
-    val input = MemoryStream[Int]
+  test("codegen") { withTempDir { case src =>
+    val temp = org.apache.spark.util.Utils.createTempDir().getCanonicalFile
 
-    // This is to make sure that
+    val input = spark.readStream.format("text").load(src.getCanonicalPath).as[String]
+
+    val listener = new QueryStatusCollector
+
+    // This is to make sure that    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+
     // - Query takes non-zero time to compute
     // - Exec plan ends with a node (filter) that supports the numOutputRows metric
-    spark.conf.set("spark.sql.codegen.wholeStage", false)
-    val df = input.toDS.map { x => Thread.sleep(10); x }.toDF("value").where("value != 0")
+    // spark.conf.set("spark.sql.codegen.wholeStage", false)
+    val df = input.map { x => Thread.sleep(10); x.toInt }.toDF("value").where("value != 0")
 
     withListenerAdded(listener) {
       testStream(df)(
@@ -68,7 +117,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           assert(status.name === query.name)
           assert(status.id === query.id)
           assert(status.sourceStatuses.size === 1)
-          assert(status.sourceStatuses(0).description.contains("Memory"))
+          assert(status.sourceStatuses(0).description.contains("File"))
 
           // The source and sink offsets must be None as this must be called before the
           // batches have started
@@ -85,8 +134,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           assert(listener.terminationStatus === null)
           true
         },
-        AddDataMemory(input, Seq(1, 2, 3)),
-        CheckAnswer(1, 2, 3),
+        AddTextFileData("1", src, temp),
+        CheckAnswer(1),
         AssertOnQuery("Incorrect query status in onQueryProgress") { query =>
           eventually(Timeout(streamingTimeout)) {
             assert(listener.lastTriggerStatus.nonEmpty)
@@ -100,7 +149,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           assert(status.sourceStatuses(0).inputRate >= 0.0) // flaky if checked for ==
           assert(status.sourceStatuses(0).processingRate > 0.0)
           assert(status.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString)
-          assert(status.sinkStatus.outputRate !== 0.0)
+          assert(status.sinkStatus.outputRate === 0.0)
 
           // No termination events
           assert(listener.terminationStatus === null)
@@ -125,7 +174,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         }
       )
     }
-  }
+  }}
 
   test("single listener, check trigger statuses") {
     import StreamingQueryListenerSuite._
