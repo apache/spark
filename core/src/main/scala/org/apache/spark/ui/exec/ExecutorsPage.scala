@@ -58,7 +58,7 @@ private[ui] class ExecutorsPage(
           <script src={UIUtils.prependBaseUri("/static/executorspage.js")}></script> ++
           <script>setThreadDumpEnabled({threadDumpEnabled})</script>
         }
-      </div>;
+      </div>
 
     UIUtils.headerSparkPage("Executors", content, parent, useDataTables = true)
   }
