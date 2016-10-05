@@ -653,7 +653,6 @@ quotedIdentifier
 
 number
     : MINUS? DECIMAL_VALUE            #decimalLiteral
-    | MINUS? SCIENTIFIC_DECIMAL_VALUE #scientificDecimalLiteral
     | MINUS? INTEGER_VALUE            #integerLiteral
     | MINUS? BIGINT_LITERAL           #bigIntLiteral
     | MINUS? SMALLINT_LITERAL         #smallIntLiteral
@@ -944,12 +943,8 @@ INTEGER_VALUE
     ;
 
 DECIMAL_VALUE
-    : DECIMAL_DIGITS {isValidDecimal()}?
-    ;
-
-SCIENTIFIC_DECIMAL_VALUE
     : DIGIT+ EXPONENT
-    | DECIMAL_DIGITS EXPONENT {isValidDecimal()}?
+    | DECIMAL_DIGITS EXPONENT? {isValidDecimal()}?
     ;
 
 DOUBLE_LITERAL
