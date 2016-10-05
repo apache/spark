@@ -422,7 +422,7 @@ case class TruncateTableCommand(
  */
 case class DescribeTableCommand(
     table: TableIdentifier,
-    partitionSpec: TablePartitionSpec,
+    partitionSpec: Map[String, String],
     isExtended: Boolean,
     isFormatted: Boolean)
   extends RunnableCommand {
