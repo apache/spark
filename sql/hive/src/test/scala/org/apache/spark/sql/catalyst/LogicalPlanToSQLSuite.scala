@@ -49,9 +49,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    sql("DROP TABLE IF EXISTS parquet_t0")
-    sql("DROP TABLE IF EXISTS parquet_t1")
-    sql("DROP TABLE IF EXISTS parquet_t2")
+    (0 to 3).foreach { i =>
+      sql(s"DROP TABLE IF EXISTS parquet_t$i")
+    }
     sql("DROP TABLE IF EXISTS t0")
 
     spark.range(10).write.saveAsTable("parquet_t0")
@@ -87,10 +87,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   override protected def afterAll(): Unit = {
     try {
-      sql("DROP TABLE IF EXISTS parquet_t0")
-      sql("DROP TABLE IF EXISTS parquet_t1")
-      sql("DROP TABLE IF EXISTS parquet_t2")
-      sql("DROP TABLE IF EXISTS parquet_t3")
+      (0 to 3).foreach { i =>
+        sql(s"DROP TABLE IF EXISTS parquet_t$i")
+      }
       sql("DROP TABLE IF EXISTS t0")
     } finally {
       super.afterAll()
@@ -234,6 +233,16 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   // when converting resolved plans back to SQL query strings as expression IDs are stripped.
   test("aggregate function in order by clause with multiple order keys") {
     checkSQL("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key, MAX(key)", "agg3")
+  }
+
+  test("order by asc nulls last") {
+    checkSQL("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key nulls last, MAX(key)",
+      "sort_asc_nulls_last")
+  }
+
+  test("order by desc nulls first") {
+    checkSQL("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key desc nulls first," +
+      "MAX(key)", "sort_desc_nulls_first")
   }
 
   test("type widening in union") {
@@ -698,6 +707,20 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |FROM parquet_t1
       """.stripMargin,
       "window_basic_3")
+
+    checkSQL(
+      """
+        |SELECT key, value, ROUND(AVG(key) OVER (), 2)
+        |FROM parquet_t1 ORDER BY key nulls last
+      """.stripMargin,
+      "window_basic_asc_nulls_last")
+
+    checkSQL(
+      """
+        |SELECT key, value, ROUND(AVG(key) OVER (), 2)
+        |FROM parquet_t1 ORDER BY key desc nulls first
+      """.stripMargin,
+      "window_basic_desc_nulls_first")
   }
 
   test("multiple window functions in one expression") {

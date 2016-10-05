@@ -24,6 +24,7 @@
 R-unit-tests.log
 R/unit-tests.out
 R/cran-check.out
+R/pkg/vignettes/sparkr-vignettes.html
 build/*.jar
 build/apache-maven*
 build/scala*

@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
@@ -111,7 +112,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val analyzer: Analyzer = {
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
-        PreprocessDDL(conf) ::
+        AnalyzeCreateTable(sparkSession) ::
         PreprocessTableInsertion(conf) ::
         new FindDataSourceTable(sparkSession) ::
         DataSourceAnalysis(conf) ::
@@ -188,11 +189,8 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   /**
    * Analyzes the given table in the current database to generate statistics, which will be
    * used in query optimizations.
-   *
-   * Right now, it only supports catalog tables and it only updates the size of a catalog table
-   * in the external catalog.
    */
-  def analyze(tableName: String): Unit = {
-    AnalyzeTableCommand(tableName).run(sparkSession)
+  def analyze(tableIdent: TableIdentifier, noscan: Boolean = true): Unit = {
+    AnalyzeTableCommand(tableIdent, noscan).run(sparkSession)
   }
 }

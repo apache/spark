@@ -58,7 +58,7 @@ class StreamExecution(
 
   import org.apache.spark.sql.streaming.StreamingQueryListener._
 
-  private val pollingDelayMs = sparkSession.conf.get(SQLConf.STREAMING_POLLING_DELAY)
+  private val pollingDelayMs = sparkSession.sessionState.conf.streamingPollingDelay
 
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
@@ -259,7 +259,7 @@ class StreamExecution(
       case (source, available) =>
         committedOffsets
             .get(source)
-            .map(committed => committed < available)
+            .map(committed => committed != available)
             .getOrElse(true)
     }
   }
@@ -290,6 +290,13 @@ class StreamExecution(
       assert(offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
         s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
       logInfo(s"Committed offsets for batch $currentBatchId.")
+
+      // Now that we have logged the new batch, no further processing will happen for
+      // the previous batch, and it is safe to discard the old metadata.
+      // Note that purge is exclusive, i.e. it purges everything before currentBatchId.
+      // NOTE: If StreamExecution implements pipeline parallelism (multiple batches in
+      // flight at the same time), this cleanup logic will need to change.
+      offsetLog.purge(currentBatchId)
     } else {
       awaitBatchLock.lock()
       try {
@@ -311,7 +318,8 @@ class StreamExecution(
 
     // Request unprocessed data from all sources.
     val newData = availableOffsets.flatMap {
-      case (source, available) if committedOffsets.get(source).map(_ < available).getOrElse(true) =>
+      case (source, available)
+          if committedOffsets.get(source).map(_ != available).getOrElse(true) =>
         val current = committedOffsets.get(source)
         val batch = source.getBatch(current, available)
         logDebug(s"Retrieving data from $source: $current -> $available")
@@ -397,16 +405,19 @@ class StreamExecution(
    * Blocks the current thread until processing for data from the given `source` has reached at
    * least the given `Offset`. This method is indented for use primarily when writing tests.
    */
-  def awaitOffset(source: Source, newOffset: Offset): Unit = {
+  private[sql] def awaitOffset(source: Source, newOffset: Offset): Unit = {
     def notDone = {
       val localCommittedOffsets = committedOffsets
-      !localCommittedOffsets.contains(source) || localCommittedOffsets(source) < newOffset
+      !localCommittedOffsets.contains(source) || localCommittedOffsets(source) != newOffset
     }
 
     while (notDone) {
       awaitBatchLock.lock()
       try {
         awaitBatchLockCondition.await(100, TimeUnit.MILLISECONDS)
+        if (streamDeathCause != null) {
+          throw streamDeathCause
+        }
       } finally {
         awaitBatchLock.unlock()
       }
