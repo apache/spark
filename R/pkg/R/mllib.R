@@ -95,6 +95,13 @@ setClass("ALSModel", representation(jobj = "jobj"))
 #' @note KSTest since 2.1.0
 setClass("KSTest", representation(jobj = "jobj"))
 
+#' S4 class that represents an LogisticRegressionModel
+#'
+#' @param jobj a Java object reference to the backing Scala LogisticRegressionModel
+#' @export
+#' @note LogisticRegressionModel since 2.1.0
+setClass("LogisticRegressionModel", representation(jobj = "jobj"))
+
 #' Saves the MLlib model to the input path
 #'
 #' Saves the MLlib model to the input path. For more information, see the specific
@@ -105,7 +112,7 @@ setClass("KSTest", representation(jobj = "jobj"))
 #' @seealso \link{spark.glm}, \link{glm},
 #' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
 #' @seealso \link{spark.lda}, \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
-#' @seealso \link{read.ml}
+#' @seealso \link{spark.logit}, \link{read.ml}
 NULL
 
 #' Makes predictions from a MLlib model
@@ -117,7 +124,7 @@ NULL
 #' @export
 #' @seealso \link{spark.glm}, \link{glm},
 #' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
-#' @seealso \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}, \link{spark.logit}
 NULL
 
 write_internal <- function(object, path, overwrite = FALSE) {
@@ -647,6 +654,169 @@ setMethod("predict", signature(object = "KMeansModel"),
             predict_internal(object, newData)
           })
 
+#' Logistic Regression Model
+#'
+#' Fits an logistic regression model against a Spark DataFrame. It supports "binomial": Binary logistic regression
+#' with pivoting; "multinomial": Multinomial logistic (softmax) regression without pivoting, similar to glmnet.
+#' Users can print, make predictions on the produced model and save the model to the input path.
+#'
+#' @param data SparkDataFrame for training
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param regParam the regularization parameter. Default is 0.0.
+#' @param elasticNetParam the ElasticNet mixing parameter. For alpha = 0, the penalty is an L2 penalty.
+#'                        For alpha = 1, it is an L1 penalty. For 0 < alpha < 1, the penalty is a combination
+#'                        of L1 and L2. Default is 0.0 which is an L2 penalty.
+#' @param maxIter maximum iteration number.
+#' @param tol convergence tolerance of iterations.
+#' @param fitIntercept whether to fit an intercept term. Default is TRUE.
+#' @param family the name of family which is a description of the label distribution to be used in the model.
+#'               Supported options:
+#'                 - "auto": Automatically select the family based on the number of classes:
+#'                           If numClasses == 1 || numClasses == 2, set to "binomial".
+#'                           Else, set to "multinomial".
+#'                 - "binomial": Binary logistic regression with pivoting.
+#'                 - "multinomial": Multinomial logistic (softmax) regression without pivoting.
+#'                 Default is "auto".
+#' @param standardization whether to standardize the training features before fitting the model. The coefficients
+#'                        of models will be always returned on the original scale, so it will be transparent for
+#'                        users. Note that with/without standardization, the models should be always converged
+#'                        to the same solution when no regularization is applied. Default is TRUE, same as glmnet.
+#' @param threshold in binary classification, in range [0, 1]. If the estimated probability of class label 1
+#'                  is > threshold, then predict 1, else 0. A high threshold encourages the model to predict 0
+#'                  more often; a low threshold encourages the model to predict 1 more often. Note: Setting this with
+#'                  threshold p is equivalent to setting thresholds (Array(1-p, p)). When threshold is set, any user-set
+#'                  value for thresholds will be cleared. If both threshold and thresholds are set, then they must be
+#'                  equivalent. Default is 0.5.
+#' @param thresholds in multiclass (or binary) classification to adjust the probability of predicting each class.
+#'                   Array must have length equal to the number of classes, with values > 0, excepting that at most one
+#'                   value may be 0. The class with largest value p/t is predicted, where p is the original probability
+#'                   of that class and t is the class's threshold. Note: When thresholds is set, any user-set
+#'                   value for threshold will be cleared. If both threshold and thresholds are set, then they must be
+#'                   equivalent. Default is NULL.
+#' @param weightCol The weight column name.
+#' @param aggregationDepth depth for treeAggregate (>= 2). If the dimensions of features or the number of partitions
+#'                         are large, this param could be adjusted to a larger size. Default is 2.
+#' @param ... additional arguments passed to the method.
+#' @return \code{spark.logit} returns a fitted logistic regression model
+#' @rdname spark.logit
+#' @aliases spark.logit,SparkDataFrame,formula-method
+#' @name spark.logit
+#' @export
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' data <- list(list(7.0, 0.0), list(5.0, 1.0), list(3.0, 2.0),
+#'         list(5.0, 3.0), list(1.0, 4.0))
+#' df <- createDataFrame(data, c("label", "feature"))
+#' # save fitted model to input path
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#'
+#' # can also read back the saved model and print
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
+#' @note spark.logit since 2.1.0
+setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
+                   tol = 1E-6, fitIntercept = TRUE, family = "auto", standardization = TRUE,
+                   threshold = 0.5, thresholds = NULL, weightCol = NULL, aggregationDepth = 2) {
+            formula <- paste0(deparse(formula), collapse = "")
+
+            if (is.null(weightCol)) {
+              weightCol <- ""
+            }
+
+            if (!is.null(thresholds)) {
+              thresholds <- as.array(thresholds)
+            }
+
+            jobj <- callJStatic("org.apache.spark.ml.r.LogisticRegressionWrapper", "fit",
+                                data@sdf, formula, as.numeric(regParam), as.numeric(elasticNetParam),
+                                as.integer(maxIter), as.numeric(tol), as.logical(fitIntercept), as.character(family),
+                                as.logical(standardization), as.numeric(threshold), thresholds,
+                                as.character(weightCol), as.integer(aggregationDepth))
+            new("LogisticRegressionModel", jobj = jobj)
+          })
+
+#  Predicted values based on an LogisticRegressionModel model
+
+#' @param newData a SparkDataFrame for testing.
+#' @return \code{predict} returns the predicted values based on an LogisticRegressionModel.
+#' @rdname spark.logit
+#' @export
+#' @note predict(LogisticRegressionModel) since 2.1.0
+setMethod("predict", signature(object = "LogisticRegressionModel"),
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
+
+#  Get the summary of an LogisticRegressionModel
+
+#' @return \code{summary} returns the Binary Logistic regression results of a given model as lists. Note that
+#'                        Multinomial logistic regression summary is not available now.
+#' @rdname spark.logit
+#' @aliases spark.logit,SparkDataFrame,formula-method
+#' @export
+#' @note summary(LogisticRegressionModel) since 2.1.0
+setMethod("summary", signature(object = "LogisticRegressionModel"),
+          function(object) {
+            jobj <- object@jobj
+            is.loaded <- callJMethod(jobj, "isLoaded")
+
+            roc <- if (is.loaded) {
+              NULL
+            } else {
+              dataFrame(callJMethod(jobj, "roc"))
+            }
+
+            areaUnderROC <- if (is.loaded) {
+              NULL
+            } else {
+              callJMethod(jobj, "areaUnderROC")
+            }
+
+            pr <- if (is.loaded) {
+              NULL
+            } else {
+              dataFrame(callJMethod(jobj, "pr"))
+            }
+
+            fMeasureByThreshold <- if (is.loaded) {
+              NULL
+            } else {
+              callJMethod(jobj, "fMeasureByThreshold")
+            }
+
+            precisionByThreshold <- if (is.loaded) {
+              NULL
+            } else {
+              callJMethod(jobj, "precisionByThreshold")
+            }
+
+            recallByThreshold <- if (is.loaded) {
+              NULL
+            } else {
+              callJMethod(jobj, "recallByThreshold")
+            }
+
+            totalIterations <- if (is.loaded) {
+              NULL
+            } else {
+              callJMethod(jobj, "totalIterations")
+            }
+
+            objectiveHistory <- if (is.loaded) {
+              NULL
+            } else {
+              callJMethod(jobj, "objectiveHistory")
+            }
+            list(roc = roc, areaUnderROC = areaUnderROC, pr = pr, fMeasureByThreshold = fMeasureByThreshold,
+                 precisionByThreshold= precisionByThreshold, recallByThreshold = recallByThreshold,
+                 totalIterations = totalIterations, objectiveHistory = objectiveHistory)
+          })
+
 #' Multilayer Perceptron Classification Model
 #'
 #' \code{spark.mlp} fits a multi-layer perceptron neural network model against a SparkDataFrame.
@@ -882,6 +1052,21 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
             write_internal(object, path, overwrite)
           })
 
+#  Save fitted LogisticRegressionModel to the input path
+
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.logit
+#' @aliases write.ml,LogisticRegressionModel,character-method
+#' @export
+#' @note write.ml(LogisticRegression, character) since 2.1.0
+setMethod("write.ml", signature(object = "LogisticRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
 #  Save fitted MLlib model to the input path
 
 #' @param path the directory where the model is saved.
@@ -932,6 +1117,8 @@ read.ml <- function(path) {
     new("GaussianMixtureModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.ALSWrapper")) {
     new("ALSModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.LogisticRegressionWrapper")) {
+    new("LogisticRegressionModel", jobj = jobj)
   } else {
     stop("Unsupported model: ", jobj)
   }

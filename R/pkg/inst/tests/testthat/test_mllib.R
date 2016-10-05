@@ -587,6 +587,17 @@ test_that("spark.isotonicRegression", {
   unlink(modelPath)
 })
 
+test_that("spark.logit", {
+  label <- c(1.0, 1.0, 1.0, 0.0, 0.0)
+  feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
+  binary_data <- as.data.frame(cbind(label, feature))
+  binary_df <- suppressWarnings(createDataFrame(binary_data))
+
+  blr_model <- spark.logit(binary_df, label ~ feature, threshold = 1.0)
+  blr_predict <- collect(select(predict(blr_model, binary_df), "prediction"))
+  expect_equal(blr_predict$prediction, c(0, 0, 0, 0, 0))
+})
+
 test_that("spark.gaussianMixture", {
   # R code to reproduce the result.
   # nolint start
