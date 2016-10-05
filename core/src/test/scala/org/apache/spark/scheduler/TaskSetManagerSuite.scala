@@ -816,6 +816,59 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   test("Kill other task attempts when one attempt belonging to the same task succeeds") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    val taskSet = FakeTask.createTaskSet(4)
+    // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
+    sc.conf.set("spark.speculation.multiplier", "0.0")
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
+    val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
+      task.metrics.internalAccums
+    }
+    // Offer resources for 4 tasks to start
+    for ((k, v) <- List(
+        "exec1" -> "host1",
+        "exec1" -> "host1",
+        "exec2" -> "host2",
+        "exec2" -> "host2")) {
+      val taskOption = manager.resourceOffer(k, v, NO_PREF)
+      assert(taskOption.isDefined)
+      val task = taskOption.get
+      assert(task.executorId === k)
+    }
+    assert(sched.startedTasks.toSet === Set(0, 1, 2, 3))
+    // Complete the 3 tasks and leave 1 task in running
+    for (id <- Set(0, 1, 2)) {
+      manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
+      assert(sched.endedTasks(id) === Success)
+    }
+
+    // checkSpeculatableTasks checks that the task runtime is greater than the threshold for
+    // speculating. Since we use a threshold of 0 for speculation, tasks need to be running for
+    // > 0ms, so advance the clock by 1ms here.
+    clock.advance(1)
+    assert(manager.checkSpeculatableTasks(0))
+    // Offer resource to start the speculative attempt for the running task
+    val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF)
+    assert(taskOption5.isDefined)
+    val task5 = taskOption5.get
+    assert(task5.index === 3)
+    assert(task5.taskId === 4)
+    assert(task5.executorId === "exec1")
+    assert(task5.attemptNumber === 1)
+    sched.backend = mock(classOf[SchedulerBackend])
+    // Complete the speculative attempt for the running task
+    manager.handleSuccessfulTask(4, createTaskResult(3, accumUpdatesByTask(3)))
+    // Verify that it kills other running attempt
+    verify(sched.backend).killTask(3, "exec2", true)
+    // Because the SchedulerBackend was a mock, the 2nd copy of the task won't actually be
+    // killed, so the FakeTaskScheduler is only told about the successful completion
+    // of the speculated task.
+    assert(sched.endedTasks(3) === Success)
+  }
+
+  test("Killing speculative tasks does not count towards aborting the taskset") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(5)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
     sc.conf.set("spark.speculation.multiplier", "0.0")
@@ -828,11 +881,11 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Offer resources for 5 tasks to start
     val tasks = new ArrayBuffer[TaskDescription]()
     for ((k, v) <- List(
-        "exec1" -> "host1",
-        "exec1" -> "host1",
-        "exec1" -> "host1",
-        "exec2" -> "host2",
-        "exec2" -> "host2")) {
+      "exec1" -> "host1",
+      "exec1" -> "host1",
+      "exec1" -> "host1",
+      "exec2" -> "host2",
+      "exec2" -> "host2")) {
       val taskOption = manager.resourceOffer(k, v, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
@@ -857,7 +910,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
 
     // have each of the running tasks fail 3 times (not enough to abort the stage)
-    (3 until 6).foreach { attempt =>
+    (0 until 3).foreach { attempt =>
       Seq(3, 4).foreach { index =>
         val task = runningTaskForIndex(index)
         logInfo(s"failing task $task")
