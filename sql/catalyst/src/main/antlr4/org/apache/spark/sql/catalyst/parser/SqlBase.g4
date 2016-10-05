@@ -601,7 +601,7 @@ complexColTypeList
     ;
 
 complexColType
-    : identifier ':'? dataType (COMMENT STRING)?
+    : identifier ':' dataType (COMMENT STRING)?
     ;
 
 whenClause

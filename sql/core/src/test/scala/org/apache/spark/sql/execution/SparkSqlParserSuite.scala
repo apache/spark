@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.command.{DescribeFunctionCommand, Describe
   ShowFunctionsCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, CreateTempViewUsing}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
 /**
  * Parser test cases for rules defined in [[SparkSqlParser]].
@@ -152,19 +152,56 @@ class SparkSqlParserSuite extends PlanTest {
     )
   }
 
-  test("create table using - createTableHeader") {
-    assertEqual("CREATE TABLE my_tab USING parquet", createTableUsing(table = "my_tab"))
-    assertEqual("CREATE TABLE db.my_tab USING parquet",
-      createTableUsing(table = "my_tab", database = Some("db")))
-    intercept("CREATE TABLE dup.db.my_tab USING parquet", "mismatched input '.'")
-    assertEqual("CREATE TEMPORARY TABLE my_tab USING parquet",
-      createTempViewUsing(table = "my_tab"))
-    intercept("CREATE EXTERNAL TABLE my_tab USING parquet",
-      "Operation not allowed: CREATE EXTERNAL TABLE ... USING")
-    assertEqual("CREATE TABLE IF NOT EXISTS my_tab USING parquet",
-      createTableUsing(table = "my_tab", mode = SaveMode.Ignore))
-    intercept("CREATE TEMPORARY TABLE IF NOT EXISTS my_tab USING parquet",
-      "Operation not allowed: CREATE TEMPORARY TABLE ... IF NOT EXISTS")
+  test("create table - schema") {
+    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING)",
+      createTable(
+        table = "my_tab",
+        schema = (new StructType)
+          .add("a", IntegerType, nullable = true, "test")
+          .add("b", StringType)
+      )
+    )
+    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
+      "PARTITIONED BY (c INT, d STRING COMMENT 'test2')",
+      createTable(
+        table = "my_tab",
+        schema = (new StructType)
+          .add("a", IntegerType, nullable = true, "test")
+          .add("b", StringType)
+          .add("c", IntegerType)
+          .add("d", StringType, nullable = true, "test2"),
+        partitionColumnNames = Seq("c", "d")
+      )
+    )
+    assertEqual("CREATE TABLE my_tab(id BIGINT, nested STRUCT<col1: STRING,col2: INT>)",
+      createTable(
+        table = "my_tab",
+        schema = (new StructType)
+          .add("id", LongType)
+          .add("nested", (new StructType)
+            .add("col1", StringType)
+            .add("col2", IntegerType)
+          )
+      )
+    )
+    // Partitioned by a StructType should be accepted by `SparkSqlParser` but will fail an analyze
+    // rule in `AnalyzeCreateTable`.
+    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
+      "PARTITIONED BY (nested STRUCT<col1: STRING,col2: INT>)",
+      createTable(
+        table = "my_tab",
+        schema = (new StructType)
+          .add("a", IntegerType, nullable = true, "test")
+          .add("b", StringType)
+          .add("nested", (new StructType)
+            .add("col1", StringType)
+            .add("col2", IntegerType)
+          ),
+        partitionColumnNames = Seq("nested")
+      )
+    )
+    intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING)",
+      "no viable alternative at input")
   }
 
   test("create table using - schema") {
@@ -180,82 +217,6 @@ class SparkSqlParserSuite extends PlanTest {
       "no viable alternative at input")
   }
 
-  test("create table using - tableProvider") {
-    assertEqual("CREATE TABLE my_tab USING json",
-      createTableUsing(table = "my_tab", provider = Some("json")))
-    val e = intercept[AnalysisException](parser.parsePlan("CREATE TABLE my_tab USING hive"))
-    assert(e.message.contains("Cannot create hive serde table"))
-  }
-
-  test("create table using - tablePropertyList") {
-    assertEqual("CREATE TABLE my_tab USING parquet OPTIONS (a 1, b 0.1, c TRUE)",
-      createTableUsing(
-        table = "my_tab",
-        storage = CatalogStorageFormat.empty.copy(
-          properties = Map("a" -> "1", "b" -> "0.1", "c" -> "true")
-        )
-      )
-    )
-    assertEqual("CREATE TABLE my_tab USING parquet OPTIONS ('a' = 1, 'b' = 0.1, 'c' = TRUE)",
-      createTableUsing(
-        table = "my_tab",
-        storage = CatalogStorageFormat.empty.copy(
-          properties = Map("a" -> "1", "b" -> "0.1", "c" -> "true")
-        )
-      )
-    )
-    intercept("CREATE TABLE my_tab USING parquet OPTIONS ()", "no viable alternative at input")
-    intercept("CREATE TABLE my_tab USING parquet OPTIONS (a = 1, b)",
-      "Operation not allowed: Values must be specified for key(s)")
-  }
-
-  test("create table using - partitioned") {
-    assertEqual("CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (a)",
-      createTableUsing(
-        table = "my_tab",
-        schema = (new StructType)
-          .add("a", IntegerType)
-          .add("b", StringType),
-        partitionColumnNames = Seq("a")
-      )
-    )
-  }
-
-  test("create table using - bucketSpec") {
-    assertEqual("CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
-      "CLUSTERED BY (a) INTO 5 BUCKETS",
-      createTableUsing(
-        table = "my_tab",
-        schema = (new StructType)
-          .add("a", IntegerType)
-          .add("b", StringType),
-        bucketSpec = Some(BucketSpec(5, Seq("a"), Seq.empty))
-      )
-    )
-    assertEqual("CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
-      "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS",
-      createTableUsing(
-        table = "my_tab",
-        schema = (new StructType)
-          .add("a", IntegerType)
-          .add("b", StringType),
-        bucketSpec = Some(BucketSpec(5, Seq("a"), Seq("b")))
-      )
-    )
-    intercept("CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
-      "CLUSTERED BY (a) SORTED BY (b) INTO 0 BUCKETS", "Expected positive number of buckets")
-  }
-
-  test("create table using - CTAS") {
-    val query = parser.parsePlan("SELECT a, b FROM t1")
-    assertEqual("CREATE TABLE my_tab USING parquet SELECT a, b FROM t1",
-      createTableUsing(table = "my_tab", query = Some(query)))
-    intercept("CREATE TEMPORARY TABLE my_tab USING parquet AS SELECT a, b FROM t1",
-      "Operation not allowed: CREATE TEMPORARY TABLE ... USING ... AS query")
-    intercept("CREATE TABLE my_tab(a INT, b STRING) USING parquet AS SELECT a FROM t1",
-      "mismatched input 'AS'")
-  }
-  
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     assertEqual("describe table t",
       DescribeTableCommand(
