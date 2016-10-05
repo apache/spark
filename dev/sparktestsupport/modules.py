@@ -158,6 +158,18 @@ hive_thriftserver = Module(
 )
 
 
+sql_kafka = Module(
+    name="sql-kafka-0-10",
+    dependencies=[sql],
+    source_file_regexes=[
+        "external/kafka-0-10-sql",
+    ],
+    sbt_test_goals=[
+        "sql-kafka-0-10/test",
+    ]
+)
+
+
 sketch = Module(
     name="sketch",
     dependencies=[tags],
