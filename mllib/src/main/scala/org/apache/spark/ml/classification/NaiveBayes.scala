@@ -177,7 +177,7 @@ class NaiveBayes @Since("1.5.0") (
     val numDocuments = aggregated.map(_._2._1).sum
 
     val piArray = Array.fill[Double](numLabels)(0.0)
-    val thetaArrays = Array.fill[Double](numLabels, numFeatures)(0.0)
+    val thetaArray = Array.fill[Double](numLabels * numFeatures)(0.0)
 
     val lambda = $(smoothing)
     val piLogDenom = math.log(numDocuments + numLabels * lambda)
@@ -193,14 +193,14 @@ class NaiveBayes @Since("1.5.0") (
       }
       var j = 0
       while (j < numFeatures) {
-        thetaArrays(i)(j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
+        thetaArray(i * numFeatures + j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
         j += 1
       }
       i += 1
     }
 
     val pi = Vectors.dense(piArray)
-    val theta = new DenseMatrix(numLabels, thetaArrays(0).length, thetaArrays.flatten, true)
+    val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
     new NaiveBayesModel(uid, pi, theta)
   }
 
