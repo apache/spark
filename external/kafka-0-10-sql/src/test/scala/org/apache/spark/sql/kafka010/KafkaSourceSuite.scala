@@ -191,6 +191,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
       .option("subscribePattern", s"$topicPrefix-.*")
+      .option("failOnDataLoss", "false")
 
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")

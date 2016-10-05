@@ -166,7 +166,9 @@ private[kafka010] case class KafkaSource(
     }
 
     val deletedPartitions = fromPartitionOffsets.keySet.diff(untilPartitionOffsets.keySet)
-    logWarning(s"$deletedPartitions are gone. Some data may have been missed")
+    if (deletedPartitions.nonEmpty) {
+      reportDataLoss(s"$deletedPartitions are gone. Some data may have been missed")
+    }
 
     // Use the until partitions to calculate offset ranges to ignore partitions that have
     // been deleted
