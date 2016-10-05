@@ -462,7 +462,10 @@ private[ui] class JobDataSource(
       }
       case "Description" => new Ordering[JobTableRowData] {
         override def compare(x: JobTableRowData, y: JobTableRowData): Int =
-          Ordering.String.compare(x.lastStageDescription, y.lastStageDescription)
+          (x.lastStageDescription, y.lastStageDescription) match {
+            case ("", "") => Ordering.String.compare(x.lastStageName, y.lastStageName)
+            case (xDesc, yDesc) => Ordering.String.compare(xDesc, yDesc)
+          }
       }
       case "Submitted" => new Ordering[JobTableRowData] {
         override def compare(x: JobTableRowData, y: JobTableRowData): Int =
@@ -498,8 +501,7 @@ private[ui] class JobPagedTable(
     sortColumn: String,
     desc: Boolean
   ) extends PagedTable[JobTableRowData] {
-  val parameterPath = UIUtils.prependBaseUri(basePath) + s"/$subPath/?" +
-    parameterOtherTable.mkString("&")
+  val parameterPath = basePath + s"/$subPath/?" + parameterOtherTable.mkString("&")
 
   override def tableId: String = jobTag + "-table"
 

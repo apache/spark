@@ -107,7 +107,6 @@ private[ui] class StageTableRowData(
     val stageId: Int,
     val attemptId: Int,
     val schedulingPool: String,
-    val description: String,
     val descriptionOption: Option[String],
     val submissionTime: Long,
     val formattedSubmissionTime: String,
@@ -126,7 +125,7 @@ private[ui] class MissingStageTableRowData(
     stageInfo: StageInfo,
     stageId: Int,
     attemptId: Int) extends StageTableRowData(
-  stageInfo, None, stageId, attemptId, "", "", None, 0, "", -1, "", 0, "", 0, "", 0, "", 0, "")
+  stageInfo, None, stageId, attemptId, "", None, 0, "", -1, "", 0, "", 0, "", 0, "", 0, "")
 
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StagePagedTable(
@@ -464,7 +463,6 @@ private[ui] class StageDataSource(
       s.stageId,
       s.attemptId,
       stageData.schedulingPool,
-      description.getOrElse(""),
       description,
       s.submissionTime.getOrElse(0),
       formattedSubmissionTime,
@@ -496,7 +494,10 @@ private[ui] class StageDataSource(
       }
       case "Description" => new Ordering[StageTableRowData] {
         override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.String.compare(x.description, y.description)
+          (x.descriptionOption, y.descriptionOption) match {
+            case (None, None) => Ordering.String.compare(x.stageInfo.name, y.stageInfo.name)
+            case (xDesc, yDesc) => Ordering.Option[String].compare(xDesc, yDesc)
+          }
       }
       case "Submitted" => new Ordering[StageTableRowData] {
         override def compare(x: StageTableRowData, y: StageTableRowData): Int =
