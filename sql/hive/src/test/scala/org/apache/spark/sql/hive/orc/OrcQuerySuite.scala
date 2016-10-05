@@ -91,6 +91,16 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
+  test("Read/write UserDefinedType") {
+    withTempPath { path =>
+      val data = Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25))))
+      val udtDF = data.toDF("id", "vectors")
+      udtDF.write.orc(path.getAbsolutePath)
+      val readBack = spark.read.schema(udtDF.schema).orc(path.getAbsolutePath)
+      checkAnswer(udtDF, readBack)
+    }
+  }
+
   test("Creating case class RDD table") {
     val data = (1 to 100).map(i => (i, s"val_$i"))
     sparkContext.parallelize(data).toDF().createOrReplaceTempView("t")
