@@ -195,7 +195,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
           Row(3, Timestamp.valueOf("1965-01-01 10:11:12.123456"))))
     }
 
-    // When written as TIMESTAMP_MILLIS, the microseconds are truncated.
+    // The microsecond portion is truncated when written as TIMESTAMP_MILLIS.
     withTable("ts") {
       withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "true") {
         sql("create table ts (c1 int, c2 timestamp) using parquet")
@@ -216,6 +216,21 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
             Row(5, Timestamp.valueOf("1965-01-01 10:11:12.1")),
             Row(6, Timestamp.valueOf("1965-01-01 10:11:12.123")),
             Row(7, Timestamp.valueOf("0001-01-01 00:00:00.000"))))
+
+        // Read timestamps that were encoded as TIMESTAMP_MILLIS annotated as INT64
+        // with PARQUET_INT64_AS_TIMESTAMP_MILLIS set to false.
+        withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "false") {
+          checkAnswer(
+            sql("select * from ts"),
+            Seq(
+              Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123")),
+              Row(2, null),
+              Row(3, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+              Row(4, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+              Row(5, Timestamp.valueOf("1965-01-01 10:11:12.1")),
+              Row(6, Timestamp.valueOf("1965-01-01 10:11:12.123")),
+              Row(7, Timestamp.valueOf("0001-01-01 00:00:00.000"))))
+        }
       }
     }
   }

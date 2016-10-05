@@ -158,7 +158,8 @@ public class VectorizedColumnReader {
             num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
         if (column.hasDictionary() || (rowId == 0 &&
             (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT32 ||
-            descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64 ||
+            (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64  &&
+               column.dataType() != DataTypes.TimestampType) ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.FLOAT ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.DOUBLE ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.BINARY))) {
@@ -251,7 +252,15 @@ public class VectorizedColumnReader {
               column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));
             }
           }
-        } else {
+        } else if (column.dataType() == DataTypes.TimestampType) {
+          for (int i = rowId; i < rowId + num; ++i) {
+            if (!column.isNullAt(i)) {
+              column.putLong(i,
+                DateTimeUtils.fromMillis(dictionary.decodeToLong(dictionaryIds.getDictId(i))));
+            }
+          }
+        }
+        else {
           throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
         }
         break;

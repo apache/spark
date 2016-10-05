@@ -609,6 +609,18 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
+  test("read dictionary and plain encoded timestamp_millis written as INT64") {
+    ("true" :: "false" :: Nil).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        checkAnswer(
+          // timestamp column in this file is encoded using combination of plain
+          // and dictionary encodings.
+          readResourceParquetFile("test-data/timemillis-in-i64.parquet"),
+          (1 to 3).map(i => Row(new java.sql.Timestamp(10))))
+      }
+    }
+  }
+
   test("SPARK-12589 copy() on rows returned from reader works for strings") {
     withTempPath { dir =>
       val data = (1, "abc") ::(2, "helloabcde") :: Nil

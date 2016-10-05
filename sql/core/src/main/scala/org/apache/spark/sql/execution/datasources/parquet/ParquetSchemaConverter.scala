@@ -363,9 +363,6 @@ private[parquet] class ParquetSchemaConverter(
       case DateType =>
         Types.primitive(INT32, repetition).as(DATE).named(field.name)
 
-      case TimestampType if writeTimestampInMillis =>
-        Types.primitive(INT64, repetition).as(TIMESTAMP_MILLIS).named(field.name)
-
       // NOTE: Spark SQL TimestampType is NOT a well defined type in Parquet format spec.
       //
       // As stated in PARQUET-323, Parquet `INT96` was originally introduced to represent nanosecond
@@ -380,10 +377,16 @@ private[parquet] class ParquetSchemaConverter(
       // we may resort to microsecond precision in the future.
       //
       // For Parquet, we plan to write all `TimestampType` value as `TIMESTAMP_MICROS`, but it's
-      // currently not implemented yet because parquet-mr 1.7.0 (the version we're currently using)
-      // hasn't implemented `TIMESTAMP_MICROS` yet.
+      // currently not implemented yet because parquet-mr 1.8.1 (the version we're currently using)
+      // hasn't implemented `TIMESTAMP_MICROS` yet, however it supports TIMESTAMP_MILLIS. We will
+      // encode timestamp values as TIMESTAMP_MILLIS annotating INT64 if
+      // 'spark.sql.parquet.int64AsTimestampMillis' is set.
       //
       // TODO Converts `TIMESTAMP_MICROS` once parquet-mr implements that.
+
+      case TimestampType if writeTimestampInMillis =>
+        Types.primitive(INT64, repetition).as(TIMESTAMP_MILLIS).named(field.name)
+
       case TimestampType =>
         Types.primitive(INT96, repetition).named(field.name)
 
