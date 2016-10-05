@@ -230,11 +230,12 @@ object StreamMetrics extends Logging {
   val GET_BATCH_TIMESTAMP = "timestamp.afterGetBatch"
   val FINISH_TIMESTAMP = "timestamp.triggerFinish"
 
-  val SOURCE_GET_OFFSET_LATENCY = "latency.sourceGetOffset"
   val GET_OFFSET_LATENCY = "latency.getOffset"
   val OFFSET_WAL_WRITE_LATENCY = "latency.offsetLogWrite"
   val GET_BATCH_LATENCY = "latency.getBatch"
   val TRIGGER_LATENCY = "latency.fullTrigger"
+  val SOURCE_GET_OFFSET_LATENCY = "latency.sourceGetOffset"
+  val SOURCE_GET_BATCH_LATENCY = "latency.sourceGetBatch"
 
   val NUM_INPUT_ROWS = "numRows.input.total"
   val NUM_OUTPUT_ROWS = "numRows.output"

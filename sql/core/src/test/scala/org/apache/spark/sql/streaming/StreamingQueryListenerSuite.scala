@@ -196,6 +196,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           assert(status.sourceStatuses.size === 1)
           assert(status.sourceStatuses(0).triggerStatus("triggerId") === "0")
           assert(status.sourceStatuses(0).triggerStatus("latency.sourceGetOffset") === "100")
+          assert(status.sourceStatuses(0).triggerStatus("latency.sourceGetBatch") === "200")
           assert(status.sourceStatuses(0).triggerStatus("numRows.input.source") === "2")
           true
         },
