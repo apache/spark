@@ -20,16 +20,14 @@ package org.apache.spark.ml.clustering
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.Model
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
-import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable}
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.types.StructType
 
 private[clustering] case class TestRow(features: Vector)
 
@@ -144,7 +142,8 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       assert(model.clusterCenters === model2.clusterCenters)
     }
     val kmeans = new KMeans()
-    testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings, checkModelData,
+      Map("initialModel" -> (checkModelData _).asInstanceOf[(Any, Any) => Unit]))
   }
 
   test("Initialize using given cluster centers") {

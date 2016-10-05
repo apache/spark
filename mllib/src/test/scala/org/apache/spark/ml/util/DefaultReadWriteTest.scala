@@ -125,27 +125,21 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
       estimator: E,
       dataset: Dataset[_],
       testParams: Map[String, Any],
-      checkModelData: (M, M) => Unit): Unit = {
+      checkModelData: (M, M) => Unit,
+      checkParamsFunctions: Map[String, (Any, Any) => Unit] = Map.empty): Unit = {
     // Set some Params to make sure set Params are serialized.
     testParams.foreach { case (p, v) =>
       estimator.set(estimator.getParam(p), v)
     }
     val model = estimator.fit(dataset)
 
-    // TODO: Change the test function if the type of initialModel isn't the same with type M.
-    val testFunctions = if (testParams.contains("initialModel")) {
-      Map(("initialModel", checkModelData.asInstanceOf[(Any, Any) => Unit]))
-    } else {
-      Map.empty[String, (Any, Any) => Unit]
-    }
-
     // Test Estimator save/load
     val estimator2 = testDefaultReadWrite(estimator, testParams = false)
-    compareParamsWithComplexTypes(estimator, estimator2, testParams, testFunctions)
+    compareParamsWithComplexTypes(estimator, estimator2, testParams, checkParamsFunctions)
 
     // Test Model save/load
     val model2 = testDefaultReadWrite(model, testParams = false)
-    compareParamsWithComplexTypes(model, model2, testParams, testFunctions)
+    compareParamsWithComplexTypes(model, model2, testParams, checkParamsFunctions)
 
     checkModelData(model, model2)
   }

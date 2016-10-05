@@ -369,6 +369,8 @@ class KMeans @Since("1.5.0") (
 @Since("1.6.0")
 object KMeans extends DefaultParamsReadable[KMeans] {
 
+  // TODO: [SPARK-17784]: Add a fromCenters method
+
   @Since("1.6.0")
   override def load(path: String): KMeans = super.load(path)
 

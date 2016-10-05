@@ -315,7 +315,7 @@ private[ml] object DefaultParamsWriter {
       ("sparkVersion" -> sc.version) ~
       ("uid" -> uid) ~
       ("paramMap" -> jsonParams) ~
-      // TODO: Figure out more robust way to detect the existing of the initialModel.
+      // TODO: [SPARK-17785] Figure out a more robust way to detect the existing of the initialModel
       ("initialModel" -> initialModelFlag)
 
     val metadata = extraMetadata match {
