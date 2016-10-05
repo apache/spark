@@ -57,7 +57,7 @@ private[scheduler] object BlacklistTracker extends Logging {
           case None =>
             // local-cluster is *not* considered local for these purposes, we still want the
             // blacklist enabled by default
-            !Utils.isLocalMaster(conf)
+            false
         }
     }
   }
@@ -85,44 +85,39 @@ private[scheduler] object BlacklistTracker extends Logging {
       throw new IllegalArgumentException(s"$k was $v, but must be > 0.")
     }
 
-    // undocumented escape hatch for validation -- just for tests that want to run in an "unsafe"
-    // configuration.
-    if (!conf.get("spark.blacklist.testing.skipValidation", "false").toBoolean) {
-
-      Seq(
-        config.MAX_TASK_ATTEMPTS_PER_EXECUTOR,
-        config.MAX_TASK_ATTEMPTS_PER_NODE,
-        config.MAX_FAILURES_PER_EXEC_STAGE,
-        config.MAX_FAILED_EXEC_PER_NODE_STAGE
-      ).foreach { config =>
-        val v = conf.get(config)
-        if (v <= 0) {
-          mustBePos(config.key, v.toString)
-        }
+    Seq(
+      config.MAX_TASK_ATTEMPTS_PER_EXECUTOR,
+      config.MAX_TASK_ATTEMPTS_PER_NODE,
+      config.MAX_FAILURES_PER_EXEC_STAGE,
+      config.MAX_FAILED_EXEC_PER_NODE_STAGE
+    ).foreach { config =>
+      val v = conf.get(config)
+      if (v <= 0) {
+        mustBePos(config.key, v.toString)
       }
+    }
 
-      val timeout = getBlacklistTimeout(conf)
-      if (timeout <= 0) {
-        // first, figure out where the timeout came from, to include the right conf in the message.
-        conf.get(config.BLACKLIST_TIMEOUT_CONF) match {
-          case Some(t) =>
-            mustBePos(config.BLACKLIST_TIMEOUT_CONF.key, timeout.toString)
-          case None =>
-            mustBePos(config.BLACKLIST_LEGACY_TIMEOUT_CONF.key, timeout.toString)
-        }
+    val timeout = getBlacklistTimeout(conf)
+    if (timeout <= 0) {
+      // first, figure out where the timeout came from, to include the right conf in the message.
+      conf.get(config.BLACKLIST_TIMEOUT_CONF) match {
+        case Some(t) =>
+          mustBePos(config.BLACKLIST_TIMEOUT_CONF.key, timeout.toString)
+        case None =>
+          mustBePos(config.BLACKLIST_LEGACY_TIMEOUT_CONF.key, timeout.toString)
       }
+    }
 
-      val maxTaskFailures = conf.get(config.MAX_TASK_FAILURES)
-      val maxNodeAttempts = conf.get(config.MAX_TASK_ATTEMPTS_PER_NODE)
+    val maxTaskFailures = conf.get(config.MAX_TASK_FAILURES)
+    val maxNodeAttempts = conf.get(config.MAX_TASK_ATTEMPTS_PER_NODE)
 
-      if (maxNodeAttempts >= maxTaskFailures) {
-        throw new IllegalArgumentException(s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
-          s"( = ${maxNodeAttempts}) was >= ${config.MAX_TASK_FAILURES.key} " +
-          s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
-          s"Spark will not be robust to one bad node.  Decrease " +
-          s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.MAX_TASK_FAILURES.key}, " +
-          s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
-      }
+    if (maxNodeAttempts >= maxTaskFailures) {
+      throw new IllegalArgumentException(s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
+        s"( = ${maxNodeAttempts}) was >= ${config.MAX_TASK_FAILURES.key} " +
+        s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
+        s"Spark will not be robust to one bad node.  Decrease " +
+        s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.MAX_TASK_FAILURES.key}, " +
+        s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
     }
   }
 }

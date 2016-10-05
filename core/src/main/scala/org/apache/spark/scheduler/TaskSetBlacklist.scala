@@ -28,9 +28,9 @@ import org.apache.spark.util.Clock
  * (task, executor) / (task, nodes) pairs, and also completely blacklisting executors and nodes
  * for the entire taskset.
  *
- * THREADING:  As a helper to [[TaskSetManager]], this class is designed to only be called from code
- * with a lock on the TaskScheduler (e.g. its event handlers). It should not be called from other
- * threads.
+ * THREADING:  This class is a helper to [[TaskSetManager]]; as with the methods in
+ * [[TaskSetManager]] this class is designed only to be called from code with a lock on the
+ * TaskScheduler (e.g. its event handlers). It should not be called from other threads.
  */
 private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int, val clock: Clock)
     extends Logging {
@@ -66,8 +66,7 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
       index: Int): Boolean = {
     execToFailures.get(executorId)
       .map { execFailures =>
-        val count = execFailures.taskToFailureCountAndExpiryTime.get(index).map(_._1).getOrElse(0)
-        count >= MAX_TASK_ATTEMPTS_PER_EXECUTOR
+        execFailures.getNumTaskFailures(index) >= MAX_TASK_ATTEMPTS_PER_EXECUTOR
       }
       .getOrElse(false)
   }
@@ -81,7 +80,7 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
   }
 
   /**
-   * Return true if this executor is blacklisted for the given stage.  Completely ignores whether
+   * Return true if this executor is blacklisted for the given stage.  Completely ignores
    * anything to do with the node the executor is on.  That
    * is to keep this method as fast as possible in the inner-loop of the scheduler, where those
    * filters will already have been applied.
@@ -111,13 +110,14 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
         // because jobs are aborted based on the number task attempts; if we counted unique
         // executors, it would be hard to config to ensure that you try another
         // node before hitting the max number of task failures.
-        failures.taskToFailureCountAndExpiryTime.getOrElse(index, (0, 0))._1
+        failures.getNumTaskFailures(index)
       }
     }.sum
     if (failuresOnHost >= MAX_TASK_ATTEMPTS_PER_NODE) {
       nodeToBlacklistedTasks.getOrElseUpdate(host, new HashSet()) += index
     }
 
+    // Check if enough tasks have failed on the executor to blacklist it for the entire stage.
     if (execFailures.numUniqueTasksWithFailures >= MAX_FAILURES_PER_EXEC_STAGE) {
       if (blacklistedExecs.add(exec)) {
         logInfo(s"Blacklisting executor ${exec} for stage $stageId")

@@ -29,27 +29,33 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
 
     val taskSetBlacklist = new TaskSetBlacklist(conf, stageId = 0, clock = clock)
     clock.setTime(0)
+    // task 0 should be blacklisted on exec1, and nowhere else
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "exec1", index = 0)
     for {
       executor <- (1 to 4).map(_.toString)
       index <- 0 until 10
     } {
-      val exp = (executor == "exec1" && index == 0)
-      assert(taskSetBlacklist.isExecutorBlacklistedForTask(executor, index) === exp)
+      val shouldBeBlacklisted = (executor == "exec1" && index == 0)
+      assert(taskSetBlacklist.isExecutorBlacklistedForTask(executor, index) === shouldBeBlacklisted)
     }
     assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
 
-    // Task 1 & 2 failed on both executor 1 & 2, so we should blacklist all executors on that host,
-    // for all tasks for the stage.  Note the api expects multiple checks for each type of
-    // blacklist -- this actually fits naturally with its use in the scheduler.
+    // Mark task 0 & 1 failed on both executor 1 & 2.
+    // We should blacklist all executors on that host, for all tasks for the stage.  Note the API
+    // will return false for isExecutorBacklistedForTaskSet even when the node is blacklisted, so
+    // the executor is implicitly blacklisted (this makes sense with how the scheduler uses the
+    // blacklist)
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "exec1", index = 1)
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    // Mark one task as failed on exec2 -- not enough for any further blacklisting yet.
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "exec2", index = 0)
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
     assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec2"))
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    // Mark another task as failed on exec2 -- now we blacklist exec2, which also leads to
+    // blacklisting the entire node.
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "exec2", index = 1)
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec2"))
@@ -85,7 +91,7 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
     // make sure that for blacklisting tasks, the node counts task attempts, not executors.  But for
     // stage-level blacklisting, we count unique tasks.  The reason for this difference is, with
     // task-attempt blacklisting, we want to make it easy to configure so that you ensure a node
-    // is blacklisted before the taskset is completely aborted b/c of spark.task.maxFailures.
+    // is blacklisted before the taskset is completely aborted because of spark.task.maxFailures.
     // But with stage-blacklisting, we want to make sure we're not just counting one bad task
     // that has failed many times.
 

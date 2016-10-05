@@ -23,36 +23,29 @@ import org.apache.spark.internal.config
 class BlacklistTrackerSuite extends SparkFunSuite {
 
   test("blacklist still respects legacy configs") {
-    val legacyKey = config.BLACKLIST_LEGACY_TIMEOUT_CONF.key
+    val conf = new SparkConf().setMaster("local")
+    assert(!BlacklistTracker.isBlacklistEnabled(conf))
+    conf.set(config.BLACKLIST_LEGACY_TIMEOUT_CONF, 5000L)
+    assert(BlacklistTracker.isBlacklistEnabled(conf))
+    assert(5000 === BlacklistTracker.getBlacklistTimeout(conf))
+    // the new conf takes precedence, though
+    conf.set(config.BLACKLIST_TIMEOUT_CONF, 1000L)
+    assert(1000 === BlacklistTracker.getBlacklistTimeout(conf))
 
-    {
-      val localConf = new SparkConf().setMaster("local")
-      assert(!BlacklistTracker.isBlacklistEnabled(localConf))
-      localConf.set(legacyKey, "5000")
-      assert(BlacklistTracker.isBlacklistEnabled(localConf))
-      assert(5000 === BlacklistTracker.getBlacklistTimeout(localConf))
-
-      localConf.set(legacyKey, "0")
-      assert(!BlacklistTracker.isBlacklistEnabled(localConf))
-    }
-
-    {
-      val distConf = new SparkConf().setMaster("yarn-cluster")
-      assert(BlacklistTracker.isBlacklistEnabled(distConf))
-      assert(60 * 60 * 1000L === BlacklistTracker.getBlacklistTimeout(distConf))
-      distConf.set(legacyKey, "5000")
-      assert(5000 === BlacklistTracker.getBlacklistTimeout(distConf))
-      distConf.set(config.BLACKLIST_TIMEOUT_CONF.key, "10h")
-      assert(10 * 60 * 60 * 1000L == BlacklistTracker.getBlacklistTimeout(distConf))
-    }
+    // if you explicitly set the legacy conf to 0, that also would disable blacklisting
+    conf.set(config.BLACKLIST_LEGACY_TIMEOUT_CONF, 0L)
+    assert(!BlacklistTracker.isBlacklistEnabled(conf))
+    // but again, the new conf takes precendence
+    conf.set(config.BLACKLIST_ENABLED, true)
+    assert(BlacklistTracker.isBlacklistEnabled(conf))
+    assert(1000 === BlacklistTracker.getBlacklistTimeout(conf))
   }
 
   test("check blacklist configuration invariants") {
     val conf = new SparkConf().setMaster("yarn-cluster")
     Seq(
       (2, 2),
-      (2, 3),
-      (3, 3)
+      (2, 3)
     ).foreach { case (maxTaskFailures, maxNodeAttempts) =>
       conf.set(config.MAX_TASK_FAILURES, maxTaskFailures)
       conf.set(config.MAX_TASK_ATTEMPTS_PER_NODE.key, maxNodeAttempts.toString)

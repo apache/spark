@@ -825,7 +825,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
       task.metrics.internalAccums
     }
-    // Offer resources for 4 tasks to start
+    // Offer resources for 5 tasks to start
     val tasks = new ArrayBuffer[TaskDescription]()
     for ((k, v) <- List(
         "exec1" -> "host1",
@@ -840,20 +840,19 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       tasks += task
     }
     assert(sched.startedTasks.toSet === (0 until 5).toSet)
-    // Complete 3 tasks and leave 2 task in running
+    // Complete 3 tasks and leave 2 tasks in running
     for (id <- Set(0, 1, 2)) {
       manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
       assert(sched.endedTasks(id) === Success)
     }
 
     def runningTaskForIndex(index: Int): TaskDescription = {
-      val t = tasks.find { task => task.index == index && !sched.endedTasks.contains(task.taskId) }
-      t match {
-        case Some(x) => x
-        case None =>
-          throw new RuntimeException(s"couldn't find index $index in " +
-            s"tasks: ${tasks.map{t => t.index -> t.taskId}} with endedTasks:" +
-            s" ${sched.endedTasks.keys}")
+      tasks.find { task =>
+        task.index == index && !sched.endedTasks.contains(task.taskId)
+      }.getOrElse {
+        throw new RuntimeException(s"couldn't find index $index in " +
+          s"tasks: ${tasks.map{t => t.index -> t.taskId}} with endedTasks:" +
+          s" ${sched.endedTasks.keys}")
       }
     }
 
@@ -872,7 +871,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       }
     }
 
-    // we can't be sure which one of our running tasks will get anothe speculative copy
+    // we can't be sure which one of our running tasks will get another speculative copy
     val originalTasks = Seq(3, 4).map { index => index -> runningTaskForIndex(index) }.toMap
 
     // checkSpeculatableTasks checks that the task runtime is greater than the threshold for
