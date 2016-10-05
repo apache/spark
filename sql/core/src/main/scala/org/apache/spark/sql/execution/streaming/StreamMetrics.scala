@@ -23,11 +23,18 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.{Source => CodahaleSource}
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.util.Clock
 
+/**
+ * Class that manages all the metrics related to a StreamingQuery. It does the following.
+ * - Calculates metrics (rates, latencies, etc.) based on information reported by StreamExecution.
+ * - Allows the current metric values to be queried
+ * - Serves some of the metrics through Codahale/DropWizard metrics
+ *
+ * @param sources Unique set of sources in a query
+ * @param triggerClock Clock used for triggering in StreamExecution
+ * @param codahaleSourceName Root name for all the Codahale metrics
+ */
 class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceName: String)
   extends CodahaleSource with Logging {
 
@@ -201,7 +208,7 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
 }
 
 object StreamMetrics extends Logging {
-
+  /** Simple utility class to calculate rate while avoiding DivideByZero */
   class RateCalculator {
     @volatile private var rate: Option[Double] = None
 

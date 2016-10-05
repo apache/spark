@@ -116,8 +116,8 @@ class StreamExecution(
   /* Get the call site in the caller thread; will pass this into the micro batch thread */
   private val callSite = Utils.getCallSite()
 
-  private val streamMetrics = new StreamMetrics(uniqueSources.toSet, triggerClock,
-    s"StructuredStreaming.$name")
+  private val streamMetrics =
+    new StreamMetrics(uniqueSources.toSet, triggerClock, s"StructuredStreaming.$name")
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
@@ -146,7 +146,17 @@ class StreamExecution(
   override def isActive: Boolean = state == ACTIVE
 
   override def status: StreamingQueryInfo = statusLock.synchronized {
-    this.toInfo
+    StreamingQueryInfo(
+      name = name,
+      id = id,
+      timestamp = triggerClock.getTimeMillis(),
+      inputRate = streamMetrics.currentInputRate,
+      processingRate = streamMetrics.currentProcessingRate,
+      outputRate = streamMetrics.currentOutputRate,
+      latency = streamMetrics.currentLatency,
+      sourceStatuses = sourceStatuses,
+      sinkStatus = sinkStatus,
+      triggerStatus = streamMetrics.currentTriggerStatus)
   }
 
   /** Returns current status of all the sources. */
@@ -200,7 +210,7 @@ class StreamExecution(
       // so must mark this as ACTIVE first.
       state = ACTIVE
       sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
-      postEvent(new QueryStarted(this.toInfo)) // Assumption: Does not throw exception.
+      postEvent(new QueryStarted(status)) // Assumption: Does not throw exception.
 
       // Unblock starting thread
       startLatch.countDown()
@@ -243,7 +253,7 @@ class StreamExecution(
           }
         }
         statusLock.synchronized { streamMetrics.reportTriggerFinished() }
-        postEvent(new QueryProgress(this.toInfo))
+        postEvent(new QueryProgress(status))
         isTerminated
       })
     } catch {
@@ -260,7 +270,7 @@ class StreamExecution(
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
       streamMetrics.stop()
       sparkSession.sparkContext.env.metricsSystem.removeSource(streamMetrics)
-      postEvent(new QueryTerminated(this.toInfo, exception.map(_.cause).map(Utils.exceptionString)))
+      postEvent(new QueryTerminated(status, exception.map(_.cause).map(Utils.exceptionString)))
       terminationLatch.countDown()
     }
   }
@@ -625,20 +635,6 @@ class StreamExecution(
 
   private def reportTimestamp(string: String): Unit = statusLock.synchronized {
     streamMetrics.reportTriggerStatus(string, triggerClock.getTimeMillis)
-  }
-
-  private def toInfo: StreamingQueryInfo = {
-    StreamingQueryInfo(
-      this.name,
-      this.id,
-      triggerClock.getTimeMillis(),
-      streamMetrics.currentInputRate,
-      streamMetrics.currentProcessingRate,
-      streamMetrics.currentOutputRate,
-      streamMetrics.currentLatency,
-      this.sourceStatuses,
-      this.sinkStatus,
-      streamMetrics.currentTriggerStatus)
   }
 
   trait State
