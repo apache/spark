@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.{DescribeFunctionCommand, ShowFunctionsCommand}
+import org.apache.spark.sql.execution.command.{DescribeFunctionCommand, DescribeTableCommand,
+  ShowFunctionsCommand}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -72,4 +73,17 @@ class SparkSqlParserSuite extends PlanTest {
       DescribeFunctionCommand(FunctionIdentifier("bar", database = Option("f")), isExtended = true))
   }
 
+  test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
+    assertEqual("describe table t",
+      DescribeTableCommand(
+        TableIdentifier("t"), Map.empty, isExtended = false, isFormatted = false))
+    assertEqual("describe table extended t",
+      DescribeTableCommand(
+        TableIdentifier("t"), Map.empty, isExtended = true, isFormatted = false))
+    assertEqual("describe table formatted t",
+      DescribeTableCommand(
+        TableIdentifier("t"), Map.empty, isExtended = false, isFormatted = true))
+
+    intercept("explain describe tables x", "Unsupported SQL statement")
+  }
 }
