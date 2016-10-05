@@ -52,9 +52,15 @@ case class CatalogStorageFormat(
     properties: Map[String, String]) {
 
   override def toString: String = {
+    val maskedProperties = properties.map {
+      case (password, _) if password.toLowerCase == "password" => (password, "###")
+      case (url, value) if url.toLowerCase == "url" && value.toLowerCase.contains("password") =>
+        (url, "###")
+      case o => o
+    }
     val serdePropsToString =
-      if (properties.nonEmpty) {
-        s"Properties: " + properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+      if (maskedProperties.nonEmpty) {
+        s"Properties: " + maskedProperties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
       } else {
         ""
       }
