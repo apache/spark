@@ -1447,39 +1447,31 @@ print.summary.KSTest <- function(x, ...) {
   invisible(x)
 }
 
-#' Decision tree regression model.
+#' Decision Tree
 #'
-#' Fit Decision Tree regression model on a SparkDataFrame.
+#' @description
+#' \code{spark.decisionTree} tree
 #'
-#' @param data SparkDataFrame for training.
-#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', ':', '+', and '-'.
-#'                Note that operator '.' is not supported currently.
-#' @return a fitted decision tree regression model
-#' @rdname spark.decisionTreeRegressor
-#' @seealso rpart: \url{https://cran.r-project.org/web/packages/rpart/}
-#' @export
-#' @examples
-#' \dontrun{
-#' df <- createDataFrame(sqlContext, kyphosis)
-#' model <- spark.decisionTree(df, Kyphosis ~ Age + Number + Start)
-#' }
+#' Decision Tree
+#'
+#' @param data a SparkDataFrame of user data.
 #' @note spark.decisionTree since 2.1.0
 setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, type = c("regression", "classification")) {
+          function(data, formula, type = c("regression", "classification"), maxDepth = 5, maxBins = 32 ) {
             formula <- paste(deparse(formula), collapse = "")
             if (identical(type, "regression")) {
               jobj <- callJStatic("org.apache.spark.ml.r.DecisionTreeRegressorWrapper", "fit",
-                                  data@sdf, formula)
+                                  data@sdf, formula, as.integer(maxDepth), as.integer(maxBins))
               new("DecisionTreeRegressionModel", jobj = jobj)
             } else if (identical(type, "classification")) {
-              jobj <- callJStatic("org.apache.spark.ml.r.DecisionTreeClassificationWrapper", "fit",
-              data@sdf, formula)
+              jobj <- callJStatic("org.apache.spark.ml.r.DecisionTreeClassifierWrapper", "fit",
+                                  data@sdf, formula, as.integer(maxDepth), as.integer(maxBins))
               new("DecisionTreeClassificationModel", jobj = jobj)
             }
           })
 
-# Makes predictions from a Decision Tree model or a model produced by spark.decisionTree()
+# Makes predictions from a Decision Tree Regression model or
+# a model produced by spark.decisionTree()
 
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
@@ -1488,6 +1480,20 @@ setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "fo
 #' @export
 #' @note predict(decisionTreeRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "DecisionTreeRegressionModel"),
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
+
+# Makes predictions from a Decision Tree Classification model or
+# a model produced by spark.decisionTree()
+
+#' @param newData a SparkDataFrame for testing.
+#' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
+#' "prediction"
+#' @rdname spark.decisionTree
+#' @export
+#' @note predict(decisionTreeClassificationModel) since 2.1.0
+setMethod("predict", signature(object = "DecisionTreeClassificationModel"),
           function(object, newData) {
             predict_internal(object, newData)
           })
@@ -1504,23 +1510,88 @@ setMethod("predict", signature(object = "DecisionTreeRegressionModel"),
 #' @export
 #' @note write.ml(DecisionTreeRegressionModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "DecisionTreeRegressionModel", path = "character"),
-function(object, path, overwrite = FALSE) {
-    write_internal(object, path, overwrite)
-})
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
 
-#  Get the summary of an IsotonicRegressionModel model
-
-#' @param object a fitted IsotonicRegressionModel
-#' @param ... Other optional arguments to summary of an IsotonicRegressionModel
-#' @return \code{summary} returns the model's boundaries and prediction as lists
-#' @rdname spark.isoreg
-#' @aliases summary,IsotonicRegressionModel-method
+#' Save the Decision Tree Classification model to the input path.
+#'
+#' @param object A fitted Decision tree classification model
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @aliases write.ml,DecisionTreeClassificationModel,character-method
+#' @rdname spark.decisionTreeClassification
 #' @export
-#' @note summary(IsotonicRegressionModel) since 2.1.0
+#' @note write.ml(DecisionTreeClassificationModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "DecisionTreeClassificationModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
+#  Get the summary of an DecisionTreeRegressionModel model
+
+#' @param object a fitted DecisionTreeRegressionModel
+#' @param ... Other optional arguments to summary of a DecisionTreeRegressionModel
+#' @return \code{summary} returns the model's features as lists, depth and number of nodes
+#' @rdname spark.decisionTree
+#' @aliases summary,DecisionTreeRegressionModel-method
+#' @export
+#' @note summary(DecisionTreeRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "DecisionTreeRegressionModel"),
           function(object, ...) {
             jobj <- object@jobj
-            boundaries <- callJMethod(jobj, "boundaries")
-            predictions <- callJMethod(jobj, "predictions")
-            return(list(boundaries = boundaries, predictions = predictions))
+            features <- callJMethod(jobj, "features")
+            depth <- callJMethod(jobj, "depth")
+            numNodes <- callJMethod(jobj, "numNodes")
+            ans <- list(features = features, depth = depth, numNodes = numNodes)
+            class(ans) <- "summary.DecisionTreeRegressionModel"
+            ans
           })
+
+#  Get the summary of an DecisionTreeClassificationModel model
+
+#' @param object a fitted DecisionTreeClassificationModel
+#' @param ... Other optional arguments to summary of a DecisionTreeClassificationModel
+#' @return \code{summary} returns the model's features as lists, depth and number of nodes
+#' @rdname spark.decisionTree
+#' @aliases summary,DecisionTreeClassificationModel-method
+#' @export
+#' @note summary(DecisionTreeRegressionModel) since 2.1.0
+setMethod("summary", signature(object = "DecisionTreeClassificationModel"),
+function(object, ...) {
+    jobj <- object@jobj
+    features <- callJMethod(jobj, "features")
+    depth <- callJMethod(jobj, "depth")
+    numNodes <- callJMethod(jobj, "numNodes")
+    ans <- list(features = features, depth = depth, numNodes = numNodes)
+    class(ans) <- "summary.DecisionTreeClassificationModel"
+    ans
+})
+
+#  Prints the summary of Decision Tree Regression Model
+
+#' @rdname spark.decisionTree
+#' @param x summary object of decisionTreeRegressionModel returned by \code{summary}.
+#' @export
+#' @note print.summary.DecisionTreeRegressionModel since 2.1.0
+print.summary.DecisionTreeRegressionModel <- function(x, ...) {
+  jobj <- x@jobj
+  summaryStr <- callJMethod(jobj, "summary")
+  cat(summaryStr, "\n")
+  invisible(x)
+  }
+
+#  Prints the summary of Decision Tree Classification Model
+
+#' @rdname spark.decisionTree
+#' @param x summary object of decisionTreeClassificationModel returned by \code{summary}.
+#' @export
+#' @note print.summary.DecisionTreeClassificationModel since 2.1.0
+print.summary.DecisionTreeClassificationModel <- function(x, ...) {
+    jobj <- x@jobj
+    summaryStr <- callJMethod(jobj, "summary")
+    cat(summaryStr, "\n")
+    invisible(x)
+}

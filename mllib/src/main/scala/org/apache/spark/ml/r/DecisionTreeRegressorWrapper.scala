@@ -23,8 +23,8 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
-import org.apache.spark.ml.feature.{IndexToString, RFormula}
+import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.feature.RFormula
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -32,20 +32,19 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 private[r] class DecisionTreeRegressorWrapper private (
   val pipeline: PipelineModel,
   val features: Array[String],
-  val labels: Array[String]) extends MLWritable {
-
-  import DecisionTreeRegressorWrapper.PREDICTED_LABEL_INDEX_COL
+  val maxDepth: Int,
+  val maxBins: Int) extends MLWritable {
 
   private val DTModel: DecisionTreeRegressionModel =
     pipeline.stages(1).asInstanceOf[DecisionTreeRegressionModel]
 
-  lazy val maxDepth: Int = DTModel.getMaxDepth
+  lazy val depth: Int = DTModel.depth
+  lazy val numNodes: Int = DTModel.numNodes
 
-  lazy val maxBins: Int = DTModel.getMaxBins
+  def summary: String = DTModel.toDebugString
 
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset)
-      .drop(PREDICTED_LABEL_INDEX_COL)
       .drop(DTModel.getFeaturesCol)
   }
 
@@ -54,33 +53,36 @@ private[r] class DecisionTreeRegressorWrapper private (
 }
 
 private[r] object DecisionTreeRegressorWrapper extends MLReadable[DecisionTreeRegressorWrapper] {
+  def fit(data: DataFrame,
+          formula: String,
+          maxDepth: Int,
+          maxBins: Int): DecisionTreeRegressorWrapper = {
 
-  val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
-  val PREDICTED_LABEL_COL = "prediction"
-
-  def fit(data: DataFrame, formula: String): DecisionTreeRegressorWrapper = {
     val rFormula = new RFormula()
       .setFormula(formula)
-      .fit(data)
-    // get labels and feature names from output schema
-    val schema = rFormula.transform(data).schema
-    val labelAttr = Attribute.fromStructField(schema(rFormula.getLabelCol))
-      .asInstanceOf[NominalAttribute]
-    val labels = labelAttr.values.get
-    val featureAttrs = AttributeGroup.fromStructField(schema(rFormula.getFeaturesCol))
+      .setFeaturesCol("features")
+      .setLabelCol("label")
+
+    RWrapperUtils.checkDataColumns(rFormula, data)
+    val rFormulaModel = rFormula.fit(data)
+
+    // get feature names from output schema
+    val schema = rFormulaModel.transform(data).schema
+    val featureAttrs = AttributeGroup.fromStructField(schema(rFormulaModel.getFeaturesCol))
       .attributes.get
     val features = featureAttrs.map(_.name.get)
+
     // assemble and fit the pipeline
-    val decisionTree = new DecisionTreeRegressor()
-      .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
-    val idxToStr = new IndexToString()
-      .setInputCol(PREDICTED_LABEL_INDEX_COL)
-      .setOutputCol(PREDICTED_LABEL_COL)
-      .setLabels(labels)
+    val decisionTreeRegression = new DecisionTreeRegressor()
+      .setMaxDepth(maxDepth)
+      .setMaxBins(maxBins)
+      .setFeaturesCol(rFormula.getFeaturesCol)
+
     val pipeline = new Pipeline()
-      .setStages(Array(rFormula, decisionTree, idxToStr))
+      .setStages(Array(rFormulaModel, decisionTreeRegression))
       .fit(data)
-    new DecisionTreeRegressorWrapper(pipeline, features, labels)
+
+    new DecisionTreeRegressorWrapper(pipeline, features, maxDepth, maxBins)
   }
 
   override def read: MLReader[DecisionTreeRegressorWrapper] = new DecisionTreeRegressorWrapperReader
@@ -96,7 +98,8 @@ private[r] object DecisionTreeRegressorWrapper extends MLReadable[DecisionTreeRe
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
         ("features" -> instance.features.toSeq) ~
-        ("labels" -> instance.labels.toSeq)
+        ("maxDepth" -> instance.maxDepth) ~
+        ("maxBins" -> instance.maxBins)
       val rMetadataJson: String = compact(render(rMetadata))
 
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
@@ -115,8 +118,10 @@ private[r] object DecisionTreeRegressorWrapper extends MLReadable[DecisionTreeRe
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
       val rMetadata = parse(rMetadataStr)
       val features = (rMetadata \ "features").extract[Array[String]]
-      val labels = (rMetadata \ "labels").extract[Array[String]]
-      new DecisionTreeRegressorWrapper(pipeline, features, labels)
+      val maxDepth = (rMetadata \ "maxDepth").extract[Int]
+      val maxBins = (rMetadata \ "maxBins").extract[Int]
+
+      new DecisionTreeRegressorWrapper(pipeline, features, maxDepth, maxBins)
     }
   }
 }

@@ -348,7 +348,9 @@ export("as.DataFrame",
        "uncacheTable",
        "print.summary.GeneralizedLinearRegressionModel",
        "read.ml",
-       "print.summary.KSTest")
+       "print.summary.KSTest",
+       "print.summary.DecisionTreeRegressionModel",
+       "print.summary.DecisionTreeClassificationModel")
 
 export("structField",
        "structField.jobj",
@@ -373,6 +375,8 @@ S3method(print, structField)
 S3method(print, structType)
 S3method(print, summary.GeneralizedLinearRegressionModel)
 S3method(print, summary.KSTest)
+S3method(print, summary.DecisionTreeRegressionModel)
+S3method(print, summary.DecisionTreeClassificationModel)
 S3method(structField, character)
 S3method(structField, jobj)
 S3method(structType, jobj)

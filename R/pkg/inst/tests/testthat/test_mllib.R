@@ -791,4 +791,34 @@ test_that("spark.kstest", {
   expect_match(capture.output(stats)[1], "Kolmogorov-Smirnov test summary:")
 })
 
+test_that("spark.decisionTree Regression", {
+  data <- suppressWarnings(createDataFrame(longley))
+  model <- spark.decisionTree(data, Employed~., "regression", maxDepth=5, maxBins=16)
+
+  #Test summary
+  stats <- summary(model)
+  expect_equal(stats$depth, 5)
+  expect_equal(stats$numNodes, 31)
+
+  #Test model predict
+  predictions <- collect(predict(model, data))
+  expect_equal(predictions$prediction, c(60.323, 61.122, 60.171, 61.187,
+                                         63.221, 63.639, 64.989, 63.761,
+                                         66.019, 67.857, 68.169, 66.513,
+                                         68.655, 69.564, 69.331, 70.551),
+               tolerance = 1e-4)
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-decisionTreeRegression", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+  expect_equal(stats$depth, stats2$depth)
+  expect_equal(stats$numNodes, stats2$numNodes)
+
+  unlink(modelPath)
+})
+
 sparkR.session.stop()
