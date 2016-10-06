@@ -171,7 +171,6 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.timestamp <= System.currentTimeMillis),
       AssertOnQuery(_.status.inputRate === 0.0),
       AssertOnQuery(_.status.processingRate === 0.0),
-      AssertOnQuery(_.status.outputRate === 0.0),
       AssertOnQuery(_.status.sourceStatuses.length === 1),
       AssertOnQuery(_.status.sourceStatuses(0).description.contains("Memory")),
       AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === None),
@@ -179,21 +178,18 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.sourceStatuses(0).processingRate === 0.0),
       AssertOnQuery(_.status.sinkStatus.description.contains("Memory")),
       AssertOnQuery(_.status.sinkStatus.offsetDesc === CompositeOffset(None :: Nil).toString),
-      AssertOnQuery(_.status.sinkStatus.outputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).description.contains("Memory")),
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === None),
       AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
       AssertOnQuery(_.sinkStatus.description.contains("Memory")),
       AssertOnQuery(_.sinkStatus.offsetDesc === new CompositeOffset(None :: Nil).toString),
-      AssertOnQuery(_.sinkStatus.outputRate === 0.0),
 
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
       AssertOnQuery(_.status.timestamp <= System.currentTimeMillis),
       AssertOnQuery(_.status.inputRate >= 0.0),
       AssertOnQuery(_.status.processingRate >= 0.0),
-      AssertOnQuery(_.status.outputRate >= 0.0),
       AssertOnQuery(_.status.sourceStatuses.length === 1),
       AssertOnQuery(_.status.sourceStatuses(0).description.contains("Memory")),
       AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString)),
@@ -202,12 +198,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.sinkStatus.description.contains("Memory")),
       AssertOnQuery(_.status.sinkStatus.offsetDesc ===
         CompositeOffset.fill(LongOffset(0)).toString),
-      AssertOnQuery(_.status.sinkStatus.outputRate >= 0.0),
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString)),
       AssertOnQuery(_.sourceStatuses(0).inputRate >= 0.0),
       AssertOnQuery(_.sourceStatuses(0).processingRate >= 0.0),
       AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString),
-      AssertOnQuery(_.sinkStatus.outputRate >= 0.0),
 
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3, 6, 3),
@@ -220,38 +214,32 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       StopStream,
       AssertOnQuery(_.status.inputRate === 0.0),
       AssertOnQuery(_.status.processingRate === 0.0),
-      AssertOnQuery(_.status.outputRate === 0.0),
       AssertOnQuery(_.status.sourceStatuses.length === 1),
       AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === Some(LongOffset(1).toString)),
       AssertOnQuery(_.status.sourceStatuses(0).inputRate === 0.0),
       AssertOnQuery(_.status.sourceStatuses(0).processingRate === 0.0),
       AssertOnQuery(_.status.sinkStatus.offsetDesc ===
         CompositeOffset.fill(LongOffset(1)).toString),
-      AssertOnQuery(_.status.sinkStatus.outputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(1).toString)),
       AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
       AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
-      AssertOnQuery(_.sinkStatus.outputRate === 0.0),
 
       StartStream(),
       AddData(inputData, 0),
       ExpectFailure[SparkException],
       AssertOnQuery(_.status.inputRate === 0.0),
       AssertOnQuery(_.status.processingRate === 0.0),
-      AssertOnQuery(_.status.outputRate === 0.0),
       AssertOnQuery(_.status.sourceStatuses.length === 1),
       AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === Some(LongOffset(2).toString)),
       AssertOnQuery(_.status.sourceStatuses(0).inputRate === 0.0),
       AssertOnQuery(_.status.sourceStatuses(0).processingRate === 0.0),
       AssertOnQuery(_.status.sinkStatus.offsetDesc ===
         CompositeOffset.fill(LongOffset(1)).toString),
-      AssertOnQuery(_.status.sinkStatus.outputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(2).toString)),
       AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
-      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
-      AssertOnQuery(_.sinkStatus.outputRate === 0.0)
+      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString)
     )
   }
 
@@ -263,9 +251,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
     // Trigger input has 10 rows, static input has 2 rows,
     // therefore after the first trigger, the calculated input rows should be 10
     val status = getFirstTriggerStatus(streamingInputDF.join(staticInputDF, "value"))
-    assert(status.triggerStatus("numRows.input.total") === "10")
+    assert(status.triggerStatus.get("numRows.input.total") === "10")
     assert(status.sourceStatuses.size === 1)
-    assert(status.sourceStatuses(0).triggerStatus("numRows.input.source") === "10")
+    assert(status.sourceStatuses(0).triggerStatus.get("numRows.input.source") === "10")
   }
 
   test("input row calculation with trigger DF having multiple leaves") {
@@ -276,9 +264,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
 
     // After the first trigger, the calculated input rows should be 10
     val status = getFirstTriggerStatus(streamingInputDF)
-    assert(status.triggerStatus("numRows.input.total") === "10")
+    assert(status.triggerStatus.get("numRows.input.total") === "10")
     assert(status.sourceStatuses.size === 1)
-    assert(status.sourceStatuses(0).triggerStatus("numRows.input.source") === "10")
+    assert(status.sourceStatuses(0).triggerStatus.get("numRows.input.source") === "10")
   }
 
   testQuietly("StreamExecution metadata garbage collection") {
@@ -319,10 +307,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
   }
 
   /** Returns the query status at the end of the first trigger of streaming DF */
-  private def getFirstTriggerStatus(streamingDF: DataFrame): StreamingQueryInfo = {
+  private def getFirstTriggerStatus(streamingDF: DataFrame): StreamingQueryStatus = {
     // A StreamingQueryListener that gets the query status after the first completed trigger
     val listener = new StreamingQueryListener {
-      @volatile var firstStatus: StreamingQueryInfo = null
+      @volatile var firstStatus: StreamingQueryStatus = null
       override def onQueryStarted(queryStarted: QueryStarted): Unit = { }
       override def onQueryProgress(queryProgress: QueryProgress): Unit = {
        if (firstStatus == null) firstStatus = queryProgress.queryInfo

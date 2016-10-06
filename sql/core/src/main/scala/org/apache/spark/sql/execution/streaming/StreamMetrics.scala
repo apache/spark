@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.{util => ju}
+
 import scala.collection.mutable
+import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
@@ -47,7 +50,6 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
   // Rate estimators for sources and sinks
   private val inputRates = new mutable.HashMap[Source, RateCalculator]
   private val processingRates = new mutable.HashMap[Source, RateCalculator]
-  private val outputRate = new RateCalculator
 
   // Number of input rows in the current trigger
   private val numInputRows = new mutable.HashMap[Source, Long]
@@ -65,7 +67,6 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
   // together in Ganglia as a single metric group
   registerGauge("inputRate-total", currentInputRate)
   registerGauge("processingRate-total", () => currentProcessingRate)
-  registerGauge("outputRate", () => currentOutputRate)
   registerGauge("latency", () => currentLatency().getOrElse(-1.0))
 
   sources.foreach { s =>
@@ -100,9 +101,8 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
     sourceTriggerStatus(source).put(key, value.toString)
   }
 
-  def reportNumRows(inputRows: Map[Source, Long], outputRows: Option[Long]): Unit = synchronized {
+  def reportNumInputRows(inputRows: Map[Source, Long]): Unit = synchronized {
     numInputRows ++= inputRows
-    numOutputRows = outputRows
   }
 
   def reportTriggerFinished(): Unit = synchronized {
@@ -142,10 +142,6 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
       processingRates(s).update(numInputRows.getOrElse(s, 0), currentTriggerDuration)
     }
 
-    // Update output rate = num rows output to the sink in current trigger duration
-    outputRate.update(numOutputRows.getOrElse(0), currentTriggerDuration)
-    logDebug("Output rate updated to " + outputRate.currentRate)
-
     // Update latency = if data present, 0.5 * previous trigger interval + current trigger duration
     if (previousInputIntervalOption.nonEmpty && totalNumInputRows > 0) {
       latency = Some((previousInputIntervalOption.get.toDouble / 2) + currentTriggerDuration)
@@ -179,14 +175,12 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
     processingRates(source).currentRate
   }
 
-  def currentOutputRate(): Double = synchronized { outputRate.currentRate }
-
   def currentLatency(): Option[Double] = synchronized { latency }
 
-  def currentTriggerStatus(): Map[String, String] = synchronized { triggerStatus.toMap }
+  def currentTriggerStatus(): ju.Map[String, String] = synchronized { triggerStatus.toMap.asJava }
 
-  def currentSourceTriggerStatus(source: Source): Map[String, String] = synchronized {
-    sourceTriggerStatus(source).toMap
+  def currentSourceTriggerStatus(source: Source): ju.Map[String, String] = synchronized {
+    sourceTriggerStatus(source).toMap.asJava
   }
 
   // =========== Other methods ===========
@@ -202,7 +196,6 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
   def stop(): Unit = synchronized {
     inputRates.valuesIterator.foreach { _.stop() }
     processingRates.valuesIterator.foreach { _.stop() }
-    outputRate.stop()
     latency = None
   }
 }

@@ -115,7 +115,7 @@ class StreamExecution(
     new StreamMetrics(uniqueSources.toSet, triggerClock, s"StructuredStreaming.$name")
 
   @volatile
-  private var currentStatus: StreamingQueryInfo = null
+  private var currentStatus: StreamingQueryStatus = null
 
   @volatile
   private var metricWarningLogged: Boolean = false
@@ -147,7 +147,7 @@ class StreamExecution(
   override def isActive: Boolean = state == ACTIVE
 
   /** Returns the current status of the query. */
-  override def status: StreamingQueryInfo = currentStatus
+  override def status: StreamingQueryStatus = currentStatus
 
   /** Returns current status of all the sources. */
   override def sourceStatuses: Array[SourceStatus] = currentStatus.sourceStatuses.toArray
@@ -612,7 +612,7 @@ class StreamExecution(
       case p if p.isInstanceOf[StateStoreSaveExec] => p
     }
 
-    streamMetrics.reportNumRows(sourceToNumInputRows, numOutputRows)
+    streamMetrics.reportNumInputRows(sourceToNumInputRows)
     stateNodes.zipWithIndex.foreach { case (s, i) =>
       streamMetrics.reportTriggerStatus(
         NUM_TOTAL_STATE_ROWS(i + 1),
@@ -657,20 +657,18 @@ class StreamExecution(
         streamMetrics.currentSourceInputRate(s),
         streamMetrics.currentSourceProcessingRate(s),
         streamMetrics.currentSourceTriggerStatus(s))
-    }
+    }.toArray
     val sinkStatus = SinkStatus(
       sink.toString,
-      committedOffsets.toCompositeOffset(sources).toString,
-      streamMetrics.currentOutputRate())
+      committedOffsets.toCompositeOffset(sources).toString)
 
     currentStatus =
-      StreamingQueryInfo(
+      StreamingQueryStatus(
         name = name,
         id = id,
         timestamp = triggerClock.getTimeMillis(),
         inputRate = streamMetrics.currentInputRate(),
         processingRate = streamMetrics.currentProcessingRate(),
-        outputRate = streamMetrics.currentOutputRate(),
         latency = streamMetrics.currentLatency(),
         sourceStatuses = sourceStatuses,
         sinkStatus = sinkStatus,

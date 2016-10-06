@@ -84,7 +84,7 @@ object StreamingQueryListener {
    * @since 2.0.0
    */
   @Experimental
-  class QueryStarted private[sql](val queryInfo: StreamingQueryInfo) extends Event
+  class QueryStarted private[sql](val queryInfo: StreamingQueryStatus) extends Event
 
   /**
    * :: Experimental ::
@@ -92,7 +92,7 @@ object StreamingQueryListener {
    * @since 2.0.0
    */
   @Experimental
-  class QueryProgress private[sql](val queryInfo: StreamingQueryInfo) extends Event
+  class QueryProgress private[sql](val queryInfo: StreamingQueryStatus) extends Event
 
   /**
    * :: Experimental ::
@@ -107,6 +107,6 @@ object StreamingQueryListener {
    */
   @Experimental
   class QueryTerminated private[sql](
-      val queryInfo: StreamingQueryInfo,
+      val queryInfo: StreamingQueryStatus,
       val exception: Option[String]) extends Event
 }

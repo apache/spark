@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.File
-
 import scala.collection.mutable
+import scala.collection.JavaConverters._
 
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
@@ -98,29 +97,28 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           // Check the correctness of the trigger info of the first completed batch reported by
           // onQueryProgress
           val status = listener.lastTriggerStatus.get
-          assert(status.triggerStatus("triggerId") == "0")
-          assert(status.triggerStatus("isActive") === "false")
+          assert(status.triggerStatus.get("triggerId") == "0")
+          assert(status.triggerStatus.get("isActive") === "false")
 
-          assert(status.triggerStatus("timestamp.triggerStart") === "0")
-          assert(status.triggerStatus("timestamp.afterGetOffset") === "100")
-          assert(status.triggerStatus("timestamp.afterGetBatch") === "300")
-          assert(status.triggerStatus("timestamp.triggerFinish") === "600")
+          assert(status.triggerStatus.get("timestamp.triggerStart") === "0")
+          assert(status.triggerStatus.get("timestamp.afterGetOffset") === "100")
+          assert(status.triggerStatus.get("timestamp.afterGetBatch") === "300")
+          assert(status.triggerStatus.get("timestamp.triggerFinish") === "600")
 
-          assert(status.triggerStatus("latency.getOffset") === "100")
-          assert(status.triggerStatus("latency.getBatch") === "200")
-          assert(status.triggerStatus("latency.offsetLogWrite") === "0")
-          assert(status.triggerStatus("latency.fullTrigger") === "600")
+          assert(status.triggerStatus.get("latency.getOffset") === "100")
+          assert(status.triggerStatus.get("latency.getBatch") === "200")
+          assert(status.triggerStatus.get("latency.offsetLogWrite") === "0")
+          assert(status.triggerStatus.get("latency.fullTrigger") === "600")
 
-          assert(status.triggerStatus("numRows.input.total") === "2")
-          assert(status.triggerStatus("numRows.output") === "1")
-          assert(status.triggerStatus("numRows.state.aggregation1.total") === "1")
-          assert(status.triggerStatus("numRows.state.aggregation1.updated") === "1")
+          assert(status.triggerStatus.get("numRows.input.total") === "2")
+          assert(status.triggerStatus.get("numRows.state.aggregation1.total") === "1")
+          assert(status.triggerStatus.get("numRows.state.aggregation1.updated") === "1")
 
           assert(status.sourceStatuses.size === 1)
-          assert(status.sourceStatuses(0).triggerStatus("triggerId") === "0")
-          assert(status.sourceStatuses(0).triggerStatus("latency.sourceGetOffset") === "100")
-          assert(status.sourceStatuses(0).triggerStatus("latency.sourceGetBatch") === "200")
-          assert(status.sourceStatuses(0).triggerStatus("numRows.input.source") === "2")
+          assert(status.sourceStatuses(0).triggerStatus.get("triggerId") === "0")
+          assert(status.sourceStatuses(0).triggerStatus.get("latency.sourceGetOffset") === "100")
+          assert(status.sourceStatuses(0).triggerStatus.get("latency.sourceGetBatch") === "200")
+          assert(status.sourceStatuses(0).triggerStatus.get("numRows.input.source") === "2")
           true
         },
         CheckAnswer(2)
@@ -224,8 +222,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   private def assertStreamingQueryInfoEquals(
-      expected: StreamingQueryInfo,
-      actual: StreamingQueryInfo): Unit = {
+      expected: StreamingQueryStatus,
+      actual: StreamingQueryStatus): Unit = {
     assert(expected.name === actual.name)
     assert(expected.sourceStatuses.size === actual.sourceStatuses.size)
     expected.sourceStatuses.zip(actual.sourceStatuses).foreach {
@@ -263,31 +261,30 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     listenerBus.listeners.toArray.map(_.asInstanceOf[StreamingQueryListener])
   }
 
-  private val testQueryInfo: StreamingQueryInfo = {
-    StreamingQueryInfo(
-      "name", 1, 123, 1.0, 2.0, 3.0, Some(345),
-      Seq(
-        SourceStatus("source1", Some(LongOffset(0).toString), 0.0, 0.0, Map.empty),
-        SourceStatus("source2", Some(LongOffset(1).toString), 1.0, 2.0, Map("a" -> "b"))),
-      SinkStatus("sink", CompositeOffset(None :: None :: Nil).toString, 2.0),
-      Map("a" -> "b"))
+  private val testQueryInfo: StreamingQueryStatus = {
+    StreamingQueryStatus(
+      "name", 1, 123, 1.0, 2.0, Some(345),
+      Array(
+        SourceStatus("source1", Some(LongOffset(0).toString), 0.0, 0.0, Map("a" -> "b").asJava)),
+      SinkStatus("sink", CompositeOffset(None :: None :: Nil).toString),
+      Map("a" -> "b").asJava)
   }
 
   class QueryStatusCollector extends StreamingQueryListener {
     // to catch errors in the async listener events
     @volatile private var asyncTestWaiter = new Waiter
 
-    @volatile var startStatus: StreamingQueryInfo = null
-    @volatile var terminationStatus: StreamingQueryInfo = null
+    @volatile var startStatus: StreamingQueryStatus = null
+    @volatile var terminationStatus: StreamingQueryStatus = null
     @volatile var terminationException: Option[String] = null
 
-    private val progressStatuses = new mutable.ArrayBuffer[StreamingQueryInfo]
+    private val progressStatuses = new mutable.ArrayBuffer[StreamingQueryStatus]
 
     /** Get the info of the last trigger that processed data */
-    def lastTriggerStatus: Option[StreamingQueryInfo] = synchronized {
+    def lastTriggerStatus: Option[StreamingQueryStatus] = synchronized {
       progressStatuses.filter { i =>
-        i.triggerStatus("isActive").toBoolean == false &&
-          i.triggerStatus("isDataAvailable").toBoolean == true
+        i.triggerStatus.get("isActive").toBoolean == false &&
+          i.triggerStatus.get("isDataAvailable").toBoolean == true
       }.lastOption
     }
 

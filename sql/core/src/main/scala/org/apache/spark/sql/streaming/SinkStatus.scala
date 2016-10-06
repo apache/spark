@@ -26,14 +26,12 @@ import org.apache.spark.sql.execution.streaming.Sink
  *
  * @param description Description of the source corresponding to this status
  * @param offsetDesc Description of the current offset up to which data has been written by the sink
- * @param outputRate Current rate (rows/sec) at which the query is writing data to the sink
  * @since 2.0.0
  */
 @Experimental
 case class SinkStatus private(
     val description: String,
-    val offsetDesc: String,
-    val outputRate: Double)
+    val offsetDesc: String)
 
 /** Companion object, primarily for creating SinkStatus instances internally */
 private[sql] object SinkStatus

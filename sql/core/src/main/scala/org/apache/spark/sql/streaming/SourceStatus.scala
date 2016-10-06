@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.streaming
 
+import java.{util => ju}
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.execution.streaming.Source
 
 /**
  * :: Experimental ::
- * Status and metrics of a streaming [[Source]].
+ * Status and metrics of a streaming Source.
  *
  * @param description Description of the source corresponding to this status
  * @param offsetDesc Description of the current offset if known
@@ -38,7 +40,7 @@ case class SourceStatus private(
     val offsetDesc: Option[String],
     val inputRate: Double,
     val processingRate: Double,
-    val triggerStatus: Map[String, String])
+    val triggerStatus: ju.Map[String, String])
 
 /** Companion object, primarily for creating SourceStatus instances internally */
 private[sql] object SourceStatus

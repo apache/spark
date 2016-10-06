@@ -33,7 +33,6 @@ class StreamingMetricsSuite extends SparkFunSuite {
     val sm = newStreamMetrics(source)
     assert(sm.currentInputRate() === 0.0)
     assert(sm.currentProcessingRate() === 0.0)
-    assert(sm.currentOutputRate() === 0.0)
     assert(sm.currentSourceInputRate(source) === 0.0)
     assert(sm.currentSourceProcessingRate(source) === 0.0)
     assert(sm.currentLatency() === None)
@@ -42,19 +41,17 @@ class StreamingMetricsSuite extends SparkFunSuite {
     sm.reportTriggerStarted(1)
     assert(sm.currentInputRate() === 0.0)
     assert(sm.currentProcessingRate() === 0.0)
-    assert(sm.currentOutputRate() === 0.0)
     assert(sm.currentSourceInputRate(source) === 0.0)
     assert(sm.currentSourceProcessingRate(source) === 0.0)
     assert(sm.currentLatency() === None)
 
     // Finishing the trigger should calculate the rates, except input rate which needs
     // to have another trigger interval
-    sm.reportNumRows(Map(source -> 100L), Some(10)) // 100 input rows, 10 output rows
+    sm.reportNumInputRows(Map(source -> 100L)) // 100 input rows, 10 output rows
     clock.advance(1000)
     sm.reportTriggerFinished()
     assert(sm.currentInputRate() === 0.0)
     assert(sm.currentProcessingRate() === 100.0)  // 100 input rows processed in 1 sec
-    assert(sm.currentOutputRate() === 10.0)       // 10 output rows generated in 1 sec
     assert(sm.currentSourceInputRate(source) === 0.0)
     assert(sm.currentSourceProcessingRate(source) === 100.0)
     assert(sm.currentLatency() === None)
@@ -62,12 +59,11 @@ class StreamingMetricsSuite extends SparkFunSuite {
     // Another trigger should calculate the input rate
     clock.advance(1000)
     sm.reportTriggerStarted(2)
-    sm.reportNumRows(Map(source -> 200L), Some(20))     // 200 input rows, 20 output rows
+    sm.reportNumInputRows(Map(source -> 200L))     // 200 input rows
     clock.advance(500)
     sm.reportTriggerFinished()
     assert(sm.currentInputRate() === 100.0)      // 200 input rows generated in 2 seconds b/w starts
     assert(sm.currentProcessingRate() === 400.0) // 200 output rows processed in 0.5 sec
-    assert(sm.currentOutputRate() === 40.0)      // 20 output rows generated in 0.5 sec
     assert(sm.currentSourceInputRate(source) === 100.0)
     assert(sm.currentSourceProcessingRate(source) === 400.0)
     assert(sm.currentLatency().get === 1500.0)       // 2000 ms / 2 + 500 ms
@@ -76,7 +72,6 @@ class StreamingMetricsSuite extends SparkFunSuite {
     sm.stop()
     assert(sm.currentInputRate() === 0.0)
     assert(sm.currentProcessingRate() === 0.0)
-    assert(sm.currentOutputRate() === 0.0)
     assert(sm.currentSourceInputRate(source) === 0.0)
     assert(sm.currentSourceProcessingRate(source) === 0.0)
     assert(sm.currentLatency() === None)
@@ -86,21 +81,20 @@ class StreamingMetricsSuite extends SparkFunSuite {
     val sm = newStreamMetrics(source)
     // Trigger 1 with data
     sm.reportTriggerStarted(1)
-    sm.reportNumRows(Map(source -> 100L), Some(10)) // 100 input rows, 10 output rows
+    sm.reportNumInputRows(Map(source -> 100L)) // 100 input rows
     clock.advance(1000)
     sm.reportTriggerFinished()
 
     // Trigger 2 with data
     clock.advance(1000)
     sm.reportTriggerStarted(2)
-    sm.reportNumRows(Map(source -> 200L), Some(20)) // 200 input rows, 20 output rows
+    sm.reportNumInputRows(Map(source -> 200L)) // 200 input rows
     clock.advance(500)
     sm.reportTriggerFinished()
 
     // Make sure that all rates are set
     require(sm.currentInputRate() === 100.0) // 200 input rows generated in 2 seconds b/w starts
     require(sm.currentProcessingRate() === 400.0) // 200 output rows processed in 0.5 sec
-    require(sm.currentOutputRate() === 40.0) // 20 output rows generated in 0.5 sec
     require(sm.currentSourceInputRate(source) === 100.0)
     require(sm.currentSourceProcessingRate(source) === 400.0)
     require(sm.currentLatency().get === 1500.0) // 2000 ms / 2 + 500 ms
@@ -114,7 +108,6 @@ class StreamingMetricsSuite extends SparkFunSuite {
     // Rates are set to zero and latency is set to None
     assert(sm.currentInputRate() === 0.0)
     assert(sm.currentProcessingRate() === 0.0)
-    assert(sm.currentOutputRate() === 0.0)
     assert(sm.currentSourceInputRate(source) === 0.0)
     assert(sm.currentSourceProcessingRate(source) === 0.0)
     assert(sm.currentLatency() === None)
@@ -127,14 +120,14 @@ class StreamingMetricsSuite extends SparkFunSuite {
     val sm = newStreamMetrics(source1, source2)
     // Trigger 1 with data
     sm.reportTriggerStarted(1)
-    sm.reportNumRows(Map(source1 -> 100L, source2 -> 100L), Some(10))
+    sm.reportNumInputRows(Map(source1 -> 100L, source2 -> 100L))
     clock.advance(1000)
     sm.reportTriggerFinished()
 
     // Trigger 2 with data
     clock.advance(1000)
     sm.reportTriggerStarted(2)
-    sm.reportNumRows(Map(source1 -> 200L, source2 -> 200L), Some(20))
+    sm.reportNumInputRows(Map(source1 -> 200L, source2 -> 200L))
     clock.advance(500)
     sm.reportTriggerFinished()
 
@@ -150,7 +143,7 @@ class StreamingMetricsSuite extends SparkFunSuite {
     clock.advance(500)
     sm.reportTriggerStarted(3)
     clock.advance(500)
-    sm.reportNumRows(Map(source1 -> 200L), Some(20))
+    sm.reportNumInputRows(Map(source1 -> 200L))
     sm.reportTriggerFinished()
 
     // Rates are set to zero and latency is set to None
