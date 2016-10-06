@@ -633,7 +633,7 @@ test_that("spark.logit", {
   data <- as.data.frame(cbind(label, feature1, feature2, feature3, feature4))
   df <- suppressWarnings(createDataFrame(data))
 
-  model <- spark.logit(df, label ~., family = "multinomial", thresholds=c(0, 1, 1))
+  model <- spark.logit(df, label ~., family = "multinomial", thresholds = c(0, 1, 1))
   predict1 <- collect(select(predict(model, df), "prediction"))
   expect_equal(predict1$prediction, c(0, 0, 0, 0, 0))
   # Summary of multinomial logistic regression is not implemented yet

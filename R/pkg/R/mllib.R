@@ -754,8 +754,9 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
             }
 
             jobj <- callJStatic("org.apache.spark.ml.r.LogisticRegressionWrapper", "fit",
-                                data@sdf, formula, as.numeric(regParam), as.numeric(elasticNetParam),
-                                as.integer(maxIter), as.numeric(tol), as.logical(fitIntercept),
+                                data@sdf, formula, as.numeric(regParam),
+                                as.numeric(elasticNetParam), as.integer(maxIter),
+                                as.numeric(tol), as.logical(fitIntercept),
                                 as.character(family), as.logical(standardization),
                                 as.numeric(threshold), thresholds,
                                 as.character(weightCol), as.integer(aggregationDepth))
