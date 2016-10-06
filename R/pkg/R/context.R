@@ -225,6 +225,59 @@ setCheckpointDir <- function(sc, dirName) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
 }
 
+#' Add a file or directory to be downloaded with this Spark job on every node.
+#'
+#' The path passed can be either a local file, a file in HDFS (or other Hadoop-supported
+#' filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
+#' use spark.getSparkFiles(fileName) to find its download location.
+#'
+#' A directory can be given if the recursive option is set to true.
+#' Currently directories are only supported for Hadoop-supported filesystems.
+#' Refer Hadoop-supported filesystems at \url{https://wiki.apache.org/hadoop/HCFS}.
+#'
+#' @rdname spark.addFile
+#' @param path The path of the file to be added
+#' @param recursive Whether to add files recursively from the path. Default is FALSE.
+#' @export
+#' @examples
+#'\dontrun{
+#' spark.addFile("~/myfile")
+#'}
+#' @note spark.addFile since 2.1.0
+spark.addFile <- function(path, recursive = FALSE) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "addFile", suppressWarnings(normalizePath(path)), recursive))
+}
+
+#' Get the root directory that contains files added through spark.addFile.
+#'
+#' @rdname spark.getSparkFilesRootDirectory
+#' @return the root directory that contains files added through spark.addFile
+#' @export
+#' @examples
+#'\dontrun{
+#' spark.getSparkFilesRootDirectory()
+#'}
+#' @note spark.getSparkFilesRootDirectory since 2.1.0
+spark.getSparkFilesRootDirectory <- function() {
+  callJStatic("org.apache.spark.SparkFiles", "getRootDirectory")
+}
+
+#' Get the absolute path of a file added through spark.addFile.
+#'
+#' @rdname spark.getSparkFiles
+#' @param fileName The name of the file added through spark.addFile
+#' @return the absolute path of a file added through spark.addFile.
+#' @export
+#' @examples
+#'\dontrun{
+#' spark.getSparkFiles("myfile")
+#'}
+#' @note spark.getSparkFiles since 2.1.0
+spark.getSparkFiles <- function(fileName) {
+  callJStatic("org.apache.spark.SparkFiles", "get", as.character(fileName))
+}
+
 #' Run a function over a list of elements, distributing the computations with Spark
 #'
 #' Run a function over a list of elements, distributing the computations with Spark. Applies a

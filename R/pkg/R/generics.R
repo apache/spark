@@ -633,7 +633,7 @@ setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
 
 #' @rdname write.df
 #' @export
-setGeneric("write.df", function(df, path, source = NULL, mode = "error", ...) {
+setGeneric("write.df", function(df, path = NULL, source = NULL, mode = "error", ...) {
   standardGeneric("write.df")
 })
 
@@ -732,7 +732,7 @@ setGeneric("withColumnRenamed",
 
 #' @rdname write.df
 #' @export
-setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
+setGeneric("write.df", function(df, path = NULL, ...) { standardGeneric("write.df") })
 
 #' @rdname randomSplit
 #' @export

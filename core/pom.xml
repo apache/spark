@@ -126,6 +126,16 @@
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-proxy</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-client</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-servlets</artifactId>
       <scope>compile</scope>
     </dependency>
@@ -388,7 +398,7 @@
               <overWriteIfNewer>true</overWriteIfNewer>
               <useSubDirectoryPerType>true</useSubDirectoryPerType>
               <includeArtifactIds>
-                guava,jetty-io,jetty-servlet,jetty-servlets,jetty-continuation,jetty-http,jetty-plus,jetty-util,jetty-server,jetty-security
+                guava,jetty-io,jetty-servlet,jetty-servlets,jetty-continuation,jetty-http,jetty-plus,jetty-util,jetty-server,jetty-security,jetty-proxy,jetty-client
               </includeArtifactIds>
               <silent>true</silent>
             </configuration>
@@ -407,7 +417,6 @@
         </os>
       </activation>
       <properties>
-        <path.separator>\</path.separator>
         <script.extension>.bat</script.extension>
       </properties>
     </profile>
@@ -419,7 +428,6 @@
         </os>
       </activation>
       <properties>
-        <path.separator>/</path.separator>
         <script.extension>.sh</script.extension>
       </properties>
     </profile>
@@ -440,7 +448,7 @@
               </execution>
             </executions>
             <configuration>
-              <executable>..${path.separator}R${path.separator}install-dev${script.extension}</executable>
+              <executable>..${file.separator}R${file.separator}install-dev${script.extension}</executable>
             </configuration>
           </plugin>
         </plugins>

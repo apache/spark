@@ -66,6 +66,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           // No progress events or termination events
           assert(listener.progressStatuses.isEmpty)
           assert(listener.terminationStatus === null)
+          true
         },
         AddDataMemory(input, Seq(1, 2, 3)),
         CheckAnswer(1, 2, 3),
@@ -84,6 +85,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             // No termination events
             assert(listener.terminationStatus === null)
           }
+          true
         },
         StopStream,
         AssertOnQuery("Incorrect query status in onQueryTerminated") { query =>
@@ -97,6 +99,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             assert(listener.terminationException === None)
           }
           listener.checkAsyncErrors()
+          true
         }
       )
     }

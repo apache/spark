@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -292,6 +292,10 @@ class ExpressionParserSuite extends PlanTest {
   test("case when") {
     assertEqual("case a when 1 then b when 2 then c else d end",
       CaseKeyWhen('a, Seq(1, 'b, 2, 'c, 'd)))
+    assertEqual("case (a or b) when true then c when false then d else e end",
+      CaseKeyWhen('a || 'b, Seq(true, 'c, false, 'd, 'e)))
+    assertEqual("case 'a'='a' when true then 1 end",
+      CaseKeyWhen("a" ===  "a", Seq(true, 1)))
     assertEqual("case when a = 1 then b when a = 2 then c else d end",
       CaseWhen(Seq(('a === 1, 'b.expr), ('a === 2, 'c.expr)), 'd))
   }
@@ -348,6 +352,10 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("literals") {
+    def testDecimal(value: String): Unit = {
+      assertEqual(value, Literal(BigDecimal(value).underlying))
+    }
+
     // NULL
     assertEqual("null", Literal(null))
 
@@ -358,20 +366,18 @@ class ExpressionParserSuite extends PlanTest {
     // Integral should have the narrowest possible type
     assertEqual("787324", Literal(787324))
     assertEqual("7873247234798249234", Literal(7873247234798249234L))
-    assertEqual("78732472347982492793712334",
-      Literal(BigDecimal("78732472347982492793712334").underlying()))
+    testDecimal("78732472347982492793712334")
 
     // Decimal
-    assertEqual("7873247234798249279371.2334",
-      Literal(BigDecimal("7873247234798249279371.2334").underlying()))
+    testDecimal("7873247234798249279371.2334")
 
     // Scientific Decimal
-    assertEqual("9.0e1", 90d)
-    assertEqual(".9e+2", 90d)
-    assertEqual("0.9e+2", 90d)
-    assertEqual("900e-1", 90d)
-    assertEqual("900.0E-1", 90d)
-    assertEqual("9.e+1", 90d)
+    testDecimal("9.0e1")
+    testDecimal(".9e+2")
+    testDecimal("0.9e+2")
+    testDecimal("900e-1")
+    testDecimal("900.0E-1")
+    testDecimal("9.e+1")
     intercept(".e3")
 
     // Tiny Int Literal
@@ -391,8 +397,6 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("10.0D", Literal(10.0D))
     intercept("-1.8E308D", s"does not fit in range")
     intercept("1.8E308D", s"does not fit in range")
-    // TODO we need to figure out if we should throw an exception here!
-    assertEqual("1E309", Literal(Double.PositiveInfinity))
 
     // BigDecimal Literal
     assertEqual("90912830918230182310293801923652346786BD",
@@ -517,5 +521,18 @@ class ExpressionParserSuite extends PlanTest {
   test("current date/timestamp braceless expressions") {
     assertEqual("current_date", CurrentDate())
     assertEqual("current_timestamp", CurrentTimestamp())
+  }
+
+  test("SPARK-17364, fully qualified column name which starts with number") {
+    assertEqual("123_", UnresolvedAttribute("123_"))
+    assertEqual("1a.123_", UnresolvedAttribute("1a.123_"))
+    // ".123" should not be treated as token of type DECIMAL_VALUE
+    assertEqual("a.123A", UnresolvedAttribute("a.123A"))
+    // ".123E3" should not be treated as token of type SCIENTIFIC_DECIMAL_VALUE
+    assertEqual("a.123E3_column", UnresolvedAttribute("a.123E3_column"))
+    // ".123D" should not be treated as token of type DOUBLE_LITERAL
+    assertEqual("a.123D_column", UnresolvedAttribute("a.123D_column"))
+    // ".123BD" should not be treated as token of type BIGDECIMAL_LITERAL
+    assertEqual("a.123BD_column", UnresolvedAttribute("a.123BD_column"))
   }
 }

@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
@@ -338,6 +338,81 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         "Function: udtf_count_temp",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
         "Usage: N/A")
+    }
+  }
+
+  test("describe partition") {
+    withTable("partitioned_table") {
+      sql("CREATE TABLE partitioned_table (a STRING, b INT) PARTITIONED BY (c STRING, d STRING)")
+      sql("ALTER TABLE partitioned_table ADD PARTITION (c='Us', d=1)")
+
+      checkKeywordsExist(sql("DESC partitioned_table PARTITION (c='Us', d=1)"),
+        "# Partition Information",
+        "# col_name")
+
+      checkKeywordsExist(sql("DESC EXTENDED partitioned_table PARTITION (c='Us', d=1)"),
+        "# Partition Information",
+        "# col_name",
+        "Detailed Partition Information CatalogPartition(",
+        "Partition Values: [Us, 1]",
+        "Storage(Location:",
+        "Partition Parameters")
+
+      checkKeywordsExist(sql("DESC FORMATTED partitioned_table PARTITION (c='Us', d=1)"),
+        "# Partition Information",
+        "# col_name",
+        "# Detailed Partition Information",
+        "Partition Value:",
+        "Database:",
+        "Table:",
+        "Location:",
+        "Partition Parameters:",
+        "# Storage Information")
+    }
+  }
+
+  test("describe partition - error handling") {
+    withTable("partitioned_table", "datasource_table") {
+      sql("CREATE TABLE partitioned_table (a STRING, b INT) PARTITIONED BY (c STRING, d STRING)")
+      sql("ALTER TABLE partitioned_table ADD PARTITION (c='Us', d=1)")
+
+      val m = intercept[NoSuchPartitionException] {
+        sql("DESC partitioned_table PARTITION (c='Us', d=2)")
+      }.getMessage()
+      assert(m.contains("Partition not found in table"))
+
+      val m2 = intercept[AnalysisException] {
+        sql("DESC partitioned_table PARTITION (c='Us')")
+      }.getMessage()
+      assert(m2.contains("Partition spec is invalid"))
+
+      val m3 = intercept[ParseException] {
+        sql("DESC partitioned_table PARTITION (c='Us', d)")
+      }.getMessage()
+      assert(m3.contains("PARTITION specification is incomplete: `d`"))
+
+      spark
+        .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
+        .partitionBy("d")
+        .saveAsTable("datasource_table")
+      val m4 = intercept[AnalysisException] {
+        sql("DESC datasource_table PARTITION (d=2)")
+      }.getMessage()
+      assert(m4.contains("DESC PARTITION is not allowed on a datasource table"))
+
+      val m5 = intercept[AnalysisException] {
+        spark.range(10).select('id as 'a, 'id as 'b).createTempView("view1")
+        sql("DESC view1 PARTITION (c='Us', d=1)")
+      }.getMessage()
+      assert(m5.contains("DESC PARTITION is not allowed on a temporary view"))
+
+      withView("permanent_view") {
+        val m = intercept[AnalysisException] {
+          sql("CREATE VIEW permanent_view AS SELECT * FROM partitioned_table")
+          sql("DESC permanent_view PARTITION (c='Us', d=1)")
+        }.getMessage()
+        assert(m.contains("DESC PARTITION is not allowed on a view"))
+      }
     }
   }
 
@@ -1784,6 +1859,27 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             "where partcol1 = 1) t"),
           Row(2))
       }
+    }
+  }
+
+  test("SPARK-17354: Partitioning by dates/timestamps works with Parquet vectorized reader") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      sql(
+        """CREATE TABLE order(id INT)
+          |PARTITIONED BY (pd DATE, pt TIMESTAMP)
+          |STORED AS PARQUET
+        """.stripMargin)
+
+      sql("set hive.exec.dynamic.partition.mode=nonstrict")
+      sql(
+        """INSERT INTO TABLE order PARTITION(pd, pt)
+          |SELECT 1 AS id, CAST('1990-02-24' AS DATE) AS pd, CAST('1990-02-24' AS TIMESTAMP) AS pt
+        """.stripMargin)
+      val actual = sql("SELECT * FROM order")
+      val expected = sql(
+        "SELECT 1 AS id, CAST('1990-02-24' AS DATE) AS pd, CAST('1990-02-24' AS TIMESTAMP) AS pt")
+      checkAnswer(actual, expected)
+      sql("DROP TABLE order")
     }
   }
 

@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Timestamp
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.objects.CreateExternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.expressions.objects.{CreateExternalRow, GetExternalRowField, ValidateExternalType}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -164,6 +166,23 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-17702: split wide constructor into blocks due to JVM code size limit") {
+    val length = 5000
+    val expressions = Seq.fill(length) {
+      ToUTCTimestamp(
+        Literal.create(Timestamp.valueOf("2015-07-24 00:00:00"), TimestampType),
+        Literal.create("PST", StringType))
+    }
+    val plan = GenerateMutableProjection.generate(expressions)
+    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
+    val expected = Seq.fill(length)(
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 07:00:00")))
+
+    if (!checkResult(actual, expected)) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+    }
+  }
+
   test("test generated safe and unsafe projection") {
     val schema = new StructType(Array(
       StructField("a", StringType, true),
@@ -264,5 +283,16 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(
       Literal.create("\\\\u001/Compilation error occurs", StringType) :: Nil)
 
+  }
+
+  test("SPARK-17160: field names are properly escaped by GetExternalRowField") {
+    val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
+    GenerateUnsafeProjection.generate(
+      ValidateExternalType(
+        GetExternalRowField(inputObject, index = 0, fieldName = "\"quote"), IntegerType) :: Nil)
+  }
+
+  test("SPARK-17160: field names are properly escaped by AssertTrue") {
+    GenerateUnsafeProjection.generate(AssertTrue(Cast(Literal("\""), BooleanType)) :: Nil)
   }
 }

@@ -2608,7 +2608,7 @@ setMethod("except",
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
-#' @aliases write.df,SparkDataFrame,character-method
+#' @aliases write.df,SparkDataFrame-method
 #' @rdname write.df
 #' @name write.df
 #' @export
@@ -2622,20 +2622,31 @@ setMethod("except",
 #' }
 #' @note write.df since 1.4.0
 setMethod("write.df",
-          signature(df = "SparkDataFrame", path = "character"),
-          function(df, path, source = NULL, mode = "error", ...) {
+          signature(df = "SparkDataFrame"),
+          function(df, path = NULL, source = NULL, mode = "error", ...) {
+            if (!is.null(path) && !is.character(path)) {
+              stop("path should be charactor, NULL or omitted.")
+            }
+            if (!is.null(source) && !is.character(source)) {
+              stop("source should be character, NULL or omitted. It is the datasource specified ",
+                   "in 'spark.sql.sources.default' configuration by default.")
+            }
+            if (!is.character(mode)) {
+              stop("mode should be charactor or omitted. It is 'error' by default.")
+            }
             if (is.null(source)) {
               source <- getDefaultSqlSource()
             }
             jmode <- convertToJSaveMode(mode)
             options <- varargsToEnv(...)
             if (!is.null(path)) {
-                options[["path"]] <- path
+              options[["path"]] <- path
             }
             write <- callJMethod(df@sdf, "write")
             write <- callJMethod(write, "format", source)
             write <- callJMethod(write, "mode", jmode)
-            write <- callJMethod(write, "save", path)
+            write <- callJMethod(write, "options", options)
+            write <- handledCallJMethod(write, "save")
           })
 
 #' @rdname write.df

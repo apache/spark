@@ -252,7 +252,7 @@ private[spark] class TaskSchedulerImpl(
       maxLocality: TaskLocality,
       shuffledOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
-      tasks: Seq[ArrayBuffer[TaskDescription]]) : Boolean = {
+      tasks: IndexedSeq[ArrayBuffer[TaskDescription]]) : Boolean = {
     var launchedTask = false
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
@@ -286,7 +286,7 @@ private[spark] class TaskSchedulerImpl(
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
    * that tasks are balanced across the cluster.
    */
-  def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
+  def resourceOffers(offers: IndexedSeq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
     // Mark each slave as alive and remember its hostname
     // Also track if new executor is added
     var newExecAvail = false
@@ -346,6 +346,7 @@ private[spark] class TaskSchedulerImpl(
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     var failedExecutor: Option[String] = None
+    var reason: Option[ExecutorLossReason] = None
     synchronized {
       try {
         if (state == TaskState.LOST && taskIdToExecutorId.contains(tid)) {
@@ -353,8 +354,9 @@ private[spark] class TaskSchedulerImpl(
           val execId = taskIdToExecutorId(tid)
 
           if (executorIdToTaskCount.contains(execId)) {
-            removeExecutor(execId,
+            reason = Some(
               SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
+            removeExecutor(execId, reason.get)
             failedExecutor = Some(execId)
           }
         }
@@ -387,7 +389,8 @@ private[spark] class TaskSchedulerImpl(
     }
     // Update the DAGScheduler without holding a lock on this, since that can deadlock
     if (failedExecutor.isDefined) {
-      dagScheduler.executorLost(failedExecutor.get)
+      assert(reason.isDefined)
+      dagScheduler.executorLost(failedExecutor.get, reason.get)
       backend.reviveOffers()
     }
   }
@@ -428,7 +431,7 @@ private[spark] class TaskSchedulerImpl(
       taskSetManager: TaskSetManager,
       tid: Long,
       taskState: TaskState,
-      reason: TaskEndReason): Unit = synchronized {
+      reason: TaskFailedReason): Unit = synchronized {
     taskSetManager.handleFailedTask(tid, taskState, reason)
     if (!taskSetManager.isZombie && taskState != TaskState.KILLED) {
       // Need to revive offers again now that the task set manager state has been updated to
@@ -513,7 +516,7 @@ private[spark] class TaskSchedulerImpl(
     }
     // Call dagScheduler.executorLost without holding the lock on this to prevent deadlock
     if (failedExecutor.isDefined) {
-      dagScheduler.executorLost(failedExecutor.get)
+      dagScheduler.executorLost(failedExecutor.get, reason)
       backend.reviveOffers()
     }
   }

@@ -15,10 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
-
-import org.apache.spark.SparkException
-
-private[spark]
-case class BlockFetchException(messages: String, throwable: Throwable)
-  extends SparkException(messages, throwable)
+/**
+ * Structured Streaming Data Source for Kafka 0.10
+ */
+package org.apache.spark.sql.kafka010;
