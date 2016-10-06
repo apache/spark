@@ -169,10 +169,17 @@ private[spark] class DirectKafkaInputDStream[K, V](
     c.poll(0)
     val parts = c.assignment().asScala
 
+    val firstBatch = currentOffsets.isEmpty
+
     // make sure new partitions are reflected in currentOffsets
     val newPartitions = parts.diff(currentOffsets.keySet)
     // position for new partitions determined by auto.offset.reset if no commit
     currentOffsets = currentOffsets ++ newPartitions.map(tp => tp -> c.position(tp)).toMap
+
+    if (firstBatch) {
+      logInfo("Init offsets: " + currentOffsets)
+    }
+
     // don't want to consume messages, so pause
     c.pause(newPartitions.asJava)
     // find latest available offsets
@@ -216,6 +223,9 @@ private[spark] class DirectKafkaInputDStream[K, V](
     val inputInfo = StreamInputInfo(id, rdd.count, metadata)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
+    if (currentOffsets != untilOffsets) {
+      logInfo(s"CurrentOffsets was updated from $currentOffsets to $untilOffsets" )
+    }
     currentOffsets = untilOffsets
     commitAll()
     Some(rdd)
