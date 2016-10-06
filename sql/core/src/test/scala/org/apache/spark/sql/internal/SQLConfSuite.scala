@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.hadoop.fs.Path
+import java.io.File
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
@@ -219,8 +219,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     try {
       // to get the default value, always unset it
       spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
-      assert(spark.sessionState.conf.warehousePath
-        === new Path(s"${System.getProperty("user.dir")}/spark-warehouse").toString)
+      assert(new File("spark-warehouse").toURI.toString === spark.sessionState.conf.warehousePath)
     } finally {
       sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
     }
