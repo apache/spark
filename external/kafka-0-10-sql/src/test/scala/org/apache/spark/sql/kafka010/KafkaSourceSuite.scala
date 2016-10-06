@@ -359,7 +359,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest with BeforeAndAfter {
   }
 
   after {
-    for (topic <- testUtils.getAllTopicsAndPartitionSize().toMap.keys) {
+    for (topic <- testUtils.getAllTopicsAndPartitionSize().toMap.keys.filter(!_.startsWith("__"))) {
       testUtils.deleteTopic(topic)
     }
   }
