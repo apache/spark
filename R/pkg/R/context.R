@@ -157,7 +157,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
 
 writeToTempFile <- function(serializedSlices) {
   fileName <- tempfile()
-  conn = file(fileName, "wb")
+  conn <- file(fileName, "wb")
   for (slice in serializedSlices) {
     writeBin(as.integer(length(slice)), conn, endian = "big")
     writeBin(slice, conn, endian = "big")
