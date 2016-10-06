@@ -64,7 +64,7 @@ trait StreamingQuery {
 
   /**
    * Returns the current status of the query.
-   * @since 2.1.0
+   * @since 2.0.2
    */
   def status: StreamingQueryStatus
 
@@ -72,9 +72,14 @@ trait StreamingQuery {
    * Returns current status of all the sources.
    * @since 2.0.0
    */
+  @deprecated("use status.sourceStatuses", "2.0.2")
   def sourceStatuses: Array[SourceStatus]
 
-  /** Returns current status of the sink. */
+  /**
+   * Returns current status of the sink.
+   * @since 2.0.0
+   */
+  @deprecated("use status.sinkStatus", "2.0.2")
   def sinkStatus: SinkStatus
 
   /**

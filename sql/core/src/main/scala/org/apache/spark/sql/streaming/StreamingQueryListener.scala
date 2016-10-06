@@ -84,7 +84,7 @@ object StreamingQueryListener {
    * @since 2.0.0
    */
   @Experimental
-  class QueryStarted private[sql](val queryInfo: StreamingQueryStatus) extends Event
+  class QueryStarted private[sql](val queryStatus: StreamingQueryStatus) extends Event
 
   /**
    * :: Experimental ::
@@ -92,21 +92,19 @@ object StreamingQueryListener {
    * @since 2.0.0
    */
   @Experimental
-  class QueryProgress private[sql](val queryInfo: StreamingQueryStatus) extends Event
+  class QueryProgress private[sql](val queryStatus: StreamingQueryStatus) extends Event
 
   /**
    * :: Experimental ::
    * Event representing that termination of a query
    *
-   * @param queryInfo Information about the status of the query.
+   * @param queryStatus Information about the status of the query.
    * @param exception The exception message of the [[StreamingQuery]] if the query was terminated
    *                  with an exception. Otherwise, it will be `None`.
-   * @param stackTrace The stack trace of the exception if the query was terminated with an
-   *                   exception. It will be empty if there was no error.
    * @since 2.0.0
    */
   @Experimental
   class QueryTerminated private[sql](
-      val queryInfo: StreamingQueryStatus,
+      val queryStatus: StreamingQueryStatus,
       val exception: Option[String]) extends Event
 }

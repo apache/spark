@@ -26,18 +26,20 @@ import org.scalatest.PrivateMethodTester._
 import org.scalatest.concurrent.AsyncAssertions.Waiter
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
-import org.apache.spark.util.{JsonProtocol, ManualClock, Utils}
+import org.apache.spark.sql.streaming.StreamingQueryListener._
+import org.apache.spark.util.{JsonProtocol, ManualClock}
 
 
 class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
-  import StreamingQueryListener._
+  import StreamingQueryListenerSuite._
 
   // To make === between double tolerate inexact values
   implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
@@ -197,7 +199,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val json = JsonProtocol.sparkEventToJson(queryStarted)
     val newQueryStarted = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryStarted]
-    assertStreamingQueryInfoEquals(queryStarted.queryInfo, newQueryStarted.queryInfo)
+    assertStreamingQueryInfoEquals(queryStarted.queryStatus, newQueryStarted.queryStatus)
   }
 
   test("QueryProgress serialization") {
@@ -205,7 +207,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val json = JsonProtocol.sparkEventToJson(queryProcess)
     val newQueryProcess = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryProgress]
-    assertStreamingQueryInfoEquals(queryProcess.queryInfo, newQueryProcess.queryInfo)
+    assertStreamingQueryInfoEquals(queryProcess.queryStatus, newQueryProcess.queryStatus)
   }
 
   test("QueryTerminated serialization") {
@@ -217,7 +219,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       JsonProtocol.sparkEventToJson(queryQueryTerminated)
     val newQueryTerminated = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryTerminated]
-    assertStreamingQueryInfoEquals(queryQueryTerminated.queryInfo, newQueryTerminated.queryInfo)
+    assertStreamingQueryInfoEquals(queryQueryTerminated.queryStatus, newQueryTerminated.queryStatus)
     assert(queryQueryTerminated.exception === newQueryTerminated.exception)
   }
 
@@ -269,6 +271,11 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       SinkStatus("sink", CompositeOffset(None :: None :: Nil).toString),
       Map("a" -> "b").asJava)
   }
+}
+
+object StreamingQueryListenerSuite {
+  // Singleton reference to clock that does not get serialized in task closures
+  @volatile var clock: ManualClock = null
 
   class QueryStatusCollector extends StreamingQueryListener {
     // to catch errors in the async listener events
@@ -296,35 +303,30 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
 
     def checkAsyncErrors(): Unit = {
-      asyncTestWaiter.await(timeout(streamingTimeout))
+      asyncTestWaiter.await(timeout(10 seconds))
     }
 
 
     override def onQueryStarted(queryStarted: QueryStarted): Unit = {
       asyncTestWaiter {
-        startStatus = queryStarted.queryInfo
+        startStatus = queryStarted.queryStatus
       }
     }
 
     override def onQueryProgress(queryProgress: QueryProgress): Unit = {
       asyncTestWaiter {
         assert(startStatus != null, "onQueryProgress called before onQueryStarted")
-        synchronized { progressStatuses += queryProgress.queryInfo }
+        synchronized { progressStatuses += queryProgress.queryStatus }
       }
     }
 
     override def onQueryTerminated(queryTerminated: QueryTerminated): Unit = {
       asyncTestWaiter {
         assert(startStatus != null, "onQueryTerminated called before onQueryStarted")
-        terminationStatus = queryTerminated.queryInfo
+        terminationStatus = queryTerminated.queryStatus
         terminationException = queryTerminated.exception
       }
       asyncTestWaiter.dismiss()
     }
   }
-}
-
-object StreamingQueryListenerSuite {
-  // Singleton reference to clock that does not get serialized in task closures
-  @volatile var clock: ManualClock = null
 }
