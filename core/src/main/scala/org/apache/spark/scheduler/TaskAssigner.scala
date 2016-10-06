@@ -84,14 +84,17 @@ class RoundRobinAssigner(conf: SparkConf) extends TaskAssigner(conf) {
 }
 
 class BalancedAssigner(conf: SparkConf) extends TaskAssigner(conf) {
+  var maxHeap: PriorityQueue[OfferState] = _
+  var current: OfferState = _
 
+  override def construct(workOffer: Seq[WorkerOffer]): Unit = {
+    offer = Random.shuffle(workOffer.map(o => OfferState(o, o.cores)))
+  }
   implicit val ord: Ordering[OfferState] = new Ordering[OfferState] {
     def compare(x: OfferState, y: OfferState): Int = {
       return Ordering[Int].compare(x.cores, y.cores)
     }
   }
-  var maxHeap: PriorityQueue[OfferState] = _
-  var current: OfferState = _
   def init(): Unit = {
     maxHeap = new PriorityQueue[OfferState]()
     offer.filter(_.cores >= CPUS_PER_TASK).foreach(maxHeap.enqueue(_))
