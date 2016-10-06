@@ -115,11 +115,7 @@ class TaskMetrics private[spark] () extends Serializable {
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
    */
-  def updatedBlockStatuses: Seq[(BlockId, BlockStatus)] = {
-    // This is called on driver. All accumulator updates have a fixed value. So it's safe to use
-    // `asScala` which accesses the internal values using `java.util.Iterator`.
-    _updatedBlockStatuses.value.asScala
-  }
+  def updatedBlockStatuses: List[(BlockId, BlockStatus)] = _updatedBlockStatuses.value
 
   // Setters and increment-ers
   private[spark] def setExecutorDeserializeTime(v: Long): Unit =
@@ -137,9 +133,7 @@ class TaskMetrics private[spark] () extends Serializable {
   private[spark] def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
   private[spark] def incUpdatedBlockStatuses(v: (BlockId, BlockStatus)): Unit =
     _updatedBlockStatuses.add(v)
-  private[spark] def setUpdatedBlockStatuses(v: java.util.List[(BlockId, BlockStatus)]): Unit =
-    _updatedBlockStatuses.setValue(v)
-  private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit =
+  private[spark] def setUpdatedBlockStatuses(v: List[(BlockId, BlockStatus)]): Unit =
     _updatedBlockStatuses.setValue(v.asJava)
 
   /**
@@ -295,7 +289,7 @@ private[spark] object TaskMetrics extends Logging {
       val name = info.name.get
       val value = info.update.get
       if (name == UPDATED_BLOCK_STATUSES) {
-        tm.setUpdatedBlockStatuses(value.asInstanceOf[java.util.List[(BlockId, BlockStatus)]])
+        tm.setUpdatedBlockStatuses(value.asInstanceOf[List[(BlockId, BlockStatus)]])
       } else {
         tm.nameToAccums.get(name).foreach(
           _.asInstanceOf[LongAccumulator].setValue(value.asInstanceOf[Long])
@@ -326,7 +320,7 @@ private[spark] object TaskMetrics extends Logging {
 
 
 private[spark] class BlockStatusesAccumulator
-  extends AccumulatorV2[(BlockId, BlockStatus), java.util.List[(BlockId, BlockStatus)]] {
+  extends AccumulatorV2[(BlockId, BlockStatus), List[(BlockId, BlockStatus)]] {
   private val _seq = Collections.synchronizedList(new ArrayList[(BlockId, BlockStatus)]())
 
   override def isZero(): Boolean = _seq.isEmpty
@@ -344,15 +338,20 @@ private[spark] class BlockStatusesAccumulator
   override def add(v: (BlockId, BlockStatus)): Unit = _seq.add(v)
 
   override def merge(
-    other: AccumulatorV2[(BlockId, BlockStatus), java.util.List[(BlockId, BlockStatus)]]): Unit = {
+    other: AccumulatorV2[(BlockId, BlockStatus), List[(BlockId, BlockStatus)]]): Unit = {
     other match {
-      case o: BlockStatusesAccumulator => _seq.addAll(o.value)
+      case o: BlockStatusesAccumulator => o.value.foreach(_seq.add)
       case _ => throw new UnsupportedOperationException(
         s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
     }
   }
 
-  override def value: java.util.List[(BlockId, BlockStatus)] = _seq
+  // `asScala` accesses the internal values using `java.util.Iterator` so needs to be synchronized
+  override def value: List[(BlockId, BlockStatus)] = {
+    _seq.synchronized {
+      _seq.asScala.toList
+    }
+  }
 
   def setValue(newValue: java.util.List[(BlockId, BlockStatus)]): Unit = {
     _seq.clear()

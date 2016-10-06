@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.util.{Collections, Properties, UUID}
+import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
@@ -309,18 +309,14 @@ private[spark] object JsonProtocol {
       value match {
         case v: Int => JInt(v)
         case v: Long => JInt(v)
-        // We only have 3 kind of internal accumulator types, so if it's not int or long, it must be
-        // the blocks accumulator, whose type is `java.util.List[(BlockId, BlockStatus)]`
-        case v =>
-          val blockAccumulator =
-            Collections.synchronizedList(v.asInstanceOf[java.util.List[(BlockId, BlockStatus)]])
-          blockAccumulator.synchronized {
-            JArray(blockAccumulator.asScala.toList.map {
-              case (id, status) =>
-                ("Block ID" -> id.toString) ~
+        case v: List[(BlockId, BlockStatus)] =>
+          JArray(v.map {
+            case (id, status) =>
+              ("Block ID" -> id.toString) ~
                 ("Status" -> blockStatusToJson(status))
-            })
-          }
+          })
+        case any => throw new UnsupportedOperationException(
+          s"Cannot serialize Accumulator of type ${any.getClass.getName}")
       }
     } else {
       // For all external accumulators, just use strings
