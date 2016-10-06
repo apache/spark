@@ -682,6 +682,7 @@ case class TimeAdd(start: Expression, interval: Expression)
   override def right: Expression = interval
 
   override def toString: String = s"$left + $right"
+  override def sql: String = s"${left.sql} + ${right.sql}"
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, CalendarIntervalType)
 
   override def dataType: DataType = TimestampType
@@ -762,6 +763,7 @@ case class TimeSub(start: Expression, interval: Expression)
   override def right: Expression = interval
 
   override def toString: String = s"$left - $right"
+  override def sql: String = s"${left.sql} - ${right.sql}"
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, CalendarIntervalType)
 
   override def dataType: DataType = TimestampType
