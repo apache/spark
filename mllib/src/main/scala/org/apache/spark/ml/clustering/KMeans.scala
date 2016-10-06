@@ -314,7 +314,9 @@ class KMeans @Since("1.5.0") (
 
   /** @group setParam */
   @Since("2.1.0")
-  def setInitialModel(value: KMeansModel): this.type = set(initialModel, value)
+  def setInitialModel(value: KMeansModel): this.type = {
+    set(k, value.parentModel.clusterCenters.length).set(initialModel, value)
+  }
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
@@ -340,11 +342,6 @@ class KMeans @Since("1.5.0") (
       val dimOfInitialModel = $(initialModel).clusterCenters.head.size
       require(dimOfData == dimOfInitialModel,
         s"mismatched dimension, $dimOfData in data while $dimOfInitialModel in the initial model.")
-
-      // Check the equal of number of clusters
-      val kOfInitialModel = $(initialModel).parentModel.clusterCenters.length
-      require(kOfInitialModel == $(k),
-        s"mismatched cluster count, ${$(k)} cluster centers required but $kOfInitialModel found.")
       algo.setInitialModel($(initialModel).parentModel)
     }
 

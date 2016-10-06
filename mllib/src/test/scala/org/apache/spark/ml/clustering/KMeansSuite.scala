@@ -33,13 +33,14 @@ private[clustering] case class TestRow(features: Vector)
 
 class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
-  final val k = 5
+  final val k: Int = 5
+  final val dim: Int = 3
   @transient var dataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
+    dataset = KMeansSuite.generateKMeansData(spark, 50, dim, k)
   }
 
   test("default parameters") {
@@ -146,7 +147,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       Map("initialModel" -> (checkModelData _).asInstanceOf[(Any, Any) => Unit]))
   }
 
-  test("Initialize using given cluster centers") {
+  test("Initialize using a trained model") {
     val kmeans = new KMeans().setK(k).setSeed(1).setMaxIter(1)
     val oneIterModel = kmeans.fit(dataset)
     val twoIterModel = kmeans.copy(ParamMap(ParamPair(kmeans.maxIter, 2))).fit(dataset)
@@ -156,20 +157,20 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       .foreach { case (center1, center2) => assert(center1 ~== center2 absTol 1E-8) }
   }
 
-  test("Initialize using wrong model") {
-    val kmeans = new KMeans().setK(k).setSeed(1).setMaxIter(10)
-
-    val wrongKModel = KMeansSuite.generateRandomKMeansModel(3, k + 1)
-    val wrongKModelThrown = intercept[IllegalArgumentException] {
-      kmeans.setInitialModel(wrongKModel).fit(dataset)
-    }
-    assert(wrongKModelThrown.getMessage.contains("mismatched cluster count"))
-
+  test("Initialize using a wrong model") {
+    val kmeans = new KMeans().setSeed(1).setMaxIter(10)
     val wrongDimModel = KMeansSuite.generateRandomKMeansModel(4, k)
     val wrongDimModelThrown = intercept[IllegalArgumentException] {
       kmeans.setInitialModel(wrongDimModel).fit(dataset)
     }
     assert(wrongDimModelThrown.getMessage.contains("mismatched dimension"))
+  }
+
+  test("Infer K from an initial model") {
+    val kmeans = new KMeans().setK(k)
+    val testNewK = 10
+    val randomModel = KMeansSuite.generateRandomKMeansModel(dim, testNewK)
+    assert(kmeans.setInitialModel(randomModel).getK === testNewK)
   }
 }
 
