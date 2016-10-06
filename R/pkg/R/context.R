@@ -126,12 +126,12 @@ parallelize <- function(sc, coll, numSlices = 1) {
   if (numSlices > length(coll))
     numSlices <- length(coll)
 
-  sizeLimit <- .Machine$integer.max - 10240 # Safe margin bellow maximum allocation limit
+  sizeLimit <- as.numeric(
+    sparkR.conf("spark.r.maxAllocationLimit", toString(.Machine$integer.max - 10240)))
   objectSize <- object.size(coll)
 
   # For large objects we make sure the size of each slice is also smaller than sizeLimit
   numSlices <- max(numSlices, ceiling(objectSize / sizeLimit))
-
 
   sliceLen <- ceiling(length(coll) / numSlices)
   slices <- split(coll, rep(1: (numSlices + 1), each = sliceLen)[1:length(coll)])
@@ -149,6 +149,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
     fileName <- writeToTempFile(serializedSlices)
     jrdd <- callJStatic(
       "org.apache.spark.api.r.RRDD", "createRDDFromFile", sc, fileName, as.integer(numSlices))
+    file.remove(fileName)
   }
 
   RDD(jrdd, "byte")
