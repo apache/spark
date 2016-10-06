@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis._
@@ -132,6 +133,35 @@ case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Convert the predicates of [[Filter]] operators to CNF form.
+ */
+case class CNFNormalization(conf: CatalystConf) extends Rule[LogicalPlan] with PredicateHelper {
+  private def toCNF(predicate: Expression, depth: Int = 0): Expression = {
+    if (depth > conf.maxDepthForCNFNormalization) {
+      return predicate
+    }
+    val disjunctives = splitDisjunctivePredicates(predicate)
+    var finalPredicates = splitConjunctivePredicates(disjunctives.head)
+    disjunctives.tail.foreach { cond =>
+      val predicates = new ArrayBuffer[Expression]()
+      splitConjunctivePredicates(cond).map { p =>
+        predicates ++= finalPredicates.map(Or(_, p))
+      }
+      finalPredicates = predicates.toSeq
+    }
+    val cnf = finalPredicates.map(toCNF(_, depth + 1))
+    if (depth == 0 && cnf.length > conf.maxPredicateNumberForCNFNormalization) {
+      return predicate
+    } else {
+      cnf.reduce(And)
+    }
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(condition, _) => f.copy(condition = toCNF(condition))
+  }
+}
 
 /**
  * Simplifies boolean expressions:

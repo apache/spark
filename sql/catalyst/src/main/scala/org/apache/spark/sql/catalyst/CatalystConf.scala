@@ -32,6 +32,9 @@ trait CatalystConf {
   def optimizerInSetConversionThreshold: Int
   def maxCaseBranchesForCodegen: Int
 
+  def maxDepthForCNFNormalization: Int
+  def maxPredicateNumberForCNFNormalization: Int
+
   def runSQLonFile: Boolean
 
   def warehousePath: String
@@ -60,6 +63,8 @@ case class SimpleCatalystConf(
     optimizerMaxIterations: Int = 100,
     optimizerInSetConversionThreshold: Int = 10,
     maxCaseBranchesForCodegen: Int = 20,
+    maxDepthForCNFNormalization: Int = 10,
+    maxPredicateNumberForCNFNormalization: Int = 20,
     runSQLonFile: Boolean = true,
     crossJoinEnabled: Boolean = false,
     warehousePath: String = "/user/hive/warehouse")

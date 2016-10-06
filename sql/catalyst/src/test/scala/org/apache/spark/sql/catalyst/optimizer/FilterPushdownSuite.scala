@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.types.IntegerType
 
 class FilterPushdownSuite extends PlanTest {
@@ -37,6 +38,7 @@ class FilterPushdownSuite extends PlanTest {
         CombineFilters,
         PushDownPredicate,
         BooleanSimplification,
+        CNFNormalization(SimpleCatalystConf(true)),
         PushPredicateThroughJoin,
         CollapseProject) :: Nil
   }
@@ -1017,5 +1019,47 @@ class FilterPushdownSuite extends PlanTest {
         condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("push down filters that are not be able to pushed down after simplification") {
+    // The following predicate ('a === 2 || 'a === 3) && ('c > 10 || 'a === 2)
+    // will be simplified as ('a == 2) || ('c > 10 && 'a == 3).
+    // In its original form, ('a === 2 || 'a === 3) can be pushed down.
+    // But the simplified one can't.
+    val originalQuery = testRelation
+      .select('a, 'b, ('c + 1) as 'cc)
+      .groupBy('a)('a, count('cc) as 'c)
+      .where('c > 10) // this predicate can't be pushed down.
+      .where(('a === 2 || 'a === 3) && ('c > 10 || 'a === 2))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where('a === 2 || 'a === 3)
+        .select('a, 'b, ('c + 1) as 'cc)
+        .groupBy('a)('a, count('cc) as 'c)
+        .where('c > 10).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("disjunctive predicates which are able to pushdown should be pushed down after converted") {
+    // (('a === 2) || ('c > 10 || 'a === 3)) can't be pushdown due to the disjunctive form.
+    // However, its conjunctive normal form can be pushdown.
+    val originalQuery = testRelation
+      .select('a, 'b, ('c + 1) as 'cc)
+      .groupBy('a)('a, count('cc) as 'c)
+      .where('c > 10)
+      .where(('a === 2) || ('c > 10 && 'a === 3))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where('a === 2 || 'a === 3)
+        .select('a, 'b, ('c + 1) as 'cc)
+        .groupBy('a)('a, count('cc) as 'c)
+        .where('c > 10).analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 }

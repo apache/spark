@@ -454,6 +454,18 @@ object SQLConf {
     .intConf
     .createWithDefault(20)
 
+  val MAX_DEPTH_CNF_PREDICATE = SQLConfigBuilder("spark.sql.expression.cnf.maxDepth")
+    .internal()
+    .doc("The maximum depth of converting recursively filter predicates to CNF normalization.")
+    .intConf
+    .createWithDefault(10)
+
+  val MAX_PREDICATE_NUMBER_CNF_PREDICATE = SQLConfigBuilder("spark.sql.expression.cnf.maxNumber")
+    .internal()
+    .doc("The maximum number of predicates in the CNF normalization of filter predicates")
+    .intConf
+    .createWithDefault(20)
+
   val FILES_MAX_PARTITION_BYTES = SQLConfigBuilder("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
@@ -684,6 +696,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def wholeStageFallback: Boolean = getConf(WHOLESTAGE_FALLBACK)
 
   def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
+
+  def maxDepthForCNFNormalization: Int = getConf(MAX_DEPTH_CNF_PREDICATE)
+
+  def maxPredicateNumberForCNFNormalization: Int = getConf(MAX_PREDICATE_NUMBER_CNF_PREDICATE)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
