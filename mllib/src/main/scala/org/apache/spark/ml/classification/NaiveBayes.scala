@@ -176,8 +176,8 @@ class NaiveBayes @Since("1.5.0") (
     val numLabels = aggregated.length
     val numDocuments = aggregated.map(_._2._1).sum
 
-    val piArray = Array.fill[Double](numLabels)(0.0)
-    val thetaArray = Array.fill[Double](numLabels * numFeatures)(0.0)
+    val piArray = new Array[Double](numLabels)
+    val thetaArray = new Array[Double](numLabels * numFeatures)
 
     val lambda = $(smoothing)
     val piLogDenom = math.log(numDocuments + numLabels * lambda)
