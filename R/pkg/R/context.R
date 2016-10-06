@@ -126,6 +126,13 @@ parallelize <- function(sc, coll, numSlices = 1) {
   if (numSlices > length(coll))
     numSlices <- length(coll)
 
+  sizeLimit <- .Machine$integer.max - 10240 # Safe margin bellow maximum allocation limit
+  objectSize <- object.size(coll)
+
+  # For large objects we make sure the size of each slice is also smaller than sizeLimit
+  numSlices <- max(numSlices, ceiling(objectSize / sizeLimit))
+
+
   sliceLen <- ceiling(length(coll) / numSlices)
   slices <- split(coll, rep(1: (numSlices + 1), each = sliceLen)[1:length(coll)])
 
@@ -136,8 +143,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # The PRC backend cannot handle arguments larger than 2GB (INT_MAX)
   # If serialized data is safely less than that threshold we send it over the PRC channel.
   # Otherwise, we write it to a file and send the file name
-  sizeLimit <- .Machine$integer.max - 1024 # Safe margin bellow maximum allocation limit
-  if (object.size(serializedSlices) < sizeLimit) {
+  if (objectSize < sizeLimit) {
     jrdd <- callJStatic("org.apache.spark.api.r.RRDD", "createRDDFromArray", sc, serializedSlices)
   } else {
     fileName <- writeToTempFile(serializedSlices)
