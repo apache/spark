@@ -117,7 +117,7 @@ object MLTestingUtils extends SparkFunSuite {
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
     types.map { t =>
         val castDF = df.select(col(labelColName).cast(t), col(featuresColName))
-        t -> TreeTests.setMetadata(castDF, 2, labelColName, featuresColName)
+        t -> TreeTests.setMetadata(castDF, 0, labelColName, featuresColName)
       }.toMap
   }
 
