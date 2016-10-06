@@ -38,6 +38,12 @@ private[r] class DecisionTreeClassifierWrapper private (
   private val DTModel: DecisionTreeClassificationModel =
     pipeline.stages(1).asInstanceOf[DecisionTreeClassificationModel]
 
+  lazy val depth: Int = DTModel.depth
+  lazy val numNodes: Int = DTModel.numNodes
+  lazy val numClasses: Int = DTModel.numClasses
+
+  def summary: String = DTModel.toDebugString
+
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset)
       .drop(DTModel.getFeaturesCol)

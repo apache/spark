@@ -1474,7 +1474,7 @@ print.summary.KSTest <- function(x, ...) {
 #' df <- createDataFrame(longley)
 #'
 #' # fit a Decision Tree Regression Model
-#' model <- spark.decisionTree(data, Employed~., "regression", maxDepth=5, maxBins=16)
+#' model <- spark.decisionTree(data, Employed~., type = "regression", maxDepth = 5, maxBins = 16)
 #'
 #' # get the summary of the model
 #' summary(model)
@@ -1579,7 +1579,7 @@ setMethod("summary", signature(object = "DecisionTreeRegressionModel"),
             features <- callJMethod(jobj, "features")
             depth <- callJMethod(jobj, "depth")
             numNodes <- callJMethod(jobj, "numNodes")
-            ans <- list(features = features, depth = depth, numNodes = numNodes)
+            ans <- list(features = features, depth = depth, numNodes = numNodes, jobj = jobj)
             class(ans) <- "summary.DecisionTreeRegressionModel"
             ans
           })
@@ -1594,15 +1594,17 @@ setMethod("summary", signature(object = "DecisionTreeRegressionModel"),
 #' @export
 #' @note summary(DecisionTreeRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "DecisionTreeClassificationModel"),
-function(object, ...) {
-    jobj <- object@jobj
-    features <- callJMethod(jobj, "features")
-    depth <- callJMethod(jobj, "depth")
-    numNodes <- callJMethod(jobj, "numNodes")
-    ans <- list(features = features, depth = depth, numNodes = numNodes)
-    class(ans) <- "summary.DecisionTreeClassificationModel"
-    ans
-})
+          function(object, ...) {
+              jobj <- object@jobj
+              features <- callJMethod(jobj, "features")
+              depth <- callJMethod(jobj, "depth")
+              numNodes <- callJMethod(jobj, "numNodes")
+              numClasses <- callJMethod(jobj, "numClasses")
+              ans <- list(features = features, depth = depth,
+                          numNodes = numNodes, numClasses = numClasses, jobj = jobj)
+              class(ans) <- "summary.DecisionTreeClassificationModel"
+              ans
+          })
 
 #  Prints the summary of Decision Tree Regression Model
 
@@ -1611,11 +1613,11 @@ function(object, ...) {
 #' @export
 #' @note print.summary.DecisionTreeRegressionModel since 2.1.0
 print.summary.DecisionTreeRegressionModel <- function(x, ...) {
-  jobj <- x@jobj
-  summaryStr <- callJMethod(jobj, "summary")
-  cat(summaryStr, "\n")
-  invisible(x)
-  }
+    jobj <- x$jobj
+    summaryStr <- callJMethod(jobj, "summary")
+    cat(summaryStr, "\n")
+    invisible(x)
+}
 
 #  Prints the summary of Decision Tree Classification Model
 
@@ -1624,7 +1626,7 @@ print.summary.DecisionTreeRegressionModel <- function(x, ...) {
 #' @export
 #' @note print.summary.DecisionTreeClassificationModel since 2.1.0
 print.summary.DecisionTreeClassificationModel <- function(x, ...) {
-    jobj <- x@jobj
+    jobj <- x$jobj
     summaryStr <- callJMethod(jobj, "summary")
     cat(summaryStr, "\n")
     invisible(x)
