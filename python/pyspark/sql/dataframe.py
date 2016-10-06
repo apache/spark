@@ -1384,8 +1384,6 @@ class DataFrame(object):
            Added support for multiple columns.
         """
 
-
-
         if not isinstance(col, (str, list, tuple)):
             raise ValueError("col should be a string, list or tuple.")
 
