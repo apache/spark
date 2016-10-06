@@ -483,46 +483,16 @@ private[ui] class StageDataSource(
    * Return Ordering according to sortColumn and desc
    */
   private def ordering(sortColumn: String, desc: Boolean): Ordering[StageTableRowData] = {
-    val ordering = sortColumn match {
-      case "Stage Id" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Int.compare(x.stageId, y.stageId)
-      }
-      case "Pool Name" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.String.compare(x.schedulingPool, y.schedulingPool)
-      }
-      case "Description" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          (x.descriptionOption, y.descriptionOption) match {
-            case (None, None) => Ordering.String.compare(x.stageInfo.name, y.stageInfo.name)
-            case (xDesc, yDesc) => Ordering.Option[String].compare(xDesc, yDesc)
-          }
-      }
-      case "Submitted" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Long.compare(x.submissionTime, y.submissionTime)
-      }
-      case "Duration" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Long.compare(x.duration, y.duration)
-      }
-      case "Input" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Long.compare(x.inputRead, y.inputRead)
-      }
-      case "Output" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Long.compare(x.outputWrite, y.outputWrite)
-      }
-      case "Shuffle Read" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Long.compare(x.shuffleRead, y.shuffleRead)
-      }
-      case "Shuffle Write" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Long.compare(x.shuffleWrite, y.shuffleWrite)
-      }
+    val ordering: Ordering[StageTableRowData] = sortColumn match {
+      case "Stage Id" => Ordering.by(_.stageId)
+      case "Pool Name" => Ordering.by(_.schedulingPool)
+      case "Description" => Ordering.by(x => (x.descriptionOption, x.stageInfo.name))
+      case "Submitted" => Ordering.by(_.submissionTime)
+      case "Duration" => Ordering.by(_.duration)
+      case "Input" => Ordering.by(_.inputRead)
+      case "Output" => Ordering.by(_.outputWrite)
+      case "Shuffle Read" => Ordering.by(_.shuffleRead)
+      case "Shuffle Write" => Ordering.by(_.shuffleWrite)
       case "Tasks: Succeeded/Total" =>
         throw new IllegalArgumentException(s"Unsortable column: $sortColumn")
       case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")

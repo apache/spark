@@ -455,26 +455,11 @@ private[ui] class JobDataSource(
    * Return Ordering according to sortColumn and desc
    */
   private def ordering(sortColumn: String, desc: Boolean): Ordering[JobTableRowData] = {
-    val ordering = sortColumn match {
-      case "Job Id" | "Job Id (Job Group)" => new Ordering[JobTableRowData] {
-        override def compare(x: JobTableRowData, y: JobTableRowData): Int =
-          Ordering.Int.compare(x.jobData.jobId, y.jobData.jobId)
-      }
-      case "Description" => new Ordering[JobTableRowData] {
-        override def compare(x: JobTableRowData, y: JobTableRowData): Int =
-          (x.lastStageDescription, y.lastStageDescription) match {
-            case ("", "") => Ordering.String.compare(x.lastStageName, y.lastStageName)
-            case (xDesc, yDesc) => Ordering.String.compare(xDesc, yDesc)
-          }
-      }
-      case "Submitted" => new Ordering[JobTableRowData] {
-        override def compare(x: JobTableRowData, y: JobTableRowData): Int =
-          Ordering.Long.compare(x.submissionTime, y.submissionTime)
-      }
-      case "Duration" => new Ordering[JobTableRowData] {
-        override def compare(x: JobTableRowData, y: JobTableRowData): Int =
-          Ordering.Long.compare(x.duration, y.duration)
-      }
+    val ordering: Ordering[JobTableRowData] = sortColumn match {
+      case "Job Id" | "Job Id (Job Group)" => Ordering.by(_.jobData.jobId)
+      case "Description" => Ordering.by(x => (x.lastStageDescription, x.lastStageName))
+      case "Submitted" => Ordering.by(_.submissionTime)
+      case "Duration" => Ordering.by(_.duration)
       case "Stages: Succeeded/Total" | "Tasks (for all stages): Succeeded/Total" =>
         throw new IllegalArgumentException(s"Unsortable column: $sortColumn")
       case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
