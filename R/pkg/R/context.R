@@ -126,8 +126,10 @@ parallelize <- function(sc, coll, numSlices = 1) {
   if (numSlices > length(coll))
     numSlices <- length(coll)
 
-  sizeLimit <- as.numeric(
-    sparkR.conf("spark.r.maxAllocationLimit", toString(.Machine$integer.max - 10240)))
+  sizeLimit <- as.numeric(sparkR.conf(
+      "spark.r.maxAllocationLimit",
+      toString(.Machine$integer.max / 2) # Default to a safe default: 200MB
+  ))
   objectSize <- object.size(coll)
 
   # For large objects we make sure the size of each slice is also smaller than sizeLimit
