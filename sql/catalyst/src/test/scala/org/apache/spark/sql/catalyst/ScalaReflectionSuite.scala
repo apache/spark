@@ -21,7 +21,9 @@ import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, NewInstance}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 case class PrimitiveData(
     intField: Int,
@@ -228,5 +230,17 @@ class ScalaReflectionSuite extends SparkFunSuite {
     val anyTypes = getParameterTypes(anyFunc)
     assert(anyTypes.forall(!_.isPrimitive))
     assert(anyTypes === Seq(classOf[java.lang.Object], classOf[java.lang.Object]))
+  }
+
+  test("SPARK-15062: Get correct serializer for List[_]") {
+    val list = List(1, 2, 3)
+    val serializer = extractorsFor[List[Int]](BoundReference(
+      0, ObjectType(list.getClass), nullable = false))
+    assert(serializer.children.size == 2)
+    assert(serializer.children.head.isInstanceOf[Literal])
+    assert(serializer.children.head.asInstanceOf[Literal].value === UTF8String.fromString("value"))
+    assert(serializer.children.last.isInstanceOf[NewInstance])
+    assert(serializer.children.last.asInstanceOf[NewInstance]
+      .cls.isInstanceOf[Class[org.apache.spark.sql.catalyst.util.GenericArrayData]])
   }
 }
