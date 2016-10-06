@@ -2662,9 +2662,6 @@ setMethod("write.df",
             if (is.null(source)) {
               source <- getDefaultSqlSource()
             }
-            if (!is.null(path)) {
-              options[["path"]] <- path
-            }
             write <- callJMethod(df@sdf, "write")
             write <- callJMethod(write, "format", source)
             write <- setWriteOptions(write, path = path, mode = mode, ...)
