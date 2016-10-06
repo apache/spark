@@ -87,6 +87,9 @@ objectFile <- function(sc, path, minPartitions = NULL) {
 #' in the list are split into \code{numSlices} slices and distributed to nodes
 #' in the cluster.
 #'
+#' If size of serialized slices is larger than 2GB (or INT_MAX bytes), the function
+#' will write it to disk and send the file name to JVM.
+#'
 #' @param sc SparkContext to use
 #' @param coll collection to parallelize
 #' @param numSlices number of partitions to create in the RDD
@@ -130,10 +133,30 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # 2-tuples of raws
   serializedSlices <- lapply(slices, serialize, connection = NULL)
 
-  jrdd <- callJStatic("org.apache.spark.api.r.RRDD",
-                      "createRDDFromArray", sc, serializedSlices)
+  # The PRC backend cannot handle arguments larger than 2GB (INT_MAX)
+  # If serialized data is safely less than that threshold we send it over the PRC channel.
+  # Otherwise, we write it to a file and send the file name
+  sizeLimit <- .Machine$integer.max - 1024 # Safe margin bellow maximum allocation limit
+  if (object.size(serializedSlices) < sizeLimit) {
+    jrdd <- callJStatic("org.apache.spark.api.r.RRDD", "createRDDFromArray", sc, serializedSlices)
+  } else {
+    fileName <- writeToTempFile(serializedSlices)
+    jrdd <- callJStatic(
+      "org.apache.spark.api.r.RRDD", "createRDDFromFile", sc, fileName, as.integer(numSlices))
+  }
 
   RDD(jrdd, "byte")
+}
+
+writeToTempFile <- function(serializedSlices) {
+  fileName <- tempfile()
+  conn = file(fileName, "wb")
+  for (slice in serializedSlices) {
+    writeBin(as.integer(length(slice)), conn, endian = "big")
+    writeBin(slice, conn, endian = "big")
+  }
+  close(conn)
+  fileName
 }
 
 #' Include this specified package on all workers
