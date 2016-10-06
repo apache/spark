@@ -171,69 +171,71 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
   override def prettyName: String = "map"
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
+// scalastyle:on line.size.limit
+case class CreateStruct(children: Seq[Expression]) extends Expression with Unevaluable {
+  override lazy val resolved: Boolean = false
+  override def nullable: Boolean = false
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+  override def prettyName: String = "struct"
+}
+
 /**
- * Returns a Row containing the evaluation of all children expressions.
+ * Common base class for both [[CreateNamedStruct]] and [[CreateNamedStructUnsafe]].
  */
-object CreateStruct extends (Seq[Expression] => CreateNamedStruct) {
-  def apply(children: Seq[Expression]) : CreateNamedStruct = {
-    val namedStructArgs = {
-      val attNames = for {
-        (child, idx) <- children.zipWithIndex
-      } yield {
-        child match {
-            // please see https://github.com/apache/spark/pull/14444
-            // for discussion about the need to check for resolved trees
-          case ne : NamedExpression if ne.resolved =>
-            // name is available, no need to wait for the [[Analyzer]] rule.
-            Literal(ne.name)
-          case ne : NamedExpression =>
-            // since ne is unresolved we're not guaranteed its name is currently available,
-            // so we put a place holder in place and wait for the [[Ana;yzer]] to do its magic.
-            NamePlaceHolder(idx)
-          case _ =>
-            // unnamed expression, simply use the default naming scheme.
-            NamePlaceHolder(idx).defaultName
+trait CreateNamedStructLike extends Expression {
+  lazy val (nameExprs, valExprs) = children.grouped(2).map {
+    case Seq(name, value) => (name, value)
+  }.toList.unzip
+
+  lazy val names = nameExprs.map(_.eval(EmptyRow))
+
+  override def nullable: Boolean = false
+
+  override def foldable: Boolean = valExprs.forall(_.foldable)
+
+  override lazy val dataType: StructType = {
+    val fields = names.zip(valExprs).map {
+      case (name, expr) =>
+        val metadata = expr match {
+          case ne: NamedExpression => ne.metadata
+          case _ => Metadata.empty
         }
-      }
-      attNames.zip(children).flatMap {
-        case (name, expression) => Seq(name, expression)
+        StructField(name.toString, expr.dataType, expr.nullable, metadata)
+    }
+    StructType(fields)
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.size % 2 != 0) {
+      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
+    } else {
+      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
+      if (invalidNames.nonEmpty) {
+        TypeCheckResult.TypeCheckFailure(
+          "Only foldable StringType expressions are allowed to appear at odd position, got:" +
+          s" ${invalidNames.mkString(",")}")
+      } else if (!names.contains(null)) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        TypeCheckResult.TypeCheckFailure("Field name should not be null")
       }
     }
-    CreateNamedStruct(namedStructArgs)
   }
 
   /**
-    * an expression representing a not yet available attribute name.
-    * this expression is unevaluable and as its name suggests it
-    * is a temporrary place holder untill we're able to determine the actual attribute name.
-    * analyzer rull[[org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveStructFields]]
-    * replaces this place golder with a string [[Literal]].
-    * @param idx the attribute's index,
-    *            used in case the attribute name is derived from a non named expression.
-    */
-  case class NamePlaceHolder(idx : Int) extends LeafExpression with Unevaluable {
-    override lazy val resolved : Boolean = false
-    override def nullable: Boolean = throw new UnresolvedException( this, "nullable" )
-
-    /**
-      * Returns the [[DataType]] of the result of evaluating this expression.  It is
-      * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
-      */
-    override def dataType: DataType = throw new UnresolvedException( this, "nullable" )
-
-    def defaultName: Literal = Literal( s"col${idx + 1}" )
-    def nameExpression( e : Expression ) : Literal = e match {
-      case ne : NamedExpression => Literal(ne.name)
-      case _ => defaultName
-    }
+   * Returns Aliased [[Expression]]s that could be used to construct a flattened version of this
+   * StructType.
+   */
+  def flatten: Seq[NamedExpression] = valExprs.zip(names).map {
+    case (v, n) => Alias(v, n.toString)()
   }
 
-  private def expressionInfo: ExpressionInfo = new ExpressionInfo( "CreateStruct",
-    "struct",
-    "_FUNC_(col1, col2, col3, ...)",
-    "Creates a struct with the given field values.")
-  def registryEntry: (String, (ExpressionInfo, CreateStruct.type)) =
-    "struct" -> (expressionInfo -> this )
+  override def eval(input: InternalRow): Any = {
+    InternalRow(valExprs.map(_.eval(input)): _*)
+  }
 }
 
 /**
@@ -245,59 +247,7 @@ object CreateStruct extends (Seq[Expression] => CreateNamedStruct) {
 @ExpressionDescription(
   usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.")
 // scalastyle:on line.size.limit
-case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
-
-  /**
-   * Returns Aliased [[Expression]]s that could be used to construct a flattened version of this
-   * StructType.
-   */
-  def flatten: Seq[NamedExpression] = valExprs.zip(names).map {
-    case (v, n) => Alias(v, n.toString)()
-  }
-
-  private lazy val (nameExprs, valExprs) =
-    children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
-
-  def valueExpressions: List[Expression] = valExprs
-
-  private lazy val names = nameExprs.map(_.eval(EmptyRow))
-
-  override lazy val dataType: StructType = {
-    val fields = names.zip(valExprs).map {
-      case (name, valExpr: NamedExpression) =>
-        StructField(name.asInstanceOf[UTF8String].toString,
-          valExpr.dataType, valExpr.nullable, valExpr.metadata)
-      case (name, valExpr) =>
-        StructField(name.asInstanceOf[UTF8String].toString,
-          valExpr.dataType, valExpr.nullable, Metadata.empty)
-    }
-    StructType(fields)
-  }
-
-  override def foldable: Boolean = valExprs.forall(_.foldable)
-
-  override def nullable: Boolean = false
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
-    } else {
-      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
-      if (invalidNames.nonEmpty) {
-        TypeCheckResult.TypeCheckFailure(
-          s"Only foldable StringType expressions are allowed to appear at odd position , got :" +
-            s" ${invalidNames.mkString(",")}")
-      } else if (!names.contains(null)) {
-        TypeCheckResult.TypeCheckSuccess
-      } else {
-        TypeCheckResult.TypeCheckFailure("Field name should not be null")
-      }
-    }
-  }
-
-  override def eval(input: InternalRow): Any = {
-    InternalRow(valExprs.map(_.eval(input)): _*)
-  }
+case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStructLike {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
@@ -334,31 +284,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
  *
  * @param children Seq(name1, val1, name2, val2, ...)
  */
-case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression {
-
-  private lazy val (nameExprs, valExprs) =
-    children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
-
-  private lazy val names = nameExprs.map(_.eval(EmptyRow).toString)
-
-  override lazy val dataType: StructType = {
-    val fields = names.zip(valExprs).map {
-      case (name, valExpr: NamedExpression) =>
-        StructField(name, valExpr.dataType, valExpr.nullable, valExpr.metadata)
-      case (name, valExpr) =>
-        StructField(name, valExpr.dataType, valExpr.nullable, Metadata.empty)
-    }
-    StructType(fields)
-  }
-
-  override def foldable: Boolean = valExprs.forall(_.foldable)
-
-  override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any = {
-    InternalRow(valExprs.map(_.eval(input)): _*)
-  }
-
+case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateNamedStructLike {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
     ExprCode(code = eval.code, isNull = eval.isNull, value = eval.value)
