@@ -35,7 +35,7 @@ abstract class StreamingQueryListener {
   /**
    * Called when a query is started.
    * @note This is called synchronously with
-   *       [[org.apache.spark.sql.DataStreamWriter `DataStreamWriter.start()`]],
+   *       [[org.apache.spark.sql.streaming.DataStreamWriter `DataStreamWriter.start()`]],
    *       that is, `onQueryStart` will be called on all listeners before
    *       `DataStreamWriter.start()` returns the corresponding [[StreamingQuery]]. Please
    *       don't block this method as it will block your query.
@@ -101,8 +101,6 @@ object StreamingQueryListener {
    * @param queryInfo Information about the status of the query.
    * @param exception The exception message of the [[StreamingQuery]] if the query was terminated
    *                  with an exception. Otherwise, it will be `None`.
-   * @param stackTrace The stack trace of the exception if the query was terminated with an
-   *                   exception. It will be empty if there was no error.
    * @since 2.0.0
    */
   @Experimental
