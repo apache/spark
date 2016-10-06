@@ -151,6 +151,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
     val mapped = kafka.map(kv => kv._2.toInt + 1)
 
     testStream(mapped)(
+      makeSureGetOffsetCalled,
       StopStream
     )
   }
