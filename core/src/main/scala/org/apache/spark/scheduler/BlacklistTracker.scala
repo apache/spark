@@ -18,8 +18,8 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.config
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
 import org.apache.spark.util.Utils
 
 private[scheduler] object BlacklistTracker extends Logging {
@@ -31,9 +31,7 @@ private[scheduler] object BlacklistTracker extends Logging {
    * order:
    * 1. Is it specifically enabled or disabled?
    * 2. Is it enabled via the legacy timeout conf?
-   * 3. Use the default for the spark-master:
-   *   - off for local mode
-   *   - on for distributed modes (including local-cluster)
+   * 3. Default is off
    */
   def isBlacklistEnabled(conf: SparkConf): Boolean = {
     conf.get(config.BLACKLIST_ENABLED) match {
@@ -41,23 +39,16 @@ private[scheduler] object BlacklistTracker extends Logging {
         enabled
       case None =>
         // if they've got a non-zero setting for the legacy conf, always enable the blacklist,
-        // otherwise, use the default based on the cluster-mode (off for local-mode, on otherwise).
+        // otherwise, use the default.
         val legacyKey = config.BLACKLIST_LEGACY_TIMEOUT_CONF.key
-        conf.get(config.BLACKLIST_LEGACY_TIMEOUT_CONF) match {
-          case Some(legacyTimeout) =>
-            if (legacyTimeout == 0) {
-              logWarning(s"Turning off blacklisting due to legacy configuration: $legacyKey == 0")
-              false
-            } else {
-              // mostly this is necessary just for tests, since real users that want the blacklist
-              // will get it anyway by default
-              logWarning(s"Turning on blacklisting due to legacy configuration: $legacyKey > 0")
-              true
-            }
-          case None =>
-            // local-cluster is *not* considered local for these purposes, we still want the
-            // blacklist enabled by default
+        conf.get(config.BLACKLIST_LEGACY_TIMEOUT_CONF).exists { legacyTimeout =>
+          if (legacyTimeout == 0) {
+            logWarning(s"Turning off blacklisting due to legacy configuration: $legacyKey == 0")
             false
+          } else {
+            logWarning(s"Turning on blacklisting due to legacy configuration: $legacyKey > 0")
+            true
+          }
         }
     }
   }
