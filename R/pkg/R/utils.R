@@ -690,10 +690,77 @@ getSparkContext <- function() {
   sc
 }
 
-is_master_local <- function(master) {
+isMasterLocal <- function(master) {
   grepl("^local(\\[([0-9]+|\\*)\\])?$", master, perl = TRUE)
 }
 
-is_sparkR_shell <- function() {
+isSparkRShell <- function() {
   grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
+}
+
+# Works identically with `callJStatic(...)` but throws a pretty formatted exception.
+handledCallJStatic <- function(cls, method, ...) {
+  result <- tryCatch(callJStatic(cls, method, ...),
+                     error = function(e) {
+                       captureJVMException(e, method)
+                     })
+  result
+}
+
+# Works identically with `callJMethod(...)` but throws a pretty formatted exception.
+handledCallJMethod <- function(obj, method, ...) {
+  result <- tryCatch(callJMethod(obj, method, ...),
+                     error = function(e) {
+                       captureJVMException(e, method)
+                     })
+  result
+}
+
+captureJVMException <- function(e, method) {
+  rawmsg <- as.character(e)
+  if (any(grep("^Error in .*?: ", rawmsg))) {
+    # If the exception message starts with "Error in ...", this is possibly
+    # "Error in invokeJava(...)". Here, it replaces the characters to
+    # `paste("Error in", method, ":")` in order to identify which function
+    # was called in JVM side.
+    stacktrace <- strsplit(rawmsg, "Error in .*?: ")[[1]]
+    rmsg <- paste("Error in", method, ":")
+    stacktrace <- paste(rmsg[1], stacktrace[2])
+  } else {
+    # Otherwise, do not convert the error message just in case.
+    stacktrace <- rawmsg
+  }
+
+  if (any(grep("java.lang.IllegalArgumentException: ", stacktrace))) {
+    msg <- strsplit(stacktrace, "java.lang.IllegalArgumentException: ", fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(paste0(rmsg, "illegal argument - ", first), call. = FALSE)
+  } else if (any(grep("org.apache.spark.sql.AnalysisException: ", stacktrace))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.AnalysisException: ", fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(paste0(rmsg, "analysis error - ", first), call. = FALSE)
+  } else {
+    stop(stacktrace, call. = FALSE)
+  }
+}
+
+# rbind a list of rows with raw (binary) columns
+#
+# @param inputData a list of rows, with each row a list
+# @return data.frame with raw columns as lists
+rbindRaws <- function(inputData){
+  row1 <- inputData[[1]]
+  rawcolumns <- ("raw" == sapply(row1, class))
+
+  listmatrix <- do.call(rbind, inputData)
+  # A dataframe with all list columns
+  out <- as.data.frame(listmatrix)
+  out[!rawcolumns] <- lapply(out[!rawcolumns], unlist)
+  out
 }

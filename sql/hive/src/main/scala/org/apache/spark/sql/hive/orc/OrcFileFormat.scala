@@ -33,10 +33,10 @@ import org.apache.hadoop.mapred.{JobConf, OutputFormat => MapRedOutputFormat, Re
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
@@ -47,8 +47,7 @@ import org.apache.spark.util.SerializableConfiguration
  * [[FileFormat]] for reading ORC files. If this is moved or renamed, please update
  * [[DataSource]]'s backwardCompatibilityMap.
  */
-private[sql] class OrcFileFormat
-  extends FileFormat with DataSourceRegister with Serializable {
+class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable {
 
   override def shortName(): String = "orc"
 
@@ -158,16 +157,23 @@ private[sql] class OrcFileFormat
             requiredSchema.map(a => physicalSchema.fieldIndex(a.name): Integer).sorted.asJava
           val orcRecordReader =
             new VectorizedSparkOrcNewRecordReader(orcReader, conf, fileSplit, columnIDs)
-          new RecordReaderIterator[InternalRow](orcRecordReader)
+          val recordsIterator = new RecordReaderIterator[InternalRow](orcRecordReader)
+          Option(TaskContext.get())
+            .foreach(_.addTaskCompletionListener(_ => recordsIterator.close()))
+          recordsIterator
         } else {
           val orcRecordReader =
             new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart, fileSplit.getLength)
+          val recordsIterator = new RecordReaderIterator[OrcStruct](orcRecordReader)
+          Option(TaskContext.get())
+            .foreach(_.addTaskCompletionListener(_ => recordsIterator.close()))
+
           // Unwraps `OrcStruct`s to `UnsafeRow`s
           OrcRelation.unwrapOrcStructs(
             conf,
             requiredSchema,
             Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
-            new RecordReaderIterator[OrcStruct](orcRecordReader))
+            recordsIterator)
         }
       }
     }
@@ -207,7 +213,8 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
       row: InternalRow): Unit = {
     val fieldRefs = oi.getAllStructFieldRefs
     var i = 0
-    while (i < fieldRefs.size) {
+    val size = fieldRefs.size
+    while (i < size) {
 
       oi.setStructFieldData(
         struct,
@@ -238,7 +245,7 @@ private[orc] class OrcOutputWriter(
 
   private lazy val recordWriter: RecordWriter[NullWritable, Writable] = {
     recordWriterInstantiated = true
-    val uniqueWriteJobId = conf.get(CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
+    val uniqueWriteJobId = conf.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
     val taskAttemptId = context.getTaskAttemptID
     val partition = taskAttemptId.getTaskID.getId
     val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
@@ -306,7 +313,8 @@ private[orc] object OrcRelation extends HiveInspectors {
       iterator.map { value =>
         val raw = deserializer.deserialize(value)
         var i = 0
-        while (i < fieldRefs.length) {
+        val length = fieldRefs.length
+        while (i < length) {
           val fieldValue = oi.getStructFieldData(raw, fieldRefs(i))
           if (fieldValue == null) {
             mutableRow.setNullAt(fieldOrdinals(i))

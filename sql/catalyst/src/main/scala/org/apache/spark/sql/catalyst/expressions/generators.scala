@@ -152,8 +152,6 @@ case class Stack(children: Seq[Expression])
 abstract class ExplodeBase(child: Expression, position: Boolean)
   extends UnaryExpression with Generator with CodegenFallback with Serializable {
 
-  override def children: Seq[Expression] = child :: Nil
-
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType]) {
       TypeCheckResult.TypeCheckSuccess
@@ -256,8 +254,6 @@ case class PosExplode(child: Expression) extends ExplodeBase(child, position = t
   usage = "_FUNC_(a) - Explodes an array of structs into a table.",
   extended = "> SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));\n  [1,a]\n  [2,b]")
 case class Inline(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
-
-  override def children: Seq[Expression] = child :: Nil
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ArrayType(et, _) if et.isInstanceOf[StructType] =>

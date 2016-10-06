@@ -75,12 +75,12 @@ class SQLBuilder private (
     val aliasedOutput = canonicalizedPlan.output.zip(outputNames).map {
       case (attr, name) => Alias(attr.withQualifier(None), name)()
     }
-    val finalPlan = Project(aliasedOutput, SubqueryAlias(finalName, canonicalizedPlan))
+    val finalPlan = Project(aliasedOutput, SubqueryAlias(finalName, canonicalizedPlan, None))
 
     try {
       val replaced = finalPlan.transformAllExpressions {
         case s: SubqueryExpression =>
-          val query = new SQLBuilder(s.query, nextSubqueryId, nextGenAttrId, exprIdMap).toSQL
+          val query = new SQLBuilder(s.plan, nextSubqueryId, nextGenAttrId, exprIdMap).toSQL
           val sql = s match {
             case _: ListQuery => query
             case _: Exists => s"EXISTS($query)"
@@ -204,6 +204,12 @@ class SQLBuilder private (
 
     case p: ScriptTransformation =>
       scriptTransformationToSQL(p)
+
+    case p: LocalRelation =>
+      p.toSQL(newSubqueryName())
+
+    case p: Range =>
+      p.toSQL()
 
     case OneRowRelation =>
       ""
@@ -440,7 +446,7 @@ class SQLBuilder private (
 
     object RemoveSubqueriesAboveSQLTable extends Rule[LogicalPlan] {
       override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-        case SubqueryAlias(_, t @ ExtractSQLTable(_)) => t
+        case SubqueryAlias(_, t @ ExtractSQLTable(_), _) => t
       }
     }
 
@@ -557,7 +563,7 @@ class SQLBuilder private (
     }
 
     private def addSubquery(plan: LogicalPlan): SubqueryAlias = {
-      SubqueryAlias(newSubqueryName(), plan)
+      SubqueryAlias(newSubqueryName(), plan, None)
     }
 
     private def addSubqueryIfNeeded(plan: LogicalPlan): LogicalPlan = plan match {
@@ -584,8 +590,12 @@ class SQLBuilder private (
 
   object ExtractSQLTable {
     def unapply(plan: LogicalPlan): Option[SQLTable] = plan match {
-      case l @ LogicalRelation(_, _, Some(TableIdentifier(table, Some(database)))) =>
-        Some(SQLTable(database, table, l.output.map(_.withQualifier(None))))
+      case l @ LogicalRelation(_, _, Some(catalogTable))
+          if catalogTable.identifier.database.isDefined =>
+        Some(SQLTable(
+          catalogTable.identifier.database.get,
+          catalogTable.identifier.table,
+          l.output.map(_.withQualifier(None))))
 
       case relation: CatalogRelation =>
         val m = relation.catalogTable
