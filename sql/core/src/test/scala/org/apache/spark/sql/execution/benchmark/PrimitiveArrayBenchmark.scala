@@ -33,40 +33,49 @@ import org.apache.spark.util.Benchmark
  */
 class PrimitiveArrayBenchmark extends BenchmarkBase {
 
-  def readDataFrameArrayElement(iters: Int): Unit = {
+  def writeDatasetArray(iters: Int): Unit = {
     import sparkSession.implicits._
 
-    val count = 1024 * 1024 * 24
+    val count = 1024 * 1024 * 2
 
     val sc = sparkSession.sparkContext
-    val primitiveIntArray = Array.fill[Int](count)(1)
-    val dfInt = sc.parallelize(Seq(primitiveIntArray), 1).toDF
-    dfInt.count
+    val primitiveIntArray = Array.fill[Int](count)(65535)
+    val dsInt = sc.parallelize(Seq(primitiveIntArray), 1).toDS
+    dsInt.count
     val intArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        dfInt.selectExpr("value[0]").count
+        dsInt.map(e => e).collect
         n += 1
       }
     }
-    val primitiveDoubleArray = Array.fill[Double](count)(1.0)
-    val dfDouble = sc.parallelize(Seq(primitiveDoubleArray), 1).toDF
-    dfDouble.count
+    val primitiveDoubleArray = Array.fill[Double](count)(65535.0)
+    val dsDouble = sc.parallelize(Seq(primitiveDoubleArray), 1).toDS
+    dsDouble.count
     val doubleArray = { i: Int =>
       var n = 0
+      var sum = 0L
       while (n < iters) {
-        dfDouble.selectExpr("value[0]").count
+        dsDouble.map(e => e).collect
         n += 1
       }
     }
 
-    val benchmark = new Benchmark("Read an array element in DataFrame", count * iters)
+    val benchmark = new Benchmark("Write an array in Dataset", count * iters)
     benchmark.addCase("Int   ")(intArray)
     benchmark.addCase("Double")(doubleArray)
     benchmark.run
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Write an array in Dataset:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Int                                            280 /  302         30.0          33.4       1.0X
+    Double                                         503 /  519         16.7          60.0       0.6X
+    */
   }
 
-  ignore("Read an array element in DataFrame") {
-    readDataFrameArrayElement(1)
+  ignore("Write an array in Dataset") {
+    writeDatasetArray(4)
   }
 }
