@@ -229,7 +229,7 @@ streaming_kafka = Module(
     ]
 )
 
-streaming_kafka-0-10 = Module(
+streaming_kafka_0_10 = Module(
     name="streaming-kafka-0-10",
     dependencies=[streaming],
     source_file_regexes=[
