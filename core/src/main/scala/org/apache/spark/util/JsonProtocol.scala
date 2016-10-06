@@ -17,18 +17,16 @@
 
 package org.apache.spark.util
 
-import java.util.{Properties, UUID}
+import java.util.{Collections, Properties, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
-
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.rdd.RDDOperationScope
@@ -312,11 +310,15 @@ private[spark] object JsonProtocol {
         // We only have 3 kind of internal accumulator types, so if it's not int or long, it must be
         // the blocks accumulator, whose type is `java.util.List[(BlockId, BlockStatus)]`
         case v =>
-          JArray(v.asInstanceOf[java.util.List[(BlockId, BlockStatus)]].asScala.toList.map {
-            case (id, status) =>
-              ("Block ID" -> id.toString) ~
-              ("Status" -> blockStatusToJson(status))
-          })
+          val blockAccumulator =
+            Collections.synchronizedList(v.asInstanceOf[java.util.List[(BlockId, BlockStatus)]])
+          blockAccumulator.synchronized {
+            JArray(blockAccumulator.asScala.toList.map {
+              case (id, status) =>
+                ("Block ID" -> id.toString) ~
+                ("Status" -> blockStatusToJson(status))
+            })
+          }
       }
     } else {
       // For all external accumulators, just use strings
