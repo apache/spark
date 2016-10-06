@@ -1391,11 +1391,13 @@ class DataFrame(object):
 
         if isinstance(col, tuple):
             col = list(col)
-        if isinstance(col, list):
-            for c in col:
-                if not isinstance(c, str):
-                    raise ValueError("columns should be strings.")
-            col = _to_list(self._sc, col)
+        elif isinstance(col, str):
+            col = [col]
+
+        for c in col:
+            if not isinstance(c, str):
+                raise ValueError("columns should be strings.")
+        col = _to_list(self._sc, col)
 
         if not isinstance(probabilities, (list, tuple)):
             raise ValueError("probabilities should be a list or tuple")
@@ -1412,7 +1414,7 @@ class DataFrame(object):
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
         if isStr:
-            return list(jaq)
+            return [list(j) for j in jaq][0]
         else:
             return [list(j) for j in jaq]
 
