@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.{File, PrintWriter}
 import java.sql.{Date, Timestamp}
 
 import scala.sys.process.{Process, ProcessLogger}
@@ -1883,6 +1884,37 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         "SELECT 1 AS id, CAST('1990-02-24' AS DATE) AS pd, CAST('1990-02-24' AS TIMESTAMP) AS pt")
       checkAnswer(actual, expected)
       sql("DROP TABLE order")
+    }
+  }
+
+  test("SPARK-17796 Support wildcard character in filename for LOAD DATA LOCAL INPATH") {
+    withTempDir { dir =>
+      for (i <- 1 to 3) {
+        val writer = new PrintWriter(new File(s"$dir/part-r-0000$i"))
+        writer.write(s"$i")
+        writer.close()
+      }
+      for (i <- 5 to 7) {
+        val writer = new PrintWriter(new File(s"$dir/part-s-0000$i"))
+        writer.write(s"$i")
+        writer.close()
+      }
+
+      withTable("load_t") {
+        sql("CREATE TABLE load_t (a STRING)")
+        sql(s"LOAD DATA LOCAL INPATH '$dir/*part-r*' INTO TABLE load_t")
+        checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1"), Row("2"), Row("3")))
+
+        val m = intercept[AnalysisException] {
+          sql("LOAD DATA LOCAL INPATH '/non-exist-folder/*part*' INTO TABLE load_t")
+        }.getMessage
+        assert(m.contains("LOAD DATA input path does not exist"))
+
+        val m2 = intercept[AnalysisException] {
+          sql(s"LOAD DATA LOCAL INPATH '$dir*/*part*' INTO TABLE load_t")
+        }.getMessage
+        assert(m2.contains("LOAD DATA input path allows only filename wildcard"))
+      }
     }
   }
 
