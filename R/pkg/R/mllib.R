@@ -777,6 +777,7 @@ setMethod("predict", signature(object = "LogisticRegressionModel"),
 
 #  Get the summary of an LogisticRegressionModel
 
+#' @param object an LogisticRegressionModel fitted by \code{spark.logit}
 #' @return \code{summary} returns the Binary Logistic regression results of a given model as lists. Note that
 #'                        Multinomial logistic regression summary is not available now.
 #' @rdname spark.logit
