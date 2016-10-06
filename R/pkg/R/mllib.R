@@ -1447,14 +1447,47 @@ print.summary.KSTest <- function(x, ...) {
   invisible(x)
 }
 
-#' Decision Tree
+#' Decision Tree Model for Regression and Classification
 #'
-#' @description
-#' \code{spark.decisionTree} tree
+#' \code{spark.decisionTree} fits a Decision Tree Regression model or Classification model on
+#' a SparkDataFrame. Users can call \code{summary} to get a summary of the fitted Decision Tree
+#' model, \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml} to
+#' save/load fitted models.
+#' For more details, see \href{https://en.wikipedia.org/wiki/Decision_tree_learning}{Decision Tree}
 #'
-#' Decision Tree
+#' @param data a SparkDataFrame for training.
+#' @param formula a symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', ':', '+', and '-'.
+#' @param type type of model to fit
+#' @param maxDepth Maximum depth of the tree (>= 0).
+#' @param maxBins Maximum number of bins used for discretizing continuous features and for choosing
+#'                how to split on features at each node. More bins give higher granularity. Must be
+#'                >= 2 and >= number of categories in any categorical feature. (default = 32)
+#' @param ... additional arguments passed to the method.
+#' @aliases spark.decisionTree,SparkDataFrame,formula-method
+#' @return \code{spark.decisionTree} returns a fitted Decision Tree model.
+#' @rdname spark.decisionTree
+#' @name spark.decisionTree
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(longley)
 #'
-#' @param data a SparkDataFrame of user data.
+#' # fit a Decision Tree Regression Model
+#' model <- spark.decisionTree(data, Employed~., "regression", maxDepth=5, maxBins=16)
+#'
+#' # get the summary of the model
+#' summary(model)
+#'
+#' # make predictions
+#' predictions <- predict(model, df)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
 #' @note spark.decisionTree since 2.1.0
 setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, type = c("regression", "classification"), maxDepth = 5, maxBins = 32 ) {
