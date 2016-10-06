@@ -156,6 +156,9 @@ public class VectorizedColumnReader {
         // Read and decode dictionary ids.
         defColumn.readIntegers(
             num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+
+        // Timestamp values encoded as INT64 can't be lazily decoded as we need to post process
+        // the values to add microseconds precision.
         if (column.hasDictionary() || (rowId == 0 &&
             (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT32 ||
             (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64  &&
