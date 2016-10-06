@@ -1379,7 +1379,13 @@ class DataFrame(object):
           input `col` is a list or tuple of strings, the output is also a
           list, but each element in it is a list of float, i.e., the output
           is a list of list of float.
+
+        .. versionchanged:: 2.1
+           Added support for multiple columns.
         """
+
+
+
         if not isinstance(col, (str, list, tuple)):
             raise ValueError("col should be a string, list or tuple.")
 
