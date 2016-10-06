@@ -793,7 +793,7 @@ test_that("spark.kstest", {
 
 test_that("spark.decisionTree Regression", {
   data <- suppressWarnings(createDataFrame(longley))
-  model <- spark.decisionTree(data, Employed~., "regression", maxDepth=5, maxBins=16)
+  model <- spark.decisionTree(data, Employed~., "regression", maxDepth = 5, maxBins = 16)
 
   #Test summary
   stats <- summary(model)

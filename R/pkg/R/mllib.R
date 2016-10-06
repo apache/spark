@@ -1490,7 +1490,8 @@ print.summary.KSTest <- function(x, ...) {
 #' }
 #' @note spark.decisionTree since 2.1.0
 setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, type = c("regression", "classification"), maxDepth = 5, maxBins = 32 ) {
+          function(data, formula, type = c("regression", "classification"),
+                   maxDepth = 5, maxBins = 32 ) {
             formula <- paste(deparse(formula), collapse = "")
             if (identical(type, "regression")) {
               jobj <- callJStatic("org.apache.spark.ml.r.DecisionTreeRegressorWrapper", "fit",
