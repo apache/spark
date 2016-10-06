@@ -83,12 +83,11 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
     val execToFailures = taskSetBlacklist.execToFailures
     assert(execToFailures.keySet === Set("exec1", "exec2"))
 
-    val expectedExpiryTime = BlacklistTracker.getBlacklistTimeout(conf)
     Seq("exec1", "exec2").foreach { exec =>
       assert(
-        execToFailures(exec).taskToFailureCountAndExpiryTime === Map(
-          0 -> (1, expectedExpiryTime),
-          1 -> (1, expectedExpiryTime)
+        execToFailures(exec).taskToFailureCount === Map(
+          0 -> 1,
+          1 -> 1
         )
       )
     }

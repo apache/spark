@@ -39,7 +39,6 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
   private val MAX_TASK_ATTEMPTS_PER_NODE = conf.get(config.MAX_TASK_ATTEMPTS_PER_NODE)
   private val MAX_FAILURES_PER_EXEC_STAGE = conf.get(config.MAX_FAILURES_PER_EXEC_STAGE)
   private val MAX_FAILED_EXEC_PER_NODE_STAGE = conf.get(config.MAX_FAILED_EXEC_PER_NODE_STAGE)
-  private val TIMEOUT_MILLIS = BlacklistTracker.getBlacklistTimeout(conf)
 
   /**
    * A map from each executor to the task failures on that executor.
@@ -95,9 +94,7 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
       exec: String,
       index: Int): Unit = {
     val execFailures = execToFailures.getOrElseUpdate(exec, new ExecutorFailuresInTaskSet(host))
-    execFailures.updateWithFailure(
-      taskIndex = index,
-      failureExpiryTime = clock.getTimeMillis() + TIMEOUT_MILLIS)
+    execFailures.updateWithFailure(index)
 
     // check if this task has also failed on other executors on the same host -- if its gone
     // over the limit, blacklist this task from the entire host.
