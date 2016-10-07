@@ -23,11 +23,13 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{AccumulatorSuite, SparkConf, SparkContext}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, BitwiseOr, Cast, Literal, ShiftLeft}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.{LongType, ShortType}
 
 /**
  * Test various broadcast join operators.
@@ -155,5 +157,50 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
 
       cases.foreach(assertBroadcastJoin)
     }
+  }
+
+  test("join key rewritten") {
+    val l = Literal(1L)
+    val i = Literal(2)
+    val s = Literal.create(3, ShortType)
+    val ss = Literal("hello")
+
+    assert(HashJoin.rewriteKeyExpr(l :: Nil) === l :: Nil)
+    assert(HashJoin.rewriteKeyExpr(l :: l :: Nil) === l :: l :: Nil)
+    assert(HashJoin.rewriteKeyExpr(l :: i :: Nil) === l :: i :: Nil)
+
+    assert(HashJoin.rewriteKeyExpr(i :: Nil) === Cast(i, LongType) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(i :: l :: Nil) === i :: l :: Nil)
+    assert(HashJoin.rewriteKeyExpr(i :: i :: Nil) ===
+      BitwiseOr(ShiftLeft(Cast(i, LongType), Literal(32)),
+        BitwiseAnd(Cast(i, LongType), Literal((1L << 32) - 1))) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(i :: i :: i :: Nil) === i :: i :: i :: Nil)
+
+    assert(HashJoin.rewriteKeyExpr(s :: Nil) === Cast(s, LongType) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(s :: l :: Nil) === s :: l :: Nil)
+    assert(HashJoin.rewriteKeyExpr(s :: s :: Nil) ===
+      BitwiseOr(ShiftLeft(Cast(s, LongType), Literal(16)),
+        BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(s :: s :: s :: Nil) ===
+      BitwiseOr(ShiftLeft(
+        BitwiseOr(ShiftLeft(Cast(s, LongType), Literal(16)),
+          BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))),
+        Literal(16)),
+        BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(s :: s :: s :: s :: Nil) ===
+      BitwiseOr(ShiftLeft(
+        BitwiseOr(ShiftLeft(
+          BitwiseOr(ShiftLeft(Cast(s, LongType), Literal(16)),
+            BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))),
+          Literal(16)),
+          BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))),
+        Literal(16)),
+        BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(s :: s :: s :: s :: s :: Nil) ===
+      s :: s :: s :: s :: s :: Nil)
+
+    assert(HashJoin.rewriteKeyExpr(ss :: Nil) === ss :: Nil)
+    assert(HashJoin.rewriteKeyExpr(l :: ss :: Nil) === l :: ss :: Nil)
+    assert(HashJoin.rewriteKeyExpr(i :: ss :: Nil) === i :: ss :: Nil)
   }
 }
