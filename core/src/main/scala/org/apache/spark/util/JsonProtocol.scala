@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.util.{Collections, Properties, UUID}
+import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
