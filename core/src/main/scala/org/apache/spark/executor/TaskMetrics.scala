@@ -323,4 +323,14 @@ private[spark] object TaskMetrics extends Logging {
 }
 
 
-private[spark] class BlockStatusesAccumulator extends CollectionAccumulator[(BlockId, BlockStatus)]
+private[spark] class BlockStatusesAccumulator
+  extends CollectionAccumulator[(BlockId, BlockStatus)] {
+
+  override def copyAndReset(): BlockStatusesAccumulator = new BlockStatusesAccumulator
+
+  override def copy(): BlockStatusesAccumulator = {
+    val newAcc = new BlockStatusesAccumulator
+    newAcc._list.addAll(_list)
+    newAcc
+  }
+}
