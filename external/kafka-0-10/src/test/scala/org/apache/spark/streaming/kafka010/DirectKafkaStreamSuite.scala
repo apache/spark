@@ -158,7 +158,7 @@ class DirectKafkaStreamSuite
     ssc.stop()
   }
 
-  ignore("pattern based subscription") {
+  test("pattern based subscription") {
     val topics = List("pat1", "pat2", "advanced3")
     // Should match 2 out of 3 topics
     val pat = """pat\d""".r.pattern
