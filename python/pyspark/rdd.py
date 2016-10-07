@@ -2031,10 +2031,10 @@ class RDD(object):
         [[1, 2, 3, 4, 5]]
         """
         if shuffle:
-          data_java_rdd = self._to_java_object_rdd().coalesce(numPartitions, shuffle)
-          jrdd = self.ctx._jvm.SerDeUtil.javaToPython(data_java_rdd)
+            data_java_rdd = self._to_java_object_rdd().coalesce(numPartitions, shuffle)
+            jrdd = self.ctx._jvm.SerDeUtil.javaToPython(data_java_rdd)
         else:
-          jrdd = self._jrdd.coalesce(numPartitions, shuffle)
+            jrdd = self._jrdd.coalesce(numPartitions, shuffle)
         return RDD(jrdd, self.ctx, self._jrdd_deserializer)
 
     def zip(self, other):
