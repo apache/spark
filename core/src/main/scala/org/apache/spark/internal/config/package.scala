@@ -95,7 +95,7 @@ package object config {
   private[spark] val CATALOG_IMPLEMENTATION = ConfigBuilder("spark.sql.catalogImplementation")
     .internal()
     .stringConf
-    .checkValues(Set("hive", "in-memory"))
+    .checkValues(Set("hive", "in-memory", "provided"))
     .createWithDefault("in-memory")
 
   private[spark] val LISTENER_BUS_EVENT_QUEUE_SIZE =

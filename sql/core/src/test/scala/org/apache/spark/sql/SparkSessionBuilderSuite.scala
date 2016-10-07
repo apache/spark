@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.sql.catalyst.catalog._
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
@@ -123,4 +126,132 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
       session.stop()
     }
   }
+
+  test("SPARK-17767 Spark SQL ExternalCatalog API custom implementation support") {
+    val session = SparkSession.builder()
+      .master("local")
+      .config("spark.sql.externalCatalog", "org.apache.spark.sql.MyExternalCatalog")
+      .config("spark.sql.externalSessionState", "org.apache.spark.sql.MySessionState")
+      .enableProvidedCatalog()
+      .getOrCreate()
+    assert(session.sharedState.externalCatalog.isInstanceOf[MyExternalCatalog])
+    assert(session.sessionState.isInstanceOf[MySessionState])
+    session.stop()
+  }
+}
+
+class MyExternalCatalog(conf: SparkConf, hadoopConf: Configuration) extends ExternalCatalog {
+  import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+
+  def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
+
+  def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {}
+
+  def alterDatabase(dbDefinition: CatalogDatabase): Unit = {}
+
+  def getDatabase(db: String): CatalogDatabase = null
+
+  def databaseExists(db: String): Boolean = true
+
+  def listDatabases(): Seq[String] = Seq.empty
+
+  def listDatabases(pattern: String): Seq[String] = Seq.empty
+
+  def setCurrentDatabase(db: String): Unit = {}
+
+  def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {}
+
+  def dropTable(db: String, table: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit = {}
+
+  def renameTable(db: String, oldName: String, newName: String): Unit = {}
+
+  def alterTable(tableDefinition: CatalogTable): Unit = {}
+
+  def getTable(db: String, table: String): CatalogTable = null
+
+  def getTableOption(db: String, table: String): Option[CatalogTable] = None
+
+  def tableExists(db: String, table: String): Boolean = true
+
+  def listTables(db: String): Seq[String] = Seq.empty
+
+  def listTables(db: String, pattern: String): Seq[String] = Seq.empty
+
+  def loadTable(
+    db: String,
+    table: String,
+    loadPath: String,
+    isOverwrite: Boolean,
+    holdDDLTime: Boolean): Unit = {}
+
+  def loadPartition(
+    db: String,
+    table: String,
+    loadPath: String,
+    partition: TablePartitionSpec,
+    isOverwrite: Boolean,
+    holdDDLTime: Boolean,
+    inheritTableSpecs: Boolean): Unit = {}
+
+  def loadDynamicPartitions(
+    db: String,
+    table: String,
+    loadPath: String,
+    partition: TablePartitionSpec,
+    replace: Boolean,
+    numDP: Int,
+    holdDDLTime: Boolean): Unit = {}
+
+  def createPartitions(
+    db: String,
+    table: String,
+    parts: Seq[CatalogTablePartition],
+    ignoreIfExists: Boolean): Unit = {}
+
+  def dropPartitions(
+    db: String,
+    table: String,
+    parts: Seq[TablePartitionSpec],
+    ignoreIfNotExists: Boolean,
+    purge: Boolean): Unit = {}
+
+  def renamePartitions(
+    db: String,
+    table: String,
+    specs: Seq[TablePartitionSpec],
+    newSpecs: Seq[TablePartitionSpec]): Unit = {}
+
+  def alterPartitions(
+    db: String,
+    table: String,
+    parts: Seq[CatalogTablePartition]): Unit = {}
+
+  def getPartition(db: String, table: String, spec: TablePartitionSpec): CatalogTablePartition =
+    null
+
+  def getPartitionOption(
+    db: String,
+    table: String,
+    spec: TablePartitionSpec): Option[CatalogTablePartition] = None
+
+  def listPartitions(
+    db: String,
+    table: String,
+    partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = Seq.empty
+
+  def createFunction(db: String, funcDefinition: CatalogFunction): Unit = {}
+
+  def dropFunction(db: String, funcName: String): Unit = {}
+
+  def renameFunction(db: String, oldName: String, newName: String): Unit = {}
+
+  def getFunction(db: String, funcName: String): CatalogFunction = null
+
+  def functionExists(db: String, funcName: String): Boolean = true
+
+  def listFunctions(db: String, pattern: String): Seq[String] = Seq.empty
+}
+
+class MySessionState(sparkSession: SparkSession)
+  extends org.apache.spark.sql.internal.SessionState(sparkSession) {
 }
