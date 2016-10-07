@@ -309,14 +309,14 @@ private[spark] object JsonProtocol {
       value match {
         case v: Int => JInt(v)
         case v: Long => JInt(v)
-        case v: java.util.List[(BlockId, BlockStatus)] =>
-          JArray(v.asScala.toList.map {
+        // We only have 3 kind of internal accumulator types, so if it's not int or long, it must be
+        // the blocks accumulator, whose type is `java.util.List[(BlockId, BlockStatus)]`
+        case v =>
+          JArray(v.asInstanceOf[java.util.List[(BlockId, BlockStatus)]].asScala.toList.map {
             case (id, status) =>
               ("Block ID" -> id.toString) ~
               ("Status" -> blockStatusToJson(status))
           })
-        case any => throw new UnsupportedOperationException(
-          s"Cannot serialize Accumulator of type ${any.getClass.getName}")
       }
     } else {
       // For all external accumulators, just use strings
