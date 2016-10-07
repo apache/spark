@@ -16,8 +16,8 @@
  */
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest}
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
@@ -30,7 +30,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (1, 1.0, 1.0, 1.0),
       (2, 3.0, 3.0, 3.0),
       (3, 4.0, 4.0, 4.0),
-      (4, Double.NaN, 2.25, 1.0)
+      (4, Double.NaN, 2.25, 3.0)
     )).toDF("id", "value", "expected_mean", "expected_median")
     Seq("mean", "median").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
@@ -74,7 +74,6 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
         .setMissingValue(-1)
       val model = imputer.fit(df)
-      val result = model.transform(df)
       model.transform(df).select("expected_" + strategy, "out").collect().foreach {
         case Row(exp: Float, out: Float) =>
           assert(exp == out, s"Imputed values differ. Expected: $exp, actual: $out")
@@ -98,6 +97,21 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       model.transform(df2).select("expected_" + strategy, "out").collect().foreach {
         case Row(exp: Double, out: Double) =>
           assert(exp ~== out absTol 1e-5, s"Imputed values differ. Expected: $exp, actual: $out")
+      }
+    }
+  }
+
+
+  test("Imputer throws exception when surrogate cannot be computed") {
+    val df = spark.createDataFrame( Seq(
+      (0, Double.NaN, 1.0, 1.0),
+      (1, Double.NaN, 3.0, 3.0),
+      (2, Double.NaN, Double.NaN, Double.NaN)
+    )).toDF("id", "value", "expected_mean", "expected_median")
+    Seq("mean", "median").foreach { strategy =>
+      val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
+      intercept[SparkException] {
+        val model = imputer.fit(df)
       }
     }
   }

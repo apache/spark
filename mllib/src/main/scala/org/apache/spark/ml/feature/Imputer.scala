@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
@@ -51,6 +52,7 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
 
   /**
    * The placeholder for the missing values. All occurrences of missingValue will be imputed.
+   * Note that null values are always treated as missing.
    * Default: Double.NaN
    *
    * @group param
@@ -65,8 +67,6 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     SchemaUtils.checkColumnTypes(schema, $(inputCol), Seq(DoubleType, FloatType))
-    require(!schema.fieldNames.contains($(outputCol)),
-      s"Output column ${$(outputCol)} already exists.")
     SchemaUtils.appendColumn(schema, $(outputCol), inputType)
   }
 }
@@ -75,7 +75,8 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
  * :: Experimental ::
  * Imputation estimator for completing missing values, either using the mean or the median
  * of the column in which the missing values are located. The input column should be of
- * DoubleType or FloatType.
+ * DoubleType or FloatType. Currently Imputer does not support categorical features yet
+ * and possibly creates incorrect values for a categorical feature.
  *
  * Note that the mean/median value is computed after filtering out missing values.
  * All Null values in the input column are treated as missing, and so are also imputed.
@@ -88,18 +89,22 @@ class Imputer @Since("2.1.0")(override val uid: String)
   def this() = this(Identifiable.randomUID("imputer"))
 
   /** @group setParam */
+  @Since("2.1.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("2.1.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
    * Imputation strategy. Available options are ["mean", "median"].
    * @group setParam
    */
+  @Since("2.1.0")
   def setStrategy(value: String): this.type = set(strategy, value)
 
   /** @group setParam */
+  @Since("2.1.0")
   def setMissingValue(value: Double): this.type = set(missingValue, value)
 
   setDefault(strategy -> "mean", missingValue -> Double.NaN)
@@ -109,8 +114,13 @@ class Imputer @Since("2.1.0")(override val uid: String)
     val ic = col($(inputCol))
     val filtered = dataset.select(ic.cast(DoubleType))
       .filter(ic.isNotNull && ic =!= $(missingValue))
+      .filter(!ic.isNaN)
+    if(filtered.count() == 0) {
+      throw new SparkException(s"surrogate cannot be computed. " +
+        s"All the values in ${$(inputCol)} are Null, Nan or missingValue ($missingValue)")
+    }
     val surrogate = $(strategy) match {
-      case "mean" => filtered.filter(!ic.isNaN).select(avg($(inputCol))).first().getDouble(0)
+      case "mean" => filtered.select(avg($(inputCol))).first().getDouble(0)
       case "median" => filtered.stat.approxQuantile($(inputCol), Array(0.5), 0.001)(0)
     }
     copyValues(new ImputerModel(uid, surrogate).setParent(this))
@@ -120,10 +130,7 @@ class Imputer @Since("2.1.0")(override val uid: String)
     validateAndTransformSchema(schema)
   }
 
-  override def copy(extra: ParamMap): Imputer = {
-    val copied = new Imputer(uid)
-    copyValues(copied, extra)
-  }
+  override def copy(extra: ParamMap): Imputer = defaultCopy(extra)
 }
 
 @Since("2.1.0")
@@ -158,7 +165,7 @@ class ImputerModel private[ml](
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val inputType = dataset.select($(inputCol)).schema.fields(0).dataType
+    val inputType = dataset.schema($(inputCol)).dataType
     val ic = col($(inputCol))
     dataset.withColumn($(outputCol), when(ic.isNull, surrogate)
       .when(ic === $(missingValue), surrogate)
