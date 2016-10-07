@@ -1011,7 +1011,7 @@ def _test():
     globs['sdf_schema'] = StructType([StructField("data", StringType(), False)])
     globs['df'] = \
         globs['spark'].readStream.format('text').load('python/test_support/sql/streaming')
-    globs['sqs'] = StreamingQueryStatus(\
+    globs['sqs'] = StreamingQueryStatus(
         spark.sparkContext._jvm.org.apache.spark.sql.streaming.StreamingQueryStatus.testStatus())
 
     (failure_count, test_count) = doctest.testmod(
