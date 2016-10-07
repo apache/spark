@@ -1,7 +1,7 @@
 ---
 layout: global
-title: PMML model export - spark.mllib
-displayTitle: PMML model export - spark.mllib
+title: PMML model export - RDD-based API
+displayTitle: PMML model export - RDD-based API
 ---
 
 * Table of contents
@@ -47,7 +47,7 @@ To export a supported `model` (see table above) to PMML, simply call `model.toPM
 
 As well as exporting the PMML model to a String (`model.toPMML` as in the example above), you can export the PMML model to other formats.
 
-Refer to the [`KMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) and [`Vectors` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors) for details on the API.
+Refer to the [`KMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) and [`Vectors` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$) for details on the API.
 
 Here a complete example of building a KMeansModel and print it out in PMML format:
 {% include_example scala/org/apache/spark/examples/mllib/PMMLModelExportExample.scala %}

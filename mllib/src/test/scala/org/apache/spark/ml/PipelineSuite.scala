@@ -27,14 +27,16 @@ import org.scalatest.mock.MockitoSugar.mock
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.Pipeline.SharedReadWrite
 import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler}
-import org.apache.spark.ml.param.{IntParam, ParamMap, ParamPair}
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
 class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
 
   abstract class MyModel extends Model[MyModel]
 
@@ -183,12 +185,11 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   }
 
   test("pipeline validateParams") {
-    val df = sqlContext.createDataFrame(
-      Seq(
-        (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
-        (2, Vectors.dense(1.0, 0.0, 4.0), 2.0),
-        (3, Vectors.dense(1.0, 0.0, 5.0), 3.0),
-        (4, Vectors.dense(0.0, 0.0, 5.0), 4.0))
+    val df = Seq(
+      (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
+      (2, Vectors.dense(1.0, 0.0, 4.0), 2.0),
+      (3, Vectors.dense(1.0, 0.0, 5.0), 3.0),
+      (4, Vectors.dense(0.0, 0.0, 5.0), 4.0)
     ).toDF("id", "features", "label")
 
     intercept[IllegalArgumentException] {

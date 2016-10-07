@@ -21,8 +21,12 @@ import org.apache.spark.sql.types.IntegerType
 
 class SubexpressionEliminationSuite extends SparkFunSuite {
   test("Semantic equals and hash") {
-    val id = ExprId(1)
     val a: AttributeReference = AttributeReference("name", IntegerType)()
+    val id = {
+      // Make sure we use a "ExprId" different from "a.exprId"
+      val _id = ExprId(1)
+      if (a.exprId == _id) ExprId(2) else _id
+    }
     val b1 = a.withName("name2").withExprId(id)
     val b2 = a.withExprId(id)
     val b3 = a.withQualifier(Some("qualifierName"))

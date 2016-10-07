@@ -24,12 +24,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.toCommentSafeString
-import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * An interface for those physical operators that support codegen.
@@ -38,7 +38,7 @@ trait CodegenSupport extends SparkPlan {
 
   /** Prefix used in the current operator's variable names. */
   private def variablePrefix: String = this match {
-    case _: TungstenAggregate => "agg"
+    case _: HashAggregateExec => "agg"
     case _: BroadcastHashJoinExec => "bhj"
     case _: SortMergeJoinExec => "smj"
     case _: RDDScanExec => "rdd"
@@ -79,7 +79,7 @@ trait CodegenSupport extends SparkPlan {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
     s"""
-       |/*** PRODUCE: ${toCommentSafeString(this.simpleString)} */
+       |${ctx.registerComment(s"PRODUCE: ${this.simpleString}")}
        |${doProduce(ctx)}
      """.stripMargin
   }
@@ -131,6 +131,7 @@ trait CodegenSupport extends SparkPlan {
         }
         val evaluateInputs = evaluateVariables(outputVars)
         // generate the code to create a UnsafeRow
+        ctx.INPUT_ROW = row
         ctx.currentVars = outputVars
         val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         val code = s"""
@@ -147,8 +148,7 @@ trait CodegenSupport extends SparkPlan {
     ctx.freshNamePrefix = parent.variablePrefix
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
     s"""
-       |
-       |/*** CONSUME: ${toCommentSafeString(parent.simpleString)} */
+       |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}
        |$evaluated
        |${parent.doConsume(ctx, inputVars, rowVar)}
      """.stripMargin
@@ -247,9 +247,14 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
      """.stripMargin
   }
 
-  override def simpleString: String = "INPUT"
-
-  override def treeChildren: Seq[SparkPlan] = Nil
+  override def generateTreeString(
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      builder: StringBuilder,
+      verbose: Boolean,
+      prefix: String = ""): StringBuilder = {
+    child.generateTreeString(depth, lastChildren, builder, verbose, "")
+  }
 }
 
 object WholeStageCodegenExec {
@@ -290,7 +295,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
   override def outputPartitioning: Partitioning = child.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override private[sql] lazy val metrics = Map(
+  override lazy val metrics = Map(
     "pipelineTime" -> SQLMetrics.createTimingMetric(sparkContext,
       WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
 
@@ -299,7 +304,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
    *
    * @return the tuple of the codegen context and the actual generated source.
    */
-  def doCodeGen(): (CodegenContext, String) = {
+  def doCodeGen(): (CodegenContext, CodeAndComment) = {
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
     val source = s"""
@@ -307,20 +312,20 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
         return new GeneratedIterator(references);
       }
 
-      /** Codegened pipeline for:
-       * ${toCommentSafeString(child.treeString.trim)}
-       */
+      ${ctx.registerComment(s"""Codegend pipeline for\n${child.treeString.trim}""")}
       final class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
         private Object[] references;
+        private scala.collection.Iterator[] inputs;
         ${ctx.declareMutableStates()}
 
         public GeneratedIterator(Object[] references) {
           this.references = references;
         }
 
-        public void init(int index, scala.collection.Iterator inputs[]) {
+        public void init(int index, scala.collection.Iterator[] inputs) {
           partitionIndex = index;
+          this.inputs = inputs;
           ${ctx.initMutableStates()}
         }
 
@@ -333,14 +338,24 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       """.trim
 
     // try to compile, helpful for debug
-    val cleanedSource = CodeFormatter.stripExtraNewLines(source)
+    val cleanedSource = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(CodeFormatter.stripExtraNewLines(source), ctx.getPlaceHolderToComments()))
+
     logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
-    CodeGenerator.compile(cleanedSource)
     (ctx, cleanedSource)
   }
 
   override def doExecute(): RDD[InternalRow] = {
     val (ctx, cleanedSource) = doCodeGen()
+    // try to compile and fallback if it failed
+    try {
+      CodeGenerator.compile(cleanedSource)
+    } catch {
+      case e: Exception if !Utils.isTesting && sqlContext.conf.wholeStageFallback =>
+        // We should already saw the error message
+        logWarning(s"Whole-stage codegen disabled for this plan:\n $treeString")
+        return child.execute()
+    }
     val references = ctx.references.toArray
 
     val durationMs = longMetric("pipelineTime")
@@ -400,20 +415,14 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
      """.stripMargin.trim
   }
 
-  override def innerChildren: Seq[SparkPlan] = {
-    child :: Nil
+  override def generateTreeString(
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      builder: StringBuilder,
+      verbose: Boolean,
+      prefix: String = ""): StringBuilder = {
+    child.generateTreeString(depth, lastChildren, builder, verbose, "*")
   }
-
-  private def collectInputs(plan: SparkPlan): Seq[SparkPlan] = plan match {
-    case InputAdapter(c) => c :: Nil
-    case other => other.children.flatMap(collectInputs)
-  }
-
-  override def treeChildren: Seq[SparkPlan] = {
-    collectInputs(child)
-  }
-
-  override def simpleString: String = "WholeStageCodegen"
 }
 
 
@@ -450,7 +459,7 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   /**
-   * Inserts a InputAdapter on top of those that do not support codegen.
+   * Inserts an InputAdapter on top of those that do not support codegen.
    */
   private def insertInputAdapter(plan: SparkPlan): SparkPlan = plan match {
     case j @ SortMergeJoinExec(_, _, _, _, left, right) if j.supportCodegen =>

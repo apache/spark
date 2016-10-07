@@ -23,15 +23,15 @@ import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite.NodeData
 import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter}
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, SQLContext}
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -332,8 +332,8 @@ private[ml] object DecisionTreeModelReadWrite {
   def loadTreeNodes(
       path: String,
       metadata: DefaultParamsReader.Metadata,
-      sqlContext: SQLContext): Node = {
-    import sqlContext.implicits._
+      sparkSession: SparkSession): Node = {
+    import sparkSession.implicits._
     implicit val format = DefaultFormats
 
     // Get impurity to construct ImpurityCalculator for each node
@@ -343,7 +343,7 @@ private[ml] object DecisionTreeModelReadWrite {
     }
 
     val dataPath = new Path(path, "data").toString
-    val data = sqlContext.read.parquet(dataPath).as[NodeData]
+    val data = sparkSession.read.parquet(dataPath).as[NodeData]
     buildTreeFromNodes(data.collect(), impurityType)
   }
 
@@ -393,7 +393,7 @@ private[ml] object EnsembleModelReadWrite {
   def saveImpl[M <: Params with TreeEnsembleModel[_ <: DecisionTreeModel]](
       instance: M,
       path: String,
-      sql: SQLContext,
+      sql: SparkSession,
       extraMetadata: JObject): Unit = {
     DefaultParamsWriter.saveMetadata(instance, path, sql.sparkContext, Some(extraMetadata))
     val treesMetadataWeights: Array[(Int, String, Double)] = instance.trees.zipWithIndex.map {
@@ -415,16 +415,16 @@ private[ml] object EnsembleModelReadWrite {
   /**
    * Helper method for loading a tree ensemble from disk.
    * This reconstructs all trees, returning the root nodes.
-   * @param path  Path given to [[saveImpl()]]
+   * @param path  Path given to `saveImpl`
    * @param className  Class name for ensemble model type
    * @param treeClassName  Class name for tree model type in the ensemble
    * @return  (ensemble metadata, array over trees of (tree metadata, root node)),
    *          where the root node is linked with all descendents
-   * @see [[saveImpl()]] for how the model was saved
+   * @see `saveImpl` for how the model was saved
    */
   def loadImpl(
       path: String,
-      sql: SQLContext,
+      sql: SparkSession,
       className: String,
       treeClassName: String): (Metadata, Array[(Metadata, Node)], Array[Double]) = {
     import sql.implicits._

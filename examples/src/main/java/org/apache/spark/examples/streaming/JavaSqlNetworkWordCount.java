@@ -94,8 +94,8 @@ public final class JavaSqlNetworkWordCount {
         });
         Dataset<Row> wordsDataFrame = spark.createDataFrame(rowRDD, JavaRecord.class);
 
-        // Register as table
-        wordsDataFrame.registerTempTable("words");
+        // Creates a temporary view using the DataFrame
+        wordsDataFrame.createOrReplaceTempView("words");
 
         // Do word count on table using SQL and print it
         Dataset<Row> wordCountsDataFrame =

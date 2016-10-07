@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.text.SimpleDateFormat
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
@@ -35,6 +33,11 @@ class CSVInferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(NullType, "2015-08-20 15:57:00", options) == TimestampType)
     assert(CSVInferSchema.inferField(NullType, "True", options) == BooleanType)
     assert(CSVInferSchema.inferField(NullType, "FAlSE", options) == BooleanType)
+
+    val textValueOne = Long.MaxValue.toString + "0"
+    val decimalValueOne = new java.math.BigDecimal(textValueOne)
+    val expectedTypeOne = DecimalType(decimalValueOne.precision, decimalValueOne.scale)
+    assert(CSVInferSchema.inferField(NullType, textValueOne, options) == expectedTypeOne)
   }
 
   test("String fields types are inferred correctly from other types") {
@@ -49,12 +52,17 @@ class CSVInferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(LongType, "True", options) == BooleanType)
     assert(CSVInferSchema.inferField(IntegerType, "FALSE", options) == BooleanType)
     assert(CSVInferSchema.inferField(TimestampType, "FALSE", options) == BooleanType)
+
+    val textValueOne = Long.MaxValue.toString + "0"
+    val decimalValueOne = new java.math.BigDecimal(textValueOne)
+    val expectedTypeOne = DecimalType(decimalValueOne.precision, decimalValueOne.scale)
+    assert(CSVInferSchema.inferField(IntegerType, textValueOne, options) == expectedTypeOne)
   }
 
   test("Timestamp field types are inferred correctly via custom data format") {
-    var options = new CSVOptions(Map("dateFormat" -> "yyyy-mm"))
+    var options = new CSVOptions(Map("timestampFormat" -> "yyyy-mm"))
     assert(CSVInferSchema.inferField(TimestampType, "2015-08", options) == TimestampType)
-    options = new CSVOptions(Map("dateFormat" -> "yyyy"))
+    options = new CSVOptions(Map("timestampFormat" -> "yyyy"))
     assert(CSVInferSchema.inferField(TimestampType, "2015", options) == TimestampType)
   }
 
@@ -94,6 +102,7 @@ class CSVInferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(DoubleType, "\\N", options) == DoubleType)
     assert(CSVInferSchema.inferField(TimestampType, "\\N", options) == TimestampType)
     assert(CSVInferSchema.inferField(BooleanType, "\\N", options) == BooleanType)
+    assert(CSVInferSchema.inferField(DecimalType(1, 1), "\\N", options) == DecimalType(1, 1))
   }
 
   test("Merging Nulltypes should yield Nulltype.") {

@@ -20,14 +20,16 @@
 #' @include generics.R jobj.R column.R
 NULL
 
-#' @title S4 class that represents a WindowSpec
-#' @description WindowSpec can be created by using window.partitionBy()
-#'              or window.orderBy()
+#' S4 class that represents a WindowSpec
+#'
+#' WindowSpec can be created by using windowPartitionBy() or windowOrderBy()
+#'
 #' @rdname WindowSpec
-#' @seealso \link{window.partitionBy}, \link{window.orderBy}
+#' @seealso \link{windowPartitionBy}, \link{windowOrderBy}
 #'
 #' @param sws A Java object reference to the backing Scala WindowSpec
 #' @export
+#' @note WindowSpec since 2.0.0
 setClass("WindowSpec",
          slots = list(sws = "jobj"))
 
@@ -42,6 +44,8 @@ windowSpec <- function(sws) {
 }
 
 #' @rdname show
+#' @export
+#' @note show(WindowSpec) since 2.0.0
 setMethod("show", "WindowSpec",
           function(object) {
             cat("WindowSpec", callJMethod(object@sws, "toString"), "\n")
@@ -51,10 +55,13 @@ setMethod("show", "WindowSpec",
 #'
 #' Defines the partitioning columns in a WindowSpec.
 #'
-#' @param x a WindowSpec
-#' @return a WindowSpec
+#' @param x a WindowSpec.
+#' @param col a column to partition on (desribed by the name or Column).
+#' @param ... additional column(s) to partition on.
+#' @return A WindowSpec.
 #' @rdname partitionBy
 #' @name partitionBy
+#' @aliases partitionBy,WindowSpec-method
 #' @family windowspec_method
 #' @export
 #' @examples
@@ -62,6 +69,7 @@ setMethod("show", "WindowSpec",
 #'   partitionBy(ws, "col1", "col2")
 #'   partitionBy(ws, df$col1, df$col2)
 #' }
+#' @note partitionBy(WindowSpec) since 2.0.0
 setMethod("partitionBy",
           signature(x = "WindowSpec"),
           function(x, col, ...) {
@@ -77,30 +85,36 @@ setMethod("partitionBy",
             }
           })
 
-#' orderBy
+#' Ordering Columns in a WindowSpec
 #'
 #' Defines the ordering columns in a WindowSpec.
-#'
 #' @param x a WindowSpec
-#' @return a WindowSpec
-#' @rdname arrange
+#' @param col a character or Column indicating an ordering column
+#' @param ... additional sorting fields
+#' @return A WindowSpec.
 #' @name orderBy
+#' @rdname orderBy
+#' @aliases orderBy,WindowSpec,character-method
 #' @family windowspec_method
+#' @seealso See \link{arrange} for use in sorting a SparkDataFrame
 #' @export
 #' @examples
 #' \dontrun{
 #'   orderBy(ws, "col1", "col2")
 #'   orderBy(ws, df$col1, df$col2)
 #' }
+#' @note orderBy(WindowSpec, character) since 2.0.0
 setMethod("orderBy",
           signature(x = "WindowSpec", col = "character"),
           function(x, col, ...) {
             windowSpec(callJMethod(x@sws, "orderBy", col, list(...)))
           })
 
-#' @rdname arrange
+#' @rdname orderBy
 #' @name orderBy
+#' @aliases orderBy,WindowSpec,Column-method
 #' @export
+#' @note orderBy(WindowSpec, Column) since 2.0.0
 setMethod("orderBy",
           signature(x = "WindowSpec", col = "Column"),
           function(x, col, ...) {
@@ -112,11 +126,11 @@ setMethod("orderBy",
 
 #' rowsBetween
 #'
-#' Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
-#' 
-#' Both `start` and `end` are relative positions from the current row. For example, "0" means
-#' "current row", while "-1" means the row before the current row, and "5" means the fifth row
-#' after the current row.
+#' Defines the frame boundaries, from \code{start} (inclusive) to \code{end} (inclusive).
+#'
+#' Both \code{start} and \code{end} are relative positions from the current row. For example,
+#' "0" means "current row", while "-1" means the row before the current row, and "5" means the
+#' fifth row after the current row.
 #'
 #' @param x a WindowSpec
 #' @param start boundary start, inclusive.
@@ -125,6 +139,7 @@ setMethod("orderBy",
 #'            The frame is unbounded if this is the maximum long value.
 #' @return a WindowSpec
 #' @rdname rowsBetween
+#' @aliases rowsBetween,WindowSpec,numeric,numeric-method
 #' @name rowsBetween
 #' @family windowspec_method
 #' @export
@@ -132,6 +147,7 @@ setMethod("orderBy",
 #' \dontrun{
 #'   rowsBetween(ws, 0, 3)
 #' }
+#' @note rowsBetween since 2.0.0
 setMethod("rowsBetween",
           signature(x = "WindowSpec", start = "numeric", end = "numeric"),
           function(x, start, end) {
@@ -142,12 +158,12 @@ setMethod("rowsBetween",
 
 #' rangeBetween
 #'
-#' Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
-#' 
-#' Both `start` and `end` are relative from the current row. For example, "0" means "current row",
-#' while "-1" means one off before the current row, and "5" means the five off after the
-#' current row.
-
+#' Defines the frame boundaries, from \code{start} (inclusive) to \code{end} (inclusive).
+#'
+#' Both \code{start} and \code{end} are relative from the current row. For example, "0" means
+#' "current row", while "-1" means one off before the current row, and "5" means the five off
+#' after the current row.
+#'
 #' @param x a WindowSpec
 #' @param start boundary start, inclusive.
 #'              The frame is unbounded if this is the minimum long value.
@@ -155,6 +171,7 @@ setMethod("rowsBetween",
 #'            The frame is unbounded if this is the maximum long value.
 #' @return a WindowSpec
 #' @rdname rangeBetween
+#' @aliases rangeBetween,WindowSpec,numeric,numeric-method
 #' @name rangeBetween
 #' @family windowspec_method
 #' @export
@@ -162,6 +179,7 @@ setMethod("rowsBetween",
 #' \dontrun{
 #'   rangeBetween(ws, 0, 3)
 #' }
+#' @note rangeBetween since 2.0.0
 setMethod("rangeBetween",
           signature(x = "WindowSpec", start = "numeric", end = "numeric"),
           function(x, start, end) {
@@ -175,12 +193,29 @@ setMethod("rangeBetween",
 
 #' over
 #'
-#' Define a windowing column. 
+#' Define a windowing column.
 #'
+#' @param x a Column, usually one returned by window function(s).
+#' @param window a WindowSpec object. Can be created by \code{windowPartitionBy} or
+#'        \code{windowOrderBy} and configured by other WindowSpec methods.
 #' @rdname over
 #' @name over
+#' @aliases over,Column,WindowSpec-method
 #' @family colum_func
 #' @export
+#' @examples \dontrun{
+#'   df <- createDataFrame(mtcars)
+#'
+#'   # Partition by am (transmission) and order by hp (horsepower)
+#'   ws <- orderBy(windowPartitionBy("am"), "hp")
+#'
+#'   # Rank on hp within each partition
+#'   out <- select(df, over(rank(), ws), df$hp, df$am)
+#'
+#'   # Lag mpg values by 1 row on the partition-and-ordered table
+#'   out <- select(df, over(lead(df$mpg), ws), df$mpg, df$hp, df$am)
+#' }
+#' @note over since 2.0.0
 setMethod("over",
           signature(x = "Column", window = "WindowSpec"),
           function(x, window) {

@@ -25,9 +25,9 @@ import org.apache.spark.storage.BlockId
  * either side can borrow memory from the other.
  *
  * The region shared between execution and storage is a fraction of (the total heap space - 300MB)
- * configurable through `spark.memory.fraction` (default 0.75). The position of the boundary
+ * configurable through `spark.memory.fraction` (default 0.6). The position of the boundary
  * within this space is further determined by `spark.memory.storageFraction` (default 0.5).
- * This means the size of the storage region is 0.75 * 0.5 = 0.375 of the heap space by default.
+ * This means the size of the storage region is 0.6 * 0.5 = 0.3 of the heap space by default.
  *
  * Storage can borrow as much execution memory as is free until execution reclaims its space.
  * When this happens, cached blocks will be evicted from memory until sufficient borrowed
@@ -65,6 +65,10 @@ private[spark] class UnifiedMemoryManager private[memory] (
 
   override def maxOnHeapStorageMemory: Long = synchronized {
     maxHeapMemory - onHeapExecutionMemoryPool.memoryUsed
+  }
+
+  override def maxOffHeapStorageMemory: Long = synchronized {
+    maxOffHeapMemory - offHeapExecutionMemoryPool.memoryUsed
   }
 
   /**
@@ -113,9 +117,10 @@ private[spark] class UnifiedMemoryManager private[memory] (
           storagePool.poolSize - storageRegionSize)
         if (memoryReclaimableFromStorage > 0) {
           // Only reclaim as much space as is necessary and available:
-          val spaceReclaimed = storagePool.shrinkPoolToFreeSpace(
+          val spaceToReclaim = storagePool.freeSpaceToShrinkPool(
             math.min(extraMemoryNeeded, memoryReclaimableFromStorage))
-          executionPool.incrementPoolSize(spaceReclaimed)
+          storagePool.decrementPoolSize(spaceToReclaim)
+          executionPool.incrementPoolSize(spaceToReclaim)
         }
       }
     }
@@ -186,7 +191,7 @@ object UnifiedMemoryManager {
   // Set aside a fixed amount of memory for non-storage, non-execution purposes.
   // This serves a function similar to `spark.memory.fraction`, but guarantees that we reserve
   // sufficient memory for the system even for small heaps. E.g. if we have a 1GB JVM, then
-  // the memory used for execution and storage will be (1024 - 300) * 0.75 = 543MB by default.
+  // the memory used for execution and storage will be (1024 - 300) * 0.6 = 434MB by default.
   private val RESERVED_SYSTEM_MEMORY_BYTES = 300 * 1024 * 1024
 
   def apply(conf: SparkConf, numCores: Int): UnifiedMemoryManager = {
@@ -222,7 +227,7 @@ object UnifiedMemoryManager {
       }
     }
     val usableMemory = systemMemory - reservedMemory
-    val memoryFraction = conf.getDouble("spark.memory.fraction", 0.75)
+    val memoryFraction = conf.getDouble("spark.memory.fraction", 0.6)
     (usableMemory * memoryFraction).toLong
   }
 }

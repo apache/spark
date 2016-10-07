@@ -43,7 +43,7 @@ case class RepartitionByExpression(
     child: LogicalPlan,
     numPartitions: Option[Int] = None) extends RedistributeData {
   numPartitions match {
-    case Some(n) => require(n > 0, "numPartitions must be greater than 0.")
+    case Some(n) => require(n > 0, s"Number of partitions ($n) must be positive.")
     case None => // Ok
   }
 }

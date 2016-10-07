@@ -19,16 +19,20 @@ package org.apache.spark.examples.ml;
 
 // $example on$
 import java.util.Arrays;
-// $example off$
+import java.util.List;
 
-// $example on$
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
+import org.apache.spark.ml.linalg.VectorUDT;
+import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.ml.param.ParamMap;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 // $example off$
 import org.apache.spark.sql.SparkSession;
 
@@ -38,19 +42,23 @@ import org.apache.spark.sql.SparkSession;
 public class JavaEstimatorTransformerParamExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaEstimatorTransformerParamExample").getOrCreate();
+      .builder()
+      .appName("JavaEstimatorTransformerParamExample")
+      .getOrCreate();
 
     // $example on$
     // Prepare training data.
-    // We use LabeledPoint, which is a JavaBean. Spark SQL can convert RDDs of JavaBeans into
-    // DataFrames, where it uses the bean metadata to infer the schema.
-    Dataset<Row> training = spark.createDataFrame(
-      Arrays.asList(
-        new LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
-        new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
-        new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
-        new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5))
-      ), LabeledPoint.class);
+    List<Row> dataTraining = Arrays.asList(
+        RowFactory.create(1.0, Vectors.dense(0.0, 1.1, 0.1)),
+        RowFactory.create(0.0, Vectors.dense(2.0, 1.0, -1.0)),
+        RowFactory.create(0.0, Vectors.dense(2.0, 1.3, 1.0)),
+        RowFactory.create(1.0, Vectors.dense(0.0, 1.2, -0.5))
+    );
+    StructType schema = new StructType(new StructField[]{
+        new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
+        new StructField("features", new VectorUDT(), false, Metadata.empty())
+    });
+    Dataset<Row> training = spark.createDataFrame(dataTraining, schema);
 
     // Create a LogisticRegression instance. This instance is an Estimator.
     LogisticRegression lr = new LogisticRegression();
@@ -85,11 +93,12 @@ public class JavaEstimatorTransformerParamExample {
     System.out.println("Model 2 was fit using parameters: " + model2.parent().extractParamMap());
 
     // Prepare test documents.
-    Dataset<Row> test = spark.createDataFrame(Arrays.asList(
-      new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
-      new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
-      new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))
-    ), LabeledPoint.class);
+    List<Row> dataTest = Arrays.asList(
+        RowFactory.create(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
+        RowFactory.create(0.0, Vectors.dense(3.0, 2.0, -0.1)),
+        RowFactory.create(1.0, Vectors.dense(0.0, 2.2, -1.5))
+    );
+    Dataset<Row> test = spark.createDataFrame(dataTest, schema);
 
     // Make predictions on test documents using the Transformer.transform() method.
     // LogisticRegression.transform will only use the 'features' column.

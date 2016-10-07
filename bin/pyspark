@@ -30,14 +30,6 @@ export _SPARK_CMD_USAGE="Usage: ./bin/pyspark [options]"
 # (e.g. PYSPARK_DRIVER_PYTHON_OPTS='notebook').  This supports full customization of the IPython
 # and executor Python executables.
 
-# Determine the Python executable to use if PYSPARK_PYTHON or PYSPARK_DRIVER_PYTHON isn't set:
-if hash python2.7 2>/dev/null; then
-  # Attempt to use Python 2.7, if installed:
-  DEFAULT_PYTHON="python2.7"
-else
-  DEFAULT_PYTHON="python"
-fi
-
 # Fail noisily if removed options are set
 if [[ -n "$IPYTHON" || -n "$IPYTHON_OPTS" ]]; then
   echo "Error in pyspark startup:" 
@@ -47,23 +39,25 @@ fi
 
 # Default to standard python interpreter unless told otherwise
 if [[ -z "$PYSPARK_DRIVER_PYTHON" ]]; then
-  PYSPARK_DRIVER_PYTHON="${PYSPARK_PYTHON:-"$DEFAULT_PYTHON"}"
+  PYSPARK_DRIVER_PYTHON="${PYSPARK_PYTHON:-"python"}"
 fi
+
+WORKS_WITH_IPYTHON=$(python -c 'import sys; print(sys.version_info >= (2, 7, 0))')
 
 # Determine the Python executable to use for the executors:
 if [[ -z "$PYSPARK_PYTHON" ]]; then
-  if [[ $PYSPARK_DRIVER_PYTHON == *ipython* && $DEFAULT_PYTHON != "python2.7" ]]; then
+  if [[ $PYSPARK_DRIVER_PYTHON == *ipython* && ! WORKS_WITH_IPYTHON ]]; then
     echo "IPython requires Python 2.7+; please install python2.7 or set PYSPARK_PYTHON" 1>&2
     exit 1
   else
-    PYSPARK_PYTHON="$DEFAULT_PYTHON"
+    PYSPARK_PYTHON=python
   fi
 fi
 export PYSPARK_PYTHON
 
 # Add the PySpark classes to the Python path:
 export PYTHONPATH="${SPARK_HOME}/python/:$PYTHONPATH"
-export PYTHONPATH="${SPARK_HOME}/python/lib/py4j-0.9.2-src.zip:$PYTHONPATH"
+export PYTHONPATH="${SPARK_HOME}/python/lib/py4j-0.10.3-src.zip:$PYTHONPATH"
 
 # Load the PySpark shell.py script when ./pyspark is used interactively:
 export OLD_PYTHONSTARTUP="$PYTHONSTARTUP"

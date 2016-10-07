@@ -34,7 +34,9 @@ import org.apache.spark.sql.SparkSession;
 public class JavaGradientBoostedTreeRegressorExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaGradientBoostedTreeRegressorExample").getOrCreate();
+      .builder()
+      .appName("JavaGradientBoostedTreeRegressorExample")
+      .getOrCreate();
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
@@ -48,7 +50,7 @@ public class JavaGradientBoostedTreeRegressorExample {
       .setMaxCategories(4)
       .fit(data);
 
-    // Split the data into training and test sets (30% held out for testing)
+    // Split the data into training and test sets (30% held out for testing).
     Dataset<Row>[] splits = data.randomSplit(new double[] {0.7, 0.3});
     Dataset<Row> trainingData = splits[0];
     Dataset<Row> testData = splits[1];
@@ -59,10 +61,10 @@ public class JavaGradientBoostedTreeRegressorExample {
       .setFeaturesCol("indexedFeatures")
       .setMaxIter(10);
 
-    // Chain indexer and GBT in a Pipeline
+    // Chain indexer and GBT in a Pipeline.
     Pipeline pipeline = new Pipeline().setStages(new PipelineStage[] {featureIndexer, gbt});
 
-    // Train model.  This also runs the indexer.
+    // Train model. This also runs the indexer.
     PipelineModel model = pipeline.fit(trainingData);
 
     // Make predictions.
@@ -71,7 +73,7 @@ public class JavaGradientBoostedTreeRegressorExample {
     // Select example rows to display.
     predictions.select("prediction", "label", "features").show(5);
 
-    // Select (prediction, true label) and compute test error
+    // Select (prediction, true label) and compute test error.
     RegressionEvaluator evaluator = new RegressionEvaluator()
       .setLabelCol("label")
       .setPredictionCol("prediction")

@@ -34,13 +34,13 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     val bytes = Array[Byte](1, 2, 3, 4)
     Seq((bytes, "AQIDBA==")).toDF("a", "b").write.saveAsTable("t0")
 
-    sqlContext
+    spark
       .range(10)
       .select('id as 'key, concat(lit("val_"), 'id) as 'value)
       .write
       .saveAsTable("t1")
 
-    sqlContext.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write.saveAsTable("t2")
+    spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write.saveAsTable("t2")
   }
 
   override protected def afterAll(): Unit = {
@@ -102,7 +102,6 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSqlGeneration("SELECT map(1, 'a', 2, 'b')")
     checkSqlGeneration("SELECT named_struct('c1',1,'c2',2,'c3',3)")
     checkSqlGeneration("SELECT nanvl(a, 5), nanvl(b, 10), nanvl(d, c) from t2")
-    checkSqlGeneration("SELECT nvl(null, 1, 2)")
     checkSqlGeneration("SELECT rand(1)")
     checkSqlGeneration("SELECT randn(3)")
     checkSqlGeneration("SELECT struct(1,2,3)")
@@ -156,6 +155,11 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   test("aggregate functions") {
     checkSqlGeneration("SELECT approx_count_distinct(value) FROM t1 GROUP BY key")
+    checkSqlGeneration("SELECT percentile_approx(value, 0.25) FROM t1 GROUP BY key")
+    checkSqlGeneration("SELECT percentile_approx(value, array(0.25, 0.75)) FROM t1 GROUP BY key")
+    checkSqlGeneration("SELECT percentile_approx(value, 0.25, 100) FROM t1 GROUP BY key")
+    checkSqlGeneration(
+      "SELECT percentile_approx(value, array(0.25, 0.75), 100) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT avg(value) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT corr(value, key) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT count(value) FROM t1 GROUP BY key")

@@ -30,7 +30,7 @@ object PivotFirst {
 
   // Currently UnsafeRow does not support the generic update method (throws
   // UnsupportedOperationException), so we need to explicitly support each DataType.
-  private val updateFunction: PartialFunction[DataType, (MutableRow, Int, Any) => Unit] = {
+  private val updateFunction: PartialFunction[DataType, (InternalRow, Int, Any) => Unit] = {
     case DoubleType =>
       (row, offset, value) => row.setDouble(offset, value.asInstanceOf[Double])
     case IntegerType =>
@@ -51,7 +51,7 @@ object PivotFirst {
 }
 
 /**
- * PivotFirst is a aggregate function used in the second phase of a two phase pivot to do the
+ * PivotFirst is an aggregate function used in the second phase of a two phase pivot to do the
  * required rearrangement of values into pivoted form.
  *
  * For example on an input of
@@ -89,9 +89,9 @@ case class PivotFirst(
 
   val indexSize = pivotIndex.size
 
-  private val updateRow: (MutableRow, Int, Any) => Unit = PivotFirst.updateFunction(valueDataType)
+  private val updateRow: (InternalRow, Int, Any) => Unit = PivotFirst.updateFunction(valueDataType)
 
-  override def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
+  override def update(mutableAggBuffer: InternalRow, inputRow: InternalRow): Unit = {
     val pivotColValue = pivotColumn.eval(inputRow)
     if (pivotColValue != null) {
       // We ignore rows whose pivot column value is not in the list of pivot column values.
@@ -105,7 +105,7 @@ case class PivotFirst(
     }
   }
 
-  override def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit = {
+  override def merge(mutableAggBuffer: InternalRow, inputAggBuffer: InternalRow): Unit = {
     for (i <- 0 until indexSize) {
       if (!inputAggBuffer.isNullAt(inputAggBufferOffset + i)) {
         val value = inputAggBuffer.get(inputAggBufferOffset + i, valueDataType)
@@ -114,7 +114,7 @@ case class PivotFirst(
     }
   }
 
-  override def initialize(mutableAggBuffer: MutableRow): Unit = valueDataType match {
+  override def initialize(mutableAggBuffer: InternalRow): Unit = valueDataType match {
     case d: DecimalType =>
       // Per doc of setDecimal we need to do this instead of setNullAt for DecimalType.
       for (i <- 0 until indexSize) {

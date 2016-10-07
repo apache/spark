@@ -62,13 +62,13 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   /**
    * Run a CLI operation and expect all the queries and expected answers to be returned.
+   *
    * @param timeout maximum time for the commands to complete
    * @param extraArgs any extra arguments
    * @param errorResponses a sequence of strings whose presence in the stdout of the forked process
    *                       is taken as an immediate error condition. That is: if a line containing
    *                       with one of these strings is found, fail the test immediately.
    *                       The default value is `Seq("Error:")`
-   *
    * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */
   def runCliWithin(
@@ -91,6 +91,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
+         |  --hiveconf conf1=conftest
+         |  --hiveconf conf2=1
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
 
@@ -237,5 +239,48 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   test("SPARK-11624 Spark SQL CLI should set sessionState only once") {
     runCliWithin(2.minute, Seq("-e", "!echo \"This is a test for Spark-11624\";"))(
       "" -> "This is a test for Spark-11624")
+  }
+
+  test("list jars") {
+    val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    runCliWithin(2.minute)(
+      s"ADD JAR $jarFile;" -> "",
+      s"LIST JARS;" -> "TestUDTF.jar"
+    )
+  }
+
+  test("list jar <jarfile>") {
+    val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    runCliWithin(2.minute)(
+      s"ADD JAR $jarFile;" -> "",
+      s"List JAR $jarFile;" -> "TestUDTF.jar"
+    )
+  }
+
+  test("list files") {
+    val dataFilePath = Thread.currentThread().
+      getContextClassLoader.getResource("data/files/small_kv.txt")
+    runCliWithin(2.minute)(
+      s"ADD FILE $dataFilePath;" -> "",
+      s"LIST FILES;" -> "small_kv.txt"
+    )
+  }
+
+  test("list file <filepath>") {
+    val dataFilePath = Thread.currentThread().
+      getContextClassLoader.getResource("data/files/small_kv.txt")
+    runCliWithin(2.minute)(
+      s"ADD FILE $dataFilePath;" -> "",
+      s"LIST FILE $dataFilePath;" -> "small_kv.txt"
+    )
+  }
+
+  test("apply hiveconf from cli command") {
+    runCliWithin(2.minute)(
+      "SET conf1;" -> "conftest",
+      "SET conf2;" -> "1",
+      "SET conf3=${hiveconf:conf1};" -> "conftest",
+      "SET conf3;" -> "conftest"
+    )
   }
 }

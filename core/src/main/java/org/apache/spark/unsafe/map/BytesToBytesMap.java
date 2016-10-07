@@ -35,6 +35,7 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UnsafeAlignedOffset;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
@@ -64,7 +65,7 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
  */
 public final class BytesToBytesMap extends MemoryConsumer {
 
-  private final Logger logger = LoggerFactory.getLogger(BytesToBytesMap.class);
+  private static final Logger logger = LoggerFactory.getLogger(BytesToBytesMap.class);
 
   private static final HashMapGrowthStrategy growthStrategy = HashMapGrowthStrategy.DOUBLING;
 
@@ -182,7 +183,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       double loadFactor,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
-    super(taskMemoryManager, pageSizeBytes);
+    super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
     this.serializerManager = serializerManager;
@@ -221,7 +222,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
       SparkEnv.get() != null ? SparkEnv.get().serializerManager() :  null,
       initialCapacity,
-      0.70,
+      // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
+      0.5,
       pageSizeBytes,
       enablePerfMetrics);
   }
@@ -272,8 +274,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
           currentPage = dataPages.get(nextIdx);
           pageBaseObject = currentPage.getBaseObject();
           offsetInPage = currentPage.getBaseOffset();
-          recordsInPage = Platform.getInt(pageBaseObject, offsetInPage);
-          offsetInPage += 4;
+          recordsInPage = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
+          offsetInPage += UnsafeAlignedOffset.getUaoSize();
         } else {
           currentPage = null;
           if (reader != null) {
@@ -320,10 +322,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
       }
       numRecords--;
       if (currentPage != null) {
-        int totalLength = Platform.getInt(pageBaseObject, offsetInPage);
+        int totalLength = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
         loc.with(currentPage, offsetInPage);
         // [total size] [key size] [key] [value] [pointer to next]
-        offsetInPage += 4 + totalLength + 8;
+        offsetInPage += UnsafeAlignedOffset.getUaoSize() + totalLength + 8;
         recordsInPage --;
         return loc;
       } else {
@@ -366,14 +368,15 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
           Object base = block.getBaseObject();
           long offset = block.getBaseOffset();
-          int numRecords = Platform.getInt(base, offset);
-          offset += 4;
+          int numRecords = UnsafeAlignedOffset.getSize(base, offset);
+          int uaoSize = UnsafeAlignedOffset.getUaoSize();
+          offset += uaoSize;
           final UnsafeSorterSpillWriter writer =
             new UnsafeSorterSpillWriter(blockManager, 32 * 1024, writeMetrics, numRecords);
           while (numRecords > 0) {
-            int length = Platform.getInt(base, offset);
-            writer.write(base, offset + 4, length, 0);
-            offset += 4 + length + 8;
+            int length = UnsafeAlignedOffset.getSize(base, offset);
+            writer.write(base, offset + uaoSize, length, 0);
+            offset += uaoSize + length + 8;
             numRecords--;
           }
           writer.close();
@@ -529,13 +532,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
     private void updateAddressesAndSizes(final Object base, long offset) {
       baseObject = base;
-      final int totalLength = Platform.getInt(base, offset);
-      offset += 4;
-      keyLength = Platform.getInt(base, offset);
-      offset += 4;
+      final int totalLength = UnsafeAlignedOffset.getSize(base, offset);
+      int uaoSize = UnsafeAlignedOffset.getUaoSize();
+      offset += uaoSize;
+      keyLength = UnsafeAlignedOffset.getSize(base, offset);
+      offset += uaoSize;
       keyOffset = offset;
       valueOffset = offset + keyLength;
-      valueLength = totalLength - keyLength - 4;
+      valueLength = totalLength - keyLength - uaoSize;
     }
 
     private Location with(int pos, int keyHashcode, boolean isDefined) {
@@ -564,10 +568,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
       this.isDefined = true;
       this.memoryPage = null;
       baseObject = base;
-      keyOffset = offset + 4;
-      keyLength = Platform.getInt(base, offset);
-      valueOffset = offset + 4 + keyLength;
-      valueLength = length - 4 - keyLength;
+      int uaoSize = UnsafeAlignedOffset.getUaoSize();
+      keyOffset = offset + uaoSize;
+      keyLength = UnsafeAlignedOffset.getSize(base, offset);
+      valueOffset = offset + uaoSize + keyLength;
+      valueLength = length - uaoSize - keyLength;
       return this;
     }
 
@@ -698,9 +703,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
       // (8 byte key length) (key) (value) (8 byte pointer to next value)
-      final long recordLength = 8 + klen + vlen + 8;
+      int uaoSize = UnsafeAlignedOffset.getUaoSize();
+      final long recordLength = (2 * uaoSize) + klen + vlen + 8;
       if (currentPage == null || currentPage.size() - pageCursor < recordLength) {
-        if (!acquireNewPage(recordLength + 4L)) {
+        if (!acquireNewPage(recordLength + uaoSize)) {
           return false;
         }
       }
@@ -709,9 +715,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
       final Object base = currentPage.getBaseObject();
       long offset = currentPage.getBaseOffset() + pageCursor;
       final long recordOffset = offset;
-      Platform.putInt(base, offset, klen + vlen + 4);
-      Platform.putInt(base, offset + 4, klen);
-      offset += 8;
+      UnsafeAlignedOffset.putSize(base, offset, klen + vlen + uaoSize);
+      UnsafeAlignedOffset.putSize(base, offset + uaoSize, klen);
+      offset += (2 * uaoSize);
       Platform.copyMemory(kbase, koff, base, offset, klen);
       offset += klen;
       Platform.copyMemory(vbase, voff, base, offset, vlen);
@@ -721,7 +727,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
       // --- Update bookkeeping data structures ----------------------------------------------------
       offset = currentPage.getBaseOffset();
-      Platform.putInt(base, offset, Platform.getInt(base, offset) + 1);
+      UnsafeAlignedOffset.putSize(base, offset, UnsafeAlignedOffset.getSize(base, offset) + 1);
       pageCursor += recordLength;
       final long storedKeyAddress = taskMemoryManager.encodePageNumberAndOffset(
         currentPage, recordOffset);
@@ -756,8 +762,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       return false;
     }
     dataPages.add(currentPage);
-    Platform.putInt(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);
-    pageCursor = 4;
+    UnsafeAlignedOffset.putSize(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);
+    pageCursor = UnsafeAlignedOffset.getUaoSize();
     return true;
   }
 

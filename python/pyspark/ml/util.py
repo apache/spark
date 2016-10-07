@@ -23,7 +23,7 @@ if sys.version > '3':
     unicode = str
 
 from pyspark import SparkContext, since
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.common import inherit_doc
 
 
 def _jvm():
@@ -238,3 +238,19 @@ class JavaMLReadable(MLReadable):
     def read(cls):
         """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
+
+
+@inherit_doc
+class JavaPredictionModel():
+    """
+    (Private) Java Model for prediction tasks (regression and classification).
+    To be mixed in with class:`pyspark.ml.JavaModel`
+    """
+
+    @property
+    @since("2.1.0")
+    def numFeatures(self):
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        return self._call_java("numFeatures")

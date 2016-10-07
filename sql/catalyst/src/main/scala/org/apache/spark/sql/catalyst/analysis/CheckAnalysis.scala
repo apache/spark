@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.SimpleCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.UsingJoin
@@ -43,6 +44,21 @@ trait CheckAnalysis extends PredicateHelper {
     exprs.flatMap(_.collect {
       case e: Generator => e
     }).length > 1
+  }
+
+  private def checkLimitClause(limitExpr: Expression): Unit = {
+    limitExpr match {
+      case e if !e.foldable => failAnalysis(
+        "The limit expression must evaluate to a constant value, but got " +
+          limitExpr.sql)
+      case e if e.dataType != IntegerType => failAnalysis(
+        s"The limit expression must be integer type, but got " +
+          e.dataType.simpleString)
+      case e if e.eval().asInstanceOf[Int] < 0 => failAnalysis(
+        "The limit expression must be equal to or greater than 0, but got " +
+          e.eval().asInstanceOf[Int])
+      case e => // OK
+    }
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
@@ -72,9 +88,9 @@ trait CheckAnalysis extends PredicateHelper {
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
           case g: Grouping =>
-            failAnalysis(s"grouping() can only be used with GroupingSets/Cube/Rollup")
+            failAnalysis("grouping() can only be used with GroupingSets/Cube/Rollup")
           case g: GroupingID =>
-            failAnalysis(s"grouping_id() can only be used with GroupingSets/Cube/Rollup")
+            failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
           case w @ WindowExpression(AggregateExpression(_, _, true, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
@@ -123,11 +139,16 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-            query match {
+            // Skip projects and subquery aliases added by the Analyzer and the SQLBuilder.
+            def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
+              case s: SubqueryAlias => cleanQuery(s.child)
+              case p: Project => cleanQuery(p.child)
+              case child => child
+            }
+
+            cleanQuery(query) match {
               case a: Aggregate => checkAggregate(a)
               case Filter(_, a: Aggregate) => checkAggregate(a)
-              case Project(_, a: Aggregate) => checkAggregate(a)
-              case Project(_, Filter(_, a: Aggregate)) => checkAggregate(a)
               case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
             }
             s
@@ -200,7 +221,6 @@ trait CheckAnalysis extends PredicateHelper {
                     "Add to group by or wrap in first() (or first_value) if you don't care " +
                     "which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
-              case e if e.references.isEmpty => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
@@ -209,7 +229,7 @@ trait CheckAnalysis extends PredicateHelper {
               if (!RowOrdering.isOrderable(expr.dataType)) {
                 failAnalysis(
                   s"expression ${expr.sql} cannot be used as a grouping expression " +
-                    s"because its data type ${expr.dataType.simpleString} is not a orderable " +
+                    s"because its data type ${expr.dataType.simpleString} is not an orderable " +
                     s"data type.")
               }
 
@@ -233,19 +253,9 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-          case s @ SetOperation(left, right) if left.output.length != right.output.length =>
-            failAnalysis(
-              s"${s.nodeName} can only be performed on tables with the same number of columns, " +
-               s"but the left table has ${left.output.length} columns and the right has " +
-               s"${right.output.length}")
+          case GlobalLimit(limitExpr, _) => checkLimitClause(limitExpr)
 
-          case s: Union if s.children.exists(_.output.length != s.children.head.output.length) =>
-            val firstError = s.children.find(_.output.length != s.children.head.output.length).get
-            failAnalysis(
-              s"""
-                |Unions can only be performed on tables with the same number of columns,
-                | but one table has '${firstError.output.length}' columns and another table has
-                | '${s.children.head.output.length}' columns""".stripMargin)
+          case LocalLimit(limitExpr, _) => checkLimitClause(limitExpr)
 
           case p if p.expressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
             p match {
@@ -256,6 +266,37 @@ trait CheckAnalysis extends PredicateHelper {
 
           case p if p.expressions.exists(PredicateSubquery.hasPredicateSubquery) =>
             failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
+
+          case _: Union | _: SetOperation if operator.children.length > 1 =>
+            def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
+            def ordinalNumber(i: Int): String = i match {
+              case 0 => "first"
+              case 1 => "second"
+              case i => s"${i}th"
+            }
+            val ref = dataTypes(operator.children.head)
+            operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
+              // Check the number of columns
+              if (child.output.length != ref.length) {
+                failAnalysis(
+                  s"""
+                    |${operator.nodeName} can only be performed on tables with the same number
+                    |of columns, but the first table has ${ref.length} columns and
+                    |the ${ordinalNumber(ti + 1)} table has ${child.output.length} columns
+                  """.stripMargin.replace("\n", " ").trim())
+              }
+              // Check if the data types match.
+              dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
+                if (dt1 != dt2) {
+                  failAnalysis(
+                    s"""
+                      |${operator.nodeName} can only be performed on tables with the compatible
+                      |column types. $dt1 <> $dt2 at the ${ordinalNumber(ci)} column of
+                      |the ${ordinalNumber(ti + 1)} table
+                    """.stripMargin.replace("\n", " ").trim())
+                }
+              }
+            }
 
           case _ => // Fallbacks to the following checks
         }
@@ -300,6 +341,40 @@ trait CheckAnalysis extends PredicateHelper {
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
+
+          case s: SimpleCatalogRelation =>
+            failAnalysis(
+              s"""
+                 |Hive support is required to select over the following tables:
+                 |${s.catalogTable.identifier}
+               """.stripMargin)
+
+          // TODO: We need to consolidate this kind of checks for InsertIntoTable
+          // with the rule of PreWriteCheck defined in extendedCheckRules.
+          case InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _) =>
+            failAnalysis(
+              s"""
+                 |Hive support is required to insert into the following tables:
+                 |${s.catalogTable.identifier}
+               """.stripMargin)
+
+          case InsertIntoTable(t, _, _, _, _)
+            if !t.isInstanceOf[LeafNode] ||
+              t.isInstanceOf[Range] ||
+              t == OneRowRelation ||
+              t.isInstanceOf[LocalRelation] =>
+            failAnalysis(s"Inserting into an RDD-based table is not allowed.")
+
+          case i @ InsertIntoTable(table, partitions, query, _, _) =>
+            val numStaticPartitions = partitions.values.count(_.isDefined)
+            if (table.output.size != (query.output.size + numStaticPartitions)) {
+              failAnalysis(
+                s"$table requires that the data to be inserted have the same number of " +
+                  s"columns as the target table: target table has ${table.output.size} " +
+                  s"column(s) but the inserted data has " +
+                  s"${query.output.size + numStaticPartitions} column(s), including " +
+                  s"$numStaticPartitions partition column(s) having constant value(s).")
+            }
 
           case o if !o.resolved =>
             failAnalysis(

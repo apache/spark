@@ -37,12 +37,15 @@ import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocolFactory;
 import org.apache.thrift.server.TServlet;
-import org.eclipse.jetty.server.nio.SelectChannelConnector;
-import org.eclipse.jetty.server.ssl.SslSelectChannelConnector;
+import org.eclipse.jetty.server.AbstractConnectionFactory;
+import org.eclipse.jetty.server.ConnectionFactory;
+import org.eclipse.jetty.server.HttpConnectionFactory;
+import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.ExecutorThreadPool;
+import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 
 
 public class ThriftHttpCLIService extends ThriftCLIService {
@@ -59,9 +62,6 @@ public class ThriftHttpCLIService extends ThriftCLIService {
   @Override
   public void run() {
     try {
-      // HTTP Server
-      httpServer = new org.eclipse.jetty.server.Server();
-
       // Server thread pool
       // Start with minWorkerThreads, expand till maxWorkerThreads and reject subsequent requests
       String threadPoolName = "HiveServer2-HttpHandler-Pool";
@@ -69,10 +69,13 @@ public class ThriftHttpCLIService extends ThriftCLIService {
           workerKeepAliveTime, TimeUnit.SECONDS, new SynchronousQueue<Runnable>(),
           new ThreadFactoryWithGarbageCleanup(threadPoolName));
       ExecutorThreadPool threadPool = new ExecutorThreadPool(executorService);
-      httpServer.setThreadPool(threadPool);
+
+      // HTTP Server
+      httpServer = new org.eclipse.jetty.server.Server(threadPool);
 
       // Connector configs
-      SelectChannelConnector connector = new SelectChannelConnector();
+
+      ConnectionFactory[] connectionFactories;
       boolean useSsl = hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_USE_SSL);
       String schemeName = useSsl ? "https" : "http";
       // Change connector if SSL is used
@@ -92,14 +95,27 @@ public class ThriftHttpCLIService extends ThriftCLIService {
           Arrays.toString(sslContextFactory.getExcludeProtocols()));
         sslContextFactory.setKeyStorePath(keyStorePath);
         sslContextFactory.setKeyStorePassword(keyStorePassword);
-        connector = new SslSelectChannelConnector(sslContextFactory);
+        connectionFactories = AbstractConnectionFactory.getFactories(
+            sslContextFactory, new HttpConnectionFactory());
+      } else {
+        connectionFactories = new ConnectionFactory[] { new HttpConnectionFactory() };
       }
+      ServerConnector connector = new ServerConnector(
+          httpServer,
+          null,
+          // Call this full constructor to set this, which forces daemon threads:
+          new ScheduledExecutorScheduler("HiveServer2-HttpHandler-JettyScheduler", true),
+          null,
+          -1,
+          -1,
+          connectionFactories);
+
       connector.setPort(portNum);
       // Linux:yes, Windows:no
       connector.setReuseAddress(!Shell.WINDOWS);
       int maxIdleTime = (int) hiveConf.getTimeVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_MAX_IDLE_TIME,
           TimeUnit.MILLISECONDS);
-      connector.setMaxIdleTime(maxIdleTime);
+      connector.setIdleTimeout(maxIdleTime);
 
       httpServer.addConnector(connector);
 

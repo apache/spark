@@ -18,11 +18,11 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
 private[clustering] case class TestRow(features: Vector)
 
@@ -34,7 +34,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    dataset = KMeansSuite.generateKMeansData(sqlContext, 50, 3, k)
+    dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
   }
 
   test("default parameters") {
@@ -45,7 +45,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getPredictionCol === "prediction")
     assert(kmeans.getMaxIter === 20)
     assert(kmeans.getInitMode === MLlibKMeans.K_MEANS_PARALLEL)
-    assert(kmeans.getInitSteps === 5)
+    assert(kmeans.getInitSteps === 2)
     assert(kmeans.getTol === 1e-4)
   }
 
@@ -142,11 +142,11 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
 }
 
 object KMeansSuite {
-  def generateKMeansData(sql: SQLContext, rows: Int, dim: Int, k: Int): DataFrame = {
-    val sc = sql.sparkContext
+  def generateKMeansData(spark: SparkSession, rows: Int, dim: Int, k: Int): DataFrame = {
+    val sc = spark.sparkContext
     val rdd = sc.parallelize(1 to rows).map(i => Vectors.dense(Array.fill(dim)((i % k).toDouble)))
       .map(v => new TestRow(v))
-    sql.createDataFrame(rdd)
+    spark.createDataFrame(rdd)
   }
 
   /**

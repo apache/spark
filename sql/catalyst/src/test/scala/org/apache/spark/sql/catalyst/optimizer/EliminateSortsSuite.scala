@@ -34,7 +34,8 @@ class EliminateSortsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Eliminate Sorts", Once,
+      Batch("Eliminate Sorts", FixedPoint(10),
+        FoldablePropagation,
         EliminateSorts) :: Nil
   }
 
@@ -66,6 +67,18 @@ class EliminateSortsSuite extends PlanTest {
     val query = x.orderBy(SortOrder(3, Ascending), 'a.asc)
     val optimized = Optimize.execute(analyzer.execute(query))
     val correctAnswer = analyzer.execute(x.orderBy('a.asc))
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Remove no-op alias") {
+    val x = testRelation
+
+    val query = x.select('a.as('x), Year(CurrentDate()).as('y), 'b)
+      .orderBy('x.asc, 'y.asc, 'b.desc)
+    val optimized = Optimize.execute(analyzer.execute(query))
+    val correctAnswer = analyzer.execute(
+      x.select('a.as('x), Year(CurrentDate()).as('y), 'b).orderBy('x.asc, 'b.desc))
 
     comparePlans(optimized, correctAnswer)
   }

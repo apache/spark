@@ -24,7 +24,7 @@ import org.apache.spark.SparkFunSuite
 class BreezeMatrixConversionSuite extends SparkFunSuite {
   test("dense matrix to breeze") {
     val mat = Matrices.dense(3, 2, Array(0.0, 1.0, 2.0, 3.0, 4.0, 5.0))
-    val breeze = mat.toBreeze.asInstanceOf[BDM[Double]]
+    val breeze = mat.asBreeze.asInstanceOf[BDM[Double]]
     assert(breeze.rows === mat.numRows)
     assert(breeze.cols === mat.numCols)
     assert(breeze.data.eq(mat.asInstanceOf[DenseMatrix].values), "should not copy data")
@@ -48,7 +48,7 @@ class BreezeMatrixConversionSuite extends SparkFunSuite {
     val colPtrs = Array(0, 2, 4)
     val rowIndices = Array(1, 2, 1, 2)
     val mat = Matrices.sparse(3, 2, colPtrs, rowIndices, values)
-    val breeze = mat.toBreeze.asInstanceOf[BSM[Double]]
+    val breeze = mat.asBreeze.asInstanceOf[BSM[Double]]
     assert(breeze.rows === mat.numRows)
     assert(breeze.cols === mat.numCols)
     assert(breeze.data.eq(mat.asInstanceOf[SparseMatrix].values), "should not copy data")

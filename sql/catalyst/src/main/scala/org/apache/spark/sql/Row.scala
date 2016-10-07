@@ -151,7 +151,7 @@ trait Row extends Serializable {
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
    *   MapType -> scala.collection.Map (use getJavaMap for java.util.Map)
-   *   StructType -> org.apache.spark.sql.Row (or Product)
+   *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
   def apply(i: Int): Any = get(i)
@@ -176,7 +176,7 @@ trait Row extends Serializable {
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
    *   MapType -> scala.collection.Map (use getJavaMap for java.util.Map)
-   *   StructType -> org.apache.spark.sql.Row (or Product)
+   *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
   def get(i: Int): Any
@@ -300,19 +300,11 @@ trait Row extends Serializable {
     getMap[K, V](i).asJava
 
   /**
-   * Returns the value at position i of struct type as an [[Row]] object.
+   * Returns the value at position i of struct type as a [[Row]] object.
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getStruct(i: Int): Row = {
-    // Product and Row both are recognized as StructType in a Row
-    val t = get(i)
-    if (t.isInstanceOf[Product]) {
-      Row.fromTuple(t.asInstanceOf[Product])
-    } else {
-      t.asInstanceOf[Row]
-    }
-  }
+  def getStruct(i: Int): Row = getAs[Row](i)
 
   /**
    * Returns the value at position i.
@@ -471,6 +463,6 @@ trait Row extends Serializable {
    * @throws NullPointerException when value is null.
    */
   private def getAnyValAs[T <: AnyVal](i: Int): T =
-    if (isNullAt(i)) throw new NullPointerException(s"Value at index $i in null")
+    if (isNullAt(i)) throw new NullPointerException(s"Value at index $i is null")
     else getAs[T](i)
 }

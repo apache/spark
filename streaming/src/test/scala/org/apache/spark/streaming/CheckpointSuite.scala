@@ -35,6 +35,7 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, TestUtils}
+import org.apache.spark.internal.config._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler._
@@ -71,7 +72,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
   /**
    * Tests a streaming operation under checkpointing, by restarting the operation
    * from checkpoint file and verifying whether the final output is correct.
-   * The output is assumed to have come from a reliable queue which an replay
+   * The output is assumed to have come from a reliable queue which a replay
    * data as required.
    *
    * NOTE: This takes into consideration that the last batch processed before
@@ -406,7 +407,8 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     // explicitly.
     ssc = new StreamingContext(null, newCp, null)
     val restoredConf1 = ssc.conf
-    assert(restoredConf1.get("spark.driver.host") === "localhost")
+    val defaultConf = new SparkConf()
+    assert(restoredConf1.get("spark.driver.host") === defaultConf.get(DRIVER_HOST_ADDRESS))
     assert(restoredConf1.get("spark.driver.port") !== "9999")
   }
 

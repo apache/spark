@@ -235,8 +235,19 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     assert(items.length === 1)
   }
 
+  test("SPARK-15709: Prevent `UnsupportedOperationException: empty.min` in `freqItems`") {
+    val ds = spark.createDataset(Seq(1, 2, 2, 3, 3, 3))
+
+    intercept[IllegalArgumentException] {
+      ds.stat.freqItems(Seq("value"), 0)
+    }
+    intercept[IllegalArgumentException] {
+      ds.stat.freqItems(Seq("value"), 2)
+    }
+  }
+
   test("sampleBy") {
-    val df = sqlContext.range(0, 100).select((col("id") % 3).as("key"))
+    val df = spark.range(0, 100).select((col("id") % 3).as("key"))
     val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),
@@ -247,7 +258,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   // `CountMinSketch`es that meet required specs.  Test cases for `CountMinSketch` can be found in
   // `CountMinSketchSuite` in project spark-sketch.
   test("countMinSketch") {
-    val df = sqlContext.range(1000)
+    val df = spark.range(1000)
 
     val sketch1 = df.stat.countMinSketch("id", depth = 10, width = 20, seed = 42)
     assert(sketch1.totalCount() === 1000)
@@ -279,7 +290,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   // This test only verifies some basic requirements, more correctness tests can be found in
   // `BloomFilterSuite` in project spark-sketch.
   test("Bloom filter") {
-    val df = sqlContext.range(1000)
+    val df = spark.range(1000)
 
     val filter1 = df.stat.bloomFilter("id", 1000, 0.03)
     assert(filter1.expectedFpp() - 0.03 < 1e-3)
@@ -304,7 +315,7 @@ class DataFrameStatPerfSuite extends QueryTest with SharedSQLContext with Loggin
 
   // Turn on this test if you want to test the performance of approximate quantiles.
   ignore("computing quantiles should not take much longer than describe()") {
-    val df = sqlContext.range(5000000L).toDF("col1").cache()
+    val df = spark.range(5000000L).toDF("col1").cache()
     def seconds(f: => Any): Double = {
       // Do some warmup
       logDebug("warmup...")

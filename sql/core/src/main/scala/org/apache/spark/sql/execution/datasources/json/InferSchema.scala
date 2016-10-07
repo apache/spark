@@ -22,8 +22,9 @@ import java.util.Comparator
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
-import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion
+import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
+import org.apache.spark.sql.catalyst.json.JSONOptions
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -37,7 +38,7 @@ private[sql] object InferSchema {
    */
   def infer(
       json: RDD[String],
-      columnNameOfCorruptRecords: String,
+      columnNameOfCorruptRecord: String,
       configOptions: JSONOptions): StructType = {
     require(configOptions.samplingRatio > 0,
       s"samplingRatio (${configOptions.samplingRatio}) should be greater than 0")
@@ -60,13 +61,13 @@ private[sql] object InferSchema {
           }
         } catch {
           case _: JsonParseException if shouldHandleCorruptRecord =>
-            Some(StructType(Seq(StructField(columnNameOfCorruptRecords, StringType))))
+            Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
           case _: JsonParseException =>
             None
         }
       }
     }.fold(StructType(Seq()))(
-      compatibleRootType(columnNameOfCorruptRecords, shouldHandleCorruptRecord))
+      compatibleRootType(columnNameOfCorruptRecord, shouldHandleCorruptRecord))
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st
@@ -252,7 +253,7 @@ private[sql] object InferSchema {
    * Returns the most general data type for two given data types.
    */
   def compatibleType(t1: DataType, t2: DataType): DataType = {
-    HiveTypeCoercion.findTightestCommonTypeOfTwo(t1, t2).getOrElse {
+    TypeCoercion.findTightestCommonTypeOfTwo(t1, t2).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
       (t1, t2) match {
         // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
