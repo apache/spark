@@ -30,6 +30,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
 
     val allAppsSize = parent.getApplicationList().count(_.completed != requestedIncomplete)
+    val eventLogsUnderProcessCount = parent.getEventLogsUnderProcess()
     val providerConfig = parent.getProviderConfig()
     val content =
       <div>
@@ -37,6 +38,13 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             <ul class="unstyled">
               {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
             </ul>
+            {
+            if (eventLogsUnderProcessCount > 0) {
+              <p>There are {eventLogsUnderProcessCount} event log(s) currently being
+                processed which may result in additional applications getting listed on this page.
+                Refresh the page to view updates. </p>
+            }
+            }
             {
             if (allAppsSize > 0) {
               <script src={UIUtils.prependBaseUri("/static/dataTables.rowsGroup.js")}></script> ++

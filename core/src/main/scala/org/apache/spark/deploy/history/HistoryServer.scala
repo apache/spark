@@ -179,6 +179,10 @@ class HistoryServer(
     provider.getListing()
   }
 
+  def getEventLogsUnderProcess(): Int = {
+    provider.getEventLogsUnderProcess()
+  }
+
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     getApplicationList().map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
