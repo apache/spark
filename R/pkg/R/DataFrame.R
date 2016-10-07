@@ -65,6 +65,49 @@ dataFrame <- function(sdf, isCached = FALSE) {
 
 ############################ SparkDataFrame Methods ##############################################
 
+#' Return an SparkDataFrame's name.
+#'
+#' @param x The SparkDataFrame whose name is returned.
+#' @rdname name
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' df.name()
+#'}
+#' @aliases name,SparkDataFrame-method
+#' @noRd
+#' @note explain since 2.1.0
+setMethod("name",
+          signature(x = "SparkDataFrame"),
+          function(x) {
+            callJMethod(x@sdf, "name")
+          })
+
+#' Set an SparkDataFrame's name.
+#'
+#' @param x The SparkDataFrame whose name is to be set.
+#' @param name The SparkDataFrame name to be set.
+#' @return a new SparkDataFrame renamed.
+#' @rdname setName
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' df.setName("foo")
+#'}
+#' @aliases setName,SparkDataFrame-method
+#' @noRd
+#' @note explain since 2.1.0
+setMethod("setName",
+          signature(x = "SparkDataFrame", name = "character"),
+          function(x, name) {
+            callJMethod(x@sdf, "setName", name)
+            x
+          })
+
 #' Print Schema of a SparkDataFrame
 #'
 #' Prints out the schema in tree format

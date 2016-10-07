@@ -32,6 +32,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
 
+  test("Dataset name") {
+    assert("foo" == spark.emptyDataset[String].setName("foo").toString)
+    assert("foo" == spark.emptyDataset[String].setName("foo").name)
+    assert("foo" != spark.emptyDataset[String].setName("foo").setName(null).toString)
+  }
+
   test("checkAnswer should compare map correctly") {
     val data = Seq((1, "2", Map(1 -> 2, 2 -> 1)))
     checkAnswer(

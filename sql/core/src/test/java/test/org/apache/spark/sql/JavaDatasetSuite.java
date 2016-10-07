@@ -67,6 +67,14 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
+  public void testName() {
+    Assert.assertEquals("foo", spark.emptyDataset(Encoders.STRING()).setName("foo").toString());
+    Assert.assertEquals("foo", spark.emptyDataset(Encoders.STRING()).setName("foo").name());
+    Assert.assertNotEquals(
+        "foo", spark.emptyDataset(Encoders.STRING()).setName("foo").setName(null).toString());
+  }
+
+  @Test
   public void testCollect() {
     List<String> data = Arrays.asList("hello", "world");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
