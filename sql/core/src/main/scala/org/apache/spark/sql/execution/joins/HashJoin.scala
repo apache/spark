@@ -192,7 +192,7 @@ trait HashJoin {
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
     val joinKeys = streamSideKeyGenerator()
-    val result = new GenericMutableRow(Array[Any](null))
+    val result = new GenericInternalRow(Array[Any](null))
     val joinedRow = new JoinedRow
     streamIter.map { current =>
       val key = joinKeys(current)

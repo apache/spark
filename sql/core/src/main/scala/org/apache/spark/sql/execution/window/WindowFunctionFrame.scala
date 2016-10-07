@@ -56,7 +56,7 @@ private[window] abstract class WindowFunctionFrame {
  * @param offset by which rows get moved within a partition.
  */
 private[window] final class OffsetWindowFunctionFrame(
-    target: MutableRow,
+    target: InternalRow,
     ordinal: Int,
     expressions: Array[OffsetWindowFunction],
     inputSchema: Seq[Attribute],
@@ -136,7 +136,7 @@ private[window] final class OffsetWindowFunctionFrame(
  * @param ubound comparator used to identify the upper bound of an output row.
  */
 private[window] final class SlidingWindowFunctionFrame(
-    target: MutableRow,
+    target: InternalRow,
     processor: AggregateProcessor,
     lbound: BoundOrdering,
     ubound: BoundOrdering)
@@ -217,7 +217,7 @@ private[window] final class SlidingWindowFunctionFrame(
  * @param processor to calculate the row values with.
  */
 private[window] final class UnboundedWindowFunctionFrame(
-    target: MutableRow,
+    target: InternalRow,
     processor: AggregateProcessor)
   extends WindowFunctionFrame {
 
@@ -255,7 +255,7 @@ private[window] final class UnboundedWindowFunctionFrame(
  * @param ubound comparator used to identify the upper bound of an output row.
  */
 private[window] final class UnboundedPrecedingWindowFunctionFrame(
-    target: MutableRow,
+    target: InternalRow,
     processor: AggregateProcessor,
     ubound: BoundOrdering)
   extends WindowFunctionFrame {
@@ -317,7 +317,7 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
  * @param lbound comparator used to identify the lower bound of an output row.
  */
 private[window] final class UnboundedFollowingWindowFunctionFrame(
-    target: MutableRow,
+    target: InternalRow,
     processor: AggregateProcessor,
     lbound: BoundOrdering)
   extends WindowFunctionFrame {

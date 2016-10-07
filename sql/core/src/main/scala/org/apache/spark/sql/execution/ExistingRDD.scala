@@ -32,7 +32,7 @@ object RDDConversions {
   def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
     data.mapPartitions { iterator =>
       val numColumns = outputTypes.length
-      val mutableRow = new GenericMutableRow(numColumns)
+      val mutableRow = new GenericInternalRow(numColumns)
       val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
       iterator.map { r =>
         var i = 0
@@ -52,7 +52,7 @@ object RDDConversions {
   def rowToRowRdd(data: RDD[Row], outputTypes: Seq[DataType]): RDD[InternalRow] = {
     data.mapPartitions { iterator =>
       val numColumns = outputTypes.length
-      val mutableRow = new GenericMutableRow(numColumns)
+      val mutableRow = new GenericInternalRow(numColumns)
       val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
       iterator.map { r =>
         var i = 0

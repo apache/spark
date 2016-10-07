@@ -37,7 +37,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val fieldTypes: Array[DataType] = Array(LongType, LongType, IntegerType)
     val converter = UnsafeProjection.create(fieldTypes)
 
-    val row = new SpecificMutableRow(fieldTypes)
+    val row = new SpecificInternalRow(fieldTypes)
     row.setLong(0, 0)
     row.setLong(1, 1)
     row.setInt(2, 2)
@@ -75,7 +75,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val fieldTypes: Array[DataType] = Array(LongType, StringType, BinaryType)
     val converter = UnsafeProjection.create(fieldTypes)
 
-    val row = new SpecificMutableRow(fieldTypes)
+    val row = new SpecificInternalRow(fieldTypes)
     row.setLong(0, 0)
     row.update(1, UTF8String.fromString("Hello"))
     row.update(2, "World".getBytes(StandardCharsets.UTF_8))
@@ -94,7 +94,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val fieldTypes: Array[DataType] = Array(LongType, StringType, DateType, TimestampType)
     val converter = UnsafeProjection.create(fieldTypes)
 
-    val row = new SpecificMutableRow(fieldTypes)
+    val row = new SpecificInternalRow(fieldTypes)
     row.setLong(0, 0)
     row.update(1, UTF8String.fromString("Hello"))
     row.update(2, DateTimeUtils.fromJavaDate(Date.valueOf("1970-01-01")))
@@ -138,7 +138,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val converter = UnsafeProjection.create(fieldTypes)
 
     val rowWithAllNullColumns: InternalRow = {
-      val r = new SpecificMutableRow(fieldTypes)
+      val r = new SpecificInternalRow(fieldTypes)
       for (i <- fieldTypes.indices) {
         r.setNullAt(i)
       }
@@ -167,7 +167,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     // columns, then the serialized row representation should be identical to what we would get by
     // creating an entirely null row via the converter
     val rowWithNoNullColumns: InternalRow = {
-      val r = new SpecificMutableRow(fieldTypes)
+      val r = new SpecificInternalRow(fieldTypes)
       r.setNullAt(0)
       r.setBoolean(1, false)
       r.setByte(2, 20)
@@ -243,11 +243,11 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
   test("NaN canonicalization") {
     val fieldTypes: Array[DataType] = Array(FloatType, DoubleType)
 
-    val row1 = new SpecificMutableRow(fieldTypes)
+    val row1 = new SpecificInternalRow(fieldTypes)
     row1.setFloat(0, java.lang.Float.intBitsToFloat(0x7f800001))
     row1.setDouble(1, java.lang.Double.longBitsToDouble(0x7ff0000000000001L))
 
-    val row2 = new SpecificMutableRow(fieldTypes)
+    val row2 = new SpecificInternalRow(fieldTypes)
     row2.setFloat(0, java.lang.Float.intBitsToFloat(0x7fffffff))
     row2.setDouble(1, java.lang.Double.longBitsToDouble(0x7fffffffffffffffL))
 
@@ -263,7 +263,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
 
     val converter = UnsafeProjection.create(fieldTypes)
 
-    val row = new GenericMutableRow(fieldTypes.length)
+    val row = new GenericInternalRow(fieldTypes.length)
     row.update(0, InternalRow(1))
     row.update(1, InternalRow(InternalRow(2L)))
 
@@ -324,7 +324,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     )
     val converter = UnsafeProjection.create(fieldTypes)
 
-    val row = new GenericMutableRow(fieldTypes.length)
+    val row = new GenericInternalRow(fieldTypes.length)
     row.update(0, createArray(1, 2))
     row.update(1, createArray(createArray(3, 4)))
 
@@ -359,7 +359,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val innerMap = createMap(5, 6)(7, 8)
     val map2 = createMap(9)(innerMap)
 
-    val row = new GenericMutableRow(fieldTypes.length)
+    val row = new GenericInternalRow(fieldTypes.length)
     row.update(0, map1)
     row.update(1, map2)
 
@@ -400,7 +400,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     )
     val converter = UnsafeProjection.create(fieldTypes)
 
-    val row = new GenericMutableRow(fieldTypes.length)
+    val row = new GenericInternalRow(fieldTypes.length)
     row.update(0, InternalRow(createArray(1)))
     row.update(1, createArray(InternalRow(2L)))
 
@@ -439,7 +439,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     )
     val converter = UnsafeProjection.create(fieldTypes)
 
-    val row = new GenericMutableRow(fieldTypes.length)
+    val row = new GenericInternalRow(fieldTypes.length)
     row.update(0, InternalRow(createMap(1)(2)))
     row.update(1, createMap(3)(InternalRow(4L)))
 
@@ -485,7 +485,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     )
     val converter = UnsafeProjection.create(fieldTypes)
 
-    val row = new GenericMutableRow(fieldTypes.length)
+    val row = new GenericInternalRow(fieldTypes.length)
     row.update(0, createArray(createMap(1)(2)))
     row.update(1, createMap(3)(createArray(4)))
 

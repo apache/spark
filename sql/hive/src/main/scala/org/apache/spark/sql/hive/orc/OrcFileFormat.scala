@@ -281,7 +281,7 @@ private[orc] object OrcRelation extends HiveInspectors {
       maybeStructOI: Option[StructObjectInspector],
       iterator: Iterator[Writable]): Iterator[InternalRow] = {
     val deserializer = new OrcSerde
-    val mutableRow = new SpecificMutableRow(dataSchema.map(_.dataType))
+    val mutableRow = new SpecificInternalRow(dataSchema.map(_.dataType))
     val unsafeProjection = UnsafeProjection.create(dataSchema)
 
     def unwrap(oi: StructObjectInspector): Iterator[InternalRow] = {

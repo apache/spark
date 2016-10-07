@@ -105,7 +105,7 @@ class JacksonParser(
       }
       emptyRow
     } else {
-      val row = new GenericMutableRow(schema.length)
+      val row = new GenericInternalRow(schema.length)
       for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecord)) {
         require(schema(corruptIndex).dataType == StringType)
         row.update(corruptIndex, UTF8String.fromString(record))
@@ -363,7 +363,7 @@ class JacksonParser(
       parser: JsonParser,
       schema: StructType,
       fieldConverters: Seq[ValueConverter]): InternalRow = {
-    val row = new GenericMutableRow(schema.length)
+    val row = new GenericInternalRow(schema.length)
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>

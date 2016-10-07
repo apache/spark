@@ -158,33 +158,6 @@ trait BaseGenericInternalRow extends InternalRow {
 }
 
 /**
- * An extended interface to [[InternalRow]] that allows the values for each column to be updated.
- * Setting a value through a primitive function implicitly marks that column as not null.
- */
-abstract class MutableRow extends InternalRow {
-  def setNullAt(i: Int): Unit
-
-  def update(i: Int, value: Any): Unit
-
-  // default implementation (slow)
-  def setBoolean(i: Int, value: Boolean): Unit = { update(i, value) }
-  def setByte(i: Int, value: Byte): Unit = { update(i, value) }
-  def setShort(i: Int, value: Short): Unit = { update(i, value) }
-  def setInt(i: Int, value: Int): Unit = { update(i, value) }
-  def setLong(i: Int, value: Long): Unit = { update(i, value) }
-  def setFloat(i: Int, value: Float): Unit = { update(i, value) }
-  def setDouble(i: Int, value: Double): Unit = { update(i, value) }
-
-  /**
-   * Update the decimal column at `i`.
-   *
-   * Note: In order to support update decimal with precision > 18 in UnsafeRow,
-   * CAN NOT call setNullAt() for decimal column on UnsafeRow, call setDecimal(i, null, precision).
-   */
-  def setDecimal(i: Int, value: Decimal, precision: Int) { update(i, value) }
-}
-
-/**
  * A row implementation that uses an array of objects as the underlying storage.  Note that, while
  * the array is not copied, and thus could technically be mutated after creation, this is not
  * allowed.
@@ -230,24 +203,9 @@ class GenericInternalRow(val values: Array[Any]) extends BaseGenericInternalRow 
 
   override def numFields: Int = values.length
 
-  override def copy(): GenericInternalRow = this
-}
-
-class GenericMutableRow(values: Array[Any]) extends MutableRow with BaseGenericInternalRow {
-  /** No-arg constructor for serialization. */
-  protected def this() = this(null)
-
-  def this(size: Int) = this(new Array[Any](size))
-
-  override protected def genericGet(ordinal: Int) = values(ordinal)
-
-  override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = values
-
-  override def numFields: Int = values.length
-
   override def setNullAt(i: Int): Unit = { values(i) = null}
 
   override def update(i: Int, value: Any): Unit = { values(i) = value }
 
-  override def copy(): InternalRow = new GenericInternalRow(values.clone())
+  override def copy(): GenericInternalRow = this
 }
