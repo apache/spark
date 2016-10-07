@@ -88,8 +88,6 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
   }
 
 
-
-
   test("names unique across active queries, ids unique across all started queries") {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map { 6 / _}

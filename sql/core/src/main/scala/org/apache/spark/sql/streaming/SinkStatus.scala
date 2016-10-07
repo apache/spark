@@ -18,7 +18,6 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.streaming.Sink
 
 /**
  * :: Experimental ::
@@ -29,9 +28,21 @@ import org.apache.spark.sql.execution.streaming.Sink
  * @since 2.0.0
  */
 @Experimental
-case class SinkStatus private(
+class SinkStatus private(
     val description: String,
-    val offsetDesc: String)
+    val offsetDesc: String) {
+
+  override def toString: String =
+    "SinkStatus:\n" + prettyStrings.map("    " + _).mkString("\n")
+
+  private[sql] def prettyStrings: Array[String] = {
+    s"""Description: $description
+       |Committed offsets: $offsetDesc
+       |""".stripMargin.split("\n")
+  }
+}
 
 /** Companion object, primarily for creating SinkStatus instances internally */
-private[sql] object SinkStatus
+private[sql] object SinkStatus {
+  def apply(desc: String, offsetDesc: String): SinkStatus = new SinkStatus(desc, offsetDesc)
+}

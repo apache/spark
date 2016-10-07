@@ -659,7 +659,7 @@ class StreamExecution(
     val sourceStatuses = sources.map { s =>
       SourceStatus(
         s.toString,
-        localAvailableOffsets.get(s).map(_.toString),
+        localAvailableOffsets.get(s).map(_.toString).getOrElse("-"),
         streamMetrics.currentSourceInputRate(s),
         streamMetrics.currentSourceProcessingRate(s),
         streamMetrics.currentSourceTriggerStatus(s))

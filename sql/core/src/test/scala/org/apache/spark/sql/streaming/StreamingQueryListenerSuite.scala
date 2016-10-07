@@ -195,7 +195,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("QueryStarted serialization") {
-    val queryStarted = new StreamingQueryListener.QueryStarted(testQueryInfo)
+    val queryStarted = new StreamingQueryListener.QueryStarted(testQueryStatus)
     val json = JsonProtocol.sparkEventToJson(queryStarted)
     val newQueryStarted = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryStarted]
@@ -203,7 +203,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("QueryProgress serialization") {
-    val queryProcess = new StreamingQueryListener.QueryProgress(testQueryInfo)
+    val queryProcess = new StreamingQueryListener.QueryProgress(testQueryStatus)
     val json = JsonProtocol.sparkEventToJson(queryProcess)
     val newQueryProcess = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryProgress]
@@ -213,7 +213,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("QueryTerminated serialization") {
     val exception = new RuntimeException("exception")
     val queryQueryTerminated = new StreamingQueryListener.QueryTerminated(
-    testQueryInfo,
+    testQueryStatus,
       Some(exception.getMessage))
     val json =
       JsonProtocol.sparkEventToJson(queryQueryTerminated)
@@ -263,13 +263,13 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     listenerBus.listeners.toArray.map(_.asInstanceOf[StreamingQueryListener])
   }
 
-  private val testQueryInfo: StreamingQueryStatus = {
+  private val testQueryStatus: StreamingQueryStatus = {
     StreamingQueryStatus(
       "name", 1, 123, 1.0, 2.0, Some(345),
       Array(
-        SourceStatus("source1", Some(LongOffset(0).toString), 0.0, 0.0, Map("a" -> "b").asJava)),
+        SourceStatus("source1", LongOffset(0).toString, 0.0, 0.0, Map("a" -> "b"))),
       SinkStatus("sink", CompositeOffset(None :: None :: Nil).toString),
-      Map("a" -> "b").asJava)
+      Map("a" -> "b"))
   }
 }
 

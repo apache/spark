@@ -170,6 +170,8 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
       logDebug(s"Skipping already committed batch: $batchId")
     }
   }
+
+  override def toString(): String = "MemorySink"
 }
 
 /**

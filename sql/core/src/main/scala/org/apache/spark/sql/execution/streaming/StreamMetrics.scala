@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming
 import java.{util => ju}
 
 import scala.collection.mutable
-import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
@@ -177,10 +176,10 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
 
   def currentLatency(): Option[Double] = synchronized { latency }
 
-  def currentTriggerStatus(): ju.Map[String, String] = synchronized { triggerStatus.toMap.asJava }
+  def currentTriggerStatus(): Map[String, String] = synchronized { triggerStatus.toMap }
 
-  def currentSourceTriggerStatus(source: Source): ju.Map[String, String] = synchronized {
-    sourceTriggerStatus(source).toMap.asJava
+  def currentSourceTriggerStatus(source: Source): Map[String, String] = synchronized {
+    sourceTriggerStatus(source).toMap
   }
 
   // =========== Other methods ===========

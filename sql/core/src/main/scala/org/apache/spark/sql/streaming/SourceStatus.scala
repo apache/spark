@@ -19,8 +19,9 @@ package org.apache.spark.sql.streaming
 
 import java.{util => ju}
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.streaming.Source
 
 /**
  * :: Experimental ::
@@ -35,12 +36,36 @@ import org.apache.spark.sql.execution.streaming.Source
  * @since 2.0.0
  */
 @Experimental
-case class SourceStatus private(
+class SourceStatus private(
     val description: String,
-    val offsetDesc: Option[String],
+    val offsetDesc: String,
     val inputRate: Double,
     val processingRate: Double,
-    val triggerStatus: ju.Map[String, String])
+    val triggerStatus: ju.Map[String, String]) {
+
+  override def toString: String =
+    "SourceStatus:\n" + prettyStrings.map("    " + _).mkString("\n")
+
+  private[sql] def prettyStrings: Array[String] = {
+    val triggerStatusStrings = triggerStatus.asScala.map { case (k, v) => s"    $k: $v" }
+    s"""Description: $description
+       |Available offset: $offsetDesc
+       |Input rate: $inputRate rows/sec
+       |Processing rate: $processingRate rows/sec
+       |Trigger status:
+       |""".stripMargin.split("\n") ++ triggerStatusStrings
+
+  }
+}
 
 /** Companion object, primarily for creating SourceStatus instances internally */
-private[sql] object SourceStatus
+private[sql] object SourceStatus {
+  def apply(
+      desc: String,
+      offsetDesc: String,
+      inputRate: Double,
+      processingRate: Double,
+      triggerStatus: Map[String, String]): SourceStatus = {
+    new SourceStatus(desc, offsetDesc, inputRate, processingRate, triggerStatus.asJava)
+  }
+}

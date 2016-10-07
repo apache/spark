@@ -19,6 +19,8 @@ package org.apache.spark.sql.streaming
 
 import java.{util => ju}
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
 
 /**
@@ -40,7 +42,7 @@ import org.apache.spark.annotation.Experimental
  * @since 2.0.0
  */
 @Experimental
-case class StreamingQueryStatus private(
+class StreamingQueryStatus private(
   val name: String,
   val id: Long,
   val timestamp: Long,
@@ -49,8 +51,51 @@ case class StreamingQueryStatus private(
   val latency: Option[Double],
   val sourceStatuses: Array[SourceStatus],
   val sinkStatus: SinkStatus,
-  val triggerStatus: ju.Map[String, String]
-)
+  val triggerStatus: ju.Map[String, String]) {
+
+  override def toString: String = {
+    val indent = "    "
+
+    val sourceStatusStrings =
+      sourceStatuses.zipWithIndex.flatMap { case (s, i) =>
+        Seq(s"Source $i:") ++ s.prettyStrings.map(indent + _)
+      }.map(s"|$indent" + _).mkString("\n")
+    val sinkStatusString =
+      sinkStatus.prettyStrings.map(s"|$indent" + _).mkString("\n")
+    val triggerStatusString =
+      triggerStatus.asScala.map { case (k, v) => s"|$indent$k: $v" }.mkString("\n")
+
+    val allString = s"""
+        |Name: $name
+        |Id: $id
+        |Timestamp: $timestamp
+        |Input rate: $inputRate rows/sec
+        |Processing rate $processingRate rows/sec
+        |Latency: ${latency.getOrElse("-")} ms
+        |Trigger status:
+        $triggerStatusString
+        |Source statuses:
+        $sourceStatusStrings
+        |Sink status:
+        $sinkStatusString""".stripMargin.split("\n").map(indent + _).mkString("\n")
+
+    s"StreamingQueryStatus:$allString"
+  }
+}
 
 /** Companion object, primarily for creating StreamingQueryInfo instances internally */
-private[sql] object StreamingQueryStatus
+private[sql] object StreamingQueryStatus {
+  def apply(
+      name: String,
+      id: Long,
+      timestamp: Long,
+      inputRate: Double,
+      processingRate: Double,
+      latency: Option[Double],
+      sourceStatuses: Array[SourceStatus],
+      sinkStatus: SinkStatus,
+      triggerStatus: Map[String, String]): StreamingQueryStatus = {
+    new StreamingQueryStatus(name, id, timestamp, inputRate, processingRate,
+      latency, sourceStatuses, sinkStatus, triggerStatus.asJava)
+  }
+}
