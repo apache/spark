@@ -23,10 +23,13 @@ import io.fabric8.kubernetes.api.model.extensions.JobBuilder
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient}
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.cluster._
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
+
+import scala.collection.mutable
+import scala.util.Random
 
 private[spark] class KubernetesClusterSchedulerBackend(
                                                   scheduler: TaskSchedulerImpl,
@@ -35,46 +38,37 @@ private[spark] class KubernetesClusterSchedulerBackend(
   val config = new ConfigBuilder().withMasterUrl("https://kubernetes").build
   val client = new DefaultKubernetesClient(config)
   val DEFAULT_NUMBER_EXECUTORS = 2
-  var NO_EXECUTORS = false
+  val sparkExecutorName = s"spark-executor-${Random.alphanumeric take 5 mkString("")}".toLowerCase()
+  var executorPods = mutable.ArrayBuffer[String]()
+
+  // This is the URL of the spark distro.
+  val sparkDistUri = sc.conf.getenv("spark.kubernetes.distribution.uri")
+  val sparkDriverImage = sc.conf.getenv("spark.kubernetes.driver.image")
+  val clientJarUri = sc.conf.getenv("spark.executor.jar")
+  val ns = sc.conf.getenv("spark.kubernetes.namespace")
 
   override def start() {
-    logWarning("Starting scheduler backendaa2")
     super.start()
     var i = 0
-
-
-    logWarning("###->initialexecutors=" + getInitialTargetExecutorNumber(sc.conf).toString())
     for(i <- 1 to getInitialTargetExecutorNumber(sc.conf)){
-      createExecutorPod(i)
+      executorPods += createExecutorPod(i)
     }
     None
   }
 
   override def stop(): Unit = {
+    for (i <- 0 to executorPods.length) {
+      client.pods().inNamespace(ns).withName(executorPods(i)).delete()
+    }
     super.stop()
-    client.pods().inNamespace("default").withName("spark-driver").delete()
-    client
-      .services()
-      .inNamespace("default")
-      .withName("spark-driver-svc")
-      .delete()
-    scheduler.stop()
   }
 
   // Dynamic allocation interfaces
   override def doRequestTotalExecutors(requestedTotal: Int): scala.concurrent.Future[Boolean] = {
-    logWarning("###->doRequestTotalExecutors" + requestedTotal.toString())
-
-    // time to create it.
-    if (!NO_EXECUTORS) {
-      NO_EXECUTORS = true
-      createExecutorPod(requestedTotal)
-    }
     return super.doRequestTotalExecutors(requestedTotal)
   }
 
   override def doKillExecutors(executorIds: Seq[String]): scala.concurrent.Future[Boolean] = {
-    logWarning("###->doKillExecutors" + executorIds.toString())
     return super.doKillExecutors(executorIds)
   }
 
@@ -98,19 +92,18 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .get("SPARK_EXECUTOR_INSTANCES")
           .map(_.toInt)
           .getOrElse(numExecutors)
-      // System property can override environment variable.
       conf.get(EXECUTOR_INSTANCES).getOrElse(targetNumExecutors)
     }
   }
 
-  def createExecutorPod(executorNum: Int): Unit = {
+  def createExecutorPod(executorNum: Int): String = {
     // create a single k8s executor pod.
     var annotationMap = Map(
       "pod.beta.kubernetes.io/init-containers" -> raw"""[
                 {
                     "name": "client-fetch",
                     "image": "busybox",
-                    "command": ["wget", "-O", "/work-dir/client.jar", "http://storage.googleapis.com/foxish-spark-distro/original-spark-examples_2.11-2.1.0-SNAPSHOT.jar"],
+                    "command": ["wget", "-O", "/work-dir/client.jar", "$clientJarUri"],
                     "volumeMounts": [
                         {
                             "name": "workdir",
@@ -121,7 +114,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
                 {
                     "name": "distro-fetch",
                     "image": "busybox",
-                    "command": ["wget", "-O", "/work-dir/spark.tgz", "http://storage.googleapis.com/foxish-spark-distro/spark.tgz"],
+                    "command": ["wget", "-O", "/work-dir/spark.tgz", "$sparkDistUri"],
                     "volumeMounts": [
                         {
                             "name": "workdir",
@@ -131,7 +124,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
                 },
                 {
                     "name": "setup",
-                    "image": "foxish/k8s-spark-driver:latest",
+                    "image": "$sparkDriverImage",
                     "command": ["./install.sh"],
                     "volumeMounts": [
                         {
@@ -147,23 +140,25 @@ private[spark] class KubernetesClusterSchedulerBackend(
             ]""")
 
 
-    val labelMap = Map("name" -> "spark-executor")
+    val labelMap = Map("type" -> "spark-executor")
+    val podName = s"$sparkExecutorName-$executorNum"
     var pod = new PodBuilder()
       .withNewMetadata()
       .withLabels(labelMap.asJava)
-      .withName(s"spark-executor-$executorNum")
+      .withName(podName)
       .withAnnotations(annotationMap.asJava)
       .endMetadata()
       .withNewSpec()
       .withRestartPolicy("OnFailure")
-      .addNewContainer().withName("spark-executor").withImage("foxish/k8s-spark-executor:latest")
+      .addNewContainer().withName("spark-executor").withImage(sparkDriverImage)
       .withImagePullPolicy("Always")
       .withCommand("/opt/spark/bin/spark-class")
       .withArgs("org.apache.spark.executor.CoarseGrainedExecutorBackend",
         "--driver-url", s"$driverURL",
-        "--executor-id", s"$executorNum", "--hostname", "localhost", "--cores", "1",
+        "--executor-id", s"$executorNum",
+        "--hostname", "localhost",
+        "--cores", "1",
         "--app-id", "1")
-      .addNewPort().withContainerPort(80).endPort()
       .withVolumeMounts()
       .addNewVolumeMount()
       .withName("workdir")
@@ -186,8 +181,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
       .endEmptyDir()
       .endVolume()
       .endSpec().build()
-    client.pods().inNamespace("default").withName(s"spark-executor-$executorNum").create(pod)
-    logWarning("## BUILDING POD FROM WITHIN ##")
+    client.pods().inNamespace(ns).withName(podName).create(pod)
+    return podName
   }
 
 

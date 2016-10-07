@@ -43,7 +43,6 @@ private[spark] class Client(val args: ClientArguments,
   def stop(): Unit = {
     scheduler.stop()
     shutdownLatch.countDown()
-
     System.clearProperty("SPARK_KUBERNETES_MODE")
   }
 
@@ -60,9 +59,9 @@ private object Client extends Logging {
     val client = new Client(args, sparkConf)
     client.start()
 
-    logDebug("Adding shutdown hook") // force eager creation of logger
+    logDebug("Adding shutdown hook")
     ShutdownHookManager.addShutdownHook { () =>
-      logInfo("Shutdown hook is shutting down dispatcher")
+      logInfo("Shutdown hook is shutting down client")
       client.stop()
       client.awaitShutdown()
     }

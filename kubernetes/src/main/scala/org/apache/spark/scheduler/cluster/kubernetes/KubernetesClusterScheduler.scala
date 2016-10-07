@@ -17,9 +17,14 @@
 
 package org.apache.spark.scheduler.cluster.kubernetes
 
-import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient}
+import java.io.File
+import java.util.Date
+import java.util.concurrent.atomic.AtomicLong
+
+import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
 import io.fabric8.kubernetes.api.model.{PodBuilder, ServiceBuilder}
 import io.fabric8.kubernetes.client.dsl.LogWatch
+import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.kubernetes.ClientArguments
 import org.apache.spark.{io, _}
 import org.apache.spark.internal.Logging
@@ -28,34 +33,71 @@ import org.apache.spark.internal.config._
 import collection.JavaConverters._
 import org.apache.spark.util.Utils
 
+import scala.util.Random
+
 /**
   * This is a simple extension to ClusterScheduler
   * */
 private[spark] class KubernetesClusterScheduler(conf: SparkConf)
     extends Logging {
-  logWarning("Created KubernetesClusterScheduler")
+  private val DEFAULT_SUPERVISE = false
+  private val DEFAULT_MEMORY = Utils.DEFAULT_DRIVER_MEM_MB // mb
+  private val DEFAULT_CORES = 1.0
 
-  val kubernetesHost = new java.net.URI(conf.get("spark.master"))
-  var config =
-    new ConfigBuilder().withMasterUrl(kubernetesHost.getHost()).build
-  var client = new DefaultKubernetesClient(config)
-  var myNs = client.namespaces().list()
+  logInfo("Created KubernetesClusterScheduler instance")
+  var client = setupKubernetesClient()
+  val driverName = s"spark-driver-${Random.alphanumeric take 5 mkString("")}".toLowerCase()
+  val svcName = s"spark-svc-${Random.alphanumeric take 5 mkString("")}".toLowerCase()
 
   def start(args: ClientArguments): Unit = {
     startDriver(client, args)
-    logWarning(myNs.toString())
   }
 
-  def stop(): Unit = {}
+  def stop(): Unit = {
+    client.pods().inNamespace(getNamespace()).withName(driverName).delete()
+    client
+      .services()
+      .inNamespace(getNamespace())
+      .withName(svcName)
+      .delete()
+  }
 
-  def startDriver(client: DefaultKubernetesClient,
+  def startDriver(client: KubernetesClient,
                   args: ClientArguments): Unit = {
-    println("###DRIVERSTART->" + args.userJar)
+    logInfo("Starting spark driver on kubernetes cluster")
+    val driverDescription = buildDriverDescription(args)
+
+    // This is the URL of the spark distro.
+    val sparkDistUri = Option(System.getenv("SPARK_DISTRO_URI")).getOrElse {
+      throw new SparkException("Spark distribution not set, please set the SPARK_DISTRO_URI environment variable to " +
+        "a runnable spark archive.")
+    }
+
+    // This is the URL of the driver pod's image.
+    // Any image may be supplied as long as it contains a
+    // ./install.sh file which is executable and sets up the
+    // spark environment in /opt/spark.
+    val sparkDriverImage = Option(System.getenv("SPARK_DRIVER_IMG")).getOrElse {
+      throw new SparkException("Spark driver image not set, please set the SPARK_DRIVER_IMG environment variable to " +
+        "a spark driver image.")
+    }
+
+    // This is the URL of the client jar.
+    val clientJarUri = args.userJar
+    conf.setExecutorEnv("spark.executor.jar", clientJarUri)
+    conf.setExecutorEnv("spark.kubernetes.namespace", getNamespace())
+    conf.setExecutorEnv("spark.kubernetes.driver.image", sparkDriverImage)
+    conf.setExecutorEnv("spark.kubernetes.distribution.uri", sparkDistUri)
+
+    // This is the kubernetes master we're launching on.
+    val kubernetesHost = "k8s://" + client.getMasterUrl().getHost()
+    logInfo("Using as kubernetes-master: " + kubernetesHost.toString())
+
     var annotationMap = Map("pod.beta.kubernetes.io/init-containers" -> raw"""[
                 {
                     "name": "client-fetch",
                     "image": "busybox",
-                    "command": ["wget", "-O", "/work-dir/client.jar", "http://storage.googleapis.com/foxish-spark-distro/original-spark-examples_2.11-2.1.0-SNAPSHOT.jar"],
+                    "command": ["wget", "-O", "/work-dir/client.jar", "$clientJarUri"],
                     "volumeMounts": [
                         {
                             "name": "workdir",
@@ -66,7 +108,7 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
                 {
                     "name": "distro-fetch",
                     "image": "busybox",
-                    "command": ["wget", "-O", "/work-dir/spark.tgz", "http://storage.googleapis.com/foxish-spark-distro/spark.tgz"],
+                    "command": ["wget", "-O", "/work-dir/spark.tgz", "$sparkDistUri"],
                     "volumeMounts": [
                         {
                             "name": "workdir",
@@ -76,7 +118,7 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
                 },
                 {
                     "name": "setup",
-                    "image": "foxish/k8s-spark-driver:latest",
+                    "image": "$sparkDriverImage",
                     "command": ["./install.sh"],
                     "volumeMounts": [
                         {
@@ -91,29 +133,27 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
                 }
             ]""")
 
-    val labelMap = Map("name" -> "spark-driver")
+
+    val labelMap = Map("type" -> "spark-driver")
     val pod = new PodBuilder()
       .withNewMetadata()
       .withLabels(labelMap.asJava)
-      .withName("spark-driver")
+      .withName(driverName)
       .withAnnotations(annotationMap.asJava)
       .endMetadata()
       .withNewSpec()
       .withRestartPolicy("OnFailure")
       .addNewContainer()
       .withName("spark-driver")
-      .withImage("foxish/k8s-spark-driver:latest")
+      .withImage(sparkDriverImage)
       .withImagePullPolicy("Always")
       .withCommand("/opt/spark/bin/spark-submit")
-      .withArgs("--class=org.apache.spark.examples.SparkPi",
+      .withArgs(s"--class=${args.userClass}",
                 s"--master=$kubernetesHost",
-                "--executor-memory=2G",
-                "--num-executors=8",
+                s"--executor-memory=${driverDescription.mem}",
+                s"--num-executors=${driverDescription.cores}",
                 "/work-dir/client.jar",
-                "10000")
-      .addNewPort()
-      .withContainerPort(80)
-      .endPort()
+                args.userArgs.mkString(" "))
       .withVolumeMounts()
       .addNewVolumeMount()
       .withName("workdir")
@@ -137,13 +177,12 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
       .endVolume()
       .endSpec()
       .build()
-
-    client.pods().inNamespace("default").withName("spark-driver").create(pod)
+    client.pods().inNamespace(getNamespace()).withName(driverName).create(pod)
 
     var svc = new ServiceBuilder()
       .withNewMetadata()
       .withLabels(labelMap.asJava)
-      .withName("spark-driver-svc")
+      .withName(svcName)
       .endMetadata()
       .withNewSpec()
       .addNewPort()
@@ -159,8 +198,8 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
 
     client
       .services()
-      .inNamespace("default")
-      .withName("spark-driver-svc")
+      .inNamespace(getNamespace())
+      .withName(svcName)
       .create(svc)
 
 //    try {
@@ -178,23 +217,59 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
 //    }
   }
 
+  def setupKubernetesClient(): KubernetesClient = {
+      val sparkMaster = new java.net.URI(conf.get("spark.master"))
+      if (sparkMaster.getHost() == "default") {
+        return new DefaultKubernetesClient()
+      } else {
+        var config = new ConfigBuilder().withMasterUrl(sparkMaster.getHost()).build
+        var client = new DefaultKubernetesClient(config)
+        return client
+      }
+  }
+
   def getNamespace(): String = {
-    return "default"
+    var kubernetesNamespace = System.getenv("K8S_NAMESPACE")
+    if (kubernetesNamespace == null) {
+      kubernetesNamespace = "default"
+    }
+    return kubernetesNamespace
   }
 
-  def generateJobName(): String = {
-    // let the job name be a sha random alphanumeric string
-    // + the timestamp.
-    return ""
-  }
+  private def buildDriverDescription(args: ClientArguments): KubernetesDriverDescription = {
+    // Required fields, including the main class because python is not yet supported
+    val appResource = Option(args.userJar).getOrElse {
+      throw new SparkException("Application jar is missing.")
+    }
+    val mainClass = Option(args.userClass).getOrElse {
+      throw new SparkException("Main class is missing.")
+    }
 
-  def generateDriverName(): String = {
-    // TODO: Fill
-    return ""
-  }
+    // Optional fields
+    val driverExtraJavaOptions = conf.getOption("spark.driver.extraJavaOptions")
+    val driverExtraClassPath = conf.getOption("spark.driver.extraClassPath")
+    val driverExtraLibraryPath = conf.getOption("spark.driver.extraLibraryPath")
+    val superviseDriver = conf.getOption("spark.driver.supervise")
+    val driverMemory = conf.getOption("spark.driver.memory")
+    val driverCores = conf.getOption("spark.driver.cores")
+    val name = conf.getOption("spark.app.name").getOrElse("default")
+    val appArgs = args.userArgs
 
-  def generateSvcName(): String = {
-    // TODO: Fill
-    return ""
+    // Construct driver description
+    val extraClassPath = driverExtraClassPath.toSeq.flatMap(_.split(File.pathSeparator))
+    val extraLibraryPath = driverExtraLibraryPath.toSeq.flatMap(_.split(File.pathSeparator))
+    val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
+    val sparkJavaOpts = Utils.sparkJavaOpts(conf)
+    val javaOpts = sparkJavaOpts ++ extraJavaOpts
+    val command = new Command(
+      mainClass, appArgs, null, extraClassPath, extraLibraryPath, javaOpts)
+    val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
+    val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
+    val actualDriverCores = driverCores.map(_.toDouble).getOrElse(DEFAULT_CORES)
+    val submitDate = new Date()
+
+    new KubernetesDriverDescription(
+      name, appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver,
+      command, submitDate)
   }
 }

@@ -29,8 +29,6 @@ private[spark] class KubernetesDriverDescription(
     val cores: Double,
     val supervise: Boolean,
     val command: Command,
-    schedulerProperties: Map[String, String],
-    val submissionId: String,
     val submissionDate: Date)
     extends Serializable {
   val conf = new SparkConf(false)
