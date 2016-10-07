@@ -34,6 +34,7 @@ import org.apache.spark.util.Utils
 private[ui] class StageTableBase(
     request: HttpServletRequest,
     stages: Seq[StageInfo],
+    tableHeaderID: String,
     stageTag: String,
     basePath: String,
     subPath: String,
@@ -77,6 +78,7 @@ private[ui] class StageTableBase(
   val toNodeSeq = try {
     new StagePagedTable(
       stages,
+      tableHeaderID,
       stageTag,
       basePath,
       subPath,
@@ -131,6 +133,7 @@ private[ui] class MissingStageTableRowData(
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StagePagedTable(
     stages: Seq[StageInfo],
+    tableHeaderId: String,
     stageTag: String,
     basePath: String,
     subPath: String,
@@ -173,12 +176,13 @@ private[ui] class StagePagedTable(
       s"&$pageNumberFormField=$page" +
       s"&$stageTag.sort=$encodedSortColumn" +
       s"&$stageTag.desc=$desc" +
-      s"&$pageSizeFormField=$pageSize"
+      s"&$pageSizeFormField=$pageSize" +
+      s"#$tableHeaderId"
   }
 
   override def goButtonFormPath: String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    s"$parameterPath&$stageTag.sort=$encodedSortColumn&$stageTag.desc=$desc"
+    s"$parameterPath&$stageTag.sort=$encodedSortColumn&$stageTag.desc=$desc#$tableHeaderId"
   }
 
   override def headers: Seq[Node] = {
@@ -226,7 +230,8 @@ private[ui] class StagePagedTable(
             parameterPath +
               s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
               s"&$stageTag.desc=${!desc}" +
-              s"&$stageTag.pageSize=$pageSize")
+              s"&$stageTag.pageSize=$pageSize") +
+              s"#$tableHeaderId"
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
 
           <th>
@@ -241,7 +246,8 @@ private[ui] class StagePagedTable(
             val headerLink = Unparsed(
               parameterPath +
                 s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
-                s"&$stageTag.pageSize=$pageSize")
+                s"&$stageTag.pageSize=$pageSize") +
+                s"#$tableHeaderId"
 
             <th>
               <a href={headerLink}>
