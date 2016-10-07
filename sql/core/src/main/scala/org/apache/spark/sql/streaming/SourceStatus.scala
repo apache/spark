@@ -22,6 +22,7 @@ import java.{util => ju}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.streaming.StreamingQueryStatus.indent
 
 /**
  * :: Experimental ::
@@ -44,16 +45,17 @@ class SourceStatus private(
     val triggerStatus: ju.Map[String, String]) {
 
   override def toString: String =
-    "SourceStatus:\n" + prettyStrings.map("    " + _).mkString("\n")
+    "SourceStatus:" + indent(prettyString)
 
-  private[sql] def prettyStrings: Array[String] = {
-    val triggerStatusStrings = triggerStatus.asScala.map { case (k, v) => s"    $k: $v" }
-    s"""Description: $description
+  private[sql] def prettyString: String = {
+    val triggerStatusStrings =
+      triggerStatus.asScala.map { case (k, v) => s"$k: $v" }
+    s"""$description
        |Available offset: $offsetDesc
        |Input rate: $inputRate rows/sec
        |Processing rate: $processingRate rows/sec
        |Trigger status:
-       |""".stripMargin.split("\n") ++ triggerStatusStrings
+       |""".stripMargin + indent(triggerStatusStrings)
 
   }
 }

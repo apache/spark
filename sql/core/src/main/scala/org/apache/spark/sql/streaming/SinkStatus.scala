@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.streaming.StreamingQueryStatus.indent
 
 /**
  * :: Experimental ::
@@ -33,12 +34,12 @@ class SinkStatus private(
     val offsetDesc: String) {
 
   override def toString: String =
-    "SinkStatus:\n" + prettyStrings.map("    " + _).mkString("\n")
+    "SinkStatus:" + indent(prettyString)
 
-  private[sql] def prettyStrings: Array[String] = {
-    s"""Description: $description
+  private[sql] def prettyString: String = {
+    s"""$description
        |Committed offsets: $offsetDesc
-       |""".stripMargin.split("\n")
+       |""".stripMargin
   }
 }
 

@@ -53,33 +53,31 @@ class StreamingQueryStatus private(
   val sinkStatus: SinkStatus,
   val triggerStatus: ju.Map[String, String]) {
 
+  import StreamingQueryStatus._
+
   override def toString: String = {
-    val indent = "    "
+    val sourceStatusLines = sourceStatuses.zipWithIndex.map { case (s, i) =>
+      s"Source ${i + 1}:" + indent(s.prettyString)
+    }
+    val sinkStatusLines = sinkStatus.prettyString
+    val triggerStatusLines = triggerStatus.asScala.map { case (k, v) => s"$k: $v" }.toSeq.sorted
+    val numSources = sourceStatuses.length
+    val numSourcesString = s"$numSources source" + { if (numSources > 1) "s" else "" }
 
-    val sourceStatusStrings =
-      sourceStatuses.zipWithIndex.flatMap { case (s, i) =>
-        Seq(s"Source $i:") ++ s.prettyStrings.map(indent + _)
-      }.map(s"|$indent" + _).mkString("\n")
-    val sinkStatusString =
-      sinkStatus.prettyStrings.map(s"|$indent" + _).mkString("\n")
-    val triggerStatusString =
-      triggerStatus.asScala.map { case (k, v) => s"|$indent$k: $v" }.mkString("\n")
-
-    val allString = s"""
-        |Name: $name
-        |Id: $id
-        |Timestamp: $timestamp
+    val allLines = s"""
+        |Query name: $name
+        |Query id: $id
+        |Status timestamp: $timestamp
         |Input rate: $inputRate rows/sec
         |Processing rate $processingRate rows/sec
         |Latency: ${latency.getOrElse("-")} ms
         |Trigger status:
-        $triggerStatusString
-        |Source statuses:
-        $sourceStatusStrings
-        |Sink status:
-        $sinkStatusString""".stripMargin.split("\n").map(indent + _).mkString("\n")
+        |${indent(triggerStatusLines)}
+        |Source statuses [$numSourcesString]:
+        |${indent(sourceStatusLines)}
+        |Sink status: ${indent(sinkStatusLines)}""".stripMargin
 
-    s"StreamingQueryStatus:$allString"
+    s"StreamingQueryStatus:${indent(allLines)}"
   }
 }
 
@@ -98,4 +96,7 @@ private[sql] object StreamingQueryStatus {
     new StreamingQueryStatus(name, id, timestamp, inputRate, processingRate,
       latency, sourceStatuses, sinkStatus, triggerStatus.asJava)
   }
+
+  def indent(strings: Iterable[String]): String = strings.map(indent).mkString("\n")
+  def indent(string: String): String = string.split("\n").map("    " + _).mkString("\n")
 }
