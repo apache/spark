@@ -1582,6 +1582,14 @@ Apart from these, the following properties are also available, and may be useful
         </td>
     </tr>
     <tr>
+        <td><code>spark.ssl.keyStoreBase64</code></td>
+        <td>None</td>
+        <td>
+            A base64 encoded key-store file. If this property is defined, spark.ssl.keyStore
+            is ignored.
+        </td>
+    </tr>
+    <tr>
         <td><code>spark.ssl.keyStorePassword</code></td>
         <td>None</td>
         <td>
@@ -1620,6 +1628,14 @@ Apart from these, the following properties are also available, and may be useful
         </td>
     </tr>
     <tr>
+        <td><code>spark.ssl.trustStoreBase64</code></td>
+        <td>None</td>
+        <td>
+            A base64 encoded trust-store file. If this property is defined, spark.ssl.trustStore
+            is ignored.
+        </td>
+    </tr>
+    <tr>
         <td><code>spark.ssl.trustStorePassword</code></td>
         <td>None</td>
         <td>
@@ -1631,6 +1647,15 @@ Apart from these, the following properties are also available, and may be useful
         <td>JKS</td>
         <td>
             The type of the trust-store.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.noCertVerification</code></td>
+        <td>None</td>
+        <td>
+            If set to <code>true</code>, spark-submit will not verify certificates when submitting
+            jobs to a cluster using the REST server, e.g. in cluster mode with the dispatcher in
+            Mesos.
         </td>
     </tr>
 </table>

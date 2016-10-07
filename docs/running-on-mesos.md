@@ -159,8 +159,9 @@ The `MesosClusterDispatcher` also supports writing recovery state into Zookeeper
 For more information about these configurations please refer to the configurations (doc)[configurations.html#deploy].
 
 From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master URL
-to the URL of the `MesosClusterDispatcher` (e.g: mesos://dispatcher:7077). You can view driver statuses on the
-Spark cluster Web UI.
+to the URL of the `MesosClusterDispatcher` (e.g: mesos://dispatcher:7077 or mesos-ssl://dispatcher:7077). You can view driver statuses on the
+Spark cluster Web UI. Use `mesos-ssl://` if the dispatcher is configured with `spark.ssl.enabled=true`.
+
 
 For example:
 {% highlight bash %}

@@ -258,6 +258,11 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
 
   // SSL configuration for the file server. This is used by Utils.setupSecureURLConnection().
   val fileServerSSLOptions = getSSLOptions("fs")
+
+  // SSL configuration for the REST submission server. This is used to setup the Jetty instance.
+  val submissionServerSSLOptions =
+    SSLOptions.parse(sparkConf, "spark.ssl.submission", Some(defaultSSLOptions))
+
   val (sslSocketFactory, hostnameVerifier) = if (fileServerSSLOptions.enabled) {
     val trustStoreManagers =
       for (trustStore <- fileServerSSLOptions.trustStore) yield {
