@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
@@ -36,6 +37,7 @@ import org.apache.spark.sql.types.DataType
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends Logging {
 
   protected[sql] def registerPython(name: String, udf: UserDefinedPythonFunction): Unit = {

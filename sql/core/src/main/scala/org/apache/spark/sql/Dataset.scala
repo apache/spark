@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
@@ -149,9 +149,10 @@ private[sql] object Dataset {
  *
  * @since 1.6.0
  */
+@InterfaceStability.Stable
 class Dataset[T] private[sql](
     @transient val sparkSession: SparkSession,
-    @DeveloperApi @transient val queryExecution: QueryExecution,
+    @DeveloperApi @InterfaceStability.Unstable @transient val queryExecution: QueryExecution,
     encoder: Encoder[T])
   extends Serializable {
 
@@ -369,6 +370,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def as[U : Encoder]: Dataset[U] = Dataset[U](sparkSession, logicalPlan)
 
   /**
@@ -477,6 +479,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def isStreaming: Boolean = logicalPlan.isStreaming
 
   /**
@@ -798,6 +801,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
     // etc.
@@ -869,6 +873,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
     joinWith(other, condition, "inner")
   }
@@ -1071,6 +1076,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
     implicit val encoder = c1.encoder
     val project = Project(c1.withInputType(exprEnc, logicalPlan.output).named :: Nil,
@@ -1105,6 +1111,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def select[U1, U2](c1: TypedColumn[T, U1], c2: TypedColumn[T, U2]): Dataset[(U1, U2)] =
     selectUntyped(c1, c2).asInstanceOf[Dataset[(U1, U2)]]
 
@@ -1116,6 +1123,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def select[U1, U2, U3](
       c1: TypedColumn[T, U1],
       c2: TypedColumn[T, U2],
@@ -1130,6 +1138,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def select[U1, U2, U3, U4](
       c1: TypedColumn[T, U1],
       c2: TypedColumn[T, U2],
@@ -1145,6 +1154,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def select[U1, U2, U3, U4, U5](
       c1: TypedColumn[T, U1],
       c2: TypedColumn[T, U2],
@@ -1315,6 +1325,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def reduce(func: (T, T) => T): T = rdd.reduce(func)
 
   /**
@@ -1327,6 +1338,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def reduce(func: ReduceFunction[T]): T = reduce(func.call(_, _))
 
   /**
@@ -1338,6 +1350,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
     val inputPlan = logicalPlan
     val withGroupingKey = AppendColumns(func, inputPlan)
@@ -1360,6 +1373,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     groupByKey(func.call(_))(encoder)
 
@@ -2028,6 +2042,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def filter(func: T => Boolean): Dataset[T] = {
     withTypedPlan(TypedFilter(func, logicalPlan))
   }
@@ -2041,6 +2056,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def filter(func: FilterFunction[T]): Dataset[T] = {
     withTypedPlan(TypedFilter(func, logicalPlan))
   }
@@ -2054,6 +2070,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def map[U : Encoder](func: T => U): Dataset[U] = withTypedPlan {
     MapElements[T, U](func, logicalPlan)
   }
@@ -2067,6 +2084,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     implicit val uEnc = encoder
     withTypedPlan(MapElements[T, U](func, logicalPlan))
@@ -2081,6 +2099,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
     new Dataset[U](
       sparkSession,
@@ -2097,6 +2116,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).asScala
     mapPartitions(func)(encoder)
@@ -2127,6 +2147,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def flatMap[U : Encoder](func: T => TraversableOnce[U]): Dataset[U] =
     mapPartitions(_.flatMap(func))
 
@@ -2140,6 +2161,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     val func: (T) => Iterator[U] = x => f.call(x).asScala
     flatMap(func)(encoder)
@@ -2471,13 +2493,11 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * :: Experimental ::
    * Interface for saving the content of the non-streaming Dataset out into external storage.
    *
    * @group basic
    * @since 1.6.0
    */
-  @Experimental
   def write: DataFrameWriter[T] = {
     if (isStreaming) {
       logicalPlan.failAnalysis(
@@ -2494,6 +2514,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def writeStream: DataStreamWriter[T] = {
     if (!isStreaming) {
       logicalPlan.failAnalysis(
