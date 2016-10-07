@@ -1706,7 +1706,7 @@ class SQLTests(ReusedPySparkTestCase):
         # Pyrolite version <= 4.9 could not serialize BinaryType with Python3 SPARK-17808
         schema = StructType([StructField('mybytes', BinaryType())])
         data = [[bytearray(b'here is my data')],
-                [bytearray(b'and here is some more')],]
+                [bytearray(b'and here is some more')]]
         df = self.spark.createDataFrame(data, schema=schema)
         df.collect()
 
