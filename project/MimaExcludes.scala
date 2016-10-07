@@ -835,6 +835,11 @@ object MimaExcludes {
       // [SPARK-12221] Add CPU time to metrics
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetrics.this"),
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.this")
+    ) ++ Seq(
+      // [SPARK-17816] Fix ConcurrentModificationException issue in BlockStatusesAccumulator
+      ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.util.AccumulatorV2.merge"),
+      ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.util.AccumulatorV2.isZero"),
+      ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.util.AccumulatorV2.reset")
     )
   }
 
