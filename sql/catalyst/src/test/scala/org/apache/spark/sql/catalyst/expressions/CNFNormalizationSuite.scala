@@ -144,10 +144,6 @@ class CNFNormalizationSuite extends SparkFunSuite with PredicateHelper {
     val input = ((a && b) || (c && d)) || e
     val expected = ((a || c) || e) && ((a || d) || e) && ((b || c) || e) && ((b || d) || e)
     checkCondition(input, expected)
-    val analyzed = testRelation.where(input).analyze
-    val optimized = Optimize.execute(analyzed)
-    val resultFilterExpression = optimized.collectFirst { case f: Filter => f.condition }.get
-    println(s"resultFilterExpression: $resultFilterExpression")
   }
 
   test("CNF normalization exceeds max predicate numbers") {
