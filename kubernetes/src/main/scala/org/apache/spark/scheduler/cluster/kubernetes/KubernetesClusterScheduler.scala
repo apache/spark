@@ -48,6 +48,9 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
   var client = setupKubernetesClient()
   val driverName = s"spark-driver-${Random.alphanumeric take 5 mkString("")}".toLowerCase()
   val svcName = s"spark-svc-${Random.alphanumeric take 5 mkString("")}".toLowerCase()
+  val instances = conf.get(EXECUTOR_INSTANCES).getOrElse(2) //TODO: default 2???
+
+  logWarning("instances: " +  instances)
 
   def start(args: ClientArguments): Unit = {
     startDriver(client, args)
@@ -151,7 +154,11 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
       .withArgs(s"--class=${args.userClass}",
                 s"--master=$kubernetesHost",
                 s"--executor-memory=${driverDescription.mem}",
-                s"--num-executors=${driverDescription.cores}",
+                s"--conf=spark.executor.jar=$clientJarUri",
+                s"--conf=spark.executor.instances=$instances",
+                s"--conf=spark.kubernetes.namespace=${getNamespace()}",
+                s"--conf=spark.kubernetes.driver.image=$sparkDriverImage",
+                s"--conf=spark.kubernetes.distribution.uri=$sparkDistUri",
                 "/work-dir/client.jar",
                 args.userArgs.mkString(" "))
       .withVolumeMounts()

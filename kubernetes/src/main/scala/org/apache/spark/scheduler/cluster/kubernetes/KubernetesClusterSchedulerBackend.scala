@@ -41,11 +41,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
   val sparkExecutorName = s"spark-executor-${Random.alphanumeric take 5 mkString("")}".toLowerCase()
   var executorPods = mutable.ArrayBuffer[String]()
 
-  // This is the URL of the spark distro.
-  val sparkDistUri = sc.conf.getenv("spark.kubernetes.distribution.uri")
-  val sparkDriverImage = sc.conf.getenv("spark.kubernetes.driver.image")
-  val clientJarUri = sc.conf.getenv("spark.executor.jar")
-  val ns = sc.conf.getenv("spark.kubernetes.namespace")
+  val sparkDistUri = sc.getConf.get("spark.kubernetes.distribution.uri")
+  val sparkDriverImage = sc.getConf.get("spark.kubernetes.driver.image")
+  val clientJarUri = sc.getConf.get("spark.executor.jar")
+  val ns = sc.getConf.get("spark.kubernetes.namespace")
 
   override def start() {
     super.start()
@@ -158,7 +157,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
         "--executor-id", s"$executorNum",
         "--hostname", "localhost",
         "--cores", "1",
-        "--app-id", "1")
+        "--app-id", "1") //TODO: change app-id per application and pass from driver.
       .withVolumeMounts()
       .addNewVolumeMount()
       .withName("workdir")
