@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.util.{Properties, UUID}
+import java.util.{Collections, Properties, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
@@ -309,11 +309,11 @@ private[spark] object JsonProtocol {
       value match {
         case v: Int => JInt(v)
         case v: Long => JInt(v)
-        case v: List[(BlockId, BlockStatus)] =>
-          JArray(v.map {
+        case v: java.util.List[(BlockId, BlockStatus)] =>
+          JArray(v.asScala.toList.map {
             case (id, status) =>
               ("Block ID" -> id.toString) ~
-                ("Status" -> blockStatusToJson(status))
+              ("Status" -> blockStatusToJson(status))
           })
         case any => throw new UnsupportedOperationException(
           s"Cannot serialize Accumulator of type ${any.getClass.getName}")
