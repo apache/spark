@@ -157,8 +157,9 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       .foreach { case (center1, center2) => assert(center1 ~== center2 absTol 1E-8) }
   }
 
-  test("Initialize using a wrong model") {
-    val kmeans = new KMeans().setSeed(1).setMaxIter(10)
+  test("Initialize using a model with wrong dimension of cluster centers") {
+    val kmeans = new KMeans().setK(k).setSeed(1).setMaxIter(1)
+
     val wrongDimModel = KMeansSuite.generateRandomKMeansModel(4, k)
     val wrongDimModelThrown = intercept[IllegalArgumentException] {
       kmeans.setInitialModel(wrongDimModel).fit(dataset)
@@ -166,11 +167,21 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(wrongDimModelThrown.getMessage.contains("mismatched dimension"))
   }
 
-  test("Infer K from an initial model") {
-    val kmeans = new KMeans().setK(k)
+  test("Infer K from an initial model if K is unset") {
+    val kmeans = new KMeans()
     val testNewK = 10
     val randomModel = KMeansSuite.generateRandomKMeansModel(dim, testNewK)
     assert(kmeans.setInitialModel(randomModel).getK === testNewK)
+  }
+
+  test("Initialize using a model with wrong K if K is set") {
+    val kmeans = new KMeans().setK(k).setSeed(1).setMaxIter(1)
+
+    val wrongKModel = KMeansSuite.generateRandomKMeansModel(3, k + 1)
+    val wrongKModelThrown = intercept[IllegalArgumentException] {
+      kmeans.setInitialModel(wrongKModel).fit(dataset)
+    }
+    assert(wrongKModelThrown.getMessage.contains("mismatched cluster count"))
   }
 }
 
