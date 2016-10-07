@@ -133,7 +133,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // test should use the deterministic number of partitions.
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
-    withTempTable("testDataForJoin") {
+    withTempView("testDataForJoin") {
       // Assume the execution plan is
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
       val df = spark.sql(
@@ -151,7 +151,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // this test should use the deterministic number of partitions.
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
-    withTempTable("testDataForJoin") {
+    withTempView("testDataForJoin") {
       // Assume the execution plan is
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
       val df = spark.sql(
@@ -206,7 +206,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      withTempTable("testDataForJoin") {
+      withTempView("testDataForJoin") {
         // Assume the execution plan is
         // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
         val df = spark.sql(
@@ -236,7 +236,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
       testDataForJoin.createOrReplaceTempView("testDataForJoin")
-      withTempTable("testDataForJoin") {
+      withTempView("testDataForJoin") {
         // Assume the execution plan is
         // ... -> CartesianProduct(nodeId = 1) -> TungstenProject(nodeId = 0)
         val df = spark.sql(

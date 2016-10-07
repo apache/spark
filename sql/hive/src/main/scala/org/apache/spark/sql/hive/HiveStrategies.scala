@@ -23,6 +23,8 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.command.ExecutedCommandExec
+import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
 
 private[hive] trait HiveStrategies {
@@ -45,6 +47,31 @@ private[hive] trait HiveStrategies {
       case logical.InsertIntoTable(
           table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite, ifNotExists) :: Nil
+
+      case CreateTable(tableDesc, mode, Some(query)) if tableDesc.provider.get == "hive" =>
+        val newTableDesc = if (tableDesc.storage.serde.isEmpty) {
+          // add default serde
+          tableDesc.withNewStorage(
+            serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+        } else {
+          tableDesc
+        }
+
+        // Currently we will never hit this branch, as SQL string API can only use `Ignore` or
+        // `ErrorIfExists` mode, and `DataFrameWriter.saveAsTable` doesn't support hive serde
+        // tables yet.
+        if (mode == SaveMode.Append || mode == SaveMode.Overwrite) {
+          throw new AnalysisException(
+            "CTAS for hive serde tables does not support append or overwrite semantics.")
+        }
+
+        val dbName = tableDesc.identifier.database.getOrElse(sparkSession.catalog.currentDatabase)
+        val cmd = CreateHiveTableAsSelectCommand(
+          newTableDesc.copy(identifier = tableDesc.identifier.copy(database = Some(dbName))),
+          query,
+          mode == SaveMode.Ignore)
+        ExecutedCommandExec(cmd) :: Nil
+
       case _ => Nil
     }
   }

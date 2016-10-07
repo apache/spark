@@ -32,9 +32,9 @@ import org.apache.spark.unsafe.KVIterator
  * An iterator used to evaluate aggregate functions. It operates on [[UnsafeRow]]s.
  *
  * This iterator first uses hash-based aggregation to process input rows. It uses
- * a hash map to store groups and their corresponding aggregation buffers. If we
- * this map cannot allocate memory from memory manager, it spill the map into disk
- * and create a new one. After processed all the input, then merge all the spills
+ * a hash map to store groups and their corresponding aggregation buffers. If
+ * this map cannot allocate memory from memory manager, it spills the map into disk
+ * and creates a new one. After processed all the input, then merge all the spills
  * together using external sorter, and do sort-based aggregation.
  *
  * The process has the following step:

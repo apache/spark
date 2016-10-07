@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.orc
 
 import java.nio.charset.StandardCharsets
+import java.sql.Timestamp
 
 import org.scalatest.BeforeAndAfterAll
 
@@ -93,7 +94,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   test("Creating case class RDD table") {
     val data = (1 to 100).map(i => (i, s"val_$i"))
     sparkContext.parallelize(data).toDF().createOrReplaceTempView("t")
-    withTempTable("t") {
+    withTempView("t") {
       checkAnswer(sql("SELECT * FROM t"), data.toDF().collect())
     }
   }
@@ -161,6 +162,29 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
+  test("SPARK-16610: Respect orc.compress option when compression is unset") {
+    // Respect `orc.compress`.
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .option("orc.compress", "ZLIB")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("ZLIB" === expectedCompressionKind.name())
+    }
+
+    // `compression` overrides `orc.compress`.
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .option("compression", "ZLIB")
+        .option("orc.compress", "SNAPPY")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("ZLIB" === expectedCompressionKind.name())
+    }
+  }
+
   // Hive supports zlib, snappy and none for Hive 1.2.1.
   test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
     withTempPath { file =>
@@ -222,7 +246,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
     }
-    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true)
+    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("overwriting") {
@@ -232,7 +256,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), data.map(Row.fromTuple))
     }
-    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true)
+    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("self-join") {
@@ -310,7 +334,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       val path = dir.getCanonicalPath
 
       withTable("empty_orc") {
-        withTempTable("empty", "single") {
+        withTempView("empty", "single") {
           spark.sql(
             s"""CREATE TABLE empty_orc(key INT, value STRING)
                |STORED AS ORC
@@ -402,7 +426,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("Verify the ORC conversion parameter: CONVERT_METASTORE_ORC") {
-    withTempTable("single") {
+    withTempView("single") {
       val singleRowDF = Seq((0, "foo")).toDF("key", "value")
       singleRowDF.createOrReplaceTempView("single")
 
@@ -473,6 +497,40 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
         // ORC filter should be applied and the total count should be 0.
         assert(actual === 0)
+      }
+    }
+  }
+
+  test("Support for pushing down filters for decimal types") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val data = (0 until 10).map(i => Tuple1(BigDecimal.valueOf(i)))
+      withTempPath { file =>
+        // It needs to repartition data so that we can have several ORC files
+        // in order to skip stripes in ORC.
+        createDataFrame(data).toDF("a").repartition(10).write.orc(file.getCanonicalPath)
+        val df = spark.read.orc(file.getCanonicalPath).where("a == 2")
+        val actual = stripSparkFilter(df).count()
+
+        assert(actual < 10)
+      }
+    }
+  }
+
+  test("Support for pushing down filters for timestamp types") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val timeString = "2015-08-20 14:57:00"
+      val data = (0 until 10).map { i =>
+        val milliseconds = Timestamp.valueOf(timeString).getTime + i * 3600
+        Tuple1(new Timestamp(milliseconds))
+      }
+      withTempPath { file =>
+        // It needs to repartition data so that we can have several ORC files
+        // in order to skip stripes in ORC.
+        createDataFrame(data).toDF("a").repartition(10).write.orc(file.getCanonicalPath)
+        val df = spark.read.orc(file.getCanonicalPath).where(s"a == '$timeString'")
+        val actual = stripSparkFilter(df).count()
+
+        assert(actual < 10)
       }
     }
   }

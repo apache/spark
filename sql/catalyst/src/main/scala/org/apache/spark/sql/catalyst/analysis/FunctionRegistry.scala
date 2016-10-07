@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
+import org.apache.spark.sql.types._
 
 
 /**
@@ -160,7 +161,6 @@ object FunctionRegistry {
   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
     // misc non-aggregate functions
     expression[Abs]("abs"),
-    expression[CreateArray]("array"),
     expression[Coalesce]("coalesce"),
     expression[Explode]("explode"),
     expression[Greatest]("greatest"),
@@ -171,10 +171,6 @@ object FunctionRegistry {
     expression[IsNull]("isnull"),
     expression[IsNotNull]("isnotnull"),
     expression[Least]("least"),
-    expression[CreateMap]("map"),
-    expression[MapKeys]("map_keys"),
-    expression[MapValues]("map_values"),
-    expression[CreateNamedStruct]("named_struct"),
     expression[NaNvl]("nanvl"),
     expression[NullIf]("nullif"),
     expression[Nvl]("nvl"),
@@ -183,7 +179,6 @@ object FunctionRegistry {
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
-    expression[CreateStruct]("struct"),
     expression[CaseWhen]("when"),
 
     // math functions
@@ -228,6 +223,7 @@ object FunctionRegistry {
     expression[Signum]("signum"),
     expression[Sin]("sin"),
     expression[Sinh]("sinh"),
+    expression[StringToMap]("str_to_map"),
     expression[Sqrt]("sqrt"),
     expression[Tan]("tan"),
     expression[Tanh]("tanh"),
@@ -254,6 +250,7 @@ object FunctionRegistry {
     expression[Average]("mean"),
     expression[Min]("min"),
     expression[Skewness]("skewness"),
+    expression[ApproximatePercentile]("percentile_approx"),
     expression[StddevSamp]("std"),
     expression[StddevSamp]("stddev"),
     expression[StddevPop]("stddev_pop"),
@@ -288,6 +285,7 @@ object FunctionRegistry {
     expression[StringLPad]("lpad"),
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
+    expression[ParseUrl]("parse_url"),
     expression[FormatString]("printf"),
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpReplace]("regexp_replace"),
@@ -309,7 +307,15 @@ object FunctionRegistry {
     expression[UnBase64]("unbase64"),
     expression[Unhex]("unhex"),
     expression[Upper]("upper"),
+    expression[XPathList]("xpath"),
     expression[XPathBoolean]("xpath_boolean"),
+    expression[XPathDouble]("xpath_double"),
+    expression[XPathDouble]("xpath_number"),
+    expression[XPathFloat]("xpath_float"),
+    expression[XPathInt]("xpath_int"),
+    expression[XPathLong]("xpath_long"),
+    expression[XPathShort]("xpath_short"),
+    expression[XPathString]("xpath_string"),
 
     // datetime functions
     expression[AddMonths]("add_months"),
@@ -343,9 +349,15 @@ object FunctionRegistry {
     expression[TimeWindow]("window"),
 
     // collection functions
+    expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
+    expression[CreateMap]("map"),
+    expression[CreateNamedStruct]("named_struct"),
+    expression[MapKeys]("map_keys"),
+    expression[MapValues]("map_values"),
     expression[Size]("size"),
     expression[SortArray]("sort_array"),
+    expression[CreateStruct]("struct"),
 
     // misc functions
     expression[AssertTrue]("assert_true"),
@@ -359,6 +371,8 @@ object FunctionRegistry {
     expression[InputFileName]("input_file_name"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
     expression[CurrentDatabase]("current_database"),
+    expression[CallMethodViaReflection]("reflect"),
+    expression[CallMethodViaReflection]("java_method"),
 
     // grouping sets
     expression[Cube]("cube"),
@@ -396,8 +410,21 @@ object FunctionRegistry {
     expression[BitwiseAnd]("&"),
     expression[BitwiseNot]("~"),
     expression[BitwiseOr]("|"),
-    expression[BitwiseXor]("^")
+    expression[BitwiseXor]("^"),
 
+    // Cast aliases (SPARK-16730)
+    castAlias("boolean", BooleanType),
+    castAlias("tinyint", ByteType),
+    castAlias("smallint", ShortType),
+    castAlias("int", IntegerType),
+    castAlias("bigint", LongType),
+    castAlias("float", FloatType),
+    castAlias("double", DoubleType),
+    castAlias("decimal", DecimalType.USER_DEFAULT),
+    castAlias("date", DateType),
+    castAlias("timestamp", TimestampType),
+    castAlias("binary", BinaryType),
+    castAlias("string", StringType)
   )
 
   val builtin: SimpleFunctionRegistry = {
@@ -440,14 +467,37 @@ object FunctionRegistry {
       }
     }
 
-    val clazz = tag.runtimeClass
+    (name, (expressionInfo[T](name), builder))
+  }
+
+  /**
+   * Creates a function registry lookup entry for cast aliases (SPARK-16730).
+   * For example, if name is "int", and dataType is IntegerType, this means int(x) would become
+   * an alias for cast(x as IntegerType).
+   * See usage above.
+   */
+  private def castAlias(
+      name: String,
+      dataType: DataType): (String, (ExpressionInfo, FunctionBuilder)) = {
+    val builder = (args: Seq[Expression]) => {
+      if (args.size != 1) {
+        throw new AnalysisException(s"Function $name accepts only one argument")
+      }
+      Cast(args.head, dataType)
+    }
+    (name, (expressionInfo[Cast](name), builder))
+  }
+
+  /**
+   * Creates an [[ExpressionInfo]] for the function as defined by expression T using the given name.
+   */
+  private def expressionInfo[T <: Expression : ClassTag](name: String): ExpressionInfo = {
+    val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
-      (name,
-        (new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended()),
-        builder))
+      new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended())
     } else {
-      (name, (new ExpressionInfo(clazz.getCanonicalName, name), builder))
+      new ExpressionInfo(clazz.getCanonicalName, name)
     }
   }
 }

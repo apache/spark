@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Frequent Pattern Mining - spark.mllib
-displayTitle: Frequent Pattern Mining - spark.mllib
+title: Frequent Pattern Mining - RDD-based API
+displayTitle: Frequent Pattern Mining - RDD-based API
 ---
 
 Mining frequent items, itemsets, subsequences, or other substructures is usually among the

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
+import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException}
 
 
 /**
@@ -35,6 +35,18 @@ abstract class ExternalCatalog {
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
       throw new NoSuchDatabaseException(db)
+    }
+  }
+
+  protected def requireFunctionExists(db: String, funcName: String): Unit = {
+    if (!functionExists(db, funcName)) {
+      throw new NoSuchFunctionException(db = db, func = funcName)
+    }
+  }
+
+  protected def requireFunctionNotExists(db: String, funcName: String): Unit = {
+    if (functionExists(db, funcName)) {
+      throw new FunctionAlreadyExistsException(db = db, func = funcName)
     }
   }
 
@@ -69,20 +81,21 @@ abstract class ExternalCatalog {
   // Tables
   // --------------------------------------------------------------------------
 
-  def createTable(db: String, tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit
+  def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit
 
-  def dropTable(db: String, table: String, ignoreIfNotExists: Boolean): Unit
+  def dropTable(db: String, table: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
 
   def renameTable(db: String, oldName: String, newName: String): Unit
 
   /**
-   * Alter a table whose name that matches the one specified in `tableDefinition`,
-   * assuming the table exists.
+   * Alter a table whose database and name match the ones specified in `tableDefinition`, assuming
+   * the table exists. Note that, even though we can specify database in `tableDefinition`, it's
+   * used to identify the table, not to alter the table's database, which is not allowed.
    *
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
    */
-  def alterTable(db: String, tableDefinition: CatalogTable): Unit
+  def alterTable(tableDefinition: CatalogTable): Unit
 
   def getTable(db: String, table: String): CatalogTable
 
@@ -108,8 +121,16 @@ abstract class ExternalCatalog {
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit
+      inheritTableSpecs: Boolean): Unit
+
+  def loadDynamicPartitions(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      replace: Boolean,
+      numDP: Int,
+      holdDDLTime: Boolean): Unit
 
   // --------------------------------------------------------------------------
   // Partitions
@@ -125,7 +146,8 @@ abstract class ExternalCatalog {
       db: String,
       table: String,
       parts: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit
 
   /**
    * Override the specs of one or many existing table partitions, assuming they exist.
@@ -150,6 +172,14 @@ abstract class ExternalCatalog {
       parts: Seq[CatalogTablePartition]): Unit
 
   def getPartition(db: String, table: String, spec: TablePartitionSpec): CatalogTablePartition
+
+  /**
+   * Returns the specified partition or None if it does not exist.
+   */
+  def getPartitionOption(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec): Option[CatalogTablePartition]
 
   /**
    * List the metadata of all partitions that belong to the specified table, assuming it exists.

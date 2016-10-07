@@ -44,21 +44,19 @@ class Pipeline(Estimator, MLReadable, MLWritable):
     the dataset for the next stage. The fitted model from a
     :py:class:`Pipeline` is a :py:class:`PipelineModel`, which
     consists of fitted models and transformers, corresponding to the
-    pipeline stages. If there are no stages, the pipeline acts as an
+    pipeline stages. If stages is an empty list, the pipeline acts as an
     identity transformer.
 
     .. versionadded:: 1.3.0
     """
 
-    stages = Param(Params._dummy(), "stages", "pipeline stages")
+    stages = Param(Params._dummy(), "stages", "a list of pipeline stages")
 
     @keyword_only
     def __init__(self, stages=None):
         """
         __init__(self, stages=None)
         """
-        if stages is None:
-            stages = []
         super(Pipeline, self).__init__()
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -78,8 +76,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         """
         Get pipeline stages.
         """
-        if self.stages in self._paramMap:
-            return self._paramMap[self.stages]
+        return self.getOrDefault(self.stages)
 
     @keyword_only
     @since("1.3.0")
@@ -88,8 +85,6 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         setParams(self, stages=None)
         Sets params for Pipeline.
         """
-        if stages is None:
-            stages = []
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 

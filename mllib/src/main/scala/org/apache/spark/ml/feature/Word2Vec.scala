@@ -19,8 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
@@ -109,17 +108,16 @@ private[feature] trait Word2VecBase extends Params
    * Validate and transform the input schema.
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new ArrayType(StringType, true))
+    val typeCandidates = List(new ArrayType(StringType, true), new ArrayType(StringType, false))
+    SchemaUtils.checkColumnTypes(schema, $(inputCol), typeCandidates)
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
 }
 
 /**
- * :: Experimental ::
  * Word2Vec trains a model of `Map(String, Vector)`, i.e. transforms a word into a code for further
  * natural language processing or machine learning process.
  */
-@Experimental
 @Since("1.4.0")
 final class Word2Vec @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
@@ -202,10 +200,8 @@ object Word2Vec extends DefaultParamsReadable[Word2Vec] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[Word2Vec]].
  */
-@Experimental
 @Since("1.4.0")
 class Word2VecModel private[ml] (
     @Since("1.4.0") override val uid: String,
@@ -226,24 +222,26 @@ class Word2VecModel private[ml] (
   }
 
   /**
-   * Find "num" number of words closest in similarity to the given word.
-   * Returns a dataframe with the words and the cosine similarities between the
-   * synonyms and the given word.
+   * Find "num" number of words closest in similarity to the given word, not
+   * including the word itself. Returns a dataframe with the words and the
+   * cosine similarities between the synonyms and the given word.
    */
   @Since("1.5.0")
   def findSynonyms(word: String, num: Int): DataFrame = {
-    findSynonyms(wordVectors.transform(word), num)
+    val spark = SparkSession.builder().getOrCreate()
+    spark.createDataFrame(wordVectors.findSynonyms(word, num)).toDF("word", "similarity")
   }
 
   /**
-   * Find "num" number of words closest to similarity to the given vector representation
-   * of the word. Returns a dataframe with the words and the cosine similarities between the
-   * synonyms and the given word vector.
+   * Find "num" number of words whose vector representation most similar to the supplied vector.
+   * If the supplied vector is the vector representation of a word in the model's vocabulary,
+   * that word will be in the results.  Returns a dataframe with the words and the cosine
+   * similarities between the synonyms and the given word vector.
    */
   @Since("2.0.0")
-  def findSynonyms(word: Vector, num: Int): DataFrame = {
+  def findSynonyms(vec: Vector, num: Int): DataFrame = {
     val spark = SparkSession.builder().getOrCreate()
-    spark.createDataFrame(wordVectors.findSynonyms(word, num)).toDF("word", "similarity")
+    spark.createDataFrame(wordVectors.findSynonyms(vec, num)).toDF("word", "similarity")
   }
 
   /** @group setParam */

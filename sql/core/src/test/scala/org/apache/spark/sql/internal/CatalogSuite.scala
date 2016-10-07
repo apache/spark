@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 
 /**
@@ -62,7 +63,7 @@ class CatalogSuite
   }
 
   private def dropTable(name: String, db: Option[String] = None): Unit = {
-    sessionCatalog.dropTable(TableIdentifier(name, db), ignoreIfNotExists = false)
+    sessionCatalog.dropTable(TableIdentifier(name, db), ignoreIfNotExists = false, purge = false)
   }
 
   private def createFunction(name: String, db: Option[String] = None): Unit = {
@@ -90,11 +91,12 @@ class CatalogSuite
       .getOrElse { spark.catalog.listColumns(tableName) }
     assume(tableMetadata.schema.nonEmpty, "bad test")
     assume(tableMetadata.partitionColumnNames.nonEmpty, "bad test")
-    assume(tableMetadata.bucketColumnNames.nonEmpty, "bad test")
+    assume(tableMetadata.bucketSpec.isDefined, "bad test")
     assert(columns.collect().map(_.name).toSet == tableMetadata.schema.map(_.name).toSet)
+    val bucketColumnNames = tableMetadata.bucketSpec.map(_.bucketColumnNames).getOrElse(Nil).toSet
     columns.collect().foreach { col =>
       assert(col.isPartition == tableMetadata.partitionColumnNames.contains(col.name))
-      assert(col.isBucket == tableMetadata.bucketColumnNames.contains(col.name))
+      assert(col.isBucket == bucketColumnNames.contains(col.name))
     }
   }
 
@@ -234,6 +236,11 @@ class CatalogSuite
     testListColumns("tab1", dbName = None)
   }
 
+  test("list columns in temporary table") {
+    createTempTable("temp1")
+    spark.catalog.listColumns("temp1")
+  }
+
   test("list columns in database") {
     createDatabase("db1")
     createTable("tab1", Some("db1"))
@@ -297,6 +304,158 @@ class CatalogSuite
     tableFields.foreach { f => assert(tableString.contains(f.toString)) }
     functionFields.foreach { f => assert(functionString.contains(f.toString)) }
     columnFields.foreach { f => assert(columnString.contains(f.toString)) }
+  }
+
+  test("createExternalTable should fail if path is not given for file-based data source") {
+    val e = intercept[AnalysisException] {
+      spark.catalog.createExternalTable("tbl", "json", Map.empty[String, String])
+    }
+    assert(e.message.contains("Unable to infer schema"))
+
+    val e2 = intercept[AnalysisException] {
+      spark.catalog.createExternalTable(
+        "tbl",
+        "json",
+        new StructType().add("i", IntegerType),
+        Map.empty[String, String])
+    }
+    assert(e2.message == "Cannot create a file-based external data source table without path")
+  }
+
+  test("createExternalTable should fail if provider is hive") {
+    val e = intercept[AnalysisException] {
+      spark.catalog.createExternalTable("tbl", "HiVe", Map.empty[String, String])
+    }
+    assert(e.message.contains("Cannot create hive serde table with createExternalTable API"))
+  }
+
+  test("dropTempView should not un-cache and drop metastore table if a same-name table exists") {
+    withTable("same_name") {
+      spark.range(10).write.saveAsTable("same_name")
+      sql("CACHE TABLE same_name")
+      assert(spark.catalog.isCached("default.same_name"))
+      spark.catalog.dropTempView("same_name")
+      assert(spark.sessionState.catalog.tableExists(TableIdentifier("same_name", Some("default"))))
+      assert(spark.catalog.isCached("default.same_name"))
+    }
+  }
+
+  test("get database") {
+    intercept[AnalysisException](spark.catalog.getDatabase("db10"))
+    withTempDatabase { db =>
+      assert(spark.catalog.getDatabase(db).name === db)
+    }
+  }
+
+  test("get table") {
+    withTempDatabase { db =>
+      withTable(s"tbl_x", s"$db.tbl_y") {
+        // Try to find non existing tables.
+        intercept[AnalysisException](spark.catalog.getTable("tbl_x"))
+        intercept[AnalysisException](spark.catalog.getTable("tbl_y"))
+        intercept[AnalysisException](spark.catalog.getTable(db, "tbl_y"))
+
+        // Create objects.
+        createTempTable("tbl_x")
+        createTable("tbl_y", Some(db))
+
+        // Find a temporary table
+        assert(spark.catalog.getTable("tbl_x").name === "tbl_x")
+
+        // Find a qualified table
+        assert(spark.catalog.getTable(db, "tbl_y").name === "tbl_y")
+
+        // Find an unqualified table using the current database
+        intercept[AnalysisException](spark.catalog.getTable("tbl_y"))
+        spark.catalog.setCurrentDatabase(db)
+        assert(spark.catalog.getTable("tbl_y").name === "tbl_y")
+      }
+    }
+  }
+
+  test("get function") {
+    withTempDatabase { db =>
+      withUserDefinedFunction("fn1" -> true, s"$db.fn2" -> false) {
+        // Try to find non existing functions.
+        intercept[AnalysisException](spark.catalog.getFunction("fn1"))
+        intercept[AnalysisException](spark.catalog.getFunction("fn2"))
+        intercept[AnalysisException](spark.catalog.getFunction(db, "fn2"))
+
+        // Create objects.
+        createTempFunction("fn1")
+        createFunction("fn2", Some(db))
+
+        // Find a temporary function
+        assert(spark.catalog.getFunction("fn1").name === "fn1")
+
+        // Find a qualified function
+        assert(spark.catalog.getFunction(db, "fn2").name === "fn2")
+
+        // Find an unqualified function using the current database
+        intercept[AnalysisException](spark.catalog.getFunction("fn2"))
+        spark.catalog.setCurrentDatabase(db)
+        assert(spark.catalog.getFunction("fn2").name === "fn2")
+      }
+    }
+  }
+
+  test("database exists") {
+    assert(!spark.catalog.databaseExists("db10"))
+    createDatabase("db10")
+    assert(spark.catalog.databaseExists("db10"))
+    dropDatabase("db10")
+  }
+
+  test("table exists") {
+    withTempDatabase { db =>
+      withTable(s"tbl_x", s"$db.tbl_y") {
+        // Try to find non existing tables.
+        assert(!spark.catalog.tableExists("tbl_x"))
+        assert(!spark.catalog.tableExists("tbl_y"))
+        assert(!spark.catalog.tableExists(db, "tbl_y"))
+
+        // Create objects.
+        createTempTable("tbl_x")
+        createTable("tbl_y", Some(db))
+
+        // Find a temporary table
+        assert(spark.catalog.tableExists("tbl_x"))
+
+        // Find a qualified table
+        assert(spark.catalog.tableExists(db, "tbl_y"))
+
+        // Find an unqualified table using the current database
+        assert(!spark.catalog.tableExists("tbl_y"))
+        spark.catalog.setCurrentDatabase(db)
+        assert(spark.catalog.tableExists("tbl_y"))
+      }
+    }
+  }
+
+  test("function exists") {
+    withTempDatabase { db =>
+      withUserDefinedFunction("fn1" -> true, s"$db.fn2" -> false) {
+        // Try to find non existing functions.
+        assert(!spark.catalog.functionExists("fn1"))
+        assert(!spark.catalog.functionExists("fn2"))
+        assert(!spark.catalog.functionExists(db, "fn2"))
+
+        // Create objects.
+        createTempFunction("fn1")
+        createFunction("fn2", Some(db))
+
+        // Find a temporary function
+        assert(spark.catalog.functionExists("fn1"))
+
+        // Find a qualified function
+        assert(spark.catalog.functionExists(db, "fn2"))
+
+        // Find an unqualified function using the current database
+        assert(!spark.catalog.functionExists("fn2"))
+        spark.catalog.setCurrentDatabase(db)
+        assert(spark.catalog.functionExists("fn2"))
+      }
+    }
   }
 
   // TODO: add tests for the rest of them

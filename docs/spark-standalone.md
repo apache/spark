@@ -196,6 +196,21 @@ SPARK_MASTER_OPTS supports the following system properties:
   </td>
 </tr>
 <tr>
+  <td><code>spark.deploy.maxExecutorRetries</code></td>
+  <td>10</td>
+  <td>
+    Limit on the maximum number of back-to-back executor failures that can occur before the
+    standalone cluster manager removes a faulty application. An application will never be removed
+    if it has any running executors. If an application experiences more than
+    <code>spark.deploy.maxExecutorRetries</code> failures in a row, no executors
+    successfully start running in between those failures, and the application has no running
+    executors then the standalone cluster manager will remove the application and mark it as failed.
+    To disable this automatic removal, set <code>spark.deploy.maxExecutorRetries</code> to
+    <code>-1</code>.
+    <br/>
+  </td>
+</tr>
+<tr>
   <td><code>spark.worker.timeout</code></td>
   <td>60</td>
   <td>
@@ -283,9 +298,9 @@ application at a time. You can cap the number of cores by setting `spark.cores.m
 
 {% highlight scala %}
 val conf = new SparkConf()
-             .setMaster(...)
-             .setAppName(...)
-             .set("spark.cores.max", "10")
+  .setMaster(...)
+  .setAppName(...)
+  .set("spark.cores.max", "10")
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
@@ -333,7 +348,7 @@ Learn more about getting started with ZooKeeper [here](http://zookeeper.apache.o
 **Configuration**
 
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
-For more information about these configurations please refer to the configurations (doc)[configurations.html#deploy]
+For more information about these configurations please refer to the [configuration doc](configuration.html#deploy)
 
 Possible gotcha: If you have multiple Masters in your cluster but fail to correctly configure the Masters to use ZooKeeper, the Masters will fail to discover each other and think they're all leaders. This will not lead to a healthy cluster state (as all Masters will schedule independently).
 

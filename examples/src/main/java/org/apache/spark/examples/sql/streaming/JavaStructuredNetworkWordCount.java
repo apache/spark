@@ -24,7 +24,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 
 /**
- * Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
+ * Counts words in UTF8 encoded, '\n' delimited text received from the network.
  *
  * Usage: JavaStructuredNetworkWordCount <hostname> <port>
  * <hostname> and <port> describe the TCP server that Structured Streaming
@@ -40,7 +40,7 @@ public final class JavaStructuredNetworkWordCount {
 
   public static void main(String[] args) throws Exception {
     if (args.length < 2) {
-      System.err.println("Usage: JavaNetworkWordCount <hostname> <port>");
+      System.err.println("Usage: JavaStructuredNetworkWordCount <hostname> <port>");
       System.exit(1);
     }
 
@@ -53,19 +53,20 @@ public final class JavaStructuredNetworkWordCount {
       .getOrCreate();
 
     // Create DataFrame representing the stream of input lines from connection to host:port
-    Dataset<String> lines = spark
+    Dataset<Row> lines = spark
       .readStream()
       .format("socket")
       .option("host", host)
       .option("port", port)
-      .load().as(Encoders.STRING());
+      .load();
 
     // Split the lines into words
-    Dataset<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
-      @Override
-      public Iterator<String> call(String x) {
-        return Arrays.asList(x.split(" ")).iterator();
-      }
+    Dataset<String> words = lines.as(Encoders.STRING())
+      .flatMap(new FlatMapFunction<String, String>() {
+        @Override
+        public Iterator<String> call(String x) {
+          return Arrays.asList(x.split(" ")).iterator();
+        }
     }, Encoders.STRING());
 
     // Generate running word count

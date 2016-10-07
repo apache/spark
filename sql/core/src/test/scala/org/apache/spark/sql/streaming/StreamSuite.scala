@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.streaming
 
+import scala.reflect.ClassTag
+import scala.util.control.ControlThrowable
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.ManualClock
 
@@ -236,6 +238,33 @@ class StreamSuite extends StreamTest {
     }
   }
 
+  testQuietly("fatal errors from a source should be sent to the user") {
+    for (e <- Seq(
+      new VirtualMachineError {},
+      new ThreadDeath,
+      new LinkageError,
+      new ControlThrowable {}
+    )) {
+      val source = new Source {
+        override def getOffset: Option[Offset] = {
+          throw e
+        }
+
+        override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+          throw e
+        }
+
+        override def schema: StructType = StructType(Array(StructField("value", IntegerType)))
+
+        override def stop(): Unit = {}
+      }
+      val df = Dataset[Int](sqlContext.sparkSession, StreamingExecutionRelation(source))
+      testStream(df)(
+        ExpectFailure()(ClassTag(e.getClass))
+      )
+    }
+  }
+
   test("output mode API in Scala") {
     val o1 = OutputMode.Append
     assert(o1 === InternalOutputModes.Append)
@@ -251,8 +280,8 @@ class StreamSuite extends StreamTest {
     val q = df.writeStream.queryName("memory_explain").format("memory").start()
       .asInstanceOf[StreamExecution]
     try {
-      assert("N/A" === q.explainInternal(false))
-      assert("N/A" === q.explainInternal(true))
+      assert("No physical plan. Waiting for data." === q.explainInternal(false))
+      assert("No physical plan. Waiting for data." === q.explainInternal(true))
 
       inputData.addData("abc")
       q.processAllAvailable()

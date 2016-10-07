@@ -218,7 +218,7 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
  * Note that, while the array is not copied, and thus could technically be mutated after creation,
  * this is not allowed.
  */
-class GenericInternalRow(private[sql] val values: Array[Any]) extends BaseGenericInternalRow {
+class GenericInternalRow(val values: Array[Any]) extends BaseGenericInternalRow {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 

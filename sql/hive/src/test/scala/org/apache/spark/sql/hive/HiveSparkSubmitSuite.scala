@@ -253,6 +253,47 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
+  test("SPARK-16901: set javax.jdo.option.ConnectionURL") {
+    // In this test, we set javax.jdo.option.ConnectionURL and set metastore version to
+    // 0.13. This test will make sure that javax.jdo.option.ConnectionURL will not be
+    // overridden by hive's default settings when we create a HiveConf object inside
+    // HiveClientImpl. Please see SPARK-16901 for more details.
+
+    val metastoreLocation = Utils.createTempDir()
+    metastoreLocation.delete()
+    val metastoreURL =
+      s"jdbc:derby:memory:;databaseName=${metastoreLocation.getAbsolutePath};create=true"
+    val hiveSiteXmlContent =
+      s"""
+         |<configuration>
+         |  <property>
+         |    <name>javax.jdo.option.ConnectionURL</name>
+         |    <value>$metastoreURL</value>
+         |  </property>
+         |</configuration>
+     """.stripMargin
+
+    // Write a hive-site.xml containing a setting of hive.metastore.warehouse.dir.
+    val hiveSiteDir = Utils.createTempDir()
+    val file = new File(hiveSiteDir.getCanonicalPath, "hive-site.xml")
+    val bw = new BufferedWriter(new FileWriter(file))
+    bw.write(hiveSiteXmlContent)
+    bw.close()
+
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SetMetastoreURLTest.getClass.getName.stripSuffix("$"),
+      "--name", "SetMetastoreURLTest",
+      "--master", "local[1]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--conf", s"spark.sql.test.expectedMetastoreURL=$metastoreURL",
+      "--conf", s"spark.driver.extraClassPath=${hiveSiteDir.getCanonicalPath}",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   // This is copied from org.apache.spark.deploy.SparkSubmitSuite
   private def runSparkSubmit(args: Seq[String]): Unit = {
@@ -309,6 +350,44 @@ class HiveSparkSubmitSuite
     } finally {
       // Ensure we still kill the process in case it timed out
       process.destroy()
+    }
+  }
+}
+
+object SetMetastoreURLTest extends Logging {
+  def main(args: Array[String]): Unit = {
+    Utils.configTestLog4j("INFO")
+
+    val sparkConf = new SparkConf(loadDefaults = true)
+    val builder = SparkSession.builder()
+      .config(sparkConf)
+      .config("spark.ui.enabled", "false")
+      .config("spark.sql.hive.metastore.version", "0.13.1")
+      // The issue described in SPARK-16901 only appear when
+      // spark.sql.hive.metastore.jars is not set to builtin.
+      .config("spark.sql.hive.metastore.jars", "maven")
+      .enableHiveSupport()
+
+    val spark = builder.getOrCreate()
+    val expectedMetastoreURL =
+      spark.conf.get("spark.sql.test.expectedMetastoreURL")
+    logInfo(s"spark.sql.test.expectedMetastoreURL is $expectedMetastoreURL")
+
+    if (expectedMetastoreURL == null) {
+      throw new Exception(
+        s"spark.sql.test.expectedMetastoreURL should be set.")
+    }
+
+    // HiveExternalCatalog is used when Hive support is enabled.
+    val actualMetastoreURL =
+      spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+        .getConf("javax.jdo.option.ConnectionURL", "this_is_a_wrong_URL")
+    logInfo(s"javax.jdo.option.ConnectionURL is $actualMetastoreURL")
+
+    if (actualMetastoreURL != expectedMetastoreURL) {
+      throw new Exception(
+        s"Expected value of javax.jdo.option.ConnectionURL is $expectedMetastoreURL. But, " +
+          s"the actual value is $actualMetastoreURL")
     }
   }
 }
@@ -511,7 +590,9 @@ object SparkSubmitClassLoaderTest extends Logging {
   def main(args: Array[String]) {
     Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
+    val hiveWarehouseLocation = Utils.createTempDir()
     conf.set("spark.ui.enabled", "false")
+    conf.set("spark.sql.warehouse.dir", hiveWarehouseLocation.toString)
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     val df = hiveContext.createDataFrame((1 to 100).map(i => (i, i))).toDF("i", "j")
@@ -620,11 +701,13 @@ object SPARK_9757 extends QueryTest {
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
 
+    val hiveWarehouseLocation = Utils.createTempDir()
     val sparkContext = new SparkContext(
       new SparkConf()
         .set("spark.sql.hive.metastore.version", "0.13.1")
         .set("spark.sql.hive.metastore.jars", "maven")
-        .set("spark.ui.enabled", "false"))
+        .set("spark.ui.enabled", "false")
+        .set("spark.sql.warehouse.dir", hiveWarehouseLocation.toString))
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession

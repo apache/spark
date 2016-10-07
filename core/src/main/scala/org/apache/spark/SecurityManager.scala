@@ -21,15 +21,19 @@ import java.lang.{Byte => JByte}
 import java.net.{Authenticator, PasswordAuthentication}
 import java.security.{KeyStore, SecureRandom}
 import java.security.cert.X509Certificate
+import javax.crypto.KeyGenerator
 import javax.net.ssl._
 
 import com.google.common.hash.HashCodes
 import com.google.common.io.Files
 import org.apache.hadoop.io.Text
+import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.network.sasl.SecretKeyHolder
+import org.apache.spark.security.CryptoStreamUtils._
 import org.apache.spark.util.Utils
 
 /**
@@ -282,7 +286,10 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
       }: TrustManager
     })
 
-    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.getOrElse("Default"))
+    require(fileServerSSLOptions.protocol.isDefined,
+      "spark.ssl.protocol is required when enabling SSL connections.")
+
+    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.get)
     sslContext.init(null, trustStoreManagers.getOrElse(credulousTrustStoreManagers), null)
 
     val hostVerifier = new HostnameVerifier {
@@ -551,4 +558,20 @@ private[spark] object SecurityManager {
 
   // key used to store the spark secret in the Hadoop UGI
   val SECRET_LOOKUP_KEY = "sparkCookie"
+
+  /**
+   * Setup the cryptographic key used by IO encryption in credentials. The key is generated using
+   * [[KeyGenerator]]. The algorithm and key length is specified by the [[SparkConf]].
+   */
+  def initIOEncryptionKey(conf: SparkConf, credentials: Credentials): Unit = {
+    if (credentials.getSecretKey(SPARK_IO_TOKEN) == null) {
+      val keyLen = conf.get(IO_ENCRYPTION_KEY_SIZE_BITS)
+      val ioKeyGenAlgorithm = conf.get(IO_ENCRYPTION_KEYGEN_ALGORITHM)
+      val keyGen = KeyGenerator.getInstance(ioKeyGenAlgorithm)
+      keyGen.init(keyLen)
+
+      val ioKey = keyGen.generateKey()
+      credentials.addSecretKey(SPARK_IO_TOKEN, ioKey.getEncoded)
+    }
+  }
 }

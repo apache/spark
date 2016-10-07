@@ -31,6 +31,7 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -577,8 +578,12 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       return (sizeInBytes == o.sizeInBytes) &&
         ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
           sizeInBytes);
+    } else if (!(other instanceof InternalRow)) {
+      return false;
+    } else {
+      throw new IllegalArgumentException(
+        "Cannot compare UnsafeRow to " + other.getClass().getName());
     }
-    return false;
   }
 
   /**

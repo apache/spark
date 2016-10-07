@@ -97,10 +97,11 @@ private[spark] object HiveUtils extends Logging {
       .createWithDefault(false)
 
   val CONVERT_METASTORE_ORC = SQLConfigBuilder("spark.sql.hive.convertMetastoreOrc")
+    .internal()
     .doc("When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
       "the built in support.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val HIVE_METASTORE_SHARED_PREFIXES = SQLConfigBuilder("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
@@ -392,6 +393,13 @@ private[spark] object HiveUtils extends Logging {
     // Then, you will find that the local metastore mode is only set to true when
     // hive.metastore.uris is not set.
     propMap.put(ConfVars.METASTOREURIS.varname, "")
+
+    // The execution client will generate garbage events, therefore the listeners that are generated
+    // for the execution clients are useless. In order to not output garbage, we don't generate
+    // these listeners.
+    propMap.put(ConfVars.METASTORE_PRE_EVENT_LISTENERS.varname, "")
+    propMap.put(ConfVars.METASTORE_EVENT_LISTENERS.varname, "")
+    propMap.put(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname, "")
 
     propMap.toMap
   }

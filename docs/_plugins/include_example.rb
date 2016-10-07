@@ -45,7 +45,15 @@ module Jekyll
       @file = File.join(@code_dir, snippet_file)
       @lang = snippet_file.split('.').last
 
-      code = File.open(@file).read.encode("UTF-8")
+      begin
+        code = File.open(@file).read.encode("UTF-8")
+      rescue => e
+        # We need to explicitly exit on execptions here because Jekyll will silently swallow
+        # them, leading to silent build failures (see https://github.com/jekyll/jekyll/issues/5104)
+        puts(e)
+        puts(e.backtrace)
+        exit 1
+      end
       code = select_lines(code)
 
       rendered_code = Pygments.highlight(code, :lexer => @lang)
