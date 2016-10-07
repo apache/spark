@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
-import org.scalatest.BeforeAndAfter
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming._
@@ -344,7 +343,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
 }
 
 
-class KafkaSourceStressSuite extends KafkaSourceTest with BeforeAndAfter {
+class KafkaSourceStressSuite extends KafkaSourceTest {
 
   import testImplicits._
 
@@ -356,13 +355,6 @@ class KafkaSourceStressSuite extends KafkaSourceTest with BeforeAndAfter {
 
   private def nextInt(start: Int, end: Int): Int = {
     start + Random.nextInt(start + end - 1)
-  }
-
-  after {
-    for (topic <-
-         testUtils.getAllTopicsAndPartitionSize().toMap.keys.filter(_.startsWith("stress"))) {
-      testUtils.deleteTopic(topic)
-    }
   }
 
   test("stress test with multiple topics and partitions")  {
