@@ -148,10 +148,13 @@ parallelize <- function(sc, coll, numSlices = 1) {
   if (objectSize < sizeLimit) {
     jrdd <- callJStatic("org.apache.spark.api.r.RRDD", "createRDDFromArray", sc, serializedSlices)
   } else {
-    fileName <- writeToTempFile(serializedSlices)
-    jrdd <- callJStatic(
-      "org.apache.spark.api.r.RRDD", "createRDDFromFile", sc, fileName, as.integer(numSlices))
-    file.remove(fileName)
+    jrdd <- tryCatch({
+      fileName <- writeToTempFile(serializedSlices)
+      callJStatic(
+        "org.apache.spark.api.r.RRDD", "createRDDFromFile", sc, fileName, as.integer(numSlices))
+    }, finally = {
+      file.remove(fileName)
+    })
   }
 
   RDD(jrdd, "byte")
