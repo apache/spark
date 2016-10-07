@@ -1011,6 +1011,8 @@ object functions {
    */
   def isnull(e: Column): Column = withExpr { IsNull(e.expr) }
 
+  def assertNotNull (e: Column): Column = withExpr { AssertNotNull(e.expr, Seq(e.toString)) }
+
   /**
    * A column expression that generates monotonically increasing 64-bit integers.
    *

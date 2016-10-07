@@ -138,6 +138,10 @@ _functions_1_6 = {
                    ' eliminated.'
 }
 
+_functions_1_8 = {
+    'assertNotNull': 'An identity function that throws an error if the argument is null'
+}
+
 # math functions that take two arguments as input
 _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
@@ -182,6 +186,8 @@ for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.6)(_create_window_function(_name, _doc))
 for _name, _doc in _functions_1_6.items():
     globals()[_name] = since(1.6)(_create_function(_name, _doc))
+for _name, _doc in _functions_1_8.items():
+    globals()[_name] = since(1.8)(_create_function(_name, _doc))
 del _name, _doc
 
 
