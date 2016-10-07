@@ -159,6 +159,7 @@ private case class SubscribePattern[K, V](
       // we've called poll, we must pause or next poll may consume messages and set position
       consumer.pause(consumer.assignment())
     }
+
     consumer
   }
 }
