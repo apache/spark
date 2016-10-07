@@ -44,12 +44,12 @@ abstract class SparkFunSuite
   }
 
   // helper function
-  protected final def getFile(file: String): File = {
+  protected final def getTestResourceFile(file: String): File = {
     new File(getClass.getClassLoader.getResource(file).getFile)
   }
 
-  protected final def getPath(file: String): String = {
-    getFile(file).getCanonicalPath
+  protected final def getTestResourcePath(file: String): String = {
+    getTestResourceFile(file).getCanonicalPath
   }
 
   /**

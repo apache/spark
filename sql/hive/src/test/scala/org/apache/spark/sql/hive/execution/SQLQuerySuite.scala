@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.File
 import java.sql.{Date, Timestamp}
 
 import scala.sys.process.{Process, ProcessLogger}
@@ -67,7 +66,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import spark.implicits._
 
   test("script") {
-    val scriptFilePath = getPath("test_script.sh")
+    val scriptFilePath = getTestResourcePath("test_script.sh")
     if (testCommandAvailable("bash") && testCommandAvailable("echo | sed")) {
       val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
       df.createOrReplaceTempView("script_table")
@@ -1292,7 +1291,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       .selectExpr("id AS a", "id AS b")
       .createOrReplaceTempView("test")
 
-    val scriptFilePath = getPath("data")
+    val scriptFilePath = getTestResourcePath("data")
     checkAnswer(
       sql(
         s"""FROM(
@@ -1311,7 +1310,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       .selectExpr("id AS a", "id AS b")
       .createOrReplaceTempView("test")
 
-    val scriptFilePath = getPath("data")
+    val scriptFilePath = getTestResourcePath("data")
     val df = sql(
       s"""FROM test
         |SELECT TRANSFORM(a, b)
