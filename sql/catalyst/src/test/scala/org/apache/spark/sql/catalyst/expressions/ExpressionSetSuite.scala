@@ -80,6 +80,24 @@ class ExpressionSetSuite extends SparkFunSuite {
   setTest(1, Not(aUpper >= 1), aUpper < 1, Not(Literal(1) <= aUpper), Literal(1) > aUpper)
   setTest(1, Not(aUpper <= 1), aUpper > 1, Not(Literal(1) >= aUpper), Literal(1) < aUpper)
 
+  setTest(1, aUpper > bUpper && aUpper <= 10, aUpper <= 10 && aUpper > bUpper)
+  setTest(1,
+    aUpper > bUpper &&
+      bUpper > 100 &&
+      aUpper <= 10,
+    bUpper > 100 &&
+      aUpper <= 10 &&
+      aUpper > bUpper)
+
+  setTest(1, aUpper > bUpper || aUpper <= 10, aUpper <= 10 || aUpper > bUpper)
+  setTest(1,
+    aUpper > bUpper ||
+      bUpper > 100 ||
+      aUpper <= 10,
+    bUpper > 100 ||
+      aUpper <= 10 ||
+      aUpper > bUpper)
+
   test("add to / remove from set") {
     val initialSet = ExpressionSet(aUpper + 1 :: Nil)
 
