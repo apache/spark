@@ -342,6 +342,24 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("read from textfile") {
+    withTempDirs { case (src, tmp) =>
+      val textStream = spark.readStream.textFile(src.getCanonicalPath)
+      val filtered = textStream.filter(_.contains("keep"))
+
+      testStream(filtered)(
+        AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
+        CheckAnswer("keep2", "keep3"),
+        StopStream,
+        AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
+        StartStream(),
+        CheckAnswer("keep2", "keep3", "keep5", "keep6"),
+        AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
+        CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
+      )
+    }
+  }
+
   test("SPARK-17165 should not track the list of seen files indefinitely") {
     // This test works by:
     // 1. Create a file
@@ -374,24 +392,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           assert(source.seenFiles.size == 1)
           true
         }
-      )
-    }
-  }
-
-  test("read from textfile") {
-    withTempDirs { case (src, tmp) =>
-      val textStream = spark.readStream.textFile(src.getCanonicalPath)
-      val filtered = textStream.filter($"value" contains "keep")
-
-      testStream(filtered)(
-        AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
-        CheckAnswer("keep2", "keep3"),
-        StopStream,
-        AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
-        StartStream(),
-        CheckAnswer("keep2", "keep3", "keep5", "keep6"),
-        AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
-        CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
       )
     }
   }
