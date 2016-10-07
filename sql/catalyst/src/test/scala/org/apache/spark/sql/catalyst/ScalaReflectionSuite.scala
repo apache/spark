@@ -23,7 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.typeOf
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -94,7 +94,7 @@ object TestingUDT {
       .add("c", DoubleType, nullable = false)
 
     override def serialize(n: NestedStruct): Any = {
-      val row = new SpecificMutableRow(sqlType.asInstanceOf[StructType].map(_.dataType))
+      val row = new SpecificInternalRow(sqlType.asInstanceOf[StructType].map(_.dataType))
       row.setInt(0, n.a)
       row.setLong(1, n.b)
       row.setDouble(2, n.c)

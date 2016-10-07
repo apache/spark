@@ -24,7 +24,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types._
 
@@ -54,7 +54,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
         expected: Int): Unit = {
 
       assertResult(expected, s"Wrong actualSize for $columnType") {
-        val row = new GenericMutableRow(1)
+        val row = new GenericInternalRow(1)
         row.update(0, CatalystTypeConverters.convertToCatalyst(value))
         val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
         columnType.actualSize(proj(row), 0)
