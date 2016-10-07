@@ -150,7 +150,13 @@ case class CNFNormalization(conf: CatalystConf) extends Rule[LogicalPlan] with P
       }
       finalPredicates = predicates.toSeq
     }
-    val cnf = finalPredicates.map(toCNF(_, depth + 1))
+    val cnf = finalPredicates.map { p =>
+      if (p.semanticEquals(predicate)) {
+        p
+      } else {
+        toCNF(p, depth + 1)
+      }
+    }
     if (depth == 0 && cnf.length > conf.maxPredicateNumberForCNFNormalization) {
       return predicate
     } else {

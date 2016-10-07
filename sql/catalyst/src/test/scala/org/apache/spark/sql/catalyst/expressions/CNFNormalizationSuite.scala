@@ -44,24 +44,6 @@ class CNFNormalizationSuite extends SparkFunSuite with PredicateHelper {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.int, 'e.int)
 
-  // Change the predicate orders in [[And]] and [[Or]] so we can compare them consistently.
-  private def normalizationPredicate(predicate: Expression): Expression = {
-    predicate transformUp {
-      case Or(a, b) =>
-        if (a.hashCode() > b.hashCode) {
-          Or(b, a)
-        } else {
-          Or(a, b)
-        }
-      case And(a, b) =>
-        if (a.hashCode() > b.hashCode) {
-          And(b, a)
-        } else {
-          And(a, b)
-        }
-    }
-  }
-
   private def checkCondition(input: Expression, expected: Expression): Unit = {
     val actual = Optimize.execute(testRelation.where(input).analyze)
     val correctAnswer = Optimize.execute(testRelation.where(expected).analyze)
@@ -69,12 +51,7 @@ class CNFNormalizationSuite extends SparkFunSuite with PredicateHelper {
     val resultFilterExpression = actual.collectFirst { case f: Filter => f.condition }.get
     val expectedFilterExpression = correctAnswer.collectFirst { case f: Filter => f.condition }.get
 
-    val normalizedResult = splitConjunctivePredicates(resultFilterExpression)
-      .map(normalizationPredicate).sortBy(_.toString)
-    val normalizedExpected = splitConjunctivePredicates(expectedFilterExpression)
-      .map(normalizationPredicate).sortBy(_.toString)
-
-    assert(normalizedResult == normalizedExpected)
+    assert(resultFilterExpression.semanticEquals(expectedFilterExpression))
   }
 
   private val a = Literal(1) < 'a
@@ -161,6 +138,16 @@ class CNFNormalizationSuite extends SparkFunSuite with PredicateHelper {
       (b || d) && (b || e) && (b || f) &&
       (c || d) && (c || e) && (c || f)
     checkCondition(input, expected)
+  }
+
+  test("((a && b) || (c && d)) || e") {
+    val input = ((a && b) || (c && d)) || e
+    val expected = ((a || c) || e) && ((a || d) || e) && ((b || c) || e) && ((b || d) || e)
+    checkCondition(input, expected)
+    val analyzed = testRelation.where(input).analyze
+    val optimized = Optimize.execute(analyzed)
+    val resultFilterExpression = optimized.collectFirst { case f: Filter => f.condition }.get
+    println(s"resultFilterExpression: $resultFilterExpression")
   }
 
   test("CNF normalization exceeds max predicate numbers") {
