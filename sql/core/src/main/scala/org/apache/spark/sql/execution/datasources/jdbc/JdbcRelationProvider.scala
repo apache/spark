@@ -70,7 +70,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
       if (tableExists) {
         mode match {
           case SaveMode.Overwrite =>
-            if (isTruncate && isCascadingTruncateTable(url).contains(false)) {
+            if (isTruncate && isCascadingTruncateTable(url).exists(_ == false)) {
               // In this case, we should truncate table and then load.
               truncateTable(conn, table)
               saveTable(df, url, table, props)
