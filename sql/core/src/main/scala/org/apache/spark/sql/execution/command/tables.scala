@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -417,10 +417,14 @@ case class TruncateTableCommand(
 /**
  * Command that looks like
  * {{{
- *   DESCRIBE [EXTENDED|FORMATTED] table_name;
+ *   DESCRIBE [EXTENDED|FORMATTED] table_name partitionSpec?;
  * }}}
  */
-case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isFormatted: Boolean)
+case class DescribeTableCommand(
+    table: TableIdentifier,
+    partitionSpec: Map[String, String],
+    isExtended: Boolean,
+    isFormatted: Boolean)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] = Seq(
@@ -438,6 +442,10 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     val catalog = sparkSession.sessionState.catalog
 
     if (catalog.isTemporaryTable(table)) {
+      if (partitionSpec.nonEmpty) {
+        throw new AnalysisException(
+          s"DESC PARTITION is not allowed on a temporary view: ${table.identifier}")
+      }
       describeSchema(catalog.lookupRelation(table).schema, result)
     } else {
       val metadata = catalog.getTableMetadata(table)
@@ -451,12 +459,16 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
         describeSchema(metadata.schema, result)
       }
 
-      if (isExtended) {
-        describeExtended(metadata, result)
-      } else if (isFormatted) {
-        describeFormatted(metadata, result)
+      describePartitionInfo(metadata, result)
+
+      if (partitionSpec.isEmpty) {
+        if (isExtended) {
+          describeExtendedTableInfo(metadata, result)
+        } else if (isFormatted) {
+          describeFormattedTableInfo(metadata, result)
+        }
       } else {
-        describePartitionInfo(metadata, result)
+        describeDetailedPartitionInfo(catalog, metadata, result)
       }
     }
 
@@ -481,16 +493,12 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     }
   }
 
-  private def describeExtended(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    describePartitionInfo(table, buffer)
-
+  private def describeExtendedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", table.toString, "")
   }
 
-  private def describeFormatted(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    describePartitionInfo(table, buffer)
-
+  private def describeFormattedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
     append(buffer, "Database:", table.database, "")
@@ -545,6 +553,53 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
           metadata.numBuckets,
           metadata.bucketColumnNames,
           metadata.sortColumnNames)
+    }
+  }
+
+  private def describeDetailedPartitionInfo(
+      catalog: SessionCatalog,
+      metadata: CatalogTable,
+      result: ArrayBuffer[Row]): Unit = {
+    if (metadata.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException(
+        s"DESC PARTITION is not allowed on a view: ${table.identifier}")
+    }
+    if (DDLUtils.isDatasourceTable(metadata)) {
+      throw new AnalysisException(
+        s"DESC PARTITION is not allowed on a datasource table: ${table.identifier}")
+    }
+    val partition = catalog.getPartition(table, partitionSpec)
+    if (isExtended) {
+      describeExtendedDetailedPartitionInfo(table, metadata, partition, result)
+    } else if (isFormatted) {
+      describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
+      describeStorageInfo(metadata, result)
+    }
+  }
+
+  private def describeExtendedDetailedPartitionInfo(
+      tableIdentifier: TableIdentifier,
+      table: CatalogTable,
+      partition: CatalogTablePartition,
+      buffer: ArrayBuffer[Row]): Unit = {
+    append(buffer, "", "", "")
+    append(buffer, "Detailed Partition Information " + partition.toString, "", "")
+  }
+
+  private def describeFormattedDetailedPartitionInfo(
+      tableIdentifier: TableIdentifier,
+      table: CatalogTable,
+      partition: CatalogTablePartition,
+      buffer: ArrayBuffer[Row]): Unit = {
+    append(buffer, "", "", "")
+    append(buffer, "# Detailed Partition Information", "", "")
+    append(buffer, "Partition Value:", s"[${partition.spec.values.mkString(", ")}]", "")
+    append(buffer, "Database:", table.database, "")
+    append(buffer, "Table:", tableIdentifier.table, "")
+    append(buffer, "Location:", partition.storage.locationUri.getOrElse(""), "")
+    append(buffer, "Partition Parameters:", "", "")
+    partition.parameters.foreach { case (key, value) =>
+      append(buffer, s"  $key", value, "")
     }
   }
 
