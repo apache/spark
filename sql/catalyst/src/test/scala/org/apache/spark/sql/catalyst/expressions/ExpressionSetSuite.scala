@@ -98,6 +98,25 @@ class ExpressionSetSuite extends SparkFunSuite {
       aUpper <= 10 ||
       aUpper > bUpper)
 
+  // Don't reorder non-deterministic expression in AND/OR.
+  setTest(2, Rand(1L) > aUpper && aUpper <= 10, aUpper <= 10 && Rand(1L) > aUpper)
+  setTest(2,
+    aUpper > bUpper &&
+      bUpper > 100 &&
+      Rand(1L) > aUpper,
+    bUpper > 100 &&
+      Rand(1L) > aUpper &&
+      aUpper > bUpper)
+
+  setTest(2, Rand(1L) > aUpper || aUpper <= 10, aUpper <= 10 || Rand(1L) > aUpper)
+  setTest(2,
+    aUpper > bUpper ||
+      aUpper <= Rand(1L) ||
+      aUpper <= 10,
+    aUpper <= Rand(1L) ||
+      aUpper <= 10 ||
+      aUpper > bUpper)
+
   test("add to / remove from set") {
     val initialSet = ExpressionSet(aUpper + 1 :: Nil)
 
