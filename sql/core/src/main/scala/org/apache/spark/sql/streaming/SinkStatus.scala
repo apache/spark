@@ -24,8 +24,9 @@ import org.apache.spark.sql.streaming.StreamingQueryStatus.indent
  * :: Experimental ::
  * Status and metrics of a streaming sink.
  *
- * @param description Description of the source corresponding to this status
- * @param offsetDesc Description of the current offset up to which data has been written by the sink
+ * @param description Description of the source corresponding to this status.
+ * @param offsetDesc Description of the current offsets up to which data has been written
+ *                   by the sink.
  * @since 2.0.0
  */
 @Experimental

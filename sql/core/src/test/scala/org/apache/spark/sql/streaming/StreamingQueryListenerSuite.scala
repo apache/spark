@@ -268,7 +268,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       "name", 1, 123, 1.0, 2.0, Some(345),
       Array(
         SourceStatus("source1", LongOffset(0).toString, 0.0, 0.0, Map("a" -> "b"))),
-      SinkStatus("sink", CompositeOffset(None :: None :: Nil).toString),
+      SinkStatus("sink", CompositeOffset(Some(LongOffset(1)) :: None :: Nil).toString),
       Map("a" -> "b"))
   }
 }
