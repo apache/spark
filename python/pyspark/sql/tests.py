@@ -1702,6 +1702,12 @@ class SQLTests(ReusedPySparkTestCase):
             "does_not_exist",
             lambda: spark.catalog.uncacheTable("does_not_exist"))
 
+    def test_read_text_file_list(self):
+        df = self.spark.read.text(['python/test_support/sql/text-test.txt',
+                                   'python/test_support/sql/text-test.txt'])
+        count = df.count()
+        self.assertEquals(count, 4)
+
     def test_BinaryType_serialization(self):
         # Pyrolite version <= 4.9 could not serialize BinaryType with Python3 SPARK-17808
         schema = StructType([StructField('mybytes', BinaryType())])

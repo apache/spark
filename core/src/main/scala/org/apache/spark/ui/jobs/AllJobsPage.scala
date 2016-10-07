@@ -216,6 +216,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
   private def jobsTable(
       request: HttpServletRequest,
+      tableHeaderId: String,
       jobTag: String,
       jobs: Seq[JobUIData]): Seq[Node] = {
     val allParameters = request.getParameterMap.asScala.toMap
@@ -256,6 +257,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     try {
       new JobPagedTable(
         jobs,
+        tableHeaderId,
         jobTag,
         UIUtils.prependBaseUri(parent.basePath),
         "jobs", // subPath
@@ -288,9 +290,9 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val completedJobs = listener.completedJobs.reverse.toSeq
       val failedJobs = listener.failedJobs.reverse.toSeq
 
-      val activeJobsTable = jobsTable(request, "activeJob", activeJobs)
-      val completedJobsTable = jobsTable(request, "completedJob", completedJobs)
-      val failedJobsTable = jobsTable(request, "failedJob", failedJobs)
+      val activeJobsTable = jobsTable(request, "active", "activeJob", activeJobs)
+      val completedJobsTable = jobsTable(request, "completed", "completedJob", completedJobs)
+      val failedJobsTable = jobsTable(request, "failed", "failedJob", failedJobs)
 
       val shouldShowActiveJobs = activeJobs.nonEmpty
       val shouldShowCompletedJobs = completedJobs.nonEmpty
@@ -486,6 +488,7 @@ private[ui] class JobDataSource(
 }
 private[ui] class JobPagedTable(
     data: Seq[JobUIData],
+    tableHeaderId: String,
     jobTag: String,
     basePath: String,
     subPath: String,
@@ -528,12 +531,13 @@ private[ui] class JobPagedTable(
       s"&$pageNumberFormField=$page" +
       s"&$jobTag.sort=$encodedSortColumn" +
       s"&$jobTag.desc=$desc" +
-      s"&$pageSizeFormField=$pageSize"
+      s"&$pageSizeFormField=$pageSize" +
+      s"#$tableHeaderId"
   }
 
   override def goButtonFormPath: String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    s"$parameterPath&$jobTag.sort=$encodedSortColumn&$jobTag.desc=$desc"
+    s"$parameterPath&$jobTag.sort=$encodedSortColumn&$jobTag.desc=$desc#$tableHeaderId"
   }
 
   override def headers: Seq[Node] = {
@@ -557,7 +561,8 @@ private[ui] class JobPagedTable(
             parameterPath +
               s"&$jobTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
               s"&$jobTag.desc=${!desc}" +
-              s"&$jobTag.pageSize=$pageSize")
+              s"&$jobTag.pageSize=$pageSize" +
+              s"#$tableHeaderId")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
 
           <th class={cssClass}>
@@ -572,7 +577,8 @@ private[ui] class JobPagedTable(
             val headerLink = Unparsed(
               parameterPath +
                 s"&$jobTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
-                s"&$jobTag.pageSize=$pageSize")
+                s"&$jobTag.pageSize=$pageSize" +
+                s"#$tableHeaderId")
 
             <th class={cssClass}>
               <a href={headerLink}>
