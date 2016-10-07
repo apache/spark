@@ -1100,9 +1100,13 @@ CREATE TEMPORARY VIEW jdbcTable
 USING org.apache.spark.sql.jdbc
 OPTIONS (
   url "jdbc:postgresql:dbserver",
-  dbtable "schema.tablename"
+  dbtable "schema.tablename",
+  user 'username', 
+  password 'password'
 )
 
+INSERT INTO TABLE jdbcTable 
+SELECT * FROM resultTable
 {% endhighlight %}
 
 </div>

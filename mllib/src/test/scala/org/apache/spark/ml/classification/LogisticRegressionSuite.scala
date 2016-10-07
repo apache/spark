@@ -32,10 +32,13 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.types.LongType
 
 class LogisticRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
 
   @transient var smallBinaryDataset: Dataset[_] = _
   @transient var smallMultinomialDataset: Dataset[_] = _
@@ -46,8 +49,7 @@ class LogisticRegressionSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    smallBinaryDataset =
-      spark.createDataFrame(generateLogisticInput(1.0, 1.0, nPoints = 100, seed = 42))
+    smallBinaryDataset = generateLogisticInput(1.0, 1.0, nPoints = 100, seed = 42).toDF()
 
     smallMultinomialDataset = {
       val nPoints = 100
@@ -61,7 +63,7 @@ class LogisticRegressionSuite
       val testData = generateMultinomialLogisticInput(
         coefficients, xMean, xVariance, addIntercept = true, nPoints, 42)
 
-      val df = spark.createDataFrame(sc.parallelize(testData, 4))
+      val df = sc.parallelize(testData, 4).toDF()
       df.cache()
       df
     }
@@ -76,7 +78,7 @@ class LogisticRegressionSuite
         generateMultinomialLogisticInput(coefficients, xMean, xVariance,
           addIntercept = true, nPoints, 42)
 
-      spark.createDataFrame(sc.parallelize(testData, 4))
+      sc.parallelize(testData, 4).toDF()
     }
 
     multinomialDataset = {
@@ -91,7 +93,7 @@ class LogisticRegressionSuite
       val testData = generateMultinomialLogisticInput(
         coefficients, xMean, xVariance, addIntercept = true, nPoints, 42)
 
-      val df = spark.createDataFrame(sc.parallelize(testData, 4))
+      val df = sc.parallelize(testData, 4).toDF()
       df.cache()
       df
     }
@@ -430,10 +432,10 @@ class LogisticRegressionSuite
     val model = new LogisticRegressionModel("mLogReg",
       Matrices.dense(3, 2, Array(0.0, 0.0, 0.0, 1.0, 2.0, 3.0)),
       Vectors.dense(0.0, 0.0, 0.0), 3, true)
-    val overFlowData = spark.createDataFrame(Seq(
+    val overFlowData = Seq(
       LabeledPoint(1.0, Vectors.dense(0.0, 1000.0)),
       LabeledPoint(1.0, Vectors.dense(0.0, -1.0))
-    ))
+    ).toDF()
     val results = model.transform(overFlowData).select("rawPrediction", "probability").collect()
 
     // probabilities are correct when margins have to be adjusted
@@ -1775,6 +1777,21 @@ class LogisticRegressionSuite
       summary.precisionByThreshold.collect() === sameSummary.precisionByThreshold.collect())
   }
 
+  test("evaluate with labels that are not doubles") {
+    // Evaluate a test set with Label that is a numeric type other than Double
+    val lr = new LogisticRegression()
+      .setMaxIter(1)
+      .setRegParam(1.0)
+    val model = lr.fit(smallBinaryDataset)
+    val summary = model.evaluate(smallBinaryDataset).asInstanceOf[BinaryLogisticRegressionSummary]
+
+    val longLabelData = smallBinaryDataset.select(col(model.getLabelCol).cast(LongType),
+      col(model.getFeaturesCol))
+    val longSummary = model.evaluate(longLabelData).asInstanceOf[BinaryLogisticRegressionSummary]
+
+    assert(summary.areaUnderROC === longSummary.areaUnderROC)
+  }
+
   test("statistics on training data") {
     // Test that loss is monotonically decreasing.
     val lr = new LogisticRegression()
@@ -1795,9 +1812,9 @@ class LogisticRegressionSuite
     val numPoints = 40
     val outlierData = MLTestingUtils.genClassificationInstancesWithWeightedOutliers(spark,
       numClasses, numPoints)
-    val testData = spark.createDataFrame(Array.tabulate[LabeledPoint](numClasses) { i =>
+    val testData = Array.tabulate[LabeledPoint](numClasses) { i =>
       LabeledPoint(i.toDouble, Vectors.dense(i.toDouble))
-    })
+    }.toSeq.toDF()
     val lr = new LogisticRegression().setFamily("binomial").setWeightCol("weight")
     val model = lr.fit(outlierData)
     val results = model.transform(testData).select("label", "prediction").collect()
@@ -1819,9 +1836,9 @@ class LogisticRegressionSuite
     val numPoints = 40
     val outlierData = MLTestingUtils.genClassificationInstancesWithWeightedOutliers(spark,
       numClasses, numPoints)
-    val testData = spark.createDataFrame(Array.tabulate[LabeledPoint](numClasses) { i =>
+    val testData = Array.tabulate[LabeledPoint](numClasses) { i =>
       LabeledPoint(i.toDouble, Vectors.dense(i.toDouble))
-    })
+    }.toSeq.toDF()
     val mlr = new LogisticRegression().setFamily("multinomial").setWeightCol("weight")
     val model = mlr.fit(outlierData)
     val results = model.transform(testData).select("label", "prediction").collect()
@@ -1945,11 +1962,10 @@ class LogisticRegressionSuite
   }
 
   test("multiclass logistic regression with all labels the same") {
-    val constantData = spark.createDataFrame(Seq(
+    val constantData = Seq(
       LabeledPoint(4.0, Vectors.dense(0.0)),
       LabeledPoint(4.0, Vectors.dense(1.0)),
-      LabeledPoint(4.0, Vectors.dense(2.0)))
-    )
+      LabeledPoint(4.0, Vectors.dense(2.0))).toDF()
     val mlr = new LogisticRegression().setFamily("multinomial")
     val model = mlr.fit(constantData)
     val results = model.transform(constantData)
@@ -1961,11 +1977,10 @@ class LogisticRegressionSuite
     }
 
     // force the model to be trained with only one class
-    val constantZeroData = spark.createDataFrame(Seq(
+    val constantZeroData = Seq(
       LabeledPoint(0.0, Vectors.dense(0.0)),
       LabeledPoint(0.0, Vectors.dense(1.0)),
-      LabeledPoint(0.0, Vectors.dense(2.0)))
-    )
+      LabeledPoint(0.0, Vectors.dense(2.0))).toDF()
     val modelZeroLabel = mlr.setFitIntercept(false).fit(constantZeroData)
     val resultsZero = modelZeroLabel.transform(constantZeroData)
     resultsZero.select("rawPrediction", "probability", "prediction").collect().foreach {
@@ -1990,20 +2005,18 @@ class LogisticRegressionSuite
   }
 
   test("compressed storage") {
-    val moreClassesThanFeatures = spark.createDataFrame(Seq(
+    val moreClassesThanFeatures = Seq(
       LabeledPoint(4.0, Vectors.dense(0.0, 0.0, 0.0)),
       LabeledPoint(4.0, Vectors.dense(1.0, 1.0, 1.0)),
-      LabeledPoint(4.0, Vectors.dense(2.0, 2.0, 2.0)))
-    )
+      LabeledPoint(4.0, Vectors.dense(2.0, 2.0, 2.0))).toDF()
     val mlr = new LogisticRegression().setFamily("multinomial")
     val model = mlr.fit(moreClassesThanFeatures)
     assert(model.coefficientMatrix.isInstanceOf[SparseMatrix])
     assert(model.coefficientMatrix.asInstanceOf[SparseMatrix].colPtrs.length === 4)
-    val moreFeaturesThanClasses = spark.createDataFrame(Seq(
+    val moreFeaturesThanClasses = Seq(
       LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0)),
       LabeledPoint(1.0, Vectors.dense(1.0, 1.0, 1.0)),
-      LabeledPoint(1.0, Vectors.dense(2.0, 2.0, 2.0)))
-    )
+      LabeledPoint(1.0, Vectors.dense(2.0, 2.0, 2.0))).toDF()
     val model2 = mlr.fit(moreFeaturesThanClasses)
     assert(model2.coefficientMatrix.isInstanceOf[SparseMatrix])
     assert(model2.coefficientMatrix.asInstanceOf[SparseMatrix].colPtrs.length === 3)

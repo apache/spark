@@ -1145,4 +1145,20 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       """.stripMargin,
       "inline_tables")
   }
+
+  test("SPARK-17750 - interval arithmetic") {
+    withTable("dates") {
+      sql("create table dates (ts timestamp)")
+      checkSQL(
+        """
+          |select ts + interval 1 day, ts + interval 2 days,
+          |       ts - interval 1 day, ts - interval 2 days,
+          |       ts + interval '1' day, ts + interval '2' days,
+          |       ts - interval '1' day, ts - interval '2' days
+          |from dates
+        """.stripMargin,
+        "interval_arithmetic"
+      )
+    }
+  }
 }
