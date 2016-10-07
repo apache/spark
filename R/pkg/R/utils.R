@@ -334,6 +334,28 @@ varargsToEnv <- function(...) {
   env
 }
 
+# Utility function to capture the varargs into environment object but all values are converted
+# into string.
+varargsToStrEnv <- function(...) {
+  pairs <- list(...)
+  env <- new.env()
+  for (name in names(pairs)) {
+    value <- pairs[[name]]
+    if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
+      stop(paste0("Unsupported type for ", name, " : ", class(value),
+           ". Supported types are logical, numeric, character and NULL."))
+    }
+    if (is.logical(value)) {
+      env[[name]] <- tolower(as.character(value))
+    } else if (is.null(value)) {
+      env[[name]] <- value
+    } else {
+      env[[name]] <- as.character(value)
+    }
+  }
+  env
+}
+
 getStorageLevel <- function(newLevel = c("DISK_ONLY",
                                          "DISK_ONLY_2",
                                          "MEMORY_AND_DISK",
