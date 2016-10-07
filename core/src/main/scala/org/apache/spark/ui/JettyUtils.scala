@@ -25,12 +25,12 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.xml.Node
 
-import org.eclipse.jetty.server.{Request, Server, ServerConnector}
+import org.eclipse.jetty.server.{HttpConnectionFactory, Request, Server, ServerConnector}
 import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.servlet._
 import org.eclipse.jetty.servlets.gzip.GzipHandler
 import org.eclipse.jetty.util.component.LifeCycle
-import org.eclipse.jetty.util.thread.QueuedThreadPool
+import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
@@ -251,7 +251,15 @@ private[spark] object JettyUtils extends Logging {
       val server = new Server(pool)
       val connectors = new ArrayBuffer[ServerConnector]
       // Create a connector on port currentPort to listen for HTTP requests
-      val httpConnector = new ServerConnector(server)
+      val httpConnector = new ServerConnector(
+        server,
+        null,
+        // Call this full constructor to set this, which forces daemon threads:
+        new ScheduledExecutorScheduler(s"$serverName-JettyScheduler", true),
+        null,
+        -1,
+        -1,
+        new HttpConnectionFactory())
       httpConnector.setPort(currentPort)
       connectors += httpConnector
 
