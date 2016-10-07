@@ -41,19 +41,19 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       val subPath = "stages"
 
       val activeStagesTable =
-        new StageTableBase(request, activeStages, "activeStage", parent.basePath, subPath,
+        new StageTableBase(request, activeStages, "active", "activeStage", parent.basePath, subPath,
           parent.progressListener, parent.isFairScheduler,
           killEnabled = parent.killEnabled, isFailedStage = false)
       val pendingStagesTable =
-        new StageTableBase(request, pendingStages, "pendingStage", parent.basePath, subPath,
-          parent.progressListener, parent.isFairScheduler,
+        new StageTableBase(request, pendingStages, "pending", "pendingStage", parent.basePath,
+          subPath, parent.progressListener, parent.isFairScheduler,
           killEnabled = false, isFailedStage = false)
       val completedStagesTable =
-        new StageTableBase(request, completedStages, "completedStage", parent.basePath, subPath,
-          parent.progressListener, parent.isFairScheduler,
+        new StageTableBase(request, completedStages, "completed", "completedStage", parent.basePath,
+          subPath, parent.progressListener, parent.isFairScheduler,
           killEnabled = false, isFailedStage = false)
       val failedStagesTable =
-        new StageTableBase(request, failedStages, "failedStage", parent.basePath, subPath,
+        new StageTableBase(request, failedStages, "failed", "failedStage", parent.basePath, subPath,
           parent.progressListener, parent.isFairScheduler,
           killEnabled = false, isFailedStage = true)
 
