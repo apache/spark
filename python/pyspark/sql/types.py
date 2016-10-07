@@ -393,7 +393,7 @@ class StructField(DataType):
 
     def __init__(self, name, dataType, nullable=True, metadata=None):
         """
-        >>> (StructField("f1", StringType(), True)
+        >>> (StructField(u"f1", StringType(), True)
         ...      == StructField("f1", StringType(), True))
         True
         >>> (StructField("f1", StringType(), True)
