@@ -552,7 +552,7 @@ object JdbcUtils extends Logging {
       isolationLevel: Int): Iterator[Byte] = {
     require(batchSize >= 1,
       s"Invalid value `${batchSize.toString}` for parameter " +
-      s"`${JdbcUtils.JDBC_BATCH_INSERT_SIZE}`. The minimum value is 1.")
+      s"`$JDBC_BATCH_INSERT_SIZE`. The minimum value is 1.")
 
     val conn = getConnection()
     var committed = false
@@ -657,10 +657,10 @@ object JdbcUtils extends Logging {
   /**
    * Compute the schema string for this RDD.
    */
-  def schemaString(df: DataFrame, url: String): String = {
+  def schemaString(schema: StructType, url: String): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
-    df.schema.fields foreach { field =>
+    schema.fields foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
       val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
       val nullable = if (field.nullable) "" else "NOT NULL"
@@ -696,5 +696,28 @@ object JdbcUtils extends Logging {
     df.foreachPartition(iterator => savePartition(
       getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect, isolationLevel)
     )
+  }
+
+  /**
+   * Creates a table with a given schema.
+   */
+  def createTable(
+      schema: StructType,
+      url: String,
+      table: String,
+      createTableOptions: String,
+      conn: Connection): Unit = {
+    val strSchema = schemaString(schema, url)
+    // Create the table if the table does not exist.
+    // To allow certain options to append when create a new table, which can be
+    // table_options or partition_options.
+    // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+    val sql = s"CREATE TABLE $table ($strSchema) $createTableOptions"
+    val statement = conn.createStatement
+    try {
+      statement.executeUpdate(sql)
+    } finally {
+      statement.close()
+    }
   }
 }
