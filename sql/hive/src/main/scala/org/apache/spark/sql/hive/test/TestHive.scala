@@ -77,14 +77,15 @@ class TestHiveContext(
    * when running in the JVM, i.e. it needs to be false when calling from Python.
    */
   def this(sc: SparkContext, loadTestTables: Boolean = true) {
-    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc), loadTestTables))
+    this(new TestHiveSparkSession(HiveUtils.withTestHiveExternalCatalog(sc), loadTestTables))
   }
 
   override def newSession(): TestHiveContext = {
     new TestHiveContext(sparkSession.newSession())
   }
 
-  override def sessionState: TestHiveSessionState = sparkSession.sessionState
+  override def sessionState: TestHiveSessionState =
+    sparkSession.sessionState.asInstanceOf[TestHiveSessionState]
 
   def setCacheTables(c: Boolean): Unit = {
     sparkSession.setCacheTables(c)
@@ -137,18 +138,12 @@ private[hive] class TestHiveSparkSession(
     }
   }
 
-  assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
+  assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "test-hive")
 
   @transient
   override lazy val sharedState: SharedState = {
     existingSharedState.getOrElse(new SharedState(sc))
   }
-
-  // TODO: Let's remove TestHiveSessionState. Otherwise, we are not really testing the reflection
-  // logic based on the setting of CATALOG_IMPLEMENTATION.
-  @transient
-  override lazy val sessionState: TestHiveSessionState =
-    new TestHiveSessionState(self)
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(sc, Some(sharedState), loadTestTables)
@@ -422,30 +417,33 @@ private[hive] class TestHiveSparkSession(
         }
       }
 
+      val hiveSessionState = sessionState.asInstanceOf[HiveSessionState]
+
       sharedState.cacheManager.clearCache()
       loadedTables.clear()
-      sessionState.catalog.clearTempTables()
-      sessionState.catalog.invalidateCache()
+      hiveSessionState.catalog.clearTempTables()
+      hiveSessionState.catalog.invalidateCache()
 
-      sessionState.metadataHive.reset()
+      hiveSessionState.metadataHive.reset()
 
       FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.
-      sessionState.conf.setConfString("fs.default.name", new File(".").toURI.toString)
+      hiveSessionState.conf.setConfString("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
-      sessionState.metadataHive.runSqlHive("RESET")
+      hiveSessionState.metadataHive.runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
       // https://issues.apache.org/jira/browse/HIVE-9004
-      sessionState.metadataHive.runSqlHive("set hive.table.parameters.default=")
-      sessionState.metadataHive.runSqlHive("set datanucleus.cache.collections=true")
-      sessionState.metadataHive.runSqlHive("set datanucleus.cache.collections.lazy=true")
+      hiveSessionState.metadataHive.runSqlHive("set hive.table.parameters.default=")
+      hiveSessionState.metadataHive.runSqlHive("set datanucleus.cache.collections=true")
+      hiveSessionState.metadataHive.runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
-      sessionState.metadataHive.runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
+      hiveSessionState.metadataHive.runSqlHive(
+        "set hive.metastore.partition.name.whitelist.pattern=.*")
 
-      sessionState.catalog.setCurrentDatabase("default")
+      hiveSessionState.catalog.setCurrentDatabase("default")
     } catch {
       case e: Exception =>
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
@@ -505,8 +503,10 @@ private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
 
 
 private[hive] class TestHiveSessionState(
-    sparkSession: TestHiveSparkSession)
+    sparkSession: SparkSession)
   extends HiveSessionState(sparkSession) { self =>
+
+  assume(sparkSession.isInstanceOf[TestHiveSparkSession])
 
   override lazy val conf: SQLConf = {
     new SQLConf {
@@ -530,7 +530,7 @@ private[hive] class TestHiveSessionState(
   }
 
   override def executePlan(plan: LogicalPlan): TestHiveQueryExecution = {
-    new TestHiveQueryExecution(sparkSession, plan)
+    new TestHiveQueryExecution(sparkSession.asInstanceOf[TestHiveSparkSession], plan)
   }
 }
 

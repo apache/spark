@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, Cat
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
-import org.apache.spark.sql.hive.HiveExternalCatalog
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveSessionState}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -526,7 +526,7 @@ class HiveDDLSuite
   }
 
   test("desc table for data source table using Hive Metastore") {
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
+    assume(spark.sessionState.isInstanceOf[HiveSessionState])
     val tabName = "tab1"
     withTable(tabName) {
       sql(s"CREATE TABLE $tabName(a int comment 'test') USING parquet ")

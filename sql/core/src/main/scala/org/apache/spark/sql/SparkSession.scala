@@ -911,10 +911,13 @@ object SparkSession {
   private val defaultSession = new AtomicReference[SparkSession]
 
   private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
+  private val TEST_HIVE_SESSION_STATE_CLASS_NAME =
+    "org.apache.spark.sql.hive.test.TestHiveSessionState"
 
   private def sessionStateClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
       case "hive" => HIVE_SESSION_STATE_CLASS_NAME
+      case "test-hive" => TEST_HIVE_SESSION_STATE_CLASS_NAME
       case "in-memory" => classOf[SessionState].getCanonicalName
     }
   }

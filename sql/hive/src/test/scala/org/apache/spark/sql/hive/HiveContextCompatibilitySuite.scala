@@ -47,6 +47,7 @@ class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEac
 
   override def afterAll(): Unit = {
     try {
+      HiveUtils.withTestHiveExternalCatalog(sc)
       sc = null
       hc = null
     } finally {
