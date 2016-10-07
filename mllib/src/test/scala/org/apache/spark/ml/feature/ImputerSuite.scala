@@ -20,7 +20,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
 
 class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -32,14 +32,8 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (3, 4.0, 4.0, 4.0),
       (4, Double.NaN, 2.25, 3.0)
     )).toDF("id", "value", "expected_mean", "expected_median")
-    Seq("mean", "median").foreach { strategy =>
-      val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
-      val model = imputer.fit(df)
-      model.transform(df).select("expected_" + strategy, "out").collect().foreach {
-       case Row(exp: Double, out: Double) =>
-          assert(exp ~== out absTol 1e-5, s"Imputed values differ. Expected: $exp, actual: $out")
-      }
-    }
+    val imputer = new Imputer().setInputCol("value").setOutputCol("out")
+    ImputerSuite.iterateStrategyTest(imputer, df)
   }
 
   test("Imputer should handle NaNs when computing surrogate value, if missingValue is not NaN") {
@@ -49,16 +43,9 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (2, Double.NaN, Double.NaN, Double.NaN),
       (3, -1.0, 2.0, 3.0)
     )).toDF("id", "value", "expected_mean", "expected_median")
-    Seq("mean", "median").foreach { strategy =>
-      val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
-        .setMissingValue(-1.0)
-      val model = imputer.fit(df)
-      model.transform(df).select("expected_" + strategy, "out").collect().foreach {
-        case Row(exp: Double, out: Double) =>
-          assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
-            s"Imputed values differ. Expected: $exp, actual: $out")
-      }
-    }
+    val imputer = new Imputer().setInputCol("value").setOutputCol("out")
+      .setMissingValue(-1.0)
+    ImputerSuite.iterateStrategyTest(imputer, df)
   }
 
   test("Imputer for Float with missing Value -1.0") {
@@ -69,16 +56,9 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (3, 10.0F, 10.0F, 10.0F),
       (4, -1.0F, 6.0F, 3.0F)
     )).toDF("id", "value", "expected_mean", "expected_median")
-
-    Seq("mean", "median").foreach { strategy =>
-      val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
-        .setMissingValue(-1)
-      val model = imputer.fit(df)
-      model.transform(df).select("expected_" + strategy, "out").collect().foreach {
-        case Row(exp: Float, out: Float) =>
-          assert(exp == out, s"Imputed values differ. Expected: $exp, actual: $out")
-      }
-    }
+    val imputer = new Imputer().setInputCol("value").setOutputCol("out")
+      .setMissingValue(-1)
+    ImputerSuite.iterateStrategyTest(imputer, df)
   }
 
   test("Imputer should impute null as well as 'missingValue'") {
@@ -90,15 +70,8 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (4, -1.0, 8.0, 10.0)
     )).toDF("id", "value", "expected_mean", "expected_median")
     val df2 = df.selectExpr("*", "IF(value=-1.0, null, value) as nullable_value")
-    Seq("mean", "median").foreach { strategy =>
-      val imputer = new Imputer().setInputCol("nullable_value").setOutputCol("out")
-        .setStrategy(strategy)
-      val model = imputer.fit(df2)
-      model.transform(df2).select("expected_" + strategy, "out").collect().foreach {
-        case Row(exp: Double, out: Double) =>
-          assert(exp ~== out absTol 1e-5, s"Imputed values differ. Expected: $exp, actual: $out")
-      }
-    }
+    val imputer = new Imputer().setInputCol("nullable_value").setOutputCol("out")
+    ImputerSuite.iterateStrategyTest(imputer, df2)
   }
 
 
@@ -125,12 +98,38 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
   }
 
   test("ImputerModel read/write") {
+    val spark = this.spark
+    import spark.implicits._
+    val surrogateDF = Seq(1.234).toDF("myInputCol")
+
     val instance = new ImputerModel(
-      "myImputer", 1.234)
+      "myImputer", surrogateDF)
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
     val newInstance = testDefaultReadWrite(instance)
-    assert(newInstance.surrogate === instance.surrogate)
+    assert(newInstance.surrogateDF.collect() === instance.surrogateDF.collect())
   }
 
+}
+
+object ImputerSuite{
+
+  /**
+   * Imputation strategy. Available options are ["mean", "median"].
+   * @param df DataFrame with columns "id", "value", "expected_mean", "expected_median"
+   */
+  def iterateStrategyTest(imputer: Imputer, df: DataFrame): Unit = {
+    Seq("mean", "median").foreach { strategy =>
+      imputer.setStrategy(strategy)
+      val model = imputer.fit(df)
+      model.transform(df).select("expected_" + strategy, "out").collect().foreach {
+        case Row(exp: Float, out: Float) =>
+          assert((exp.isNaN && out.isNaN) || (exp == out),
+            s"Imputed values differ. Expected: $exp, actual: $out")
+        case Row(exp: Double, out: Double) =>
+          assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
+            s"Imputed values differ. Expected: $exp, actual: $out")
+      }
+    }
+  }
 }

@@ -25,7 +25,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -76,7 +76,7 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
  * Imputation estimator for completing missing values, either using the mean or the median
  * of the column in which the missing values are located. The input column should be of
  * DoubleType or FloatType. Currently Imputer does not support categorical features yet
- * and possibly creates incorrect values for a categorical feature.
+ * (SPARK-15041) and possibly creates incorrect values for a categorical feature.
  *
  * Note that the mean/median value is computed after filtering out missing values.
  * All Null values in the input column are treated as missing, and so are also imputed.
@@ -123,7 +123,9 @@ class Imputer @Since("2.1.0")(override val uid: String)
       case "mean" => filtered.select(avg($(inputCol))).first().getDouble(0)
       case "median" => filtered.stat.approxQuantile($(inputCol), Array(0.5), 0.001)(0)
     }
-    copyValues(new ImputerModel(uid, surrogate).setParent(this))
+    import dataset.sparkSession.implicits._
+    val surrogateDF = Seq(surrogate.asInstanceOf[Double]).toDF($(inputCol))
+    copyValues(new ImputerModel(uid, surrogateDF).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -147,12 +149,13 @@ object Imputer extends DefaultParamsReadable[Imputer] {
  * :: Experimental ::
  * Model fitted by [[Imputer]].
  *
- * @param surrogate Value by which missing values in the input column will be replaced.
+ * @param surrogateDF Value by which missing values in the input columns will be replaced. This
+ *    is stored using DataFrame with input column names and the corresponding surrogates.
  */
 @Experimental
 class ImputerModel private[ml](
     override val uid: String,
-    val surrogate: Double)
+    val surrogateDF: DataFrame)
   extends Model[ImputerModel] with ImputerParams with MLWritable {
 
   import ImputerModel._
@@ -167,8 +170,9 @@ class ImputerModel private[ml](
     transformSchema(dataset.schema, logging = true)
     val inputType = dataset.schema($(inputCol)).dataType
     val ic = col($(inputCol))
-    dataset.withColumn($(outputCol), when(ic.isNull, surrogate)
-      .when(ic === $(missingValue), surrogate)
+    val icsurrogate = surrogateDF.head().getDouble(0)
+    dataset.withColumn($(outputCol), when(ic.isNull, icsurrogate)
+      .when(ic === $(missingValue), icsurrogate)
       .otherwise(ic)
       .cast(inputType))
   }
@@ -178,7 +182,7 @@ class ImputerModel private[ml](
   }
 
   override def copy(extra: ParamMap): ImputerModel = {
-    val copied = new ImputerModel(uid, surrogate)
+    val copied = new ImputerModel(uid, surrogateDF)
     copyValues(copied, extra).setParent(parent)
   }
 
@@ -192,13 +196,10 @@ object ImputerModel extends MLReadable[ImputerModel] {
 
   private[ImputerModel] class ImputerModelWriter(instance: ImputerModel) extends MLWriter {
 
-    private case class Data(surrogate: Double)
-
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = new Data(instance.surrogate)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      instance.surrogateDF.repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -209,10 +210,8 @@ object ImputerModel extends MLReadable[ImputerModel] {
     override def load(path: String): ImputerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val Row(surrogate: Double) = sqlContext.read.parquet(dataPath)
-        .select("surrogate")
-        .head()
-      val model = new ImputerModel(metadata.uid, surrogate)
+      val surrogateDF = sqlContext.read.parquet(dataPath)
+      val model = new ImputerModel(metadata.uid, surrogateDF)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
