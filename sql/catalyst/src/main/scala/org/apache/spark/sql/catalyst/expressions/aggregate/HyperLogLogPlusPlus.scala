@@ -53,31 +53,18 @@ import org.apache.spark.sql.types._
     """)
 case class HyperLogLogPlusPlus(
     child: Expression,
-    relativeSD: Double = 0.05,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-  extends ImperativeAggregate {
+    relativeSD: Double = 0.05) extends ImperativeAggregateImpl {
   import HyperLogLogPlusPlus._
 
-  def this(child: Expression) = {
-    this(child = child, relativeSD = 0.05, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
-  }
+  def this(child: Expression) = this(child, 0.05)
 
   def this(child: Expression, relativeSD: Expression) = {
     this(
       child = child,
-      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral(relativeSD),
-      mutableAggBufferOffset = 0,
-      inputAggBufferOffset = 0)
+      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral(relativeSD))
   }
 
   override def prettyName: String = "approx_count_distinct"
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   /**
    * HLL++ uses 'p' bits for addressing. The more addressing bits we use, the more precise the
@@ -142,23 +129,16 @@ case class HyperLogLogPlusPlus(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
-
   /** Allocate enough words to store all registers. */
-  override val aggBufferAttributes: Seq[AttributeReference] = Seq.tabulate(numWords) { i =>
-    AttributeReference(s"MS[$i]", LongType)()
-  }
-
-  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
-  // in the superclass because that will lead to initialization ordering issues.
-  override val inputAggBufferAttributes: Seq[AttributeReference] =
-    aggBufferAttributes.map(_.newInstance())
+  override val aggBufferSchema: StructType = StructType(Seq.tabulate(numWords) { i =>
+    StructField(s"MS[$i]", LongType)
+  })
 
   /** Fill all words with zeros. */
   override def initialize(buffer: MutableRow): Unit = {
     var word = 0
     while (word < numWords) {
-      buffer.setLong(mutableAggBufferOffset + word, 0)
+      buffer.setLong(word, 0)
       word += 1
     }
   }
@@ -182,7 +162,7 @@ case class HyperLogLogPlusPlus(
 
       // Get the word containing the register we are interested in.
       val wordOffset = idx / REGISTERS_PER_WORD
-      val word = buffer.getLong(mutableAggBufferOffset + wordOffset)
+      val word = buffer.getLong(wordOffset)
 
       // Extract the M[J] register value from the word.
       val shift = REGISTER_SIZE * (idx - (wordOffset * REGISTERS_PER_WORD))
@@ -191,7 +171,7 @@ case class HyperLogLogPlusPlus(
 
       // Assign the maximum number of leading zeros to the register.
       if (pw > Midx) {
-        buffer.setLong(mutableAggBufferOffset + wordOffset, (word & ~mask) | (pw << shift))
+        buffer.setLong(wordOffset, (word & ~mask) | (pw << shift))
       }
     }
   }
@@ -204,8 +184,8 @@ case class HyperLogLogPlusPlus(
     var idx = 0
     var wordOffset = 0
     while (wordOffset < numWords) {
-      val word1 = buffer1.getLong(mutableAggBufferOffset + wordOffset)
-      val word2 = buffer2.getLong(inputAggBufferOffset + wordOffset)
+      val word1 = buffer1.getLong(wordOffset)
+      val word2 = buffer2.getLong(wordOffset)
       var word = 0L
       var i = 0
       var mask = REGISTER_WORD_MASK
@@ -215,7 +195,7 @@ case class HyperLogLogPlusPlus(
         i += 1
         idx += 1
       }
-      buffer1.setLong(mutableAggBufferOffset + wordOffset, word)
+      buffer1.setLong(wordOffset, word)
       wordOffset += 1
     }
   }
@@ -277,7 +257,7 @@ case class HyperLogLogPlusPlus(
     var idx = 0
     var wordOffset = 0
     while (wordOffset < numWords) {
-      val word = buffer.getLong(mutableAggBufferOffset + wordOffset)
+      val word = buffer.getLong(wordOffset)
       var i = 0
       var shift = 0
       while (idx < m && i < REGISTERS_PER_WORD) {

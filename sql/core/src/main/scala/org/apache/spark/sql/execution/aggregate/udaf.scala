@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, MutableRow, _}
-import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
+import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregateImpl
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
@@ -321,16 +321,8 @@ private[aggregate] class InputAggregationBuffer(
  */
 case class ScalaUDAF(
     children: Seq[Expression],
-    udaf: UserDefinedAggregateFunction,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-  extends ImperativeAggregate with NonSQLExpression with Logging {
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
+    udaf: UserDefinedAggregateFunction)
+  extends ImperativeAggregateImpl with NonSQLExpression with Logging {
 
   override def nullable: Boolean = true
 
@@ -341,13 +333,6 @@ case class ScalaUDAF(
   override val inputTypes: Seq[DataType] = udaf.inputSchema.map(_.dataType)
 
   override val aggBufferSchema: StructType = udaf.bufferSchema
-
-  override val aggBufferAttributes: Seq[AttributeReference] = aggBufferSchema.toAttributes
-
-  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
-  // in the superclass because that will lead to initialization ordering issues.
-  override val inputAggBufferAttributes: Seq[AttributeReference] =
-    aggBufferAttributes.map(_.newInstance())
 
   private[this] lazy val childrenSchema: StructType = {
     val inputFields = children.zipWithIndex.map {
@@ -389,7 +374,7 @@ case class ScalaUDAF(
       aggBufferSchema,
       bufferValuesToCatalystConverters,
       bufferValuesToScalaConverters,
-      inputAggBufferOffset,
+      0,
       null)
   }
 
@@ -399,7 +384,7 @@ case class ScalaUDAF(
       aggBufferSchema,
       bufferValuesToCatalystConverters,
       bufferValuesToScalaConverters,
-      mutableAggBufferOffset,
+      0,
       null)
   }
 
@@ -409,7 +394,7 @@ case class ScalaUDAF(
       aggBufferSchema,
       bufferValuesToCatalystConverters,
       bufferValuesToScalaConverters,
-      mutableAggBufferOffset,
+      0,
       null)
   }
 

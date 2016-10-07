@@ -893,8 +893,8 @@ class Analyzer(
                 // the context of a Window clause. They do not need to be wrapped in an
                 // AggregateExpression.
                 case wf: AggregateWindowFunction => wf
-                // We get an aggregate function, we need to wrap it in an AggregateExpression.
-                case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
+                case i: ImperativeAggregateImpl => i.toAggregateExpression(isDistinct)
+                case agg: AggregateFunction => agg.toAggregateExpression(isDistinct)
                 // This function is not an aggregate function, just return the resolved one.
                 case other => other
               }
@@ -1585,8 +1585,15 @@ class Analyzer(
           case we @ WindowExpression(
               ae @ AggregateExpression(function, _, _, _),
               spec: WindowSpecDefinition) =>
-            val newChildren = function.children.map(extractExpr)
-            val newFunction = function.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
+            val newFunction = function match {
+              case i: ImperativeAggregate =>
+                val newChildren = i.impl.children.map(extractExpr)
+                i.copy(impl = i.impl.withNewChildren(newChildren)
+                  .asInstanceOf[ImperativeAggregateImpl])
+              case _ =>
+                function.withNewChildren(function.children.map(extractExpr))
+                  .asInstanceOf[AggregateFunction]
+            }
             val newAgg = ae.copy(aggregateFunction = newFunction)
             seenWindowAggregates += newAgg
             WindowExpression(newAgg, spec)

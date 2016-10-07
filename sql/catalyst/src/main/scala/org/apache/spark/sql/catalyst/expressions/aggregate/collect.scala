@@ -34,7 +34,7 @@ import org.apache.spark.sql.types._
  * collected elements are stored on heap, and that too many elements can cause GC pauses and
  * eventually Out of Memory Errors.
  */
-abstract class Collect extends ImperativeAggregate {
+abstract class Collect extends ImperativeAggregateImpl {
 
   val child: Expression
 
@@ -48,11 +48,7 @@ abstract class Collect extends ImperativeAggregate {
 
   override def supportsPartial: Boolean = false
 
-  override def aggBufferAttributes: Seq[AttributeReference] = Nil
-
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
-
-  override def inputAggBufferAttributes: Seq[AttributeReference] = Nil
+  override def aggBufferSchema: StructType = new StructType
 
   // Both `CollectList` and `CollectSet` are non-deterministic since their results depend on the
   // actual order of input rows.
@@ -87,18 +83,7 @@ abstract class Collect extends ImperativeAggregate {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.")
-case class CollectList(
-    child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect {
-
-  def this(child: Expression) = this(child, 0, 0)
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
+case class CollectList(child: Expression) extends Collect {
 
   override def prettyName: String = "collect_list"
 
@@ -110,12 +95,7 @@ case class CollectList(
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a set of unique elements.")
-case class CollectSet(
-    child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect {
-
-  def this(child: Expression) = this(child, 0, 0)
+case class CollectSet(child: Expression) extends Collect {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!child.dataType.existsRecursively(_.isInstanceOf[MapType])) {
@@ -124,12 +104,6 @@ case class CollectSet(
       TypeCheckResult.TypeCheckFailure("collect_set() cannot have map type data")
     }
   }
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def prettyName: String = "collect_set"
 

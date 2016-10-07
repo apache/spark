@@ -155,7 +155,7 @@ case class AggregateExpression(
  * Code which accepts [[AggregateFunction]] instances should be prepared to handle both types of
  * aggregate functions.
  */
-sealed abstract class AggregateFunction extends Expression with ImplicitCastInputTypes {
+sealed abstract class AggregateFunction extends Expression {
 
   /** An aggregate function is not foldable. */
   final override def foldable: Boolean = false
@@ -219,26 +219,36 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
 }
 
 /**
- * API for aggregation functions that are expressed in terms of imperative initialize(), update(),
- * and merge() functions which operate on Row-based aggregation buffers.
+ * An implementation of [[AggregateFunction]] that are expressed in terms of imperative
+ * initialize(), update(), merge() and complete() functions which operate on Row-based aggregation
+ * buffers.
  *
- * Within these functions, code should access fields of the mutable aggregation buffer by adding the
- * bufferSchema-relative field number to `mutableAggBufferOffset` then using this new field number
- * to access the buffer Row. This is necessary because this aggregation function's buffer is
- * embedded inside of a larger shared aggregation buffer when an aggregation operator evaluates
- * multiple aggregate functions at the same time.
- *
- * We need to perform similar field number arithmetic when merging multiple intermediate
- * aggregate buffers together in `merge()` (in this case, use `inputAggBufferOffset` when accessing
- * the input buffer).
- *
- * Correct ImperativeAggregate evaluation depends on the correctness of `mutableAggBufferOffset` and
- * `inputAggBufferOffset`, but not on the correctness of the attribute ids in `aggBufferAttributes`
- * and `inputAggBufferAttributes`.
+ * The actual functionality is delegated to the underlying [[ImperativeAggregateImpl]], this class
+ * is mostly used to hold the buffer offsets.
  */
-abstract class ImperativeAggregate extends AggregateFunction with CodegenFallback {
+case class ImperativeAggregate(
+    impl: ImperativeAggregateImpl,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends AggregateFunction with CodegenFallback {
 
   /**
+   * The aggregation operator keeps a large shared mutable buffer row for all aggregate functions,
+   * each aggregate function should only access a slice of this shared buffer.
+   */
+  private lazy val mutableBufferRow: SlicedMutableRow =
+    new SlicedMutableRow(mutableAggBufferOffset, aggBufferSchema.length)
+
+  /**
+   * During partial aggregation, the input buffer row to be merged is shared among all aggregate
+   * functions, each aggregate function should only access a slice of this input buffer.
+   */
+  private lazy val inputBufferRow: SlicedInternalRow =
+    new SlicedInternalRow(inputAggBufferOffset, aggBufferSchema.length)
+
+  /**
+   * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset.
+   * This new copy's attributes may have different ids than the original.
+   *
    * The offset of this function's first buffer value in the underlying shared mutable aggregation
    * buffer.
    *
@@ -257,15 +267,14 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    *                     avg(y) mutableAggBufferOffset = 2
    * }}}
    */
-  protected val mutableAggBufferOffset: Int
+  def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate = {
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+  }
 
   /**
-   * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset.
+   * Returns a copy of this ImperativeAggregate with an updated inputAggBufferOffset.
    * This new copy's attributes may have different ids than the original.
-   */
-  def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate
-
-  /**
+   *
    * The offset of this function's start buffer value in the underlying shared input aggregation
    * buffer. An input aggregation buffer is used when we merge two aggregation buffers together in
    * the `update()` function and is immutable (we merge an input aggregation buffer and a mutable
@@ -290,40 +299,95 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    *                       avg(y) inputAggBufferOffset = 3
    * }}}
    */
-  protected val inputAggBufferOffset: Int
+  def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate = {
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+  }
+
+  def initialize(mutableAggBuffer: MutableRow): Unit = {
+    impl.initialize(mutableBufferRow.target(mutableAggBuffer))
+  }
+
+  def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
+    impl.update(mutableBufferRow.target(mutableAggBuffer), inputRow)
+  }
+
+  def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit = {
+    impl.merge(mutableBufferRow.target(mutableAggBuffer), inputBufferRow.target(inputAggBuffer))
+  }
+
+  override def eval(aggBuffer: InternalRow): Any = {
+    assert(aggBuffer.isInstanceOf[MutableRow])
+    impl.eval(mutableBufferRow.target(aggBuffer.asInstanceOf[MutableRow]))
+  }
+
+  override def aggBufferSchema: StructType = impl.aggBufferSchema
+
+  override lazy val aggBufferAttributes: Seq[AttributeReference] = aggBufferSchema.toAttributes
+
+  override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
+
+  override def supportsPartial: Boolean = impl.supportsPartial
+
+  override def nullable: Boolean = impl.nullable
+
+  override def dataType: DataType = impl.dataType
+
+  override def children: Seq[Expression] = Seq(impl)
+
+  override def sql(isDistinct: Boolean): String = impl.sql(isDistinct)
+
+  override def toAggString(isDistinct: Boolean): String = impl.toAggString(isDistinct)
+}
+
+/**
+ * API for aggregation functions that are expressed in terms of imperative initialize(),
+ * update(), merge() and complete() functions which operate on Row-based aggregation buffers.
+ */
+abstract class ImperativeAggregateImpl extends Expression
+  with ImplicitCastInputTypes with CodegenFallback {
+
+  final override def foldable: Boolean = false
 
   /**
-   * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset.
-   * This new copy's attributes may have different ids than the original.
-   */
-  def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate
-
-  // Note: although all subclasses implement inputAggBufferAttributes by simply cloning
-  // aggBufferAttributes, that common clone code cannot be placed here in the abstract
-  // ImperativeAggregate class, since that will lead to initialization ordering issues.
-
-  /**
-   * Initializes the mutable aggregation buffer located in `mutableAggBuffer`.
-   *
-   * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
+   * Initializes the mutable aggregation buffer.
    */
   def initialize(mutableAggBuffer: MutableRow): Unit
 
   /**
-   * Updates its aggregation buffer, located in `mutableAggBuffer`, based on the given `inputRow`.
-   *
-   * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
+   * Updates its aggregation buffer, based on the given `inputRow`.
    */
   def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit
 
   /**
    * Combines new intermediate results from the `inputAggBuffer` with the existing intermediate
    * results in the `mutableAggBuffer.`
-   *
-   * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
-   * Use `fieldNumber + inputAggBufferOffset` to access fields of `inputAggBuffer`.
    */
   def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit
+
+  /**
+   * The schema of the aggregation buffer.
+   */
+  def aggBufferSchema: StructType
+
+  /**
+   * Indicates if this function supports partial aggregation.
+   */
+  def supportsPartial: Boolean = true
+
+  def toAggregateExpression(isDistinct: Boolean = false): AggregateExpression = {
+    AggregateExpression(ImperativeAggregate(this), mode = Complete, isDistinct = isDistinct)
+  }
+
+  def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    s"$prettyName($distinct${children.map(_.sql).mkString(", ")})"
+  }
+
+  def toAggString(isDistinct: Boolean): String = {
+    val start = if (isDistinct) "(distinct " else "("
+    prettyName + flatArguments.mkString(start, ", ", ")")
+  }
 }
 
 /**
@@ -339,10 +403,8 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
  * the implemented class that need to access fields of its children, please make
  * those fields `lazy val`s.
  */
-abstract class DeclarativeAggregate
-  extends AggregateFunction
-  with Serializable
-  with Unevaluable {
+abstract class DeclarativeAggregate extends AggregateFunction
+  with Serializable with Unevaluable with ImplicitCastInputTypes {
 
   /**
    * Expressions for initializing empty aggregation buffers.
