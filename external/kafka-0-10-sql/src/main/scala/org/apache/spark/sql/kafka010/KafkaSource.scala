@@ -82,6 +82,7 @@ private[kafka010] case class KafkaSource(
     executorKafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String],
     metadataPath: String,
+    startFromEarliestOffset: Boolean,
     failOnDataLoss: Boolean)
   extends Source with Logging {
 
@@ -109,7 +110,11 @@ private[kafka010] case class KafkaSource(
   private lazy val initialPartitionOffsets = {
     val metadataLog = new HDFSMetadataLog[KafkaSourceOffset](sqlContext.sparkSession, metadataPath)
     metadataLog.get(0).getOrElse {
-      val offsets = KafkaSourceOffset(fetchPartitionOffsets(seekToEnd = false))
+      val offsets = if (startFromEarliestOffset) {
+        KafkaSourceOffset(fetchEarliestOffsets())
+      } else {
+        KafkaSourceOffset(fetchLatestOffsets())
+      }
       metadataLog.add(0, offsets)
       logInfo(s"Initial offsets: $offsets")
       offsets
@@ -123,7 +128,7 @@ private[kafka010] case class KafkaSource(
     // Make sure initialPartitionOffsets is initialized
     initialPartitionOffsets
 
-    val offset = KafkaSourceOffset(fetchPartitionOffsets(seekToEnd = true))
+    val offset = KafkaSourceOffset(fetchLatestOffsets())
     logDebug(s"GetOffset: ${offset.partitionToOffsets.toSeq.map(_.toString).sorted}")
     Some(offset)
   }
@@ -227,11 +232,9 @@ private[kafka010] case class KafkaSource(
   override def toString(): String = s"KafkaSource[$consumerStrategy]"
 
   /**
-   * Fetch the offset of a partition, either seek to the latest offsets or use the current offsets
-   * in the consumer.
+   * Fetch the earliest offsets of partitions.
    */
-  private def fetchPartitionOffsets(
-      seekToEnd: Boolean): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
+  private def fetchEarliestOffsets(): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
     // Make sure `KafkaConsumer.poll` won't be interrupted (KAFKA-1894)
     assert(Thread.currentThread().isInstanceOf[StreamExecutionThread])
     // Poll to get the latest assigned partitions
@@ -240,11 +243,27 @@ private[kafka010] case class KafkaSource(
     consumer.pause(partitions)
     logDebug(s"Partitioned assigned to consumer: $partitions")
 
-    // Get the current or latest offset of each partition
-    if (seekToEnd) {
-      consumer.seekToEnd(partitions)
-      logDebug("Seeked to the end")
-    }
+    logDebug("Seeked to the beginning")
+    consumer.seekToBeginning(partitions)
+    val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
+    logDebug(s"Got offsets for partition : $partitionOffsets")
+    partitionOffsets
+  }
+
+  /**
+   * Fetch the latest offset of partitions.
+   */
+  private def fetchLatestOffsets(): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
+    // Make sure `KafkaConsumer.poll` won't be interrupted (KAFKA-1894)
+    assert(Thread.currentThread().isInstanceOf[StreamExecutionThread])
+    // Poll to get the latest assigned partitions
+    consumer.poll(0)
+    val partitions = consumer.assignment()
+    consumer.pause(partitions)
+    logDebug(s"Partitioned assigned to consumer: $partitions")
+
+    logDebug("Seeked to the end")
+    consumer.seekToEnd(partitions)
     val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
     logDebug(s"Got offsets for partition : $partitionOffsets")
     partitionOffsets
