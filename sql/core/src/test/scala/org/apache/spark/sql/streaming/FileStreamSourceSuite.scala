@@ -983,7 +983,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("can calculate num rows read in a trigger") {
+  test("input row metrics") {
     withTempDirs { case (src, tmp) =>
       val input = spark.readStream.format("text").load(src.getCanonicalPath).as[String]
       val listener = new QueryStatusCollector

@@ -23,9 +23,11 @@ import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.streaming.StreamingQueryListenerSuite.QueryStatusCollector
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -263,6 +265,44 @@ class KafkaSourceSuite extends KafkaSourceTest {
     testUnsupportedConfig("kafka.auto.offset.reset", "someValue")
     testUnsupportedConfig("kafka.auto.offset.reset", "earliest")
     testUnsupportedConfig("kafka.auto.offset.reset", "latest")
+  }
+
+  test("input row metrics") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 5)
+    testUtils.sendMessages(topic, Array("-1"))
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("subscribe", topic)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+
+    val mapped = kafka.map(kv => kv._2.toInt + 1)
+    val listener = new QueryStatusCollector
+    spark.streams.addListener(listener)
+    try {
+        testStream(mapped)(
+        makeSureGetOffsetCalled,
+        AddKafkaData(Set(topic), 1, 2, 3),
+        CheckAnswer(2, 3, 4),
+          AssertOnQuery { query =>
+            eventually(timeout(streamingTimeout)) {
+              assert(listener.lastTriggerStatus.nonEmpty)
+            }
+            val status = listener.lastTriggerStatus.get
+            assert(status.triggerStatus.get("numRows.input.total").toInt > 0)
+            assert(status.sourceStatuses(0).processingRate > 0.0)
+            true
+          }
+        )
+    } finally {
+      spark.streams.removeListener(listener)
+    }
   }
 
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"

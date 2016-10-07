@@ -24,7 +24,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.ManualClock
 
-class StreamingMetricsSuite extends SparkFunSuite {
+class StreamMetricsSuite extends SparkFunSuite {
 
   // To make === between double tolerate inexact values
   implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
@@ -168,7 +168,6 @@ class StreamingMetricsSuite extends SparkFunSuite {
       "inputRate-source0",
       "processingRate-total",
       "processingRate-source0",
-      "outputRate",
       "latency"))
   }
 

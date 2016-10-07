@@ -225,6 +225,7 @@ class StreamExecution(
             false
           }
         }
+        // Update metrics and notify others
         streamMetrics.reportTriggerFinished()
         updateStatus()
         postEvent(new QueryProgress(currentStatus))
@@ -241,9 +242,14 @@ class StreamExecution(
         logError(s"Query $name terminated with error", e)
     } finally {
       state = TERMINATED
-      sparkSession.streams.notifyQueryTermination(StreamExecution.this)
+
+      // Update metrics and status
       streamMetrics.stop()
       sparkSession.sparkContext.env.metricsSystem.removeSource(streamMetrics)
+      updateStatus()
+
+      // Notify others
+      sparkSession.streams.notifyQueryTermination(StreamExecution.this)
       postEvent(new QueryTerminated(status, exception.map(_.cause).map(Utils.exceptionString)))
       terminationLatch.countDown()
     }
