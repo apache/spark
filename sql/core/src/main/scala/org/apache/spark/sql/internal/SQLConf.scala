@@ -156,6 +156,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ADAPTIVE_EXECUTION2_ENABLED = SQLConfigBuilder("spark.sql.adaptive2.enabled")
+    .doc("When true, enable adaptive query execution.")
+    .booleanConf
+    .createWithDefault(false)
+
   val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
     SQLConfigBuilder("spark.sql.adaptive.minNumPostShufflePartitions")
       .internal()
@@ -661,6 +666,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def adaptiveExecution2Enabled: Boolean = getConf(ADAPTIVE_EXECUTION2_ENABLED)
 
   def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
