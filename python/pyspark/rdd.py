@@ -2017,9 +2017,7 @@ class RDD(object):
          >>> len(rdd.repartition(10).glom().collect())
          10
         """
-        data_java_rdd = self._to_java_object_rdd().repartition(numPartitions)
-        jrdd = self.ctx._jvm.SerDeUtil.javaToPython(data_java_rdd)
-        return RDD(jrdd, self.ctx, self._jrdd_deserializer)
+        return self.coalesce(numPartitions, shuffle=True)
 
     def coalesce(self, numPartitions, shuffle=False):
         """
