@@ -27,19 +27,20 @@ object StringUtils {
   // replace the % with .*, match 0 or more times with any character
   def escapeLikeRegex(str: String): String = {
     val builder = new StringBuilder()
-    str.foldLeft(false) { case (escaping, next) =>
+    var escaping = false
+    for (next <- str) {
       if (escaping) {
         builder ++= Pattern.quote(Character.toString(next))
-        false
+        escaping = false
       } else if (next == '\\') {
-        true
+        escaping = true
       } else {
         builder ++= (next match {
           case '_' => "."
           case '%' => ".*"
           case _ => Pattern.quote(Character.toString(next))
         })
-        false
+        escaping = false
       }
     }
     "(?s)" + builder.result() // (?s) enables dotall mode, causing "." to match new lines
