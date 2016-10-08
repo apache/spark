@@ -984,6 +984,17 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     int64AsTimestampMillis = true)
 
+  testSchema(
+    "Interval written and read as FIXED_LEN_BYTE_ARRAY with INTERVAL",
+    StructType(Seq(StructField("f1", CalendarIntervalType))),
+    """message root {
+      |  optional fixed_len_byte_array(12) f1 (INTERVAL);
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = false,
+    writeLegacyParquetFormat = true)
+
   private def testSchemaClipping(
       testName: String,
       parquetSchema: String,

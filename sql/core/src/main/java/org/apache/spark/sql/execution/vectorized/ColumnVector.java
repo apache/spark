@@ -617,6 +617,21 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
+   * Sets the value at rowId to `value`.
+   */
+  public final void putInterval(int rowId, CalendarInterval value) {
+    getChildColumn(0).putInt(rowId, value.months);
+    getChildColumn(1).putLong(rowId, value.microseconds);
+  }
+
+  /**
+   * Returns the interval value for rowId.
+   */
+  public final CalendarInterval getInterval(int rowId) {
+    return new CalendarInterval(getChildColumn(0).getInt(rowId), getChildColumn(1).getLong(rowId));
+  }
+
+  /**
    * Returns the UTF8String for rowId.
    */
   public final UTF8String getUTF8String(int rowId) {

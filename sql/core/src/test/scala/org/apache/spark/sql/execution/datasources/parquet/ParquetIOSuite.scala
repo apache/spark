@@ -109,7 +109,6 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         |  required binary g(ENUM);
         |  required binary h(DECIMAL(32,0));
         |  required fixed_len_byte_array(32) i(DECIMAL(32,0));
-        |  required int64 j(TIMESTAMP_MILLIS);
         |  required fixed_len_byte_array(12) j(INTERVAL);
         |}
       """.stripMargin)
@@ -661,6 +660,18 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           // and dictionary encodings.
           readResourceParquetFile("test-data/timemillis-in-i64.parquet"),
           (1 to 3).map(i => Row(new java.sql.Timestamp(10))))
+      }
+    }
+  }
+
+  test("read dictionary and normal encoded intervals written as FIXED_LEN_BYTE_ARRAY") {
+    val intervalData = CalendarInterval.fromString("interval 10 years 9 months")
+    ("true" :: "false" :: Nil).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        checkAnswer(
+          // interval column in this file is encoded using plain dictionary
+          readResourceParquetFile("test-data/interval-in-fixed-len-dict.parquet"),
+          (1 to 4).map (i => (intervalData, intervalData)).toDF)
       }
     }
   }

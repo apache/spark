@@ -331,6 +331,13 @@ public class VectorizedColumnReader {
               column.putByteArray(i, v.getBytes());
             }
           }
+        } else if (column.dataType() == DataTypes.CalendarIntervalType) {
+          for (int i = rowId; i < rowId + num; ++i) {
+            if (!column.isNullAt(i)) {
+              Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
+              column.putInterval(i, ParquetRowConverter.binaryToInterval(v));
+            }
+          }
         } else {
           throw new UnsupportedOperationException();
         }
@@ -459,6 +466,14 @@ public class VectorizedColumnReader {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putByteArray(rowId + i, data.readBinary(arrayLen).getBytes());
+        } else {
+          column.putNull(rowId + i);
+        }
+      }
+    } else if (column.dataType() == DataTypes.CalendarIntervalType) {
+      for (int i = 0; i < num; i++) {
+        if (defColumn.readInteger() == maxDefLevel) {
+          column.putInterval(rowId + i, ParquetRowConverter.binaryToInterval(data.readBinary(arrayLen)));
         } else {
           column.putNull(rowId + i);
         }
