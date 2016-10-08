@@ -1827,7 +1827,7 @@ class Dataset[T] private[sql](
     val resolver = sparkSession.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
     val remainingCols = allColumns.filter { attribute =>
-      colNames.forall(n => !resolver(attribute.name, n))
+      colNames.forall(n => !(resolver(attribute.name, n) || resolver(attribute.qualifiedName, n)))
     }.map(attribute => Column(attribute))
     if (remainingCols.size == allColumns.size) {
       toDF()
@@ -1879,8 +1879,8 @@ class Dataset[T] private[sql](
     val resolver = sparkSession.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
     val groupCols = colNames.map { colName =>
-      allColumns.find(col => resolver(col.name, colName)).getOrElse(
-        throw new AnalysisException(
+      allColumns.find(col => resolver(col.qualifiedName, colName) || resolver(col.name, colName))
+        .getOrElse(throw new AnalysisException(
           s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})"""))
     }
     val groupColExprIds = groupCols.map(_.exprId)

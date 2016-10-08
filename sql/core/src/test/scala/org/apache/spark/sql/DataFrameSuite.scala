@@ -1581,6 +1581,29 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.distinct(), Row(1) :: Row(2) :: Nil)
   }
 
+  test("SPARK-16938: `drop/dropDuplicate` should handle qualified column names") {
+    val dfa = Seq((1, 2), (2, 3)).toDF("id", "a").alias("dfa")
+    val dfb = Seq((1, 0), (1, 1)).toDF("id", "b").alias("dfb")
+
+    checkAnswer(dfa.drop("dfa.id"), Row(2) :: Row(3) :: Nil)
+    checkAnswer(dfa.drop("id"), Row(2) :: Row(3) :: Nil)
+    checkAnswer(dfa.drop($"dfa.id"), Row(2) :: Row(3) :: Nil)
+    checkAnswer(dfa.drop($"id"), Row(2) :: Row(3) :: Nil)
+
+    checkAnswer(dfa.join(dfb, dfa("id") === dfb("id")).drop("dfa.id"),
+      Row(2, 1, 0) :: Row(2, 1, 1) :: Nil)
+    checkAnswer(dfa.join(dfb, dfa("id") === dfb("id")).drop("dfa.id", "dfb.id"),
+      Row(2, 0) :: Row(2, 1) :: Nil)
+
+    checkAnswer(dfb.dropDuplicates(Array("dfb.id")), Row(1, 0) :: Nil)
+    checkAnswer(dfb.dropDuplicates(Array("dfb.b")), Row(1, 0) :: Row(1, 1) :: Nil)
+    checkAnswer(dfb.dropDuplicates(Array("id")), Row(1, 0) :: Nil)
+    checkAnswer(dfb.dropDuplicates(Array("b")), Row(1, 0) :: Row(1, 1) :: Nil)
+
+    checkAnswer(dfa.join(dfb, dfa("id") === dfb("id")).dropDuplicates(Array("dfa.id", "dfb.id")),
+      Row(1, 2, 1, 1) :: Nil)
+  }
+
   test("SPARK-16181: outer join with isNull filter") {
     val left = Seq("x").toDF("col")
     val right = Seq("y").toDF("col").withColumn("new", lit(true))
