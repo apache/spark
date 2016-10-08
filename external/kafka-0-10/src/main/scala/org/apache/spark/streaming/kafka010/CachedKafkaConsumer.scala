@@ -99,6 +99,8 @@ class CachedKafkaConsumer[K, V] private(
     val p = consumer.poll(timeout)
     val r = p.records(topicPartition)
     logDebug(s"Polled ${p.partitions()}  ${r.size}")
+    import scala.collection.JavaConverters._
+    r.asScala.foreach { x => System.err.println(s"${x.offset} ${x.key} ${x.value}") }
     buffer = r.iterator
   }
 

@@ -30,7 +30,7 @@ import scala.util.control.NonFatal
 import kafka.admin.AdminUtils
 import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
-import kafka.utils.ZkUtils
+import kafka.utils.{ Pool, ZkUtils }
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
@@ -38,6 +38,7 @@ import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Time
+import org.apache.spark.streaming.kafka010.mocks.MockTime
 import org.apache.spark.util.Utils
 
 /**
@@ -72,6 +73,8 @@ private[kafka010] class KafkaTestUtils extends Logging {
   // Flag to test whether the system is correctly started
   private var zkReady = false
   private var brokerReady = false
+
+  private val mockTime = new MockTime()
 
   def zkAddress: String = {
     assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper address")
@@ -148,11 +151,41 @@ private[kafka010] class KafkaTestUtils extends Logging {
       zookeeper.shutdown()
       zookeeper = null
     }
+
+    mockTime.scheduler.shutdown()
+  }
+
+  /**
+   * Compact logs for the given topic / partition until offset
+   */
+  def compactLogs(topic: String, partition: Int, offset: Long) {
+    import kafka.log._
+    import kafka.common.TopicAndPartition
+
+    val cleaner = {
+      val logs = new Pool[TopicAndPartition, Log]()
+      val logDir = brokerConf.logDirs.head
+      val dir = new java.io.File(logDir, topic + "-" + partition)
+      val logProps = new Properties()
+      logProps.put(LogConfig.CleanupPolicyProp, LogConfig.Compact)
+      val log = new Log(
+        dir,
+        LogConfig(logProps),
+        0L,
+        mockTime.scheduler,
+        mockTime
+      )
+      logs.put(TopicAndPartition(topic, partition), log)
+      System.err.println(s"built cleaner for compacting logs for $dir")
+      new LogCleaner(CleanerConfig(), logDirs = Array(dir), logs = logs)
+    }
+    cleaner.awaitCleaned(topic, partition, offset)
+    System.err.println("finished cleaning")
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
-  def createTopic(topic: String, partitions: Int): Unit = {
-    AdminUtils.createTopic(zkUtils, topic, partitions, 1)
+  def createTopic(topic: String, partitions: Int, config: Properties): Unit = {
+    AdminUtils.createTopic(zkUtils, topic, partitions, 1, config)
     // wait until metadata is propagated
     (0 until partitions).foreach { p =>
       waitUntilMetadataIsPropagated(topic, p)
@@ -160,8 +193,13 @@ private[kafka010] class KafkaTestUtils extends Logging {
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
+  def createTopic(topic: String, partitions: Int): Unit = {
+    createTopic(topic, partitions, new Properties)
+  }
+
+  /** Create a Kafka topic and wait until it is propagated to the whole cluster */
   def createTopic(topic: String): Unit = {
-    createTopic(topic, 1)
+    createTopic(topic, 1, new Properties)
   }
 
   /** Java-friendly function for sending messages to the Kafka broker */
@@ -180,6 +218,16 @@ private[kafka010] class KafkaTestUtils extends Logging {
     producer = new KafkaProducer[String, String](producerConfiguration)
     messages.foreach { message =>
       producer.send(new ProducerRecord[String, String](topic, message))
+    }
+    producer.close()
+    producer = null
+  }
+
+  /** Send the array of (key, value) messages to the Kafka broker */
+  def sendMessages(topic: String, messages: Array[(String, String)]): Unit = {
+    producer = new KafkaProducer[String, String](producerConfiguration)
+    messages.foreach { message =>
+      producer.send(new ProducerRecord[String, String](topic, message._1, message._2))
     }
     producer.close()
     producer = null

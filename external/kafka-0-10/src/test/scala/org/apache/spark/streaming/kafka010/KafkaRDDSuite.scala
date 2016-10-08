@@ -102,6 +102,69 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("compacted topic") {
+    val topic = s"topiccompacted-${Random.nextInt}-${System.currentTimeMillis}"
+    val props = new ju.Properties()
+    props.put("cleanup.policy", "compact")
+    props.put("flush.messages", "1")
+    props.put("segment.ms", "1")
+    props.put("segment.bytes", "256")
+    kafkaTestUtils.createTopic(topic, 1, props)
+    val messages = Array(
+      ("a", "1"),
+      ("b", "1"),
+      ("b", "2"),
+      ("c", "1"),
+      ("b", "3"),
+      ("a", "2"),
+      ("c", "2")
+    )
+    val compactedMessages = Array(
+      ("a", "2"),
+      ("b", "3"),
+      ("c", "2")
+    )
+
+    kafkaTestUtils.sendMessages(topic, messages)
+    // send some junk to fill a log segment
+    kafkaTestUtils.sendMessages(topic, Array.fill(100)("garbage" -> "1"))
+    // wait for log compaction
+    kafkaTestUtils.compactLogs(topic, 0, messages.size - 1)
+
+    Thread.sleep(100000)
+    val kafkaParams = getKafkaParams()
+
+    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
+
+    val rdd = KafkaUtils.createRDD[String, String](sc, kafkaParams, offsetRanges, preferredHosts)
+      .map(m => m.key -> m.value)
+      .filter(_._1 != "garbage")
+
+    val received = rdd.collect.toSet
+    assert(received === compactedMessages.toSet)
+
+    // size-related method optimizations return sane results
+    assert(rdd.count === compactedMessages.size)
+    assert(rdd.countApprox(0).getFinalValue.mean === compactedMessages.size)
+    assert(!rdd.isEmpty)
+    assert(rdd.take(1).size === 1)
+    assert(rdd.take(1).head === compactedMessages.head)
+    assert(rdd.take(messages.size + 10).size === compactedMessages.size)
+
+    val emptyRdd = KafkaUtils.createRDD[String, String](
+      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
+
+    assert(emptyRdd.isEmpty)
+
+    // invalid offset ranges throw exceptions
+    val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
+    intercept[SparkException] {
+      val result = KafkaUtils.createRDD[String, String](sc, kafkaParams, badRanges, preferredHosts)
+        .map(_.value)
+        .collect()
+    }
+  }
+
   test("iterator boundary conditions") {
     // the idea is to find e.g. off-by-one errors between what kafka has available and the rdd
     val topic = s"topicboundary-${Random.nextInt}-${System.currentTimeMillis}"
