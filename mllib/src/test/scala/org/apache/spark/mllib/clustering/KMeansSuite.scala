@@ -75,7 +75,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Make sure code runs.
     var model = KMeans.train(data, k = 2, maxIterations = 1)
-    assert(model.clusterCenters.size === 1)
+    assert(model.clusterCenters.size === 2)
   }
 
   test("more clusters than points") {
@@ -87,7 +87,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Make sure code runs.
     var model = KMeans.train(data, k = 3, maxIterations = 1)
-    assert(model.clusterCenters.size === 2)
+    assert(model.clusterCenters.size === 3)
   }
 
   test("deterministic initialization") {
