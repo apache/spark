@@ -592,7 +592,7 @@ test_that("spark.logit", {
   label <- c(1.0, 1.0, 1.0, 0.0, 0.0)
   feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
   binary_data <- as.data.frame(cbind(label, feature))
-  binary_df <- suppressWarnings(createDataFrame(binary_data))
+  binary_df <- createDataFrame(binary_data)
 
   blr_model <- spark.logit(binary_df, label ~ feature, threshold = 1.0)
   blr_predict <- collect(select(predict(blr_model, binary_df), "prediction"))
@@ -631,7 +631,7 @@ test_that("spark.logit", {
   feature3 <- c(1.322733, 1.348044, 3.861237, 9.686976, 3.447130)
   feature4 <- c(1.3246388, 0.5510444, 0.9225810, 1.2147881, 1.6020842)
   data <- as.data.frame(cbind(label, feature1, feature2, feature3, feature4))
-  df <- suppressWarnings(createDataFrame(data))
+  df <- createDataFrame(data)
 
   model <- spark.logit(df, label ~., family = "multinomial", thresholds = c(0, 1, 1))
   predict1 <- collect(select(predict(model, df), "prediction"))
