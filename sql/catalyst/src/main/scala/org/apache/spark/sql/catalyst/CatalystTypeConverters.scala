@@ -158,6 +158,20 @@ object CatalystTypeConverters {
 
     override def toCatalystImpl(scalaValue: Any): ArrayData = {
       scalaValue match {
+        case a: Array[Boolean] =>
+          UnsafeArrayData.fromPrimitiveArray(a)
+        case a: Array[Byte] =>
+          UnsafeArrayData.fromPrimitiveArray(a)
+        case a: Array[Short] =>
+          UnsafeArrayData.fromPrimitiveArray(a)
+        case a: Array[Int] =>
+          UnsafeArrayData.fromPrimitiveArray(a)
+        case a: Array[Long] =>
+          UnsafeArrayData.fromPrimitiveArray(a)
+        case a: Array[Float] =>
+          UnsafeArrayData.fromPrimitiveArray(a)
+        case a: Array[Double] =>
+          UnsafeArrayData.fromPrimitiveArray(a)
         case a: Array[_] =>
           new GenericArrayData(a.map(elementConverter.toCatalyst))
         case s: Seq[_] =>
