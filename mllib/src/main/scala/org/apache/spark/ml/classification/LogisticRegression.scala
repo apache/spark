@@ -78,7 +78,6 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   /**
    * Param for the name of family which is a description of the label distribution
    * to be used in the model.
-   * Supported options: "auto", "multinomial", "binomial".
    * Supported options:
    *  - "auto": Automatically select the family based on the number of classes:
    *            If numClasses == 1 || numClasses == 2, set to "binomial".
