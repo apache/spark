@@ -330,7 +330,7 @@ private[spark] class BlockStatusesAccumulator
 
   override def copy(): BlockStatusesAccumulator = {
     val newAcc = new BlockStatusesAccumulator
-    newAcc._list.addAll(_list)
+    newAcc.merge(this)
     newAcc
   }
 }

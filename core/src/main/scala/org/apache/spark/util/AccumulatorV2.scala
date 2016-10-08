@@ -436,7 +436,7 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
  * @since 2.0.0
  */
 class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
-  protected val _list: java.util.List[T] = Collections.synchronizedList(new ArrayList[T]())
+  private val _list: java.util.List[T] = Collections.synchronizedList(new ArrayList[T]())
 
   override def isZero: Boolean = _list.isEmpty
 
@@ -444,7 +444,7 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
 
   override def copy(): CollectionAccumulator[T] = {
     val newAcc = new CollectionAccumulator[T]
-    newAcc._list.addAll(_list)
+    newAcc.merge(this)
     newAcc
   }
 
