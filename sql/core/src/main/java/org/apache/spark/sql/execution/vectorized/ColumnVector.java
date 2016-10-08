@@ -26,7 +26,6 @@ import org.apache.parquet.io.api.Binary;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.MutableRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
 import org.apache.spark.sql.catalyst.expressions.UnsafeMapData;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
@@ -558,7 +557,7 @@ public abstract class ColumnVector implements AutoCloseable, Serializable {
    * Returns a utility object to get structs.
    * provided to keep API compatibility with InternalRow for code generation
    */
-  public MutableRow getStruct(int rowId, int size) {
+  public InternalRow getStruct(int rowId, int size) {
     if (!unsafeDirectCopy) {
       resultStruct.rowId = rowId;
       return resultStruct;

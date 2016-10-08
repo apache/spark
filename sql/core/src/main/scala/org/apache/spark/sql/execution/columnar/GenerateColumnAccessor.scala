@@ -87,7 +87,7 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends BaseGenericInternalR
     val size = u.getSizeInBytes
     writer.write(i, base, offset.toInt, size)
   }
-  def setStruct(i: Int, r: MutableRow): Unit = {
+  def setStruct(i: Int, r: InternalRow): Unit = {
     val u = r.asInstanceOf[UnsafeRow]
     val base = u.getBaseObject.asInstanceOf[Array[Byte]]
     val offset = u.getBaseOffset - Platform.BYTE_ARRAY_OFFSET
