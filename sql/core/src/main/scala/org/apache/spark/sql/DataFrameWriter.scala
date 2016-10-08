@@ -23,9 +23,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
-import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource, HadoopFsRelation}
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, CreateTable, DataSource, HadoopFsRelation}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -355,6 +357,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
+    if (source.toLowerCase == "hive") {
+      throw new AnalysisException("Cannot create hive serde table with saveAsTable API")
+    }
 
     val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
 
@@ -366,15 +371,22 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
       case _ =>
-        val cmd =
-          CreateTableUsingAsSelect(
-            tableIdent,
-            source,
-            partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
-            getBucketSpec,
-            mode,
-            extraOptions.toMap,
-            df.logicalPlan)
+        val tableType = if (new CaseInsensitiveMap(extraOptions.toMap).contains("path")) {
+          CatalogTableType.EXTERNAL
+        } else {
+          CatalogTableType.MANAGED
+        }
+
+        val tableDesc = CatalogTable(
+          identifier = tableIdent,
+          tableType = tableType,
+          storage = CatalogStorageFormat.empty.copy(properties = extraOptions.toMap),
+          schema = new StructType,
+          provider = Some(source),
+          partitionColumnNames = partitioningColumns.getOrElse(Nil),
+          bucketSpec = getBucketSpec
+        )
+        val cmd = CreateTable(tableDesc, mode, Some(df.logicalPlan))
         df.sparkSession.sessionState.executePlan(cmd).toRdd
     }
   }
@@ -387,58 +399,37 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
+   * You can set the following JDBC-specific option(s) for storing JDBC:
+   * <ul>
+   * <li>`truncate` (default `false`): use `TRUNCATE TABLE` instead of `DROP TABLE`.</li>
+   * </ul>
+   *
+   * In case of failures, users should turn off `truncate` option to use `DROP TABLE` again. Also,
+   * due to the different behavior of `TRUNCATE TABLE` among DBMS, it's not always safe to use this.
+   * MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, and OracleDialect supports this
+   * while PostgresDialect and default JDBCDirect doesn't. For unknown and unsupported JDBCDirect,
+   * the user option `truncate` is ignored.
+   *
    * @param url JDBC database url of the form `jdbc:subprotocol:subname`
    * @param table Name of the table in the external database.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included. "batchsize" can be used to control the
-   *                             number of rows per insert.
+   *                             number of rows per insert. "isolationLevel" can be one of
+   *                             "NONE", "READ_COMMITTED", "READ_UNCOMMITTED", "REPEATABLE_READ",
+   *                             or "SERIALIZABLE", corresponding to standard transaction
+   *                             isolation levels defined by JDBC's Connection object, with default
+   *                             of "READ_UNCOMMITTED".
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     assertNotPartitioned("jdbc")
     assertNotBucketed("jdbc")
-
-    val props = new Properties()
-    extraOptions.foreach { case (key, value) =>
-      props.put(key, value)
-    }
     // connectionProperties should override settings in extraOptions
-    props.putAll(connectionProperties)
-    val conn = JdbcUtils.createConnectionFactory(url, props)()
-
-    try {
-      var tableExists = JdbcUtils.tableExists(conn, url, table)
-
-      if (mode == SaveMode.Ignore && tableExists) {
-        return
-      }
-
-      if (mode == SaveMode.ErrorIfExists && tableExists) {
-        sys.error(s"Table $table already exists.")
-      }
-
-      if (mode == SaveMode.Overwrite && tableExists) {
-        JdbcUtils.dropTable(conn, table)
-        tableExists = false
-      }
-
-      // Create the table if the table didn't exist.
-      if (!tableExists) {
-        val schema = JdbcUtils.schemaString(df, url)
-        val sql = s"CREATE TABLE $table ($schema)"
-        val statement = conn.createStatement
-        try {
-          statement.executeUpdate(sql)
-        } finally {
-          statement.close()
-        }
-      }
-    } finally {
-      conn.close()
-    }
-
-    JdbcUtils.saveTable(df, url, table, props)
+    this.extraOptions = this.extraOptions ++ (connectionProperties.asScala)
+    // explicit url and dbtable should override all
+    this.extraOptions += ("url" -> url, "dbtable" -> table)
+    format("jdbc").save()
   }
 
   /**
@@ -449,9 +440,17 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following JSON-specific option(s) for writing JSON files:
+   * <ul>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
+   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
+   * date type.</li>
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * indicates a timestamp format. Custom date formats follow the formats at
+   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * </ul>
    *
    * @since 1.4.0
    */
@@ -467,10 +466,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following Parquet-specific option(s) for writing Parquet files:
+   * <ul>
    * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
    * compression codec to use when saving to file. This can be one of the known case-insensitive
    * shorten names(none, `snappy`, `gzip`, and `lzo`). This will override
    * `spark.sql.parquet.compression.codec`.</li>
+   * </ul>
    *
    * @since 1.4.0
    */
@@ -486,9 +487,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following ORC-specific option(s) for writing ORC files:
+   * <ul>
    * <li>`compression` (default `snappy`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
    * This will override `orc.compress`.</li>
+   * </ul>
    *
    * @since 1.5.0
    * @note Currently, this method can only be used after enabling Hive support
@@ -510,9 +513,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following option(s) for writing text files:
+   * <ul>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
+   * </ul>
    *
    * @since 1.6.0
    */
@@ -528,6 +533,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following CSV-specific option(s) for writing CSV files:
+   * <ul>
    * <li>`sep` (default `,`): sets the single character as a separator for each
    * field and value.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
@@ -544,6 +550,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
+   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
+   * date type.</li>
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * indicates a timestamp format. Custom date formats follow the formats at
+   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * </ul>
    *
    * @since 2.0.0
    */

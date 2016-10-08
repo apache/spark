@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
@@ -59,12 +59,11 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
   }
 
 }
+
 /**
- * :: Experimental ::
  * PCA trains a model to project vectors to a lower dimensional space of the top [[PCA!.k]]
  * principal components.
  */
-@Experimental
 @Since("1.5.0")
 class PCA @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
@@ -116,14 +115,12 @@ object PCA extends DefaultParamsReadable[PCA] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[PCA]]. Transforms vectors to a lower dimensional space.
  *
  * @param pc A principal components Matrix. Each column is one principal component.
  * @param explainedVariance A vector of proportions of variance explained by
  *                          each principal component.
  */
-@Experimental
 @Since("1.5.0")
 class PCAModel private[ml] (
     @Since("1.5.0") override val uid: String,

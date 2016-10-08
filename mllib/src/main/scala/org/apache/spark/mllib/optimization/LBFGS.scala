@@ -212,6 +212,7 @@ object LBFGS extends Logging {
       state = states.next()
     }
     lossHistory += state.value
+
     val weights = Vectors.fromBreeze(state.x)
 
     val lossHistoryArray = lossHistory.result()

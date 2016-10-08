@@ -25,7 +25,6 @@ import java.util.concurrent.TimeoutException
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import kafka.admin.AdminUtils
@@ -274,4 +273,3 @@ private[kafka] class KafkaTestUtils extends Logging {
     }
   }
 }
-

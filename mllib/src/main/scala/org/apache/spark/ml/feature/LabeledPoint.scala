@@ -23,7 +23,9 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.linalg.Vector
 
 /**
- * Class that represents the features and labels of a data point.
+ * :: Experimental ::
+ *
+ * Class that represents the features and label of a data point.
  *
  * @param label Label for this data point.
  * @param features List of features for this data point.

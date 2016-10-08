@@ -551,7 +551,8 @@ class DateTimeUtilsSuite extends SparkFunSuite {
         val skipped = skipped_days.getOrElse(tz.getID, Int.MinValue)
         (-20000 to 20000).foreach { d =>
           if (d != skipped) {
-            assert(millisToDays(daysToMillis(d)) === d)
+            assert(millisToDays(daysToMillis(d)) === d,
+              s"Round trip of ${d} did not work in tz ${tz}")
           }
         }
       }

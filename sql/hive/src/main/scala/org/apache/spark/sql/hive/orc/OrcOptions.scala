@@ -20,8 +20,7 @@ package org.apache.spark.sql.hive.orc
 /**
  * Options for the ORC data source.
  */
-private[orc] class OrcOptions(
-    @transient private val parameters: Map[String, String])
+private[orc] class OrcOptions(@transient private val parameters: Map[String, String])
   extends Serializable {
 
   import OrcOptions._
@@ -31,7 +30,14 @@ private[orc] class OrcOptions(
    * Acceptable values are defined in [[shortOrcCompressionCodecNames]].
    */
   val compressionCodec: String = {
-    val codecName = parameters.getOrElse("compression", "snappy").toLowerCase
+    // `orc.compress` is a ORC configuration. So, here we respect this as an option but
+    // `compression` has higher precedence than `orc.compress`. It means if both are set,
+    // we will use `compression`.
+    val orcCompressionConf = parameters.get(OrcRelation.ORC_COMPRESSION)
+    val codecName = parameters
+      .get("compression")
+      .orElse(orcCompressionConf)
+      .getOrElse("snappy").toLowerCase
     if (!shortOrcCompressionCodecNames.contains(codecName)) {
       val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
       throw new IllegalArgumentException(s"Codec [$codecName] " +

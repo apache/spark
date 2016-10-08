@@ -47,8 +47,6 @@ __all__ = ['BisectingKMeansModel', 'BisectingKMeans', 'KMeansModel', 'KMeans',
 @inherit_doc
 class BisectingKMeansModel(JavaModelWrapper):
     """
-    .. note:: Experimental
-
     A clustering model derived from the bisecting k-means method.
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
@@ -120,8 +118,6 @@ class BisectingKMeansModel(JavaModelWrapper):
 
 class BisectingKMeans(object):
     """
-    .. note:: Experimental
-
     A bisecting k-means algorithm based on the paper "A comparison of
     document clustering techniques" by Steinbach, Karypis, and Kumar,
     with modification to fit Spark.
@@ -310,7 +306,7 @@ class KMeans(object):
     @classmethod
     @since('0.9.0')
     def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
-              seed=None, initializationSteps=5, epsilon=1e-4, initialModel=None):
+              seed=None, initializationSteps=2, epsilon=1e-4, initialModel=None):
         """
         Train a k-means clustering model.
 
@@ -334,9 +330,9 @@ class KMeans(object):
           (default: None)
         :param initializationSteps:
           Number of steps for the k-means|| initialization mode.
-          This is an advanced setting -- the default of 5 is almost
+          This is an advanced setting -- the default of 2 is almost
           always enough.
-          (default: 5)
+          (default: 2)
         :param epsilon:
           Distance threshold within which a center will be considered to
           have converged. If all centers move less than this Euclidean
@@ -366,8 +362,6 @@ class KMeans(object):
 class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     """
-    .. note:: Experimental
-
     A clustering model derived from the Gaussian Mixture Model method.
 
     >>> from pyspark.mllib.linalg import Vectors, DenseMatrix
@@ -422,7 +416,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     ...                 4.5605,  5.2043,  6.2734])
     >>> clusterdata_2 = sc.parallelize(data.reshape(5,3))
     >>> model = GaussianMixture.train(clusterdata_2, 2, convergenceTol=0.0001,
-    ...                               maxIterations=150, seed=10)
+    ...                               maxIterations=150, seed=4)
     >>> labels = model.predict(clusterdata_2).collect()
     >>> labels[0]==labels[1]
     True
@@ -513,8 +507,6 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
 class GaussianMixture(object):
     """
-    .. note:: Experimental
-
     Learning algorithm for Gaussian Mixtures using the expectation-maximization algorithm.
 
     .. versionadded:: 1.3.0
@@ -565,8 +557,6 @@ class GaussianMixture(object):
 class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     """
-    .. note:: Experimental
-
     Model produced by [[PowerIterationClustering]].
 
     >>> import math
@@ -645,8 +635,6 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
 class PowerIterationClustering(object):
     """
-    .. note:: Experimental
-
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm
     developed by [[http://www.icml2010.org/papers/387.pdf Lin and Cohen]].
     From the abstract: PIC finds a very low-dimensional embedding of a
@@ -693,8 +681,6 @@ class PowerIterationClustering(object):
 
 class StreamingKMeansModel(KMeansModel):
     """
-    .. note:: Experimental
-
     Clustering model which can perform an online update of the centroids.
 
     The update formula for each centroid is given by
@@ -794,8 +780,6 @@ class StreamingKMeansModel(KMeansModel):
 
 class StreamingKMeans(object):
     """
-    .. note:: Experimental
-
     Provides methods to set k, decayFactor, timeUnit to configure the
     KMeans algorithm for fitting and predicting on incoming dstreams.
     More details on how the centroids are updated are provided under the

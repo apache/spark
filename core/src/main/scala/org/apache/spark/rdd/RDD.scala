@@ -70,7 +70,7 @@ import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, Poi
  * All of the scheduling and execution in Spark is done based on these methods, allowing each RDD
  * to implement its own way of computing itself. Indeed, users can implement custom RDDs (e.g. for
  * reading data from a new storage system) by overriding these functions. Please refer to the
- * [[http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf Spark paper]] for more details
+ * [[http://people.csail.mit.edu/matei/papers/2012/nsdi_spark.pdf Spark paper]] for more details
  * on RDD internals.
  */
 abstract class RDD[T: ClassTag](
@@ -474,12 +474,17 @@ abstract class RDD[T: ClassTag](
   def sample(
       withReplacement: Boolean,
       fraction: Double,
-      seed: Long = Utils.random.nextLong): RDD[T] = withScope {
-    require(fraction >= 0.0, "Negative fraction value: " + fraction)
-    if (withReplacement) {
-      new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), true, seed)
-    } else {
-      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](fraction), true, seed)
+      seed: Long = Utils.random.nextLong): RDD[T] = {
+    require(fraction >= 0,
+      s"Fraction must be nonnegative, but got ${fraction}")
+
+    withScope {
+      require(fraction >= 0.0, "Negative fraction value: " + fraction)
+      if (withReplacement) {
+        new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), true, seed)
+      } else {
+        new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](fraction), true, seed)
+      }
     }
   }
 
@@ -493,13 +498,21 @@ abstract class RDD[T: ClassTag](
    */
   def randomSplit(
       weights: Array[Double],
-      seed: Long = Utils.random.nextLong): Array[RDD[T]] = withScope {
-    val sum = weights.sum
-    val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
-    normalizedCumWeights.sliding(2).map { x =>
-      randomSampleWithRange(x(0), x(1), seed)
-    }.toArray
+      seed: Long = Utils.random.nextLong): Array[RDD[T]] = {
+    require(weights.forall(_ >= 0),
+      s"Weights must be nonnegative, but got ${weights.mkString("[", ",", "]")}")
+    require(weights.sum > 0,
+      s"Sum of weights must be positive, but got ${weights.mkString("[", ",", "]")}")
+
+    withScope {
+      val sum = weights.sum
+      val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
+      normalizedCumWeights.sliding(2).map { x =>
+        randomSampleWithRange(x(0), x(1), seed)
+      }.toArray
+    }
   }
+
 
   /**
    * Internal method exposed for Random Splits in DataFrames. Samples an RDD given a probability
@@ -699,18 +712,28 @@ abstract class RDD[T: ClassTag](
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: String): RDD[String] = withScope {
-    pipe(command)
+    // Similar to Runtime.exec(), if we are given a single string, split it into words
+    // using a standard StringTokenizer (i.e. by spaces)
+    pipe(PipedRDD.tokenize(command))
   }
 
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: String, env: Map[String, String]): RDD[String] = withScope {
-    pipe(command, env)
+    // Similar to Runtime.exec(), if we are given a single string, split it into words
+    // using a standard StringTokenizer (i.e. by spaces)
+    pipe(PipedRDD.tokenize(command), env)
   }
 
   /**
-   * Return an RDD created by piping elements to a forked external process.
+   * Return an RDD created by piping elements to a forked external process. The resulting RDD
+   * is computed by executing the given process once per partition. All elements
+   * of each input partition are written to a process's stdin as lines of input separated
+   * by a newline. The resulting partition consists of the process's stdout output, with
+   * each line of stdout resulting in one element of the output partition. A process is invoked
+   * even for empty partitions.
+   *
    * The print behavior can be customized by providing two functions.
    *
    * @param command command to run in forked process.
@@ -1273,6 +1296,7 @@ abstract class RDD[T: ClassTag](
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
   def take(num: Int): Array[T] = withScope {
+    val scaleUpFactor = Math.max(conf.getInt("spark.rdd.limit.scaleUpFactor", 4), 2)
     if (num == 0) {
       new Array[T](0)
     } else {
@@ -1287,12 +1311,12 @@ abstract class RDD[T: ClassTag](
           // If we didn't find any rows after the previous iteration, quadruple and retry.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate
           // it by 50%. We also cap the estimation in the end.
-          if (buf.size == 0) {
-            numPartsToTry = partsScanned * 4
+          if (buf.isEmpty) {
+            numPartsToTry = partsScanned * scaleUpFactor
           } else {
             // the left side of max is >=1 whenever partsScanned >= 2
             numPartsToTry = Math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)
-            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4)
+            numPartsToTry = Math.min(numPartsToTry, partsScanned * scaleUpFactor)
           }
         }
 

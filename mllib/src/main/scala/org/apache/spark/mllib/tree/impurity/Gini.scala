@@ -17,16 +17,14 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
- * :: Experimental ::
- * Class for calculating the
- * [[http://en.wikipedia.org/wiki/Decision_tree_learning#Gini_impurity Gini impurity]]
+ * Class for calculating the Gini impurity
+ * (http://en.wikipedia.org/wiki/Decision_tree_learning#Gini_impurity)
  * during multiclass classification.
  */
 @Since("1.0.0")
-@Experimental
 object Gini extends Impurity {
 
   /**

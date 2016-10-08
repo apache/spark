@@ -39,7 +39,7 @@ def rmse(R, ms, us):
     return np.sqrt(np.sum(np.power(diff, 2)) / (M * U))
 
 
-def update(i, vec, mat, ratings):
+def update(i, mat, ratings):
     uu = mat.shape[0]
     ff = mat.shape[1]
 
@@ -88,7 +88,7 @@ if __name__ == "__main__":
 
     for i in range(ITERATIONS):
         ms = sc.parallelize(range(M), partitions) \
-               .map(lambda x: update(x, msb.value[x, :], usb.value, Rb.value)) \
+               .map(lambda x: update(x, usb.value, Rb.value)) \
                .collect()
         # collect() returns a list, so array ends up being
         # a 3-d array, we take the first 2 dims for the matrix
@@ -96,7 +96,7 @@ if __name__ == "__main__":
         msb = sc.broadcast(ms)
 
         us = sc.parallelize(range(U), partitions) \
-               .map(lambda x: update(x, usb.value[x, :], msb.value, Rb.value.T)) \
+               .map(lambda x: update(x, msb.value, Rb.value.T)) \
                .collect()
         us = matrix(np.array(us)[:, :, 0])
         usb = sc.broadcast(us)

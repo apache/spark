@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.11</artifactId>
-  <version>2.0.0-SNAPSHOT</version>
+  <version>2.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -111,6 +111,7 @@
     <module>external/kafka-0-8-assembly</module>
     <module>external/kafka-0-10</module>
     <module>external/kafka-0-10-assembly</module>
+    <module>external/kafka-0-10-sql</module>
   </modules>
 
   <properties>
@@ -119,8 +120,6 @@
     <java.version>1.7</java.version>
     <maven.version>3.3.9</maven.version>
     <sbt.project.name>spark</sbt.project.name>
-    <mesos.version>0.21.1</mesos.version>
-    <mesos.classifier>shaded-protobuf</mesos.classifier>
     <slf4j.version>1.7.16</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>2.2.0</hadoop.version>
@@ -134,7 +133,7 @@
     <hive.version>1.2.1.spark2</hive.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
-    <derby.version>10.11.1.1</derby.version>
+    <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.8.1</parquet.version>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.2.16.v20160414</jetty.version>
@@ -159,11 +158,9 @@
     <commons.collections.version>3.2.2</commons.collections.version>
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
-    <jline.version>${scala.version}</jline.version>
-    <jline.groupid>org.scala-lang</jline.groupid>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.6.5</fasterxml.jackson.version>
-    <snappy.version>1.1.2.4</snappy.version>
+    <snappy.version>1.1.2.6</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
     <commons-codec.version>1.10</commons-codec.version>
@@ -184,6 +181,7 @@
     <selenium.version>2.52.0</selenium.version>
     <paranamer.version>2.8</paranamer.version>
     <maven-antrun.version>1.8</maven-antrun.version>
+    <commons-crypto.version>1.0.0</commons-crypto.version>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
@@ -338,6 +336,18 @@
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-servlets</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-proxy</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-client</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
@@ -530,18 +540,6 @@
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
-        <groupId>org.apache.mesos</groupId>
-        <artifactId>mesos</artifactId>
-        <version>${mesos.version}</version>
-        <classifier>${mesos.classifier}</classifier>
-        <exclusions>
-          <exclusion>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
         <version>0.5.11</version>
@@ -554,7 +552,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.29.Final</version>
+        <version>4.0.41.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -657,7 +655,7 @@
       <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
-        <version>0.11.2</version>
+        <version>0.12</version>
         <exclusions>
           <!-- This is included as a compile-scoped dependency by jtransforms, which is
                a dependency of breeze. -->
@@ -746,7 +744,6 @@
       <dependency>
         <groupId>com.spotify</groupId>
         <artifactId>docker-client</artifactId>
-        <classifier>shaded</classifier>
         <version>3.6.6</version>
         <scope>test</scope>
         <exclusions>
@@ -1428,6 +1425,10 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>jline</groupId>
+            <artifactId>jline</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1831,6 +1832,22 @@
         <groupId>org.antlr</groupId>
         <artifactId>antlr4-runtime</artifactId>
         <version>${antlr4.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>${jline.groupid}</groupId>
+        <artifactId>jline</artifactId>
+        <version>${jline.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-crypto</artifactId>
+        <version>${commons-crypto.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -2251,6 +2268,8 @@
               <include>org.spark-project.spark:unused</include>
               <include>org.eclipse.jetty:jetty-io</include>
               <include>org.eclipse.jetty:jetty-http</include>
+              <include>org.eclipse.jetty:jetty-proxy</include>
+              <include>org.eclipse.jetty:jetty-client</include>
               <include>org.eclipse.jetty:jetty-continuation</include>
               <include>org.eclipse.jetty:jetty-servlet</include>
               <include>org.eclipse.jetty:jetty-servlets</include>
@@ -2505,7 +2524,7 @@
     <profile>
       <id>hadoop-2.7</id>
       <properties>
-        <hadoop.version>2.7.2</hadoop.version>
+        <hadoop.version>2.7.3</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>
@@ -2517,6 +2536,13 @@
       <modules>
         <module>yarn</module>
         <module>common/network-yarn</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>mesos</id>
+      <modules>
+        <module>mesos</module>
       </modules>
     </profile>
 
@@ -2538,15 +2564,6 @@
         <jline.version>${scala.version}</jline.version>
         <jline.groupid>org.scala-lang</jline.groupid>
       </properties>
-      <dependencyManagement>
-        <dependencies>
-          <dependency>
-            <groupId>${jline.groupid}</groupId>
-            <artifactId>jline</artifactId>
-            <version>${jline.version}</version>
-          </dependency>
-        </dependencies>
-      </dependencyManagement>
       <build>
         <plugins>
           <plugin>
@@ -2601,8 +2618,9 @@
               <configuration>
                 <compilerArgs combine.children="append">
                   <arg>-bootclasspath</arg>
-                  <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                  <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
                 </compilerArgs>
+                <verbose>true</verbose>
               </configuration>
             </plugin>
             <plugin>
@@ -2617,7 +2635,7 @@
                   <configuration>
                     <args combine.children="append">
                       <arg>-javabootclasspath</arg>
-                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
                     </args>
                   </configuration>
                 </execution>
@@ -2626,7 +2644,7 @@
                   <configuration>
                     <args combine.children="append">
                       <arg>-javabootclasspath</arg>
-                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
                     </args>
                   </configuration>
                 </execution>
@@ -2645,6 +2663,8 @@
       <properties>
         <scala.version>2.11.8</scala.version>
         <scala.binary.version>2.11</scala.binary.version>
+        <jline.version>2.12.1</jline.version>
+        <jline.groupid>jline</jline.groupid>
       </properties>
       <build>
         <plugins>

@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param._
@@ -29,7 +29,6 @@ import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, StructType}
 
 /**
- * :: Experimental ::
  * Maps a sequence of terms to their term frequencies using the hashing trick.
  * Currently we use Austin Appleby's MurmurHash 3 algorithm (MurmurHash3_x86_32)
  * to calculate the hash code value for the term object.
@@ -37,7 +36,6 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  * it is advisable to use a power of two as the numFeatures parameter;
  * otherwise the features will not be mapped evenly to the columns.
  */
-@Experimental
 @Since("1.2.0")
 class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {

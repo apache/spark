@@ -39,6 +39,8 @@ if __name__ == "__main__":
                              outputCol="selectedFeatures", labelCol="clicked")
 
     result = selector.fit(df).transform(df)
+
+    print("ChiSqSelector output with top %d features selected" % selector.getNumTopFeatures())
     result.show()
     # $example off$
 

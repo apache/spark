@@ -589,6 +589,13 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       }
     }
   }
+
+  test("self-join") {
+    val table = spark.table("normal_parquet")
+    val selfJoin = table.as("t1").crossJoin(table.as("t2"))
+    checkAnswer(selfJoin,
+      sql("SELECT * FROM normal_parquet x CROSS JOIN normal_parquet y"))
+  }
 }
 
 /**
@@ -702,7 +709,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
   }
 
   test("Verify the PARQUET conversion parameter: CONVERT_METASTORE_PARQUET") {
-    withTempTable("single") {
+    withTempView("single") {
       val singleRowDF = Seq((0, "foo")).toDF("key", "value")
       singleRowDF.createOrReplaceTempView("single")
 

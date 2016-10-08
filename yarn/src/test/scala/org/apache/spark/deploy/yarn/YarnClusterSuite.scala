@@ -32,6 +32,8 @@ import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
@@ -96,7 +98,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Spark in yarn-cluster mode with different configurations") {
-    testBasicYarnApp(true,
+    testBasicYarnApp(false,
       Map(
         "spark.driver.memory" -> "512m",
         "spark.driver.cores" -> "1",
@@ -104,6 +106,10 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         "spark.executor.memory" -> "512m",
         "spark.executor.instances" -> "2"
       ))
+  }
+
+  test("run Spark in yarn-cluster mode with using SparkHadoopUtil.conf") {
+    testYarnAppUseSparkHadoopUtilConf()
   }
 
   test("run Spark in yarn-client mode with additional jar") {
@@ -131,6 +137,20 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   test("run Python application in yarn-cluster mode") {
     testPySpark(false)
+  }
+
+  test("run Python application in yarn-cluster mode using " +
+    " spark.yarn.appMasterEnv to override local envvar") {
+    testPySpark(
+      clientMode = false,
+      extraConf = Map(
+        "spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON"
+          -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python"),
+        "spark.yarn.appMasterEnv.PYSPARK_PYTHON"
+          -> sys.env.getOrElse("PYSPARK_PYTHON", "python")),
+      extraEnv = Map(
+        "PYSPARK_DRIVER_PYTHON" -> "not python",
+        "PYSPARK_PYTHON" -> "not python"))
   }
 
   test("user class path first in client mode") {
@@ -173,11 +193,28 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     }
   }
 
+  test("timeout to get SparkContext in cluster mode triggers failure") {
+    val timeout = 2000
+    val finalState = runSpark(false, mainClassName(SparkContextTimeoutApp.getClass),
+      appArgs = Seq((timeout * 4).toString),
+      extraConf = Map(AM_MAX_WAIT_TIME.key -> timeout.toString))
+    finalState should be (SparkAppHandle.State.FAILED)
+  }
+
   private def testBasicYarnApp(clientMode: Boolean, conf: Map[String, String] = Map()): Unit = {
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
       appArgs = Seq(result.getAbsolutePath()),
       extraConf = conf)
+    checkResult(finalState, result)
+  }
+
+  private def testYarnAppUseSparkHadoopUtilConf(): Unit = {
+    val result = File.createTempFile("result", null, tempDir)
+    val finalState = runSpark(false,
+      mainClassName(YarnClusterDriverUseSparkHadoopUtilConf.getClass),
+      appArgs = Seq("key=value", result.getAbsolutePath()),
+      extraConf = Map("spark.hadoop.key" -> "value"))
     checkResult(finalState, result)
   }
 
@@ -193,7 +230,10 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, executorResult, "ORIGINAL")
   }
 
-  private def testPySpark(clientMode: Boolean): Unit = {
+  private def testPySpark(
+      clientMode: Boolean,
+      extraConf: Map[String, String] = Map(),
+      extraEnv: Map[String, String] = Map()): Unit = {
     val primaryPyFile = new File(tempDir, "test.py")
     Files.write(TEST_PYFILE, primaryPyFile, StandardCharsets.UTF_8)
 
@@ -202,11 +242,11 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // needed locations.
     val sparkHome = sys.props("spark.test.home")
     val pythonPath = Seq(
-        s"$sparkHome/python/lib/py4j-0.10.1-src.zip",
+        s"$sparkHome/python/lib/py4j-0.10.3-src.zip",
         s"$sparkHome/python")
-    val extraEnv = Map(
+    val extraEnvVars = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
-      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator))
+      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator)) ++ extraEnv
 
     val moduleDir =
       if (clientMode) {
@@ -228,7 +268,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val finalState = runSpark(clientMode, primaryPyFile.getAbsolutePath(),
       sparkArgs = Seq("--py-files" -> pyFiles),
       appArgs = Seq(result.getAbsolutePath()),
-      extraEnv = extraEnv)
+      extraEnv = extraEnvVars,
+      extraConf = extraConf)
     checkResult(finalState, result)
   }
 
@@ -271,6 +312,37 @@ private object YarnClusterDriverWithFailure extends Logging with Matchers {
       .setAppName("yarn test with failure"))
 
     throw new Exception("exception after sc initialized")
+  }
+}
+
+private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matchers {
+  def main(args: Array[String]): Unit = {
+    if (args.length != 2) {
+      // scalastyle:off println
+      System.err.println(
+        s"""
+        |Invalid command line: ${args.mkString(" ")}
+        |
+        |Usage: YarnClusterDriverUseSparkHadoopUtilConf [hadoopConfKey=value] [result file]
+        """.stripMargin)
+      // scalastyle:on println
+      System.exit(1)
+    }
+
+    val sc = new SparkContext(new SparkConf()
+      .set("spark.extraListeners", classOf[SaveExecutorInfo].getName)
+      .setAppName("yarn test using SparkHadoopUtil's conf"))
+
+    val kv = args(0).split("=")
+    val status = new File(args(1))
+    var result = "failure"
+    try {
+      SparkHadoopUtil.get.conf.get(kv(0)) should be (kv(1))
+      result = "success"
+    } finally {
+      Files.write(result, status, StandardCharsets.UTF_8)
+      sc.stop()
+    }
   }
 }
 
@@ -403,6 +475,19 @@ private object YarnLauncherTestApp {
         wait()
       }
     }
+  }
+
+}
+
+/**
+ * Used to test code in the AM that detects the SparkContext instance. Expects a single argument
+ * with the duration to sleep for, in ms.
+ */
+private object SparkContextTimeoutApp {
+
+  def main(args: Array[String]): Unit = {
+    val Array(sleepTime) = args
+    Thread.sleep(java.lang.Long.parseLong(sleepTime))
   }
 
 }

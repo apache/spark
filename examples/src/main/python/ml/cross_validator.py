@@ -24,7 +24,7 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
 # $example off$
-from pyspark.sql import Row, SparkSession
+from pyspark.sql import SparkSession
 
 """
 A simple example demonstrating model selection using CrossValidator.
@@ -39,6 +39,7 @@ if __name__ == "__main__":
         .builder\
         .appName("CrossValidatorExample")\
         .getOrCreate()
+
     # $example on$
     # Prepare training documents, which are labeled.
     training = spark.createDataFrame([
