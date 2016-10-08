@@ -682,6 +682,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.listFunctions(db, pattern)
   }
 
+  // --------------------------------------------------------------------------
+  // Resources
+  // --------------------------------------------------------------------------
+
+  override def addJar(path: String): Unit = withClient {
+    client.addJar(path)
+  }
+
 }
 
 object HiveExternalCatalog {

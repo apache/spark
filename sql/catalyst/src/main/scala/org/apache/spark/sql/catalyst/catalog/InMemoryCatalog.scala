@@ -515,4 +515,12 @@ class InMemoryCatalog(
     StringUtils.filterPattern(catalog(db).functions.keysIterator.toSeq, pattern)
   }
 
+  // --------------------------------------------------------------------------
+  // Resources
+  // --------------------------------------------------------------------------
+
+  override def addJar(path: String): Unit = {
+    throw new UnsupportedOperationException("addJar is not supported")
+  }
+
 }

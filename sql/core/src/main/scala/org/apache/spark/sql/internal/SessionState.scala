@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.io.File
-
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -43,6 +40,11 @@ private[sql] class SessionState(sparkSession: SparkSession) {
 
   // Note: These are all lazy vals because they depend on each other (e.g. conf) and we
   // want subclasses to override some of the fields. Otherwise, we would get a lot of NPEs.
+
+  // Since both sharedState and sessionState are lazily initialized in SparkSession,
+  // we need to ensure sharedState are initialized before the sessionState; otherwise,
+  // hive-site.xml might not be loaded when we using it.
+  sparkSession.sharedState
 
   /**
    * SQL-specific key-value configurations.
@@ -79,7 +81,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     new FunctionResourceLoader {
       override def loadResource(resource: FunctionResource): Unit = {
         resource.resourceType match {
-          case JarResource => addJar(resource.uri)
+          case JarResource => sparkSession.sharedState.addJar(resource.uri)
           case FileResource => sparkSession.sparkContext.addFile(resource.uri)
           case ArchiveResource =>
             throw new AnalysisException(
@@ -152,9 +154,6 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     new StreamingQueryManager(sparkSession)
   }
 
-  private val jarClassLoader: NonClosableMutableURLClassLoader =
-    sparkSession.sharedState.jarClassLoader
-
   // Automatically extract all entries and put it in our SQLConf
   // We need to call it after all of vals have been initialized.
   sparkSession.sparkContext.getConf.getAll.foreach { case (k, v) =>
@@ -169,21 +168,6 @@ private[sql] class SessionState(sparkSession: SparkSession) {
 
   def refreshTable(tableName: String): Unit = {
     catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
-  }
-
-  def addJar(path: String): Unit = {
-    sparkSession.sparkContext.addJar(path)
-
-    val uri = new Path(path).toUri
-    val jarURL = if (uri.getScheme == null) {
-      // `path` is a local file path without a URL scheme
-      new File(path).toURI.toURL
-    } else {
-      // `path` is a URL with a scheme
-      uri.toURL
-    }
-    jarClassLoader.addURL(jarURL)
-    Thread.currentThread().setContextClassLoader(jarClassLoader)
   }
 
   /**

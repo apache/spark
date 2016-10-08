@@ -100,11 +100,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
 
-  override def addJar(path: String): Unit = {
-    metadataHive.addJar(path)
-    super.addJar(path)
-  }
-
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
    * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive

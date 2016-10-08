@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.internal
 
+import java.io.File
+
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.config._
@@ -30,7 +33,6 @@ import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, InMemoryCatalog}
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
-
 
 /**
  * A class that holds all state shared across sessions in a given [[SQLContext]].
@@ -68,6 +70,29 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    */
   val jarClassLoader = new NonClosableMutableURLClassLoader(
     org.apache.spark.util.Utils.getContextOrSparkClassLoader)
+
+  /**
+   * Add a global-scoped jar
+   */
+  def addJar(path: String): Unit = {
+    if (sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive") {
+      // Hive metastore supports custom serde.
+      externalCatalog.addJar(path)
+    }
+    // The added jar is shared by all the sessions, because SparkContext does not support sessions
+    sparkContext.addJar(path)
+
+    val uri = new Path(path).toUri
+    val jarURL = if (uri.getScheme == null) {
+      // `path` is a local file path without a URL scheme
+      new File(path).toURI.toURL
+    } else {
+      // `path` is a URL with a scheme
+      uri.toURL
+    }
+    jarClassLoader.addURL(jarURL)
+    Thread.currentThread().setContextClassLoader(jarClassLoader)
+  }
 
   {
     // Set the Hive metastore warehouse path to the one we use
