@@ -345,6 +345,8 @@ trait BasicFileCatalog {
  * A [[BasicFileCatalog]] which can enumerate all of the files comprising a relation and, from
  * those, infer the relation's partition specification.
  */
+// TODO: Consider a more descriptive, appropriate name which suggests this is a file catalog for
+// which it is safe to list all of its files?
 trait FileCatalog extends BasicFileCatalog {
 
   /** Returns the specification of the partitions inferred from the data. */
