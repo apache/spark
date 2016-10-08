@@ -75,6 +75,29 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("elt") {
+    def testElt(result: String, n: java.lang.Integer, args: String*): Unit = {
+      checkEvaluation(
+        Elt(Literal.create(n, IntegerType) +: args.map(Literal.create(_, StringType))),
+        result)
+    }
+
+    testElt("hello", 1, "hello", "world")
+    testElt(null, 1, null, "world")
+    testElt(null, null, "hello", "world")
+
+    // Invalid ranages
+    testElt(null, 3, "hello", "world")
+    testElt(null, 0, "hello", "world")
+    testElt(null, -1, "hello", "world")
+
+    // type checking
+    assert(Elt(Seq.empty).checkInputDataTypes().isFailure)
+    assert(Elt(Seq(Literal(1))).checkInputDataTypes().isFailure)
+    assert(Elt(Seq(Literal(1), Literal("A"))).checkInputDataTypes().isSuccess)
+    assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes().isFailure)
+  }
+
   test("StringComparison") {
     val row = create_row("abc", null)
     val c1 = 'a.string.at(0)
@@ -231,102 +254,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       SubstringIndex(Literal("www||apache||org"), Literal( "||"), Literal(2)), "www||apache")
   }
 
-  test("LIKE literal Regular Expression") {
-    checkEvaluation(Literal.create(null, StringType).like("a"), null)
-    checkEvaluation(Literal.create("a", StringType).like(Literal.create(null, StringType)), null)
-    checkEvaluation(Literal.create(null, StringType).like(Literal.create(null, StringType)), null)
-    checkEvaluation(
-      Literal.create("a", StringType).like(NonFoldableLiteral.create("a", StringType)), true)
-    checkEvaluation(
-      Literal.create("a", StringType).like(NonFoldableLiteral.create(null, StringType)), null)
-    checkEvaluation(
-      Literal.create(null, StringType).like(NonFoldableLiteral.create("a", StringType)), null)
-    checkEvaluation(
-      Literal.create(null, StringType).like(NonFoldableLiteral.create(null, StringType)), null)
-
-    checkEvaluation("abdef" like "abdef", true)
-    checkEvaluation("a_%b" like "a\\__b", true)
-    checkEvaluation("addb" like "a_%b", true)
-    checkEvaluation("addb" like "a\\__b", false)
-    checkEvaluation("addb" like "a%\\%b", false)
-    checkEvaluation("a_%b" like "a%\\%b", true)
-    checkEvaluation("addb" like "a%", true)
-    checkEvaluation("addb" like "**", false)
-    checkEvaluation("abc" like "a%", true)
-    checkEvaluation("abc"  like "b%", false)
-    checkEvaluation("abc"  like "bc%", false)
-    checkEvaluation("a\nb" like "a_b", true)
-    checkEvaluation("ab" like "a%b", true)
-    checkEvaluation("a\nb" like "a%b", true)
-  }
-
-  test("LIKE Non-literal Regular Expression") {
-    val regEx = 'a.string.at(0)
-    checkEvaluation("abcd" like regEx, null, create_row(null))
-    checkEvaluation("abdef" like regEx, true, create_row("abdef"))
-    checkEvaluation("a_%b" like regEx, true, create_row("a\\__b"))
-    checkEvaluation("addb" like regEx, true, create_row("a_%b"))
-    checkEvaluation("addb" like regEx, false, create_row("a\\__b"))
-    checkEvaluation("addb" like regEx, false, create_row("a%\\%b"))
-    checkEvaluation("a_%b" like regEx, true, create_row("a%\\%b"))
-    checkEvaluation("addb" like regEx, true, create_row("a%"))
-    checkEvaluation("addb" like regEx, false, create_row("**"))
-    checkEvaluation("abc" like regEx, true, create_row("a%"))
-    checkEvaluation("abc" like regEx, false, create_row("b%"))
-    checkEvaluation("abc" like regEx, false, create_row("bc%"))
-    checkEvaluation("a\nb" like regEx, true, create_row("a_b"))
-    checkEvaluation("ab" like regEx, true, create_row("a%b"))
-    checkEvaluation("a\nb" like regEx, true, create_row("a%b"))
-
-    checkEvaluation(Literal.create(null, StringType) like regEx, null, create_row("bc%"))
-  }
-
-  test("RLIKE literal Regular Expression") {
-    checkEvaluation(Literal.create(null, StringType) rlike "abdef", null)
-    checkEvaluation("abdef" rlike Literal.create(null, StringType), null)
-    checkEvaluation(Literal.create(null, StringType) rlike Literal.create(null, StringType), null)
-    checkEvaluation("abdef" rlike NonFoldableLiteral.create("abdef", StringType), true)
-    checkEvaluation("abdef" rlike NonFoldableLiteral.create(null, StringType), null)
-    checkEvaluation(
-      Literal.create(null, StringType) rlike NonFoldableLiteral.create("abdef", StringType), null)
-    checkEvaluation(
-      Literal.create(null, StringType) rlike NonFoldableLiteral.create(null, StringType), null)
-
-    checkEvaluation("abdef" rlike "abdef", true)
-    checkEvaluation("abbbbc" rlike "a.*c", true)
-
-    checkEvaluation("fofo" rlike "^fo", true)
-    checkEvaluation("fo\no" rlike "^fo\no$", true)
-    checkEvaluation("Bn" rlike "^Ba*n", true)
-    checkEvaluation("afofo" rlike "fo", true)
-    checkEvaluation("afofo" rlike "^fo", false)
-    checkEvaluation("Baan" rlike "^Ba?n", false)
-    checkEvaluation("axe" rlike "pi|apa", false)
-    checkEvaluation("pip" rlike "^(pi)*$", false)
-
-    checkEvaluation("abc"  rlike "^ab", true)
-    checkEvaluation("abc"  rlike "^bc", false)
-    checkEvaluation("abc"  rlike "^ab", true)
-    checkEvaluation("abc"  rlike "^bc", false)
-
-    intercept[java.util.regex.PatternSyntaxException] {
-      evaluate("abbbbc" rlike "**")
-    }
-  }
-
-  test("RLIKE Non-literal Regular Expression") {
-    val regEx = 'a.string.at(0)
-    checkEvaluation("abdef" rlike regEx, true, create_row("abdef"))
-    checkEvaluation("abbbbc" rlike regEx, true, create_row("a.*c"))
-    checkEvaluation("fofo" rlike regEx, true, create_row("^fo"))
-    checkEvaluation("fo\no" rlike regEx, true, create_row("^fo\no$"))
-    checkEvaluation("Bn" rlike regEx, true, create_row("^Ba*n"))
-
-    intercept[java.util.regex.PatternSyntaxException] {
-      evaluate("abbbbc" rlike regEx, create_row("**"))
-    }
-  }
-
   test("ascii for string") {
     val a = 'a.string.at(0)
     checkEvaluation(Ascii(Literal("efg")), 101, create_row("abdef"))
@@ -382,6 +309,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(InitCap(Literal("a b")), "A B")
     checkEvaluation(InitCap(Literal(" a")), " A")
     checkEvaluation(InitCap(Literal("the test")), "The Test")
+    checkEvaluation(InitCap(Literal("sParK")), "Spark")
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     checkEvaluation(InitCap(Literal("世界")), "世界")
@@ -507,16 +435,18 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val s2 = 'b.string.at(1)
     val s3 = 'c.string.at(2)
     val s4 = 'd.int.at(3)
-    val row1 = create_row("aaads", "aa", "zz", 1)
-    val row2 = create_row(null, "aa", "zz", 0)
-    val row3 = create_row("aaads", null, "zz", 0)
-    val row4 = create_row(null, null, null, 0)
+    val row1 = create_row("aaads", "aa", "zz", 2)
+    val row2 = create_row(null, "aa", "zz", 1)
+    val row3 = create_row("aaads", null, "zz", 1)
+    val row4 = create_row(null, null, null, 1)
 
     checkEvaluation(new StringLocate(Literal("aa"), Literal("aaads")), 1, row1)
-    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(1)), 2, row1)
-    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(2)), 0, row1)
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(0)), 0, row1)
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(1)), 1, row1)
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(2)), 2, row1)
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(3)), 0, row1)
     checkEvaluation(new StringLocate(Literal("de"), Literal("aaads")), 0, row1)
-    checkEvaluation(StringLocate(Literal("de"), Literal("aaads"), 1), 0, row1)
+    checkEvaluation(StringLocate(Literal("de"), Literal("aaads"), 2), 0, row1)
 
     checkEvaluation(new StringLocate(s2, s1), 1, row1)
     checkEvaluation(StringLocate(s2, s1, s4), 2, row1)
@@ -586,68 +516,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringSpace(s1), null, row2)
   }
 
-  test("RegexReplace") {
-    val row1 = create_row("100-200", "(\\d+)", "num")
-    val row2 = create_row("100-200", "(\\d+)", "###")
-    val row3 = create_row("100-200", "(-)", "###")
-    val row4 = create_row(null, "(\\d+)", "###")
-    val row5 = create_row("100-200", null, "###")
-    val row6 = create_row("100-200", "(-)", null)
-
-    val s = 's.string.at(0)
-    val p = 'p.string.at(1)
-    val r = 'r.string.at(2)
-
-    val expr = RegExpReplace(s, p, r)
-    checkEvaluation(expr, "num-num", row1)
-    checkEvaluation(expr, "###-###", row2)
-    checkEvaluation(expr, "100###200", row3)
-    checkEvaluation(expr, null, row4)
-    checkEvaluation(expr, null, row5)
-    checkEvaluation(expr, null, row6)
-  }
-
-  test("RegexExtract") {
-    val row1 = create_row("100-200", "(\\d+)-(\\d+)", 1)
-    val row2 = create_row("100-200", "(\\d+)-(\\d+)", 2)
-    val row3 = create_row("100-200", "(\\d+).*", 1)
-    val row4 = create_row("100-200", "([a-z])", 1)
-    val row5 = create_row(null, "([a-z])", 1)
-    val row6 = create_row("100-200", null, 1)
-    val row7 = create_row("100-200", "([a-z])", null)
-
-    val s = 's.string.at(0)
-    val p = 'p.string.at(1)
-    val r = 'r.int.at(2)
-
-    val expr = RegExpExtract(s, p, r)
-    checkEvaluation(expr, "100", row1)
-    checkEvaluation(expr, "200", row2)
-    checkEvaluation(expr, "100", row3)
-    checkEvaluation(expr, "", row4) // will not match anything, empty string get
-    checkEvaluation(expr, null, row5)
-    checkEvaluation(expr, null, row6)
-    checkEvaluation(expr, null, row7)
-
-    val expr1 = new RegExpExtract(s, p)
-    checkEvaluation(expr1, "100", row1)
-  }
-
-  test("SPLIT") {
-    val s1 = 'a.string.at(0)
-    val s2 = 'b.string.at(1)
-    val row1 = create_row("aa2bb3cc", "[1-9]+")
-    val row2 = create_row(null, "[1-9]+")
-    val row3 = create_row("aa2bb3cc", null)
-
-    checkEvaluation(
-      StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+")), Seq("aa", "bb", "cc"), row1)
-    checkEvaluation(
-      StringSplit(s1, s2), Seq("aa", "bb", "cc"), row1)
-    checkEvaluation(StringSplit(s1, s2), null, row2)
-    checkEvaluation(StringSplit(s1, s2), null, row3)
-  }
-
   test("length for string / binary") {
     val a = 'a.string.at(0)
     val b = 'b.binary.at(0)
@@ -687,7 +555,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Literal(Decimal(123123324123L) * Decimal(123123.21234d)), Literal(4)),
       "15,159,339,180,002,773.2778")
     checkEvaluation(FormatNumber(Literal.create(null, IntegerType), Literal(3)), null)
-    checkEvaluation(FormatNumber(Literal.create(null, NullType), Literal(3)), null)
+    assert(FormatNumber(Literal.create(null, NullType), Literal(3)).resolved === false)
   }
 
   test("find in set") {
@@ -698,5 +566,79 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(FindInSet(Literal("ab"), Literal("abc,b,ab,c,def")), 3)
     checkEvaluation(FindInSet(Literal("abf"), Literal("abc,b,ab,c,def")), 0)
     checkEvaluation(FindInSet(Literal("ab,"), Literal("abc,b,ab,c,def")), 0)
+  }
+
+  test("ParseUrl") {
+    def checkParseUrl(expected: String, urlStr: String, partToExtract: String): Unit = {
+      checkEvaluation(
+        ParseUrl(Seq(Literal(urlStr), Literal(partToExtract))), expected)
+    }
+    def checkParseUrlWithKey(
+        expected: String,
+        urlStr: String,
+        partToExtract: String,
+        key: String): Unit = {
+      checkEvaluation(
+        ParseUrl(Seq(Literal(urlStr), Literal(partToExtract), Literal(key))), expected)
+    }
+
+    checkParseUrl("spark.apache.org", "http://spark.apache.org/path?query=1", "HOST")
+    checkParseUrl("/path", "http://spark.apache.org/path?query=1", "PATH")
+    checkParseUrl("query=1", "http://spark.apache.org/path?query=1", "QUERY")
+    checkParseUrl("Ref", "http://spark.apache.org/path?query=1#Ref", "REF")
+    checkParseUrl("http", "http://spark.apache.org/path?query=1", "PROTOCOL")
+    checkParseUrl("/path?query=1", "http://spark.apache.org/path?query=1", "FILE")
+    checkParseUrl("spark.apache.org:8080", "http://spark.apache.org:8080/path?query=1", "AUTHORITY")
+    checkParseUrl("userinfo", "http://userinfo@spark.apache.org/path?query=1", "USERINFO")
+    checkParseUrlWithKey("1", "http://spark.apache.org/path?query=1", "QUERY", "query")
+
+    // Null checking
+    checkParseUrl(null, null, "HOST")
+    checkParseUrl(null, "http://spark.apache.org/path?query=1", null)
+    checkParseUrl(null, null, null)
+    checkParseUrl(null, "test", "HOST")
+    checkParseUrl(null, "http://spark.apache.org/path?query=1", "NO")
+    checkParseUrl(null, "http://spark.apache.org/path?query=1", "USERINFO")
+    checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "HOST", "query")
+    checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", "quer")
+    checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", null)
+    checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", "")
+
+    // exceptional cases
+    intercept[java.util.regex.PatternSyntaxException] {
+      evaluate(ParseUrl(Seq(Literal("http://spark.apache.org/path?"),
+        Literal("QUERY"), Literal("???"))))
+    }
+
+    // arguments checking
+    assert(ParseUrl(Seq(Literal("1"))).checkInputDataTypes().isFailure)
+    assert(ParseUrl(Seq(Literal("1"), Literal("2"), Literal("3"), Literal("4")))
+      .checkInputDataTypes().isFailure)
+    assert(ParseUrl(Seq(Literal("1"), Literal(2))).checkInputDataTypes().isFailure)
+    assert(ParseUrl(Seq(Literal(1), Literal("2"))).checkInputDataTypes().isFailure)
+    assert(ParseUrl(Seq(Literal("1"), Literal("2"), Literal(3))).checkInputDataTypes().isFailure)
+  }
+
+  test("Sentences") {
+    val nullString = Literal.create(null, StringType)
+    checkEvaluation(Sentences(nullString, nullString, nullString), null)
+    checkEvaluation(Sentences(nullString, nullString), null)
+    checkEvaluation(Sentences(nullString), null)
+    checkEvaluation(Sentences(Literal.create(null, NullType)), null)
+    checkEvaluation(Sentences("", nullString, nullString), Seq.empty)
+    checkEvaluation(Sentences("", nullString), Seq.empty)
+    checkEvaluation(Sentences(""), Seq.empty)
+
+    val answer = Seq(
+      Seq("Hi", "there"),
+      Seq("The", "price", "was"),
+      Seq("But", "not", "now"))
+
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now."), answer)
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "en"), answer)
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "en", "US"),
+      answer)
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "XXX", "YYY"),
+      answer)
   }
 }

@@ -19,11 +19,12 @@ package org.apache.spark.mllib.linalg.distributed
 
 import scala.collection.mutable.ArrayBuffer
 
-import breeze.linalg.{DenseMatrix => BDM, Matrix => BM}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM, SparseVector => BSV, Vector => BV}
 
-import org.apache.spark.{Logging, Partitioner, SparkException}
+import org.apache.spark.{Partitioner, SparkException}
 import org.apache.spark.annotation.Since
-import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix}
+import org.apache.spark.internal.Logging
+import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -256,20 +257,42 @@ class BlockMatrix @Since("1.3.0") (
       val colStart = blockColIndex.toLong * colsPerBlock
       val entryValues = new ArrayBuffer[MatrixEntry]()
       mat.foreachActive { (i, j, v) =>
-        if (v != 0.0) entryValues.append(new MatrixEntry(rowStart + i, colStart + j, v))
+        if (v != 0.0) entryValues += new MatrixEntry(rowStart + i, colStart + j, v)
       }
       entryValues
     }
     new CoordinateMatrix(entryRDD, numRows(), numCols())
   }
 
+
   /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
   @Since("1.3.0")
   def toIndexedRowMatrix(): IndexedRowMatrix = {
-    require(numCols() < Int.MaxValue, "The number of columns must be within the integer range. " +
-      s"numCols: ${numCols()}")
-    // TODO: This implementation may be optimized
-    toCoordinateMatrix().toIndexedRowMatrix()
+    val cols = numCols().toInt
+
+    require(cols < Int.MaxValue, s"The number of columns should be less than Int.MaxValue ($cols).")
+
+    val rows = blocks.flatMap { case ((blockRowIdx, blockColIdx), mat) =>
+      mat.rowIter.zipWithIndex.map {
+        case (vector, rowIdx) =>
+          blockRowIdx * rowsPerBlock + rowIdx -> (blockColIdx, vector.asBreeze)
+      }
+    }.groupByKey().map { case (rowIdx, vectors) =>
+      val numberNonZeroPerRow = vectors.map(_._2.activeSize).sum.toDouble / cols.toDouble
+
+      val wholeVector = if (numberNonZeroPerRow <= 0.1) { // Sparse at 1/10th nnz
+        BSV.zeros[Double](cols)
+      } else {
+        BDV.zeros[Double](cols)
+      }
+
+      vectors.foreach { case (blockColIdx: Int, vec: BV[Double]) =>
+        val offset = colsPerBlock * blockColIdx
+        wholeVector(offset until Math.min(cols, offset + colsPerBlock)) := vec
+      }
+      new IndexedRow(rowIdx, Vectors.fromBreeze(wholeVector))
+    }
+    new IndexedRowMatrix(rows)
   }
 
   /** Collect the distributed matrix on the driver as a `DenseMatrix`. */
@@ -344,12 +367,12 @@ class BlockMatrix @Since("1.3.0") (
           }
           if (a.isEmpty) {
             val zeroBlock = BM.zeros[Double](b.head.numRows, b.head.numCols)
-            val result = binMap(zeroBlock, b.head.toBreeze)
+            val result = binMap(zeroBlock, b.head.asBreeze)
             new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
           } else if (b.isEmpty) {
             new MatrixBlock((blockRowIndex, blockColIndex), a.head)
           } else {
-            val result = binMap(a.head.toBreeze, b.head.toBreeze)
+            val result = binMap(a.head.asBreeze, b.head.asBreeze)
             new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
           }
       }
@@ -403,16 +426,21 @@ class BlockMatrix @Since("1.3.0") (
       partitioner: GridPartitioner): (BlockDestinations, BlockDestinations) = {
     val leftMatrix = blockInfo.keys.collect() // blockInfo should already be cached
     val rightMatrix = other.blocks.keys.collect()
+
+    val rightCounterpartsHelper = rightMatrix.groupBy(_._1).mapValues(_.map(_._2))
     val leftDestinations = leftMatrix.map { case (rowIndex, colIndex) =>
-      val rightCounterparts = rightMatrix.filter(_._1 == colIndex)
-      val partitions = rightCounterparts.map(b => partitioner.getPartition((rowIndex, b._2)))
+      val rightCounterparts = rightCounterpartsHelper.getOrElse(colIndex, Array())
+      val partitions = rightCounterparts.map(b => partitioner.getPartition((rowIndex, b)))
       ((rowIndex, colIndex), partitions.toSet)
     }.toMap
+
+    val leftCounterpartsHelper = leftMatrix.groupBy(_._2).mapValues(_.map(_._1))
     val rightDestinations = rightMatrix.map { case (rowIndex, colIndex) =>
-      val leftCounterparts = leftMatrix.filter(_._2 == rowIndex)
-      val partitions = leftCounterparts.map(b => partitioner.getPartition((b._1, colIndex)))
+      val leftCounterparts = leftCounterpartsHelper.getOrElse(rowIndex, Array())
+      val partitions = leftCounterparts.map(b => partitioner.getPartition((b, colIndex)))
       ((rowIndex, colIndex), partitions.toSet)
     }.toMap
+
     (leftDestinations, rightDestinations)
   }
 
@@ -456,7 +484,7 @@ class BlockMatrix @Since("1.3.0") (
               case _ =>
                 throw new SparkException(s"Unrecognized matrix type ${rightBlock.getClass}.")
             }
-            ((leftRowIndex, rightColIndex), C.toBreeze)
+            ((leftRowIndex, rightColIndex), C.asBreeze)
           }
         }
       }.reduceByKey(resultPartitioner, (a, b) => a + b).mapValues(Matrices.fromBreeze)

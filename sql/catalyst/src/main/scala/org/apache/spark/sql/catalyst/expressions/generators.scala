@@ -41,19 +41,16 @@ import org.apache.spark.sql.types._
  */
 trait Generator extends Expression {
 
-  // TODO ideally we should return the type of ArrayType(StructType),
-  // however, we don't keep the output field names in the Generator.
-  override def dataType: DataType = throw new UnsupportedOperationException
+  override def dataType: DataType = ArrayType(elementSchema)
 
   override def foldable: Boolean = false
 
   override def nullable: Boolean = false
 
   /**
-   * The output element data types in structure of Seq[(DataType, Nullable)]
-   * TODO we probably need to add more information like metadata etc.
+   * The output element schema.
    */
-  def elementTypes: Seq[(DataType, Boolean, String)]
+  def elementSchema: StructType
 
   /** Should be implemented by child classes to perform specific Generators. */
   override def eval(input: InternalRow): TraversableOnce[InternalRow]
@@ -69,7 +66,7 @@ trait Generator extends Expression {
  * A generator that produces its output using the provided lambda function.
  */
 case class UserDefinedGenerator(
-    elementTypes: Seq[(DataType, Boolean, String)],
+    elementSchema: StructType,
     function: Row => TraversableOnce[InternalRow],
     children: Seq[Expression])
   extends Generator with CodegenFallback {
@@ -97,11 +94,63 @@ case class UserDefinedGenerator(
 }
 
 /**
- * Given an input array produces a sequence of rows for each value in the array.
+ * Separate v1, ..., vk into n rows. Each row will have k/n columns. n must be constant.
+ * {{{
+ *   SELECT stack(2, 1, 2, 3) ->
+ *   1      2
+ *   3      NULL
+ * }}}
  */
-case class Explode(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
+@ExpressionDescription(
+  usage = "_FUNC_(n, v1, ..., vk) - Separate v1, ..., vk into n rows.",
+  extended = "> SELECT _FUNC_(2, 1, 2, 3);\n  [1,2]\n  [3,null]")
+case class Stack(children: Seq[Expression])
+    extends Expression with Generator with CodegenFallback {
 
-  override def children: Seq[Expression] = child :: Nil
+  private lazy val numRows = children.head.eval().asInstanceOf[Int]
+  private lazy val numFields = Math.ceil((children.length - 1.0) / numRows).toInt
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length <= 1) {
+      TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least 2 arguments.")
+    } else if (children.head.dataType != IntegerType || !children.head.foldable || numRows < 1) {
+      TypeCheckResult.TypeCheckFailure("The number of rows must be a positive constant integer.")
+    } else {
+      for (i <- 1 until children.length) {
+        val j = (i - 1) % numFields
+        if (children(i).dataType != elementSchema.fields(j).dataType) {
+          return TypeCheckResult.TypeCheckFailure(
+            s"Argument ${j + 1} (${elementSchema.fields(j).dataType}) != " +
+              s"Argument $i (${children(i).dataType})")
+        }
+      }
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def elementSchema: StructType =
+    StructType(children.tail.take(numFields).zipWithIndex.map {
+      case (e, index) => StructField(s"col$index", e.dataType)
+    })
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    val values = children.tail.map(_.eval(input)).toArray
+    for (row <- 0 until numRows) yield {
+      val fields = new Array[Any](numFields)
+      for (col <- 0 until numFields) {
+        val index = row * numFields + col
+        fields.update(col, if (index < values.length) values(index) else null)
+      }
+      InternalRow(fields: _*)
+    }
+  }
+}
+
+/**
+ * A base class for Explode and PosExplode
+ */
+abstract class ExplodeBase(child: Expression, position: Boolean)
+  extends UnaryExpression with Generator with CodegenFallback with Serializable {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType]) {
@@ -113,10 +162,27 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
   }
 
   // hive-compatible default alias for explode function ("col" for array, "key", "value" for map)
-  override def elementTypes: Seq[(DataType, Boolean, String)] = child.dataType match {
-    case ArrayType(et, containsNull) => (et, containsNull, "col") :: Nil
+  override def elementSchema: StructType = child.dataType match {
+    case ArrayType(et, containsNull) =>
+      if (position) {
+        new StructType()
+          .add("pos", IntegerType, false)
+          .add("col", et, containsNull)
+      } else {
+        new StructType()
+          .add("col", et, containsNull)
+      }
     case MapType(kt, vt, valueContainsNull) =>
-      (kt, false, "key") :: (vt, valueContainsNull, "value") :: Nil
+      if (position) {
+        new StructType()
+          .add("pos", IntegerType, false)
+          .add("key", kt, false)
+          .add("value", vt, valueContainsNull)
+      } else {
+        new StructType()
+          .add("key", kt, false)
+          .add("value", vt, valueContainsNull)
+      }
   }
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
@@ -128,7 +194,7 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
         } else {
           val rows = new Array[InternalRow](inputArray.numElements())
           inputArray.foreach(et, (i, e) => {
-            rows(i) = InternalRow(e)
+            rows(i) = if (position) InternalRow(i, e) else InternalRow(e)
           })
           rows
         }
@@ -140,11 +206,76 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
           val rows = new Array[InternalRow](inputMap.numElements())
           var i = 0
           inputMap.foreach(kt, vt, (k, v) => {
-            rows(i) = InternalRow(k, v)
+            rows(i) = if (position) InternalRow(i, k, v) else InternalRow(k, v)
             i += 1
           })
           rows
         }
+    }
+  }
+}
+
+/**
+ * Given an input array produces a sequence of rows for each value in the array.
+ *
+ * {{{
+ *   SELECT explode(array(10,20)) ->
+ *   10
+ *   20
+ * }}}
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Separates the elements of array a into multiple rows, or the elements of map a into multiple rows and columns.",
+  extended = "> SELECT _FUNC_(array(10,20));\n  10\n  20")
+// scalastyle:on line.size.limit
+case class Explode(child: Expression) extends ExplodeBase(child, position = false)
+
+/**
+ * Given an input array produces a sequence of rows for each position and value in the array.
+ *
+ * {{{
+ *   SELECT posexplode(array(10,20)) ->
+ *   0  10
+ *   1  20
+ * }}}
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Separates the elements of array a into multiple rows with positions, or the elements of a map into multiple rows and columns with positions.",
+  extended = "> SELECT _FUNC_(array(10,20));\n  0\t10\n  1\t20")
+// scalastyle:on line.size.limit
+case class PosExplode(child: Expression) extends ExplodeBase(child, position = true)
+
+/**
+ * Explodes an array of structs into a table.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Explodes an array of structs into a table.",
+  extended = "> SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));\n  [1,a]\n  [2,b]")
+case class Inline(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
+
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case ArrayType(et, _) if et.isInstanceOf[StructType] =>
+      TypeCheckResult.TypeCheckSuccess
+    case _ =>
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName should be array of struct type, not ${child.dataType}")
+  }
+
+  override def elementSchema: StructType = child.dataType match {
+    case ArrayType(et : StructType, _) => et
+  }
+
+  private lazy val numFields = elementSchema.fields.length
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    val inputArray = child.eval(input).asInstanceOf[ArrayData]
+    if (inputArray == null) {
+      Nil
+    } else {
+      for (i <- 0 until inputArray.numElements())
+        yield inputArray.getStruct(i, numFields)
     }
   }
 }

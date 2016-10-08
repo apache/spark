@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
 abstract class BaseProjection extends Projection {}
 
 /**
- * Generates byte code that produces a [[MutableRow]] object (not an [[UnsafeRow]]) that can update
+ * Generates byte code that produces a [[InternalRow]] object (not an [[UnsafeRow]]) that can update
  * itself based on a new input [[InternalRow]] for a fixed set of [[Expression Expressions]].
  */
 object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection] {
@@ -48,7 +48,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val tmp = ctx.freshName("tmp")
     val output = ctx.freshName("safeRow")
     val values = ctx.freshName("values")
-    // These expressions could be splitted into multiple functions
+    // These expressions could be split into multiple functions
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
     val rowClass = classOf[GenericInternalRow].getName
@@ -68,6 +68,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       this.$values = new Object[${schema.length}];
       $allFields
       final InternalRow $output = new $rowClass($values);
+      this.$values = null;
     """
 
     ExprCode(code, "false", output)
@@ -141,7 +142,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val expressionCodes = expressions.zipWithIndex.map {
       case (NoOp, _) => ""
       case (e, i) =>
-        val evaluationCode = e.gen(ctx)
+        val evaluationCode = e.genCode(ctx)
         val converter = convertToSafe(ctx, evaluationCode.value, e.dataType)
         evaluationCode.code +
           s"""
@@ -154,7 +155,8 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           """
     }
     val allExpressions = ctx.splitExpressions(ctx.INPUT_ROW, expressionCodes)
-    val code = s"""
+
+    val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
         return new SpecificSafeProjection(references);
       }
@@ -162,15 +164,16 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       class SpecificSafeProjection extends ${classOf[BaseProjection].getName} {
 
         private Object[] references;
-        private MutableRow mutableRow;
+        private InternalRow mutableRow;
         ${ctx.declareMutableStates()}
-        ${ctx.declareAddedFunctions()}
 
         public SpecificSafeProjection(Object[] references) {
           this.references = references;
-          mutableRow = (MutableRow) references[references.length - 1];
+          mutableRow = (InternalRow) references[references.length - 1];
           ${ctx.initMutableStates()}
         }
+
+        ${ctx.declareAddedFunctions()}
 
         public java.lang.Object apply(java.lang.Object _i) {
           InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
@@ -180,10 +183,12 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       }
     """
 
+    val code = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = CodeGenerator.compile(code)
-    val resultRow = new SpecificMutableRow(expressions.map(_.dataType))
+    val resultRow = new SpecificInternalRow(expressions.map(_.dataType))
     c.generate(ctx.references.toArray :+ resultRow).asInstanceOf[Projection]
   }
 }

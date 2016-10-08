@@ -19,14 +19,16 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.DataTypeParser
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
 
@@ -37,6 +39,14 @@ private[sql] object Column {
   def apply(expr: Expression): Column = new Column(expr)
 
   def unapply(col: Column): Option[Expression] = Some(col.expr)
+
+  private[sql] def generateAlias(e: Expression): String = {
+    e match {
+      case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
+        a.aggregateFunction.toString
+      case expr => usePrettyExpression(expr).sql
+    }
+  }
 }
 
 /**
@@ -60,18 +70,32 @@ class TypedColumn[-T, U](
    */
   private[sql] def withInputType(
       inputEncoder: ExpressionEncoder[_],
-      schema: Seq[Attribute]): TypedColumn[T, U] = {
-    val boundEncoder = inputEncoder.bind(schema).asInstanceOf[ExpressionEncoder[Any]]
-    new TypedColumn[T, U](
-      expr transform { case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
-        ta.copy(aEncoder = Some(boundEncoder), children = schema)
-      },
-      encoder)
+      inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
+    val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
+    val newExpr = expr transform {
+      case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
+        ta.copy(
+          inputDeserializer = Some(unresolvedDeserializer),
+          inputClass = Some(inputEncoder.clsTag.runtimeClass),
+          inputSchema = Some(inputEncoder.schema))
+    }
+    new TypedColumn[T, U](newExpr, encoder)
   }
+
+  /**
+   * Gives the TypedColumn a name (alias).
+   * If the current TypedColumn has metadata associated with it, this metadata will be propagated
+   * to the new column.
+   *
+   * @group expr_ops
+   * @since 2.0.0
+   */
+  override def name(alias: String): TypedColumn[T, U] =
+    new TypedColumn[T, U](super.name(alias).expr, encoder)
+
 }
 
 /**
- * :: Experimental ::
  * A column that will be computed based on the data in a [[DataFrame]].
  *
  * A new column is constructed based on the input columns present in a dataframe:
@@ -100,7 +124,6 @@ class TypedColumn[-T, U](
  *
  * @since 1.3.0
  */
-@Experimental
 class Column(protected[sql] val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
@@ -110,6 +133,15 @@ class Column(protected[sql] val expr: Expression) extends Logging {
       UnresolvedStar(Some(parts))
     case _ => UnresolvedAttribute.quotedString(name)
   })
+
+  override def toString: String = usePrettyExpression(expr).sql
+
+  override def equals(that: Any): Boolean = that match {
+    case that: Column => that.expr.equals(this.expr)
+    case _ => false
+  }
+
+  override def hashCode: Int = this.expr.hashCode()
 
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
@@ -130,31 +162,27 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     // Leave an unaliased generator with an empty list of names since the analyzer will generate
     // the correct defaults after the nested expression's type has been resolved.
     case explode: Explode => MultiAlias(explode, Nil)
+    case explode: PosExplode => MultiAlias(explode, Nil)
 
     case jt: JsonTuple => MultiAlias(jt, Nil)
 
-    case func: UnresolvedFunction => UnresolvedAlias(func, Some(usePrettyExpression(func).sql))
+    case func: UnresolvedFunction => UnresolvedAlias(func, Some(Column.generateAlias))
 
     // If we have a top level Cast, there is a chance to give it a better alias, if there is a
     // NamedExpression under this Cast.
-    case c: Cast => c.transformUp {
-      case Cast(ne: NamedExpression, to) => UnresolvedAlias(Cast(ne, to))
-    } match {
-      case ne: NamedExpression => ne
-      case other => Alias(expr, usePrettyExpression(expr).sql)()
-    }
+    case c: Cast =>
+      c.transformUp {
+        case Cast(ne: NamedExpression, to) => UnresolvedAlias(Cast(ne, to))
+      } match {
+        case ne: NamedExpression => ne
+        case other => Alias(expr, usePrettyExpression(expr).sql)()
+      }
+
+    case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
+      UnresolvedAlias(a, Some(Column.generateAlias))
 
     case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
-
-  override def toString: String = usePrettyExpression(expr).sql
-
-  override def equals(that: Any): Boolean = that match {
-    case that: Column => that.expr.equals(this.expr)
-    case _ => false
-  }
-
-  override def hashCode: Int = this.expr.hashCode
 
   /**
    * Provides a type hint about the expected return value of this column.  This information can
@@ -856,7 +884,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def alias(alias: String): Column = as(alias)
+  def alias(alias: String): Column = name(alias)
 
   /**
    * Gives the column an alias.
@@ -871,12 +899,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: String): Column = withExpr {
-    expr match {
-      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
-      case other => Alias(other, alias)()
-    }
-  }
+  def as(alias: String): Column = name(alias)
 
   /**
    * (Scala-specific) Assigns the given aliases to the results of a table generating function.
@@ -915,12 +938,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: Symbol): Column = withExpr {
-    expr match {
-      case ne: NamedExpression => Alias(expr, alias.name)(explicitMetadata = Some(ne.metadata))
-      case other => Alias(other, alias.name)()
-    }
-  }
+  def as(alias: Symbol): Column = name(alias.name)
 
   /**
    * Gives the column an alias with metadata.
@@ -934,6 +952,26 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    */
   def as(alias: String, metadata: Metadata): Column = withExpr {
     Alias(expr, alias)(explicitMetadata = Some(metadata))
+  }
+
+  /**
+   * Gives the column a name (alias).
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select($"colA".name("colB"))
+   * }}}
+   *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   *
+   * @group expr_ops
+   * @since 2.0.0
+   */
+  def name(alias: String): Column = withExpr {
+    expr match {
+      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
+      case other => Alias(other, alias)()
+    }
   }
 
   /**
@@ -964,12 +1002,12 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def cast(to: String): Column = cast(DataTypeParser.parse(to))
+  def cast(to: String): Column = cast(CatalystSqlParser.parseDataType(to))
 
   /**
    * Returns an ordering used in sorting.
    * {{{
-   *   // Scala: sort a DataFrame by age column in descending order.
+   *   // Scala
    *   df.sort(df("age").desc)
    *
    *   // Java
@@ -982,7 +1020,37 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def desc: Column = withExpr { SortOrder(expr, Descending) }
 
   /**
-   * Returns an ordering used in sorting.
+   * Returns a descending ordering used in sorting, where null values appear before non-null values.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in descending order and null values appearing first.
+   *   df.sort(df("age").desc_nulls_first)
+   *
+   *   // Java
+   *   df.sort(df.col("age").desc_nulls_first());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def desc_nulls_first: Column = withExpr { SortOrder(expr, Descending, NullsFirst) }
+
+  /**
+   * Returns a descending ordering used in sorting, where null values appear after non-null values.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in descending order and null values appearing last.
+   *   df.sort(df("age").desc_nulls_last)
+   *
+   *   // Java
+   *   df.sort(df.col("age").desc_nulls_last());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def desc_nulls_last: Column = withExpr { SortOrder(expr, Descending, NullsLast) }
+
+  /**
+   * Returns an ascending ordering used in sorting.
    * {{{
    *   // Scala: sort a DataFrame by age column in ascending order.
    *   df.sort(df("age").asc)
@@ -995,6 +1063,36 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def asc: Column = withExpr { SortOrder(expr, Ascending) }
+
+  /**
+   * Returns an ascending ordering used in sorting, where null values appear before non-null values.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in ascending order and null values appearing first.
+   *   df.sort(df("age").asc_nulls_last)
+   *
+   *   // Java
+   *   df.sort(df.col("age").asc_nulls_last());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def asc_nulls_first: Column = withExpr { SortOrder(expr, Ascending, NullsFirst) }
+
+  /**
+   * Returns an ordering used in sorting, where null values appear after non-null values.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in ascending order and null values appearing last.
+   *   df.sort(df("age").asc_nulls_last)
+   *
+   *   // Java
+   *   df.sort(df.col("age").asc_nulls_last());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def asc_nulls_last: Column = withExpr { SortOrder(expr, Ascending, NullsLast) }
 
   /**
    * Prints the expression to the console for debugging purpose.
@@ -1060,6 +1158,22 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.4.0
    */
   def over(window: expressions.WindowSpec): Column = window.withAggregate(this)
+
+  /**
+   * Define a empty analytic clause. In this case the analytic function is applied
+   * and presented for all rows in the result set.
+   *
+   * {{{
+   *   df.select(
+   *     sum("price").over(),
+   *     avg("price").over()
+   *   )
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.0.0
+   */
+  def over(): Column = over(Window.spec)
 
 }
 

@@ -24,7 +24,8 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkException, TaskContext}
+import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.shuffle.FetchFailedException
@@ -107,7 +108,7 @@ final class ShuffleBlockFetcherIterator(
   /** Current number of requests in flight */
   private[this] var reqsInFlight = 0
 
-  private[this] val shuffleMetrics = context.taskMetrics().registerTempShuffleReadMetrics()
+  private[this] val shuffleMetrics = context.taskMetrics().createTempShuffleReadMetrics()
 
   /**
    * Whether the iterator is still active. If isZombie is true, the callback interface will no
@@ -142,13 +143,12 @@ final class ShuffleBlockFetcherIterator(
     while (iter.hasNext) {
       val result = iter.next()
       result match {
-        case SuccessFetchResult(_, address, _, buf, _) => {
+        case SuccessFetchResult(_, address, _, buf, _) =>
           if (address != blockManager.blockManagerId) {
             shuffleMetrics.incRemoteBytesRead(buf.size)
             shuffleMetrics.incRemoteBlocksFetched(1)
           }
           buf.release()
-        }
         case _ =>
       }
     }
@@ -312,7 +312,7 @@ final class ShuffleBlockFetcherIterator(
     shuffleMetrics.incFetchWaitTime(stopFetchWait - startFetchWait)
 
     result match {
-      case SuccessFetchResult(_, address, size, buf, isNetworkReqDone) => {
+      case SuccessFetchResult(_, address, size, buf, isNetworkReqDone) =>
         if (address != blockManager.blockManagerId) {
           shuffleMetrics.incRemoteBytesRead(buf.size)
           shuffleMetrics.incRemoteBlocksFetched(1)
@@ -322,7 +322,6 @@ final class ShuffleBlockFetcherIterator(
           reqsInFlight -= 1
           logDebug("Number of requests in flight " + reqsInFlight)
         }
-      }
       case _ =>
     }
     // Send fetch requests up to maxBytesInFlight

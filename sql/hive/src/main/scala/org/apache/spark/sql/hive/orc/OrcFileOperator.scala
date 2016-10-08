@@ -22,16 +22,15 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.orc.{OrcFile, Reader}
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 
-import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.HiveMetastoreTypes
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types.StructType
 
 private[orc] object OrcFileOperator extends Logging {
   /**
-   * Retrieves a ORC file reader from a given path.  The path can point to either a directory or a
-   * single ORC file.  If it points to an directory, it picks any non-empty ORC file within that
+   * Retrieves an ORC file reader from a given path.  The path can point to either a directory or a
+   * single ORC file.  If it points to a directory, it picks any non-empty ORC file within that
    * directory.
    *
    * The reader returned by this method is mainly used for two purposes:
@@ -43,7 +42,7 @@ private[orc] object OrcFileOperator extends Logging {
    *       ORC file if the file contains zero rows. This is OK for Hive since the schema of the
    *       table is managed by metastore.  But this becomes a problem when reading ORC files
    *       directly from HDFS via Spark SQL, because we have to discover the schema from raw ORC
-   *       files.  So this method always tries to find a ORC file whose schema is non-empty, and
+   *       files. So this method always tries to find an ORC file whose schema is non-empty, and
    *       create the result reader from that file.  If no such file is found, it returns `None`.
    * @todo Needs to consider all files when schema evolution is taken into account.
    */
@@ -79,7 +78,7 @@ private[orc] object OrcFileOperator extends Logging {
       val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
       val schema = readerInspector.getTypeName
       logDebug(s"Reading schema from file $paths, got Hive schema string: $schema")
-      HiveMetastoreTypes.toDataType(schema).asInstanceOf[StructType]
+      CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
     }
   }
 
@@ -92,7 +91,6 @@ private[orc] object OrcFileOperator extends Logging {
     // TODO: Check if the paths coming in are already qualified and simplify.
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
-    val path = origPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
     val paths = SparkHadoopUtil.get.listLeafStatuses(fs, origPath)
       .filterNot(_.isDirectory)
       .map(_.getPath)

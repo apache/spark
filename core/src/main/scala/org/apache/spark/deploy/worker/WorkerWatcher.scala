@@ -17,11 +17,12 @@
 
 package org.apache.spark.deploy.worker
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 
 /**
- * Actor which connects to a worker process and terminates the JVM if the connection is severed.
+ * Endpoint which connects to a worker process and terminates the JVM if the
+ * connection is severed.
  * Provides fate sharing between a worker and its associated child processes.
  */
 private[spark] class WorkerWatcher(

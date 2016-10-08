@@ -19,7 +19,7 @@ package org.apache.spark.status.api.v1
 
 import java.util.Date
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.LinkedHashMap
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.scheduler.{StageInfo, TaskInfo, TaskLocality}
@@ -28,17 +28,17 @@ import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
 class AllStagesResourceSuite extends SparkFunSuite {
 
   def getFirstTaskLaunchTime(taskLaunchTimes: Seq[Long]): Option[Date] = {
-    val tasks = new HashMap[Long, TaskUIData]
+    val tasks = new LinkedHashMap[Long, TaskUIData]
     taskLaunchTimes.zipWithIndex.foreach { case (time, idx) =>
-      tasks(idx.toLong) = new TaskUIData(
-        new TaskInfo(idx, idx, 1, time, "", "", TaskLocality.ANY, false), None, None)
+      tasks(idx.toLong) = TaskUIData(
+        new TaskInfo(idx, idx, 1, time, "", "", TaskLocality.ANY, false), None)
     }
 
     val stageUiData = new StageUIData()
     stageUiData.taskData = tasks
     val status = StageStatus.ACTIVE
     val stageInfo = new StageInfo(
-      1, 1, "stage 1", 10, Seq.empty, Seq.empty, "details abc", Seq.empty)
+      1, 1, "stage 1", 10, Seq.empty, Seq.empty, "details abc")
     val stageData = AllStagesResource.stageUiToStageData(status, stageInfo, stageUiData, false)
 
     stageData.firstTaskLaunchedTime

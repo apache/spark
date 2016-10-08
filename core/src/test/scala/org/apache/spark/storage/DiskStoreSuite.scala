@@ -21,15 +21,20 @@ import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.util.io.ChunkedByteBuffer
+import org.apache.spark.util.Utils
 
 class DiskStoreSuite extends SparkFunSuite {
 
   test("reads of memory-mapped and non memory-mapped files are equivalent") {
+    // It will cause error when we tried to re-open the filestore and the
+    // memory-mapped byte buffer tot he file has not been GC on Windows.
+    assume(!Utils.isWindows)
     val confKey = "spark.storage.memoryMapThreshold"
 
     // Create a non-trivial (not all zeros) byte array
     val bytes = Array.tabulate[Byte](1000)(_.toByte)
-    val byteBuffer = ByteBuffer.wrap(bytes)
+    val byteBuffer = new ChunkedByteBuffer(ByteBuffer.wrap(bytes))
 
     val blockId = BlockId("rdd_1_2")
     val diskBlockManager = new DiskBlockManager(new SparkConf(), deleteFilesOnStop = true)
@@ -44,9 +49,10 @@ class DiskStoreSuite extends SparkFunSuite {
     val notMapped = diskStoreNotMapped.getBytes(blockId)
 
     // Not possible to do isInstanceOf due to visibility of HeapByteBuffer
-    assert(notMapped.getClass.getName.endsWith("HeapByteBuffer"),
+    assert(notMapped.getChunks().forall(_.getClass.getName.endsWith("HeapByteBuffer")),
       "Expected HeapByteBuffer for un-mapped read")
-    assert(mapped.isInstanceOf[MappedByteBuffer], "Expected MappedByteBuffer for mapped read")
+    assert(mapped.getChunks().forall(_.isInstanceOf[MappedByteBuffer]),
+      "Expected MappedByteBuffer for mapped read")
 
     def arrayFromByteBuffer(in: ByteBuffer): Array[Byte] = {
       val array = new Array[Byte](in.remaining())
@@ -54,9 +60,7 @@ class DiskStoreSuite extends SparkFunSuite {
       array
     }
 
-    val mappedAsArray = arrayFromByteBuffer(mapped)
-    val notMappedAsArray = arrayFromByteBuffer(notMapped)
-    assert(Arrays.equals(mappedAsArray, bytes))
-    assert(Arrays.equals(notMappedAsArray, bytes))
+    assert(Arrays.equals(mapped.toArray, bytes))
+    assert(Arrays.equals(notMapped.toArray, bytes))
   }
 }

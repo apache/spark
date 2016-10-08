@@ -18,13 +18,15 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class BinaryClassificationEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
 
   test("params") {
     ParamsSuite.checkParams(new BinaryClassificationEvaluator)
@@ -42,30 +44,35 @@ class BinaryClassificationEvaluatorSuite
     val evaluator = new BinaryClassificationEvaluator()
       .setMetricName("areaUnderPR")
 
-    val vectorDF = sqlContext.createDataFrame(Seq(
+    val vectorDF = Seq(
       (0d, Vectors.dense(12, 2.5)),
       (1d, Vectors.dense(1, 3)),
       (0d, Vectors.dense(10, 2))
-    )).toDF("label", "rawPrediction")
+    ).toDF("label", "rawPrediction")
     assert(evaluator.evaluate(vectorDF) === 1.0)
 
-    val doubleDF = sqlContext.createDataFrame(Seq(
+    val doubleDF = Seq(
       (0d, 0d),
       (1d, 1d),
       (0d, 0d)
-    )).toDF("label", "rawPrediction")
+    ).toDF("label", "rawPrediction")
     assert(evaluator.evaluate(doubleDF) === 1.0)
 
-    val stringDF = sqlContext.createDataFrame(Seq(
+    val stringDF = Seq(
       (0d, "0d"),
       (1d, "1d"),
       (0d, "0d")
-    )).toDF("label", "rawPrediction")
+    ).toDF("label", "rawPrediction")
     val thrown = intercept[IllegalArgumentException] {
       evaluator.evaluate(stringDF)
     }
     assert(thrown.getMessage.replace("\n", "") contains "Column rawPrediction must be of type " +
       "equal to one of the following types: [DoubleType, ")
     assert(thrown.getMessage.replace("\n", "") contains "but was actually of type StringType.")
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val evaluator = new BinaryClassificationEvaluator().setRawPredictionCol("prediction")
+    MLTestingUtils.checkNumericTypes(evaluator, spark)
   }
 }

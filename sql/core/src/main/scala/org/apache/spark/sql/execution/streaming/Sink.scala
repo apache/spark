@@ -17,31 +17,22 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.sql.DataFrame
+
 /**
- * An interface for systems that can collect the results of a streaming query.
- *
- * When new data is produced by a query, a [[Sink]] must be able to transactionally collect the
- * data and update the [[Offset]]. In the case of a failure, the sink will be recreated
- * and must be able to return the [[Offset]] for all of the data that is made durable.
- * This contract allows Spark to process data with exactly-once semantics, even in the case
- * of failures that require the computation to be restarted.
+ * An interface for systems that can collect the results of a streaming query. In order to preserve
+ * exactly once semantics a sink must be idempotent in the face of multiple attempts to add the same
+ * batch.
  */
 trait Sink {
-  /**
-   * Returns the [[Offset]] for all data that is currently present in the sink, if any. This
-   * function will be called by Spark when restarting execution in order to determine at which point
-   * in the input stream computation should be resumed from.
-   */
-  def currentOffset: Option[Offset]
 
   /**
-   * Accepts a new batch of data as well as a [[Offset]] that denotes how far in the input
-   * data computation has progressed to.  When computation restarts after a failure, it is important
-   * that a [[Sink]] returns the same [[Offset]] as the most recent batch of data that
-   * has been persisted durably.  Note that this does not necessarily have to be the
-   * [[Offset]] for the most recent batch of data that was given to the sink.  For example,
-   * it is valid to buffer data before persisting, as long as the [[Offset]] is stored
-   * transactionally as data is eventually persisted.
+   * Adds a batch of data to this sink. The data for a given `batchId` is deterministic and if
+   * this method is called more than once with the same batchId (which will happen in the case of
+   * failures), then `data` should only be added once.
+   *
+   * Note: You cannot apply any operators on `data` except consuming it (e.g., `collect/foreach`).
+   * Otherwise, you may get a wrong result.
    */
-  def addBatch(batch: Batch): Unit
+  def addBatch(batchId: Long, data: DataFrame): Unit
 }

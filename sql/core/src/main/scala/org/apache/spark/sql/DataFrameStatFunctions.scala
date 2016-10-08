@@ -52,6 +52,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670 Space-efficient
    * Online Computation of Quantile Summaries]] by Greenwald and Khanna.
    *
+   * Note that NaN values will be removed from the numerical column before calculation
    * @param col the name of the numerical column
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
@@ -67,7 +68,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       col: String,
       probabilities: Array[Double],
       relativeError: Double): Array[Double] = {
-    StatFunctions.multipleApproxQuantiles(df, Seq(col), probabilities, relativeError).head.toArray
+    StatFunctions.multipleApproxQuantiles(df.select(col).na.drop(),
+      Seq(col), probabilities, relativeError).head.toArray
   }
 
   /**
@@ -160,8 +162,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @return A DataFrame containing for the contingency table.
    *
    * {{{
-   *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
-   *      (3, 3))).toDF("key", "value")
+   *    val df = spark.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2), (3, 3)))
+   *      .toDF("key", "value")
    *    val ct = df.stat.crosstab("key", "value")
    *    ct.show()
    *    +---------+---+---+---+
@@ -197,7 +199,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *    val rows = Seq.tabulate(100) { i =>
    *      if (i % 2 == 0) (1, -1.0) else (i, i * -1.0)
    *    }
-   *    val df = sqlContext.createDataFrame(rows).toDF("a", "b")
+   *    val df = spark.createDataFrame(rows).toDF("a", "b")
    *    // find the items with a frequency greater than 0.4 (observed 40% of the time) for columns
    *    // "a" and "b"
    *    val freqSingles = df.stat.freqItems(Array("a", "b"), 0.4)
@@ -258,7 +260,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *    val rows = Seq.tabulate(100) { i =>
    *      if (i % 2 == 0) (1, -1.0) else (i, i * -1.0)
    *    }
-   *    val df = sqlContext.createDataFrame(rows).toDF("a", "b")
+   *    val df = spark.createDataFrame(rows).toDF("a", "b")
    *    // find the items with a frequency greater than 0.4 (observed 40% of the time) for columns
    *    // "a" and "b"
    *    val freqSingles = df.stat.freqItems(Seq("a", "b"), 0.4)
@@ -314,7 +316,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @return a new [[DataFrame]] that represents the stratified sample
    *
    * {{{
-   *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
+   *    val df = spark.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
    *      (3, 3))).toDF("key", "value")
    *    val fractions = Map(1 -> 1.0, 3 -> 0.5)
    *    df.stat.sampleBy("key", fractions, 36L).show()

@@ -17,37 +17,41 @@
 
 package org.apache.spark.ml.tree.impl
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
 import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy => OldBoostingStrategy}
-import org.apache.spark.mllib.tree.impl.TimeTracker
 import org.apache.spark.mllib.tree.impurity.{Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
-private[ml] object GradientBoostedTrees extends Logging {
+
+private[spark] object GradientBoostedTrees extends Logging {
 
   /**
    * Method to train a gradient boosting model
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param seed Random seed.
    * @return tuple of ensemble models and weights:
    *         (array of decision tree models, array of model weights)
    */
-  def run(input: RDD[LabeledPoint],
-      boostingStrategy: OldBoostingStrategy
-      ): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+  def run(
+      input: RDD[LabeledPoint],
+      boostingStrategy: OldBoostingStrategy,
+      seed: Long): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
-        GradientBoostedTrees.boost(input, input, boostingStrategy, validate = false)
+        GradientBoostedTrees.boost(input, input, boostingStrategy, validate = false, seed)
       case OldAlgo.Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
-        GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false)
+        GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false,
+          seed)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by gradient boosting.")
     }
@@ -61,18 +65,19 @@ private[ml] object GradientBoostedTrees extends Logging {
    *                        but it should follow the same distribution.
    *                        E.g., these two datasets could be created from an original dataset
    *                        by using [[org.apache.spark.rdd.RDD.randomSplit()]]
+   * @param seed Random seed.
    * @return tuple of ensemble models and weights:
    *         (array of decision tree models, array of model weights)
    */
   def runWithValidation(
       input: RDD[LabeledPoint],
       validationInput: RDD[LabeledPoint],
-      boostingStrategy: OldBoostingStrategy
-      ): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      boostingStrategy: OldBoostingStrategy,
+      seed: Long): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
-        GradientBoostedTrees.boost(input, validationInput, boostingStrategy, validate = true)
+        GradientBoostedTrees.boost(input, validationInput, boostingStrategy, validate = true, seed)
       case OldAlgo.Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(
@@ -80,7 +85,7 @@ private[ml] object GradientBoostedTrees extends Logging {
         val remappedValidationInput = validationInput.map(
           x => new LabeledPoint((x.label * 2) - 1, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedValidationInput, boostingStrategy,
-          validate = true)
+          validate = true, seed)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
@@ -102,7 +107,7 @@ private[ml] object GradientBoostedTrees extends Logging {
       initTree: DecisionTreeRegressionModel,
       loss: OldLoss): RDD[(Double, Double)] = {
     data.map { lp =>
-      val pred = initTreeWeight * initTree.rootNode.predictImpl(lp.features).prediction
+      val pred = updatePrediction(lp.features, 0.0, initTree, initTreeWeight)
       val error = loss.computeError(pred, lp.label)
       (pred, error)
     }
@@ -128,7 +133,7 @@ private[ml] object GradientBoostedTrees extends Logging {
 
     val newPredError = data.zip(predictionAndError).mapPartitions { iter =>
       iter.map { case (lp, (pred, error)) =>
-        val newPred = pred + tree.rootNode.predictImpl(lp.features).prediction * treeWeight
+        val newPred = updatePrediction(lp.features, pred, tree, treeWeight)
         val newError = loss.computeError(newPred, lp.label)
         (newPred, newError)
       }
@@ -137,11 +142,101 @@ private[ml] object GradientBoostedTrees extends Logging {
   }
 
   /**
+   * Add prediction from a new boosting iteration to an existing prediction.
+   *
+   * @param features Vector of features representing a single data point.
+   * @param prediction The existing prediction.
+   * @param tree New Decision Tree model.
+   * @param weight Tree weight.
+   * @return Updated prediction.
+   */
+  def updatePrediction(
+      features: Vector,
+      prediction: Double,
+      tree: DecisionTreeRegressionModel,
+      weight: Double): Double = {
+    prediction + tree.rootNode.predictImpl(features).prediction * weight
+  }
+
+  /**
+   * Method to calculate error of the base learner for the gradient boosting calculation.
+   * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
+   * purposes.
+   * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param trees Boosted Decision Tree models
+   * @param treeWeights Learning rates at each boosting iteration.
+   * @param loss evaluation metric.
+   * @return Measure of model error on data
+   */
+  def computeError(
+      data: RDD[LabeledPoint],
+      trees: Array[DecisionTreeRegressionModel],
+      treeWeights: Array[Double],
+      loss: OldLoss): Double = {
+    data.map { lp =>
+      val predicted = trees.zip(treeWeights).foldLeft(0.0) { case (acc, (model, weight)) =>
+        updatePrediction(lp.features, acc, model, weight)
+      }
+      loss.computeError(predicted, lp.label)
+    }.mean()
+  }
+
+  /**
+   * Method to compute error or loss for every iteration of gradient boosting.
+   *
+   * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param trees Boosted Decision Tree models
+   * @param treeWeights Learning rates at each boosting iteration.
+   * @param loss evaluation metric.
+   * @param algo algorithm for the ensemble, either Classification or Regression
+   * @return an array with index i having the losses or errors for the ensemble
+   *         containing the first i+1 trees
+   */
+  def evaluateEachIteration(
+      data: RDD[LabeledPoint],
+      trees: Array[DecisionTreeRegressionModel],
+      treeWeights: Array[Double],
+      loss: OldLoss,
+      algo: OldAlgo.Value): Array[Double] = {
+
+    val sc = data.sparkContext
+    val remappedData = algo match {
+      case OldAlgo.Classification => data.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
+      case _ => data
+    }
+
+    val broadcastTrees = sc.broadcast(trees)
+    val localTreeWeights = treeWeights
+    val treesIndices = trees.indices
+
+    val dataCount = remappedData.count()
+    val evaluation = remappedData.map { point =>
+      treesIndices.map { idx =>
+        val prediction = broadcastTrees.value(idx)
+          .rootNode
+          .predictImpl(point.features)
+          .prediction
+        prediction * localTreeWeights(idx)
+      }
+      .scanLeft(0.0)(_ + _).drop(1)
+      .map(prediction => loss.computeError(prediction, point.label))
+    }
+    .aggregate(treesIndices.map(_ => 0.0))(
+      (aggregated, row) => treesIndices.map(idx => aggregated(idx) + row(idx)),
+      (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
+    .map(_ / dataCount)
+
+    broadcastTrees.destroy()
+    evaluation.toArray
+  }
+
+  /**
    * Internal method for performing regression using trees as base learners.
    * @param input training dataset
    * @param validationInput validation dataset, ignored if validate is set to false.
    * @param boostingStrategy boosting parameters
    * @param validate whether or not to use the validation dataset.
+   * @param seed Random seed.
    * @return tuple of ensemble models and weights:
    *         (array of decision tree models, array of model weights)
    */
@@ -149,7 +244,8 @@ private[ml] object GradientBoostedTrees extends Logging {
       input: RDD[LabeledPoint],
       validationInput: RDD[LabeledPoint],
       boostingStrategy: OldBoostingStrategy,
-      validate: Boolean): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      validate: Boolean,
+      seed: Long): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val timer = new TimeTracker()
     timer.start("total")
     timer.start("init")
@@ -191,7 +287,7 @@ private[ml] object GradientBoostedTrees extends Logging {
 
     // Initialize tree
     timer.start("building tree 0")
-    val firstTree = new DecisionTreeRegressor()
+    val firstTree = new DecisionTreeRegressor().setSeed(seed)
     val firstTreeModel = firstTree.train(input, treeStrategy)
     val firstTreeWeight = 1.0
     baseLearners(0) = firstTreeModel
@@ -223,7 +319,7 @@ private[ml] object GradientBoostedTrees extends Logging {
       logDebug("###################################################")
       logDebug("Gradient boosting tree iteration " + m)
       logDebug("###################################################")
-      val dt = new DecisionTreeRegressor()
+      val dt = new DecisionTreeRegressor().setSeed(seed + m)
       val model = dt.train(data, treeStrategy)
       timer.stop(s"building tree $m")
       // Update partial model

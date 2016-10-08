@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Properties
+
 import scala.util.Random
 
 import org.apache.spark._
@@ -26,6 +28,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 /**
  * Test suite for [[UnsafeKVExternalSorter]], with randomly generated test data.
@@ -117,10 +120,12 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
       taskAttemptId = 98456,
       attemptNumber = 0,
       taskMemoryManager = taskMemMgr,
+      localProperties = new Properties,
       metricsSystem = null))
 
     val sorter = new UnsafeKVExternalSorter(
-      keySchema, valueSchema, SparkEnv.get.blockManager, pageSize)
+      keySchema, valueSchema, SparkEnv.get.blockManager, SparkEnv.get.serializerManager,
+      pageSize, UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD)
 
     // Insert the keys and values into the sorter
     inputData.foreach { case (k, v) =>

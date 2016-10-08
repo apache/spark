@@ -19,41 +19,24 @@ package org.apache.spark.ml.feature;
 
 import java.util.Arrays;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.SharedSparkSession;
+import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.types.*;
 
-public class JavaWord2VecSuite {
-  private transient JavaSparkContext jsc;
-  private transient SQLContext sqlContext;
-
-  @Before
-  public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaWord2VecSuite");
-    sqlContext = new SQLContext(jsc);
-  }
-
-  @After
-  public void tearDown() {
-    jsc.stop();
-    jsc = null;
-  }
+public class JavaWord2VecSuite extends SharedSparkSession {
 
   @Test
   public void testJavaWord2Vec() {
     StructType schema = new StructType(new StructField[]{
       new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
     });
-    Dataset<Row> documentDF = sqlContext.createDataFrame(
+    Dataset<Row> documentDF = spark.createDataFrame(
       Arrays.asList(
         RowFactory.create(Arrays.asList("Hi I heard about Spark".split(" "))),
         RowFactory.create(Arrays.asList("I wish Java could use case classes".split(" "))),
@@ -68,8 +51,8 @@ public class JavaWord2VecSuite {
     Word2VecModel model = word2Vec.fit(documentDF);
     Dataset<Row> result = model.transform(documentDF);
 
-    for (Row r: result.select("result").collectAsList()) {
-      double[] polyFeatures = ((Vector)r.get(0)).toArray();
+    for (Row r : result.select("result").collectAsList()) {
+      double[] polyFeatures = ((Vector) r.get(0)).toArray();
       Assert.assertEquals(polyFeatures.length, 3);
     }
   }

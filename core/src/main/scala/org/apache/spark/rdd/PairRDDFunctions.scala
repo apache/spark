@@ -40,7 +40,8 @@ import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.executor.{DataWriteMethod, OutputMetrics}
+import org.apache.spark.executor.OutputMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -82,7 +83,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         throw new SparkException("Cannot use map-side combining with array keys.")
       }
       if (partitioner.isInstanceOf[HashPartitioner]) {
-        throw new SparkException("Default partitioner cannot partition array keys.")
+        throw new SparkException("HashPartitioner cannot partition array keys.")
       }
     }
     val aggregator = new Aggregator[K, V, C](
@@ -374,6 +375,16 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Approximate version of countByKey that can return a partial result if it does
    * not finish within a timeout.
+   *
+   * The confidence is the probability that the error bounds of the result will
+   * contain the true value. That is, if countApprox were called repeatedly
+   * with confidence 0.9, we would expect 90% of the results to contain the
+   * true count. The confidence must be in the range [0,1] or an exception will
+   * be thrown.
+   *
+   * @param timeout maximum time to wait for the job, in milliseconds
+   * @param confidence the desired statistical confidence in the result
+   * @return a potentially incomplete result, with error bounds
    */
   def countByKeyApprox(timeout: Long, confidence: Double = 0.95)
       : PartialResult[Map[K, BoundedDouble]] = self.withScope {
@@ -519,7 +530,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def partitionBy(partitioner: Partitioner): RDD[(K, V)] = self.withScope {
     if (keyClass.isArray && partitioner.isInstanceOf[HashPartitioner]) {
-      throw new SparkException("Default partitioner cannot partition array keys.")
+      throw new SparkException("HashPartitioner cannot partition array keys.")
     }
     if (self.partitioner == Some(partitioner)) {
       self
@@ -773,7 +784,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = self.withScope {
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
-      throw new SparkException("Default partitioner cannot partition array keys.")
+      throw new SparkException("HashPartitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2, other3), partitioner)
     cg.mapValues { case Array(vs, w1s, w2s, w3s) =>
@@ -791,7 +802,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W]))] = self.withScope {
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
-      throw new SparkException("Default partitioner cannot partition array keys.")
+      throw new SparkException("HashPartitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other), partitioner)
     cg.mapValues { case Array(vs, w1s) =>
@@ -806,7 +817,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = self.withScope {
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
-      throw new SparkException("Default partitioner cannot partition array keys.")
+      throw new SparkException("HashPartitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2), partitioner)
     cg.mapValues { case Array(vs, w1s, w2s) =>
@@ -1043,7 +1054,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val warningMessage =
         s"$outputCommitterClass may be an output committer that writes data directly to " +
           "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
           "committer that does not have this behavior (e.g. FileOutputCommitter)."
       logWarning(warningMessage)
     }
@@ -1068,7 +1079,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf
     val job = NewAPIHadoopJob.getInstance(hadoopConf)
-    val formatter = new SimpleDateFormat("yyyyMMddHHmm")
+    val formatter = new SimpleDateFormat("yyyyMMddHHmmss")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
     val jobConfiguration = job.getConfiguration
@@ -1110,9 +1121,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           maybeUpdateOutputMetrics(outputMetricsAndBytesWrittenCallback, recordsWritten)
           recordsWritten += 1
         }
-      } {
-        writer.close(hadoopContext)
-      }
+      }(finallyBlock = writer.close(hadoopContext))
       committer.commitTask(hadoopContext)
       outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
         om.setBytesWritten(callback())
@@ -1133,7 +1142,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val warningMessage =
         s"$outputCommitterClass may be an output committer that writes data directly to " +
           "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
           "committer that does not have this behavior (e.g. FileOutputCommitter)."
       logWarning(warningMessage)
     }
@@ -1199,9 +1208,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           maybeUpdateOutputMetrics(outputMetricsAndBytesWrittenCallback, recordsWritten)
           recordsWritten += 1
         }
-      } {
-        writer.close()
-      }
+      }(finallyBlock = writer.close())
       writer.commit()
       outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
         om.setBytesWritten(callback())
@@ -1221,7 +1228,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       context: TaskContext): Option[(OutputMetrics, () => Long)] = {
     val bytesWrittenCallback = SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback()
     bytesWrittenCallback.map { b =>
-      (context.taskMetrics().registerOutputMetrics(DataWriteMethod.Hadoop), b)
+      (context.taskMetrics().outputMetrics, b)
     }
   }
 

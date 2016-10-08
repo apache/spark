@@ -21,7 +21,8 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, ThreadSafeRpcEndpoint}
 
 
@@ -51,7 +52,7 @@ private[netty] case class RemoteProcessConnectionError(cause: Throwable, remoteA
   extends InboxMessage
 
 /**
- * A inbox that stores messages for an [[RpcEndpoint]] and posts messages to it thread-safely.
+ * An inbox that stores messages for an [[RpcEndpoint]] and posts messages to it thread-safely.
  */
 private[netty] class Inbox(
     val endpointRef: NettyRpcEndpointRef,

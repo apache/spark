@@ -123,23 +123,30 @@ private[repl] trait SparkILoopInit {
   def initializeSpark() {
     intp.beQuietDuring {
       command("""
+        @transient val spark = org.apache.spark.repl.Main.interp.createSparkSession()
         @transient val sc = {
-          val _sc = org.apache.spark.repl.Main.interp.createSparkContext()
-          println("Spark context available as sc " +
+          val _sc = spark.sparkContext
+          if (_sc.getConf.getBoolean("spark.ui.reverseProxy", false)) {
+            val proxyUrl = _sc.getConf.get("spark.ui.reverseProxyUrl", null)
+            if (proxyUrl != null) {
+              println(s"Spark Context Web UI is available at ${proxyUrl}/proxy/${_sc.applicationId}")
+            } else {
+              println(s"Spark Context Web UI is available at Spark Master Public URL")
+            }
+          } else {
+            _sc.uiWebUrl.foreach {
+              webUrl => println(s"Spark context Web UI available at ${webUrl}")
+            }
+          }
+          println("Spark context available as 'sc' " +
             s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
+          println("Spark session available as 'spark'.")
           _sc
         }
         """)
-      command("""
-        @transient val sqlContext = {
-          val _sqlContext = org.apache.spark.repl.Main.interp.createSQLContext()
-          println("SQL context available as sqlContext.")
-          _sqlContext
-        }
-        """)
       command("import org.apache.spark.SparkContext._")
-      command("import sqlContext.implicits._")
-      command("import sqlContext.sql")
+      command("import spark.implicits._")
+      command("import spark.sql")
       command("import org.apache.spark.sql.functions._")
     }
   }

@@ -24,6 +24,7 @@ package org.apache.spark.sql.execution.streaming
  *  - Allow the user to query the latest batch id.
  *  - Allow the user to query the metadata object of a specified batch id.
  *  - Allow the user to query metadata objects in a range of batch ids.
+ *  - Allow the user to remove obsolete metadata
  */
 trait MetadataLog[T] {
 
@@ -42,10 +43,16 @@ trait MetadataLog[T] {
    * Return metadata for batches between startId (inclusive) and endId (inclusive). If `startId` is
    * `None`, just return all batches before endId (inclusive).
    */
-  def get(startId: Option[Long], endId: Long): Array[(Long, T)]
+  def get(startId: Option[Long], endId: Option[Long]): Array[(Long, T)]
 
   /**
    * Return the latest batch Id and its metadata if exist.
    */
   def getLatest(): Option[(Long, T)]
+
+  /**
+   * Removes all the log entry earlier than thresholdBatchId (exclusive).
+   * This operation should be idempotent.
+   */
+  def purge(thresholdBatchId: Long): Unit
 }

@@ -17,34 +17,45 @@
 
 package org.apache.spark.sql.test
 
-import org.apache.spark.sql.SQLContext
+import org.scalatest.BeforeAndAfterEach
+
+import org.apache.spark.{DebugFilesystem, SparkConf}
+import org.apache.spark.sql.{SparkSession, SQLContext}
 
 
 /**
- * Helper trait for SQL test suites where all tests share a single [[TestSQLContext]].
+ * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
-trait SharedSQLContext extends SQLTestUtils {
+trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach {
+
+  protected val sparkConf = new SparkConf()
 
   /**
-   * The [[TestSQLContext]] to use for all tests in this suite.
+   * The [[TestSparkSession]] to use for all tests in this suite.
    *
    * By default, the underlying [[org.apache.spark.SparkContext]] will be run in local
    * mode with the default test configurations.
    */
-  private var _ctx: TestSQLContext = null
+  private var _spark: TestSparkSession = null
+
+  /**
+   * The [[TestSparkSession]] to use for all tests in this suite.
+   */
+  protected implicit def spark: SparkSession = _spark
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
    */
-  protected implicit def sqlContext: SQLContext = _ctx
+  protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
   /**
-   * Initialize the [[TestSQLContext]].
+   * Initialize the [[TestSparkSession]].
    */
   protected override def beforeAll(): Unit = {
-    SQLContext.clearSqlListener()
-    if (_ctx == null) {
-      _ctx = new TestSQLContext
+    SparkSession.sqlListener.set(null)
+    if (_spark == null) {
+      _spark = new TestSparkSession(
+        sparkConf.set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName))
     }
     // Ensure we have initialized the context before calling parent code
     super.beforeAll()
@@ -55,12 +66,22 @@ trait SharedSQLContext extends SQLTestUtils {
    */
   protected override def afterAll(): Unit = {
     try {
-      if (_ctx != null) {
-        _ctx.sparkContext.stop()
-        _ctx = null
+      if (_spark != null) {
+        _spark.stop()
+        _spark = null
       }
     } finally {
       super.afterAll()
     }
+  }
+
+  protected override def beforeEach(): Unit = {
+    super.beforeEach()
+    DebugFilesystem.clearOpenStreams()
+  }
+
+  protected override def afterEach(): Unit = {
+    super.afterEach()
+    DebugFilesystem.assertNoOpenStreams()
   }
 }

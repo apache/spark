@@ -17,12 +17,14 @@
 
 package org.apache.spark.scheduler
 
+import java.util.Properties
+
 import org.mockito.Matchers.any
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetricsSuite
+import org.apache.spark.executor.{Executor, TaskMetrics, TaskMetricsSuite}
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.JvmSource
 import org.apache.spark.network.util.JavaUtils
@@ -59,7 +61,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
-    val task = new ResultTask[String, String](0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0)
+    val task = new ResultTask[String, String](
+      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties, new TaskMetrics)
     intercept[RuntimeException] {
       task.run(0, 0, null)
     }
@@ -79,7 +82,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
-    val task = new ResultTask[String, String](0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0)
+    val task = new ResultTask[String, String](
+      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties, new TaskMetrics)
     intercept[RuntimeException] {
       task.run(0, 0, null)
     }
@@ -142,14 +146,13 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("accumulators are updated on exception failures") {
     // This means use 1 core and 4 max task failures
     sc = new SparkContext("local[1,4]", "test")
-    val param = AccumulatorParam.LongAccumulatorParam
     // Create 2 accumulators, one that counts failed values and another that doesn't
-    val acc1 = new Accumulator(0L, param, Some("x"), internal = false, countFailedValues = true)
-    val acc2 = new Accumulator(0L, param, Some("y"), internal = false, countFailedValues = false)
+    val acc1 = AccumulatorSuite.createLongAccum("x", true)
+    val acc2 = AccumulatorSuite.createLongAccum("y", false)
     // Fail first 3 attempts of every task. This means each task should be run 4 times.
     sc.parallelize(1 to 10, 10).map { i =>
-      acc1 += 1
-      acc2 += 1
+      acc1.add(1)
+      acc2.add(1)
       if (TaskContext.get.attemptNumber() <= 2) {
         throw new Exception("you did something wrong")
       } else {
@@ -158,35 +161,69 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     }.count()
     // The one that counts failed values should be 4x the one that didn't,
     // since we ran each task 4 times
-    assert(Accumulators.get(acc1.id).get.value === 40L)
-    assert(Accumulators.get(acc2.id).get.value === 10L)
+    assert(AccumulatorContext.get(acc1.id).get.value === 40L)
+    assert(AccumulatorContext.get(acc2.id).get.value === 10L)
   }
 
   test("failed tasks collect only accumulators whose values count during failures") {
     sc = new SparkContext("local", "test")
-    val param = AccumulatorParam.LongAccumulatorParam
-    val acc1 = new Accumulator(0L, param, Some("x"), internal = false, countFailedValues = true)
-    val acc2 = new Accumulator(0L, param, Some("y"), internal = false, countFailedValues = false)
-    val initialAccums = InternalAccumulator.createAll()
+    val acc1 = AccumulatorSuite.createLongAccum("x", false)
+    val acc2 = AccumulatorSuite.createLongAccum("y", true)
+    acc1.add(1)
+    acc2.add(1)
     // Create a dummy task. We won't end up running this; we just want to collect
     // accumulator updates from it.
-    val task = new Task[Int](0, 0, 0, Seq.empty[Accumulator[_]]) {
+    val taskMetrics = TaskMetrics.empty
+    val task = new Task[Int](0, 0, 0) {
       context = new TaskContextImpl(0, 0, 0L, 0,
         new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
+        new Properties,
         SparkEnv.get.metricsSystem,
-        initialAccums)
-      context.taskMetrics.registerAccumulator(acc1)
-      context.taskMetrics.registerAccumulator(acc2)
+        taskMetrics)
+      taskMetrics.registerAccumulator(acc1)
+      taskMetrics.registerAccumulator(acc2)
       override def runTask(tc: TaskContext): Int = 0
     }
     // First, simulate task success. This should give us all the accumulators.
     val accumUpdates1 = task.collectAccumulatorUpdates(taskFailed = false)
-    val accumUpdates2 = (initialAccums ++ Seq(acc1, acc2)).map(TaskMetricsSuite.makeInfo)
-    TaskMetricsSuite.assertUpdatesEquals(accumUpdates1, accumUpdates2)
+    TaskMetricsSuite.assertUpdatesEquals(accumUpdates1.takeRight(2), Seq(acc1, acc2))
     // Now, simulate task failures. This should give us only the accums that count failed values.
-    val accumUpdates3 = task.collectAccumulatorUpdates(taskFailed = true)
-    val accumUpdates4 = (initialAccums ++ Seq(acc1)).map(TaskMetricsSuite.makeInfo)
-    TaskMetricsSuite.assertUpdatesEquals(accumUpdates3, accumUpdates4)
+    val accumUpdates2 = task.collectAccumulatorUpdates(taskFailed = true)
+    TaskMetricsSuite.assertUpdatesEquals(accumUpdates2.takeRight(1), Seq(acc2))
+  }
+
+  test("only updated internal accumulators will be sent back to driver") {
+    sc = new SparkContext("local", "test")
+    // Create a dummy task. We won't end up running this; we just want to collect
+    // accumulator updates from it.
+    val taskMetrics = TaskMetrics.empty
+    val task = new Task[Int](0, 0, 0) {
+      context = new TaskContextImpl(0, 0, 0L, 0,
+        new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
+        new Properties,
+        SparkEnv.get.metricsSystem,
+        taskMetrics)
+      taskMetrics.incMemoryBytesSpilled(10)
+      override def runTask(tc: TaskContext): Int = 0
+    }
+    val updatedAccums = task.collectAccumulatorUpdates()
+    assert(updatedAccums.length == 2)
+    // the RESULT_SIZE accumulator will be sent back anyway.
+    assert(updatedAccums(0).name == Some(InternalAccumulator.RESULT_SIZE))
+    assert(updatedAccums(0).value == 0)
+    assert(updatedAccums(1).name == Some(InternalAccumulator.MEMORY_BYTES_SPILLED))
+    assert(updatedAccums(1).value == 10)
+  }
+
+  test("localProperties are propagated to executors correctly") {
+    sc = new SparkContext("local", "test")
+    sc.setLocalProperty("testPropKey", "testPropValue")
+    val res = sc.parallelize(Array(1), 1).map(i => i).map(i => {
+      val inTask = TaskContext.get().getLocalProperty("testPropKey")
+      val inDeser = Executor.taskDeserializationProps.get().getProperty("testPropKey")
+      s"$inTask,$inDeser"
+    }).collect()
+    assert(res === Array("testPropValue,testPropValue"))
   }
 
 }

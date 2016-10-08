@@ -17,10 +17,12 @@
 
 package org.apache.spark.deploy.master.ui
 
-import org.apache.spark.Logging
+import scala.collection.mutable.HashMap
+
+import org.eclipse.jetty.servlet.ServletContextHandler
+
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource,
-  UIRoot}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
 
@@ -30,15 +32,13 @@ import org.apache.spark.ui.JettyUtils._
 private[master]
 class MasterWebUI(
     val master: Master,
-    requestedPort: Int,
-    customMasterPage: Option[MasterPage] = None)
+    requestedPort: Int)
   extends WebUI(master.securityMgr, master.securityMgr.getSSLOptions("standalone"),
-    requestedPort, master.conf, name = "MasterUI") with Logging with UIRoot {
+    requestedPort, master.conf, name = "MasterUI") with Logging {
 
   val masterEndpointRef = master.self
   val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)
-
-  val masterPage = customMasterPage.getOrElse(new MasterPage(this))
+  private val proxyHandlers = new HashMap[String, ServletContextHandler]
 
   initialize()
 
@@ -46,43 +46,23 @@ class MasterWebUI(
   def initialize() {
     val masterPage = new MasterPage(this)
     attachPage(new ApplicationPage(this))
-    attachPage(new HistoryNotFoundPage(this))
     attachPage(masterPage)
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
-    attachHandler(ApiRootResource.getServletHandler(this))
     attachHandler(createRedirectHandler(
       "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
     attachHandler(createRedirectHandler(
       "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethods = Set("POST")))
   }
 
-  /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */
-  def attachSparkUI(ui: SparkUI) {
-    assert(serverInfo.isDefined, "Master UI must be bound to a server before attaching SparkUIs")
-    ui.getHandlers.foreach(attachHandler)
+  def addProxyTargets(id: String, target: String): Unit = {
+    var endTarget = target.stripSuffix("/")
+    val handler = createProxyHandler("/proxy/" + id, endTarget)
+    attachHandler(handler)
+    proxyHandlers(id) = handler
   }
 
-  /** Detach a reconstructed UI from this Master UI. Only valid after bind(). */
-  def detachSparkUI(ui: SparkUI) {
-    assert(serverInfo.isDefined, "Master UI must be bound to a server before detaching SparkUIs")
-    ui.getHandlers.foreach(detachHandler)
-  }
-
-  def getApplicationInfoList: Iterator[ApplicationInfo] = {
-    val state = masterPage.getMasterState
-    val activeApps = state.activeApps.sortBy(_.startTime).reverse
-    val completedApps = state.completedApps.sortBy(_.endTime).reverse
-    activeApps.iterator.map { ApplicationsListResource.convertApplicationInfo(_, false) } ++
-      completedApps.iterator.map { ApplicationsListResource.convertApplicationInfo(_, true) }
-  }
-
-  def getSparkUI(appId: String): Option[SparkUI] = {
-    val state = masterPage.getMasterState
-    val activeApps = state.activeApps.sortBy(_.startTime).reverse
-    val completedApps = state.completedApps.sortBy(_.endTime).reverse
-    (activeApps ++ completedApps).find { _.id == appId }.flatMap {
-      master.rebuildSparkUI
-    }
+  def removeProxyTargets(id: String): Unit = {
+    proxyHandlers.remove(id).foreach(detachHandler)
   }
 }
 

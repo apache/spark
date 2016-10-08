@@ -88,16 +88,12 @@ object MimaBuild {
 
   def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
     val organization = "org.apache.spark"
-    // The resolvers setting for MQTT Repository is needed for mqttv3(1.0.1)
-    // because spark-streaming-mqtt(1.6.0) depends on it.
-    // Remove the setting on updating previousSparkVersion.
-    val previousSparkVersion = "1.6.0"
-    val fullId = "spark-" + projectRef.project + "_2.11"
+    val previousSparkVersion = "2.0.0"
+    val project = projectRef.project
+    val fullId = "spark-" + project + "_2.11"
     mimaDefaultSettings ++
     Seq(previousArtifact := Some(organization % fullId % previousSparkVersion),
-      binaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value),
-      sbt.Keys.resolvers +=
-        "MQTT Repository" at "https://repo.eclipse.org/content/repositories/paho-releases")
+      binaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value))
   }
 
 }

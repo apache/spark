@@ -17,14 +17,12 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
- * :: Experimental ::
  * Class for calculating variance during regression
  */
 @Since("1.0.0")
-@Experimental
 object Variance extends Impurity {
 
   /**
@@ -71,7 +69,7 @@ object Variance extends Impurity {
  * in order to compute impurity from a sample.
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  */
-private[tree] class VarianceAggregator()
+private[spark] class VarianceAggregator()
   extends ImpurityAggregator(statsSize = 3) with Serializable {
 
   /**
@@ -93,7 +91,6 @@ private[tree] class VarianceAggregator()
   def getCalculator(allStats: Array[Double], offset: Int): VarianceCalculator = {
     new VarianceCalculator(allStats.view(offset, offset + statsSize).toArray)
   }
-
 }
 
 /**

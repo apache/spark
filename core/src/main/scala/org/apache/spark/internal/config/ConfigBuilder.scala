@@ -85,10 +85,12 @@ private[spark] class TypedConfigBuilder[T](
     this(parent, converter, Option(_).map(_.toString).orNull)
   }
 
+  /** Apply a transformation to the user-provided values of the config entry. */
   def transform(fn: T => T): TypedConfigBuilder[T] = {
     new TypedConfigBuilder(parent, s => fn(converter(s)), stringConverter)
   }
 
+  /** Check that user-provided values for the config match a pre-defined set. */
   def checkValues(validValues: Set[T]): TypedConfigBuilder[T] = {
     transform { v =>
       if (!validValues.contains(v)) {
@@ -99,30 +101,43 @@ private[spark] class TypedConfigBuilder[T](
     }
   }
 
+  /** Turns the config entry into a sequence of values of the underlying type. */
   def toSequence: TypedConfigBuilder[Seq[T]] = {
     new TypedConfigBuilder(parent, stringToSeq(_, converter), seqToString(_, stringConverter))
   }
 
-  /** Creates a [[ConfigEntry]] that does not require a default value. */
-  def optional: OptionalConfigEntry[T] = {
-    new OptionalConfigEntry[T](parent.key, converter, stringConverter, parent._doc, parent._public)
+  /** Creates a [[ConfigEntry]] that does not have a default value. */
+  def createOptional: OptionalConfigEntry[T] = {
+    val entry = new OptionalConfigEntry[T](parent.key, converter, stringConverter, parent._doc,
+      parent._public)
+    parent._onCreate.foreach(_(entry))
+    entry
   }
 
   /** Creates a [[ConfigEntry]] that has a default value. */
-  def withDefault(default: T): ConfigEntry[T] = {
-    val transformedDefault = converter(stringConverter(default))
-    new ConfigEntryWithDefault[T](parent.key, transformedDefault, converter, stringConverter,
-      parent._doc, parent._public)
+  def createWithDefault(default: T): ConfigEntry[T] = {
+    // Treat "String" as a special case, so that both createWithDefault and createWithDefaultString
+    // behave the same w.r.t. variable expansion of default values.
+    if (default.isInstanceOf[String]) {
+      createWithDefaultString(default.asInstanceOf[String])
+    } else {
+      val transformedDefault = converter(stringConverter(default))
+      val entry = new ConfigEntryWithDefault[T](parent.key, transformedDefault, converter,
+        stringConverter, parent._doc, parent._public)
+      parent._onCreate.foreach(_(entry))
+      entry
+    }
   }
 
   /**
    * Creates a [[ConfigEntry]] that has a default value. The default value is provided as a
    * [[String]] and must be a valid value for the entry.
    */
-  def withDefaultString(default: String): ConfigEntry[T] = {
-    val typedDefault = converter(default)
-    new ConfigEntryWithDefault[T](parent.key, typedDefault, converter, stringConverter, parent._doc,
-      parent._public)
+  def createWithDefaultString(default: String): ConfigEntry[T] = {
+    val entry = new ConfigEntryWithDefaultString[T](parent.key, default, converter, stringConverter,
+      parent._doc, parent._public)
+    parent._onCreate.foreach(_(entry))
+    entry
   }
 
 }
@@ -136,16 +151,26 @@ private[spark] case class ConfigBuilder(key: String) {
 
   import ConfigHelpers._
 
-  var _public = true
-  var _doc = ""
+  private[config] var _public = true
+  private[config] var _doc = ""
+  private[config] var _onCreate: Option[ConfigEntry[_] => Unit] = None
 
-  def internal: ConfigBuilder = {
+  def internal(): ConfigBuilder = {
     _public = false
     this
   }
 
   def doc(s: String): ConfigBuilder = {
     _doc = s
+    this
+  }
+
+  /**
+   * Registers a callback for when the config entry is finally instantiated. Currently used by
+   * SQLConf to keep track of SQL configuration entries.
+   */
+  def onCreate(callback: ConfigEntry[_] => Unit): ConfigBuilder = {
+    _onCreate = Option(callback)
     this
   }
 

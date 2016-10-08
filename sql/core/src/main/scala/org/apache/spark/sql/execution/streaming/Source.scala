@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -29,8 +30,16 @@ trait Source  {
   /** Returns the schema of the data from this source */
   def schema: StructType
 
+  /** Returns the maximum available offset for this source. */
+  def getOffset: Option[Offset]
+
   /**
-   * Returns the next batch of data that is available after `start`, if any is available.
+   * Returns the data that is between the offsets (`start`, `end`]. When `start` is `None` then
+   * the batch should begin with the first available record. This method must always return the
+   * same data for a particular `start` and `end` pair.
    */
-  def getNextBatch(start: Option[Offset]): Option[Batch]
+  def getBatch(start: Option[Offset], end: Offset): DataFrame
+
+  /** Stop this source and free any resources it has allocated. */
+  def stop(): Unit
 }

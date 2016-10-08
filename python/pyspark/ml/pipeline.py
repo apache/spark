@@ -20,76 +20,16 @@ import sys
 if sys.version > '3':
     basestring = str
 
-from pyspark import SparkContext
-from pyspark import since
+from pyspark import since, keyword_only, SparkContext
 from pyspark.ml import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import keyword_only, JavaMLWriter, JavaMLReader
-from pyspark.ml.wrapper import JavaWrapper
-from pyspark.mllib.common import inherit_doc
-
-
-def _stages_java2py(java_stages):
-    """
-    Transforms the parameter Python stages from a list of Java stages.
-    :param java_stages: An array of Java stages.
-    :return: An array of Python stages.
-    """
-
-    return [JavaWrapper._transfer_stage_from_java(stage) for stage in java_stages]
-
-
-def _stages_py2java(py_stages, cls):
-    """
-    Transforms the parameter of Python stages to a Java array of Java stages.
-    :param py_stages: An array of Python stages.
-    :return: A Java array of Java Stages.
-    """
-
-    for stage in py_stages:
-        assert(isinstance(stage, JavaWrapper),
-               "Python side implementation is not supported in the meta-PipelineStage currently.")
-    gateway = SparkContext._gateway
-    java_stages = gateway.new_array(cls, len(py_stages))
-    for idx, stage in enumerate(py_stages):
-        java_stages[idx] = stage._transfer_stage_to_java()
-    return java_stages
+from pyspark.ml.util import JavaMLWriter, JavaMLReader, MLReadable, MLWritable
+from pyspark.ml.wrapper import JavaParams
+from pyspark.ml.common import inherit_doc
 
 
 @inherit_doc
-class PipelineMLWriter(JavaMLWriter, JavaWrapper):
-    """
-    Private Pipeline utility class that can save ML instances through their Scala implementation.
-    """
-
-    def __init__(self, instance):
-        cls = SparkContext._jvm.org.apache.spark.ml.PipelineStage
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.Pipeline", instance.uid)
-        self._java_obj.setStages(_stages_py2java(instance.getStages(), cls))
-        self._jwrite = self._java_obj.write()
-
-
-@inherit_doc
-class PipelineMLReader(JavaMLReader):
-    """
-    Private utility class that can load Pipeline instances through their Scala implementation.
-    """
-
-    def load(self, path):
-        """Load the Pipeline instance from the input path."""
-        if not isinstance(path, basestring):
-            raise TypeError("path should be a basestring, got type %s" % type(path))
-
-        java_obj = self._jread.load(path)
-        instance = self._clazz()
-        instance._resetUid(java_obj.uid())
-        instance.setStages(_stages_java2py(java_obj.getStages()))
-
-        return instance
-
-
-@inherit_doc
-class Pipeline(Estimator):
+class Pipeline(Estimator, MLReadable, MLWritable):
     """
     A simple pipeline, which acts as an estimator. A Pipeline consists
     of a sequence of stages, each of which is either an
@@ -102,23 +42,21 @@ class Pipeline(Estimator):
     stage. If a stage is a :py:class:`Transformer`, its
     :py:meth:`Transformer.transform` method will be called to produce
     the dataset for the next stage. The fitted model from a
-    :py:class:`Pipeline` is an :py:class:`PipelineModel`, which
+    :py:class:`Pipeline` is a :py:class:`PipelineModel`, which
     consists of fitted models and transformers, corresponding to the
-    pipeline stages. If there are no stages, the pipeline acts as an
+    pipeline stages. If stages is an empty list, the pipeline acts as an
     identity transformer.
 
     .. versionadded:: 1.3.0
     """
 
-    stages = Param(Params._dummy(), "stages", "pipeline stages")
+    stages = Param(Params._dummy(), "stages", "a list of pipeline stages")
 
     @keyword_only
     def __init__(self, stages=None):
         """
         __init__(self, stages=None)
         """
-        if stages is None:
-            stages = []
         super(Pipeline, self).__init__()
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -131,16 +69,14 @@ class Pipeline(Estimator):
         :param value: a list of transformers or estimators
         :return: the pipeline instance
         """
-        self._paramMap[self.stages] = value
-        return self
+        return self._set(stages=value)
 
     @since("1.3.0")
     def getStages(self):
         """
         Get pipeline stages.
         """
-        if self.stages in self._paramMap:
-            return self._paramMap[self.stages]
+        return self.getOrDefault(self.stages)
 
     @keyword_only
     @since("1.3.0")
@@ -149,8 +85,6 @@ class Pipeline(Estimator):
         setParams(self, stages=None)
         Sets params for Pipeline.
         """
-        if stages is None:
-            stages = []
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
@@ -195,8 +129,8 @@ class Pipeline(Estimator):
 
     @since("2.0.0")
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
-        return PipelineMLWriter(self)
+        """Returns an MLWriter instance for this ML instance."""
+        return JavaMLWriter(self)
 
     @since("2.0.0")
     def save(self, path):
@@ -206,49 +140,44 @@ class Pipeline(Estimator):
     @classmethod
     @since("2.0.0")
     def read(cls):
-        """Returns an JavaMLReader instance for this class."""
-        return PipelineMLReader(cls)
+        """Returns an MLReader instance for this class."""
+        return JavaMLReader(cls)
 
     @classmethod
-    @since("2.0.0")
-    def load(cls, path):
-        """Reads an ML instance from the input path, a shortcut of `read().load(path)`."""
-        return cls.read().load(path)
+    def _from_java(cls, java_stage):
+        """
+        Given a Java Pipeline, create and return a Python wrapper of it.
+        Used for ML persistence.
+        """
+        # Create a new instance of this stage.
+        py_stage = cls()
+        # Load information from java_stage to the instance.
+        py_stages = [JavaParams._from_java(s) for s in java_stage.getStages()]
+        py_stage.setStages(py_stages)
+        py_stage._resetUid(java_stage.uid())
+        return py_stage
+
+    def _to_java(self):
+        """
+        Transfer this instance to a Java Pipeline.  Used for ML persistence.
+
+        :return: Java object equivalent to this instance.
+        """
+
+        gateway = SparkContext._gateway
+        cls = SparkContext._jvm.org.apache.spark.ml.PipelineStage
+        java_stages = gateway.new_array(cls, len(self.getStages()))
+        for idx, stage in enumerate(self.getStages()):
+            java_stages[idx] = stage._to_java()
+
+        _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.Pipeline", self.uid)
+        _java_obj.setStages(java_stages)
+
+        return _java_obj
 
 
 @inherit_doc
-class PipelineModelMLWriter(JavaMLWriter, JavaWrapper):
-    """
-    Private PipelineModel utility class that can save ML instances through their Scala
-    implementation.
-    """
-
-    def __init__(self, instance):
-        cls = SparkContext._jvm.org.apache.spark.ml.Transformer
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.PipelineModel",
-                                            instance.uid,
-                                            _stages_py2java(instance.stages, cls))
-        self._jwrite = self._java_obj.write()
-
-
-@inherit_doc
-class PipelineModelMLReader(JavaMLReader):
-    """
-    Private utility class that can load PipelineModel instances through their Scala implementation.
-    """
-
-    def load(self, path):
-        """Load the PipelineModel instance from the input path."""
-        if not isinstance(path, basestring):
-            raise TypeError("path should be a basestring, got type %s" % type(path))
-        java_obj = self._jread.load(path)
-        instance = self._clazz(_stages_java2py(java_obj.stages()))
-        instance._resetUid(java_obj.uid())
-        return instance
-
-
-@inherit_doc
-class PipelineModel(Model):
+class PipelineModel(Model, MLReadable, MLWritable):
     """
     Represents a compiled pipeline with transformers and fitted models.
 
@@ -279,8 +208,8 @@ class PipelineModel(Model):
 
     @since("2.0.0")
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
-        return PipelineModelMLWriter(self)
+        """Returns an MLWriter instance for this ML instance."""
+        return JavaMLWriter(self)
 
     @since("2.0.0")
     def save(self, path):
@@ -290,11 +219,36 @@ class PipelineModel(Model):
     @classmethod
     @since("2.0.0")
     def read(cls):
-        """Returns an JavaMLReader instance for this class."""
-        return PipelineModelMLReader(cls)
+        """Returns an MLReader instance for this class."""
+        return JavaMLReader(cls)
 
     @classmethod
-    @since("2.0.0")
-    def load(cls, path):
-        """Reads an ML instance from the input path, a shortcut of `read().load(path)`."""
-        return cls.read().load(path)
+    def _from_java(cls, java_stage):
+        """
+        Given a Java PipelineModel, create and return a Python wrapper of it.
+        Used for ML persistence.
+        """
+        # Load information from java_stage to the instance.
+        py_stages = [JavaParams._from_java(s) for s in java_stage.stages()]
+        # Create a new instance of this stage.
+        py_stage = cls(py_stages)
+        py_stage._resetUid(java_stage.uid())
+        return py_stage
+
+    def _to_java(self):
+        """
+        Transfer this instance to a Java PipelineModel.  Used for ML persistence.
+
+        :return: Java object equivalent to this instance.
+        """
+
+        gateway = SparkContext._gateway
+        cls = SparkContext._jvm.org.apache.spark.ml.Transformer
+        java_stages = gateway.new_array(cls, len(self.stages))
+        for idx, stage in enumerate(self.stages):
+            java_stages[idx] = stage._to_java()
+
+        _java_obj =\
+            JavaParams._new_java_obj("org.apache.spark.ml.PipelineModel", self.uid, java_stages)
+
+        return _java_obj

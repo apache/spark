@@ -148,19 +148,19 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
     testOneToOneMathFunction(tanh, math.tanh)
   }
 
-  test("toDegrees") {
-    testOneToOneMathFunction(toDegrees, math.toDegrees)
+  test("degrees") {
+    testOneToOneMathFunction(degrees, math.toDegrees)
     checkAnswer(
       sql("SELECT degrees(0), degrees(1), degrees(1.5)"),
-      Seq((1, 2)).toDF().select(toDegrees(lit(0)), toDegrees(lit(1)), toDegrees(lit(1.5)))
+      Seq((1, 2)).toDF().select(degrees(lit(0)), degrees(lit(1)), degrees(lit(1.5)))
     )
   }
 
-  test("toRadians") {
-    testOneToOneMathFunction(toRadians, math.toRadians)
+  test("radians") {
+    testOneToOneMathFunction(radians, math.toRadians)
     checkAnswer(
       sql("SELECT radians(0), radians(1), radians(1.5)"),
-      Seq((1, 2)).toDF().select(toRadians(lit(0)), toRadians(lit(1)), toRadians(lit(1.5)))
+      Seq((1, 2)).toDF().select(radians(lit(0)), radians(lit(1)), radians(lit(1.5)))
     )
   }
 
@@ -207,17 +207,27 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
     testOneToOneMathFunction(rint, math.rint)
   }
 
-  test("round") {
+  test("round/bround") {
     val df = Seq(5, 55, 555).map(Tuple1(_)).toDF("a")
     checkAnswer(
       df.select(round('a), round('a, -1), round('a, -2)),
       Seq(Row(5, 10, 0), Row(55, 60, 100), Row(555, 560, 600))
+    )
+    checkAnswer(
+      df.select(bround('a), bround('a, -1), bround('a, -2)),
+      Seq(Row(5, 0, 0), Row(55, 60, 100), Row(555, 560, 600))
     )
 
     val pi = "3.1415"
     checkAnswer(
       sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
         s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),
+      Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
+        BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
+    )
+    checkAnswer(
+      sql(s"SELECT bround($pi, -3), bround($pi, -2), bround($pi, -1), " +
+        s"bround($pi, 0), bround($pi, 1), bround($pi, 2), bround($pi, 3)"),
       Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
         BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
     )

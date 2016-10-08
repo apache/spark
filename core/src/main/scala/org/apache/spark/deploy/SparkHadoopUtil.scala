@@ -17,26 +17,27 @@
 
 package org.apache.spark.deploy
 
-import java.io.{ByteArrayInputStream, DataInputStream}
+import java.io.IOException
 import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
-import java.util.{Arrays, Comparator}
+import java.text.DateFormat
+import java.util.{Arrays, Comparator, Date}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.fs.FileSystem.Statistics
-import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -73,13 +74,12 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
-  /**
-   * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
-   * subsystems.
-   */
-  def newConfiguration(conf: SparkConf): Configuration = {
-    val hadoopConf = new Configuration()
 
+  /**
+   * Appends S3-specific, spark.hadoop.*, and spark.buffer.size configurations to a Hadoop
+   * configuration.
+   */
+  def appendS3AndSparkHadoopConfigurations(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Note: this null check is around more than just access to the "conf" object to maintain
     // the behavior of the old implementation of this code, for backwards compatibility.
     if (conf != null) {
@@ -105,7 +105,15 @@ class SparkHadoopUtil extends Logging {
       val bufferSize = conf.get("spark.buffer.size", "65536")
       hadoopConf.set("io.file.buffer.size", bufferSize)
     }
+  }
 
+  /**
+   * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
+   * subsystems.
+   */
+  def newConfiguration(conf: SparkConf): Configuration = {
+    val hadoopConf = new Configuration()
+    appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
     hadoopConf
   }
 
@@ -144,10 +152,9 @@ class SparkHadoopUtil extends Logging {
       val baselineBytesRead = f()
       Some(() => f() - baselineBytesRead)
     } catch {
-      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) =>
         logDebug("Couldn't find method for retrieving thread-level FileSystem input data", e)
         None
-      }
     }
   }
 
@@ -166,10 +173,9 @@ class SparkHadoopUtil extends Logging {
       val baselineBytesWritten = f()
       Some(() => f() - baselineBytesWritten)
     } catch {
-      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) =>
         logDebug("Couldn't find method for retrieving thread-level FileSystem output data", e)
         None
-      }
     }
   }
 
@@ -222,6 +228,10 @@ class SparkHadoopUtil extends Logging {
     recurse(baseStatus)
   }
 
+  def isGlobPath(pattern: Path): Boolean = {
+    pattern.toString.exists("{}[]*?\\".toSet.contains)
+  }
+
   def globPath(pattern: Path): Seq[Path] = {
     val fs = pattern.getFileSystem(conf)
     Option(fs.globStatus(pattern)).map { statuses =>
@@ -230,11 +240,7 @@ class SparkHadoopUtil extends Logging {
   }
 
   def globPathIfNecessary(pattern: Path): Seq[Path] = {
-    if (pattern.toString.exists("{}[]*?\\".toSet.contains)) {
-      globPath(pattern)
-    } else {
-      Seq(pattern)
-    }
+    if (isGlobPath(pattern)) globPath(pattern) else Seq(pattern)
   }
 
   /**
@@ -268,30 +274,6 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
-  /**
-   * How much time is remaining (in millis) from now to (fraction * renewal time for the token that
-   * is valid the latest)?
-   * This will return -ve (or 0) value if the fraction of validity has already expired.
-   */
-  def getTimeFromNowToRenewal(
-      sparkConf: SparkConf,
-      fraction: Double,
-      credentials: Credentials): Long = {
-    val now = System.currentTimeMillis()
-
-    val renewalInterval =
-      sparkConf.getLong("spark.yarn.token.renewal.interval", (24 hours).toMillis)
-
-    credentials.getAllTokens.asScala
-      .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
-      .map { t =>
-        val identifier = new DelegationTokenIdentifier()
-        identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
-        (identifier.getIssueDate + fraction * renewalInterval).toLong - now
-      }.foldLeft(0L)(math.max)
-  }
-
-
   private[spark] def getSuffixForCredentialsPath(credentialsPath: Path): Int = {
     val fileName = credentialsPath.getName
     fileName.substring(
@@ -307,7 +289,7 @@ class SparkHadoopUtil extends Logging {
    */
   def substituteHadoopVariables(text: String, hadoopConf: Configuration): String = {
     text match {
-      case HADOOP_CONF_PATTERN(matched) => {
+      case HADOOP_CONF_PATTERN(matched) =>
         logDebug(text + " matched " + HADOOP_CONF_PATTERN)
         val key = matched.substring(13, matched.length() - 1) // remove ${hadoopconf- .. }
         val eval = Option[String](hadoopConf.get(key))
@@ -322,24 +304,22 @@ class SparkHadoopUtil extends Logging {
           // Continue to substitute more variables.
           substituteHadoopVariables(eval.get, hadoopConf)
         }
-      }
-      case _ => {
+      case _ =>
         logDebug(text + " didn't match " + HADOOP_CONF_PATTERN)
         text
-      }
     }
   }
 
   /**
-   * Start a thread to periodically update the current user's credentials with new delegation
-   * tokens so that writes to HDFS do not fail.
+   * Start a thread to periodically update the current user's credentials with new credentials so
+   * that access to secured service does not fail.
    */
-  private[spark] def startExecutorDelegationTokenRenewer(conf: SparkConf) {}
+  private[spark] def startCredentialUpdater(conf: SparkConf) {}
 
   /**
-   * Stop the thread that does the delegation token updates.
+   * Stop the thread that does the credential updates.
    */
-  private[spark] def stopExecutorDelegationTokenRenewer() {}
+  private[spark] def stopCredentialUpdater() {}
 
   /**
    * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.
@@ -352,6 +332,50 @@ class SparkHadoopUtil extends Logging {
     val confKey = s"fs.${scheme}.impl.disable.cache"
     newConf.setBoolean(confKey, true)
     newConf
+  }
+
+  /**
+   * Dump the credentials' tokens to string values.
+   *
+   * @param credentials credentials
+   * @return an iterator over the string values. If no credentials are passed in: an empty list
+   */
+  private[spark] def dumpTokens(credentials: Credentials): Iterable[String] = {
+    if (credentials != null) {
+      credentials.getAllTokens.asScala.map(tokenToString)
+    } else {
+      Seq()
+    }
+  }
+
+  /**
+   * Convert a token to a string for logging.
+   * If its an abstract delegation token, attempt to unmarshall it and then
+   * print more details, including timestamps in human-readable form.
+   *
+   * @param token token to convert to a string
+   * @return a printable string value.
+   */
+  private[spark] def tokenToString(token: Token[_ <: TokenIdentifier]): String = {
+    val df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+    val buffer = new StringBuilder(128)
+    buffer.append(token.toString)
+    try {
+      val ti = token.decodeIdentifier
+      buffer.append("; ").append(ti)
+      ti match {
+        case dt: AbstractDelegationTokenIdentifier =>
+          // include human times and the renewer, which the HDFS tokens toString omits
+          buffer.append("; Renewer: ").append(dt.getRenewer)
+          buffer.append("; Issued: ").append(df.format(new Date(dt.getIssueDate)))
+          buffer.append("; Max Date: ").append(df.format(new Date(dt.getMaxDate)))
+        case _ =>
+      }
+    } catch {
+      case e: IOException =>
+        logDebug("Failed to decode $token: $e", e)
+    }
+    buffer.toString
   }
 }
 
@@ -380,7 +404,7 @@ object SparkHadoopUtil {
 
   def get: SparkHadoopUtil = {
     // Check each time to support changing to/from YARN
-    val yarnMode = java.lang.Boolean.valueOf(
+    val yarnMode = java.lang.Boolean.parseBoolean(
         System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
     if (yarnMode) {
       yarn

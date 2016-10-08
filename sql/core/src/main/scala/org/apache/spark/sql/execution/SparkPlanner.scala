@@ -20,31 +20,40 @@ package org.apache.spark.sql.execution
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
 import org.apache.spark.sql.internal.SQLConf
 
 class SparkPlanner(
     val sparkContext: SparkContext,
     val conf: SQLConf,
-    val experimentalMethods: ExperimentalMethods)
+    val extraStrategies: Seq[Strategy])
   extends SparkStrategies {
 
   def numPartitions: Int = conf.numShufflePartitions
 
   def strategies: Seq[Strategy] =
-    experimentalMethods.extraStrategies ++ (
+      extraStrategies ++ (
       FileSourceStrategy ::
       DataSourceStrategy ::
       DDLStrategy ::
       SpecialLimits ::
       Aggregation ::
-      LeftSemiJoin ::
-      EquiJoinSelection ::
+      JoinSelection ::
       InMemoryScans ::
-      BasicOperators ::
-      BroadcastNestedLoop ::
-      CartesianProduct ::
-      DefaultJoin :: Nil)
+      BasicOperators :: Nil)
+
+  override protected def collectPlaceholders(plan: SparkPlan): Seq[(SparkPlan, LogicalPlan)] = {
+    plan.collect {
+      case placeholder @ PlanLater(logicalPlan) => placeholder -> logicalPlan
+    }
+  }
+
+  override protected def prunePlans(plans: Iterator[SparkPlan]): Iterator[SparkPlan] = {
+    // TODO: We will need to prune bad plans when we improve plan space exploration
+    //       to prevent combinatorial explosion.
+    plans
+  }
 
   /**
    * Used to build table scan operators where complex projection and filtering are done using
@@ -82,10 +91,10 @@ class SparkPlanner(
       // when the columns of this projection are enough to evaluate all filter conditions,
       // just do a scan followed by a filter, with no extra project.
       val scan = scanBuilder(projectList.asInstanceOf[Seq[Attribute]])
-      filterCondition.map(Filter(_, scan)).getOrElse(scan)
+      filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
     } else {
       val scan = scanBuilder((projectSet ++ filterSet).toSeq)
-      Project(projectList, filterCondition.map(Filter(_, scan)).getOrElse(scan))
+      ProjectExec(projectList, filterCondition.map(FilterExec(_, scan)).getOrElse(scan))
     }
   }
 }

@@ -31,7 +31,8 @@ import org.mockito.ArgumentCaptor
 import org.mockito.Mockito.{atLeast, mock, verify}
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.logging.{FileAppender, RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy}
 
 class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
@@ -200,24 +201,29 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
 
     // Make sure only logging errors
     val logger = Logger.getRootLogger
+    val oldLogLevel = logger.getLevel
     logger.setLevel(Level.ERROR)
-    logger.addAppender(mockAppender)
+    try {
+      logger.addAppender(mockAppender)
 
-    val testOutputStream = new PipedOutputStream()
-    val testInputStream = new PipedInputStream(testOutputStream)
+      val testOutputStream = new PipedOutputStream()
+      val testInputStream = new PipedInputStream(testOutputStream)
 
-    // Close the stream before appender tries to read will cause an IOException
-    testInputStream.close()
-    testOutputStream.close()
-    val appender = FileAppender(testInputStream, testFile, new SparkConf)
+      // Close the stream before appender tries to read will cause an IOException
+      testInputStream.close()
+      testOutputStream.close()
+      val appender = FileAppender(testInputStream, testFile, new SparkConf)
 
-    appender.awaitTermination()
+      appender.awaitTermination()
 
-    // If InputStream was closed without first stopping the appender, an exception will be logged
-    verify(mockAppender, atLeast(1)).doAppend(loggingEventCaptor.capture)
-    val loggingEvent = loggingEventCaptor.getValue
-    assert(loggingEvent.getThrowableInformation !== null)
-    assert(loggingEvent.getThrowableInformation.getThrowable.isInstanceOf[IOException])
+      // If InputStream was closed without first stopping the appender, an exception will be logged
+      verify(mockAppender, atLeast(1)).doAppend(loggingEventCaptor.capture)
+      val loggingEvent = loggingEventCaptor.getValue
+      assert(loggingEvent.getThrowableInformation !== null)
+      assert(loggingEvent.getThrowableInformation.getThrowable.isInstanceOf[IOException])
+    } finally {
+      logger.setLevel(oldLogLevel)
+    }
   }
 
   test("file appender async close stream gracefully") {
@@ -227,30 +233,35 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
 
     // Make sure only logging errors
     val logger = Logger.getRootLogger
+    val oldLogLevel = logger.getLevel
     logger.setLevel(Level.ERROR)
-    logger.addAppender(mockAppender)
+    try {
+      logger.addAppender(mockAppender)
 
-    val testOutputStream = new PipedOutputStream()
-    val testInputStream = new PipedInputStream(testOutputStream) with LatchedInputStream
+      val testOutputStream = new PipedOutputStream()
+      val testInputStream = new PipedInputStream(testOutputStream) with LatchedInputStream
 
-    // Close the stream before appender tries to read will cause an IOException
-    testInputStream.close()
-    testOutputStream.close()
-    val appender = FileAppender(testInputStream, testFile, new SparkConf)
+      // Close the stream before appender tries to read will cause an IOException
+      testInputStream.close()
+      testOutputStream.close()
+      val appender = FileAppender(testInputStream, testFile, new SparkConf)
 
-    // Stop the appender before an IOException is called during read
-    testInputStream.latchReadStarted.await()
-    appender.stop()
-    testInputStream.latchReadProceed.countDown()
+      // Stop the appender before an IOException is called during read
+      testInputStream.latchReadStarted.await()
+      appender.stop()
+      testInputStream.latchReadProceed.countDown()
 
-    appender.awaitTermination()
+      appender.awaitTermination()
 
-    // Make sure no IOException errors have been logged as a result of appender closing gracefully
-    verify(mockAppender, atLeast(0)).doAppend(loggingEventCaptor.capture)
-    import scala.collection.JavaConverters._
-    loggingEventCaptor.getAllValues.asScala.foreach { loggingEvent =>
-      assert(loggingEvent.getThrowableInformation === null
-        || !loggingEvent.getThrowableInformation.getThrowable.isInstanceOf[IOException])
+      // Make sure no IOException errors have been logged as a result of appender closing gracefully
+      verify(mockAppender, atLeast(0)).doAppend(loggingEventCaptor.capture)
+      import scala.collection.JavaConverters._
+      loggingEventCaptor.getAllValues.asScala.foreach { loggingEvent =>
+        assert(loggingEvent.getThrowableInformation === null
+          || !loggingEvent.getThrowableInformation.getThrowable.isInstanceOf[IOException])
+      }
+    } finally {
+      logger.setLevel(oldLogLevel)
     }
   }
 

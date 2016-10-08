@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.AccumulatorV2
 
 /**
  * Low-level task scheduler interface, currently implemented exclusively by
@@ -51,7 +52,7 @@ private[spark] trait TaskScheduler {
   def submitTasks(taskSet: TaskSet): Unit
 
   // Cancel a stage.
-  def cancelTasks(stageId: Int, interruptThread: Boolean)
+  def cancelTasks(stageId: Int, interruptThread: Boolean): Unit
 
   // Set the DAG scheduler for upcalls. This is guaranteed to be set before submitTasks is called.
   def setDAGScheduler(dagScheduler: DAGScheduler): Unit
@@ -66,7 +67,7 @@ private[spark] trait TaskScheduler {
    */
   def executorHeartbeatReceived(
       execId: String,
-      accumUpdates: Array[(Long, Seq[AccumulableInfo])],
+      accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
       blockManagerId: BlockManagerId): Boolean
 
   /**

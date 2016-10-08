@@ -26,6 +26,7 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.{RedirectThread, Utils}
 
 private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
@@ -234,7 +235,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   }
 
   private def cleanupIdleWorkers() {
-    while (idleWorkers.length > 0) {
+    while (idleWorkers.nonEmpty) {
       val worker = idleWorkers.dequeue()
       try {
         // the worker will exit after closing the socket

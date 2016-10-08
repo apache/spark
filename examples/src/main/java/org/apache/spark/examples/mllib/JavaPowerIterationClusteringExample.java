@@ -40,11 +40,11 @@ public class JavaPowerIterationClusteringExample {
     @SuppressWarnings("unchecked")
     // $example on$
     JavaRDD<Tuple3<Long, Long, Double>> similarities = sc.parallelize(Lists.newArrayList(
-      new Tuple3<Long, Long, Double>(0L, 1L, 0.9),
-      new Tuple3<Long, Long, Double>(1L, 2L, 0.9),
-      new Tuple3<Long, Long, Double>(2L, 3L, 0.9),
-      new Tuple3<Long, Long, Double>(3L, 4L, 0.1),
-      new Tuple3<Long, Long, Double>(4L, 5L, 0.9)));
+      new Tuple3<>(0L, 1L, 0.9),
+      new Tuple3<>(1L, 2L, 0.9),
+      new Tuple3<>(2L, 3L, 0.9),
+      new Tuple3<>(3L, 4L, 0.1),
+      new Tuple3<>(4L, 5L, 0.9)));
 
     PowerIterationClustering pic = new PowerIterationClustering()
       .setK(2)

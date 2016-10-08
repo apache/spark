@@ -22,9 +22,13 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import scala.collection.JavaConverters._
 import scala.util.Failure
 
-import org.apache.spark.Logging
+import org.apache.commons.lang3.SerializationUtils
+
+import org.apache.spark.ExecutorAllocationClient
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{PairRDDFunctions, RDD}
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.api.python.PythonDStream
 import org.apache.spark.streaming.ui.UIUtils
 import org.apache.spark.util.{EventLoop, ThreadUtils}
 
@@ -57,6 +61,8 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   // A tracker to track all the input stream information as well as processed record number
   var inputInfoTracker: InputInfoTracker = null
 
+  private var executorAllocationManager: Option[ExecutorAllocationManager] = None
+
   private var eventLoop: EventLoop[JobSchedulerEvent] = null
 
   def start(): Unit = synchronized {
@@ -79,8 +85,22 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     listenerBus.start()
     receiverTracker = new ReceiverTracker(ssc)
     inputInfoTracker = new InputInfoTracker(ssc)
+
+    val executorAllocClient: ExecutorAllocationClient = ssc.sparkContext.schedulerBackend match {
+      case b: ExecutorAllocationClient => b.asInstanceOf[ExecutorAllocationClient]
+      case _ => null
+    }
+
+    executorAllocationManager = ExecutorAllocationManager.createIfEnabled(
+      executorAllocClient,
+      receiverTracker,
+      ssc.conf,
+      ssc.graph.batchDuration.milliseconds,
+      clock)
+    executorAllocationManager.foreach(ssc.addStreamingListener)
     receiverTracker.start()
     jobGenerator.start()
+    executorAllocationManager.foreach(_.start())
     logInfo("Started JobScheduler")
   }
 
@@ -91,6 +111,10 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     if (receiverTracker != null) {
       // First, stop receiving
       receiverTracker.stop(processAllReceivedData)
+    }
+
+    if (executorAllocationManager != null) {
+      executorAllocationManager.foreach(_.stop())
     }
 
     // Second, stop generating jobs. If it has to process all received data,
@@ -194,13 +218,16 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   private def handleError(msg: String, e: Throwable) {
     logError(msg, e)
     ssc.waiter.notifyError(e)
+    PythonDStream.stopStreamingContextIfPythonProcessIsDead(e)
   }
 
   private class JobHandler(job: Job) extends Runnable with Logging {
     import JobScheduler._
 
     def run() {
+      val oldProps = ssc.sparkContext.getLocalProperties
       try {
+        ssc.sparkContext.setLocalProperties(SerializationUtils.clone(ssc.savedProperties.get()))
         val formattedTime = UIUtils.formatBatchTime(
           job.time.milliseconds, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
         val batchUrl = s"/streaming/batch/?id=${job.time.milliseconds}"
@@ -234,8 +261,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
           // JobScheduler has been stopped.
         }
       } finally {
-        ssc.sc.setLocalProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, null)
-        ssc.sc.setLocalProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, null)
+        ssc.sparkContext.setLocalProperties(oldProps)
       }
     }
   }

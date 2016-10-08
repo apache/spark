@@ -19,15 +19,17 @@ package org.apache.spark.scheduler
 
 import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
+import java.util.Properties
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{Accumulator, SparkEnv, TaskContext, TaskContextImpl}
+import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
+import org.apache.spark.util._
 
 /**
  * A unit of execution. We have two kinds of Task's in Spark:
@@ -43,15 +45,24 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
  * @param stageId id of the stage this task belongs to
  * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
- * @param initialAccumulators initial set of accumulators to be used in this task for tracking
- *                            internal metrics. Other accumulators will be registered later when
- *                            they are deserialized on the executors.
+ * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
+ * @param localProperties copy of thread-local properties set by the user on the driver side.
+ *
+ * The parameters below are optional:
+ * @param jobId id of the job this task belongs to
+ * @param appId id of the app this task belongs to
+ * @param appAttemptId attempt id of the app this task belongs to
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
-    val initialAccumulators: Seq[Accumulator[_]]) extends Serializable {
+    // The default value is only used in tests.
+    val metrics: TaskMetrics = TaskMetrics.registered,
+    @transient var localProperties: Properties = new Properties,
+    val jobId: Option[Int] = None,
+    val appId: Option[String] = None,
+    val appAttemptId: Option[String] = None) extends Serializable {
 
   /**
    * Called by [[org.apache.spark.executor.Executor]] to run this task.
@@ -71,26 +82,39 @@ private[spark] abstract class Task[T](
       taskAttemptId,
       attemptNumber,
       taskMemoryManager,
+      localProperties,
       metricsSystem,
-      initialAccumulators)
+      metrics)
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
+
     if (_killed) {
       kill(interruptThread = false)
     }
+
+    new CallerContext("TASK", appId, appAttemptId, jobId, Option(stageId), Option(stageAttemptId),
+      Option(taskAttemptId), Option(attemptNumber)).setCurrentContext()
+
     try {
       runTask(context)
-    } catch { case e: Throwable =>
-      // Catch all errors; run task failure callbacks, and rethrow the exception.
-      context.markTaskFailed(e)
-      throw e
+    } catch {
+      case e: Throwable =>
+        // Catch all errors; run task failure callbacks, and rethrow the exception.
+        try {
+          context.markTaskFailed(e)
+        } catch {
+          case t: Throwable =>
+            e.addSuppressed(t)
+        }
+        throw e
     } finally {
       // Call the task completion callbacks.
       context.markTaskCompleted()
       try {
         Utils.tryLogNonFatalError {
           // Release memory used by this thread for unrolling blocks
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask()
+          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
+          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.OFF_HEAP)
           // Notify any tasks waiting for execution memory to be freed to wake up and try to
           // acquire memory again. This makes impossible the scenario where a task sleeps forever
           // because there are no other tasks left to notify it. Since this is safe to do but may
@@ -117,8 +141,6 @@ private[spark] abstract class Task[T](
   // Map output tracker epoch. Will be set by TaskScheduler.
   var epoch: Long = -1
 
-  var metrics: Option[TaskMetrics] = None
-
   // Task context, to be initialized in run().
   @transient protected var context: TaskContextImpl = _
 
@@ -130,6 +152,7 @@ private[spark] abstract class Task[T](
   @volatile @transient private var _killed = false
 
   protected var _executorDeserializeTime: Long = 0
+  protected var _executorDeserializeCpuTime: Long = 0
 
   /**
    * Whether the task has been killed.
@@ -140,16 +163,24 @@ private[spark] abstract class Task[T](
    * Returns the amount of time spent deserializing the RDD and function to be run.
    */
   def executorDeserializeTime: Long = _executorDeserializeTime
+  def executorDeserializeCpuTime: Long = _executorDeserializeCpuTime
 
   /**
    * Collect the latest values of accumulators used in this task. If the task failed,
    * filter out the accumulators whose values should not be included on failures.
    */
-  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulableInfo] = {
+  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulatorV2[_, _]] = {
     if (context != null) {
-      context.taskMetrics.accumulatorUpdates().filter { a => !taskFailed || a.countFailedValues }
+      context.taskMetrics.internalAccums.filter { a =>
+        // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
+        // value will be updated at driver side.
+        // Note: internal accumulators representing task metrics always count failed values
+        !a.isZero || a.name == Some(InternalAccumulator.RESULT_SIZE)
+      // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not filter
+      // them out.
+      } ++ context.taskMetrics.externalAccums.filter(a => !taskFailed || a.countFailedValues)
     } else {
-      Seq.empty[AccumulableInfo]
+      Seq.empty
     }
   }
 
@@ -183,8 +214,8 @@ private[spark] object Task {
    */
   def serializeWithDependencies(
       task: Task[_],
-      currentFiles: HashMap[String, Long],
-      currentJars: HashMap[String, Long],
+      currentFiles: mutable.Map[String, Long],
+      currentJars: mutable.Map[String, Long],
       serializer: SerializerInstance)
     : ByteBuffer = {
 
@@ -205,10 +236,16 @@ private[spark] object Task {
       dataOut.writeLong(timestamp)
     }
 
+    // Write the task properties separately so it is available before full task deserialization.
+    val propBytes = Utils.serialize(task.localProperties)
+    dataOut.writeInt(propBytes.length)
+    dataOut.write(propBytes)
+
     // Write the task itself and finish
     dataOut.flush()
     val taskBytes = serializer.serialize(task)
     Utils.writeByteBuffer(taskBytes, out)
+    out.close()
     out.toByteBuffer
   }
 
@@ -217,10 +254,10 @@ private[spark] object Task {
    * and return the task itself as a serialized ByteBuffer. The caller can then update its
    * ClassLoaders and deserialize the task.
    *
-   * @return (taskFiles, taskJars, taskBytes)
+   * @return (taskFiles, taskJars, taskProps, taskBytes)
    */
   def deserializeWithDependencies(serializedTask: ByteBuffer)
-    : (HashMap[String, Long], HashMap[String, Long], ByteBuffer) = {
+    : (HashMap[String, Long], HashMap[String, Long], Properties, ByteBuffer) = {
 
     val in = new ByteBufferInputStream(serializedTask)
     val dataIn = new DataInputStream(in)
@@ -239,8 +276,13 @@ private[spark] object Task {
       taskJars(dataIn.readUTF()) = dataIn.readLong()
     }
 
+    val propLength = dataIn.readInt()
+    val propBytes = new Array[Byte](propLength)
+    dataIn.readFully(propBytes, 0, propLength)
+    val taskProps = Utils.deserialize[Properties](propBytes)
+
     // Create a sub-buffer for the rest of the data, which is the serialized Task object
     val subBuffer = serializedTask.slice()  // ByteBufferInputStream will have read just up to task
-    (taskFiles, taskJars, subBuffer)
+    (taskFiles, taskJars, taskProps, subBuffer)
   }
 }

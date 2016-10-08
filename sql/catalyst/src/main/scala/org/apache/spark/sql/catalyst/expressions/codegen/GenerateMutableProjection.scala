@@ -24,12 +24,12 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 abstract class BaseMutableProjection extends MutableProjection
 
 /**
- * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
+ * Generates byte code that produces a [[InternalRow]] object that can update itself based on a new
  * input [[InternalRow]] for a fixed set of [[Expression Expressions]].
  * It exposes a `target` method, which is used to set the row that will be updated.
- * The internal [[MutableRow]] object created internally is used only when `target` is not used.
+ * The internal [[InternalRow]] object created internally is used only when `target` is not used.
  */
-object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
+object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableProjection] {
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
@@ -40,17 +40,17 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
   def generate(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute],
-      useSubexprElimination: Boolean): (() => MutableProjection) = {
+      useSubexprElimination: Boolean): MutableProjection = {
     create(canonicalize(bind(expressions, inputSchema)), useSubexprElimination)
   }
 
-  protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
+  protected def create(expressions: Seq[Expression]): MutableProjection = {
     create(expressions, false)
   }
 
   private def create(
       expressions: Seq[Expression],
-      useSubexprElimination: Boolean): (() => MutableProjection) = {
+      useSubexprElimination: Boolean): MutableProjection = {
     val ctx = newCodeGenContext()
     val (validExpr, index) = expressions.zipWithIndex.filter {
       case (NoOp, _) => false
@@ -94,7 +94,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
     val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)
     val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
 
-    val code = s"""
+    val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
         return new SpecificMutableProjection(references);
       }
@@ -102,9 +102,8 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       class SpecificMutableProjection extends ${classOf[BaseMutableProjection].getName} {
 
         private Object[] references;
-        private MutableRow mutableRow;
+        private InternalRow mutableRow;
         ${ctx.declareMutableStates()}
-        ${ctx.declareAddedFunctions()}
 
         public SpecificMutableProjection(Object[] references) {
           this.references = references;
@@ -112,7 +111,9 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           ${ctx.initMutableStates()}
         }
 
-        public ${classOf[BaseMutableProjection].getName} target(MutableRow row) {
+        ${ctx.declareAddedFunctions()}
+
+        public ${classOf[BaseMutableProjection].getName} target(InternalRow row) {
           mutableRow = row;
           return this;
         }
@@ -133,11 +134,11 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       }
     """
 
+    val code = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = CodeGenerator.compile(code)
-    () => {
-      c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
-    }
+    c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
   }
 }

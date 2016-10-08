@@ -14,166 +14,187 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.types._
+import scala.collection.mutable.StringBuilder
 
+import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.misc.Interval
+import org.antlr.v4.runtime.tree.TerminalNode
+
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 
 /**
- * A collection of utility methods and patterns for parsing query texts.
+ * A collection of utility methods for use during the parsing process.
  */
-// TODO: merge with ParseUtils
 object ParserUtils {
+  /** Get the command which created the token. */
+  def command(ctx: ParserRuleContext): String = {
+    val stream = ctx.getStart.getInputStream
+    stream.getText(Interval.of(0, stream.size()))
+  }
 
-  object Token {
-    // Match on (text, children)
-    def unapply(node: ASTNode): Some[(String, List[ASTNode])] = {
-      CurrentOrigin.setPosition(node.line, node.positionInLine)
-      node.pattern
+  def operationNotAllowed(message: String, ctx: ParserRuleContext): Nothing = {
+    throw new ParseException(s"Operation not allowed: $message", ctx)
+  }
+
+  /** Check if duplicate keys exist in a set of key-value pairs. */
+  def checkDuplicateKeys[T](keyPairs: Seq[(String, T)], ctx: ParserRuleContext): Unit = {
+    keyPairs.groupBy(_._1).filter(_._2.size > 1).foreach { case (key, _) =>
+      throw new ParseException(s"Found duplicate keys '$key'.", ctx)
     }
   }
 
-  private val escapedIdentifier = "`(.+)`".r
-  private val doubleQuotedString = "\"([^\"]+)\"".r
-  private val singleQuotedString = "'([^']+)'".r
+  /** Get the code that creates the given node. */
+  def source(ctx: ParserRuleContext): String = {
+    val stream = ctx.getStart.getInputStream
+    stream.getText(Interval.of(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex))
+  }
 
-  // Token patterns
-  val COUNT = "(?i)COUNT".r
-  val SUM = "(?i)SUM".r
-  val AND = "(?i)AND".r
-  val OR = "(?i)OR".r
-  val NOT = "(?i)NOT".r
-  val TRUE = "(?i)TRUE".r
-  val FALSE = "(?i)FALSE".r
-  val LIKE = "(?i)LIKE".r
-  val RLIKE = "(?i)RLIKE".r
-  val REGEXP = "(?i)REGEXP".r
-  val IN = "(?i)IN".r
-  val DIV = "(?i)DIV".r
-  val BETWEEN = "(?i)BETWEEN".r
-  val WHEN = "(?i)WHEN".r
-  val CASE = "(?i)CASE".r
-  val INTEGRAL = "[+-]?\\d+".r
-  val DECIMAL = "[+-]?((\\d+(\\.\\d*)?)|(\\.\\d+))".r
+  /** Get all the text which comes after the given rule. */
+  def remainder(ctx: ParserRuleContext): String = remainder(ctx.getStop)
 
-  /**
-   * Strip quotes, if any, from the string.
-   */
-  def unquoteString(str: String): String = {
-    str match {
-      case singleQuotedString(s) => s
-      case doubleQuotedString(s) => s
-      case other => other
+  /** Get all the text which comes after the given token. */
+  def remainder(token: Token): String = {
+    val stream = token.getInputStream
+    val interval = Interval.of(token.getStopIndex + 1, stream.size())
+    stream.getText(interval)
+  }
+
+  /** Convert a string token into a string. */
+  def string(token: Token): String = unescapeSQLString(token.getText)
+
+  /** Convert a string node into a string. */
+  def string(node: TerminalNode): String = unescapeSQLString(node.getText)
+
+  /** Get the origin (line and position) of the token. */
+  def position(token: Token): Origin = {
+    val opt = Option(token)
+    Origin(opt.map(_.getLine), opt.map(_.getCharPositionInLine))
+  }
+
+  /** Validate the condition. If it doesn't throw a parse exception. */
+  def validate(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
+    if (!f) {
+      throw new ParseException(message, ctx)
     }
-  }
-
-  /**
-   * Strip backticks, if any, from the string.
-   */
-  def cleanIdentifier(ident: String): String = {
-    ident match {
-      case escapedIdentifier(i) => i
-      case plainIdent => plainIdent
-    }
-  }
-
-  def getClauses(
-      clauseNames: Seq[String],
-      nodeList: Seq[ASTNode]): Seq[Option[ASTNode]] = {
-    var remainingNodes = nodeList
-    val clauses = clauseNames.map { clauseName =>
-      val (matches, nonMatches) = remainingNodes.partition(_.text.toUpperCase == clauseName)
-      remainingNodes = nonMatches ++ (if (matches.nonEmpty) matches.tail else Nil)
-      matches.headOption
-    }
-
-    if (remainingNodes.nonEmpty) {
-      sys.error(
-        s"""Unhandled clauses: ${remainingNodes.map(_.treeString).mkString("\n")}.
-            |You are likely trying to use an unsupported Hive feature."""".stripMargin)
-    }
-    clauses
-  }
-
-  def getClause(clauseName: String, nodeList: Seq[ASTNode]): ASTNode = {
-    getClauseOption(clauseName, nodeList).getOrElse(sys.error(
-      s"Expected clause $clauseName missing from ${nodeList.map(_.treeString).mkString("\n")}"))
-  }
-
-  def getClauseOption(clauseName: String, nodeList: Seq[ASTNode]): Option[ASTNode] = {
-    nodeList.filter { case ast: ASTNode => ast.text == clauseName } match {
-      case Seq(oneMatch) => Some(oneMatch)
-      case Seq() => None
-      case _ => sys.error(s"Found multiple instances of clause $clauseName")
-    }
-  }
-
-  def extractTableIdent(tableNameParts: ASTNode): TableIdentifier = {
-    tableNameParts.children.map {
-      case Token(part, Nil) => cleanIdentifier(part)
-    } match {
-      case Seq(tableOnly) => TableIdentifier(tableOnly)
-      case Seq(databaseName, table) => TableIdentifier(table, Some(databaseName))
-      case other => sys.error("Hive only supports tables names like 'tableName' " +
-        s"or 'databaseName.tableName', found '$other'")
-    }
-  }
-
-  def nodeToDataType(node: ASTNode): DataType = node match {
-    case Token("TOK_DECIMAL", precision :: scale :: Nil) =>
-      DecimalType(precision.text.toInt, scale.text.toInt)
-    case Token("TOK_DECIMAL", precision :: Nil) =>
-      DecimalType(precision.text.toInt, 0)
-    case Token("TOK_DECIMAL", Nil) => DecimalType.USER_DEFAULT
-    case Token("TOK_BIGINT", Nil) => LongType
-    case Token("TOK_INT", Nil) => IntegerType
-    case Token("TOK_TINYINT", Nil) => ByteType
-    case Token("TOK_SMALLINT", Nil) => ShortType
-    case Token("TOK_BOOLEAN", Nil) => BooleanType
-    case Token("TOK_STRING", Nil) => StringType
-    case Token("TOK_VARCHAR", Token(_, Nil) :: Nil) => StringType
-    case Token("TOK_CHAR", Token(_, Nil) :: Nil) => StringType
-    case Token("TOK_FLOAT", Nil) => FloatType
-    case Token("TOK_DOUBLE", Nil) => DoubleType
-    case Token("TOK_DATE", Nil) => DateType
-    case Token("TOK_TIMESTAMP", Nil) => TimestampType
-    case Token("TOK_BINARY", Nil) => BinaryType
-    case Token("TOK_LIST", elementType :: Nil) => ArrayType(nodeToDataType(elementType))
-    case Token("TOK_STRUCT", Token("TOK_TABCOLLIST", fields) :: Nil) =>
-      StructType(fields.map(nodeToStructField))
-    case Token("TOK_MAP", keyType :: valueType :: Nil) =>
-      MapType(nodeToDataType(keyType), nodeToDataType(valueType))
-    case _ =>
-      noParseRule("DataType", node)
-  }
-
-  def nodeToStructField(node: ASTNode): StructField = node match {
-    case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: Nil) =>
-      StructField(cleanIdentifier(fieldName), nodeToDataType(dataType), nullable = true)
-    case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: comment :: Nil) =>
-      val meta = new MetadataBuilder().putString("comment", unquoteString(comment.text)).build()
-      StructField(cleanIdentifier(fieldName), nodeToDataType(dataType), nullable = true, meta)
-    case _ =>
-      noParseRule("StructField", node)
   }
 
   /**
-   * Throw an exception because we cannot parse the given node for some unexpected reason.
+   * Register the origin of the context. Any TreeNode created in the closure will be assigned the
+   * registered origin. This method restores the previously set origin after completion of the
+   * closure.
    */
-  def parseFailed(msg: String, node: ASTNode): Nothing = {
-    throw new AnalysisException(s"$msg: '${node.source}")
+  def withOrigin[T](ctx: ParserRuleContext)(f: => T): T = {
+    val current = CurrentOrigin.get
+    CurrentOrigin.set(position(ctx.getStart))
+    try {
+      f
+    } finally {
+      CurrentOrigin.set(current)
+    }
   }
 
-  /**
-   * Throw an exception because there are no rules to parse the node.
-   */
-  def noParseRule(msg: String, node: ASTNode): Nothing = {
-    throw new NotImplementedError(
-      s"[$msg]: No parse rules for ASTNode type: ${node.tokenType}, tree:\n${node.treeString}")
+  /** Unescape baskslash-escaped string enclosed by quotes. */
+  def unescapeSQLString(b: String): String = {
+    var enclosure: Character = null
+    val sb = new StringBuilder(b.length())
+
+    def appendEscapedChar(n: Char) {
+      n match {
+        case '0' => sb.append('\u0000')
+        case '\'' => sb.append('\'')
+        case '"' => sb.append('\"')
+        case 'b' => sb.append('\b')
+        case 'n' => sb.append('\n')
+        case 'r' => sb.append('\r')
+        case 't' => sb.append('\t')
+        case 'Z' => sb.append('\u001A')
+        case '\\' => sb.append('\\')
+        // The following 2 lines are exactly what MySQL does TODO: why do we do this?
+        case '%' => sb.append("\\%")
+        case '_' => sb.append("\\_")
+        case _ => sb.append(n)
+      }
+    }
+
+    var i = 0
+    val strLength = b.length
+    while (i < strLength) {
+      val currentChar = b.charAt(i)
+      if (enclosure == null) {
+        if (currentChar == '\'' || currentChar == '\"') {
+          enclosure = currentChar
+        }
+      } else if (enclosure == currentChar) {
+        enclosure = null
+      } else if (currentChar == '\\') {
+
+        if ((i + 6 < strLength) && b.charAt(i + 1) == 'u') {
+          // \u0000 style character literals.
+
+          val base = i + 2
+          val code = (0 until 4).foldLeft(0) { (mid, j) =>
+            val digit = Character.digit(b.charAt(j + base), 16)
+            (mid << 4) + digit
+          }
+          sb.append(code.asInstanceOf[Char])
+          i += 5
+        } else if (i + 4 < strLength) {
+          // \000 style character literals.
+
+          val i1 = b.charAt(i + 1)
+          val i2 = b.charAt(i + 2)
+          val i3 = b.charAt(i + 3)
+
+          if ((i1 >= '0' && i1 <= '1') && (i2 >= '0' && i2 <= '7') && (i3 >= '0' && i3 <= '7')) {
+            val tmp = ((i3 - '0') + ((i2 - '0') << 3) + ((i1 - '0') << 6)).asInstanceOf[Char]
+            sb.append(tmp)
+            i += 3
+          } else {
+            appendEscapedChar(i1)
+            i += 1
+          }
+        } else if (i + 2 < strLength) {
+          // escaped character literals.
+          val n = b.charAt(i + 1)
+          appendEscapedChar(n)
+          i += 1
+        }
+      } else {
+        // non-escaped character literals.
+        sb.append(currentChar)
+      }
+      i += 1
+    }
+    sb.toString()
   }
 
+  /** Some syntactic sugar which makes it easier to work with optional clauses for LogicalPlans. */
+  implicit class EnhancedLogicalPlan(val plan: LogicalPlan) extends AnyVal {
+    /**
+     * Create a plan using the block of code when the given context exists. Otherwise return the
+     * original plan.
+     */
+    def optional(ctx: AnyRef)(f: => LogicalPlan): LogicalPlan = {
+      if (ctx != null) {
+        f
+      } else {
+        plan
+      }
+    }
+
+    /**
+     * Map a [[LogicalPlan]] to another [[LogicalPlan]] if the passed context exists using the
+     * passed function. The original plan is returned when the context does not exist.
+     */
+    def optionalMap[C](ctx: C)(f: (C, LogicalPlan) => LogicalPlan): LogicalPlan = {
+      if (ctx != null) {
+        f(ctx, plan)
+      } else {
+        plan
+      }
+    }
+  }
 }

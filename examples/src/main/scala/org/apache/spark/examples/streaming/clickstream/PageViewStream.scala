@@ -22,16 +22,17 @@ import org.apache.spark.examples.streaming.StreamingExamples
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 // scalastyle:off
-/** Analyses a streaming dataset of web page views. This class demonstrates several types of
-  * operators available in Spark streaming.
-  *
-  * This should be used in tandem with PageViewStream.scala. Example:
-  * To run the generator
-  * `$ bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewGenerator 44444 10`
-  * To process the generated stream
-  * `$ bin/run-example \
-  *    org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444`
-  */
+/**
+ * Analyses a streaming dataset of web page views. This class demonstrates several types of
+ * operators available in Spark streaming.
+ *
+ * This should be used in tandem with PageViewStream.scala. Example:
+ * To run the generator
+ * `$ bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewGenerator 44444 10`
+ * To process the generated stream
+ * `$ bin/run-example \
+ *    org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444`
+ */
 // scalastyle:on
 object PageViewStream {
   def main(args: Array[String]) {

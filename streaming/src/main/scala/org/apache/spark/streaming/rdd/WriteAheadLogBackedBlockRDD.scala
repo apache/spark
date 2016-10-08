@@ -28,11 +28,13 @@ import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.util._
 import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Partition class for [[org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD]].
  * It contains information about the id of the blocks having this partition's data and
  * the corresponding record handle in the write ahead log that backs the partition.
+ *
  * @param index index of the partition
  * @param blockId id of the block having the partition data
  * @param isBlockIdValid Whether the block Ids are valid (i.e., the blocks are present in the Spark
@@ -58,7 +60,6 @@ class WriteAheadLogBackedBlockRDDPartition(
  * element in isBlockIdValid to false. This is a performance optimization which does not affect
  * correctness, and it can be used in situations where it is known that the block
  * does not exist in the Spark executors (e.g. after a failed driver is restarted).
- *
  *
  * @param sc SparkContext
  * @param _blockIds Ids of the blocks that contains this RDD's data
@@ -114,11 +115,12 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
     assertValid()
     val hadoopConf = broadcastedHadoopConf.value
     val blockManager = SparkEnv.get.blockManager
+    val serializerManager = SparkEnv.get.serializerManager
     val partition = split.asInstanceOf[WriteAheadLogBackedBlockRDDPartition]
     val blockId = partition.blockId
 
     def getBlockFromBlockManager(): Option[Iterator[T]] = {
-      blockManager.get(blockId).map(_.data.asInstanceOf[Iterator[T]])
+      blockManager.get[T](blockId).map(_.data.asInstanceOf[Iterator[T]])
     }
 
     def getBlockFromWriteAheadLog(): Iterator[T] = {
@@ -156,11 +158,14 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
       logInfo(s"Read partition data of $this from write ahead log, record handle " +
         partition.walRecordHandle)
       if (storeInBlockManager) {
-        blockManager.putBytes(blockId, dataRead, storageLevel)
+        blockManager.putBytes(blockId, new ChunkedByteBuffer(dataRead.duplicate()), storageLevel)
         logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
         dataRead.rewind()
       }
-      blockManager.dataDeserialize(blockId, dataRead).asInstanceOf[Iterator[T]]
+      serializerManager
+        .dataDeserializeStream(
+          blockId, new ChunkedByteBuffer(dataRead).toInputStream())(elementClassTag)
+        .asInstanceOf[Iterator[T]]
     }
 
     if (partition.isBlockIdValid) {

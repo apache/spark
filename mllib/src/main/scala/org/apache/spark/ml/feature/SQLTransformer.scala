@@ -17,16 +17,14 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: Experimental ::
  * Implements the transformations which are defined by SQL statement.
  * Currently we only support SQL syntax like 'SELECT ... FROM __THIS__ ...'
  * where '__THIS__' represents the underlying table of the input dataset.
@@ -38,9 +36,8 @@ import org.apache.spark.sql.types.StructType
  *  - SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5
  *  - SELECT a, b, SUM(c) AS c_sum FROM __THIS__ GROUP BY a, b
  */
-@Experimental
 @Since("1.6.0")
-class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transformer
+class SQLTransformer @Since("1.6.0") (@Since("1.6.0") override val uid: String) extends Transformer
   with DefaultParamsWritable {
 
   @Since("1.6.0")
@@ -48,6 +45,7 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
 
   /**
    * SQL statement parameter. The statement is provided in string form.
+   *
    * @group param
    */
   @Since("1.6.0")
@@ -63,23 +61,25 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
 
   private val tableIdentifier: String = "__THIS__"
 
-  @Since("1.6.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val tableName = Identifiable.randomUID(uid)
-    dataset.registerTempTable(tableName)
+    dataset.createOrReplaceTempView(tableName)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
-    val outputDF = dataset.sqlContext.sql(realStatement)
-    outputDF
+    dataset.sparkSession.sql(realStatement)
   }
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    val sc = SparkContext.getOrCreate()
-    val sqlContext = SQLContext.getOrCreate(sc)
-    val dummyRDD = sc.parallelize(Seq(Row.empty))
-    val dummyDF = sqlContext.createDataFrame(dummyRDD, schema)
-    dummyDF.registerTempTable(tableIdentifier)
-    val outputSchema = sqlContext.sql($(statement)).schema
+    val spark = SparkSession.builder().getOrCreate()
+    val dummyRDD = spark.sparkContext.parallelize(Seq(Row.empty))
+    val dummyDF = spark.createDataFrame(dummyRDD, schema)
+    val tableName = Identifiable.randomUID(uid)
+    val realStatement = $(statement).replace(tableIdentifier, tableName)
+    dummyDF.createOrReplaceTempView(tableName)
+    val outputSchema = spark.sql(realStatement).schema
+    spark.catalog.dropTempView(tableName)
     outputSchema
   }
 

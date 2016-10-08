@@ -81,8 +81,8 @@ class StreamingLinearRegressionWithSGD private[mllib] (
   }
 
   /**
-    * Set the number of iterations of gradient descent to run per update. Default: 50.
-    */
+   * Set the number of iterations of gradient descent to run per update. Default: 50.
+   */
   @Since("1.1.0")
   def setNumIterations(numIterations: Int): this.type = {
     this.algorithm.optimizer.setNumIterations(numIterations)

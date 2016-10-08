@@ -59,8 +59,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext
   with ResetSystemProperties {
 
-  private val logDir = new File("src/test/resources/spark-events")
-  private val expRoot = new File("src/test/resources/HistoryServerExpectations/")
+  private val logDir = getTestResourcePath("spark-events")
+  private val expRoot = getTestResourceFile("HistoryServerExpectations")
 
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null
@@ -68,7 +68,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
   def init(): Unit = {
     val conf = new SparkConf()
-      .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
+      .set("spark.history.fs.logDirectory", logDir)
       .set("spark.history.fs.update.interval", "0")
       .set("spark.testing", "true")
     provider = new FsHistoryProvider(conf)
@@ -100,6 +100,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "minDate app list json" -> "applications?minDate=2015-02-10",
     "maxDate app list json" -> "applications?maxDate=2015-02-10",
     "maxDate2 app list json" -> "applications?maxDate=2015-02-03T16:42:40.000GMT",
+    "limit app list json" -> "applications?limit=3",
     "one app json" -> "applications/local-1422981780767",
     "one app multi-attempt json" -> "applications/local-1426533911241",
     "job list json" -> "applications/local-1422981780767/jobs",
@@ -140,8 +141,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "stage task list from multi-attempt app json(2)" ->
       "applications/local-1426533911241/2/stages/0/0/taskList",
 
-    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
-    "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
+    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd"
+    // Todo: enable this test when logging the even of onBlockUpdated. See: SPARK-13845
+    // "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )
 
   // run a bunch of characterization tests -- just verify the behavior is the same as what is saved
@@ -152,32 +154,36 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       code should be (HttpServletResponse.SC_OK)
       jsonOpt should be ('defined)
       errOpt should be (None)
-      val jsonOrg = jsonOpt.get
-
-      // SPARK-10873 added the lastUpdated field for each application's attempt,
-      // the REST API returns the last modified time of EVENT LOG file for this field.
-      // It is not applicable to hard-code this dynamic field in a static expected file,
-      // so here we skip checking the lastUpdated field's value (setting it as "").
-      val json = if (jsonOrg.indexOf("lastUpdated") >= 0) {
-        val subStrings = jsonOrg.split(",")
-        for (i <- subStrings.indices) {
-          if (subStrings(i).indexOf("lastUpdated") >= 0) {
-            subStrings(i) = "\"lastUpdated\":\"\""
-          }
-        }
-        subStrings.mkString(",")
-      } else {
-        jsonOrg
-      }
 
       val exp = IOUtils.toString(new FileInputStream(
         new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")))
       // compare the ASTs so formatting differences don't cause failures
       import org.json4s._
       import org.json4s.jackson.JsonMethods._
-      val jsonAst = parse(json)
+      val jsonAst = parse(clearLastUpdated(jsonOpt.get))
       val expAst = parse(exp)
       assertValidDataInJson(jsonAst, expAst)
+    }
+  }
+
+  // SPARK-10873 added the lastUpdated field for each application's attempt,
+  // the REST API returns the last modified time of EVENT LOG file for this field.
+  // It is not applicable to hard-code this dynamic field in a static expected file,
+  // so here we skip checking the lastUpdated field's value (setting it as "").
+  private def clearLastUpdated(json: String): String = {
+    if (json.indexOf("lastUpdated") >= 0) {
+      val subStrings = json.split(",")
+      for (i <- subStrings.indices) {
+        if (subStrings(i).indexOf("lastUpdatedEpoch") >= 0) {
+          subStrings(i) = subStrings(i).replaceAll("(\\d+)", "0")
+        } else if (subStrings(i).indexOf("lastUpdated") >= 0) {
+          val regex = "\"lastUpdated\"\\s*:\\s*\".*\"".r
+          subStrings(i) = regex.replaceAllIn(subStrings(i), "\"lastUpdated\" : \"\"")
+        }
+      }
+      subStrings.mkString(",")
+    } else {
+      json
     }
   }
 
@@ -441,7 +447,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
     }
     val jobcount = getNumJobs("/jobs")
-    assert(!provider.getListing().head.completed)
+    assert(!provider.getListing().next.completed)
 
     listApplications(false) should contain(appId)
 
@@ -449,7 +455,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     resetSparkContext()
     // check the app is now found as completed
     eventually(stdTimeout, stdInterval) {
-      assert(provider.getListing().head.completed,
+      assert(provider.getListing().next.completed,
         s"application never completed, server=$server\n")
     }
 
@@ -483,7 +489,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val json = getUrl(path)
     val file = new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")
     val out = new FileWriter(file)
-    out.write(json)
+    out.write(clearLastUpdated(json))
+    out.write('\n')
     out.close()
   }
 

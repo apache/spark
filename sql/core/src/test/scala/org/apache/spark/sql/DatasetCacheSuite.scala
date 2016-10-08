@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.language.postfixOps
-
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -39,7 +37,8 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
       2, 3, 4)
     // Drop the cache.
     cached.unpersist()
-    assert(!sqlContext.isCached(cached), "The Dataset should not be cached.")
+    assert(spark.sharedState.cacheManager.lookupCachedData(cached).isEmpty,
+      "The Dataset should not be cached.")
   }
 
   test("persist and then rebind right encoder when join 2 datasets") {
@@ -56,14 +55,16 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     assertCached(joined, 2)
 
     ds1.unpersist()
-    assert(!sqlContext.isCached(ds1), "The Dataset ds1 should not be cached.")
+    assert(spark.sharedState.cacheManager.lookupCachedData(ds1).isEmpty,
+      "The Dataset ds1 should not be cached.")
     ds2.unpersist()
-    assert(!sqlContext.isCached(ds2), "The Dataset ds2 should not be cached.")
+    assert(spark.sharedState.cacheManager.lookupCachedData(ds2).isEmpty,
+      "The Dataset ds2 should not be cached.")
   }
 
   test("persist and then groupBy columns asKey, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupByKey($"_1").keyAs[String]
+    val grouped = ds.groupByKey(_._1)
     val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
     agged.persist()
 
@@ -73,8 +74,10 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     assertCached(agged.filter(_._1 == "b"))
 
     ds.unpersist()
-    assert(!sqlContext.isCached(ds), "The Dataset ds should not be cached.")
+    assert(spark.sharedState.cacheManager.lookupCachedData(ds).isEmpty,
+      "The Dataset ds should not be cached.")
     agged.unpersist()
-    assert(!sqlContext.isCached(agged), "The Dataset agged should not be cached.")
+    assert(spark.sharedState.cacheManager.lookupCachedData(agged).isEmpty,
+      "The Dataset agged should not be cached.")
   }
 }

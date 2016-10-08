@@ -36,6 +36,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.QueryTest$;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.test.TestHive$;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
@@ -46,7 +47,7 @@ import org.apache.spark.util.Utils;
 
 public class JavaMetastoreDataSourcesSuite {
   private transient JavaSparkContext sc;
-  private transient HiveContext sqlContext;
+  private transient SQLContext sqlContext;
 
   File path;
   Path hiveManagedPath;
@@ -70,12 +71,11 @@ public class JavaMetastoreDataSourcesSuite {
     if (path.exists()) {
       path.delete();
     }
-    hiveManagedPath = new Path(sqlContext.sessionState().catalog().hiveDefaultTableFilePath(
-      new TableIdentifier("javaSavedTable")));
+    HiveSessionCatalog catalog = (HiveSessionCatalog) sqlContext.sessionState().catalog();
+    hiveManagedPath = new Path(
+      catalog.hiveDefaultTableFilePath(new TableIdentifier("javaSavedTable")));
     fs = hiveManagedPath.getFileSystem(sc.hadoopConfiguration());
-    if (fs.exists(hiveManagedPath)){
-      fs.delete(hiveManagedPath, true);
-    }
+    fs.delete(hiveManagedPath, true);
 
     List<String> jsonObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
@@ -83,7 +83,7 @@ public class JavaMetastoreDataSourcesSuite {
     }
     JavaRDD<String> rdd = sc.parallelize(jsonObjects);
     df = sqlContext.read().json(rdd);
-    df.registerTempTable("jsonTable");
+    df.createOrReplaceTempView("jsonTable");
   }
 
   @After

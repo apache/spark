@@ -16,12 +16,11 @@
  */
 package org.apache.spark.status.api.v1
 
-import java.util.{Arrays, Date, List => JList}
+import java.util.{Date, List => JList}
 import javax.ws.rs.{DefaultValue, GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.deploy.history.ApplicationHistoryInfo
-import org.apache.spark.deploy.master.{ApplicationInfo => InternalApplicationInfo}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class ApplicationListResource(uiRoot: UIRoot) {
@@ -30,30 +29,24 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
   def appList(
       @QueryParam("status") status: JList[ApplicationStatus],
       @DefaultValue("2010-01-01") @QueryParam("minDate") minDate: SimpleDateParam,
-      @DefaultValue("3000-01-01") @QueryParam("maxDate") maxDate: SimpleDateParam)
+      @DefaultValue("3000-01-01") @QueryParam("maxDate") maxDate: SimpleDateParam,
+      @QueryParam("limit") limit: Integer)
   : Iterator[ApplicationInfo] = {
-    val allApps = uiRoot.getApplicationInfoList
-    val adjStatus = {
-      if (status.isEmpty) {
-        Arrays.asList(ApplicationStatus.values(): _*)
-      } else {
-        status
-      }
-    }
-    val includeCompleted = adjStatus.contains(ApplicationStatus.COMPLETED)
-    val includeRunning = adjStatus.contains(ApplicationStatus.RUNNING)
-    allApps.filter { app =>
+
+    val numApps = Option(limit).map(_.toInt).getOrElse(Integer.MAX_VALUE)
+    val includeCompleted = status.isEmpty || status.contains(ApplicationStatus.COMPLETED)
+    val includeRunning = status.isEmpty || status.contains(ApplicationStatus.RUNNING)
+
+    uiRoot.getApplicationInfoList.filter { app =>
       val anyRunning = app.attempts.exists(!_.completed)
-      // if any attempt is still running, we consider the app to also still be running
-      val statusOk = (!anyRunning && includeCompleted) ||
-        (anyRunning && includeRunning)
+      // if any attempt is still running, we consider the app to also still be running;
       // keep the app if *any* attempts fall in the right time window
-      val dateOk = app.attempts.exists { attempt =>
-        attempt.startTime.getTime >= minDate.timestamp &&
-          attempt.startTime.getTime <= maxDate.timestamp
+      ((!anyRunning && includeCompleted) || (anyRunning && includeRunning)) &&
+      app.attempts.exists { attempt =>
+        val start = attempt.startTime.getTime
+        start >= minDate.timestamp && start <= maxDate.timestamp
       }
-      statusOk && dateOk
-    }
+    }.take(numApps)
   }
 }
 
@@ -84,33 +77,4 @@ private[spark] object ApplicationsListResource {
       }
     )
   }
-
-  def convertApplicationInfo(
-      internal: InternalApplicationInfo,
-      completed: Boolean): ApplicationInfo = {
-    // standalone application info always has just one attempt
-    new ApplicationInfo(
-      id = internal.id,
-      name = internal.desc.name,
-      coresGranted = Some(internal.coresGranted),
-      maxCores = internal.desc.maxCores,
-      coresPerExecutor = internal.desc.coresPerExecutor,
-      memoryPerExecutorMB = Some(internal.desc.memoryPerExecutorMB),
-      attempts = Seq(new ApplicationAttemptInfo(
-        attemptId = None,
-        startTime = new Date(internal.startTime),
-        endTime = new Date(internal.endTime),
-        duration =
-          if (internal.endTime > 0) {
-            internal.endTime - internal.startTime
-          } else {
-            0
-          },
-        lastUpdated = new Date(internal.endTime),
-        sparkUser = internal.desc.user,
-        completed = completed
-      ))
-    )
-  }
-
 }

@@ -23,21 +23,21 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.{DescribeCommand => RunnableDescribeCommand, _}
-import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTableUsingAsSelect,
-  DescribeCommand}
+import org.apache.spark.sql.execution.command.ExecutedCommandExec
+import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
 
 private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
   self: SparkPlanner =>
 
-  val hiveContext: HiveContext
+  val sparkSession: SparkSession
 
   object Scripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.ScriptTransformation(input, script, output, child, schema: HiveScriptIOSchema) =>
-        ScriptTransformation(input, script, output, planLater(child), schema)(hiveContext) :: Nil
+      case logical.ScriptTransformation(input, script, output, child, ioschema) =>
+        val hiveIoSchema = HiveScriptIOSchema(ioschema)
+        ScriptTransformation(input, script, output, planLater(child), hiveIoSchema) :: Nil
       case _ => Nil
     }
   }
@@ -46,12 +46,32 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(
           table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
-        execution.InsertIntoHiveTable(
-          table, partition, planLater(child), overwrite, ifNotExists) :: Nil
-      case hive.InsertIntoHiveTable(
-          table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
-        execution.InsertIntoHiveTable(
-          table, partition, planLater(child), overwrite, ifNotExists) :: Nil
+        InsertIntoHiveTable(table, partition, planLater(child), overwrite, ifNotExists) :: Nil
+
+      case CreateTable(tableDesc, mode, Some(query)) if tableDesc.provider.get == "hive" =>
+        val newTableDesc = if (tableDesc.storage.serde.isEmpty) {
+          // add default serde
+          tableDesc.withNewStorage(
+            serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+        } else {
+          tableDesc
+        }
+
+        // Currently we will never hit this branch, as SQL string API can only use `Ignore` or
+        // `ErrorIfExists` mode, and `DataFrameWriter.saveAsTable` doesn't support hive serde
+        // tables yet.
+        if (mode == SaveMode.Append || mode == SaveMode.Overwrite) {
+          throw new AnalysisException(
+            "CTAS for hive serde tables does not support append or overwrite semantics.")
+        }
+
+        val dbName = tableDesc.identifier.database.getOrElse(sparkSession.catalog.currentDatabase)
+        val cmd = CreateHiveTableAsSelectCommand(
+          newTableDesc.copy(identifier = tableDesc.identifier.copy(database = Some(dbName))),
+          query,
+          mode == SaveMode.Ignore)
+        ExecutedCommandExec(cmd) :: Nil
+
       case _ => Nil
     }
   }
@@ -75,36 +95,9 @@ private[hive] trait HiveStrategies {
           projectList,
           otherPredicates,
           identity[Seq[Expression]],
-          HiveTableScan(_, relation, pruningPredicates)(hiveContext)) :: Nil
+          HiveTableScanExec(_, relation, pruningPredicates)(sparkSession)) :: Nil
       case _ =>
         Nil
-    }
-  }
-
-  object HiveDDLStrategy extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(
-        tableIdent, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
-        val cmd =
-          CreateMetastoreDataSource(
-            tableIdent, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)
-        ExecutedCommand(cmd) :: Nil
-
-      case c: CreateTableUsingAsSelect =>
-        val cmd = CreateMetastoreDataSourceAsSelect(c.tableIdent, c.provider, c.partitionColumns,
-          c.bucketSpec, c.mode, c.options, c.child)
-        ExecutedCommand(cmd) :: Nil
-
-      case _ => Nil
-    }
-  }
-
-  case class HiveCommandStrategy(context: HiveContext) extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case describe: DescribeCommand =>
-        ExecutedCommand(
-          DescribeHiveTableCommand(describe.table, describe.output, describe.isExtended)) :: Nil
-      case _ => Nil
     }
   }
 }

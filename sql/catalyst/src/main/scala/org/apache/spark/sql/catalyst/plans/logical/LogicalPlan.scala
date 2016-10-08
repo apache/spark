@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.types.StructType
 
 
@@ -41,6 +41,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * have already been analyzed, and can be reset by transformations.
    */
   def analyzed: Boolean = _analyzed
+
+  /** Returns true if this subtree contains any streaming data sources. */
+  def isStreaming: Boolean = children.exists(_.isStreaming == true)
 
   /**
    * Returns a copy of this node where `rule` has been recursively applied first to all of its
@@ -79,13 +82,13 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
-   * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
+   * cardinality is the product of all child plan's cardinality, i.e. applies in the case
    * of cartesian joins.
    *
    * [[LeafNode]]s must override this.
    */
   def statistics: Statistics = {
-    if (children.size == 0) {
+    if (children.isEmpty) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }
     Statistics(sizeInBytes = children.map(_.statistics.sizeInBytes).product)
@@ -124,7 +127,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def resolve(schema: StructType, resolver: Resolver): Seq[Attribute] = {
     schema.map { field =>
-      resolveQuoted(field.name, resolver).map {
+      resolve(field.name :: Nil, resolver).map {
         case a: AttributeReference => a
         case other => sys.error(s"can not handle nested schema yet...  plan $this")
       }.getOrElse {
@@ -177,7 +180,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
     assert(nameParts.length > 1)
-    if (attribute.qualifiers.exists(resolver(_, nameParts.head))) {
+    if (attribute.qualifier.exists(resolver(_, nameParts.head))) {
       // At least one qualifier matches. See if remaining parts match.
       val remainingParts = nameParts.tail
       resolveAsColumn(remainingParts, resolver, attribute)
@@ -262,13 +265,18 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
           s"Reference '$name' is ambiguous, could be: $referenceNames.")
     }
   }
+
+  /**
+   * Refreshes (or invalidates) any metadata/data cached in the plan recursively.
+   */
+  def refresh(): Unit = children.foreach(_.refresh())
 }
 
 /**
  * A logical plan node with no children.
  */
 abstract class LeafNode extends LogicalPlan {
-  override def children: Seq[LogicalPlan] = Nil
+  override final def children: Seq[LogicalPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
 }
 
@@ -278,7 +286,7 @@ abstract class LeafNode extends LogicalPlan {
 abstract class UnaryNode extends LogicalPlan {
   def child: LogicalPlan
 
-  override def children: Seq[LogicalPlan] = child :: Nil
+  override final def children: Seq[LogicalPlan] = child :: Nil
 
   /**
    * Generates an additional set of aliased constraints by replacing the original constraint
@@ -310,7 +318,8 @@ abstract class UnaryNode extends LogicalPlan {
       // (product of children).
       sizeInBytes = 1
     }
-    Statistics(sizeInBytes = sizeInBytes)
+
+    child.statistics.copy(sizeInBytes = sizeInBytes)
   }
 }
 
@@ -321,5 +330,5 @@ abstract class BinaryNode extends LogicalPlan {
   def left: LogicalPlan
   def right: LogicalPlan
 
-  override def children: Seq[LogicalPlan] = Seq(left, right)
+  override final def children: Seq[LogicalPlan] = Seq(left, right)
 }

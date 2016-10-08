@@ -36,7 +36,6 @@ import org.junit.Test;
 import com.google.common.io.Files;
 import com.google.common.collect.Sets;
 
-import org.apache.spark.Accumulator;
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
@@ -46,6 +45,7 @@ import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.api.java.*;
+import org.apache.spark.util.LongAccumulator;
 import org.apache.spark.util.Utils;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
@@ -349,7 +349,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaDStream<Integer> reducedWindowed;
     if (withInverse) {
       reducedWindowed = stream.reduceByWindow(new IntegerSum(),
-                                              new IntegerDifference(), new Duration(2000), new Duration(1000));
+                                              new IntegerDifference(),
+                                              new Duration(2000),
+                                              new Duration(1000));
     } else {
       reducedWindowed = stream.reduceByWindow(new IntegerSum(),
                                               new Duration(2000), new Duration(1000));
@@ -497,7 +499,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
     pairStream.transformToPair(
         new Function2<JavaPairRDD<String, Integer>, Time, JavaPairRDD<String, String>>() {
-          @Override public JavaPairRDD<String, String> call(JavaPairRDD<String, Integer> in, Time time) {
+          @Override public JavaPairRDD<String, String> call(JavaPairRDD<String, Integer> in,
+                                                            Time time) {
             return null;
           }
         }
@@ -606,7 +609,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         pairStream1,
         new Function3<JavaRDD<Integer>, JavaPairRDD<String, Integer>, Time, JavaRDD<Double>>() {
           @Override
-          public JavaRDD<Double> call(JavaRDD<Integer> rdd1, JavaPairRDD<String, Integer> rdd2, Time time) {
+          public JavaRDD<Double> call(JavaRDD<Integer> rdd1, JavaPairRDD<String, Integer> rdd2,
+                                      Time time) {
             return null;
           }
         }
@@ -616,7 +620,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         stream2,
         new Function3<JavaRDD<Integer>, JavaRDD<String>, Time, JavaPairRDD<Double, Double>>() {
           @Override
-          public JavaPairRDD<Double, Double> call(JavaRDD<Integer> rdd1, JavaRDD<String> rdd2, Time time) {
+          public JavaPairRDD<Double, Double> call(JavaRDD<Integer> rdd1, JavaRDD<String> rdd2,
+                                                  Time time) {
             return null;
           }
         }
@@ -624,9 +629,12 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
     stream1.transformWithToPair(
         pairStream1,
-        new Function3<JavaRDD<Integer>, JavaPairRDD<String, Integer>, Time, JavaPairRDD<Double, Double>>() {
+        new Function3<JavaRDD<Integer>, JavaPairRDD<String, Integer>, Time,
+          JavaPairRDD<Double, Double>>() {
           @Override
-          public JavaPairRDD<Double, Double> call(JavaRDD<Integer> rdd1, JavaPairRDD<String, Integer> rdd2, Time time) {
+          public JavaPairRDD<Double, Double> call(JavaRDD<Integer> rdd1,
+                                                  JavaPairRDD<String, Integer> rdd2,
+                                                  Time time) {
             return null;
           }
         }
@@ -636,7 +644,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         stream2,
         new Function3<JavaPairRDD<String, Integer>, JavaRDD<String>, Time, JavaRDD<Double>>() {
           @Override
-          public JavaRDD<Double> call(JavaPairRDD<String, Integer> rdd1, JavaRDD<String> rdd2, Time time) {
+          public JavaRDD<Double> call(JavaPairRDD<String, Integer> rdd1, JavaRDD<String> rdd2,
+                                      Time time) {
             return null;
           }
         }
@@ -644,9 +653,12 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
     pairStream1.transformWith(
         pairStream1,
-        new Function3<JavaPairRDD<String, Integer>, JavaPairRDD<String, Integer>, Time, JavaRDD<Double>>() {
+        new Function3<JavaPairRDD<String, Integer>, JavaPairRDD<String, Integer>, Time,
+          JavaRDD<Double>>() {
           @Override
-          public JavaRDD<Double> call(JavaPairRDD<String, Integer> rdd1, JavaPairRDD<String, Integer> rdd2, Time time) {
+          public JavaRDD<Double> call(JavaPairRDD<String, Integer> rdd1,
+                                      JavaPairRDD<String, Integer> rdd2,
+                                      Time time) {
             return null;
           }
         }
@@ -654,9 +666,12 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
     pairStream1.transformWithToPair(
         stream2,
-        new Function3<JavaPairRDD<String, Integer>, JavaRDD<String>, Time, JavaPairRDD<Double, Double>>() {
+        new Function3<JavaPairRDD<String, Integer>, JavaRDD<String>, Time,
+          JavaPairRDD<Double, Double>>() {
           @Override
-          public JavaPairRDD<Double, Double> call(JavaPairRDD<String, Integer> rdd1, JavaRDD<String> rdd2, Time time) {
+          public JavaPairRDD<Double, Double> call(JavaPairRDD<String, Integer> rdd1,
+                                                  JavaRDD<String> rdd2,
+                                                  Time time) {
             return null;
           }
         }
@@ -664,9 +679,12 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
     pairStream1.transformWithToPair(
         pairStream2,
-        new Function3<JavaPairRDD<String, Integer>, JavaPairRDD<Double, Character>, Time, JavaPairRDD<Double, Double>>() {
+        new Function3<JavaPairRDD<String, Integer>, JavaPairRDD<Double, Character>, Time,
+          JavaPairRDD<Double, Double>>() {
           @Override
-          public JavaPairRDD<Double, Double> call(JavaPairRDD<String, Integer> rdd1, JavaPairRDD<Double, Character> rdd2, Time time) {
+          public JavaPairRDD<Double, Double> call(JavaPairRDD<String, Integer> rdd1,
+                                                  JavaPairRDD<Double, Character> rdd2,
+                                                  Time time) {
             return null;
           }
         }
@@ -722,13 +740,16 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
       listOfDStreams2,
       new Function2<List<JavaRDD<?>>, Time, JavaPairRDD<Integer, Tuple2<Integer, String>>>() {
         @Override
-        public JavaPairRDD<Integer, Tuple2<Integer, String>> call(List<JavaRDD<?>> listOfRDDs, Time time) {
+        public JavaPairRDD<Integer, Tuple2<Integer, String>> call(List<JavaRDD<?>> listOfRDDs,
+                                                                  Time time) {
           Assert.assertEquals(3, listOfRDDs.size());
           JavaRDD<Integer> rdd1 = (JavaRDD<Integer>)listOfRDDs.get(0);
           JavaRDD<Integer> rdd2 = (JavaRDD<Integer>)listOfRDDs.get(1);
-          JavaRDD<Tuple2<Integer, String>> rdd3 = (JavaRDD<Tuple2<Integer, String>>)listOfRDDs.get(2);
+          JavaRDD<Tuple2<Integer, String>> rdd3 =
+            (JavaRDD<Tuple2<Integer, String>>)listOfRDDs.get(2);
           JavaPairRDD<Integer, String> prdd3 = JavaPairRDD.fromJavaRDD(rdd3);
-          PairFunction<Integer, Integer, Integer> mapToTuple = new PairFunction<Integer, Integer, Integer>() {
+          PairFunction<Integer, Integer, Integer> mapToTuple =
+            new PairFunction<Integer, Integer, Integer>() {
             @Override
             public Tuple2<Integer, Integer> call(Integer i) {
               return new Tuple2<>(i, i);
@@ -739,7 +760,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
       }
     );
     JavaTestUtils.attachTestOutputStream(transformed2);
-    List<List<Tuple2<Integer, Tuple2<Integer, String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<Integer, Tuple2<Integer, String>>>> result =
+      JavaTestUtils.runStreams(ssc, 2, 2);
     Assert.assertEquals(expected, result);
   }
 
@@ -772,8 +794,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @SuppressWarnings("unchecked")
   @Test
   public void testForeachRDD() {
-    final Accumulator<Integer> accumRdd = ssc.sparkContext().accumulator(0);
-    final Accumulator<Integer> accumEle = ssc.sparkContext().accumulator(0);
+    final LongAccumulator accumRdd = ssc.sparkContext().sc().longAccumulator();
+    final LongAccumulator accumEle = ssc.sparkContext().sc().longAccumulator();
     List<List<Integer>> inputData = Arrays.asList(
         Arrays.asList(1,1,1),
         Arrays.asList(1,1,1));
@@ -981,7 +1003,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
             new Tuple2<>(3, "new york"),
             new Tuple2<>(1, "new york")));
 
-    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, Integer>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
     JavaPairDStream<Integer, String> reversed = pairStream.mapToPair(
         new PairFunction<Tuple2<String, Integer>, Integer, String>() {
@@ -1014,7 +1037,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
             new Tuple2<>(3, "new york"),
             new Tuple2<>(1, "new york")));
 
-    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, Integer>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
     JavaPairDStream<Integer, String> reversed = pairStream.mapPartitionsToPair(
         new PairFlatMapFunction<Iterator<Tuple2<String, Integer>>, Integer, String>() {
@@ -1044,7 +1068,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
             Arrays.asList(1, 3, 4, 1),
             Arrays.asList(5, 5, 3, 1));
 
-    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, Integer>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
     JavaDStream<Integer> reversed = pairStream.map(
         new Function<Tuple2<String, Integer>, Integer>() {
@@ -1116,7 +1141,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
             new Tuple2<>("california", Arrays.asList("sharks", "ducks")),
             new Tuple2<>("new york", Arrays.asList("rangers", "islanders"))));
 
-    JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, String>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Iterable<String>> grouped = pairStream.groupByKey();
@@ -1241,7 +1267,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
       )
     );
 
-    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, Integer>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Iterable<Integer>> groupWindowed =
@@ -1255,7 +1282,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     }
   }
 
-  private static Set<Tuple2<String, HashSet<Integer>>> convert(List<Tuple2<String, List<Integer>>> listOfTuples) {
+  private static Set<Tuple2<String, HashSet<Integer>>>
+    convert(List<Tuple2<String, List<Integer>>> listOfTuples) {
     List<Tuple2<String, HashSet<Integer>>> newListOfTuples = new ArrayList<>();
     for (Tuple2<String, List<Integer>> tuple: listOfTuples) {
       newListOfTuples.add(convert(tuple));
@@ -1280,7 +1308,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList(new Tuple2<>("california", 10),
                       new Tuple2<>("new york", 4)));
 
-    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, Integer>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Integer> reduceWindowed =
@@ -1304,7 +1333,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList(new Tuple2<>("california", 14),
                       new Tuple2<>("new york", 9)));
 
-    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, Integer>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Integer> updated = pairStream.updateStateByKey(
@@ -1347,7 +1377,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList(new Tuple2<>("california", 15),
                       new Tuple2<>("new york", 11)));
 
-    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, Integer>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Integer> updated = pairStream.updateStateByKey(
@@ -1383,7 +1414,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList(new Tuple2<>("california", 10),
                       new Tuple2<>("new york", 4)));
 
-    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, Integer>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Integer> reduceWindowed =
@@ -1630,19 +1662,27 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         ssc, stringStringKVStream2, 1);
     JavaPairDStream<String, String> pairStream2 = JavaPairDStream.fromJavaDStream(stream2);
 
-    JavaPairDStream<String, Tuple2<Iterable<String>, Iterable<String>>> grouped = pairStream1.cogroup(pairStream2);
+    JavaPairDStream<String, Tuple2<Iterable<String>, Iterable<String>>> grouped =
+        pairStream1.cogroup(pairStream2);
     JavaTestUtils.attachTestOutputStream(grouped);
-    List<List<Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>>>> result =
+        JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected.size(), result.size());
-    Iterator<List<Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>>>> resultItr = result.iterator();
-    Iterator<List<Tuple2<String, Tuple2<List<String>, List<String>>>>> expectedItr = expected.iterator();
+    Iterator<List<Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>>>> resultItr =
+        result.iterator();
+    Iterator<List<Tuple2<String, Tuple2<List<String>, List<String>>>>> expectedItr =
+        expected.iterator();
     while (resultItr.hasNext() && expectedItr.hasNext()) {
-      Iterator<Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>>> resultElements = resultItr.next().iterator();
-      Iterator<Tuple2<String, Tuple2<List<String>, List<String>>>> expectedElements = expectedItr.next().iterator();
+      Iterator<Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>>> resultElements =
+          resultItr.next().iterator();
+      Iterator<Tuple2<String, Tuple2<List<String>, List<String>>>> expectedElements =
+          expectedItr.next().iterator();
       while (resultElements.hasNext() && expectedElements.hasNext()) {
-        Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>> resultElement = resultElements.next();
-        Tuple2<String, Tuple2<List<String>, List<String>>> expectedElement = expectedElements.next();
+        Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>> resultElement =
+            resultElements.next();
+        Tuple2<String, Tuple2<List<String>, List<String>>> expectedElement =
+            expectedElements.next();
         Assert.assertEquals(expectedElement._1(), resultElement._1());
         equalIterable(expectedElement._2()._1(), resultElement._2()._1());
         equalIterable(expectedElement._2()._2(), resultElement._2()._2());
@@ -1719,7 +1759,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         ssc, stringStringKVStream2, 1);
     JavaPairDStream<String, String> pairStream2 = JavaPairDStream.fromJavaDStream(stream2);
 
-    JavaPairDStream<String, Tuple2<String, Optional<String>>> joined = pairStream1.leftOuterJoin(pairStream2);
+    JavaPairDStream<String, Tuple2<String, Optional<String>>> joined =
+        pairStream1.leftOuterJoin(pairStream2);
     JavaDStream<Long> counted = joined.count();
     JavaTestUtils.attachTestOutputStream(counted);
     List<List<Long>> result = JavaTestUtils.runStreams(ssc, 2, 2);

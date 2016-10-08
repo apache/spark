@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.io.File
 import java.nio.charset.StandardCharsets
+import java.sql.Timestamp
 
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.io.orc.CompressionKind
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -53,12 +54,6 @@ case class Person(name: String, age: Int, contacts: Seq[Contact])
 
 class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
-  def getTempFilePath(prefix: String, suffix: String = ""): File = {
-    val tempFile = File.createTempFile(prefix, suffix)
-    tempFile.delete()
-    tempFile
-  }
-
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
       (s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0)
@@ -66,7 +61,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        sqlContext.read.orc(file),
+        spark.read.orc(file),
         data.toDF().collect())
     }
   }
@@ -79,7 +74,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("Read/write all types with non-primitive type") {
-    val data = (0 to 255).map { i =>
+    val data: Seq[AllDataTypesWithNonPrimitiveType] = (0 to 255).map { i =>
       AllDataTypesWithNonPrimitiveType(
         s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0,
         0 until i,
@@ -98,8 +93,8 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("Creating case class RDD table") {
     val data = (1 to 100).map(i => (i, s"val_$i"))
-    sparkContext.parallelize(data).toDF().registerTempTable("t")
-    withTempTable("t") {
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("t")
+    withTempView("t") {
       checkAnswer(sql("SELECT * FROM t"), data.toDF().collect())
     }
   }
@@ -153,11 +148,11 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("save and load case class RDD with `None`s as orc") {
     val data = (
-      None: Option[Int],
-      None: Option[Long],
-      None: Option[Float],
-      None: Option[Double],
-      None: Option[Boolean]
+      Option.empty[Int],
+      Option.empty[Long],
+      Option.empty[Float],
+      Option.empty[Double],
+      Option.empty[Boolean]
     ) :: Nil
 
     withOrcFile(data) { file =>
@@ -167,39 +162,68 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  // We only support zlib in Hive 0.12.0 now
-  test("Default compression options for writing to an ORC file") {
-    withOrcFile((1 to 100).map(i => (i, s"val_$i"))) { file =>
-      assertResult(CompressionKind.ZLIB) {
-        OrcFileOperator.getFileReader(file).get.getCompression
-      }
+  test("SPARK-16610: Respect orc.compress option when compression is unset") {
+    // Respect `orc.compress`.
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .option("orc.compress", "ZLIB")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("ZLIB" === expectedCompressionKind.name())
+    }
+
+    // `compression` overrides `orc.compress`.
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .option("compression", "ZLIB")
+        .option("orc.compress", "SNAPPY")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("ZLIB" === expectedCompressionKind.name())
     }
   }
 
-  // Following codec is supported in hive-0.13.1, ignore it now
-  ignore("Other compression options for writing to an ORC file - 0.13.1 and above") {
-    val data = (1 to 100).map(i => (i, s"val_$i"))
-    val conf = sparkContext.hadoopConfiguration
-
-    conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "SNAPPY")
-    withOrcFile(data) { file =>
-      assertResult(CompressionKind.SNAPPY) {
-        OrcFileOperator.getFileReader(file).get.getCompression
-      }
+  // Hive supports zlib, snappy and none for Hive 1.2.1.
+  test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .option("compression", "ZLIB")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("ZLIB" === expectedCompressionKind.name())
     }
 
-    conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "NONE")
-    withOrcFile(data) { file =>
-      assertResult(CompressionKind.NONE) {
-        OrcFileOperator.getFileReader(file).get.getCompression
-      }
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .option("compression", "SNAPPY")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("SNAPPY" === expectedCompressionKind.name())
     }
 
-    conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "LZO")
-    withOrcFile(data) { file =>
-      assertResult(CompressionKind.LZO) {
-        OrcFileOperator.getFileReader(file).get.getCompression
-      }
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .option("compression", "NONE")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("NONE" === expectedCompressionKind.name())
+    }
+  }
+
+  // Following codec is not supported in Hive 1.2.1, ignore it now
+  ignore("LZO compression options for writing to an ORC file not supported in Hive 1.2.1") {
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .option("compression", "LZO")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("LZO" === expectedCompressionKind.name())
     }
   }
 
@@ -217,22 +241,22 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
-    createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     withOrcTable(data, "t") {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
     }
-    sessionState.catalog.unregisterTable(TableIdentifier("tmp"))
+    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("overwriting") {
     val data = (0 until 10).map(i => (i, i.toString))
-    createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     withOrcTable(data, "t") {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), data.map(Row.fromTuple))
     }
-    sessionState.catalog.unregisterTable(TableIdentifier("tmp"))
+    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("self-join") {
@@ -295,12 +319,12 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      sqlContext.range(0, 10).select('id as "Acol").write.format("orc").save(path)
-      sqlContext.read.format("orc").load(path).schema("Acol")
+      spark.range(0, 10).select('id as "Acol").write.format("orc").save(path)
+      spark.read.format("orc").load(path).schema("Acol")
       intercept[IllegalArgumentException] {
-        sqlContext.read.format("orc").load(path).schema("acol")
+        spark.read.format("orc").load(path).schema("acol")
       }
-      checkAnswer(sqlContext.read.format("orc").load(path).select("acol").sort("acol"),
+      checkAnswer(spark.read.format("orc").load(path).select("acol").sort("acol"),
         (0 until 10).map(Row(_)))
     }
   }
@@ -310,38 +334,38 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       val path = dir.getCanonicalPath
 
       withTable("empty_orc") {
-        withTempTable("empty", "single") {
-          sqlContext.sql(
+        withTempView("empty", "single") {
+          spark.sql(
             s"""CREATE TABLE empty_orc(key INT, value STRING)
                |STORED AS ORC
                |LOCATION '$path'
              """.stripMargin)
 
           val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
-          emptyDF.registerTempTable("empty")
+          emptyDF.createOrReplaceTempView("empty")
 
           // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
           // Spark SQL ORC data source always avoids write empty ORC files.
-          sqlContext.sql(
+          spark.sql(
             s"""INSERT INTO TABLE empty_orc
                |SELECT key, value FROM empty
              """.stripMargin)
 
           val errorMessage = intercept[AnalysisException] {
-            sqlContext.read.orc(path)
+            spark.read.orc(path)
           }.getMessage
 
           assert(errorMessage.contains("Unable to infer schema for ORC"))
 
           val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
-          singleRowDF.registerTempTable("single")
+          singleRowDF.createOrReplaceTempView("single")
 
-          sqlContext.sql(
+          spark.sql(
             s"""INSERT INTO TABLE empty_orc
                |SELECT key, value FROM single
              """.stripMargin)
 
-          val df = sqlContext.read.orc(path)
+          val df = spark.read.orc(path)
           assert(df.schema === singleRowDF.schema.asNullable)
           checkAnswer(df, singleRowDF)
         }
@@ -367,7 +391,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         // It needs to repartition data so that we can have several ORC files
         // in order to skip stripes in ORC.
         createDataFrame(data).toDF("a", "b").repartition(10).write.orc(path)
-        val df = sqlContext.read.orc(path)
+        val df = spark.read.orc(path)
 
         def checkPredicate(pred: Column, answer: Seq[Row]): Unit = {
           val sourceDf = stripSparkFilter(df.where(pred))
@@ -398,6 +422,137 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         checkPredicate(!('a > 3), List(1, 3).map(Row(_, null)))
         checkPredicate(!('a > 0 && 'a < 3), List(3, 5, 7, 9).map(Row(_, null)))
       }
+    }
+  }
+
+  test("Verify the ORC conversion parameter: CONVERT_METASTORE_ORC") {
+    withTempView("single") {
+      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
+      singleRowDF.createOrReplaceTempView("single")
+
+      Seq("true", "false").foreach { orcConversion =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> orcConversion) {
+          withTable("dummy_orc") {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              spark.sql(
+                s"""
+                   |CREATE TABLE dummy_orc(key INT, value STRING)
+                   |STORED AS ORC
+                   |LOCATION '$path'
+                 """.stripMargin)
+
+              spark.sql(
+                s"""
+                   |INSERT INTO TABLE dummy_orc
+                   |SELECT key, value FROM single
+                 """.stripMargin)
+
+              val df = spark.sql("SELECT * FROM dummy_orc WHERE key=0")
+              checkAnswer(df, singleRowDF)
+
+              val queryExecution = df.queryExecution
+              if (orcConversion == "true") {
+                queryExecution.analyzed.collectFirst {
+                  case _: LogicalRelation => ()
+                }.getOrElse {
+                  fail(s"Expecting the query plan to convert orc to data sources, " +
+                    s"but got:\n$queryExecution")
+                }
+              } else {
+                queryExecution.analyzed.collectFirst {
+                  case _: MetastoreRelation => ()
+                }.getOrElse {
+                  fail(s"Expecting no conversion from orc to data sources, " +
+                    s"but got:\n$queryExecution")
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-14962 Produce correct results on array type with isnotnull") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val data = (0 until 10).map(i => Tuple1(Array(i)))
+      withOrcFile(data) { file =>
+        val actual = spark
+          .read
+          .orc(file)
+          .where("_1 is not null")
+        val expected = data.toDF()
+        checkAnswer(actual, expected)
+      }
+    }
+  }
+
+  test("SPARK-15198 Support for pushing down filters for boolean types") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val data = (0 until 10).map(_ => (true, false))
+      withOrcFile(data) { file =>
+        val df = spark.read.orc(file).where("_2 == true")
+        val actual = stripSparkFilter(df).count()
+
+        // ORC filter should be applied and the total count should be 0.
+        assert(actual === 0)
+      }
+    }
+  }
+
+  test("Support for pushing down filters for decimal types") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val data = (0 until 10).map(i => Tuple1(BigDecimal.valueOf(i)))
+      withTempPath { file =>
+        // It needs to repartition data so that we can have several ORC files
+        // in order to skip stripes in ORC.
+        createDataFrame(data).toDF("a").repartition(10).write.orc(file.getCanonicalPath)
+        val df = spark.read.orc(file.getCanonicalPath).where("a == 2")
+        val actual = stripSparkFilter(df).count()
+
+        assert(actual < 10)
+      }
+    }
+  }
+
+  test("Support for pushing down filters for timestamp types") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val timeString = "2015-08-20 14:57:00"
+      val data = (0 until 10).map { i =>
+        val milliseconds = Timestamp.valueOf(timeString).getTime + i * 3600
+        Tuple1(new Timestamp(milliseconds))
+      }
+      withTempPath { file =>
+        // It needs to repartition data so that we can have several ORC files
+        // in order to skip stripes in ORC.
+        createDataFrame(data).toDF("a").repartition(10).write.orc(file.getCanonicalPath)
+        val df = spark.read.orc(file.getCanonicalPath).where(s"a == '$timeString'")
+        val actual = stripSparkFilter(df).count()
+
+        assert(actual < 10)
+      }
+    }
+  }
+
+  test("column nullability and comment - write and then read") {
+    val schema = (new StructType)
+      .add("cl1", IntegerType, nullable = false, comment = "test")
+      .add("cl2", IntegerType, nullable = true)
+      .add("cl3", IntegerType, nullable = true)
+    val row = Row(3, null, 4)
+    val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+
+    val tableName = "tab"
+    withTable(tableName) {
+      df.write.format("orc").mode("overwrite").saveAsTable(tableName)
+      // Verify the DDL command result: DESCRIBE TABLE
+      checkAnswer(
+        sql(s"desc $tableName").select("col_name", "comment").where($"comment" === "test"),
+        Row("cl1", "test") :: Nil)
+      // Verify the schema
+      val expectedFields = schema.fields.map(f => f.copy(nullable = true))
+      assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
     }
   }
 }

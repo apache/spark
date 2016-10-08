@@ -20,9 +20,10 @@ package org.apache.spark.graphx
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.SparkException
 import org.apache.spark.graphx.lib._
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkException
 
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the
@@ -276,7 +277,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
         if (Random.nextDouble() < probability) { Some(vidVvals._1) }
         else { None }
       }
-      if (selectedVertices.count > 1) {
+      if (selectedVertices.count > 0) {
         found = true
         val collectedVertices = selectedVertices.collect()
         retVal = collectedVertices(Random.nextInt(collectedVertices.length))
@@ -392,6 +393,15 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
+   * Run parallel personalized PageRank for a given array of source vertices, such
+   * that all random walks are started relative to the source vertices
+   */
+  def staticParallelPersonalizedPageRank(sources: Array[VertexId], numIter: Int,
+    resetProb: Double = 0.15) : Graph[Vector, Double] = {
+    PageRank.runParallelPersonalizedPageRank(graph, numIter, resetProb, sources)
+  }
+
+  /**
    * Run Personalized PageRank for a fixed number of iterations with
    * with all iterations originating at the source node
    * returning a graph with vertex attributes
@@ -415,11 +425,11 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
-    * Compute the connected component membership of each vertex and return a graph with the vertex
-    * value containing the lowest vertex id in the connected component containing that vertex.
-    *
-    * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
-    */
+   * Compute the connected component membership of each vertex and return a graph with the vertex
+   * value containing the lowest vertex id in the connected component containing that vertex.
+   *
+   * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
+   */
   def connectedComponents(): Graph[VertexId, ED] = {
     ConnectedComponents.run(graph)
   }

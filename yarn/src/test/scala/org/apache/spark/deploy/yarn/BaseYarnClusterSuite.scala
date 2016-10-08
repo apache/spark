@@ -35,6 +35,7 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher._
 import org.apache.spark.util.Utils
 
@@ -52,7 +53,7 @@ abstract class BaseYarnClusterSuite
     |log4j.logger.org.apache.hadoop=WARN
     |log4j.logger.org.eclipse.jetty=WARN
     |log4j.logger.org.mortbay=WARN
-    |log4j.logger.org.spark-project.jetty=WARN
+    |log4j.logger.org.spark_project.jetty=WARN
     """.stripMargin
 
   private var yarnCluster: MiniYARNCluster = _

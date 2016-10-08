@@ -25,7 +25,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
+import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.types._
 
@@ -138,7 +138,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     inputRow: InternalRow = EmptyRow): Unit = {
 
     val plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)(),
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
 
     val actual = plan(inputRow).get(0, expression.dataType)
@@ -151,7 +151,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     expression: Expression,
     inputRow: InternalRow = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
-    val optimizedPlan = DefaultOptimizer.execute(plan)
+    val optimizedPlan = SimpleTestOptimizer.execute(plan)
     checkNaNWithoutCodegen(optimizedPlan.expressions.head, inputRow)
   }
 
@@ -508,7 +508,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Logarithm, DoubleType, DoubleType)
   }
 
-  test("round") {
+  test("round/bround") {
     val scales = -6 to 6
     val doublePi: Double = math.Pi
     val shortPi: Short = 31415
@@ -529,11 +529,18 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       31415926535900000L, 31415926535898000L, 31415926535897900L, 31415926535897930L) ++
       Seq.fill(7)(31415926535897932L)
 
+    val intResultsB: Seq[Int] = Seq(314000000, 314200000, 314160000, 314159000, 314159300,
+      314159260) ++ Seq.fill(7)(314159265)
+
     scales.zipWithIndex.foreach { case (scale, i) =>
       checkEvaluation(Round(doublePi, scale), doubleResults(i), EmptyRow)
       checkEvaluation(Round(shortPi, scale), shortResults(i), EmptyRow)
       checkEvaluation(Round(intPi, scale), intResults(i), EmptyRow)
       checkEvaluation(Round(longPi, scale), longResults(i), EmptyRow)
+      checkEvaluation(BRound(doublePi, scale), doubleResults(i), EmptyRow)
+      checkEvaluation(BRound(shortPi, scale), shortResults(i), EmptyRow)
+      checkEvaluation(BRound(intPi, scale), intResultsB(i), EmptyRow)
+      checkEvaluation(BRound(longPi, scale), longResults(i), EmptyRow)
     }
 
     val bdResults: Seq[BigDecimal] = Seq(BigDecimal(3.0), BigDecimal(3.1), BigDecimal(3.14),
@@ -543,15 +550,33 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // and not allowed by o.a.s.s.types.Decimal.changePrecision, therefore null
     (0 to 7).foreach { i =>
       checkEvaluation(Round(bdPi, i), bdResults(i), EmptyRow)
+      checkEvaluation(BRound(bdPi, i), bdResults(i), EmptyRow)
     }
     (8 to 10).foreach { scale =>
       checkEvaluation(Round(bdPi, scale), null, EmptyRow)
+      checkEvaluation(BRound(bdPi, scale), null, EmptyRow)
     }
 
     DataTypeTestUtils.numericTypes.foreach { dataType =>
       checkEvaluation(Round(Literal.create(null, dataType), Literal(2)), null)
       checkEvaluation(Round(Literal.create(null, dataType),
         Literal.create(null, IntegerType)), null)
+      checkEvaluation(BRound(Literal.create(null, dataType), Literal(2)), null)
+      checkEvaluation(BRound(Literal.create(null, dataType),
+        Literal.create(null, IntegerType)), null)
     }
+
+    checkEvaluation(Round(2.5, 0), 3.0)
+    checkEvaluation(Round(3.5, 0), 4.0)
+    checkEvaluation(Round(-2.5, 0), -3.0)
+    checkEvaluation(Round(-3.5, 0), -4.0)
+    checkEvaluation(Round(-0.35, 1), -0.4)
+    checkEvaluation(Round(-35, -1), -40)
+    checkEvaluation(BRound(2.5, 0), 2.0)
+    checkEvaluation(BRound(3.5, 0), 4.0)
+    checkEvaluation(BRound(-2.5, 0), -2.0)
+    checkEvaluation(BRound(-3.5, 0), -4.0)
+    checkEvaluation(BRound(-0.35, 1), -0.4)
+    checkEvaluation(BRound(-35, -1), -40)
   }
 }

@@ -29,7 +29,7 @@ import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.Message;
 import org.apache.spark.network.protocol.RequestMessage;
 import org.apache.spark.network.protocol.ResponseMessage;
-import org.apache.spark.network.util.NettyUtils;
+import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
  * The single Transport-level Channel handler which is used for delegating requests to the
@@ -49,7 +49,7 @@ import org.apache.spark.network.util.NettyUtils;
  * timeout if the client is continuously sending but getting no responses, for simplicity.
  */
 public class TransportChannelHandler extends SimpleChannelInboundHandler<Message> {
-  private final Logger logger = LoggerFactory.getLogger(TransportChannelHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportChannelHandler.class);
 
   private final TransportClient client;
   private final TransportResponseHandler responseHandler;
@@ -76,7 +76,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
 
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-    logger.warn("Exception in connection from " + NettyUtils.getRemoteAddress(ctx.channel()),
+    logger.warn("Exception in connection from " + getRemoteAddress(ctx.channel()),
       cause);
     requestHandler.exceptionCaught(cause);
     responseHandler.exceptionCaught(cause);
@@ -139,10 +139,10 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
           System.nanoTime() - responseHandler.getTimeOfLastRequestNs() > requestTimeoutNs;
         if (e.state() == IdleState.ALL_IDLE && isActuallyOverdue) {
           if (responseHandler.numOutstandingRequests() > 0) {
-            String address = NettyUtils.getRemoteAddress(ctx.channel());
+            String address = getRemoteAddress(ctx.channel());
             logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
-              "requests. Assuming connection is dead; please adjust spark.network.timeout if this " +
-              "is wrong.", address, requestTimeoutNs / 1000 / 1000);
+              "requests. Assuming connection is dead; please adjust spark.network.timeout if " +
+              "this is wrong.", address, requestTimeoutNs / 1000 / 1000);
             client.timeOut();
             ctx.close();
           } else if (closeIdleConnections) {

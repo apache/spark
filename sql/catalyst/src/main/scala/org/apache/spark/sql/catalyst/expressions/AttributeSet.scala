@@ -60,6 +60,8 @@ object AttributeSet {
 class AttributeSet private (val baseSet: Set[AttributeEquals])
   extends Traversable[Attribute] with Serializable {
 
+  override def hashCode: Int = baseSet.hashCode()
+
   /** Returns true if the members of this AttributeSet and other are the same. */
   override def equals(other: Any): Boolean = other match {
     case otherSet: AttributeSet =>

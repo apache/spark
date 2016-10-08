@@ -17,21 +17,29 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import java.io.ByteArrayInputStream
+import java.util.{Map => JavaMap}
+
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
+import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
-import org.codehaus.janino.ClassBodyEvaluator
+import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleCompiler}
+import org.codehaus.janino.util.ClassFile
+import scala.language.existentials
 
-import org.apache.spark.Logging
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
+import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ParentClassLoader, Utils}
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -47,6 +55,25 @@ import org.apache.spark.util.Utils
 case class ExprCode(var code: String, var isNull: String, var value: String)
 
 /**
+ * State used for subexpression elimination.
+ *
+ * @param isNull A term that holds a boolean value representing whether the expression evaluated
+ *               to null.
+ * @param value A term for a value of a common sub-expression. Not valid if `isNull`
+ *              is set to `true`.
+ */
+case class SubExprEliminationState(isNull: String, value: String)
+
+/**
+ * Codes and common subexpressions mapping used for subexpression elimination.
+ *
+ * @param codes Strings representing the codes that evaluate common subexpressions.
+ * @param states Foreach expression that is participating in subexpression elimination,
+ *               the state to use.
+ */
+case class SubExprCodes(codes: Seq[String], states: Map[Expression, SubExprEliminationState])
+
+/**
  * A context for codegen, tracking a list of objects that could be passed into generated Java
  * function.
  */
@@ -58,10 +85,25 @@ class CodegenContext {
   val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
 
   /**
-    * Add an object to `references`, create a class member to access it.
-    *
-    * Returns the name of class member.
-    */
+   * Add an object to `references`.
+   *
+   * Returns the code to access it.
+   *
+   * This is for minor objects not to store the object into field but refer it from the references
+   * field at the time of use because number of fields in class is limited so we should reduce it.
+   */
+  def addReferenceObj(obj: Any): String = {
+    val idx = references.length
+    references += obj
+    val clsName = obj.getClass.getName
+    s"(($clsName) references[$idx])"
+  }
+
+  /**
+   * Add an object to `references`, create a class member to access it.
+   *
+   * Returns the name of class member.
+   */
   def addReferenceObj(name: String, obj: Any, className: String = null): String = {
     val term = freshName(name)
     val idx = references.length
@@ -72,9 +114,9 @@ class CodegenContext {
   }
 
   /**
-    * Holding a list of generated columns as input of current operator, will be used by
-    * BoundReference to generate code.
-    */
+   * Holding a list of generated columns as input of current operator, will be used by
+   * BoundReference to generate code.
+   */
   var currentVars: Seq[ExprCode] = null
 
   /**
@@ -109,14 +151,37 @@ class CodegenContext {
     mutableStates += ((javaType, variableName, initCode))
   }
 
+  /**
+   * Add buffer variable which stores data coming from an [[InternalRow]]. This methods guarantees
+   * that the variable is safely stored, which is important for (potentially) byte array backed
+   * data types like: UTF8String, ArrayData, MapData & InternalRow.
+   */
+  def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
+    val value = freshName(variableName)
+    addMutableState(javaType(dataType), value, "")
+    val code = dataType match {
+      case StringType => s"$value = $initCode.clone();"
+      case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
+      case _ => s"$value = $initCode;"
+    }
+    ExprCode(code, "false", value)
+  }
+
   def declareMutableStates(): String = {
-    mutableStates.map { case (javaType, variableName, _) =>
+    // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
+    // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
+    mutableStates.distinct.map { case (javaType, variableName, _) =>
       s"private $javaType $variableName;"
     }.mkString("\n")
   }
 
   def initMutableStates(): String = {
-    mutableStates.map(_._3).mkString("\n")
+    // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
+    // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
+    val initCodes = mutableStates.distinct.map(_._3 + "\n")
+    // The generated initialization code may exceed 64kb function size limit in JVM if there are too
+    // many mutable states, so split it into multiple functions.
+    splitExpressions(initCodes, "init", Nil)
   }
 
   /**
@@ -144,9 +209,6 @@ class CodegenContext {
    */
   val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
 
-  // State used for subexpression elimination.
-  case class SubExprEliminationState(isNull: String, value: String)
-
   // Foreach expression that is participating in subexpression elimination, the state to use.
   val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
@@ -169,15 +231,20 @@ class CodegenContext {
   final var INPUT_ROW = "i"
 
   /**
-    * The map from a variable name to it's next ID.
-    */
+   * The map from a variable name to it's next ID.
+   */
   private val freshNameIds = new mutable.HashMap[String, Int]
   freshNameIds += INPUT_ROW -> 1
 
   /**
-    * A prefix used to generate fresh name.
-    */
+   * A prefix used to generate fresh name.
+   */
   var freshNamePrefix = ""
+
+  /**
+   * The map from a place holder to a corresponding comment
+   */
+  private val placeHolderToComments = new mutable.HashMap[String, String]
 
   /**
    * Returns a term name that is unique within this instance of a `CodegenContext`.
@@ -234,17 +301,20 @@ class CodegenContext {
   }
 
   /**
-    * Update a column in MutableRow from ExprCode.
-    */
+   * Update a column in MutableRow from ExprCode.
+   *
+   * @param isVectorized True if the underlying row is of type `ColumnarBatch.Row`, false otherwise
+   */
   def updateColumn(
       row: String,
       dataType: DataType,
       ordinal: Int,
       ev: ExprCode,
-      nullable: Boolean): String = {
+      nullable: Boolean,
+      isVectorized: Boolean = false): String = {
     if (nullable) {
       // Can't call setNullAt on DecimalType, because we need to keep the offset
-      if (dataType.isInstanceOf[DecimalType]) {
+      if (!isVectorized && dataType.isInstanceOf[DecimalType]) {
         s"""
            if (!${ev.isNull}) {
              ${setColumn(row, dataType, ordinal, ev.value)};
@@ -263,6 +333,63 @@ class CodegenContext {
       }
     } else {
       s"""${setColumn(row, dataType, ordinal, ev.value)};"""
+    }
+  }
+
+  /**
+   * Returns the specialized code to set a given value in a column vector for a given `DataType`.
+   */
+  def setValue(batch: String, row: String, dataType: DataType, ordinal: Int,
+      value: String): String = {
+    val jt = javaType(dataType)
+    dataType match {
+      case _ if isPrimitiveType(jt) =>
+        s"$batch.column($ordinal).put${primitiveTypeName(jt)}($row, $value);"
+      case t: DecimalType => s"$batch.column($ordinal).putDecimal($row, $value, ${t.precision});"
+      case t: StringType => s"$batch.column($ordinal).putByteArray($row, $value.getBytes());"
+      case _ =>
+        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+    }
+  }
+
+  /**
+   * Returns the specialized code to set a given value in a column vector for a given `DataType`
+   * that could potentially be nullable.
+   */
+  def updateColumn(
+      batch: String,
+      row: String,
+      dataType: DataType,
+      ordinal: Int,
+      ev: ExprCode,
+      nullable: Boolean): String = {
+    if (nullable) {
+      s"""
+         if (!${ev.isNull}) {
+           ${setValue(batch, row, dataType, ordinal, ev.value)}
+         } else {
+           $batch.column($ordinal).putNull($row);
+         }
+       """
+    } else {
+      s"""${setValue(batch, row, dataType, ordinal, ev.value)};"""
+    }
+  }
+
+  /**
+   * Returns the specialized code to access a value from a column vector for a given `DataType`.
+   */
+  def getValue(batch: String, row: String, dataType: DataType, ordinal: Int): String = {
+    val jt = javaType(dataType)
+    dataType match {
+      case _ if isPrimitiveType(jt) =>
+        s"$batch.column($ordinal).get${primitiveTypeName(jt)}($row)"
+      case t: DecimalType =>
+        s"$batch.column($ordinal).getDecimal($row, ${t.precision}, ${t.scale})"
+      case StringType =>
+        s"$batch.column($ordinal).getUTF8String($row)"
+      case _ =>
+        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
     }
   }
 
@@ -404,6 +531,7 @@ class CodegenContext {
       addNewFunction(compareFunc, funcCode)
       s"this.$compareFunc($c1, $c2)"
     case schema: StructType =>
+      INPUT_ROW = "i"
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")
       val funcCode: String =
@@ -475,27 +603,39 @@ class CodegenContext {
    * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(row: String, expressions: Seq[String]): String = {
+    if (row == null || currentVars != null) {
+      // Cannot split these expressions because they are not created from a row object.
+      return expressions.mkString("\n")
+    }
+    splitExpressions(expressions, "apply", ("InternalRow", row) :: Nil)
+  }
+
+  private def splitExpressions(
+      expressions: Seq[String], funcName: String, arguments: Seq[(String, String)]): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
-      // We can't know how many byte code will be generated, so use the number of bytes as limit
-      if (blockBuilder.length > 64 * 1000) {
-        blocks.append(blockBuilder.toString())
+      // We can't know how many bytecode will be generated, so use the length of source code
+      // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
+      // also not be too small, or it will have many function calls (for wide table), see the
+      // results in BenchmarkWideTable.
+      if (blockBuilder.length > 1024) {
+        blocks += blockBuilder.toString()
         blockBuilder.clear()
       }
       blockBuilder.append(code)
     }
-    blocks.append(blockBuilder.toString())
+    blocks += blockBuilder.toString()
 
     if (blocks.length == 1) {
       // inline execution if only one block
       blocks.head
     } else {
-      val apply = freshName("apply")
+      val func = freshName(funcName)
       val functions = blocks.zipWithIndex.map { case (body, i) =>
-        val name = s"${apply}_$i"
+        val name = s"${func}_$i"
         val code = s"""
-           |private void $name(InternalRow $row) {
+           |private void $name(${arguments.map { case (t, name) => s"$t $name" }.mkString(", ")}) {
            |  $body
            |}
          """.stripMargin
@@ -503,13 +643,61 @@ class CodegenContext {
         name
       }
 
-      functions.map(name => s"$name($row);").mkString("\n")
+      functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")});").mkString("\n")
     }
   }
 
   /**
+   * Perform a function which generates a sequence of ExprCodes with a given mapping between
+   * expressions and common expressions, instead of using the mapping in current context.
+   */
+  def withSubExprEliminationExprs(
+      newSubExprEliminationExprs: Map[Expression, SubExprEliminationState])(
+      f: => Seq[ExprCode]): Seq[ExprCode] = {
+    val oldsubExprEliminationExprs = subExprEliminationExprs
+    subExprEliminationExprs.clear
+    newSubExprEliminationExprs.foreach(subExprEliminationExprs += _)
+
+    val genCodes = f
+
+    // Restore previous subExprEliminationExprs
+    subExprEliminationExprs.clear
+    oldsubExprEliminationExprs.foreach(subExprEliminationExprs += _)
+    genCodes
+  }
+
+  /**
    * Checks and sets up the state and codegen for subexpression elimination. This finds the
-   * common subexpresses, generates the functions that evaluate those expressions and populates
+   * common subexpressions, generates the code snippets that evaluate those expressions and
+   * populates the mapping of common subexpressions to the generated code snippets. The generated
+   * code snippets will be returned and should be inserted into generated codes before these
+   * common subexpressions actually are used first time.
+   */
+  def subexpressionEliminationForWholeStageCodegen(expressions: Seq[Expression]): SubExprCodes = {
+    // Create a clear EquivalentExpressions and SubExprEliminationState mapping
+    val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
+    val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
+
+    // Add each expression tree and compute the common subexpressions.
+    expressions.foreach(equivalentExpressions.addExprTree(_, true, false))
+
+    // Get all the expressions that appear at least twice and set up the state for subexpression
+    // elimination.
+    val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
+    val codes = commonExprs.map { e =>
+      val expr = e.head
+      // Generate the code for this expression tree.
+      val code = expr.genCode(this)
+      val state = SubExprEliminationState(code.isNull, code.value)
+      e.foreach(subExprEliminationExprs.put(_, state))
+      code.code.trim
+    }
+    SubExprCodes(codes, subExprEliminationExprs.toMap)
+  }
+
+  /**
+   * Checks and sets up the state and codegen for subexpression elimination. This finds the
+   * common subexpressions, generates the functions that evaluate those expressions and populates
    * the mapping of common subexpressions to the generated functions.
    */
   private def subexpressionElimination(expressions: Seq[Expression]) = {
@@ -519,14 +707,14 @@ class CodegenContext {
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
-    commonExprs.foreach(e => {
+    commonExprs.foreach { e =>
       val expr = e.head
       val fnName = freshName("evalExpr")
       val isNull = s"${fnName}IsNull"
       val value = s"${fnName}Value"
 
       // Generate the code for this expression tree and wrap it in a function.
-      val code = expr.gen(this)
+      val code = expr.genCode(this)
       val fn =
         s"""
            |private void $fnName(InternalRow $INPUT_ROW) {
@@ -561,7 +749,7 @@ class CodegenContext {
       subexprFunctions += s"$fnName($INPUT_ROW);"
       val state = SubExprEliminationState(isNull, value)
       e.foreach(subExprEliminationExprs.put(_, state))
-    })
+    }
   }
 
   /**
@@ -572,7 +760,34 @@ class CodegenContext {
   def generateExpressions(expressions: Seq[Expression],
       doSubexpressionElimination: Boolean = false): Seq[ExprCode] = {
     if (doSubexpressionElimination) subexpressionElimination(expressions)
-    expressions.map(e => e.gen(this))
+    expressions.map(e => e.genCode(this))
+  }
+
+  /**
+   * get a map of the pair of a place holder and a corresponding comment
+   */
+  def getPlaceHolderToComments(): collection.Map[String, String] = placeHolderToComments
+
+  /**
+   * Register a comment and return the corresponding place holder
+   */
+  def registerComment(text: => String): String = {
+    // By default, disable comments in generated code because computing the comments themselves can
+    // be extremely expensive in certain cases, such as deeply-nested expressions which operate over
+    // inputs with wide schemas. For more details on the performance issues that motivated this
+    // flat, see SPARK-15680.
+    if (SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
+      val name = freshName("c")
+      val comment = if (text.contains("\n") || text.contains("\r")) {
+        text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
+      } else {
+        s"// $text"
+      }
+      placeHolderToComments += (name -> comment)
+      s"/*$name*/"
+    } else {
+      ""
+    }
   }
 }
 
@@ -585,13 +800,26 @@ abstract class GeneratedClass {
 }
 
 /**
+ * A wrapper for the source code to be compiled by [[CodeGenerator]].
+ */
+class CodeAndComment(val body: String, val comment: collection.Map[String, String])
+  extends Serializable {
+  override def equals(that: Any): Boolean = that match {
+    case t: CodeAndComment if t.body == body => true
+    case _ => false
+  }
+
+  override def hashCode(): Int = body.hashCode
+}
+
+/**
  * A base class for generators of byte code to perform expression evaluation.  Includes a set of
  * helpers for referring to Catalyst types and building trees that perform evaluation of individual
  * expressions.
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
 
-  protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
+  protected val genericMutableRowType: String = classOf[GenericInternalRow].getName
 
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
@@ -626,18 +854,28 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
 object CodeGenerator extends Logging {
   /**
-    * Compile the Java source code into a Java class, using Janino.
-    */
-  def compile(code: String): GeneratedClass = {
+   * Compile the Java source code into a Java class, using Janino.
+   */
+  def compile(code: CodeAndComment): GeneratedClass = {
     cache.get(code)
   }
 
   /**
-    * Compile the Java source code into a Java class, using Janino.
-    */
-  private[this] def doCompile(code: String): GeneratedClass = {
+   * Compile the Java source code into a Java class, using Janino.
+   */
+  private[this] def doCompile(code: CodeAndComment): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
-    evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
+
+    // A special classloader used to wrap the actual parent classloader of
+    // [[org.codehaus.janino.ClassBodyEvaluator]] (see CodeGenerator.doCompile). This classloader
+    // does not throw a ClassNotFoundException with a cause set (i.e. exception.getCause returns
+    // a null). This classloader is needed because janino will throw the exception directly if
+    // the parent classloader throws a ClassNotFoundException with cause set instead of trying to
+    // find other possible classes (see org.codehaus.janinoClassLoaderIClassLoader's
+    // findIClass method). Please also see https://issues.apache.org/jira/browse/SPARK-15622 and
+    // https://issues.apache.org/jira/browse/SPARK-11636.
+    val parentClassLoader = new ParentClassLoader(Utils.getContextOrSparkClassLoader)
+    evaluator.setParentClassLoader(parentClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
     evaluator.setDefaultImports(Array(
@@ -651,21 +889,21 @@ object CodeGenerator extends Logging {
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
       classOf[UnsafeMapData].getName,
-      classOf[MutableRow].getName,
       classOf[Expression].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
-    def formatted = CodeFormatter.format(code)
+    lazy val formatted = CodeFormatter.format(code)
 
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
       evaluator.setDebuggingInformation(true, true, false)
-      formatted
+      s"\n$formatted"
     })
 
     try {
-      evaluator.cook("generated.java", code)
+      evaluator.cook("generated.java", code.body)
+      recordCompilationStats(evaluator)
     } catch {
       case e: Exception =>
         val msg = s"failed to compile: $e\n$formatted"
@@ -673,6 +911,43 @@ object CodeGenerator extends Logging {
         throw new Exception(msg, e)
     }
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
+  }
+
+  /**
+   * Records the generated class and method bytecode sizes by inspecting janino private fields.
+   */
+  private def recordCompilationStats(evaluator: ClassBodyEvaluator): Unit = {
+    // First retrieve the generated classes.
+    val classes = {
+      val resultField = classOf[SimpleCompiler].getDeclaredField("result")
+      resultField.setAccessible(true)
+      val loader = resultField.get(evaluator).asInstanceOf[ByteArrayClassLoader]
+      val classesField = loader.getClass.getDeclaredField("classes")
+      classesField.setAccessible(true)
+      classesField.get(loader).asInstanceOf[JavaMap[String, Array[Byte]]].asScala
+    }
+
+    // Then walk the classes to get at the method bytecode.
+    val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
+    val codeAttrField = codeAttr.getDeclaredField("code")
+    codeAttrField.setAccessible(true)
+    classes.foreach { case (_, classBytes) =>
+      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
+      try {
+        val cf = new ClassFile(new ByteArrayInputStream(classBytes))
+        cf.methodInfos.asScala.foreach { method =>
+          method.getAttributes().foreach { a =>
+            if (a.getClass.getName == codeAttr.getName) {
+              CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(
+                codeAttrField.get(a).asInstanceOf[Array[Byte]].length)
+            }
+          }
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Error calculating stats of compiled class.", e)
+      }
+    }
   }
 
   /**
@@ -687,12 +962,14 @@ object CodeGenerator extends Logging {
   private val cache = CacheBuilder.newBuilder()
     .maximumSize(100)
     .build(
-      new CacheLoader[String, GeneratedClass]() {
-        override def load(code: String): GeneratedClass = {
+      new CacheLoader[CodeAndComment, GeneratedClass]() {
+        override def load(code: CodeAndComment): GeneratedClass = {
           val startTime = System.nanoTime()
           val result = doCompile(code)
           val endTime = System.nanoTime()
           def timeMs: Double = (endTime - startTime).toDouble / 1000000
+          CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
+          CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
           logInfo(s"Code generated in $timeMs ms")
           result
         }

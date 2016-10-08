@@ -22,11 +22,10 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.11</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <version>2.1.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-hive_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Hive</name>
@@ -60,7 +59,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
 <!--
     <dependency>
@@ -73,10 +72,6 @@
       <version>${protobuf.version}</version>
     </dependency>
 -->
-    <dependency>
-      <groupId>${hive.group}</groupId>
-      <artifactId>hive-cli</artifactId>
-    </dependency>
 <!--
     <dependency>
       <groupId>${hive.group}</groupId>
@@ -226,48 +221,26 @@
         </configuration>
       </plugin>
       <plugin>
-         <groupId>org.codehaus.mojo</groupId>
-         <artifactId>build-helper-maven-plugin</artifactId>
-         <executions>
-           <execution>
-             <id>add-default-sources</id>
-             <phase>generate-sources</phase>
-             <goals>
-               <goal>add-source</goal>
-             </goals>
-             <configuration>
-               <sources>
-                 <source>v${hive.version.short}/src/main/scala</source>
-                 <source>${project.build.directory/generated-sources/antlr</source>
-               </sources>
-             </configuration>
-           </execution>
-         </executions>
-      </plugin>
-
-      <!-- Deploy datanucleus jars to the spark/lib_managed/jars directory -->
-      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-dependency-plugin</artifactId>
+        <artifactId>maven-enforcer-plugin</artifactId>
         <executions>
           <execution>
-            <id>copy-dependencies</id>
-            <phase>package</phase>
+            <id>enforce-versions</id>
             <goals>
-              <goal>copy-dependencies</goal>
+              <goal>enforce</goal>
             </goals>
             <configuration>
-              <!-- basedir is spark/sql/hive/ -->
-              <outputDirectory>${basedir}/../../lib_managed/jars</outputDirectory>
-              <overWriteReleases>false</overWriteReleases>
-              <overWriteSnapshots>false</overWriteSnapshots>
-              <overWriteIfNewer>true</overWriteIfNewer>
-              <includeGroupIds>org.datanucleus</includeGroupIds>
+              <rules>
+                <bannedDependencies>
+                  <excludes combine.children="append">
+                    <exclude>*:hive-cli</exclude>
+                  </excludes>
+                </bannedDependencies>
+              </rules>
             </configuration>
           </execution>
         </executions>
       </plugin>
-
     </plugins>
   </build>
 </project>

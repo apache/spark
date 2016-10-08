@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -32,6 +32,7 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * Functions for registering user-defined functions. Use [[SQLContext.udf]] to access this.
+ * Note that the user-defined functions must be deterministic.
  *
  * @since 1.3.0
  */

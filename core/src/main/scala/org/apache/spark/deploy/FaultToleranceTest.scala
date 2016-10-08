@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.{Await, Future, Promise}
+import scala.concurrent.{Future, Promise}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -32,9 +32,10 @@ import scala.sys.process._
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.master.RecoveryState
-import org.apache.spark.util.Utils
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * This suite tests the fault tolerance of the Spark standalone scheduler, mainly the Master.
@@ -264,7 +265,7 @@ private object FaultToleranceTest extends App with Logging {
     }
 
     // Avoid waiting indefinitely (e.g., we could register but get no executors).
-    assertTrue(Await.result(f, 120 seconds))
+    assertTrue(ThreadUtils.awaitResult(f, 120 seconds))
   }
 
   /**
@@ -317,7 +318,7 @@ private object FaultToleranceTest extends App with Logging {
     }
 
     try {
-      assertTrue(Await.result(f, 120 seconds))
+      assertTrue(ThreadUtils.awaitResult(f, 120 seconds))
     } catch {
       case e: TimeoutException =>
         logError("Master states: " + masters.map(_.state))
@@ -421,7 +422,7 @@ private object SparkDocker {
     }
 
     dockerCmd.run(ProcessLogger(findIpAndLog _))
-    val ip = Await.result(ipPromise.future, 30 seconds)
+    val ip = ThreadUtils.awaitResult(ipPromise.future, 30 seconds)
     val dockerId = Docker.getLastProcessId
     (ip, dockerId, outFile)
   }

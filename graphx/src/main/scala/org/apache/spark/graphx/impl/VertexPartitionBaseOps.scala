@@ -21,13 +21,13 @@ import scala.language.higherKinds
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.collection.BitSet
 
 /**
- * An class containing additional operations for subclasses of VertexPartitionBase that provide
+ * A class containing additional operations for subclasses of VertexPartitionBase that provide
  * implicit evidence of membership in the `VertexPartitionBaseOpsConstructor` typeclass (for
  * example, [[VertexPartition.VertexPartitionOpsConstructor]]).
  */

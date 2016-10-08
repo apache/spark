@@ -35,33 +35,37 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       .union(inferAdditionalConstraints(constraints))
       .union(constructIsNotNullConstraints(constraints))
       .filter(constraint =>
-        constraint.references.nonEmpty && constraint.references.subsetOf(outputSet))
+        constraint.references.nonEmpty && constraint.references.subsetOf(outputSet) &&
+          constraint.deterministic)
   }
 
   /**
-   * Infers a set of `isNotNull` constraints from a given set of equality/comparison expressions.
-   * For e.g., if an expression is of the form (`a > 5`), this returns a constraint of the form
-   * `isNotNull(a)`
+   * Infers a set of `isNotNull` constraints from a given set of equality/comparison expressions as
+   * well as non-nullable attributes. For e.g., if an expression is of the form (`a > 5`), this
+   * returns a constraint of the form `isNotNull(a)`
    */
   private def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
-    // Currently we only propagate constraints if the condition consists of equality
-    // and ranges. For all other cases, we return an empty set of constraints
-    constraints.map {
-      case EqualTo(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case GreaterThan(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case GreaterThanOrEqual(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case LessThan(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case LessThanOrEqual(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case Not(EqualTo(l, r)) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case _ =>
-        Set.empty[Expression]
-    }.foldLeft(Set.empty[Expression])(_ union _.toSet)
+    // First, we propagate constraints from the null intolerant expressions.
+    var isNotNullConstraints: Set[Expression] =
+      constraints.flatMap(scanNullIntolerantExpr).map(IsNotNull(_))
+
+    // Second, we infer additional constraints from non-nullable attributes that are part of the
+    // operator's output
+    val nonNullableAttributes = output.filterNot(_.nullable)
+    isNotNullConstraints ++= nonNullableAttributes.map(IsNotNull).toSet
+
+    isNotNullConstraints -- constraints
+  }
+
+  /**
+   * Recursively explores the expressions which are null intolerant and returns all attributes
+   * in these expressions.
+   */
+  private def scanNullIntolerantExpr(expr: Expression): Seq[Attribute] = expr match {
+    case a: Attribute => Seq(a)
+    case _: NullIntolerant | IsNotNull(_: NullIntolerant) =>
+      expr.children.flatMap(scanNullIntolerantExpr)
+    case _ => Seq.empty[Attribute]
   }
 
   /**
@@ -119,8 +123,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     AttributeSet(children.flatMap(_.asInstanceOf[QueryPlan[PlanType]].output))
 
   /**
-    * The set of all attributes that are produced by this node.
-    */
+   * The set of all attributes that are produced by this node.
+   */
   def producedAttributes: AttributeSet = AttributeSet.empty
 
   /**
@@ -169,7 +173,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       case null => null
     }
 
-    val newArgs = productIterator.map(recursiveTransform).toArray
+    val newArgs = mapProductIterator(recursiveTransform)
 
     if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
   }
@@ -203,13 +207,15 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       case null => null
     }
 
-    val newArgs = productIterator.map(recursiveTransform).toArray
+    val newArgs = mapProductIterator(recursiveTransform)
 
     if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
   }
 
-  /** Returns the result of running [[transformExpressions]] on this node
-    * and all its children. */
+  /**
+   * Returns the result of running [[transformExpressions]] on this node
+   * and all its children.
+   */
   def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     transform {
       case q: QueryPlan[_] => q.transformExpressions(rule).asInstanceOf[PlanType]
@@ -252,14 +258,18 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   override def simpleString: String = statePrefix + super.simpleString
 
+  override def verboseString: String = simpleString
+
   /**
    * All the subqueries of current plan.
    */
   def subqueries: Seq[PlanType] = {
-    expressions.flatMap(_.collect {case e: SubqueryExpression => e.plan.asInstanceOf[PlanType]})
+    expressions.flatMap(_.collect {
+      case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
+    })
   }
 
-  override def innerChildren: Seq[PlanType] = subqueries
+  override protected def innerChildren: Seq[QueryPlan[_]] = subqueries
 
   /**
    * Canonicalized copy of this query plan.
@@ -291,14 +301,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   /**
    * All the attributes that are used for this plan.
    */
-  lazy val allAttributes: Seq[Attribute] = children.flatMap(_.output)
+  lazy val allAttributes: AttributeSeq = children.flatMap(_.output)
 
-  private def cleanExpression(e: Expression): Expression = e match {
+  protected def cleanExpression(e: Expression): Expression = e match {
     case a: Alias =>
       // As the root of the expression, Alias will always take an arbitrary exprId, we need
       // to erase that for equality testing.
       val cleanedExprId =
-        Alias(a.child, a.name)(ExprId(-1), a.qualifiers, isGenerated = a.isGenerated)
+        Alias(a.child, a.name)(ExprId(-1), a.qualifier, isGenerated = a.isGenerated)
       BindReferences.bindReference(cleanedExprId, allAttributes, allowFailures = true)
     case other =>
       BindReferences.bindReference(other, allAttributes, allowFailures = true)
@@ -307,18 +317,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   /** Args that have cleaned such that differences in expression id should not affect equality */
   protected lazy val cleanArgs: Seq[Any] = {
     def cleanArg(arg: Any): Any = arg match {
+      // Children are checked using sameResult above.
+      case tn: TreeNode[_] if containsChild(tn) => null
       case e: Expression => cleanExpression(e).canonicalized
       case other => other
     }
 
-    productIterator.map {
-      // Children are checked using sameResult above.
-      case tn: TreeNode[_] if containsChild(tn) => null
-      case e: Expression => cleanArg(e)
+    mapProductIterator {
       case s: Option[_] => s.map(cleanArg)
       case s: Seq[_] => s.map(cleanArg)
       case m: Map[_, _] => m.mapValues(cleanArg)
-      case other => other
+      case other => cleanArg(other)
     }.toSeq
   }
 }

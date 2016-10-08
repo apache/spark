@@ -27,7 +27,8 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{Logging, SparkEnv, SparkException}
+import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.Time
@@ -59,7 +60,7 @@ private[streaming] class ReceiverSupervisorImpl(
             "Please use streamingContext.checkpoint() to set the checkpoint directory. " +
             "See documentation for more details.")
       }
-      new WriteAheadLogBasedBlockHandler(env.blockManager, receiver.streamId,
+      new WriteAheadLogBasedBlockHandler(env.blockManager, env.serializerManager, receiver.streamId,
         receiver.storageLevel, env.conf, hadoopConf, checkpointDirOption.get)
     } else {
       new BlockManagerBasedBlockHandler(env.blockManager, receiver.storageLevel)
@@ -128,7 +129,7 @@ private[streaming] class ReceiverSupervisorImpl(
     pushAndReportBlock(ArrayBufferBlock(arrayBuffer), metadataOption, blockIdOption)
   }
 
-  /** Store a iterator of received data as a data block into Spark's memory. */
+  /** Store an iterator of received data as a data block into Spark's memory. */
   def pushIterator(
       iterator: Iterator[_],
       metadataOption: Option[Any],

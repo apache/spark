@@ -53,7 +53,7 @@ while (( "$#" )); do
     --hadoop)
       echo "Error: '--hadoop' is no longer supported:"
       echo "Error: use Maven profiles and options -Dhadoop.version and -Dyarn.version instead."
-      echo "Error: Related profiles include hadoop-2.2, hadoop-2.3 and hadoop-2.4."
+      echo "Error: Related profiles include hadoop-2.2, hadoop-2.3, hadoop-2.4, hadoop-2.6 and hadoop-2.7."
       exit_with_usage
       ;;
     --with-yarn)
@@ -150,7 +150,7 @@ export MAVEN_OPTS="${MAVEN_OPTS:--Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCac
 # Store the command as an array because $MVN variable might have spaces in it.
 # Normal quoting tricks don't work.
 # See: http://mywiki.wooledge.org/BashFAQ/050
-BUILD_COMMAND=("$MVN" clean package -DskipTests $@)
+BUILD_COMMAND=("$MVN" -T 1C clean package -DskipTests $@)
 
 # Actually build the jar
 echo -e "\nBuilding with..."
@@ -160,27 +160,34 @@ echo -e "\$ ${BUILD_COMMAND[@]}\n"
 
 # Make directories
 rm -rf "$DISTDIR"
-mkdir -p "$DISTDIR/lib"
+mkdir -p "$DISTDIR/jars"
 echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
 echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 
 # Copy jars
-cp "$SPARK_HOME"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
-# This will fail if the -Pyarn profile is not provided
-# In this case, silence the error and ignore the return code of this command
-cp "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/lib/" &> /dev/null || :
+cp "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
+
+# Only create the yarn directory if the yarn artifacts were build.
+if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then
+  mkdir "$DISTDIR"/yarn
+  cp "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/yarn"
+fi
 
 # Copy examples and dependencies
 mkdir -p "$DISTDIR/examples/jars"
 cp "$SPARK_HOME"/examples/target/scala*/jars/* "$DISTDIR/examples/jars"
 
+# Deduplicate jars that have already been packaged as part of the main Spark dependencies.
+for f in "$DISTDIR/examples/jars/"*; do
+  name=$(basename "$f")
+  if [ -f "$DISTDIR/jars/$name" ]; then
+    rm "$DISTDIR/examples/jars/$name"
+  fi
+done
+
 # Copy example sources (needed for python and SQL)
 mkdir -p "$DISTDIR/examples/src/main"
 cp -r "$SPARK_HOME"/examples/src/main "$DISTDIR/examples/src/"
-
-if [ "$SPARK_HIVE" == "1" ]; then
-  cp "$SPARK_HOME"/lib_managed/jars/datanucleus*.jar "$DISTDIR/lib/"
-fi
 
 # Copy license and ASF files
 cp "$SPARK_HOME/LICENSE" "$DISTDIR"

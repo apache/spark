@@ -19,8 +19,8 @@ package org.apache.spark.mllib.stat.test
 
 import scala.beans.BeanInfo
 
-import org.apache.spark.Logging
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.api.java.JavaDStream
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.StatCounter
@@ -42,7 +42,6 @@ case class BinarySample @Since("1.6.0") (
 }
 
 /**
- * :: Experimental ::
  * Performs online 2-sample significance testing for a stream of (Boolean, Double) pairs. The
  * Boolean identifies which sample each observation comes from, and the Double is the numeric value
  * of the observation.
@@ -67,7 +66,6 @@ case class BinarySample @Since("1.6.0") (
  *     .registerStream(DStream)
  * }}}
  */
-@Experimental
 @Since("1.6.0")
 class StreamingTest @Since("1.6.0") () extends Logging with Serializable {
   private var peacePeriod: Int = 0

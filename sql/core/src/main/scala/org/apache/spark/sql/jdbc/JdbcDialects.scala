@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.Connection
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.sql.types._
 
 /**
@@ -100,14 +100,34 @@ abstract class JdbcDialect extends Serializable {
   }
 
   /**
-    * Override connection specific properties to run before a select is made.  This is in place to
-    * allow dialects that need special treatment to optimize behavior.
-    * @param connection The connection object
-    * @param properties The connection properties.  This is passed through from the relation.
-    */
+   * The SQL query that should be used to discover the schema of a table. It only needs to
+   * ensure that the result set has the same schema as the table, such as by calling
+   * "SELECT * ...". Dialects can override this method to return a query that works best in a
+   * particular database.
+   * @param table The name of the table.
+   * @return The SQL query to use for discovering the schema.
+   */
+  @Since("2.1.0")
+  def getSchemaQuery(table: String): String = {
+    s"SELECT * FROM $table WHERE 1=0"
+  }
+
+  /**
+   * Override connection specific properties to run before a select is made.  This is in place to
+   * allow dialects that need special treatment to optimize behavior.
+   * @param connection The connection object
+   * @param properties The connection properties.  This is passed through from the relation.
+   */
   def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
   }
 
+  /**
+   * Return Some[true] iff `TRUNCATE TABLE` causes cascading default.
+   * Some[true] : TRUNCATE TABLE causes cascading.
+   * Some[false] : TRUNCATE TABLE does not cause cascading.
+   * None: The behavior of TRUNCATE TABLE is unknown (default).
+   */
+  def isCascadingTruncateTable(): Option[Boolean] = None
 }
 
 /**
@@ -126,7 +146,7 @@ object JdbcDialects {
 
   /**
    * Register a dialect for use on all new matching jdbc [[org.apache.spark.sql.DataFrame]].
-   * Readding an existing dialect will cause a move-to-front.
+   * Reading an existing dialect will cause a move-to-front.
    *
    * @param dialect The new dialect.
    */
@@ -155,7 +175,7 @@ object JdbcDialects {
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
    */
-  private[sql] def get(url: String): JdbcDialect = {
+  def get(url: String): JdbcDialect = {
     val matchingDialects = dialects.filter(_.canHandle(url))
     matchingDialects.length match {
       case 0 => NoopDialect

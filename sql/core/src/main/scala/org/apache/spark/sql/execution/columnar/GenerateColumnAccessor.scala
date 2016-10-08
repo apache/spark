@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGenerator, UnsafeRowWriter}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, CodeGenerator, UnsafeRowWriter}
 import org.apache.spark.sql.types._
 
 /**
@@ -36,8 +36,7 @@ abstract class ColumnarIterator extends Iterator[InternalRow] {
  *
  * WARNING: These setter MUST be called in increasing order of ordinals.
  */
-class MutableUnsafeRow(val writer: UnsafeRowWriter) extends GenericMutableRow(null) {
-
+class MutableUnsafeRow(val writer: UnsafeRowWriter) extends BaseGenericInternalRow {
   override def isNullAt(i: Int): Boolean = writer.isNullAt(i)
   override def setNullAt(i: Int): Unit = writer.setNullAt(i)
 
@@ -55,10 +54,13 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends GenericMutableRow(nu
   override def update(i: Int, v: Any): Unit = throw new UnsupportedOperationException
 
   // all other methods inherited from GenericMutableRow are not need
+  override protected def genericGet(ordinal: Int): Any = throw new UnsupportedOperationException
+  override def numFields: Int = throw new UnsupportedOperationException
+  override def copy(): InternalRow = throw new UnsupportedOperationException
 }
 
 /**
- * Generates bytecode for an [[ColumnarIterator]] for columnar cache.
+ * Generates bytecode for a [[ColumnarIterator]] for columnar cache.
  */
 object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarIterator] with Logging {
 
@@ -88,7 +90,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case array: ArrayType => classOf[ArrayColumnAccessor].getName
         case t: MapType => classOf[MapColumnAccessor].getName
       }
-      ctx.addMutableState(accessorCls, accessorName, s"$accessorName = null;")
+      ctx.addMutableState(accessorCls, accessorName, "")
 
       val createCode = dt match {
         case t if ctx.isPrimitiveType(dt) =>
@@ -114,7 +116,43 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       (createCode, extract + patch)
     }.unzip
 
-    val code = s"""
+    /*
+     * 200 = 6000 bytes / 30 (up to 30 bytes per one call))
+     * the maximum byte code size to be compiled for HotSpot is 8000.
+     * We should keep less than 8000
+     */
+    val numberOfStatementsThreshold = 200
+    val (initializerAccessorCalls, extractorCalls) =
+      if (initializeAccessors.length <= numberOfStatementsThreshold) {
+        (initializeAccessors.mkString("\n"), extractors.mkString("\n"))
+      } else {
+        val groupedAccessorsItr = initializeAccessors.grouped(numberOfStatementsThreshold)
+        val groupedExtractorsItr = extractors.grouped(numberOfStatementsThreshold)
+        var groupedAccessorsLength = 0
+        groupedAccessorsItr.zipWithIndex.foreach { case (body, i) =>
+          groupedAccessorsLength += 1
+          val funcName = s"accessors$i"
+          val funcCode = s"""
+             |private void $funcName() {
+             |  ${body.mkString("\n")}
+             |}
+           """.stripMargin
+          ctx.addNewFunction(funcName, funcCode)
+        }
+        groupedExtractorsItr.zipWithIndex.foreach { case (body, i) =>
+          val funcName = s"extractors$i"
+          val funcCode = s"""
+             |private void $funcName() {
+             |  ${body.mkString("\n")}
+             |}
+           """.stripMargin
+          ctx.addNewFunction(funcName, funcCode)
+        }
+        ((0 to groupedAccessorsLength - 1).map { i => s"accessors$i();" }.mkString("\n"),
+         (0 to groupedAccessorsLength - 1).map { i => s"extractors$i();" }.mkString("\n"))
+      }
+
+    val codeBody = s"""
       import java.nio.ByteBuffer;
       import java.nio.ByteOrder;
       import scala.collection.Iterator;
@@ -149,8 +187,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           this.nativeOrder = ByteOrder.nativeOrder();
           this.buffers = new byte[${columnTypes.length}][];
           this.mutableRow = new MutableUnsafeRow(rowWriter);
-
-          ${ctx.initMutableStates()}
         }
 
         public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes) {
@@ -158,6 +194,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           this.columnTypes = columnTypes;
           this.columnIndexes = columnIndexes;
         }
+
+        ${ctx.declareAddedFunctions()}
 
         public boolean hasNext() {
           if (currentRow < numRowsInBatch) {
@@ -173,7 +211,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           for (int i = 0; i < columnIndexes.length; i ++) {
             buffers[i] = batch.buffers()[columnIndexes[i]];
           }
-          ${initializeAccessors.mkString("\n")}
+          ${initializerAccessorCalls}
 
           return hasNext();
         }
@@ -182,13 +220,15 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           currentRow += 1;
           bufferHolder.reset();
           rowWriter.zeroOutNullBytes();
-          ${extractors.mkString("\n")}
+          ${extractorCalls}
           unsafeRow.setTotalSize(bufferHolder.totalSize());
           return unsafeRow;
         }
       }"""
 
-    logDebug(s"Generated ColumnarIterator: ${CodeFormatter.format(code)}")
+    val code = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
+    logDebug(s"Generated ColumnarIterator:\n${CodeFormatter.format(code)}")
 
     CodeGenerator.compile(code).generate(Array.empty).asInstanceOf[ColumnarIterator]
   }

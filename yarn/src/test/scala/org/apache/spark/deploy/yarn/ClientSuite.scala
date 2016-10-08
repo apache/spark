@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
+import java.io.{File, FileInputStream, FileOutputStream}
 import java.net.URI
 import java.util.Properties
 
@@ -118,10 +118,11 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val sparkConf = new SparkConf()
       .set(SPARK_JARS, Seq(SPARK))
       .set(USER_CLASS_PATH_FIRST, true)
+      .set("spark.yarn.dist.jars", ADDED)
     val env = new MutableHashMap[String, String]()
-    val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
+    val args = new ClientArguments(Array("--jar", USER))
 
-    populateClasspath(args, conf, sparkConf, env, true)
+    populateClasspath(args, conf, sparkConf, env)
 
     val cp = env("CLASSPATH").split(":|;|<CPS>")
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
@@ -138,13 +139,22 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   }
 
   test("Jar path propagation through SparkConf") {
-    val sparkConf = new SparkConf().set(SPARK_JARS, Seq(SPARK))
-    val client = createClient(sparkConf,
-      args = Array("--jar", USER, "--addJars", ADDED))
+    val conf = new Configuration()
+    val sparkConf = new SparkConf()
+      .set(SPARK_JARS, Seq(SPARK))
+      .set("spark.yarn.dist.jars", ADDED)
+    val client = createClient(sparkConf, args = Array("--jar", USER))
+    doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
+      any(classOf[Path]), anyShort(), anyBoolean(), any())
 
     val tempDir = Utils.createTempDir()
     try {
-      client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
+      // Because we mocked "copyFileToRemote" above to avoid having to create fake local files,
+      // we need to create a fake config archive in the temp dir to avoid having
+      // prepareLocalResources throw an exception.
+      new FileOutputStream(new File(tempDir, LOCALIZED_CONF_ARCHIVE)).close()
+
+      client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
       sparkConf.get(APP_JAR) should be (Some(USER))
 
       // The non-local path should be propagated by name only, since it will end up in the app's
@@ -178,8 +188,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       "/remotePath/1:/remotePath/2")
 
     val env = new MutableHashMap[String, String]()
-    populateClasspath(null, conf, sparkConf, env, false,
-      extraClassPath = Some("/localPath/my1.jar"))
+    populateClasspath(null, conf, sparkConf, env, extraClassPath = Some("/localPath/my1.jar"))
     val cp = classpath(env)
     cp should contain ("/remotePath/spark.jar")
     cp should contain ("/remotePath/my1.jar")
@@ -193,9 +202,9 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val sparkConf = new SparkConf()
       .set(APPLICATION_TAGS.key, ",tag1, dup,tag2 , ,multi word , dup")
       .set(MAX_APP_ATTEMPTS, 42)
-    val args = new ClientArguments(Array(
-      "--name", "foo-test-app",
-      "--queue", "staging-queue"), sparkConf)
+      .set("spark.app.name", "foo-test-app")
+      .set(QUEUE_NAME, "staging-queue")
+    val args = new ClientArguments(Array())
 
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
     val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
@@ -236,14 +245,17 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val client = createClient(sparkConf)
 
     val tempDir = Utils.createTempDir()
-    client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
+    client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
 
     assert(sparkConf.get(SPARK_JARS) ===
       Some(Seq(s"local:${jar4.getPath()}", s"local:${single.getAbsolutePath()}/*")))
 
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar1.toURI())), anyShort())
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar2.toURI())), anyShort())
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar3.toURI())), anyShort())
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar1.toURI())), anyShort(),
+      anyBoolean(), any())
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar2.toURI())), anyShort(),
+      anyBoolean(), any())
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar3.toURI())), anyShort(),
+      anyBoolean(), any())
 
     val cp = classpath(client)
     cp should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
@@ -258,28 +270,60 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
     val sparkConf = new SparkConf().set(SPARK_ARCHIVE, archive.getPath())
     val client = createClient(sparkConf)
-    client.prepareLocalResources(temp.getAbsolutePath(), Nil)
+    client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
 
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())), anyShort())
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())), anyShort(),
+      anyBoolean(), any())
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
 
     sparkConf.set(SPARK_ARCHIVE, LOCAL_SCHEME + ":" + archive.getPath())
     intercept[IllegalArgumentException] {
-      client.prepareLocalResources(temp.getAbsolutePath(), Nil)
+      client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
     }
   }
 
   test("distribute local spark jars") {
     val temp = Utils.createTempDir()
-    val jarsDir = new File(temp, "lib")
+    val jarsDir = new File(temp, "jars")
     assert(jarsDir.mkdir())
     val jar = TestUtils.createJarWithFiles(Map(), jarsDir)
+    new FileOutputStream(new File(temp, "RELEASE")).close()
 
     val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> temp.getAbsolutePath()))
     val client = createClient(sparkConf)
-    client.prepareLocalResources(temp.getAbsolutePath(), Nil)
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar.toURI())), anyShort())
+    client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
+  }
+
+  test("ignore same name jars") {
+    val libs = Utils.createTempDir()
+    val jarsDir = new File(libs, "jars")
+    assert(jarsDir.mkdir())
+    new FileOutputStream(new File(libs, "RELEASE")).close()
+    val userLib1 = Utils.createTempDir()
+    val userLib2 = Utils.createTempDir()
+
+    val jar1 = TestUtils.createJarWithFiles(Map(), jarsDir)
+    val jar2 = TestUtils.createJarWithFiles(Map(), userLib1)
+    // Copy jar2 to jar3 with same name
+    val jar3 = {
+      val target = new File(userLib2, new File(jar2.toURI).getName)
+      val input = new FileInputStream(jar2.getPath)
+      val output = new FileOutputStream(target)
+      Utils.copyStream(input, output, closeStreams = true)
+      target.toURI.toURL
+    }
+
+    val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> libs.getAbsolutePath))
+      .set(JARS_TO_DISTRIBUTE, Seq(jar2.getPath, jar3.getPath))
+
+    val client = createClient(sparkConf)
+    val tempDir = Utils.createTempDir()
+    client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
+
+    // Only jar2 will be added to SECONDARY_JARS, jar3 which has the same name with jar2 will be
+    // ignored.
+    sparkConf.get(SECONDARY_JARS) should be (Some(Seq(new File(jar2.toURI).getName)))
   }
 
   object Fixtures {
@@ -346,16 +390,13 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       sparkConf: SparkConf,
       conf: Configuration = new Configuration(),
       args: Array[String] = Array()): Client = {
-    val clientArgs = new ClientArguments(args, sparkConf)
-    val client = spy(new Client(clientArgs, conf, sparkConf))
-    doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
-      any(classOf[Path]), anyShort())
-    client
+    val clientArgs = new ClientArguments(args)
+    spy(new Client(clientArgs, conf, sparkConf))
   }
 
   private def classpath(client: Client): Array[String] = {
     val env = new MutableHashMap[String, String]()
-    populateClasspath(null, client.hadoopConf, client.sparkConf, env, false)
+    populateClasspath(null, client.hadoopConf, client.sparkConf, env)
     classpath(env)
   }
 

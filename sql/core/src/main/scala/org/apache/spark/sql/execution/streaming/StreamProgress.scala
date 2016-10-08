@@ -17,55 +17,31 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import scala.collection.mutable
+import scala.collection.{immutable, GenTraversableOnce}
 
 /**
  * A helper class that looks like a Map[Source, Offset].
  */
-class StreamProgress {
-  private val currentOffsets = new mutable.HashMap[Source, Offset]
+class StreamProgress(
+    val baseMap: immutable.Map[Source, Offset] = new immutable.HashMap[Source, Offset])
+  extends scala.collection.immutable.Map[Source, Offset] {
 
-  private[streaming] def update(source: Source, newOffset: Offset): Unit = {
-    currentOffsets.get(source).foreach(old =>
-      assert(newOffset > old, s"Stream going backwards $newOffset -> $old"))
-    currentOffsets.put(source, newOffset)
-  }
-
-  private[streaming] def update(newOffset: (Source, Offset)): Unit =
-    update(newOffset._1, newOffset._2)
-
-  private[streaming] def apply(source: Source): Offset = currentOffsets(source)
-  private[streaming] def get(source: Source): Option[Offset] = currentOffsets.get(source)
-  private[streaming] def contains(source: Source): Boolean = currentOffsets.contains(source)
-
-  private[streaming] def ++(updates: Map[Source, Offset]): StreamProgress = {
-    val updated = new StreamProgress
-    currentOffsets.foreach(updated.update)
-    updates.foreach(updated.update)
-    updated
-  }
-
-  /**
-   * Used to create a new copy of this [[StreamProgress]]. While this class is currently mutable,
-   * it should be copied before being passed to user code.
-   */
-  private[streaming] def copy(): StreamProgress = {
-    val copied = new StreamProgress
-    currentOffsets.foreach(copied.update)
-    copied
-  }
-
-  private[sql] def toCompositeOffset(source: Seq[Source]): CompositeOffset = {
+  def toCompositeOffset(source: Seq[Source]): CompositeOffset = {
     CompositeOffset(source.map(get))
   }
 
   override def toString: String =
-    currentOffsets.map { case (k, v) => s"$k: $v"}.mkString("{", ",", "}")
+    baseMap.map { case (k, v) => s"$k: $v"}.mkString("{", ",", "}")
 
-  override def equals(other: Any): Boolean = other match {
-    case s: StreamProgress => currentOffsets == s.currentOffsets
-    case _ => false
+  override def +[B1 >: Offset](kv: (Source, B1)): Map[Source, B1] = baseMap + kv
+
+  override def get(key: Source): Option[Offset] = baseMap.get(key)
+
+  override def iterator: Iterator[(Source, Offset)] = baseMap.iterator
+
+  override def -(key: Source): Map[Source, Offset] = baseMap - key
+
+  def ++(updates: GenTraversableOnce[(Source, Offset)]): StreamProgress = {
+    new StreamProgress(baseMap ++ updates)
   }
-
-  override def hashCode: Int = currentOffsets.hashCode()
 }

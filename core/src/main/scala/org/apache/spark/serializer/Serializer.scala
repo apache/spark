@@ -188,10 +188,9 @@ abstract class DeserializationStream {
       try {
         (readKey[Any](), readValue[Any]())
       } catch {
-        case eof: EOFException => {
+        case eof: EOFException =>
           finished = true
           null
-        }
       }
     }
 

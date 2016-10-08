@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * A library for easily manipulating trees of operators.  Operators that extend TreeNode are

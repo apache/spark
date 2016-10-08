@@ -37,7 +37,8 @@ import scala.reflect.{ ClassTag, classTag }
 import scala.tools.reflect.StdRuntimeTags._
 import scala.util.control.ControlThrowable
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 import org.apache.spark.annotation.DeveloperApi
 

@@ -67,7 +67,7 @@ case class ClusteredDistribution(clustering: Seq[Expression]) extends Distributi
 case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
   require(
     ordering != Nil,
-    "The ordering expressions of a OrderedDistribution should not be Nil. " +
+    "The ordering expressions of an OrderedDistribution should not be Nil. " +
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
 
@@ -76,9 +76,9 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
 }
 
 /**
-  * Represents data where tuples are broadcasted to every node. It is quite common that the
-  * entire set of tuples is transformed into different data structure.
-  */
+ * Represents data where tuples are broadcasted to every node. It is quite common that the
+ * entire set of tuples is transformed into different data structure.
+ */
 case class BroadcastDistribution(mode: BroadcastMode) extends Distribution
 
 /**

@@ -21,10 +21,10 @@ import javax.servlet.ServletContext
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
 
-import com.sun.jersey.api.core.ResourceConfig
-import com.sun.jersey.spi.container.servlet.ServletContainer
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
+import org.glassfish.jersey.server.ServerProperties
+import org.glassfish.jersey.servlet.ServletContainer
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.ui.SparkUI
@@ -91,12 +91,28 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
     }
   }
 
+  @Path("applications/{appId}/allexecutors")
+  def getAllExecutors(@PathParam("appId") appId: String): AllExecutorListResource = {
+    uiRoot.withSparkUI(appId, None) { ui =>
+      new AllExecutorListResource(ui)
+    }
+  }
+
   @Path("applications/{appId}/{attemptId}/executors")
   def getExecutors(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): ExecutorListResource = {
     uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
       new ExecutorListResource(ui)
+    }
+  }
+
+  @Path("applications/{appId}/{attemptId}/allexecutors")
+  def getAllExecutors(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): AllExecutorListResource = {
+    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+      new AllExecutorListResource(ui)
     }
   }
 
@@ -177,6 +193,12 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
       @PathParam("attemptId") attemptId: String): EventLogDownloadResource = {
     new EventLogDownloadResource(uiRoot, appId, Some(attemptId))
   }
+
+  @Path("version")
+  def getVersion(): VersionResource = {
+    new VersionResource(uiRoot)
+  }
+
 }
 
 private[spark] object ApiRootResource {
@@ -185,12 +207,7 @@ private[spark] object ApiRootResource {
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
     jerseyContext.setContextPath("/api")
     val holder: ServletHolder = new ServletHolder(classOf[ServletContainer])
-    holder.setInitParameter("com.sun.jersey.config.property.resourceConfigClass",
-      "com.sun.jersey.api.core.PackagesResourceConfig")
-    holder.setInitParameter("com.sun.jersey.config.property.packages",
-      "org.apache.spark.status.api.v1")
-    holder.setInitParameter(ResourceConfig.PROPERTY_CONTAINER_REQUEST_FILTERS,
-      classOf[SecurityFilter].getCanonicalName)
+    holder.setInitParameter(ServerProperties.PROVIDER_PACKAGES, "org.apache.spark.status.api.v1")
     UIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
     jerseyContext.addServlet(holder, "/*")
     jerseyContext
@@ -199,12 +216,13 @@ private[spark] object ApiRootResource {
 
 /**
  * This trait is shared by the all the root containers for application UI information --
- * the HistoryServer, the Master UI, and the application UI.  This provides the common
+ * the HistoryServer and the application UI.  This provides the common
  * interface needed for them all to expose application info as json.
  */
 private[spark] trait UIRoot {
   def getSparkUI(appKey: String): Option[SparkUI]
   def getApplicationInfoList: Iterator[ApplicationInfo]
+  def getApplicationInfo(appId: String): Option[ApplicationInfo]
 
   /**
    * Write the event logs for the given app to the [[ZipOutputStream]] instance. If attemptId is

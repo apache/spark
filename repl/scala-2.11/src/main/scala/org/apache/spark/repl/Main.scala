@@ -22,8 +22,10 @@ import java.io.File
 import scala.tools.nsc.GenericRunnerSettings
 
 import org.apache.spark._
+import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
-import org.apache.spark.sql.SQLContext
 
 object Main extends Logging {
 
@@ -34,7 +36,7 @@ object Main extends Logging {
   val outputDir = Utils.createTempDir(root = rootDir, namePrefix = "repl")
 
   var sparkContext: SparkContext = _
-  var sqlContext: SQLContext = _
+  var sparkSession: SparkSession = _
   // this is a public var because tests reset it.
   var interp: SparkILoop = _
 
@@ -52,9 +54,7 @@ object Main extends Logging {
   // Visible for testing
   private[repl] def doMain(args: Array[String], _interp: SparkILoop): Unit = {
     interp = _interp
-    val jars = conf.getOption("spark.jars")
-      .map(_.replace(",", File.pathSeparator))
-      .getOrElse("")
+    val jars = Utils.getUserJars(conf, isShell = true).mkString(File.pathSeparator)
     val interpArguments = List(
       "-Yrepl-class-based",
       "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
@@ -70,39 +70,46 @@ object Main extends Logging {
     }
   }
 
-  def createSparkContext(): SparkContext = {
+  def createSparkSession(): SparkSession = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
     conf.setIfMissing("spark.app.name", "Spark shell")
-      // SparkContext will detect this configuration and register it with the RpcEnv's
-      // file server, setting spark.repl.class.uri to the actual URI for executors to
-      // use. This is sort of ugly but since executors are started as part of SparkContext
-      // initialization in certain cases, there's an initialization order issue that prevents
-      // this from being set after SparkContext is instantiated.
-      .set("spark.repl.class.outputDir", outputDir.getAbsolutePath())
+    // SparkContext will detect this configuration and register it with the RpcEnv's
+    // file server, setting spark.repl.class.uri to the actual URI for executors to
+    // use. This is sort of ugly but since executors are started as part of SparkContext
+    // initialization in certain cases, there's an initialization order issue that prevents
+    // this from being set after SparkContext is instantiated.
+    conf.set("spark.repl.class.outputDir", outputDir.getAbsolutePath())
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
     }
     if (System.getenv("SPARK_HOME") != null) {
       conf.setSparkHome(System.getenv("SPARK_HOME"))
     }
-    sparkContext = new SparkContext(conf)
-    logInfo("Created spark context..")
-    sparkContext
-  }
 
-  def createSQLContext(): SQLContext = {
-    val name = "org.apache.spark.sql.hive.HiveContext"
-    val loader = Utils.getContextOrSparkClassLoader
-    try {
-      sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
-        .newInstance(sparkContext).asInstanceOf[SQLContext]
-      logInfo("Created sql context (with Hive support)..")
-    } catch {
-      case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
-        sqlContext = new SQLContext(sparkContext)
-        logInfo("Created sql context..")
+    val builder = SparkSession.builder.config(conf)
+    if (conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase == "hive") {
+      if (SparkSession.hiveClassesArePresent) {
+        // In the case that the property is not set at all, builder's config
+        // does not have this value set to 'hive' yet. The original default
+        // behavior is that when there are hive classes, we use hive catalog.
+        sparkSession = builder.enableHiveSupport().getOrCreate()
+        logInfo("Created Spark session with Hive support")
+      } else {
+        // Need to change it back to 'in-memory' if no hive classes are found
+        // in the case that the property is set to hive in spark-defaults.conf
+        builder.config(CATALOG_IMPLEMENTATION.key, "in-memory")
+        sparkSession = builder.getOrCreate()
+        logInfo("Created Spark session")
+      }
+    } else {
+      // In the case that the property is set but not to 'hive', the internal
+      // default is 'in-memory'. So the sparkSession will use in-memory catalog.
+      sparkSession = builder.getOrCreate()
+      logInfo("Created Spark session")
     }
-    sqlContext
+    sparkContext = sparkSession.sparkContext
+    Signaling.cancelOnInterrupt(sparkContext)
+    sparkSession
   }
 
 }

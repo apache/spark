@@ -57,7 +57,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
       rows(0))
 
     // dropna on an a dataframe with no column should return an empty data frame.
-    val empty = input.sqlContext.emptyDataFrame.select()
+    val empty = input.sparkSession.emptyDataFrame.select()
     assert(empty.na.drop().count() === 0L)
 
     // Make sure the columns are properly named.
@@ -141,26 +141,36 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("fill with map") {
-    val df = Seq[(String, String, java.lang.Long, java.lang.Double, java.lang.Boolean)](
-      (null, null, null, null, null)).toDF("a", "b", "c", "d", "e")
-    checkAnswer(
-      df.na.fill(Map(
-        "a" -> "test",
-        "c" -> 1,
-        "d" -> 2.2,
-        "e" -> false
-      )),
-      Row("test", null, 1, 2.2, false))
+    val df = Seq[(String, String, java.lang.Integer, java.lang.Long,
+        java.lang.Float, java.lang.Double, java.lang.Boolean)](
+      (null, null, null, null, null, null, null))
+      .toDF("stringFieldA", "stringFieldB", "integerField", "longField",
+        "floatField", "doubleField", "booleanField")
 
-    // Test Java version
-    checkAnswer(
-      df.na.fill(Map(
-        "a" -> "test",
-        "c" -> 1,
-        "d" -> 2.2,
-        "e" -> false
-      ).asJava),
-      Row("test", null, 1, 2.2, false))
+    val fillMap = Map(
+      "stringFieldA" -> "test",
+      "integerField" -> 1,
+      "longField" -> 2L,
+      "floatField" -> 3.3f,
+      "doubleField" -> 4.4d,
+      "booleanField" -> false)
+
+    val expectedRow = Row("test", null, 1, 2L, 3.3f, 4.4d, false)
+
+    checkAnswer(df.na.fill(fillMap), expectedRow)
+    checkAnswer(df.na.fill(fillMap.asJava), expectedRow) // Test Java version
+
+    // Ensure replacement values are cast to the column data type.
+    checkAnswer(df.na.fill(Map(
+      "integerField" -> 1d,
+      "longField" -> 2d,
+      "floatField" -> 3d,
+      "doubleField" -> 4d)),
+      Row(null, null, 1, 2L, 3f, 4d, null))
+
+    // Ensure column types do not change. Columns that have null values replaced
+    // will no longer be flagged as nullable, so do not compare schemas directly.
+    assert(df.na.fill(fillMap).schema.fields.map(_.dataType) === df.schema.fields.map(_.dataType))
   }
 
   test("replace") {

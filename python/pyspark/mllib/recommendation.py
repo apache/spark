@@ -207,7 +207,7 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     def load(cls, sc, path):
         """Load a model from the given path"""
         model = cls._load_java(sc, path)
-        wrapper = sc._jvm.MatrixFactorizationModelWrapper(model)
+        wrapper = sc._jvm.org.apache.spark.mllib.api.python.MatrixFactorizationModelWrapper(model)
         return MatrixFactorizationModel(wrapper)
 
 

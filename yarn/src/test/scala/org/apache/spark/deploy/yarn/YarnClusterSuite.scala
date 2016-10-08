@@ -32,6 +32,9 @@ import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
   SparkListenerExecutorAdded}
@@ -84,9 +87,47 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     testBasicYarnApp(false)
   }
 
+  test("run Spark in yarn-client mode with different configurations") {
+    testBasicYarnApp(true,
+      Map(
+        "spark.driver.memory" -> "512m",
+        "spark.executor.cores" -> "1",
+        "spark.executor.memory" -> "512m",
+        "spark.executor.instances" -> "2"
+      ))
+  }
+
+  test("run Spark in yarn-cluster mode with different configurations") {
+    testBasicYarnApp(false,
+      Map(
+        "spark.driver.memory" -> "512m",
+        "spark.driver.cores" -> "1",
+        "spark.executor.cores" -> "1",
+        "spark.executor.memory" -> "512m",
+        "spark.executor.instances" -> "2"
+      ))
+  }
+
+  test("run Spark in yarn-cluster mode with using SparkHadoopUtil.conf") {
+    testYarnAppUseSparkHadoopUtilConf()
+  }
+
+  test("run Spark in yarn-client mode with additional jar") {
+    testWithAddJar(true)
+  }
+
+  test("run Spark in yarn-cluster mode with additional jar") {
+    testWithAddJar(false)
+  }
+
   test("run Spark in yarn-cluster mode unsuccessfully") {
     // Don't provide arguments so the driver will fail.
     val finalState = runSpark(false, mainClassName(YarnClusterDriver.getClass))
+    finalState should be (SparkAppHandle.State.FAILED)
+  }
+
+  test("run Spark in yarn-cluster mode failure after sc initialized") {
+    val finalState = runSpark(false, mainClassName(YarnClusterDriverWithFailure.getClass))
     finalState should be (SparkAppHandle.State.FAILED)
   }
 
@@ -96,6 +137,20 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   test("run Python application in yarn-cluster mode") {
     testPySpark(false)
+  }
+
+  test("run Python application in yarn-cluster mode using " +
+    " spark.yarn.appMasterEnv to override local envvar") {
+    testPySpark(
+      clientMode = false,
+      extraConf = Map(
+        "spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON"
+          -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python"),
+        "spark.yarn.appMasterEnv.PYSPARK_PYTHON"
+          -> sys.env.getOrElse("PYSPARK_PYTHON", "python")),
+      extraEnv = Map(
+        "PYSPARK_DRIVER_PYTHON" -> "not python",
+        "PYSPARK_PYTHON" -> "not python"))
   }
 
   test("user class path first in client mode") {
@@ -117,7 +172,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       .setPropertiesFile(propsFile)
       .setMaster("yarn")
       .setDeployMode("client")
-      .setAppResource("spark-internal")
+      .setAppResource(SparkLauncher.NO_RESOURCE)
       .setMainClass(mainClassName(YarnLauncherTestApp.getClass))
       .startApplication()
 
@@ -138,14 +193,47 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     }
   }
 
-  private def testBasicYarnApp(clientMode: Boolean): Unit = {
+  test("timeout to get SparkContext in cluster mode triggers failure") {
+    val timeout = 2000
+    val finalState = runSpark(false, mainClassName(SparkContextTimeoutApp.getClass),
+      appArgs = Seq((timeout * 4).toString),
+      extraConf = Map(AM_MAX_WAIT_TIME.key -> timeout.toString))
+    finalState should be (SparkAppHandle.State.FAILED)
+  }
+
+  private def testBasicYarnApp(clientMode: Boolean, conf: Map[String, String] = Map()): Unit = {
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
-      appArgs = Seq(result.getAbsolutePath()))
+      appArgs = Seq(result.getAbsolutePath()),
+      extraConf = conf)
     checkResult(finalState, result)
   }
 
-  private def testPySpark(clientMode: Boolean): Unit = {
+  private def testYarnAppUseSparkHadoopUtilConf(): Unit = {
+    val result = File.createTempFile("result", null, tempDir)
+    val finalState = runSpark(false,
+      mainClassName(YarnClusterDriverUseSparkHadoopUtilConf.getClass),
+      appArgs = Seq("key=value", result.getAbsolutePath()),
+      extraConf = Map("spark.hadoop.key" -> "value"))
+    checkResult(finalState, result)
+  }
+
+  private def testWithAddJar(clientMode: Boolean): Unit = {
+    val originalJar = TestUtils.createJarWithFiles(Map("test.resource" -> "ORIGINAL"), tempDir)
+    val driverResult = File.createTempFile("driver", null, tempDir)
+    val executorResult = File.createTempFile("executor", null, tempDir)
+    val finalState = runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
+      appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
+      extraClassPath = Seq(originalJar.getPath()),
+      extraJars = Seq("local:" + originalJar.getPath()))
+    checkResult(finalState, driverResult, "ORIGINAL")
+    checkResult(finalState, executorResult, "ORIGINAL")
+  }
+
+  private def testPySpark(
+      clientMode: Boolean,
+      extraConf: Map[String, String] = Map(),
+      extraEnv: Map[String, String] = Map()): Unit = {
     val primaryPyFile = new File(tempDir, "test.py")
     Files.write(TEST_PYFILE, primaryPyFile, StandardCharsets.UTF_8)
 
@@ -154,11 +242,11 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // needed locations.
     val sparkHome = sys.props("spark.test.home")
     val pythonPath = Seq(
-        s"$sparkHome/python/lib/py4j-0.9.2-src.zip",
+        s"$sparkHome/python/lib/py4j-0.10.3-src.zip",
         s"$sparkHome/python")
-    val extraEnv = Map(
+    val extraEnvVars = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
-      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator))
+      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator)) ++ extraEnv
 
     val moduleDir =
       if (clientMode) {
@@ -180,7 +268,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val finalState = runSpark(clientMode, primaryPyFile.getAbsolutePath(),
       sparkArgs = Seq("--py-files" -> pyFiles),
       appArgs = Seq(result.getAbsolutePath()),
-      extraEnv = extraEnv)
+      extraEnv = extraEnvVars,
+      extraConf = extraConf)
     checkResult(finalState, result)
   }
 
@@ -216,6 +305,47 @@ private[spark] class SaveExecutorInfo extends SparkListener {
   }
 }
 
+private object YarnClusterDriverWithFailure extends Logging with Matchers {
+  def main(args: Array[String]): Unit = {
+    val sc = new SparkContext(new SparkConf()
+      .set("spark.extraListeners", classOf[SaveExecutorInfo].getName)
+      .setAppName("yarn test with failure"))
+
+    throw new Exception("exception after sc initialized")
+  }
+}
+
+private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matchers {
+  def main(args: Array[String]): Unit = {
+    if (args.length != 2) {
+      // scalastyle:off println
+      System.err.println(
+        s"""
+        |Invalid command line: ${args.mkString(" ")}
+        |
+        |Usage: YarnClusterDriverUseSparkHadoopUtilConf [hadoopConfKey=value] [result file]
+        """.stripMargin)
+      // scalastyle:on println
+      System.exit(1)
+    }
+
+    val sc = new SparkContext(new SparkConf()
+      .set("spark.extraListeners", classOf[SaveExecutorInfo].getName)
+      .setAppName("yarn test using SparkHadoopUtil's conf"))
+
+    val kv = args(0).split("=")
+    val status = new File(args(1))
+    var result = "failure"
+    try {
+      SparkHadoopUtil.get.conf.get(kv(0)) should be (kv(1))
+      result = "success"
+    } finally {
+      Files.write(result, status, StandardCharsets.UTF_8)
+      sc.stop()
+    }
+  }
+}
+
 private object YarnClusterDriver extends Logging with Matchers {
 
   val WAIT_TIMEOUT_MILLIS = 10000
@@ -244,6 +374,14 @@ private object YarnClusterDriver extends Logging with Matchers {
       sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
       data should be (Set(1, 2, 3, 4))
       result = "success"
+
+      // Verify that the config archive is correctly placed in the classpath of all containers.
+      val confFile = "/" + Client.SPARK_CONF_FILE
+      assert(getClass().getResource(confFile) != null)
+      val configFromExecutors = sc.parallelize(1 to 4, 4)
+        .map { _ => Option(getClass().getResource(confFile)).map(_.toString).orNull }
+        .collect()
+      assert(configFromExecutors.find(_ == null) === None)
     } finally {
       Files.write(result, status, StandardCharsets.UTF_8)
       sc.stop()
@@ -261,7 +399,7 @@ private object YarnClusterDriver extends Logging with Matchers {
 
     // If we are running in yarn-cluster mode, verify that driver logs links and present and are
     // in the expected format.
-    if (conf.get("spark.master") == "yarn-cluster") {
+    if (conf.get("spark.submit.deployMode") == "cluster") {
       assert(listener.driverLogs.nonEmpty)
       val driverLogs = listener.driverLogs.get
       assert(driverLogs.size === 2)
@@ -279,9 +417,6 @@ private object YarnClusterDriver extends Logging with Matchers {
 }
 
 private object YarnClasspathTest extends Logging {
-
-  var exitCode = 0
-
   def error(m: String, ex: Throwable = null): Unit = {
     logError(m, ex)
     // scalastyle:off println
@@ -310,7 +445,6 @@ private object YarnClasspathTest extends Logging {
     } finally {
       sc.stop()
     }
-    System.exit(exitCode)
   }
 
   private def readResource(resultPath: String): Unit = {
@@ -323,8 +457,6 @@ private object YarnClasspathTest extends Logging {
     } catch {
       case t: Throwable =>
         error(s"loading test.resource to $resultPath", t)
-        // set the exit code if not yet set
-        exitCode = 2
     } finally {
       Files.write(result, new File(resultPath), StandardCharsets.UTF_8)
     }
@@ -343,6 +475,19 @@ private object YarnLauncherTestApp {
         wait()
       }
     }
+  }
+
+}
+
+/**
+ * Used to test code in the AM that detects the SparkContext instance. Expects a single argument
+ * with the duration to sleep for, in ms.
+ */
+private object SparkContextTimeoutApp {
+
+  def main(args: Array[String]): Unit = {
+    val Array(sleepTime) = args
+    Thread.sleep(java.lang.Long.parseLong(sleepTime))
   }
 
 }

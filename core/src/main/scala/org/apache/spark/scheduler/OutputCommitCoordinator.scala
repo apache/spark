@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 
 private sealed trait OutputCommitCoordinationMessage extends Serializable
@@ -182,6 +183,8 @@ private[spark] object OutputCommitCoordinator {
   private[spark] class OutputCommitCoordinatorEndpoint(
       override val rpcEnv: RpcEnv, outputCommitCoordinator: OutputCommitCoordinator)
     extends RpcEndpoint with Logging {
+
+    logDebug("init") // force eager creation of logger
 
     override def receive: PartialFunction[Any, Unit] = {
       case StopCoordinator =>

@@ -17,36 +17,53 @@
 
 package org.apache.spark.mllib.util
 
-import org.scalatest.{BeforeAndAfterAll, Suite}
+import java.io.File
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.SQLContext
+import org.scalatest.Suite
 
-trait MLlibTestSparkContext extends BeforeAndAfterAll { self: Suite =>
+import org.apache.spark.SparkContext
+import org.apache.spark.ml.util.TempDirectory
+import org.apache.spark.sql.{SparkSession, SQLContext, SQLImplicits}
+import org.apache.spark.util.Utils
+
+trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
+  @transient var spark: SparkSession = _
   @transient var sc: SparkContext = _
-  @transient var sqlContext: SQLContext = _
+  @transient var checkpointDir: String = _
 
   override def beforeAll() {
     super.beforeAll()
-    val conf = new SparkConf()
-      .setMaster("local[2]")
-      .setAppName("MLlibUnitTest")
-    sc = new SparkContext(conf)
-    SQLContext.clearActive()
-    sqlContext = new SQLContext(sc)
-    SQLContext.setActive(sqlContext)
+    spark = SparkSession.builder
+      .master("local[2]")
+      .appName("MLlibUnitTest")
+      .getOrCreate()
+    sc = spark.sparkContext
+
+    checkpointDir = Utils.createDirectory(tempDir.getCanonicalPath, "checkpoints").toString
+    sc.setCheckpointDir(checkpointDir)
   }
 
   override def afterAll() {
     try {
-      sqlContext = null
-      SQLContext.clearActive()
-      if (sc != null) {
-        sc.stop()
+      Utils.deleteRecursively(new File(checkpointDir))
+      SparkSession.clearActiveSession()
+      if (spark != null) {
+        spark.stop()
       }
-      sc = null
+      spark = null
     } finally {
       super.afterAll()
     }
+  }
+
+  /**
+   * A helper object for importing SQL implicits.
+   *
+   * Note that the alternative of importing `spark.implicits._` is not possible here.
+   * This is because we create the [[SQLContext]] immediately before the first test is run,
+   * but the implicits import is needed in the constructor.
+   */
+  protected object testImplicits extends SQLImplicits {
+    protected override def _sqlContext: SQLContext = self.spark.sqlContext
   }
 }

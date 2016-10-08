@@ -30,7 +30,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 
@@ -382,11 +382,10 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
                 fs.rename(tempHadoopFile, hadoopFile)
             done = true
           } catch {
-            case ioe: IOException => {
+            case ioe: IOException =>
                   fs = testDir.getFileSystem(new Configuration())
                   logWarning("Attempt " + tries + " at generating file " + hadoopFile + " failed.",
                     ioe)
-            }
           }
         }
         if (!done) {

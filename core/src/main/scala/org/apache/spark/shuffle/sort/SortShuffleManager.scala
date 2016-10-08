@@ -20,6 +20,7 @@ package org.apache.spark.shuffle.sort
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._
 
 /**
@@ -77,8 +78,6 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
    * A mapping from shuffle ids to the number of mappers producing output for those shuffles.
    */
   private[this] val numMapsForShuffle = new ConcurrentHashMap[Int, Int]()
-
-  override val shortName: String = "sort"
 
   override val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
 
