@@ -225,13 +225,16 @@ case class FileSourceScanExec(
   }
 
   // These metadata values make scan plans uniquely identifiable for equality checking.
-  override val metadata: Map[String, String] = Map(
-    "Format" -> relation.fileFormat.toString,
-    "ReadSchema" -> outputSchema.catalogString,
-    "Batched" -> supportsBatch.toString,
-    "PartitionFilters" -> partitionFilters.mkString("[", ", ", "]"),
-    "PushedFilters" -> dataFilters.mkString("[", ", ", "]"),
-    "RootPaths" -> relation.location.rootPaths.mkString(", "))
+  override val metadata: Map[String, String] = {
+    def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
+    val location = relation.location
+    Map("Format" -> relation.fileFormat.toString,
+      "ReadSchema" -> outputSchema.catalogString,
+      "Batched" -> supportsBatch.toString,
+      "PartitionFilters" -> seqToString(partitionFilters),
+      "PushedFilters" -> seqToString(dataFilters),
+      "Location" -> (location.getClass.getSimpleName + seqToString(location.rootPaths)))
+  }
 
   private lazy val inputRDD: RDD[InternalRow] = {
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
