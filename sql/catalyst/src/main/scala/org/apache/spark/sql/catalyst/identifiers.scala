@@ -29,8 +29,16 @@ sealed trait IdentifierWithDatabase {
 
   def database: Option[String]
 
+  private def replaceBackticks(origin: String): String = origin.replace("`", "``")
+
   def quotedString: String = {
-    if (database.isDefined) s"`${database.get}`.`$identifier`" else s"`$identifier`"
+    val replacedIdentifier = replaceBackticks(identifier)
+    if (database.isDefined) {
+      val replacedDatabase = replaceBackticks(database.get)
+      s"`$replacedDatabase`.`$replacedIdentifier`"
+    } else {
+      s"`$replacedIdentifier`"
+    }
   }
 
   def unquotedString: String = {

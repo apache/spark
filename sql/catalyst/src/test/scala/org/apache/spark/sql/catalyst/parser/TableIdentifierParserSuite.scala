@@ -104,4 +104,15 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     // ".123BD" should not be treated as token of type BIGDECIMAL_LITERAL
     assert(parseTableIdentifier("a.123BD_LIST") == TableIdentifier("123BD_LIST", Some("a")))
   }
+
+  test("SPARK-17832 table identifier - contains backtick") {
+    val complexName = TableIdentifier("`weird`table`name", Some("`d`b`1"))
+    assert(TableIdentifier("`weird`table`name", Some("`d`b`1")) ===
+      parseTableIdentifier("```d``b``1`.```weird``table``name`"))
+    assert(complexName === parseTableIdentifier(complexName.quotedString))
+    intercept[ParseException](parseTableIdentifier(complexName.unquotedString))
+    // Table identifier contains countious backticks should be treated correctly.
+    val complexName2 = TableIdentifier("x``y", Some("d``b"))
+    assert(complexName2 === parseTableIdentifier(complexName2.quotedString))
+  }
 }
