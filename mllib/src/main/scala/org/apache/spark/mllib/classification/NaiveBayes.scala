@@ -364,6 +364,7 @@ class NaiveBayes private (
     val nb = new NewNaiveBayes()
       .setModelType(modelType)
       .setSmoothing(lambda)
+      .setIsML(false)
 
     val dataset = data.map { case LabeledPoint(label, features) => (label, features.asML) }
       .toDF("label", "features")
@@ -377,6 +378,8 @@ class NaiveBayes private (
         theta(i)(j) = v
     }
 
+    require(newModel.oldLabels != null,
+      "The underlying ML NaiveBayes training does not produce labels.")
     new NaiveBayesModel(newModel.oldLabels, pi, theta, modelType)
   }
 }

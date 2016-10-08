@@ -110,16 +110,28 @@ class NaiveBayes @Since("1.5.0") (
   @Since("2.1.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
+  /**
+   * ml assumes input labels in range [0, numClasses). But this implementation
+   * is also called by mllib NaiveBayes which allows other kinds of input labels
+   * such as {-1, +1}. Here we use this parameter to switch between different processing logic.
+   * It should be removed when we remove mllib NaiveBayes.
+   */
+  private[spark] var isML: Boolean = true
+
+  private[spark] def setIsML(isML: Boolean): this.type = {
+    this.isML = isML
+    this
+  }
+
   override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
-    val numClasses = getNumClasses(dataset)
-
-    if (isDefined(thresholds)) {
-      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
-        ".train() called with non-matching numClasses and thresholds.length." +
-        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
+    if (isML) {
+      val numClasses = getNumClasses(dataset)
+      if (isDefined(thresholds)) {
+        require($(thresholds).length == numClasses, this.getClass.getSimpleName +
+          ".train() called with non-matching numClasses and thresholds.length." +
+          s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
+      }
     }
-
-    val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
 
     val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
       val values = v match {
@@ -153,6 +165,7 @@ class NaiveBayes @Since("1.5.0") (
       }
     }
 
+    val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
     // Aggregates term frequencies per label.
@@ -176,11 +189,6 @@ class NaiveBayes @Since("1.5.0") (
     val numLabels = aggregated.length
     val numDocuments = aggregated.map(_._2._1).sum
 
-    /**
-     * ml assumes input labels in range [0, numClasses). But this implementation
-     * is also called by mllib NaiveBayes which allows other kinds of input labels
-     * such as {-1, +1}. Here we should store the labels and send them to mllib side.
-     */
     val labelArray = new Array[Double](numLabels)
     val piArray = new Array[Double](numLabels)
     val thetaArray = new Array[Double](numLabels * numFeatures)
