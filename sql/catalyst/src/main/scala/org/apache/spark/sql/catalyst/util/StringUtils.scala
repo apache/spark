@@ -25,26 +25,24 @@ object StringUtils {
 
   // replace the _ with .{1} exactly match 1 time of any character
   // replace the % with .*, match 0 or more times with any character
-  def escapeLikeRegex(v: String): String = {
-    if (!v.isEmpty) {
-      "(?s)" + (' ' +: v.init).zip(v).flatMap {
-        case (prev, '\\') => ""
-        case ('\\', c) =>
-          c match {
-            case '_' => "_"
-            case '%' => "%"
-            case _ => Pattern.quote("\\" + c)
-          }
-        case (prev, c) =>
-          c match {
-            case '_' => "."
-            case '%' => ".*"
-            case _ => Pattern.quote(Character.toString(c))
-          }
-      }.mkString
-    } else {
-      v
+  def escapeLikeRegex(str: String): String = {
+    val builder = new StringBuilder()
+    str.foldLeft(false) { case (escaping, next) =>
+      if (escaping) {
+        builder ++= Pattern.quote(Character.toString(next))
+        false
+      } else if (next == '\\') {
+        true
+      } else {
+        builder ++= (next match {
+          case '_' => "."
+          case '%' => ".*"
+          case _ => Pattern.quote(Character.toString(next))
+        })
+        false
+      }
     }
+    "(?s)" + builder.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
   private[this] val trueStrings = Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)

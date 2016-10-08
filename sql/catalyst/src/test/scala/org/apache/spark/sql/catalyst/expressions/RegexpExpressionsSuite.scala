@@ -53,6 +53,8 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation("a\nb" like "a_b", true)
     checkEvaluation("ab" like "a%b", true)
     checkEvaluation("a\nb" like "a%b", true)
+
+    checkEvaluation("""\\\\""" like """%\\%""", true) // triple quotes to avoid java string escaping
   }
 
   test("LIKE Non-literal Regular Expression") {
