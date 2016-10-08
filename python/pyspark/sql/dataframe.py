@@ -651,14 +651,12 @@ class DataFrame(object):
                 else:
                     on = on[0]
 
-        if how is None:
-            how = "inner"
+        if on is None and how is None:
+            jdf = self._jdf.crossJoin(other._jdf)
         else:
+            if how is None:
+                how = "inner"
             assert isinstance(how, basestring), "how should be basestring"
-
-        if on is None:
-            jdf = self._jdf.join(other._jdf, on, how)
-        else:
             jdf = self._jdf.join(other._jdf, on._jc, how)
         return DataFrame(jdf, self.sql_ctx)
 
