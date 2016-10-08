@@ -640,7 +640,6 @@ class DataFrame(object):
         if on is not None and not isinstance(on, list):
             on = [on]
 
-
         if on is not None:
             if isinstance(on[0], basestring):
                 on = self._jseq(on)
@@ -651,7 +650,7 @@ class DataFrame(object):
                 else:
                     on = on[0]
 
-        if on is None and how is None:
+        if on is None or len(on) == 0 and how is None:
             jdf = self._jdf.crossJoin(other._jdf)
         else:
             if how is None:
