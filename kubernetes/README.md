@@ -24,3 +24,5 @@
    * `--master k8s://default` ensures that it picks up the correct APIServer the default from the current context. 
 * Check for pods being created. Watch the master logs using kubectl log -f <driver-pod>.
 * If on a service that allows external load balancers to be provisioned, an external IP will be allocated to the service associated with the driver. The spark-master UI can be accessed from that IP address on port 4040.
+
+![spark-submit](spark-submit.png)
