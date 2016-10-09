@@ -196,7 +196,6 @@ class SparkConf(object):
         else:
             return self._conf.items()
 
-
     def contains(self, key):
         """Does this configuration contain a given key?"""
         if self._jconf is not None:
