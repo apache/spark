@@ -28,7 +28,7 @@ from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import Row, StringType
+from pyspark.sql.types import IntegerType, Row, StringType
 from pyspark.sql.utils import install_exception_handler
 
 __all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
@@ -202,9 +202,25 @@ class SQLContext(object):
         """
         self.sparkSession.catalog.registerFunction(name, f, returnType)
 
-    def registerJavaFunction(self, name, javaClassName, returnType):
-        jdt = self._ssql_ctx.parseDataType(returnType.json())
-        self._ssql_ctx.udf().registerJava(name, javaClassName, jdt)
+    @ignore_unicode_prefix
+    @since(2.1)
+    def registerJavaFunction(self, name, javaClassName, returnType=StringType()):
+        """Register a java UDF so it can be used in SQL statements.
+
+        In addition to a name and the function itself, the return type can be optionally specified.
+        When the return type is not given it default to a string and conversion will automatically
+        be done.  For any other return type, the produced object must match the specified type.
+        :param name:  name of the UDF
+        :param javaClassName: fully qualified name of java class
+        :param returnType: a :class:`pyspark.sql.types.DataType` object
+
+        >>> sqlContext.registerJavaFunction("stringLengthString",
+        ...   "test.org.apache.spark.sql.StringLengthTest", IntegerType())
+        >>> sqlContext.sql("SELECT stringLengthString('test')").collect()
+        [Row(stringLengthString(test)=u'4')]
+        """
+        jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
+        self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):
