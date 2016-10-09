@@ -41,10 +41,7 @@ sealed trait IdentifierWithDatabase {
   }
 
   def unquotedString: String = {
-    val replacedId = quoteIdentifier(identifier)
-    val replacedDb = database.map(quoteIdentifier(_))
-
-    if (replacedDb.isDefined) s"${replacedDb.get}.$replacedId" else replacedId
+    if (database.isDefined) s"${database.get}.$identifier" else identifier
   }
 
   override def toString: String = quotedString

@@ -107,8 +107,7 @@ class TableIdentifierParserSuite extends SparkFunSuite {
 
   test("SPARK-17832 table identifier - contains backtick") {
     val complexName = TableIdentifier("`weird`table`name", Some("`d`b`1"))
-    assert(TableIdentifier("`weird`table`name", Some("`d`b`1")) ===
-      parseTableIdentifier("```d``b``1`.```weird``table``name`"))
+    assert(complexName === parseTableIdentifier("```d``b``1`.```weird``table``name`"))
     assert(complexName === parseTableIdentifier(complexName.quotedString))
     intercept[ParseException](parseTableIdentifier(complexName.unquotedString))
     // Table identifier contains countious backticks should be treated correctly.
