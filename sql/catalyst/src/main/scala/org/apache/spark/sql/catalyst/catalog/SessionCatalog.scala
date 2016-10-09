@@ -199,7 +199,8 @@ class SessionCatalog(
     if (dbName == globalTempViewManager.database) {
       throw new AnalysisException(
         s"${globalTempViewManager.database} is a system preserved database, " +
-          "you cannot use it as current database.")
+          "you cannot use it as current database. To access global temporary views, you should " +
+          s"use qualified name, e.g. ${globalTempViewManager.database}.viewName.")
     }
     requireDbExists(dbName)
     synchronized { currentDb = dbName }
