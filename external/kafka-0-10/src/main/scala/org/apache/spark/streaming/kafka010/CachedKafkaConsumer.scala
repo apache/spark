@@ -53,7 +53,7 @@ class CachedKafkaConsumer[K, V] private(
 
   // TODO if the buffer was kept around as a random-access structure,
   // could possibly optimize re-calculating of an RDD in the same batch
-  protected var buffer = ju.Collections.emptyList[ConsumerRecord[K, V]]().iterator
+  protected var buffer = ju.Collections.emptyListIterator[ConsumerRecord[K, V]]()
   protected var nextOffset = -2L
 
   def close(): Unit = consumer.close()
@@ -90,6 +90,40 @@ class CachedKafkaConsumer[K, V] private(
     record
   }
 
+  /**
+   * Start a batch on a compacted topic
+   */
+  def compactedStart(offset: Long, timeout: Long): Unit = {
+    logDebug(s"compacted start $groupId $topic $partition starting $offset")
+    // This seek may not be necessary, but it's hard to tell due to gaps in compacted topics
+    if (offset != nextOffset) {
+      logInfo(s"Initial fetch for compacted $groupId $topic $partition $offset")
+      seek(offset)
+      poll(timeout)
+    }
+  }
+
+  /**
+   * Get the next record in the batch from a compacted topic.
+   * Assumes compactedStart has been called first, and ignores gaps.
+   */
+  def compactedNext(timeout: Long): ConsumerRecord[K, V] = {
+    if (!buffer.hasNext()) { poll(timeout) }
+    assert(buffer.hasNext(),
+      s"Failed to get records for compacted $groupId $topic $partition after polling for $timeout")
+    val record = buffer.next()
+    nextOffset = record.offset + 1
+    record
+  }
+
+  /**
+   * Rewind to previous record in the batch from a compacted topic.
+   * Will throw NoSuchElementException if no previous element
+   */
+  def compactedPrevious(): ConsumerRecord[K, V] = {
+    buffer.previous()
+  }
+
   private def seek(offset: Long): Unit = {
     logDebug(s"Seeking to $topicPartition $offset")
     consumer.seek(topicPartition, offset)
@@ -101,7 +135,7 @@ class CachedKafkaConsumer[K, V] private(
     logDebug(s"Polled ${p.partitions()}  ${r.size}")
     import scala.collection.JavaConverters._
     r.asScala.foreach { x => System.err.println(s"${x.offset} ${x.key} ${x.value}") }
-    buffer = r.iterator
+    buffer = r.listIterator
   }
 
 }

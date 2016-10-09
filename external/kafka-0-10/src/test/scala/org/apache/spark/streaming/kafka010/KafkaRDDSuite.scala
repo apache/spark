@@ -22,12 +22,17 @@ import java.{ util => ju }
 import scala.collection.JavaConverters._
 import scala.util.Random
 
+import kafka.common.TopicAndPartition
+import kafka.log._
+import kafka.message._
+import kafka.utils.Pool
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
+import org.apache.spark.streaming.kafka010.mocks.MockTime
 
 class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
@@ -63,6 +68,40 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   ).asJava
 
   private val preferredHosts = LocationStrategies.PreferConsistent
+
+  private def compactLogs(topic: String, partition: Int, messages: Array[(String, String)]) {
+    val mockTime = new MockTime()
+    val logs = new Pool[TopicAndPartition, Log]()
+    val logDir = kafkaTestUtils.brokerLogDir
+    val dir = new java.io.File(logDir, topic + "-" + partition)
+    dir.mkdirs()
+    val logProps = new ju.Properties()
+    logProps.put(LogConfig.CleanupPolicyProp, LogConfig.Compact)
+    logProps.put(LogConfig.MinCleanableDirtyRatioProp, 0.1f: java.lang.Float)
+    val log = new Log(
+      dir,
+      LogConfig(logProps),
+      0L,
+      mockTime.scheduler,
+      mockTime
+    )
+    messages.foreach { case (k, v) =>
+        val msg = new ByteBufferMessageSet(
+          NoCompressionCodec,
+          new Message(v.getBytes, k.getBytes, Message.NoTimestamp, Message.CurrentMagicValue))
+        log.append(msg)
+    }
+    log.roll()
+    logs.put(TopicAndPartition(topic, partition), log)
+    System.err.println(s"built cleaner for compacting logs for $dir")
+    val cleaner = new LogCleaner(CleanerConfig(), logDirs = Array(dir), logs = logs)
+    cleaner.startup()
+    cleaner.awaitCleaned(topic, partition, log.activeSegment.baseOffset, 1000)
+    System.err.println("finished cleaning")
+    cleaner.shutdown()
+    mockTime.scheduler.shutdown()
+  }
+
 
   test("basic usage") {
     val topic = s"topicbasic-${Random.nextInt}-${System.currentTimeMillis}"
@@ -104,20 +143,15 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("compacted topic") {
     val topic = s"topiccompacted-${Random.nextInt}-${System.currentTimeMillis}"
-    val props = new ju.Properties()
-    props.put("cleanup.policy", "compact")
-    props.put("flush.messages", "1")
-    props.put("segment.ms", "1")
-    props.put("segment.bytes", "256")
-    kafkaTestUtils.createTopic(topic, 1, props)
+
     val messages = Array(
       ("a", "1"),
-      ("b", "1"),
-      ("b", "2"),
-      ("c", "1"),
-      ("b", "3"),
       ("a", "2"),
-      ("c", "2")
+      ("b", "1"),
+      ("c", "1"),
+      ("c", "2"),
+      ("b", "2"),
+      ("b", "3")
     )
     val compactedMessages = Array(
       ("a", "2"),
@@ -125,20 +159,24 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       ("c", "2")
     )
 
-    kafkaTestUtils.sendMessages(topic, messages)
-    // send some junk to fill a log segment
-    kafkaTestUtils.sendMessages(topic, Array.fill(100)("garbage" -> "1"))
-    // wait for log compaction
-    kafkaTestUtils.compactLogs(topic, 0, messages.size - 1)
+    compactLogs(topic, 0, messages)
 
-    Thread.sleep(100000)
+    val props = new ju.Properties()
+    props.put("cleanup.policy", "compact")
+    props.put("flush.messages", "1")
+    props.put("segment.ms", "1")
+    props.put("segment.bytes", "256")
+    kafkaTestUtils.createTopic(topic, 1, props)
+    System.err.println(kafkaTestUtils.brokerLogDir + "/" + topic)
+
+
     val kafkaParams = getKafkaParams()
 
     val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
-    val rdd = KafkaUtils.createRDD[String, String](sc, kafkaParams, offsetRanges, preferredHosts)
-      .map(m => m.key -> m.value)
-      .filter(_._1 != "garbage")
+    val rdd = KafkaUtils.createRDD[String, String](
+      sc, kafkaParams, offsetRanges, preferredHosts, true
+    ).map(m => m.key -> m.value)
 
     val received = rdd.collect.toSet
     assert(received === compactedMessages.toSet)
@@ -152,7 +190,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(rdd.take(messages.size + 10).size === compactedMessages.size)
 
     val emptyRdd = KafkaUtils.createRDD[String, String](
-      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
+      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts, true)
 
     assert(emptyRdd.isEmpty)
 
@@ -217,7 +255,8 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       kafkaParams,
       Array(OffsetRange("unused", 0, 1, 2)),
       ju.Collections.emptyMap[TopicPartition, String](),
-      true)
+      true,
+      false)
     val a3 = ExecutorCacheTaskLocation("a", "3")
     val a4 = ExecutorCacheTaskLocation("a", "4")
     val b1 = ExecutorCacheTaskLocation("b", "1")
