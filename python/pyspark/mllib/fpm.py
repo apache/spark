@@ -36,16 +36,13 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     >>> data = [["a", "b", "c"], ["a", "b", "d", "e"], ["a", "c", "e"], ["a", "c", "f"]]
     >>> rdd = sc.parallelize(data, 2)
-    >>> model1 = FPGrowth.train(rdd, 0.6, 2)
-    >>> model2 = FPGrowth.train(rdd, 0.6)
-    >>> sorted(model1.freqItemsets().collect())
-    [FreqItemset(items=[u'a'], freq=4), FreqItemset(items=[u'c'], freq=3), ...
-    >>> sorted(model2.freqItemsets().collect())
+    >>> model = FPGrowth.train(rdd, 0.6, 2)
+    >>> sorted(model.freqItemsets().collect())
     [FreqItemset(items=[u'a'], freq=4), FreqItemset(items=[u'c'], freq=3), ...
     >>> model_path = temp_path + "/fpm"
-    >>> model1.save(sc, model_path)
+    >>> model.save(sc, model_path)
     >>> sameModel = FPGrowthModel.load(sc, model_path)
-    >>> sorted(model1.freqItemsets().collect()) == sorted(sameModel.freqItemsets().collect())
+    >>> sorted(model.freqItemsets().collect()) == sorted(sameModel.freqItemsets().collect())
     True
 
     .. versionadded:: 1.4.0
