@@ -123,6 +123,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       assertNoSuchTable(s"SHOW CREATE TABLE $viewName")
       assertNoSuchTable(s"SHOW PARTITIONS $viewName")
       assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+      assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
     }
   }
 

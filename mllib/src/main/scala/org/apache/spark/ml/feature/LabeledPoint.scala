@@ -25,7 +25,7 @@ import org.apache.spark.ml.linalg.Vector
 /**
  * :: Experimental ::
  *
- * Class that represents the features and labels of a data point.
+ * Class that represents the features and label of a data point.
  *
  * @param label Label for this data point.
  * @param features List of features for this data point.

@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst
 import java.sql.Timestamp
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{If, Literal, SpecifiedWindowFrame, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{If, Literal, SpecifiedWindowFrame, TimeAdd,
+  TimeSub, WindowSpecDefinition}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class ExpressionSQLBuilderSuite extends SQLBuilderTest {
   test("literal") {
@@ -117,6 +119,20 @@ class ExpressionSQLBuilderSuite extends SQLBuilderTest {
     checkSQL(
       WindowSpecDefinition('a.int :: 'b.string :: Nil, 'c.int.asc :: 'd.string.desc :: Nil, frame),
       s"(PARTITION BY `a`, `b` ORDER BY `c` ASC NULLS FIRST, `d` DESC NULLS LAST $frame)"
+    )
+  }
+
+  test("interval arithmetic") {
+    val interval = Literal(new CalendarInterval(0, CalendarInterval.MICROS_PER_DAY))
+
+    checkSQL(
+      TimeAdd('a, interval),
+      "`a` + interval 1 days"
+    )
+
+    checkSQL(
+      TimeSub('a, interval),
+      "`a` - interval 1 days"
     )
   }
 }

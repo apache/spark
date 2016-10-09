@@ -116,7 +116,7 @@ class StreamExecution(
    * [[HDFSMetadataLog]]. See SPARK-14131 for more details.
    */
   val microBatchThread =
-    new UninterruptibleThread(s"stream execution thread for $name") {
+    new StreamExecutionThread(s"stream execution thread for $name") {
       override def run(): Unit = {
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
         // thread to this micro batch thread
@@ -207,13 +207,18 @@ class StreamExecution(
       })
     } catch {
       case _: InterruptedException if state == TERMINATED => // interrupted by stop()
-      case NonFatal(e) =>
+      case e: Throwable =>
         streamDeathCause = new StreamingQueryException(
           this,
           s"Query $name terminated with exception: ${e.getMessage}",
           e,
           Some(committedOffsets.toCompositeOffset(sources)))
         logError(s"Query $name terminated with error", e)
+        // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
+        // handle them
+        if (!NonFatal(e)) {
+          throw e
+        }
     } finally {
       state = TERMINATED
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
@@ -530,3 +535,9 @@ object StreamExecution {
 
   def nextId: Long = _nextId.getAndIncrement()
 }
+
+/**
+ * A special thread to run the stream query. Some codes require to run in the StreamExecutionThread
+ * and will use `classOf[StreamExecutionThread]` to check.
+ */
+abstract class StreamExecutionThread(name: String) extends UninterruptibleThread(name)
