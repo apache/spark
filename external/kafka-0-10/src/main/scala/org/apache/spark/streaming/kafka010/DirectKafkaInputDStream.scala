@@ -263,13 +263,13 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
   protected def commitAll(): Unit = {
     val m = new ju.HashMap[TopicPartition, OffsetAndMetadata]()
-    val it = commitQueue.iterator()
-    while (it.hasNext) {
-      val osr = it.next
+    var osr = commitQueue.poll()
+    while (null != osr) {
       val tp = osr.topicPartition
       val x = m.get(tp)
       val offset = if (null == x) { osr.untilOffset } else { Math.max(x.offset, osr.untilOffset) }
       m.put(tp, new OffsetAndMetadata(offset))
+      osr = commitQueue.poll()
     }
     if (!m.isEmpty) {
       consumer.commitAsync(m, commitCallback.get)
