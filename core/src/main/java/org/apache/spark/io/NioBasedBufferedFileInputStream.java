@@ -19,28 +19,37 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.StandardOpenOption;
 
 /**
  * {@link InputStream} implementation which uses direct buffer
  * to read a file to avoid extra copy of data between Java and
- * native memory which happens when using {@link java.io.BufferedInputStream}
+ * native memory which happens when using {@link java.io.BufferedInputStream}.
+ * Unfortunately, this is not something already available in JDK,
+ * {@link sun.nio.ch.ChannelInputStream} supports reading a file using nio,
+ * but does not support buffering.
  *
  */
 public final class NioBasedBufferedFileInputStream extends InputStream {
 
-  ByteBuffer bb;
+  private static int DEFAULT_BUFFER_SIZE = 8192;
 
-  FileChannel ch;
+  private final ByteBuffer bb;
+
+  private final FileChannel ch;
 
   public NioBasedBufferedFileInputStream(File file, int bufferSize) throws IOException {
     bb = ByteBuffer.allocateDirect(bufferSize);
-    FileInputStream f = new FileInputStream(file);
-    ch = f.getChannel();
+    ch = FileChannel.open(file.toPath(), StandardOpenOption.READ);
     ch.read(bb);
     bb.flip();
   }
 
-  public boolean refill() throws IOException {
+  public NioBasedBufferedFileInputStream(File file) throws IOException {
+    this(file, DEFAULT_BUFFER_SIZE);
+  }
+
+  private boolean refill() throws IOException {
     if (!bb.hasRemaining()) {
       bb.clear();
       int nRead = ch.read(bb);
@@ -57,7 +66,7 @@ public final class NioBasedBufferedFileInputStream extends InputStream {
     if (!refill()) {
       return -1;
     }
-    return bb.get();
+    return bb.get() & 0xFF;
   }
 
   @Override
@@ -68,6 +77,11 @@ public final class NioBasedBufferedFileInputStream extends InputStream {
     len = Math.min(len, bb.remaining());
     bb.get(b, off, len);
     return len;
+  }
+
+  @Override
+  public int available() throws IOException {
+    return bb.remaining();
   }
 
   @Override

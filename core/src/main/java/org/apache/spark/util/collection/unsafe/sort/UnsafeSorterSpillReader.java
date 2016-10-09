@@ -70,7 +70,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;
     }
 
-    final NioBasedBufferedFileInputStream bs =
+    final InputStream bs =
         new NioBasedBufferedFileInputStream(file, (int) bufferSizeBytes);
     try {
       this.in = serializerManager.wrapStream(blockId, bs);
