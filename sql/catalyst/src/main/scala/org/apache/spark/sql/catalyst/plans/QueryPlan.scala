@@ -81,19 +81,18 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     // because then both `QueryPlan.inferAdditionalConstraints` and
     // `UnaryNode.getAliasedConstraints` applies and may produce a non-converging set of
     // constraints.
-    // For more details, infer https://issues.apache.org/jira/browse/SPARK-17733
-    val aliasMap = AttributeMap((expressions ++ children.flatMap(_.expressions)).collect {
-      case a: Alias => (a.toAttribute, a.child)
-    })
+    // For more details, refer to https://issues.apache.org/jira/browse/SPARK-17733
+    val aliasSet = AttributeSet((expressions ++ children.flatMap(_.expressions))
+      .filter(_.isInstanceOf[Alias]))
 
     var inferredConstraints = Set.empty[Expression]
     constraints.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
         inferredConstraints ++= (constraints - eq).map(_ transform {
-          case a: Attribute if a.semanticEquals(l) && !aliasMap.contains(r) => r
+          case a: Attribute if a.semanticEquals(l) && !aliasSet.contains(r) => r
         })
         inferredConstraints ++= (constraints - eq).map(_ transform {
-          case a: Attribute if a.semanticEquals(r) && !aliasMap.contains(l) => l
+          case a: Attribute if a.semanticEquals(r) && !aliasSet.contains(l) => l
         })
       case _ => // No inference
     }
