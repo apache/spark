@@ -33,6 +33,11 @@ from pyspark.serializers import read_int
 
 
 def launch_gateway(conf=None):
+    """
+    launch jvm gateway
+    :param conf: spark configuration passed to spark-submit
+    :return:
+    """
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
     else:

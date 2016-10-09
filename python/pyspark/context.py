@@ -125,7 +125,7 @@ class SparkContext(object):
         if conf is not None and conf._jconf:
             # conf has been initialized in JVM properly, so use conf directly. This represent the
             # scenario that JVM has been launched before SparkConf is created (e.g. SparkContext is
-            # created and then stopped, and we create a new SparkConf and new SparkContext again
+            # created and then stopped, and we create a new SparkConf and new SparkContext again)
             self._conf = conf
         else:
             self._conf = SparkConf(_jvm=SparkContext._jvm)
